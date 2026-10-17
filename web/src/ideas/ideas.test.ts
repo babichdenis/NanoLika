@@ -9,7 +9,7 @@ const COPIES = import.meta.glob<string>(
 const copy = (suffix: string) => Object.entries(COPIES).find(([k]) => k.endsWith(suffix))?.[1];
 
 describe("the Ideas catalogue", () => {
-  it.each(["en", "zh"])("ideas.%s.json is identical to the Android and harness copies (contract C5)", (lang) => {
+  it.each(["en", "zh", "ru"])("ideas.%s.json is identical to the Android and harness copies (contract C5)", (lang) => {
     const ours = copy(`/src/ideas/ideas.${lang}.json`) ?? copy(`./ideas.${lang}.json`);
     const android = copy(`/assets/nanomuse/ideas.${lang}.json`);
     const harness = copy(`/dsh-nanomuse/assets/ideas.${lang}.json`);

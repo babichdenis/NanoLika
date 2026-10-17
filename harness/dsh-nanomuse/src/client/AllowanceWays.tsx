@@ -5,7 +5,7 @@
  * `/v1/me.spend` (`guidance`, contract C11: the providers for the region, the plans, the
  * caveats), never from a list written here; where the relay is older, the bundled catalogue
  * stands in. Two places draw it: the chat, under a refused turn (`RefusalCard.tsx`), where the
- * key rows and the ChatGPT sign-in are inline; and Settings → nanoMuse Cloud, under the pool
+ * key rows and the ChatGPT sign-in are inline; and Settings → NanoLika Cloud, under the pool
  * bar, where the rows are already on the page above.
  */
 import { createElement as h, Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -78,7 +78,7 @@ export interface AllowanceWaysProps {
   exhausted: boolean
   /** The lead sentence instead of the one `exhausted` picks (relay 0.22: the allowance paused, not spent). */
   lead?: string | undefined
-  /** In Settings → nanoMuse Cloud the key rows and the sign-in are on the page already: the card points up instead of drawing them again. */
+  /** In Settings → NanoLika Cloud the key rows and the sign-in are on the page already: the card points up instead of drawing them again. */
   inSettings?: boolean
   onChanged?(): void
 }
@@ -86,7 +86,7 @@ export interface AllowanceWaysProps {
 /**
  * The 80 % heads-up, once per pool size: the host re-reads the account after a turn on the
  * account's model and sets `live.headsUp` while the relay says `warn`; one dismissible line
- * above the composer, leading to Settings → nanoMuse Cloud. Nothing while the pool is spent
+ * above the composer, leading to Settings → NanoLika Cloud. Nothing while the pool is spent
  * (the card under the turn says that) or without limit.
  */
 export function AllowanceHeadsUp({ t }: { t: Translate }): ReactNode {

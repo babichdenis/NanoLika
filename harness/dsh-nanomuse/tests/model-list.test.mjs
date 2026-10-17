@@ -74,7 +74,7 @@ test('a default the provider does not list is skipped; a current that is the def
 })
 
 test('the Cloud group keeps the recommended model first, the current choice after it', () => {
-  const cloud = { key: 'nanomuse', label: 'nanoMuse Cloud', rows: [{ id: 'q-rec', name: 'Qwen', recommended: true }, ...rows('q', 12)] }
+  const cloud = { key: 'nanomuse', label: 'NanoLika Cloud', rows: [{ id: 'q-rec', name: 'Qwen', recommended: true }, ...rows('q', 12)] }
   const [shown] = m.layoutGroups([cloud], { current: { group: 'nanomuse', id: 'q-9' } })
   assert.deepEqual(ids(shown.rows).slice(0, 3), ['q-rec', 'q-9', 'q-1'])
   assert.equal(shown.more, 5)
@@ -107,7 +107,7 @@ test('a query matches the id or the name, case-insensitively, as a substring', (
 
 test('while a query is present every group shows all its matches, groups without one are hidden', () => {
   const groups = [
-    { key: 'cloud', label: 'nanoMuse Cloud', rows: [{ id: 'qwen-vl', name: 'Qwen VL', recommended: true }, { id: 'glm-4.6v', name: 'GLM 4.6V' }] },
+    { key: 'cloud', label: 'NanoLika Cloud', rows: [{ id: 'qwen-vl', name: 'Qwen VL', recommended: true }, { id: 'glm-4.6v', name: 'GLM 4.6V' }] },
     { key: 'openrouter', label: 'OpenRouter', rows: [...rows('qwen', 20), ...rows('gpt', 5)] },
     { key: 'zhipu', label: 'Zhipu GLM', rows: rows('glm', 3) },
   ]

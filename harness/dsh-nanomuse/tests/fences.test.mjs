@@ -51,7 +51,7 @@ test('the words around a goal match the phone, in both languages', () => {
 })
 
 test('the Ideas list is the phones\' list, byte for byte, and reads into sections', () => {
-  for (const lang of ['en', 'zh']) {
+  for (const lang of ['en', 'zh', 'ru']) {
     const ours = readFileSync(new URL(`../assets/ideas.${lang}.json`, here), 'utf8')
     const android = readFileSync(new URL(`../../../android/src/android/app/src/main/assets/nanomuse/ideas.${lang}.json`, here), 'utf8')
     const ios = readFileSync(new URL(`../../../android/src/ios/NanoMuse/Resources/ideas.${lang}.json`, here), 'utf8')

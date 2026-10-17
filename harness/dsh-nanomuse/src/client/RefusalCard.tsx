@@ -13,7 +13,7 @@
  *
  * Any other failure — an own key the provider refused, a model that timed out — gets a plain
  * sentence by the harness's routing code, with what came back folded under it, and, signed
- * in, *Use nanoMuse Cloud this time* (0.1.41): that one turn again through the account, the
+ * in, *Use NanoLika Cloud this time* (0.1.41): that one turn again through the account, the
  * chat slot untouched (`POST /retry-cloud`, then the same resend). Nothing falls back by itself.
  */
 import { createElement as h, Fragment, useEffect, useRef, useState, type ReactNode } from 'react'

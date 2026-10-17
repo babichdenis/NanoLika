@@ -30,7 +30,7 @@ process.stdin.on('data', (c) => {
     else if (msg.method === 'tools/call') {
       const { name, arguments: args } = msg.params
       if (name === 'computer_screen') {
-        if (mode === 'black') result = { isError: true, content: [{ type: 'text', text: 'the screenshot came back all black. On macOS, allow Screen Recording for nanoMuse Desktop, then relaunch.' }] }
+        if (mode === 'black') result = { isError: true, content: [{ type: 'text', text: 'the screenshot came back all black. On macOS, allow Screen Recording for NanoLika Desktop, then relaunch.' }] }
         else result = { content: [{ type: 'text', text: 'Finder · 1440×900 · keyboard hidden\nthe desktop' }, { type: 'image', data: 'AAAA', mimeType: 'image/jpeg' }] }
       } else if (name === 'computer_act' && args.action === 'computer_target') {
         result = { content: [{ type: 'text', text: 'Finder · 1440×900\nWindow mode is not available here (window mode is macOS only; the hands use the shared screen here); the hands work on the whole screen, with Finder as the application they are about. Screen now:' }] }
@@ -147,7 +147,7 @@ test('displayInfo: Linux reads the session the way the operator and the runtime 
 
 test('the words that mean "grant Screen Recording" and "grant Accessibility"', () => {
   assert.ok(isBlack('the screenshot came back all black. On macOS, allow Screen Recording'))
-  assert.ok(isBlack('the window of Finder came back empty: allow Screen Recording for nanoMuse Desktop'))
+  assert.ok(isBlack('the window of Finder came back empty: allow Screen Recording for NanoLika Desktop'))
   assert.ok(!isBlack('the hands did not finish click in time'))
   assert.ok(needsAccessibility('CGEventPostToPid refused: the process is not trusted'))
   assert.ok(needsAccessibility('no hands backend: install xdotool'))

@@ -39,7 +39,7 @@ describe("the model picker's folded groups and search", () => {
   });
 
   it("keeps the Cloud group's recommended model first, the current choice after it", () => {
-    const cloud = { key: "nanomuse_cloud", label: "nanoMuse Cloud", rows: [{ id: "q-rec", name: "Qwen", recommended: true }, ...rows("q", 12)] };
+    const cloud = { key: "nanomuse_cloud", label: "NanoLika Cloud", rows: [{ id: "q-rec", name: "Qwen", recommended: true }, ...rows("q", 12)] };
     const [shown] = layoutGroups([cloud], { current: { group: "nanomuse_cloud", id: "q-9" } });
     expect(ids(shown.rows).slice(0, 3)).toEqual(["q-rec", "q-9", "q-1"]);
     expect(shown.more).toBe(5);
@@ -77,7 +77,7 @@ describe("the model picker's folded groups and search", () => {
 
   it("shows every match in every group while a query is present, hides groups without one, and folds again when cleared", () => {
     const groups = [
-      { key: "cloud", label: "nanoMuse Cloud", rows: [{ id: "qwen-vl", name: "Qwen VL", recommended: true }, { id: "glm-4.6v", name: "GLM 4.6V" }] },
+      { key: "cloud", label: "NanoLika Cloud", rows: [{ id: "qwen-vl", name: "Qwen VL", recommended: true }, { id: "glm-4.6v", name: "GLM 4.6V" }] },
       { key: "openrouter", label: "OpenRouter", rows: [...rows("qwen", 20), ...rows("gpt", 5)] },
       { key: "zhipu", label: "Zhipu GLM", rows: rows("glm", 3) },
     ];

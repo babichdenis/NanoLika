@@ -70,7 +70,7 @@ export function FeedScreen() {
   const { data: posts, setData: setPosts } = postsRequest;
   const upcoming = upcomingRequest.data;
   const calendar = calendarRequest.data;
-  const name = state.profile?.name ?? "nanoMuse";
+  const name = state.profile?.name ?? "NanoLika";
   const t = useT();
   const locale = useLocale();
 

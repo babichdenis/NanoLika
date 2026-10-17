@@ -1,4 +1,4 @@
-/** Ids of the global panels nanoMuse adds to the harness's `main` seat. */
+/** Ids of the global panels NanoLika adds to the harness's `main` seat. */
 
 /** The rooms of the Muse desktop, in the rail's order. */
 export const FEED_PANEL = 'nanomuse-feed'
@@ -11,7 +11,7 @@ export const DEVICES_PANEL = 'nanomuse-devices'
 
 export const ROOM_PANELS = [FEED_PANEL, IDEAS_PANEL, GOALS_PANEL, LIBRARY_PANEL, DEVICES_PANEL] as const
 
-/** Where a problem with nanoMuse is reported. */
+/** Where a problem with NanoLika is reported. */
 export const SITE_URL = 'https://nanolika.ru'
 export const REPO_URL = `${SITE_URL}/source`
 export const ISSUES_URL = `${SITE_URL}/help`

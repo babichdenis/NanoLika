@@ -1,6 +1,6 @@
 /**
  * Pictures through an own key (0.1.41 "Choice"): the avatar studio's candidates and poses
- * drawn by the provider the person chose under Settings → Models, not only by nanoMuse
+ * drawn by the provider the person chose under Settings → Models, not only by NanoLika
  * Cloud. Three shapes, the same three the Python runtime's `nanomuse/avatar/studio.py`
  * tells apart:
  *
@@ -28,7 +28,7 @@ export interface ImageEndpoint {
   baseURL: string
   apiKey: string
   model: string
-  /** `nanoMuse Cloud`, or the row's label. */
+  /** `NanoLika Cloud`, or the row's label. */
   label: string
   /** `nanomuse` for the account, else the own row's id. */
   instanceId: string

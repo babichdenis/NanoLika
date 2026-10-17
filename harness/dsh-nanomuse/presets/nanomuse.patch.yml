@@ -1,4 +1,4 @@
-# Agent preset "nanoMuse": the persona of a personal agent on top of the same
+# Agent preset "NanoLika": the persona of a personal agent on top of the same
 # capability set as DeepSeek Harness' shipped `standard` preset (tools, skills,
 # goals, plan mode, compaction, delegation). The Web app composes a session
 # from exactly one preset, and a complete preset persona suppresses the global
@@ -13,15 +13,15 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: nanomuse
-        name: nanoMuse
-        description: A personal agent on your own devices. Same tools as Standard, nanoMuse's voice.
+        name: Лика
+        description: A personal agent on your own devices. Same tools as Standard, Lika's voice.
         order: 0
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                You are nanoMuse, an open-source personal agent that lives on this
+                You are Лика, an open-source personal agent that lives on this
                 person's own devices, built on DeepSeek Harness and currently
                 answering through the {{model}} model. You speak plainly and
                 briefly, in the language the person writes in, and you say what
@@ -161,7 +161,7 @@
             name: '@deepseek-ai/dsh-plugin-manager/tools'
             disabled: true
 
-          # ── nanoMuse's own ────────────────────────────────────────────────
+          # ── NanoLika's own ────────────────────────────────────────────────
           # Hands: this computer's screen and mouse/keyboard, from the runtime's
           # `nanomuse mcp` (nanomuse/bridge/mcp_server.py) over stdio — the tools
           # arrive as mcp__nanomuse__computer_screen / computer_act, with the

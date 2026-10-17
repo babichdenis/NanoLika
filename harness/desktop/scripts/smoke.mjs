@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Start the harness the way the app does — the Electron binary in Node mode, the staged dsh,
-// a throwaway home with the nanoMuse profile — and check that (1) the composed configuration
+// a throwaway home with the NanoLika profile — and check that (1) the composed configuration
 // carries the bundle's patches and (2) the Host comes up and answers. No display is needed,
 // so this runs on every CI platform after packaging.
 //
@@ -141,12 +141,12 @@ else child.kill("SIGTERM");
 await new Promise((r) => setTimeout(r, 1500));
 cleanup();
 if (noToken !== 401 || withToken >= 400) throw new Error("the Host did not answer as dsh's web app does");
-if (Object.values(ours).some((status) => status !== 200)) throw new Error("the nanoMuse routes did not answer: the cloud or rooms row did not come up");
+if (Object.values(ours).some((status) => status !== 200)) throw new Error("the NanoLika routes did not answer: the cloud or rooms row did not come up");
 if (warnings > 0) {
   console.error(redact(out));
   throw new Error("some entries did not activate");
 }
-console.log("ok: the harness boots with the nanoMuse bundle");
+console.log("ok: the harness boots with the NanoLika bundle");
 
 // 4. opt-in: the operator — the app as an app this time (not Node mode), with the check flag
 // src/main.ts answers: it starts the operator server alone, asks it for /info and a small

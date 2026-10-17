@@ -55,7 +55,7 @@ export type Mood = (typeof MOODS)[number]
 /** What the browser half needs to draw the agent. */
 export interface Profile {
   rev: number
-  /** What the person calls the agent; `nanoMuse` until the account says otherwise. */
+  /** What the person calls the agent; `NanoLika` until the account says otherwise. */
   name: string
   /** `dragon` (the default), `emoji`, or `face`. */
   avatar: 'dragon' | 'emoji' | 'face'
@@ -69,7 +69,7 @@ export interface Profile {
   connectors: SharedConnector[]
 }
 
-export const DEFAULT_PROFILE: Profile = { rev: 0, name: 'nanoMuse', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', connectors: [] }
+export const DEFAULT_PROFILE: Profile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', connectors: [] }
 
 const FACE_ID = /^[a-f0-9]{6,40}$/
 
@@ -122,7 +122,7 @@ export class ProfileStore {
     if (!force && light.rev <= this.profile.rev) return false
     const next: Profile = {
       rev: light.rev,
-      name: light.name.trim() || 'nanoMuse',
+      name: light.name.trim() || 'NanoLika',
       avatar: 'dragon',
       emoji: '',
       color: '',
@@ -198,7 +198,7 @@ function normalize(raw: Partial<Profile>): Profile {
   const avatar = raw.avatar === 'emoji' || raw.avatar === 'face' ? raw.avatar : 'dragon'
   return {
     rev: Number(raw.rev ?? 0) || 0,
-    name: String(raw.name ?? '').trim() || 'nanoMuse',
+    name: String(raw.name ?? '').trim() || 'NanoLika',
     avatar,
     emoji: String(raw.emoji ?? ''),
     color: String(raw.color ?? ''),

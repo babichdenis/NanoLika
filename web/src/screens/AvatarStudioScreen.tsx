@@ -33,7 +33,7 @@ export function AvatarStudioScreen() {
   const { state, setTab, toast, draft, refreshSettings } = useStore();
   const t = useT();
   const profile = state.profile;
-  const name = profile?.name ?? "nanoMuse";
+  const name = profile?.name ?? "NanoLika";
   const [view, setView] = useState<StudioView | null>(null);
   const [description, setDescription] = useState("");
   const [style, setStyle] = useState("muse");
@@ -110,7 +110,7 @@ export function AvatarStudioScreen() {
   })();
 
   const styleLabel = (id: string | null | undefined) => AVATAR_STYLES.find((s) => s.id === id)?.label;
-  const provider = view?.cloud ? "nanoMuse Cloud" : providerName(view?.host ?? "", t);
+  const provider = view?.cloud ? "NanoLika Cloud" : providerName(view?.host ?? "", t);
 
   return (
     <div className="flex h-full flex-col">

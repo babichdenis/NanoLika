@@ -1,7 +1,7 @@
 import type { TimelineEvent } from "./types";
 
 /**
- * *Use nanoMuse Cloud this time* under a failed turn (the own-key models contract, section 4).
+ * *Use NanoLika Cloud this time* under a failed turn (the own-key models contract, section 4).
  * The button belongs under an error notice when the person is signed in, the chat model is not
  * the account's, the chat is not another device's, the failure is not the allowance's (that card
  * has its own ways on) and the failed turn was not on the account already (`model_used`). It

@@ -1,7 +1,7 @@
 /**
  * The Invite button at the top right of a chat, as the Muse desktop has it: a
  * small pill with a gift, and a card with the account's invite code and link
- * — a friend who signs up with the code gets credit on nanoMuse Cloud, and so
+ * — a friend who signs up with the code gets credit on NanoLika Cloud, and so
  * does the person inviting. Occupies `conversation.session.header.utilities`;
  * nothing shows without an account.
  */

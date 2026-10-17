@@ -104,7 +104,7 @@ export interface AvatarProps {
 
 /** A round face of the agent at the requested size, moving when it may; an emoji face is drawn, not loaded. */
 export function Avatar({ size, profile, mood = 'idle', className, title, still = false }: AvatarProps): ReactElement {
-  const name = title ?? profile?.name ?? 'nanoMuse'
+  const name = title ?? profile?.name ?? 'NanoLika'
   const [, bump] = useState(0)
   const live = useLive()
   const visible = useVisible()

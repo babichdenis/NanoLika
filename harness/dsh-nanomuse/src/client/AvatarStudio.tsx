@@ -131,7 +131,7 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
   const [moods, setMoods] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
-  // *Use nanoMuse Cloud this time* (0.1.41): the round after an own provider failed draws through the account, the slot untouched
+  // *Use NanoLika Cloud this time* (0.1.41): the round after an own provider failed draws through the account, the slot untouched
   const [viaCloud, setViaCloud] = useState(false)
   const live = useLive()
   const alive = useRef(true)
@@ -262,7 +262,7 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
           image ? h('img', { src: `data:image/png;base64,${image}`, alt: t('stOption', { n: index + 1 }) }) : h('span', { className: 'nm-st-wait' }, busy ? '…' : '—'),
           h('span', { className: 'nm-st-tag' }, t('stOption', { n: index + 1 }))))),
       error ? h('div', { className: 'nm-room-error' }, error) : null,
-      // an own provider failed and the account could draw: this round through nanoMuse Cloud, the slot untouched
+      // an own provider failed and the account could draw: this round through NanoLika Cloud, the slot untouched
       error && !busy && !viaCloud && estimate?.source === 'provider' && live.cloud.signedIn
         ? h('div', { style: { marginTop: 6 } }, h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', 'data-testid': 'nm-st-cloud-once', onClick: () => draw(true) }, t('rfUseCloudOnce')))
         : null)

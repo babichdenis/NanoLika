@@ -655,4 +655,8 @@ enum NanoMuseLocale {
     static var isChinese: Bool {
         tag.lowercased().hasPrefix("zh")
     }
+
+    static var isRussian: Bool {
+        tag.lowercased().hasPrefix("ru")
+    }
 }

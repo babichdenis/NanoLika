@@ -1,6 +1,6 @@
 // Settings → Models (0.1.41, "Choice"), the host's half, through `NanomuseCloud` itself: the
 // resolution order of the four slots (the person's choice, then the chat provider's defaults,
-// then nanoMuse Cloud, then the first own row that can), `GET /models` for the page, the
+// then NanoLika Cloud, then the first own row that can), `GET /models` for the page, the
 // "Use it for" card's offer and `POST /providers/adopt`, the hands' environment for the MCP
 // client, and the own-provider image shapes with a fake fetch. No Electron, no relay, no
 // network: the same in-memory context as cloud-providers.test.mjs.
@@ -112,12 +112,12 @@ test('GET /models: the four slots; signed in with nothing else, every row is the
     assert.deepEqual(view.handsExcluded, [])
     // the chat slot: the account's default, the recommended model first and marked, the other one after it
     assert.equal(view.slots.chat.provider, PROVIDER_ID)
-    assert.equal(view.slots.chat.providerLabel, 'nanoMuse Cloud')
+    assert.equal(view.slots.chat.providerLabel, 'NanoLika Cloud')
     assert.deepEqual(view.slots.chat.options.map((o) => [o.id, Boolean(o.recommended)]), [['deepseek-v4.1-flash', true], ['deepseek-v4.1', false]])
     assert.deepEqual(view.slots.hands.options.map((o) => [o.id, Boolean(o.recommended)]), [['qwen3.8-27b', true]])
     assert.equal(view.slots.hands.chosen, false)
     // pictures and clips: the account's models, the recommended image model marked
-    assert.deepEqual(view.slots.image, { provider: PROVIDER_ID, providerLabel: 'nanoMuse Cloud', model: 'qwen-image-3.0', options: [{ provider: PROVIDER_ID, providerLabel: 'nanoMuse Cloud', id: 'qwen-image-3.0', name: 'Qwen Image', recommended: true }], chosen: false, auto: { provider: PROVIDER_ID, providerLabel: 'nanoMuse Cloud', model: 'qwen-image-3.0' } })
+    assert.deepEqual(view.slots.image, { provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', model: 'qwen-image-3.0', options: [{ provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', id: 'qwen-image-3.0', name: 'Qwen Image', recommended: true }], chosen: false, auto: { provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', model: 'qwen-image-3.0' } })
     assert.equal(view.slots.video.model, 'wan2.2-i2v-flash')
     assert.equal(view.slots.video.off, undefined)
   } finally {
@@ -298,7 +298,7 @@ test('the video order: the choice, else the chat provider, else the account, els
     assert.equal((await out.svc.videoEndpoint()).instanceId, PROVIDER_ID)
     // the choice: the account's model by name, the own row by name, off
     const options = (await out.api('GET', '/providers/models?cap=video')).body.options
-    assert.deepEqual(options.slice(0, 1), [{ provider: PROVIDER_ID, providerLabel: 'nanoMuse Cloud', id: 'wan2.2-i2v-flash', name: 'Wan', recommended: true }])
+    assert.deepEqual(options.slice(0, 1), [{ provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', id: 'wan2.2-i2v-flash', name: 'Wan', recommended: true }])
     assert.ok(options.some((o) => o.provider === 'bailian' && o.id === 'wan2.2-i2v-flash'))
     const set = await out.api('POST', '/video-model', { model: 'wan2.2-i2v-flash', provider: 'bailian' })
     assert.equal(set.status, 200)
@@ -329,7 +329,7 @@ test('Automatic: an empty model drops the stored choice and the slot follows the
     let view = (await out.api('GET', '/models')).body
     for (const slot of ['hands', 'image', 'video']) {
       assert.equal(view.slots[slot].chosen, false, slot)
-      assert.deepEqual(view.slots[slot].auto, { provider: PROVIDER_ID, providerLabel: 'nanoMuse Cloud', model: view.slots[slot].model }, slot)
+      assert.deepEqual(view.slots[slot].auto, { provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', model: view.slots[slot].model }, slot)
     }
     // explicit choices on the own row; `auto` still names what the order would give (the account)
     await out.api('POST', '/hands-model', { model: 'qwen3-vl-plus', provider: 'bailian' })

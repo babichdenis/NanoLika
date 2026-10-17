@@ -8,7 +8,7 @@ const failed = (id: string, extra: Record<string, unknown> = {}): TimelineEvent 
   ({ id, ts: "2026-10-09T00:00:01Z", type: "notice", level: "error", code: "key", text: "The model provider refused the API key. Check it under Connections.", ...extra }) as TimelineEvent;
 const ctx = { signedIn: true, chatOnCloud: false, deviceChat: false };
 
-describe("Use nanoMuse Cloud this time", () => {
+describe("Use NanoLika Cloud this time", () => {
   it("offers the words of the failed turn under its notice", () => {
     const events = [user("u1", "first"), failed("n1"), user("u2", "second", ["attachments/a.pdf"]), failed("n2")];
     expect(cloudRetryTarget(events, 1, ctx)).toEqual({ text: "first", files: [] });

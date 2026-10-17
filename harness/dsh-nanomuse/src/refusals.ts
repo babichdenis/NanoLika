@@ -173,7 +173,7 @@ export function classifyRefusal(status: number, code: string, message: string, p
 /**
  * The refusal inside an adapter failure: `message` is what the adapter made of the reply
  * (`429: {"message":…,"code":"allowance_exhausted",…}`, `413 Request too large`,
- * `nanoMuse Cloud (502): …`, `Connection error.`), `code` its routing code. Null when the line
+ * `NanoLika Cloud (502): …`, `Connection error.`), `code` its routing code. Null when the line
  * is not a refused HTTP reply or a transport failure — a model that answered and then said
  * nothing, say — so the caller leaves it as it was.
  */
@@ -216,37 +216,37 @@ export function parseRelayFailure(message: string, code?: string): RelayRefusal 
 export function refusalSentence(refusal: RelayRefusal): string {
   switch (refusal.kind) {
     case 'exhausted':
-      return 'The free allowance is used up. Add a key of your own, sign in with a plan you already pay for, or invite a friend, all under Settings → nanoMuse Cloud. Your sign-in and your devices keep working.'
+      return 'The free allowance is used up. Add a key of your own, sign in with a plan you already pay for, or invite a friend, all under Settings → NanoLika Cloud. Your sign-in and your devices keep working.'
     case 'allowance_paused':
-      return 'The free allowance is paused on this relay for now, not used up. Add a key of your own or sign in with a plan you already pay for, both under Settings → nanoMuse Cloud. Your sign-in, your devices and what is left stay as they are.'
+      return 'The free allowance is paused on this relay for now, not used up. Add a key of your own or sign in with a plan you already pay for, both under Settings → NanoLika Cloud. Your sign-in, your devices and what is left stay as they are.'
     case 'too_large':
       return 'That message is too large for the model. Shorten it, leave out some attachments, or start a new chat.'
     case 'content_rejected':
       return "The model provider's content check declined this request. Try different words, or start a new chat if it keeps happening: the words it objects to can be earlier in the conversation."
     case 'signed_out':
-      return 'This sign-in is no longer valid. Sign in again under Settings → nanoMuse Cloud.'
+      return 'This sign-in is no longer valid. Sign in again under Settings → NanoLika Cloud.'
     case 'disabled':
-      return refusal.message || 'This account cannot use nanoMuse Cloud right now.'
+      return refusal.message || 'This account cannot use NanoLika Cloud right now.'
     case 'daily_cap':
       return refusal.message || "Today's share of the allowance is used up."
     case 'busy':
       return 'Too many requests at once. Wait a moment and try again.'
     case 'model':
-      return 'nanoMuse Cloud does not offer that model any more. Pick another under Settings → nanoMuse Cloud.'
+      return 'NanoLika Cloud does not offer that model any more. Pick another under Settings → NanoLika Cloud.'
     case 'relay_down':
-      return 'nanoMuse Cloud did not answer. Try again in a moment.'
+      return 'NanoLika Cloud did not answer. Try again in a moment.'
     case 'unreachable':
-      return 'Could not reach nanoMuse Cloud. Check the connection and try again.'
+      return 'Could not reach NanoLika Cloud. Check the connection and try again.'
     case 'service_paused':
-      return 'nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.'
+      return 'NanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.'
     case 'sync_paused':
       return 'Conversation sync is paused on this relay for now; what is stored is kept and your devices keep working on their own.'
     case 'hub_paused':
       return 'The device hub is paused on this relay for now; each device keeps working on its own.'
     case 'cloud_off':
-      return 'nanoMuse Cloud models are switched off under Settings → Models, and this chat still runs on one, so nothing was sent. Pick another model for the chat, start a new chat, or use nanoMuse Cloud this time.'
+      return 'NanoLika Cloud models are switched off under Settings → Models, and this chat still runs on one, so nothing was sent. Pick another model for the chat, start a new chat, or use NanoLika Cloud this time.'
     case 'other':
-      return refusal.message || 'nanoMuse Cloud could not complete the request.'
+      return refusal.message || 'NanoLika Cloud could not complete the request.'
   }
 }
 
@@ -288,7 +288,7 @@ export function relayFailure(failure: FailureLike): { failure: FailureLike; refu
 
 // ---- what the card shows, by kind (the browser draws it; tested here as data) --------------------
 
-/** A button on a refusal card; `cloud-once` is *Use nanoMuse Cloud this time*, `models` opens Settings › Models. */
+/** A button on a refusal card; `cloud-once` is *Use NanoLika Cloud this time*, `models` opens Settings › Models. */
 export type RefusalAction = 'ways' | 'sign-in' | 'retry' | 'new-chat' | 'settings' | 'cloud-once' | 'models'
 
 /** The card for a kind: which actions it offers, in order, and whether the relay's own sentence is worth showing under ours. */

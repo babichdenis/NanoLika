@@ -57,7 +57,7 @@ test('the OpenAI envelope `{error: {...}}` and a trailing provider dump are read
   const dumped = `${relayLine(429, EXHAUSTED)}\n{"raw":"provider metadata"}`
   assert.equal(parseRelayFailure(dumped)?.grant, 10)
   // a prefixed line, as `formatProviderError` prints it
-  assert.equal(parseRelayFailure(`nanoMuse Cloud (429): ${JSON.stringify(EXHAUSTED)}`)?.kind, 'exhausted')
+  assert.equal(parseRelayFailure(`NanoLika Cloud (429): ${JSON.stringify(EXHAUSTED)}`)?.kind, 'exhausted')
 })
 
 test('402 out_of_tokens (older relay) is the same card', () => {
@@ -174,7 +174,7 @@ test('relay 0.22: the operator’s switches — the allowance paused (not spent)
   assert.equal(classifyRefusal(429, 'allowance_exhausted', '', false), 'exhausted')
 
   // the Cloud service, Conversation sync and Device hub switches: 503 with the code, not "relay down"
-  const service = parseRelayFailure(relayLine(503, { message: 'nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.', code: 'service_paused', paused: true }), 'SERVER')
+  const service = parseRelayFailure(relayLine(503, { message: 'NanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.', code: 'service_paused', paused: true }), 'SERVER')
   assert.equal(service.kind, 'service_paused')
   assert.equal(service.paused, true)
   assert.match(refusalSentence(service), /paused by its operator for now; your sign-in and your data are kept/)

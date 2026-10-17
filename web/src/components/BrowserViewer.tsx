@@ -133,7 +133,7 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
     /* raw */
   }
   const live = event.status === "live";
-  const name = state.profile?.name ?? "nanoMuse";
+  const name = state.profile?.name ?? "NanoLika";
   const agentState = hold
     ? t("{name} is waiting for you", { name })
     : state.status.state !== "idle" && state.status.thread === thread

@@ -1,6 +1,6 @@
 // The two dictionaries, side by side: every `{hole}` an English string has, its Chinese twin
 // has too (the client fills them by name); a Chinese entry reads the same as the English one
-// only when it is a name (nanoMuse, Harness, a URL); quotation marks in Chinese are 「」, not
+// only when it is a name (NanoLika, Harness, a URL); quotation marks in Chinese are 「」, not
 // the English pair. Each of these was a slip once ('kwai is working…', 'online', “始终允许”).
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -26,7 +26,6 @@ const SAME_ON_PURPOSE = new Set([
   'handsAct',
   'cnCustomUrl',
   'fsMacTitle',
-  'style_muse',
   'abVersionBundle',
   'ownKeyKeyField',
   'ownKeyChatGptRow',

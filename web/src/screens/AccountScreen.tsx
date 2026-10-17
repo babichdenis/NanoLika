@@ -13,7 +13,7 @@ import type { CloudAccount, CloudEvent, CloudMe, CloudSession, UsageRow } from "
 import { cx, relativeSeconds } from "../util";
 
 /**
- * Your nanoMuse Cloud account: who you are signed in as, what has been used (by kind — chat,
+ * Your NanoLika Cloud account: who you are signed in as, what has been used (by kind — chat,
  * pictures, clips — and by model), the password, every device signed in, and the
  * way out (sign out here, everywhere, or delete the account). Everything the relay knows
  * about you is on this one screen; what the relay keeps of your chats is one switch away, under
@@ -51,7 +51,7 @@ export function AccountScreen() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageBar title={t("Account")} description={signedIn ? t("nanoMuse Cloud · one account for all your devices") : t("Sign in to nanoMuse Cloud")} />
+      <PageBar title={t("Account")} description={signedIn ? t("NanoLika Cloud · one account for all your devices") : t("Sign in to NanoLika Cloud")} />
 
       <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-4">
         {!signedIn ? (
@@ -61,7 +61,7 @@ export function AccountScreen() {
                 allowance: (cfg.allowance_cny ?? 10).toFixed(0),
               })}
             </p>
-            <SignIn onSignedIn={() => toast(t("Signed in to nanoMuse Cloud."))} />
+            <SignIn onSignedIn={() => toast(t("Signed in to NanoLika Cloud."))} />
           </Section>
         ) : (
           <>
@@ -214,7 +214,7 @@ function DataControlsLink({ me }: { me: CloudMe }) {
           <DatabaseZap size={18} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-medium">{t("Help improve nanoMuse's AI models")}</span>
+          <span className="block text-[14px] font-medium">{t("Help improve NanoLika's AI models")}</span>
           <span className="block text-[12.5px] text-muted">
             {ct.on ? t("On") : t("Off")}
             {ct.samples > 0 && ` · ${t("{n} turns kept so far", { n: String(ct.samples) })}`}
@@ -230,7 +230,7 @@ function DataControlsLink({ me }: { me: CloudMe }) {
 function Invite({ invite: inv }: { invite: NonNullable<CloudMe["invite"]> }) {
   const t = useT();
   const { toast } = useStore();
-  const link = inv.url || `https://nanomuse.cn/web/?invite=${inv.code}`;
+  const link = inv.url || `https://nanolika.ru/?invite=${inv.code}`;
   const earned = inv.earned_cny ?? inv.invites * inv.bonus_cny;
   const copy = async (text: string) => {
     try {
@@ -241,7 +241,7 @@ function Invite({ invite: inv }: { invite: NonNullable<CloudMe["invite"]> }) {
     }
   };
   const share = async () => {
-    const text = t("Try nanoMuse with me, a fully open-source personal agent, free to use. Sign up with my code {code}: {link}", { code: inv.code, link });
+    const text = t("Try NanoLika with me, a fully open-source personal agent, free to use. Sign up with my code {code}: {link}", { code: inv.code, link });
     const nav = navigator as Navigator & { share?: (data: { text: string }) => Promise<void> };
     if (nav.share) {
       try {
@@ -556,7 +556,7 @@ function SignOut({ account, onDone }: { account: CloudAccount | null; onDone: ()
   const run = async (what: "here" | "all" | "delete") => {
     const ask =
       what === "here"
-        ? t("Sign out of nanoMuse Cloud on this device? The hub and the Cloud model stop working here until you sign in again.")
+        ? t("Sign out of NanoLika Cloud on this device? The hub and the Cloud model stop working here until you sign in again.")
         : what === "all"
           ? t("Sign out on every device, including this one?")
           : t("Delete the account? The relay forgets your identifier, your devices and your usage. This cannot be undone.");

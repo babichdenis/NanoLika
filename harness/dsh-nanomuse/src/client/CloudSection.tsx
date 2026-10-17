@@ -1,5 +1,5 @@
 /**
- * Settings → nanoMuse Cloud: sign in with a code, see the account, the look it
+ * Settings → NanoLika Cloud: sign in with a code, see the account, the look it
  * gives the agent, this computer and the other devices on the hub, sign out.
  * Talks to the host half over the loopback API (`/nanomuse/cloud/*`) and reads
  * the live state the host streams.
@@ -198,7 +198,7 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' = 'accou
         // The pickers and the "ways on" (C11): the account's models and each own row's in one
         // chooser, the account's row first, then the catalogue grouped for the region.
         h(OwnKeyPanel, { t, onChanged: refreshStatus }),
-        // The proxy for the providers (the shell's setting; drawn inside nanoMuse Desktop only).
+        // The proxy for the providers (the shell's setting; drawn inside NanoLika Desktop only).
         h(NetworkRows, { t, relayURL: status.baseURL }),
         // The account as the phone shows it — the pool in yuan, the ways on, invite, usage,
         // password, devices holding a key, the timeline, deletion — read live from the relay.

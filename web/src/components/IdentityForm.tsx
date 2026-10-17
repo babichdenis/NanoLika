@@ -43,9 +43,9 @@ export function Chip({ active, onClick, children }: { active: boolean; onClick: 
 }
 
 /**
- * Who your nanoMuse is. Used on the first-run naming page and under Settings; the same
+ * Who your NanoLika is. Used on the first-run naming page and under Settings; the same
  * fields, the same limits as the server (`NAME_MAX`, `TAGLINE_MAX`, the tone and
- * communication vocabularies). An empty name falls back to "nanoMuse" on save.
+ * communication vocabularies). An empty name falls back to "NanoLika" on save.
  */
 export function IdentityForm({
   value,
@@ -81,7 +81,7 @@ export function IdentityForm({
               onChange={(e) => set({ name: e.target.value.slice(0, NAME_MAX) })}
               maxLength={NAME_MAX}
               className={cx(inputCls, "text-[17px] font-medium")}
-              placeholder="nanoMuse"
+              placeholder="NanoLika"
               aria-label={t("Name")}
               autoCapitalize="words"
             />
@@ -156,7 +156,7 @@ export function IdentityForm({
 /** The identity as the store has it, with defaults for a profile from before these fields. */
 export function identityOf(p: Partial<Profile> | null | undefined, fallbackAvatar: string, fallbackColor: string): Identity {
   return {
-    name: p?.name ?? "nanoMuse",
+    name: p?.name ?? "NanoLika",
     tagline: p?.tagline ?? "",
     avatar: p?.avatar ?? fallbackAvatar,
     emoji: p?.emoji ?? "✨",
@@ -170,5 +170,5 @@ export function identityOf(p: Partial<Profile> | null | undefined, fallbackAvata
 
 /** What to send: trimmed, the empty name back to the default. */
 export function identityBody(v: Identity): Identity {
-  return { ...v, name: v.name.trim() || "nanoMuse", tagline: v.tagline.trim(), style: v.style.trim(), user_name: v.user_name.trim() };
+  return { ...v, name: v.name.trim() || "NanoLika", tagline: v.tagline.trim(), style: v.style.trim(), user_name: v.user_name.trim() };
 }

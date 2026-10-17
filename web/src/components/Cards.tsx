@@ -228,7 +228,7 @@ export function scopeLabel(scope: string, tool: string, target?: string | null, 
 
 export function ApprovalCard({
   event,
-  name = "nanoMuse",
+  name = "NanoLika",
   onDecide,
 }: {
   event: ApprovalEvent;
@@ -426,7 +426,7 @@ function noticeText(event: NoticeEvent): string {
 }
 
 /**
- * A line from the runtime. `onCloudRetry` is *Use nanoMuse Cloud this time* under a failed
+ * A line from the runtime. `onCloudRetry` is *Use NanoLika Cloud this time* under a failed
  * turn of one's own model (the own-key models contract, section 4): the same words again,
  * one turn on the account's model, the next back on the own key. The chat screen passes it
  * when the person is signed in, the chat is not the account's and the failed turn was not
@@ -485,7 +485,7 @@ export function Notice({ event, onCloudRetry }: { event: NoticeEvent; onCloudRet
               onClick={retryOnCloud}
               className="rounded-full bg-accent/12 px-3 py-1 text-[12px] font-medium text-accent disabled:opacity-50"
             >
-              {t("Use nanoMuse Cloud this time")}
+              {t("Use NanoLika Cloud this time")}
             </button>
             {cloudError && <div className="text-[12px] text-rose-700 dark:text-rose-300">{cloudError}</div>}
           </div>
@@ -562,7 +562,7 @@ export function BrowserCard({ event, onOpen }: { event: BrowserEvent; onOpen: (i
  * the window in front, and a Stop that takes the mouse back. The ring around the cursor is
  * drawn by the desktop stage (desktop/app); here the card is the account of it.
  */
-export function HandsCard({ event, name = "nanoMuse" }: { event: HandsEvent; name?: string }) {
+export function HandsCard({ event, name = "NanoLika" }: { event: HandsEvent; name?: string }) {
   const t = useT();
   const { state, toast } = useStore();
   const [stopping, setStopping] = useState(false);
@@ -698,7 +698,7 @@ export function holdLine(hold: HoldEvent, t: (s: string, v?: Record<string, stri
  * phone — "Your turn — <reason>" when the agent asked, "You took over …" when they did —
  * with Done. Off: greyed, with how it ended.
  */
-export function HoldCard({ event, name = "nanoMuse" }: { event: HoldEvent; name?: string }) {
+export function HoldCard({ event, name = "NanoLika" }: { event: HoldEvent; name?: string }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const on = event.status === "on";

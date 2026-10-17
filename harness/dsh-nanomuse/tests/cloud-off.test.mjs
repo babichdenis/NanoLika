@@ -1,7 +1,7 @@
-// Settings → Models → *Use nanoMuse Cloud models* switched off: the account's models leave
+// Settings → Models → *Use NanoLika Cloud models* switched off: the account's models leave
 // every slot's list and order while the sign-in stays; the `llm/stream` hook refuses a chat
 // that still sits on a Cloud model with a card of its own, sends the harness's side calls (a
-// title, a compaction) to the chat slot's own model, and lets a session under *Use nanoMuse
+// title, a compaction) to the chat slot's own model, and lets a session under *Use NanoLika
 // Cloud this time* through. The same in-memory context as cloud-models.test.mjs, plus an
 // `inject` that keeps the hook so the test can call it. The switch itself is refused (`409
 // chat_on_cloud`) while the chat slot is the account's and no own chat model could take it.
@@ -291,7 +291,7 @@ test('the llm/stream hook: on, the relay is called; off, a turn is refused with 
     assert.equal(run.sent[0].provider, 'bailian')
     assert.equal(run.sent[0].model, 'deepseek-v4.1-flash')
     assert.equal(run.sent[0].purpose, 'session-title')
-    // *Use nanoMuse Cloud this time* holds the session: that one goes through
+    // *Use NanoLika Cloud this time* holds the session: that one goes through
     out.svc.cloudOnce.set('s1', { provider: 'bailian', model: 'deepseek-v4.1-flash', at: Date.now() })
     run = await runHook(out.hooks, { provider: PROVIDER_ID, model: 'deepseek-v4.1-flash', sessionId: 's1' })
     assert.equal(run.relayCalled, true)

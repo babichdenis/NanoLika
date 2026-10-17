@@ -8,7 +8,7 @@
  * models can do — `chat`, `vision` (the hands see the screen), `image` (pictures), `video` (clips).
  *
  * **One rule.** What the person has configured — the own-key rows this plugin wrote into the
- * harness's model adapter, the ChatGPT sign-in, nanoMuse Cloud while the allowance lasts — decides
+ * harness's model adapter, the ChatGPT sign-in, NanoLika Cloud while the allowance lasts — decides
  * what the app offers: chat needs `chat`, the hands need `vision`, pictures `image`, clips `video`.
  * A capability nobody has is unavailable with one sentence (the browser half's words), never a raw
  * error; a model picker lists only the models of providers that have the capability.

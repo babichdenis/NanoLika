@@ -21,8 +21,8 @@
         "image": "qwen-image-3.0",
         "video": "wan2.2-i2v-flash"
       },
-      "note": "One key for chat, hands, pictures and clips. Signs up accounts with a mainland China identity only; the international edition (dashscope-intl) does not carry these models. Pictures and clips go through Model Studio's own API, which nanoMuse speaks.",
-      "note_zh": "一把 key 覆盖对话、手、画图和视频。只给中国大陆身份注册；国际版（dashscope-intl）没有这几个模型。画图和视频走百炼自己的接口，nanoMuse 已支持。",
+      "note": "One key for chat, hands, pictures and clips. Signs up accounts with a mainland China identity only; the international edition (dashscope-intl) does not carry these models. Pictures and clips go through Model Studio's own API, which NanoLika speaks.",
+      "note_zh": "一把 key 覆盖对话、手、画图和视频。只给中国大陆身份注册；国际版（dashscope-intl）没有这几个模型。画图和视频走百炼自己的接口，NanoLika 已支持。",
       "verified": "2026-10"
     },
     {
@@ -151,8 +151,8 @@
         "hands": "doubao-seed-2-0-pro-260215",
         "image": "doubao-seedream-5-0-lite-260128"
       },
-      "note": "Model ids are dated deployments; the live list has the exact ones. Doubao Seed 2.0 reads pictures; Seedream draws them through /images/generations. Seedance video uses Ark's own task API, which nanoMuse does not speak, so clips are left out.",
-      "note_zh": "模型 id 带日期后缀，以实时列表为准。豆包 Seed 2.0 能看图；Seedream 画图走 /images/generations。Seedance 视频走方舟自己的任务接口，nanoMuse 还不支持，所以不列视频。",
+      "note": "Model ids are dated deployments; the live list has the exact ones. Doubao Seed 2.0 reads pictures; Seedream draws them through /images/generations. Seedance video uses Ark's own task API, which NanoLika does not speak, so clips are left out.",
+      "note_zh": "模型 id 带日期后缀，以实时列表为准。豆包 Seed 2.0 能看图；Seedream 画图走 /images/generations。Seedance 视频走方舟自己的任务接口，NanoLika 还不支持，所以不列视频。",
       "verified": "2026-10",
       "reasoning": {
         "doc": "https://docs.volcengine.com/docs/ark/model-parameter-support?lang=zh",

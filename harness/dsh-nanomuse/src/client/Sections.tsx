@@ -263,7 +263,7 @@ export function AppBehaviorRows({ t }: { t: Translate }): ReactNode {
 // ---- Wallet, Secure storage, Channels: Muse's pages, with what is true here ----------
 
 /**
- * Wallet. Muse keeps payment methods here; nanoMuse pays for nothing on the person's
+ * Wallet. Muse keeps payment methods here; NanoLika pays for nothing on the person's
  * behalf, and says so — the page explains what happens when something costs money, and
  * points at the usage quota that *is* an account balance of sorts.
  */
@@ -292,7 +292,7 @@ export function makeWalletSection(t: Translate, openSection: (id: string) => voi
 interface Folders { home: string; library: string; downloads: string; state: string }
 
 /**
- * Secure storage: what nanoMuse keeps that is secret or personal, and where — files on this
+ * Secure storage: what NanoLika keeps that is secret or personal, and where — files on this
  * machine readable by this user alone (mode 0600), nothing in the system keychain. Each row
  * says what it is; the folder opens in the file manager.
  */

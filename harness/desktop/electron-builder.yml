@@ -1,4 +1,4 @@
-# electron-builder: the installers of nanoMuse Desktop — the desktop built on DeepSeek
+# electron-builder: the installers of NanoLika Desktop — the desktop built on DeepSeek
 # Harness. `npm run dist` here after scripts/prepare-dsh.mjs has staged dsh/ (and, for the
 # hands, after scripts/desktop-app/build-runtime.py --target harness/desktop/runtime has put
 # the runtime at runtime/); .github/workflows/desktop-app.yml does all of it per platform.
@@ -9,10 +9,10 @@
 # The appId is the one the previous desktop app (desktop/app, retired in 0.1.30) carried, so
 # this one installs over it and keeps its place in the system's permission lists.
 appId: io.github.nanomuse.desktop
-productName: nanoMuse
+productName: NanoLika
 executableName: nanomuse-desktop
-copyright: GPL-3.0-or-later · the nanoMuse community · built on DeepSeek Harness (MIT)
-artifactName: nanoMuse-Desktop-${version}-${os}-${arch}.${ext}
+copyright: GPL-3.0-or-later · NanoLika, built on the open-source nanoMuse project and DeepSeek Harness
+artifactName: NanoLika-Desktop-${version}-${os}-${arch}.${ext}
 directories:
   output: dist
   buildResources: resources
@@ -56,7 +56,7 @@ linux:
     # and the .deb does not apply; unpack anywhere and run ./nanomuse-desktop (docs/desktop.md)
     - target: tar.gz
       arch: [x64]
-  artifactName: nanoMuse-Desktop-${version}-linux-x64.${ext}
+  artifactName: NanoLika-Desktop-${version}-linux-x64.${ext}
   category: Utility
   # the icon set, one PNG per size (resources/icons/<n>x<n>.png, made from app-icon.png): the deb
   # installs each under /usr/share/icons/hicolor/<n>x<n>/apps/. A single 1024px PNG landed only in
@@ -88,7 +88,7 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  shortcutName: nanoMuse
+  shortcutName: NanoLika
   # electron-builder keeps files with these extensions out of the installer's 7z archive and
   # writes them into the installer one by one instead, and when it does it skips every
   # node_modules folder. The default list has .mp4, so the face's clips under
@@ -109,12 +109,12 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
   identity: null
-  # "nanoMuse Computer Use.app" — the helper that holds Screen Recording and Accessibility and
+  # "NanoLika Computer Use.app" — the helper that holds Screen Recording and Accessibility and
   # takes the screenshots and moves the mouse (mac/computer-use/, built by its build.sh in the
   # workflow before electron-builder runs). extraFiles land under Contents/; a bundle in
   # Contents/Helpers is nested code, which package-mac.sh signs before the outer app.
   # Nothing is signed here (identity: null), so the helper arrives as build.sh left it.
   extraFiles:
-    - from: mac/computer-use/build/nanoMuse Computer Use.app
-      to: Helpers/nanoMuse Computer Use.app
+    - from: mac/computer-use/build/NanoLika Computer Use.app
+      to: Helpers/NanoLika Computer Use.app
       filter: ["**/*"]

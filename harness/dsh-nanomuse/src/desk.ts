@@ -410,7 +410,7 @@ export interface UpdateInfo {
 
 /**
  * `-1`, `0` or `1` for `a` against `b`; `v` prefixes and pre-release tags (`-rc.1`) are read,
- * and so is a label in front of the number (`dsh-nanomuse 0.1.41`, `nanoMuse Desktop 0.1.41`):
+ * and so is a label in front of the number (`dsh-nanomuse 0.1.41`, `NanoLika Desktop 0.1.41`):
  * the first dotted number in the string is the version.
  */
 export function compareVersions(a: string, b: string): number {
@@ -463,12 +463,12 @@ function comparePre(a: string, b: string): number {
  */
 export function pickAsset(assets: ReleaseAsset[], platform: string, arch: string, appImage = false): ReleaseAsset | undefined {
   const cpu = arch === 'arm64' ? 'arm64' : 'x64'
-  const linux = [new RegExp(`^nanoMuse-Desktop-.*-linux-${cpu}\\.deb$`, 'i'), new RegExp(`^nanoMuse-Desktop-.*-linux-${cpu}\\.AppImage$`, 'i')]
+  const linux = [new RegExp(`^NanoLika-Desktop-.*-linux-${cpu}\\.deb$`, 'i'), new RegExp(`^NanoLika-Desktop-.*-linux-${cpu}\\.AppImage$`, 'i')]
   const wanted: RegExp[] =
     platform === 'darwin'
-      ? [new RegExp(`^nanoMuse-Desktop-.*-mac-${cpu}\\.dmg$`, 'i'), new RegExp(`^nanoMuse-Desktop-.*-mac-${cpu}\\.zip$`, 'i')]
+      ? [new RegExp(`^NanoLika-Desktop-.*-mac-${cpu}\\.dmg$`, 'i'), new RegExp(`^NanoLika-Desktop-.*-mac-${cpu}\\.zip$`, 'i')]
       : platform === 'win32'
-        ? [/^nanoMuse-Desktop-.*-win-x64\.exe$/i]
+        ? [/^NanoLika-Desktop-.*-win-x64\.exe$/i]
         : appImage
           ? linux.reverse()
           : linux

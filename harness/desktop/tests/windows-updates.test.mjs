@@ -11,7 +11,7 @@ function fixture(version = "1.0.4", options = {}) {
     currentVersion: { compare: (v) => "1.0.3".localeCompare(v, undefined, { numeric: true }) },
     setFeedURL() {},
     checkForUpdates: async () => ({ isUpdateAvailable: version !== "1.0.3", updateInfo: {
-      version, files: [{ url: `nanoMuse-Desktop-${version}-win-x64.exe`, sha512: "digest", size: 10 }],
+      version, files: [{ url: `NanoLika-Desktop-${version}-win-x64.exe`, sha512: "digest", size: 10 }],
     } }),
     downloadUpdate: async () => { downloads++; updater.emit("download-progress", { percent: 42 }); return ["verified.exe"]; },
     quitAndInstall: (silent, reopen) => { assert.equal(silent, true); assert.equal(reopen, true); installs++; },

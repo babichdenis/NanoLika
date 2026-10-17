@@ -3,14 +3,14 @@
 // HTTP_PROXY / HTTPS_PROXY / NO_PROXY when NODE_USE_ENV_PROXY=1 (Node 24, which Electron 44
 // carries; checked against a loopback forward proxy: an http:// and a socks5:// proxy are both
 // taken, ALL_PROXY alone is not read). The bundled runtime for the hands, a child of the Host,
-// inherits the same variables and httpx reads them too. nanoMuse Cloud and loopback are on
+// inherits the same variables and httpx reads them too. NanoLika Cloud and loopback are on
 // NO_PROXY, so the relay, the hub's WebSocket and the sync never go through the proxy.
 
 /** The schemes a proxy address may carry: a plain or TLS HTTP proxy, SOCKS5 with local or remote name lookup. */
 export const PROXY_SCHEMES = ["http", "https", "socks5", "socks5h"] as const;
 
 /** The relay every build knows (own-key installs read the star policy from it too). */
-export const DEFAULT_RELAY_HOST = "cloud.nanomuse.cn";
+export const DEFAULT_RELAY_HOST = "cloud.nanolika.ru";
 
 /** Never through a proxy: the Host's own loopback, the operator's server, the connectors' callback. */
 const LOOPBACK = ["localhost", "127.0.0.1", "::1"];

@@ -35,7 +35,11 @@ object Ideas {
 
     fun load(context: Context): List<IdeaSection> {
         val lang = context.resources.configuration.locales[0]?.language ?: Locale.getDefault().language
-        val name = if (lang == "zh") "nanomuse/ideas.zh.json" else "nanomuse/ideas.en.json"
+        val name = when (lang) {
+            "zh" -> "nanomuse/ideas.zh.json"
+            "ru" -> "nanomuse/ideas.ru.json"
+            else -> "nanomuse/ideas.en.json"
+        }
         return runCatching {
             val text = context.assets.open(name).bufferedReader().use { it.readText() }
             val root = JSONObject(text)

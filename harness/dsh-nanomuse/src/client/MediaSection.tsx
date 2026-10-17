@@ -1,7 +1,7 @@
 /**
  * Settings → Media: the models that draw the face and its clips, after the phone's
  * `MediaModelsScreen`. The image and video rows are the same pickers as Settings → Models'
- * *Making pictures* and *Making clips* (0.1.41): nanoMuse Cloud first while signed in, then
+ * *Making pictures* and *Making clips* (0.1.41): NanoLika Cloud first while signed in, then
  * each own provider's models that can do the job; the video picker also has *Off*. OpenRouter
  * and the like have no video API, so the face keeps still with one line saying why. Below:
  * the switch that animates a new face by itself (default on), "Make the clips now / Redo
@@ -117,7 +117,7 @@ export function makeMediaSection(t: Translate) {
     const imageSub = view.image && view.image.source !== 'none'
       ? `${t('mdImageModelSub')} · ${view.image.label}${view.image.model ? ` · ${view.image.model}` : ''}`
       : view.imageModel
-        ? `${t('mdImageModelSub')} · nanoMuse Cloud · ${view.imageModel}`
+        ? `${t('mdImageModelSub')} · NanoLika Cloud · ${view.imageModel}`
         : noImage
           ? h(UnavailableLine, { t, view: gate, capability: 'image', link: true, className: 'nm-wrap', tag: 'span' })
           : t('mdImageNone')

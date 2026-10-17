@@ -137,7 +137,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     res = await fetch(path, { ...init, headers });
   } catch {
     // the browser's "Failed to fetch": the runtime is down or the network is
-    throw new Error("Cannot reach your nanoMuse right now.");
+    throw new Error("Cannot reach your NanoLika right now.");
   }
   if (res.status === 401) throw new AuthError();
   if (!res.ok) {
@@ -161,20 +161,20 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 export function failureDetail(status: number, data: unknown): string {
   const detail = data && typeof data === "object" ? (data as { detail?: unknown }).detail : undefined;
   if (typeof detail === "string" && detail.trim()) return detail;
-  return status >= 500 ? "Your nanoMuse hit a problem; try again in a moment." : "Your nanoMuse could not do that.";
+  return status >= 500 ? "Your NanoLika hit a problem; try again in a moment." : "Your NanoLika could not do that.";
 }
 
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 export const api = {
   state: () => request<StateSnapshot>("/api/state"),
-  // ---- nanoMuse Cloud (the account) and the hub (the other devices)
+  // ---- NanoLika Cloud (the account) and the hub (the other devices)
   cloud: () => request<CloudAccount>("/api/cloud"),
   cloudCode: (identifier: string) => request<{ ok: boolean }>("/api/cloud/code", json({ identifier })),
   cloudVerify: (identifier: string, code: string, invite = "") =>
     request<CloudAccount>("/api/cloud/verify", json(invite ? { identifier, code, invite } : { identifier, code })),
   cloudSignOut: () => request<CloudAccount>("/api/cloud/sign-out", json({})),
-  /** *Use nanoMuse Cloud models*: the account's models as a source, on or off; `409 chat_on_cloud` while the chat model is the account's */
+  /** *Use NanoLika Cloud models*: the account's models as a source, on or off; `409 chat_on_cloud` while the chat model is the account's */
   cloudModels: (on: boolean) => request<CloudAccount>("/api/cloud/models", json({ on })),
   cloudLogin: (identifier: string, password: string) => request<CloudAccount>("/api/cloud/login", json({ identifier, password })),
   /** set or change the password; "" with the current one removes it */
@@ -255,7 +255,7 @@ export const api = {
       `/api/threads/${thread}/events?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
     ),
   /** `language` is the locale of this console's screens; the reply is written in it. `via: "cloud"` is
-   * *Use nanoMuse Cloud this time*: this one turn on the account's model (401 `signed_out` when signed out). */
+   * *Use NanoLika Cloud this time*: this one turn on the account's model (401 `signed_out` when signed out). */
   send: (thread: string, text: string, files: string[] = [], language = "", via = "") =>
     request<{ event: TimelineEvent; thread: ThreadMeta }>(`/api/threads/${thread}/send`, json(via ? { text, files, language, via } : { text, files, language })),
   /** A file to attach: the bytes as the body, the name in the query. */
@@ -353,7 +353,7 @@ export const api = {
       models: string[];
       image_models?: string[];
       video_models?: string[];
-      // nanoMuse Cloud, relay 0.10: the chat models on the menu and the other usable ones under
+      // NanoLika Cloud, relay 0.10: the chat models on the menu and the other usable ones under
       // the operator's key (a member's list), likewise for pictures / clips; which chat models read pictures
       menu?: string[];
       catalog?: string[];

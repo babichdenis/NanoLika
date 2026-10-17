@@ -5,7 +5,7 @@ interface BaseEvent {
   ts: string;
   thread: string;
   updated_ts?: string;
-  /** "user" for things you said; "goal" / "background" for work your nanoMuse did on its own. */
+  /** "user" for things you said; "goal" / "background" for work your NanoLika did on its own. */
   source?: string;
   /** For background events: the short label of the work being done. */
   about?: string;
@@ -37,7 +37,7 @@ export interface UserEvent extends BaseEvent {
   /** a synced message written on another device of the account */
   via_device?: string;
   via_device_name?: string;
-  /** *Use nanoMuse Cloud this time*: the model id this one turn ran on */
+  /** *Use NanoLika Cloud this time*: the model id this one turn ran on */
   model_used?: string;
 }
 
@@ -47,7 +47,7 @@ export interface AssistantEvent extends BaseEvent {
   reasoning?: string;
   /** A background pass that found nothing worth interrupting you for. */
   quiet?: boolean;
-  /** *Use nanoMuse Cloud this time*: the model id this reply came from */
+  /** *Use NanoLika Cloud this time*: the model id this reply came from */
   model_used?: string;
   /** the device whose Muse said this (a chat addressed to a device) */
   device?: string;
@@ -119,7 +119,7 @@ export interface NoticeEvent extends BaseEvent {
   code?: string;
   /** the raw exception, for bug reports */
   detail?: string;
-  /** the failed turn ran on *Use nanoMuse Cloud this time* already: the model id */
+  /** the failed turn ran on *Use NanoLika Cloud this time* already: the model id */
   model_used?: string;
   /** values for the {placeholders} in `text` */
   vars?: Record<string, string | number>;
@@ -302,7 +302,7 @@ export interface SyncState {
   side_chats?: boolean;
   /** C9: the other devices' turns under way on synced chats */
   working?: WorkingPresence[];
-  /** signed in to nanoMuse Cloud, so syncing can happen at all */
+  /** signed in to NanoLika Cloud, so syncing can happen at all */
   available: boolean;
   /** the relay refused the key: nothing moves until the next sign-in */
   paused: boolean;
@@ -352,7 +352,7 @@ export interface CloudAccount {
   is_model: boolean;
   /** this runtime insists on an account (self-hosters may turn it off) */
   required?: boolean;
-  /** the account's models as a source (*Use nanoMuse Cloud models*); false leaves them out of the automatic order and the listings */
+  /** the account's models as a source (*Use NanoLika Cloud models*); false leaves them out of the automatic order and the listings */
   models?: boolean;
   has_password?: boolean;
   /** on the operator's list: no spend limit */
@@ -463,7 +463,7 @@ export interface CloudMe {
   /** Relay 0.4/0.5: the account's invite code and what came of it (`earned_cny` since 0.5). */
   invite?: { code: string; url: string; invites: number; bonus_cny: number; invitee_bonus_cny?: number; earned_cny?: number; friends: Array<{ hint: string; joined_at: number }> };
   /**
-   * Data controls: whether "Help improve nanoMuse's AI models" is on for this account, how many
+   * Data controls: whether "Help improve NanoLika's AI models" is on for this account, how many
    * turns the relay keeps, what the relay's default for new accounts is (0.9), what a kept turn
    * holds and where its privacy policy is.
    */
@@ -607,7 +607,7 @@ export interface CodingSession {
   runs?: CodingRun[];
 }
 
-/** A message sent into a coding agent through nanoMuse, and how it went. */
+/** A message sent into a coding agent through NanoLika, and how it went. */
 export interface CodingRun {
   id: string;
   agent: string;
@@ -863,11 +863,11 @@ export interface UpdateView {
   newer: boolean;
   /** The release page of the latest. */
   url: string;
-  /** The download page (nanomuse.cn/dl). */
+  /** The download page (nanolika.ru/dl). */
   download_url?: string;
   /** When the runtime last asked (ISO, UTC), or null before the first check. */
   checked_at?: string | null;
-  /** Where the answer came from: `nanomuse.cn`, `github`, or null. */
+  /** Where the answer came from: `nanolika.ru`, `github`, or null. */
   source?: string | null;
   error?: string | null;
 }
@@ -954,7 +954,7 @@ export interface ProviderPreset {
   /** the fallback catalogue; the live list comes from /api/llm/models */
   models?: string[];
   no_key?: boolean;
-  /** the nanoMuse Cloud account as the provider: the account key is the key, saved through /api/cloud/use-as-model */
+  /** the NanoLika Cloud account as the provider: the account key is the key, saved through /api/cloud/use-as-model */
   cloud?: boolean;
   /** a key may be left empty (a gateway or local server without one) */
   key_optional?: boolean;
@@ -964,7 +964,7 @@ export interface ProviderPreset {
   key_hint?: string;
   /** the hands model the preset suggests beside its chat model (contract C4): one that sees */
   gui_model?: string;
-  /** the account's hands models, recommended first (the nanoMuse Cloud preset) */
+  /** the account's hands models, recommended first (the NanoLika Cloud preset) */
   gui_models?: string[];
   /** "cn": the vendor only signs up accounts from mainland China (contract C5) */
   region?: string;
@@ -1016,7 +1016,7 @@ export interface ConnectionsData {
     /** vault = key entered in the app; config = from config.toml / env; missing = referenced but not set. */
     key_source: "vault" | "config" | "missing" | "none";
     from_app: boolean;
-    /** the model is the nanoMuse Cloud account's */
+    /** the model is the NanoLika Cloud account's */
     cloud?: boolean;
     /** the avatar studio's picture model at the same host; "" = the runtime's pick */
     image_model?: string;

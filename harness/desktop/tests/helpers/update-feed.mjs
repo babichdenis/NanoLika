@@ -40,7 +40,7 @@ export async function updateFeed(t, { current = "1.0.3", version = "1.0.4", slow
   let on = busy;
   const answers = { mirrorPackage: bytes, githubPackage: bytes, mirrorMetadata: version, githubMetadata: version,
     mirrorCheck: version, githubCheck: version, githubDigest: digest, stopError: false, installError: false };
-  const metadata = (v) => `version: ${v}\nfiles:\n  - url: nanoMuse-Desktop-${v}-win-x64.exe\n    sha512: ${digest}\n    size: ${bytes.length}\npath: nanoMuse-Desktop-${v}-win-x64.exe\nsha512: ${digest}\nreleaseDate: '2026-10-12T00:00:00.000Z'\n`;
+  const metadata = (v) => `version: ${v}\nfiles:\n  - url: NanoLika-Desktop-${v}-win-x64.exe\n    sha512: ${digest}\n    size: ${bytes.length}\npath: NanoLika-Desktop-${v}-win-x64.exe\nsha512: ${digest}\nreleaseDate: '2026-10-12T00:00:00.000Z'\n`;
   const server = http.createServer((req, res) => {
     const path = new URL(req.url, "http://feed").pathname;
     seen.push(path);

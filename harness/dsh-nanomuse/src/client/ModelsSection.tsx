@@ -1,7 +1,7 @@
 /**
  * Settings → Models (0.1.41, "Choice"): the four things a model does for the person, one
  * row each — Chat, Operating the screen, Making pictures, Making clips — with a picker per
- * row. Every picker lists nanoMuse Cloud first while signed in (its recommended model
+ * row. Every picker lists NanoLika Cloud first while signed in (its recommended model
  * marked), then one group per own provider the person added, each group filtered to the
  * models that can do the row's job (the host's `GET /models`). A row nothing configured can
  * do shows the gate's one sentence and *Add a provider*; the page ends with *Add a provider*
@@ -46,7 +46,7 @@ export function valueText(provider: string, providerLabel: string, model: string
 /** `GET /models`. */
 export interface ModelsView {
   signedIn: boolean
-  /** *Use nanoMuse Cloud models*: signed in and not switched off. */
+  /** *Use NanoLika Cloud models*: signed in and not switched off. */
   cloudModels: boolean
   slots: Record<Slot, SlotView>
   handsExcluded: string[]
@@ -88,7 +88,7 @@ export function useModels(t: Translate): { view: ModelsView | undefined; error: 
 }
 
 /**
- * The groups of one picker: `nanoMuse Cloud` first (its recommended model marked and first),
+ * The groups of one picker: `NanoLika Cloud` first (its recommended model marked and first),
  * then one group per own provider in the order the options came, each keyed by the
  * provider's id and carrying the provider's catalogue default for the slot, which the
  * folded view shows first (`model-list.ts`).
@@ -111,7 +111,7 @@ export function slotGroups(slot: Slot, options: readonly ModelOption[], catalogu
  * One picker (`ModelPicker.tsx`): the button reads what the slot uses, `<provider> · <model>`;
  * the panel has *Automatic* first on the three dependent slots (selected when no choice is
  * stored; picking it drops the stored choice, `onPick('', 'auto')`, so the slot follows the
- * order again), the video slot's *Off* under it, then `nanoMuse Cloud` and one group per own
+ * order again), the video slot's *Off* under it, then `NanoLika Cloud` and one group per own
  * provider, each folded past a few rows, with a search once the lists are long. A current
  * model the list does not carry (an older choice, a model the provider stopped listing)
  * still reads on the button, so the picker never looks empty.
@@ -155,7 +155,7 @@ export function makeModelsSection(t: Translate) {
     // the host refused the switch (`409 chat_on_cloud`: the chat slot is the account's and nothing of
     // one's own could answer); one sentence under the switch, which stays on
     const [switchNote, setSwitchNote] = useState<string | undefined>()
-    // Signed in: the one switch for the account as a model source. Off, nanoMuse Cloud leaves every
+    // Signed in: the one switch for the account as a model source. Off, NanoLika Cloud leaves every
     // row's list and order and no side call runs on it; the sign-in stays (sync, the devices).
     const setCloudModels = (on: boolean) => {
       setSwitching(true)

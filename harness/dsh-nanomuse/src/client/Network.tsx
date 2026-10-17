@@ -1,5 +1,5 @@
 /**
- * The Network row on the nanoMuse Cloud page: one proxy for the model providers, kept by the
+ * The Network row on the NanoLika Cloud page: one proxy for the model providers, kept by the
  * Electron shell (its `desktop.json`, next to *open at login*) and put on the dsh Host's
  * environment at the next start, where Node's fetch and the hands' runtime read it. Only the
  * providers go through it — the relay's host and loopback are on NO_PROXY, which the shell

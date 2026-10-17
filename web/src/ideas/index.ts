@@ -1,11 +1,12 @@
 /**
- * The curated Ideas catalogue (contract C5): the same `ideas.en.json` / `ideas.zh.json` the
- * Android app and the harness ship, byte for byte (a test holds them identical). It is what
- * the Ideas page shows until the model has written ideas of its own from what it knows.
+ * The curated Ideas catalogue (contract C5): the same `ideas.en.json` / `ideas.zh.json` /
+ * `ideas.ru.json` the Android app and the harness ship, byte for byte (a test holds them
+ * identical). It is what the Ideas page shows until the model has written ideas of its own.
  */
 import type { Idea } from "../types";
 import en from "./ideas.en.json";
 import zh from "./ideas.zh.json";
+import ru from "./ideas.ru.json";
 
 export interface CatalogueIdea {
   id: string;
@@ -28,9 +29,10 @@ export interface Catalogue {
   sections: CatalogueSection[];
 }
 
-/** The catalogue in the app's language: Chinese for any `zh` locale, English otherwise. */
+/** The catalogue in the app's language: Russian or Chinese for those locales, English otherwise. */
 export function catalogue(locale: string): Catalogue {
-  return (locale.toLowerCase().startsWith("zh") ? zh : en) as Catalogue;
+  const lower = locale.toLowerCase();
+  return (lower.startsWith("zh") ? zh : lower.startsWith("ru") ? ru : en) as Catalogue;
 }
 
 /** A catalogue idea in the shape the page renders (the runtime's `Idea`), with its own emoji. */

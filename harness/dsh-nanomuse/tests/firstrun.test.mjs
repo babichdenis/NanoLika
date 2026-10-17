@@ -144,13 +144,13 @@ test('the built-in names are two, from the pool of the language, the same for th
 
 test('the addendum follows the phase and quotes the opening; nothing once over', () => {
   const s = fresh()
-  const ask = promptAddendum(s, 'en', 'nanoMuse')
+  const ask = promptAddendum(s, 'en', 'NanoLika')
   assert.ok(ask.startsWith('First conversation. The app already showed the user this opening'))
   for (const line of introLines('en')) assert.ok(ask.includes(line.split('\n')[0]))
   assert.ok(ask.includes('```nanomuse-naming'))
   assert.ok(ask.includes('"user_address"'))
   const asking = afterTurn(s, '```nanomuse-naming\n{"user_address": "Lin", "suggest": ["Pip", "Wren"]}\n```').state
-  const chooser = promptAddendum(asking, 'en', 'nanoMuse')
+  const chooser = promptAddendum(asking, 'en', 'NanoLika')
   assert.ok(chooser.includes('"Pip", "Wren"'))
   assert.ok(chooser.includes('meaning "Pip"'))
   assert.ok(chooser.includes('The user goes by "Lin"'))

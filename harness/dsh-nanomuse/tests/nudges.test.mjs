@@ -8,13 +8,16 @@ import { askKey, dayKey, DEFAULT_NUDGES, dueAsk, LEDGER_EMPTY, mergeNudges, read
 const DAY = 86_400_000
 const T0 = Date.UTC(2026, 9, 5, 12)
 const empty = () => ({ ...LEDGER_EMPTY, days: [], asks: [] })
+// Our own default ships the asks off (the upstream's nudge went with the upstream brand).
+// The engine is exercised on the same policy with the relay's switch on.
+const ON = mergeNudges({ star: { enabled: true } })
 
 test('the defaults are the shared contract', () => {
   assert.deepEqual(DEFAULT_NUDGES, {
     version: 1,
     star: {
-      enabled: true,
-      url: 'https://github.com/nano-muse/nanoMuse',
+      enabled: false,
+      url: 'https://nanolika.ru',
       moments: { signed_in: true, tasks: [3, 10, 30], new_look: true, exhausted: true, days_used: [7, 30], goal_done: true },
       cooldown_days: 7,
       max_asks: 4,
@@ -79,58 +82,58 @@ test('tasks ask at each threshold once; the counter persists in the ledger', () 
   let now = T0
   for (let i = 0; i < 12; i++) {
     ledger = recordTask(ledger)
-    const ask = dueAsk(DEFAULT_NUDGES, ledger, 'tasks', ledger.tasks, now)
+    const ask = dueAsk(ON, ledger, 'tasks', ledger.tasks, now)
     if (ask) { asks.push(ask); ledger = recordAsk(ledger, ask) }
     now += 2 * DAY
   }
   assert.equal(ledger.tasks, 12)
   assert.deepEqual(asks.map((a) => a.n), [3, 10])
   // the third threshold would be the 30th; asking for 3 again is refused
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'tasks', 3, now + 30 * DAY), null)
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'tasks', 30, now + 30 * DAY)?.key, 'tasks:30')
+  assert.equal(dueAsk(ON, ledger, 'tasks', 3, now + 30 * DAY), null)
+  assert.equal(dueAsk(ON, ledger, 'tasks', 30, now + 30 * DAY)?.key, 'tasks:30')
   // a number off the list never asks
-  assert.equal(dueAsk(DEFAULT_NUDGES, empty(), 'tasks', 4, T0), null)
-  assert.equal(dueAsk(DEFAULT_NUDGES, empty(), 'tasks', undefined, T0), null)
+  assert.equal(dueAsk(ON, empty(), 'tasks', 4, T0), null)
+  assert.equal(dueAsk(ON, empty(), 'tasks', undefined, T0), null)
 })
 
 test('the cooldown holds between any two asks, whatever their moments', () => {
   let ledger = empty()
-  const first = dueAsk(DEFAULT_NUDGES, ledger, 'signed_in', undefined, T0)
+  const first = dueAsk(ON, ledger, 'signed_in', undefined, T0)
   assert.ok(first)
   ledger = recordAsk(ledger, first)
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'new_look', undefined, T0 + 3 * DAY), null)
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'goal_done', undefined, T0 + 6.9 * DAY), null)
-  assert.ok(dueAsk(DEFAULT_NUDGES, ledger, 'new_look', undefined, T0 + 7 * DAY))
+  assert.equal(dueAsk(ON, ledger, 'new_look', undefined, T0 + 3 * DAY), null)
+  assert.equal(dueAsk(ON, ledger, 'goal_done', undefined, T0 + 6.9 * DAY), null)
+  assert.ok(dueAsk(ON, ledger, 'new_look', undefined, T0 + 7 * DAY))
   // a second signed_in never
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'signed_in', undefined, T0 + 30 * DAY), null)
+  assert.equal(dueAsk(ON, ledger, 'signed_in', undefined, T0 + 30 * DAY), null)
 })
 
 test('max_asks is a lifetime cap and "Not now" counts', () => {
   let ledger = empty()
   let now = T0
   for (const moment of ['signed_in', 'new_look', 'goal_done', 'exhausted']) {
-    const ask = dueAsk(DEFAULT_NUDGES, ledger, moment, undefined, now)
+    const ask = dueAsk(ON, ledger, moment, undefined, now)
     assert.ok(ask, moment)
     ledger = recordAsk(ledger, ask) // shown, dismissed with "Not now" — still an ask
     now += 8 * DAY
   }
   assert.equal(ledger.asks.length, 4)
   ledger = recordTask(recordTask(recordTask(ledger)))
-  assert.equal(dueAsk(DEFAULT_NUDGES, ledger, 'tasks', 3, now), null)
+  assert.equal(dueAsk(ON, ledger, 'tasks', 3, now), null)
 })
 
 test('starring ends every ask; enabled:false asks nothing', () => {
   const starred = recordStarred(empty())
-  assert.equal(dueAsk(DEFAULT_NUDGES, starred, 'signed_in', undefined, T0), null)
+  assert.equal(dueAsk(ON, starred, 'signed_in', undefined, T0), null)
   // "I already starred" with no ask ever shown: no cooldown, every ask left, still nothing
-  const generous = mergeNudges({ star: { cooldown_days: 0, max_asks: 50 } })
+  const generous = mergeNudges({ star: { enabled: true, cooldown_days: 0, max_asks: 50 } })
   for (const [moment, n] of [['signed_in'], ['tasks', 3], ['new_look'], ['exhausted'], ['days_used', 7], ['goal_done']]) {
     assert.equal(dueAsk(generous, starred, moment, n, T0 + 365 * DAY), null, moment)
   }
   assert.equal(recordStarred(starred), starred, 'saying it twice changes nothing')
   assert.equal(dueAsk(mergeNudges({ star: { enabled: false } }), empty(), 'signed_in', undefined, T0), null)
   // a moment switched off
-  assert.equal(dueAsk(mergeNudges({ star: { moments: { new_look: false } } }), empty(), 'new_look', undefined, T0), null)
+  assert.equal(dueAsk(mergeNudges({ star: { enabled: true, moments: { new_look: false } } }), empty(), 'new_look', undefined, T0), null)
 })
 
 test('days of use count distinct local days and ask on the 7th and 30th', () => {
@@ -143,7 +146,7 @@ test('days of use count distinct local days and ask on the 7th and 30th', () => 
     assert.equal(r1.newDay, true)
     assert.equal(r2.newDay, false)
     ledger = r2.ledger
-    const ask = dueAsk(DEFAULT_NUDGES, ledger, 'days_used', ledger.days.length, at)
+    const ask = dueAsk(ON, ledger, 'days_used', ledger.days.length, at)
     if (ask) { asked.push(ask.n); ledger = recordAsk(ledger, ask) }
   }
   assert.equal(ledger.days.length, 31)

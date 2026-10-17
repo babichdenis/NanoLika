@@ -184,7 +184,7 @@ export class AvatarMotion {
    * Draws the missing clips (all of them with `force`). No-op without a face or a video
    * model. Returns false when nothing was started. Clips are drawn one after another; a
    * failure marks that mood and the rest carry on — a partial set is fine, the still fills in.
-   * `viaCloud` draws this run with the account (*Use nanoMuse Cloud this time*), the slot untouched.
+   * `viaCloud` draws this run with the account (*Use NanoLika Cloud this time*), the slot untouched.
    */
   async animateAll(force = false, viaCloud = false): Promise<boolean> {
     const ep = await this.deps.endpoint(viaCloud)

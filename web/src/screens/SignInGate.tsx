@@ -8,7 +8,7 @@ import { useT } from "../i18n";
 import { useStore } from "../store";
 
 /**
- * The door: this runtime insists on a nanoMuse Cloud account (cloud.required, the default),
+ * The door: this runtime insists on a NanoLika Cloud account (cloud.required, the default),
  * so before anything else the person signs in — a code the first time, the password once
  * one is set. What comes with it is said plainly; the choice between the Cloud model and
  * a key of their own follows in setup. The door is not a wall: *Use your own API key
@@ -22,10 +22,10 @@ import { useStore } from "../store";
 export function SignInGate() {
   const { state, refreshSettings, refreshHub, toast, skipSignIn } = useStore();
   const t = useT();
-  const name = state.profile?.name ?? "nanoMuse";
+  const name = state.profile?.name ?? "NanoLika";
   const perks = (
     <ul className="grid grid-cols-2 gap-2 text-[12.5px] wide:grid-cols-1 wide:gap-1.5 wide:text-[13.5px]">
-      <Perk icon={<MonitorSmartphone size={15} />} text={t("Every device of yours, one nanoMuse")} />
+      <Perk icon={<MonitorSmartphone size={15} />} text={t("Every device of yours, one NanoLika")} />
       <Perk icon={<Cloud size={15} />} text={t("A model with a free allowance, or your own key")} />
       <Perk icon={<Hand size={15} />} text={t("It uses your phone and computers for you")} />
       <Perk icon={<ShieldCheck size={15} />} text={t("Keys in your vault; nothing you say is kept on the relay")} />
@@ -54,7 +54,7 @@ export function SignInGate() {
             <div className="mt-8 rounded-[28px] border border-border/70 bg-surface p-5 shadow-sm wide:mt-0 wide:p-7">
               <SignIn
                 onSignedIn={async () => {
-                  toast(t("Signed in to nanoMuse Cloud."));
+                  toast(t("Signed in to NanoLika Cloud."));
                   await Promise.all([refreshSettings(), refreshHub()]);
                 }}
               />

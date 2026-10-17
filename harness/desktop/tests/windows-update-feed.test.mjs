@@ -30,7 +30,7 @@ test("a failed mirror download falls back to the same candidate's GitHub assets"
   assert.equal(demo.flow.snapshot().phase, "ready");
   assert.equal(demo.flow.snapshot().version, "1.0.4");
   assert.equal(demo.flow.snapshot().source, "github");
-  assert.ok(demo.seen.includes("/github/v1.0.4/nanoMuse-Desktop-1.0.4-win-x64.exe"));
+  assert.ok(demo.seen.includes("/github/v1.0.4/NanoLika-Desktop-1.0.4-win-x64.exe"));
   assert.equal(demo.seen.some((path) => path.includes("1.0.5")), false);
 });
 

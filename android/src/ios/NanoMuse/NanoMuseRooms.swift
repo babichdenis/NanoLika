@@ -91,7 +91,7 @@ enum NanoMuseIdeas {
     private struct File: Decodable { var sections: [NanoMuseIdeaSection] }
 
     static func load() -> [NanoMuseIdeaSection] {
-        let name = NanoMuseLocale.isChinese ? "ideas.zh" : "ideas.en"
+        let name = NanoMuseLocale.isChinese ? "ideas.zh" : NanoMuseLocale.isRussian ? "ideas.ru" : "ideas.en"
         guard let url = Bundle.main.url(forResource: name, withExtension: "json")
                 ?? Bundle.main.url(forResource: "ideas.en", withExtension: "json"),
               let data = try? Data(contentsOf: url),

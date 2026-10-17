@@ -117,13 +117,13 @@ test('versions compare numerically, with pre-releases below the release', () => 
   // offered the installed release as an update
   assert.equal(compareVersions('0.1.40', 'dsh-nanomuse 0.1.40'), 0)
   assert.equal(compareVersions('dsh-nanomuse 0.1.41', 'v0.1.40'), 1)
-  assert.equal(compareVersions('nanoMuse-Desktop-0.1.40', '0.1.41'), -1)
+  assert.equal(compareVersions('NanoLika-Desktop-0.1.40', '0.1.41'), -1)
 })
 
 test('the update check compares the bare bundle version, so the installed release is not offered again', async () => {
-  const mirror = { repo: 'nano-muse/nanoMuse', releases: [{ tag: 'v0.1.40', assets: [] }] }
-  const fetchMirror = async () => ({ ok: true, status: 200, json: async () => mirror })
-  const same = await checkForUpdate(BUNDLE_VERSION, fetchMirror)
+  const index = { releases: [{ tag: 'v0.1.40', assets: [] }] }
+  const fetchIndex = async () => ({ ok: true, status: 200, json: async () => index })
+  const same = await checkForUpdate(BUNDLE_VERSION, fetchIndex)
   assert.equal(same.current, BUNDLE_VERSION)
   // the host bundle carries package.json's version: it read the environment until 0.1.41,
   // which nothing set in the packaged app, so every install ran as 0.0.0 and saw every
@@ -131,46 +131,53 @@ test('the update check compares the bare bundle version, so the installed releas
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(BUNDLE_VERSION, pkg.version)
   assert.equal(same.newer, compareVersions('0.1.40', BUNDLE_VERSION) > 0)
-  const installed = await checkForUpdate('0.1.40', fetchMirror)
+  const installed = await checkForUpdate('0.1.40', fetchIndex)
   assert.equal(installed.newer, false)
-  const labelled = await checkForUpdate('dsh-nanomuse 0.1.40', fetchMirror)
+  const labelled = await checkForUpdate('dsh-nanomuse 0.1.40', fetchIndex)
   assert.equal(labelled.newer, false)
 })
 
 test('the installer for this computer is picked from the release', () => {
-  const assets = ['nanoMuse-Desktop-0.1.34-linux-x64.AppImage', 'nanoMuse-Desktop-0.1.34-linux-x64.deb', 'nanoMuse-Desktop-0.1.34-mac-arm64.dmg', 'nanoMuse-Desktop-0.1.34-mac-x64.zip', 'nanoMuse-Desktop-0.1.34-win-x64.exe', 'nanoMuse-0.1.34-arm64.apk'].map((name) => ({ name, url: `https://x/${name}`, size: 1 }))
-  assert.equal(pickAsset(assets, 'darwin', 'arm64')?.name, 'nanoMuse-Desktop-0.1.34-mac-arm64.dmg')
-  assert.equal(pickAsset(assets, 'darwin', 'x64')?.name, 'nanoMuse-Desktop-0.1.34-mac-x64.zip')
-  assert.equal(pickAsset(assets, 'win32', 'x64')?.name, 'nanoMuse-Desktop-0.1.34-win-x64.exe')
-  assert.equal(pickAsset(assets, 'linux', 'x64')?.name, 'nanoMuse-Desktop-0.1.34-linux-x64.deb', 'the .deb is the one the docs prefer')
-  assert.equal(pickAsset(assets, 'linux', 'x64', true)?.name, 'nanoMuse-Desktop-0.1.34-linux-x64.AppImage', 'an AppImage install stays an AppImage')
+  const assets = ['NanoLika-Desktop-0.1.34-linux-x64.AppImage', 'NanoLika-Desktop-0.1.34-linux-x64.deb', 'NanoLika-Desktop-0.1.34-mac-arm64.dmg', 'NanoLika-Desktop-0.1.34-mac-x64.zip', 'NanoLika-Desktop-0.1.34-win-x64.exe', 'NanoLika-0.1.34-arm64.apk'].map((name) => ({ name, url: `https://x/${name}`, size: 1 }))
+  assert.equal(pickAsset(assets, 'darwin', 'arm64')?.name, 'NanoLika-Desktop-0.1.34-mac-arm64.dmg')
+  assert.equal(pickAsset(assets, 'darwin', 'x64')?.name, 'NanoLika-Desktop-0.1.34-mac-x64.zip')
+  assert.equal(pickAsset(assets, 'win32', 'x64')?.name, 'NanoLika-Desktop-0.1.34-win-x64.exe')
+  assert.equal(pickAsset(assets, 'linux', 'x64')?.name, 'NanoLika-Desktop-0.1.34-linux-x64.deb', 'the .deb is the one the docs prefer')
+  assert.equal(pickAsset(assets, 'linux', 'x64', true)?.name, 'NanoLika-Desktop-0.1.34-linux-x64.AppImage', 'an AppImage install stays an AppImage')
   assert.equal(pickAsset(assets, 'linux', 'arm64'), undefined)
 })
 
-test('the update check reads the nanomuse.cn index first, GitHub second, and never throws (C2)', async () => {
-  const github = { tag_name: 'v0.1.34', html_url: 'https://github.com/nano-muse/nanoMuse/releases/tag/v0.1.34', body: 'notes', assets: [{ name: 'nanoMuse-Desktop-0.1.34-win-x64.exe', browser_download_url: 'https://dl/x.exe', size: 5 }] }
-  const mirror = { repo: 'nano-muse/nanoMuse', releases: [{ tag: 'v0.1.33', assets: [{ name: 'nanoMuse-Desktop-0.1.33-linux-x64.AppImage', size: 3 }] }] }
-  // both answer: the index wins, and GitHub is not asked at all
+test('the update check reads our own index on nanolika.ru, offers nothing from elsewhere, and never throws (C2)', async () => {
+  // our index names no repository: the file carries its own url
+  const index = { releases: [{ tag: 'v0.1.33', page: 'https://nanolika.ru/dl/v0.1.33/', assets: [{ name: 'NanoLika-Desktop-0.1.33-linux-x64.AppImage', url: 'https://nanolika.ru/dl/v0.1.33/NanoLika-Desktop-0.1.33-linux-x64.AppImage', size: 3 }] }] }
   const asked = []
-  const both = async (url) => { asked.push(url); return { ok: true, status: 200, json: async () => (url.includes('github') ? github : mirror) } }
-  const a = await checkForUpdate('0.1.33', both)
-  assert.equal(a.source, 'nanomuse.cn')
+  const one = async (url) => { asked.push(url); return { ok: true, status: 200, json: async () => index } }
+  const a = await checkForUpdate('0.1.33', one)
+  assert.equal(a.source, 'site')
   assert.equal(a.latest, '0.1.33')
   assert.equal(a.newer, false)
-  assert.equal(a.assets[0].url, 'https://github.com/nano-muse/nanoMuse/releases/download/v0.1.33/nanoMuse-Desktop-0.1.33-linux-x64.AppImage')
-  assert.deepEqual(asked, ['https://nanomuse.cn/dl/index.json'])
+  assert.equal(a.assets[0].url, 'https://nanolika.ru/dl/v0.1.33/NanoLika-Desktop-0.1.33-linux-x64.AppImage')
+  assert.deepEqual(asked, ['https://nanolika.ru/dl/index.json'])
 
-  // the index does not answer: GitHub
-  const b = await checkForUpdate('0.1.33', async (url) => (url.includes('nanomuse.cn') ? { ok: false, status: 502, json: async () => ({}) } : { ok: true, status: 200, json: async () => github }))
-  assert.equal(b.source, 'github')
+  // an index that does name a repository, with a file that carries no url of its own
+  const named = { repo: 'nanolika/desktop', releases: [{ tag: 'v0.1.34', assets: [{ name: 'NanoLika-Desktop-0.1.34-win-x64.exe', size: 5 }] }] }
+  const b = await checkForUpdate('0.1.33', async () => ({ ok: true, status: 200, json: async () => named }))
+  assert.equal(b.source, 'site')
   assert.equal(b.latest, '0.1.34')
   assert.equal(b.newer, true)
-  assert.equal(b.assets[0].url, 'https://dl/x.exe')
+  assert.equal(b.assets[0].url, 'https://github.com/nanolika/desktop/releases/download/v0.1.34/NanoLika-Desktop-0.1.34-win-x64.exe')
 
-  const c = await checkForUpdate('0.1.33', async () => { throw new Error('offline') })
+  // the index does not answer: the update is simply not offered, never taken from the upstream project
+  const c = await checkForUpdate('0.1.33', async () => ({ ok: false, status: 502, json: async () => ({}) }))
   assert.equal(c.source, 'none')
   assert.equal(c.latest, '')
-  assert.match(c.error, /nanomuse\.cn: offline; github: offline/)
+  assert.equal(c.newer, false)
+  assert.match(c.error, /site: 502/)
+
+  const d = await checkForUpdate('0.1.33', async () => { throw new Error('offline') })
+  assert.equal(d.source, 'none')
+  assert.equal(d.latest, '')
+  assert.match(d.error, /site: offline/)
 })
 
 test('each update request gives up after the timeout (5 s by default)', async () => {

@@ -15,7 +15,7 @@ function bugReportUrl(version: string): string {
   const bridge = desktopBridge();
   const where = bridge ? `Desktop app (${bridge.platform}, shell ${bridge.version})` : `Web app (${navigator.userAgent})`;
   const params = new URLSearchParams({ template: "bug_report.yml", version: version || "", os: where });
-  return `https://github.com/nano-muse/nanoMuse/issues/new?${params.toString()}`;
+  return `https://nanolika.ru/help?${params.toString()}`;
 }
 
 /**
@@ -35,7 +35,7 @@ export function Sidebar() {
   const menuRef = useRef<HTMLDivElement>(null);
   const developer = useDeveloperTools();
   const { profile, status } = state;
-  const name = profile?.name ?? "nanoMuse";
+  const name = profile?.name ?? "NanoLika";
 
   const pendingApprovals = state.pendingApprovals.length;
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
@@ -164,7 +164,7 @@ export function Sidebar() {
                   <span className="flex-1">{t("Developer tools")}</span>
                   <span className="text-[11.5px] font-normal text-muted">{developer ? t("On") : t("Off")}</span>
                 </button>
-                {state.version && <div className="px-2.5 pb-1 pt-1.5 text-[11.5px] text-muted">nanoMuse {state.version}</div>}
+                {state.version && <div className="px-2.5 pb-1 pt-1.5 text-[11.5px] text-muted">NanoLika {state.version}</div>}
               </div>
             )}
           </div>
