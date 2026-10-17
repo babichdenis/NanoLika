@@ -1,18 +1,126 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <title>nanoMuse — moved to nanomuse.cn</title>
-    <meta http-equiv="refresh" content="0; url=https://nanomuse.cn/" />
-    <link rel="canonical" href="https://nanomuse.cn/" />
-    <meta name="robots" content="noindex" />
-    <script>location.replace("https://nanomuse.cn/" + location.hash);</script>
-    <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; color: #1d1d1f; }
-      a { color: #0a66e4; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f1e8" />
+    <meta name="description" content="NanoLika — личный ИИ-агент для телефона и компьютера. Помогает с задачами и спрашивает перед важными действиями." />
+    <meta property="og:title" content="NanoLika — личный ИИ-агент" />
+    <meta property="og:description" content="Одна Лика для телефона и компьютера. Скажи, что нужно, и смотри, как задача движется к результату." />
+    <meta property="og:type" content="website" />
+    <title>NanoLika — личный ИИ-агент для телефона и компьютера</title>
+    <link rel="icon" href="nanolika-icon.svg" type="image/svg+xml" />
+    <link rel="preload" href="assets/fonts/figtree-latin-ext.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="nanolika.css" />
+    <script src="nanolika.js" defer></script>
   </head>
   <body>
-    <p>The nanoMuse homepage has moved to <a href="https://nanomuse.cn/">nanomuse.cn</a>. The earlier page is kept at <a href="legacy.html">legacy.html</a>.</p>
+    <a class="skip-link" href="#main">Перейти к содержимому</a>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="NanoLika — на главную">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-word">Nano<span>Lika</span></span>
+      </a>
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="Открыть меню">
+        <span></span><span></span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="Главная навигация">
+        <a href="#how">Как работает</a>
+        <a href="#care">Под контролем</a>
+        <a class="nav-cta" href="#devices">Узнать о NanoLika <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> Личный ИИ-агент для ваших устройств</p>
+          <h1 id="hero-title">Скажи, что нужно.<br /><em>Лика поможет.</em></h1>
+          <p class="hero-lede">Одна Лика на телефоне и компьютере. Она берётся за задачу, работает в приложениях и возвращается с результатом.</p>
+          <div class="hero-actions">
+            <a class="button button-dark" href="#how">Посмотреть, как это работает <span aria-hidden="true">↓</span></a>
+            <span class="availability"><span class="availability-dot"></span> Готовим запуск в России</span>
+          </div>
+          <div class="hero-footnote"><span class="footnote-line"></span><span>Вы решаете, что Лике можно делать</span></div>
+        </div>
+
+        <div class="hero-stage" aria-label="Пример задачи в NanoLika: маленькая фея Лика работает на компьютере и просит разрешение перед отправкой письма">
+          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+          <div class="sun-disc" aria-hidden="true"><span class="sun-core"><i></i><i></i><b></b></span><span class="sun-ray ray-a"></span><span class="sun-ray ray-b"></span><span class="sun-ray ray-c"></span><span class="sun-ray ray-d"></span></div>
+          <div class="stage-label label-phone"><span class="device-glyph phone-glyph" aria-hidden="true"></span> Телефон</div>
+          <div class="stage-label label-desktop"><span class="device-glyph desktop-glyph" aria-hidden="true"></span> Компьютер</div>
+          <div class="mini-phone" aria-hidden="true">
+            <div class="phone-speaker"></div>
+            <div class="phone-ui">
+              <div class="phone-topline"><span>9:41</span><span>•••</span></div>
+              <div class="lika-avatar"><span></span></div>
+              <p class="phone-name">Лика</p><p class="phone-state">Слушает задачу</p>
+              <div class="phone-message">Найди письмо от Иры и подготовь короткий ответ.</div>
+              <div class="phone-thinking"><i></i><span>Лика думает</span></div>
+              <div class="phone-input"><span>Напишите Лике…</span><b>↑</b></div>
+            </div>
+          </div>
+          <div class="mini-laptop" aria-hidden="true">
+            <div class="laptop-screen">
+              <div class="desktop-bar"><span class="desktop-mark">N</span><span>Задача на компьютере</span><span class="desktop-live"><i></i> Лика работает</span></div>
+              <div class="desktop-body">
+                <div class="desktop-side"><b>Ваши задачи</b><span class="side-active">Ответить Ире</span><span>Планы на неделю</span><span>Разобрать файлы</span></div>
+                <div class="desktop-main"><span class="mail-label">ПОЧТА · ЧЕРНОВИК</span><h3>Ответ для Иры</h3><p>Нашла письмо и подготовила ответ. Проверьте текст перед отправкой.</p><div class="draft-line"></div><div class="draft-line short"></div><div class="approval-card"><div class="approval-icon">↗</div><div><b>Отправить письмо?</b><span>Ире · черновик можно проверить</span></div><span class="approval-arrow">→</span></div></div>
+              </div>
+            </div>
+            <div class="laptop-base"></div>
+          </div>
+          <div class="stage-note"><span class="note-spark" aria-hidden="true">✳</span><span>Сначала подготовит.<br /><b>Отправите вы.</b></span></div>
+        </div>
+      </section>
+
+      <section class="ticker" aria-label="NanoLika работает с вашими устройствами">
+        <div class="ticker-inner"><span>одна Лика</span><i>✳</i><span>ваш телефон</span><i>✳</i><span>ваш компьютер</span><i>✳</i><span>ваше решение</span><i>✳</i><span>одна Лика</span><i>✳</i><span>ваш телефон</span><i>✳</i><span>ваш компьютер</span><i>✳</i><span>ваше решение</span><i>✳</i></div>
+      </section>
+
+      <section class="section how wrap" id="how" aria-labelledby="how-title">
+        <div class="section-heading">
+          <p class="eyebrow">Не ещё один чат</p>
+          <h2 id="how-title">От просьбы<br />к <em>готовому делу.</em></h2>
+          <p>Лика может перейти от ответа к действию. А вы видите, что происходит, и подключаетесь там, где нужно ваше решение.</p>
+        </div>
+        <div class="steps" role="list">
+          <article class="step" role="listitem"><span class="step-no">01</span><div class="step-icon icon-speech" aria-hidden="true"><span></span><span></span><span></span></div><h3>Попросите обычными словами</h3><p>Напишите, что нужно сделать. Без команд и сложных настроек.</p><div class="step-example">«Найди письмо и подготовь ответ»</div></article>
+          <article class="step" role="listitem"><span class="step-no">02</span><div class="step-icon icon-path" aria-hidden="true"><span></span><span></span><span></span></div><h3>Лика работает на устройстве</h3><p>Она может использовать приложения и инструменты на подключённом телефоне или компьютере.</p><div class="step-example">Телефон <span>↔</span> компьютер</div></article>
+          <article class="step" role="listitem"><span class="step-no">03</span><div class="step-icon icon-check" aria-hidden="true"><span>✓</span></div><h3>Вы принимаете решение</h3><p>Перед важным действием Лика покажет, что именно собирается сделать.</p><div class="step-example">Вы подтверждаете отправку</div></article>
+        </div>
+      </section>
+
+      <section class="care-band" id="care" aria-labelledby="care-title">
+        <div class="care-inner wrap">
+          <div class="care-copy"><p class="eyebrow"><span class="eyebrow-dot"></span> Помощь с чувством контроля</p><h2 id="care-title">Умная —<br /><em>но не самовольная.</em></h2><p>Лика не должна угадывать, что вам разрешено. Отправка, удаление и другие значимые действия останавливаются на подтверждении.</p><a class="text-link" href="#devices">Посмотреть, где работает Лика <span aria-hidden="true">↗</span></a></div>
+          <div class="care-visual" aria-label="Карточка подтверждения действия">
+            <div class="care-ring ring-large"></div><div class="care-ring ring-small"></div>
+            <div class="permission-card"><div class="permission-top"><span class="permission-symbol">↗</span><span class="permission-status">НУЖНО ВАШЕ РЕШЕНИЕ</span><span class="permission-dots">•••</span></div><h3>Отправить письмо?</h3><p>Ире · тема «Встреча в пятницу»</p><div class="permission-preview">Черновик готов. Откройте его, чтобы проверить перед отправкой.</div><div class="permission-actions"><span class="permission-later">Пока нет</span><span class="permission-allow">Проверить черновик <b>→</b></span></div></div>
+            <div class="care-stamp"><span>решение<br />за вами</span><b>✓</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="devices wrap" id="devices" aria-labelledby="devices-title">
+        <div class="devices-heading"><div><p class="eyebrow">Одна история на разных экранах</p><h2 id="devices-title">Лика рядом,<br /><em>где бы вы ни были.</em></h2></div><p>Начните на телефоне. Продолжите на компьютере. Общий аккаунт связывает устройства и разговоры.</p></div>
+        <div class="device-rail">
+          <article class="device-card device-card-phone"><div class="device-card-top"><span class="device-index">01 / В КАРМАНЕ</span><span class="device-card-icon phone-outline" aria-hidden="true"></span></div><div class="device-illustration phone-illustration"><div class="illustration-glow"></div><div class="illustration-phone"><div class="illustration-camera"></div><div class="illustration-screen"><div class="tiny-lika"><span></span></div><i></i><i></i><b>Лика</b><small>Я рядом</small></div></div><span class="phone-orbit-dot"></span></div><h3>На телефоне</h3><p>Попросите о помощи в привычном ритме дня.</p></article>
+          <article class="device-card device-card-desktop"><div class="device-card-top"><span class="device-index">02 / НА РАБОЧЕМ СТОЛЕ</span><span class="device-card-icon desktop-outline" aria-hidden="true"></span></div><div class="device-illustration desktop-illustration"><div class="illustration-glow"></div><div class="illustration-window"><div class="window-head"><i></i><i></i><i></i><span>Лика · задача</span></div><div class="window-content"><div class="window-avatar">L</div><div class="window-task"><b>Подготовить заметки</b><i></i><i></i><i></i></div><span class="window-check">✓</span></div></div><div class="window-foot"></div></div><h3>На компьютере</h3><p>Поручите задачу там, где находятся ваши файлы и приложения.</p></article>
+          <article class="device-card device-card-chat"><div class="device-card-top"><span class="device-index">03 / В ЗНАКОМОМ ЧАТЕ</span><span class="device-card-icon chat-outline" aria-hidden="true"></span></div><div class="device-illustration chat-illustration"><div class="illustration-glow"></div><div class="chat-bubble bubble-left"><span class="chat-avatar">L</span><span>С чего начнём?</span></div><div class="chat-bubble bubble-right"><span>Собери мои планы на день</span></div><div class="chat-bubble bubble-left bubble-answer"><span class="chat-avatar">L</span><span>Собрала. Вот главное…</span></div><div class="chat-sun">✳</div></div><h3>В чате</h3><p>К одному и тому же помощнику можно будет обратиться и в мессенджере.</p></article>
+        </div>
+        <p class="device-note"><span>✳</span> Возможности зависят от подключённого устройства и выданных разрешений.</p>
+      </section>
+
+      <section class="closing wrap">
+        <div class="closing-mark" aria-hidden="true"><span></span><span></span><span></span><i>✳</i></div>
+        <p class="eyebrow">Знакомьтесь</p><h2>Это Лика.<br /><em>Она на вашей стороне.</em></h2>
+        <p class="closing-lede">Личный ИИ-агент, который помогает доводить цифровые дела до результата и оставляет важные решения за вами.</p>
+        <a class="button button-dark" href="#top">Вернуться наверх <span aria-hidden="true">↑</span></a>
+        <span class="closing-note">NanoLika · готовим запуск</span>
+      </section>
+    </main>
+
+    <footer class="site-footer"><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span class="brand-word">Nano<span>Lika</span></span></a><p>Личный ИИ-агент для ваших устройств.</p><a class="footer-top" href="#top">Наверх ↑</a><small>© <span id="year">2026</span> NanoLika</small></footer>
   </body>
 </html>
