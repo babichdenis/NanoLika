@@ -2,7 +2,7 @@
  * The desk behind the hands (0.1.34): the approvals and holds the chat's cards and
  * the capsule answer (shared contracts C1 and C2 of this release), what the account's
  * connectors look like to the other devices (C3), and the update check the
- * About row runs (nanomuse.cn/dl/index.json first, GitHub releases as the fallback).
+ * About row runs (nanolika.ru/dl/index.json first, GitHub releases as the fallback).
  *
  * No Cordis here: `cloud.ts` owns the wiring, this file owns the shapes and
  * the decisions so the tests can drive them without a host.
@@ -384,9 +384,8 @@ export function readSharedConnectors(raw: unknown): SharedConnector[] {
 
 // ---- the update check (B5) ---------------------------------------------------------
 
-export const RELEASES_API = 'https://api.github.com/repos/nano-muse/nanoMuse/releases/latest'
-export const RELEASES_INDEX = 'https://nanomuse.cn/dl/index.json'
-export const RELEASES_PAGE = 'https://github.com/nano-muse/nanoMuse/releases'
+export const RELEASES_INDEX = 'https://nanolika.ru/dl/index.json'
+export const RELEASES_PAGE = 'https://nanolika.ru/'
 
 export interface ReleaseAsset {
   name: string
@@ -404,7 +403,7 @@ export interface UpdateInfo {
   page: string
   assets: ReleaseAsset[]
   notes: string
-  source: 'github' | 'nanomuse.cn' | 'none'
+  source: 'site' | 'none'
   checkedAt: number
   error?: string
 }
@@ -483,7 +482,7 @@ export function pickAsset(assets: ReleaseAsset[], platform: string, arch: string
 type Fetch = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>
 
 /**
- * The latest release, from the mirror's index on nanomuse.cn first (reachable from the
+ * The latest release, from the mirror's index on nanolika.ru first (reachable from the
  * mainland, no rate limit), then GitHub's API when the index does not answer. Each
  * request has 5 s (C2). Never throws: a failed check is an `UpdateInfo` with
  * `source: 'none'` and an `error`.
@@ -496,7 +495,7 @@ export async function checkForUpdate(current: string, fetchImpl: Fetch = fetch a
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), timeoutMs)
     try {
-      const res = await fetchImpl(url, { headers: { accept: 'application/json', 'user-agent': 'nanoMuse-Desktop' }, signal: ctl.signal })
+      const res = await fetchImpl(url, { headers: { accept: 'application/json', 'user-agent': 'NanoLika-Desktop' }, signal: ctl.signal })
       if (!res.ok) throw new Error(`${res.status}`)
       return await res.json()
     } finally {
@@ -504,38 +503,29 @@ export async function checkForUpdate(current: string, fetchImpl: Fetch = fetch a
     }
   }
   try {
-    const index = (await get(RELEASES_INDEX)) as { repo?: string; releases?: { tag?: string; assets?: { name?: string; size?: number }[] }[] }
+    const index = (await get(RELEASES_INDEX)) as { repo?: string; releases?: { tag?: string; page?: string; assets?: { name?: string; url?: string; size?: number }[] }[] }
     const rel = (index.releases ?? []).find((r) => r.tag)
     const latest = String(rel?.tag ?? '').replace(/^v/, '')
     if (!rel || !latest) throw new Error('no release')
-    const repo = index.repo || 'nano-muse/nanoMuse'
+    // The index may say where a file lives. When it does not, and the index names its own
+    // repository, the GitHub shape it was written for is used; otherwise the page stands alone.
+    const repo = index.repo || ''
+    const atGithub = (path: string) => (repo ? `https://github.com/${repo}/${path}` : '')
     return {
       ...base,
       latest,
       newer: compareVersions(latest, current) > 0,
-      page: `https://github.com/${repo}/releases/tag/${rel.tag}`,
-      assets: (rel.assets ?? []).flatMap((a) => (a.name ? [{ name: a.name, url: `https://github.com/${repo}/releases/download/${rel.tag}/${a.name}`, size: Number(a.size ?? 0) || 0 }] : [])),
-      source: 'nanomuse.cn',
+      page: rel.page || atGithub(`releases/tag/${rel.tag}`) || RELEASES_PAGE,
+      assets: (rel.assets ?? []).flatMap((a) => (a.name
+        ? [{ name: a.name, url: a.url || atGithub(`releases/download/${rel.tag}/${a.name}`), size: Number(a.size ?? 0) || 0 }]
+        : [])),
+      source: 'site',
     }
   } catch (error: unknown) {
-    errors.push(`nanomuse.cn: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(`site: ${error instanceof Error ? error.message : String(error)}`)
   }
-  try {
-    const rel = (await get(RELEASES_API)) as { tag_name?: string; html_url?: string; body?: string; assets?: { name?: string; browser_download_url?: string; size?: number }[] }
-    const latest = String(rel.tag_name ?? '').replace(/^v/, '')
-    if (!latest) throw new Error('no tag')
-    return {
-      ...base,
-      latest,
-      newer: compareVersions(latest, current) > 0,
-      page: rel.html_url || `${RELEASES_PAGE}/tag/v${latest}`,
-      assets: (rel.assets ?? []).flatMap((a) => (a.name && a.browser_download_url ? [{ name: a.name, url: a.browser_download_url, size: Number(a.size ?? 0) || 0 }] : [])),
-      notes: String(rel.body ?? '').slice(0, 4000),
-      source: 'github',
-    }
-  } catch (error: unknown) {
-    errors.push(`github: ${error instanceof Error ? error.message : String(error)}`)
-  }
+  // Our build does not fall back to the upstream project's releases: an offer to install
+  // a release from elsewhere would replace this program with a foreign one.
   return { ...base, error: errors.join('; ') }
 }
 

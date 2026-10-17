@@ -87,7 +87,7 @@ export interface SocketLike {
 }
 
 export interface HubClientOptions {
-  /** `wss://cloud.nanomuse.cn/v1/hub`. */
+  /** `wss://cloud.nanolika.ru/v1/hub`. */
   url: string
   /** The account key when signed in; nothing when not — the client then waits. */
   key: () => Promise<string | undefined>

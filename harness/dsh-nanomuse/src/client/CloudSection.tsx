@@ -21,7 +21,7 @@ import { SignIn } from './SignIn.tsx'
 type Phase = 'loading' | 'signedOut' | 'signedIn'
 
 /** Where the privacy policy is when the relay did not name one. */
-const PRIVACY_URL = 'https://nanomuse.cn/privacy/'
+const PRIVACY_URL = 'https://nanolika.ru/privacy/'
 
 /** `GET nanomuse/cloud/sync/state`: the switch, the relay's counts, the main chat and the synced sessions (see `sync.ts`). */
 export interface SyncView {

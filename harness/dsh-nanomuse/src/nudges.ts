@@ -50,8 +50,9 @@ export interface NudgesPolicy {
 export const DEFAULT_NUDGES: NudgesPolicy = {
   version: 1,
   star: {
-    enabled: true,
-    url: 'https://github.com/nano-muse/nanoMuse',
+    // Our build does not ask for stars: the upstream's nudge went with the upstream brand.
+    enabled: false,
+    url: 'https://nanolika.ru',
     moments: { signed_in: true, tasks: [3, 10, 30], new_look: true, exhausted: true, days_used: [7, 30], goal_done: true },
     cooldown_days: 7,
     max_asks: 4,
@@ -83,7 +84,7 @@ export function starText(policy: Pick<NudgesPolicy, 'star'>, zh: boolean, fallba
 /** The policy is fetched at most this often. */
 export const NUDGES_EVERY_MS = 24 * 3600_000
 /** Where own-key installs (no relay account) read the policy from. */
-export const NUDGES_ORIGIN = 'https://cloud.nanomuse.cn'
+export const NUDGES_ORIGIN = 'https://nanomuse.46-8-228-71.sslip.io'
 export const NUDGES_TIMEOUT_MS = 5000
 
 function numbers(value: unknown, fallback: number[]): number[] {

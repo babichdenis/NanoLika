@@ -415,7 +415,7 @@ export const MODELS_SECTION = 'nanomuse-models'
  */
 export function ModelsLink({ t, view }: { t: Translate; view: ProvidersView }): ReactNode {
   // the slot names the row's id (`custom-2` for a second hand-made endpoint), which is the catalogue id for a vendor
-  const labelOf = (provider: string) => (provider === 'nanomuse' ? 'nanoMuse Cloud' : (view.configured.find((p) => p.id === provider) ?? view.configured.find((p) => p.provider === provider))?.label || provider)
+  const labelOf = (provider: string) => (provider === 'nanomuse' ? 'NanoLika Cloud' : (view.configured.find((p) => p.id === provider) ?? view.configured.find((p) => p.provider === provider))?.label || provider)
   const line = (slot: { provider: string; model: string }) => (slot.model ? `${labelOf(slot.provider)} · ${slot.model}` : t('mdPick'))
   return h('div', { className: 'nm-card', style: { marginTop: 4 } },
     h('button', { type: 'button', className: 'nm-row nm-row-button', 'data-testid': 'nm-models-link', onClick: () => { settingsBus.openSection?.(MODELS_SECTION) } },
