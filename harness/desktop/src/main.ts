@@ -1014,7 +1014,9 @@ function registerBridge(): void {
     if (typeof url === "string" && EXTERNAL_URL.test(url)) void shell.openExternal(url);
   });
   ipcMain.handle("nanomuse:keep-awake", (_e, on: boolean) => {
-    if (on === true && awakeBlocker === null) awakeBlocker = powerSaveBlocker.start("prevent-display-sleep");
+    // "Keep awake" must keep the whole machine up, not just its screen: the agent lives on
+    // this computer, so a sleeping host is an unreachable agent. The display may still dim.
+    if (on === true && awakeBlocker === null) awakeBlocker = powerSaveBlocker.start("prevent-app-suspension");
     else if (on !== true) releaseAwake();
   });
   ipcMain.handle("nanomuse:theme", (_e, theme: string) => {
