@@ -33,12 +33,9 @@ const SAME_ON_PURPOSE = new Set([
   'nwProxyPlaceholder',
 ])
 
-/** Entries whose Russian is, on purpose, the English: names, a URL, a shape with no words in it. */
+/** Entries whose Russian is, on purpose, the English: a URL, a shape with no words in it, a name
+ *  of someone else's product. Our own name is ours now, so the brand entries are not here. */
 const SAME_ON_PURPOSE_RU = new Set([
-  'title',
-  'nav',
-  'brand',
-  'railLabel',
   'navHarness',
   'handsAct',
   'cnCustomUrl',
