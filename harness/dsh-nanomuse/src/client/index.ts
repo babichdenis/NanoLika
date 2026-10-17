@@ -40,7 +40,7 @@ import { makeLibraryPanel } from './LibraryPanel.tsx'
 import { IconPanelLeft, IconPlus } from './icons.tsx'
 import { makeInviteButton } from './Invite.tsx'
 import { useLive } from './live.ts'
-import { en, zh } from './locales.ts'
+import { en, ru, zh } from './locales.ts'
 import type { ChatActions } from './MuseChats.tsx'
 import { MuseHeader, type UseSessionStatus } from './MuseHeader.tsx'
 import { CONNECTORS_SECTION, makeConnectorsSection } from './Connectors.tsx'
@@ -159,7 +159,7 @@ export function apply(ctx: ClientContext): void {
   const getService = (name: string): unknown => (ctx as unknown as { get(name: string): unknown }).get(name)
   const shell = createShellStore()
 
-  ctx.effect(() => locale.register('nanomuse', { en, zh }), 'nanomuse: dictionaries')
+  ctx.effect(() => locale.register('nanomuse', { en, ru, zh }), 'nanomuse: dictionaries')
   const t = locale.bind('nanomuse') as Translate
   ctx.effect(() => ensureStyles(), 'nanomuse: stylesheet')
   // The Muse composer and column unless the Developer switch asks for the harness's own.

@@ -13,6 +13,7 @@ import { build } from 'esbuild'
 const here = fileURLToPath(new URL('.', import.meta.url))
 let dir
 let en
+let ru
 let zh
 
 /** Entries whose Chinese is, on purpose, the English: names, a URL, a field label the vendors use. */
@@ -32,6 +33,22 @@ const SAME_ON_PURPOSE = new Set([
   'nwProxyPlaceholder',
 ])
 
+/** Entries whose Russian is, on purpose, the English: names, a URL, a shape with no words in it. */
+const SAME_ON_PURPOSE_RU = new Set([
+  'title',
+  'nav',
+  'brand',
+  'railLabel',
+  'navHarness',
+  'handsAct',
+  'cnCustomUrl',
+  'fsMacTitle',
+  'ownKeyChatGptRow',
+  'nwProxyPlaceholder',
+  'incomingOther',
+  'obTermsEnd',
+])
+
 const holes = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',')
 
 before(async () => {
@@ -44,7 +61,7 @@ before(async () => {
     outfile: join(dir, 'locales.mjs'),
     logLevel: 'silent',
   })
-  ;({ en, zh } = await import(pathToFileURL(join(dir, 'locales.mjs')).href))
+  ;({ en, ru, zh } = await import(pathToFileURL(join(dir, 'locales.mjs')).href))
 })
 
 after(async () => {
@@ -70,6 +87,29 @@ test('a Chinese entry equals the English only when it is a name', () => {
 test('Chinese quotes are 「」', () => {
   const off = Object.keys(zh).filter((k) => /["“”]/.test(zh[k]))
   assert.deepEqual(off, [])
+})
+
+test('en and ru have the same keys', () => {
+  assert.deepEqual(Object.keys(ru).sort(), Object.keys(en).sort())
+})
+
+test('every {hole} of an English string is in its Russian twin', () => {
+  const off = Object.keys(en).filter((k) => holes(en[k]) !== holes(ru[k]))
+  assert.deepEqual(off, [])
+})
+
+test('a Russian entry equals the English only when it is a name', () => {
+  const same = Object.keys(en).filter((k) => en[k] === ru[k] && !SAME_ON_PURPOSE_RU.has(k))
+  assert.deepEqual(same, [], 'English left in the Russian dictionary')
+  const gone = [...SAME_ON_PURPOSE_RU].filter((k) => en[k] !== ru[k])
+  assert.deepEqual(gone, [], 'drop these from SAME_ON_PURPOSE_RU')
+})
+
+test('house style holds in Russian too: no dashes, no exclamation marks', () => {
+  const dashed = Object.keys(ru).filter((k) => /[—–]/.test(ru[k]))
+  const loud = Object.keys(ru).filter((k) => /[!！]/.test(ru[k]))
+  assert.deepEqual(dashed, [], 'Russian strings with a dash')
+  assert.deepEqual(loud, [], 'Russian strings with an exclamation mark')
 })
 
 test('no string names this computer', () => {
