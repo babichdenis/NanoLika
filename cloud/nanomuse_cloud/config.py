@@ -575,18 +575,18 @@ class Settings:
     # INVITE_URL is the link the apps offer to share; the code is appended.
     # OWN_KEY_DOCS is the guide the apps open when the allowance is used up and
     # the person wants to bring their own model key.
-    invite_url: str = field(default_factory=lambda: _env("INVITE_URL", "https://nanomuse.cn/web/?invite="))
-    own_key_docs: str = field(default_factory=lambda: _env("OWN_KEY_DOCS", "https://nanomuse.cn/own-key"))
+    invite_url: str = field(default_factory=lambda: _env("INVITE_URL", "https://nanolika.ru/?invite="))
+    own_key_docs: str = field(default_factory=lambda: _env("OWN_KEY_DOCS", "https://nanolika.ru/help"))
     # OPENROUTER_URL is where someone outside mainland China gets a key (0.17): Alibaba
     # Cloud Bailian only signs up accounts from the mainland, so the "ways on" the relay
     # sends put OpenRouter first for everyone else (service.region).
     openrouter_url: str = field(default_factory=lambda: _env("OPENROUTER_URL", "https://openrouter.ai/keys"))
     # PRIVACY_URL is the policy the apps link from Data controls and the sign-in
     # pages — the one that states what this relay keeps and its default above.
-    privacy_url: str = field(default_factory=lambda: _env("PRIVACY_URL", "https://nanomuse.cn/privacy/"))
+    privacy_url: str = field(default_factory=lambda: _env("PRIVACY_URL", "https://nanolika.ru/privacy/"))
     # REPO_URL is the project's repository, which the apps point to when they ask for a
     # star — at the first sign-in, when the allowance is used up, after the first task.
-    repo_url: str = field(default_factory=lambda: _env("REPO_URL", "https://github.com/nano-muse/nanoMuse"))
+    repo_url: str = field(default_factory=lambda: _env("REPO_URL", "https://nanolika.ru/source"))
 
     code_ttl_s: int = field(default_factory=lambda: _int("CODE_TTL_S", 600))
     code_per_identifier_10m: int = field(default_factory=lambda: _int("CODE_PER_IDENTIFIER_10M", 3))

@@ -31,8 +31,9 @@ from typing import Any
 DEFAULT_NUDGES: dict[str, Any] = {
     "version": 1,
     "star": {
-        "enabled": True,
-        "url": "https://github.com/nano-muse/nanoMuse",
+        # Our relay does not ask for stars: the nudge was the upstream project's.
+        "enabled": False,
+        "url": "https://nanolika.ru",
         "moments": {
             "signed_in": True,
             "tasks": [3, 10, 30],

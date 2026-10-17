@@ -127,38 +127,22 @@ def guidance(region: str, docs_url: str) -> dict[str, Any]:
                 "covers": [c for c in CAPABILITIES if c in covers],
             }
         )
+    # NanoLika carries the model itself: the card keeps the guide's URL and nothing else. A key of
+    # one's own stays possible; providers abroad and plans bought elsewhere are not offered.
     return {
         "version": cat.get("version", 1),
         "updated": cat.get("updated", ""),
         "region": region,
         "docs": docs_url,
-        "providers": providers,
-        "session_providers": [{**_public(p, region), "session_header": p["session_header"]} for p in session],
-        "plans": plans,
-        "local": [_public(by_id[pid], region) for pid in LOCAL if pid in by_id],
+        "providers": [],
+        "session_providers": [],
+        "plans": [],
+        "local": [],
         "caveats": {"chatgpt": CHATGPT_CAVEAT, "chatgpt_zh": CHATGPT_CAVEAT_ZH},
     }
 
 
 def exhausted_key_line(region: str) -> str:
-    """The "own key" half of the `allowance_exhausted` message, for the apps of before 0.1.39
-    that print the relay's sentence as it is."""
-    if region == "cn":
-        return (
-            "add your own model key (Alibaba Cloud Bailian, 阿里云百炼, covers chat, hands, pictures and clips "
-            "with one key and has a free tier for mainland China accounts; DeepSeek, Kimi, Zhipu, SiliconFlow, "
-            "Volcengine and MiniMax work too, for chat and hands, and some draw pictures), or sign in with a plan you "
-            "already pay for (ChatGPT, Claude or Kimi, where the app has the sign-in)"
-        )
-    if region == "intl":
-        return (
-            "add your own model key (OpenRouter, with one account, one key and pay as you go, or OpenAI first; "
-            "Anthropic, Gemini, xAI, Groq, Mistral, DeepSeek, Kimi and MiniMax work too, each covering what its "
-            "models can do), or sign in with a plan you already pay for (ChatGPT, Claude or Kimi, where the app "
-            "has the sign-in); Alibaba Cloud Bailian only signs up accounts from mainland China"
-        )
-    return (
-        "add your own model key (OpenRouter or OpenAI outside mainland China, Alibaba Cloud Bailian inside, "
-        "or any of the providers the app lists with what each covers), or sign in with a plan you already "
-        "pay for (ChatGPT, Claude or Kimi, where the app has the sign-in)"
-    )
+    """The half-sentence an older app prints as it is when the allowance is used up. NanoLika's own
+    way on is the subscription and the invitation; a key of one's own stays possible."""
+    return "renew your access with a subscription or invite a friend (a model key of your own works too)"
