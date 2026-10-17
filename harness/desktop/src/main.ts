@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { GLOW_HIDE_MS, GLOW_SETTLE_MS, type Leak, LeakLog, leakIsEvidence, leakIsReal, pointerAction, REARM_DELAYS_MS, staleInstance } from "./glow";
 import { defaultHelperPath, HELPER_NAME, MacHelper } from "./mac-helper";
 import * as macPermissions from "./mac-permissions";
@@ -42,8 +42,10 @@ import { windowsNetworkCost } from "./windows-network-cost";
 const PROFILE = "nanomuse";
 // The composition: the harness's base and Web app, its Schedule (the goals' automations and
 // the agent's reminders — an optional bundle of the harness, on by default here), then ours.
-const BUNDLES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@deepseek-ai/dsh-experimental-schedule-bundle", "dsh-nanomuse"];
+const BUNDLES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@deepseek-ai/dsh-experimental-schedule-bundle", "dsh-nanomuse", "@absolutemikhail/dsh-locale-ru"];
 const BUNDLE = "dsh-nanomuse";
+/** The community Russian pack for the dsh web shell (vendored under harness/vendor), a bundle of its own. */
+const LOCALE_BUNDLE = "@absolutemikhail/dsh-locale-ru";
 const RELEASES_PAGE = "https://nanolika.ru/";
 const ISSUES_PAGE = "https://nanolika.ru/help";
 const DOCS_PAGE = "https://nanolika.ru/help";
@@ -209,12 +211,12 @@ function ensureProfile(dshDir: string): string {
   const dsh = (manifest.dsh as { profile?: { bundles?: string[] } } | undefined) ?? {};
   const bundles = dsh.profile?.bundles ?? [];
   const same = bundles.length === BUNDLES.length && bundles.every((b, i) => b === BUNDLES[i]);
-  if (!same || deps[BUNDLE] !== "*" || manifest.name !== `dsh-profile-${PROFILE}`) {
+  if (!same || deps[BUNDLE] !== "*" || deps[LOCALE_BUNDLE] !== "*" || manifest.name !== `dsh-profile-${PROFILE}`) {
     const next = {
       ...manifest,
       name: `dsh-profile-${PROFILE}`,
       private: true,
-      dependencies: { ...deps, [BUNDLE]: "*" },
+      dependencies: { ...deps, [BUNDLE]: "*", [LOCALE_BUNDLE]: "*" },
       dsh: { ...dsh, profile: { ...dsh.profile, bundles: [...BUNDLES] } },
     };
     writeFileSync(manifestPath, `${JSON.stringify(next, null, 2)}\n`);
@@ -234,6 +236,10 @@ function ensureProfile(dshDir: string): string {
   const link = join(dir, "node_modules", BUNDLE);
   const target = join(dshDir, "node_modules", BUNDLE);
   if (relink(link, target)) log(`profile: ${BUNDLE} → ${target}`);
+  const localeLink = join(dir, "node_modules", LOCALE_BUNDLE);
+  mkdirSync(dirname(localeLink), { recursive: true });
+  const localeTarget = join(dshDir, "node_modules", LOCALE_BUNDLE);
+  if (relink(localeLink, localeTarget)) log(`profile: ${LOCALE_BUNDLE} → ${localeTarget}`);
   return dir;
 }
 
@@ -685,8 +691,8 @@ function iconPath(): string {
 }
 
 /** The Muse window colours: near-black in the dark, paper in the light (the bundle's stylesheet agrees). */
-const BASE_DARK = "#171717";
-const BASE_LIGHT = "#f9f9f9";
+const BASE_DARK = "#242820";
+const BASE_LIGHT = "#f7f1e6";
 /** The height of the Windows caption-button overlay; the page's top clearance matches it. */
 const OVERLAY_HEIGHT = 40;
 

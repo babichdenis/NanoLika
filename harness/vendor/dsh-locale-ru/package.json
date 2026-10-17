@@ -1,0 +1,70 @@
+{
+  "name": "@absolutemikhail/dsh-locale-ru",
+  "version": "0.1.0",
+  "description": "Russian locale bundle for the DeepSeek Harness web interface",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "check:harness:keys": "node scripts/check-harness-keys.mjs",
+    "check:harness:install": "node scripts/smoke-install.mjs",
+    "check:harness": "npm run build && npm run check:harness:keys && npm run check:harness:install",
+    "check": "npm run build && npm test && npm pack --dry-run",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "locale",
+    "i18n",
+    "russian",
+    "ru"
+  ],
+  "author": {
+    "name": "AbsoluteMikhail",
+    "url": "https://github.com/AbsoluteMikhail"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/AbsoluteMikhail/dsh-locale-ru#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbsoluteMikhail/dsh-locale-ru.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AbsoluteMikhail/dsh-locale-ru/issues"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@12.4.2",
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

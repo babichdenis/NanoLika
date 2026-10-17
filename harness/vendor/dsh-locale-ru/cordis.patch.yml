@@ -1,0 +1,28 @@
+# Install the Russian browser locale and localize the built-in permission
+# preset names that originate in Host configuration rather than UI dictionaries.
+
+- insert:
+    - id: locale-ru
+      name: '@absolutemikhail/dsh-locale-ru'
+
+# This row mirrors the built-in permission preset table. Keep its ids and
+# security settings aligned with the DeepSeek Harness base profile.
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+        name: Только чтение
+        description: Агент может читать файлы, но не изменять их; расширение прав требует подтверждения.
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+        name: Запись в рабочей папке
+        description: Запись внутри рабочей папки и разрешённых временных папок; более широкие действия требуют подтверждения.
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+        name: Полный доступ
+        description: Полный доступ к файлам без запросов подтверждения.

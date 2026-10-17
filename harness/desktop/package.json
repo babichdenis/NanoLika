@@ -16,8 +16,8 @@
     "prepare-dsh": "node scripts/prepare-dsh.mjs",
     "start": "tsc -p tsconfig.json && electron .",
     "smoke": "node scripts/smoke.mjs",
-    "dist": "tsc -p tsconfig.json && node scripts/patch-locale.mjs && electron-builder --config electron-builder.yml --publish never",
-    "dist:dir": "tsc -p tsconfig.json && node scripts/patch-locale.mjs && electron-builder --config electron-builder.yml --dir",
+    "dist": "tsc -p tsconfig.json && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "tsc -p tsconfig.json && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --dir",
     "check:update-feed": "node scripts/update-feed-check.mjs"
   },
   "devDependencies": {
