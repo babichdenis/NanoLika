@@ -1130,4 +1130,9 @@
     <string name="nm_font_scale_medium">中</string>
     <string name="nm_font_scale_large">大</string>
     <string name="nm_font_scale_extra_large">特大</string>
+
+    <string name="nm_nl_cloud_ready">助手已配置好，无需 API 密钥。</string>
+    <string name="nm_nl_own_title">自己的模型</string>
+    <string name="nm_nl_own_subtitle">可选：为对话连接自己的服务商。</string>
+    <string name="nm_nl_cloud_use">使用 nanoLika Cloud</string>
 </resources>

@@ -110,7 +110,7 @@ struct NanoMuseCloudError: LocalizedError, Sendable {
 @MainActor
 enum NanoMuseCloud {
     static let defaultBase = "https://cloud.nanomuse.cn"
-    static let label = "nanoMuse Cloud"
+    static let label = "nanoLika Cloud"
 
     private enum Keys {
         static let base = "nanomuse.cloud.base"
@@ -385,9 +385,10 @@ enum NanoMuseCloud {
 
         // The models the relay serves — the same `/v1/models` call every provider gets; the
         // relay includes modalities so a picture model is recognised as one.
-        await store.refreshModels(for: inst)
         let menu = reply["models"] as? [[String: Any]] ?? []
-        NanoMuseRelayMenu.store(menu) // the pickers' Cloud group (Settings › Models) reads it without a round trip
+        NanoMuseRelayMenu.store(menu) // the authenticated sign-in already carries a model menu
+        provisionDefaults(store: store, instance: inst, models: menu)
+        await store.refreshModels(for: inst)
         provisionDefaults(store: store, instance: inst, models: menu)
 
         let parsed = parseAccount(reply)
@@ -414,6 +415,10 @@ enum NanoMuseCloud {
             let me = try await call("GET", "/v1/me", body: nil, token: key)
             let parsed = parseAccount(me)
             account = parsed
+            // Recover an interrupted first model fetch without requiring another sign-in.
+            let menu = me["models"] as? [[String: Any]] ?? NanoMuseRelayMenu.cached
+            NanoMuseRelayMenu.store(menu)
+            provisionDefaults(store: ProviderConfigStore.shared, instance: inst, models: menu)
             NanoMuseNudges.shared.absorb(me: me) // nanoMuse: contract C1
             NanoMuseAllowance.shared.absorb(me: me) // the 80 % heads-up, the region's guidance (contract C11)
             return parsed
@@ -567,31 +572,43 @@ enum NanoMuseCloud {
     /// replaced — someone who already has a key and a group keeps them and gets the relay as
     /// one more provider.
     private static func provisionDefaults(store: ProviderConfigStore, instance: ProviderInstance, models: [[String: Any]]) {
-        // Contract C4: the chat opens on the model the relay recommends *for chat*
-        // (`for: ["chat"]`, deepseek-v4.1-flash), never on a hands-only one.
-        let recommendedChat = NanoMuseModelMenu.recommendedChat(models)?["id"] as? String
+        guard instance.isEnabled else { return } // never undo a deliberate Cloud opt-out
+        let recommended = NanoMuseModelMenu.recommendedChat(models)
+        let recommendedChat = recommended?["id"] as? String
+        // The sign-in and /me replies already authenticate this model menu. A failed
+        // secondary /models fetch must not leave a signed-in phone with no chat entry.
+        if let id = recommendedChat, !id.isEmpty,
+           !store.entries(for: instance.id).contains(where: { $0.model.id == id }) {
+            let model = LLMModel(id: id, displayName: recommended?["name"] as? String ?? id,
+                                 provider: instance.providerType.displayName)
+            store.addEntry(ModelEntry(providerInstanceId: instance.id, model: model))
+        }
         let pictureIds = Set(models.filter { drawsOnly($0) }.compactMap { $0["id"] as? String })
-
-        let entries = store.entries(for: instance.id).filter { !$0.isHidden }
+        let entries = store.entries(for: instance.id).filter { !$0.isHidden && NanoMuseModelSlots.chats($0) }
         let chatEntry = entries.first(where: { $0.model.id == recommendedChat })
             ?? entries.first(where: { !pictureIds.contains($0.model.id) })
         guard let chatEntry else { return }
-        // Ours already, with the recommended model or with the person's own choice (a member
-        // who swapped the recommended model for another must not get a second group with the
-        // old one back on signing in again).
-        let already = store.modelGroups.contains { $0.memberEntryIds.contains(chatEntry.id) || ($0.name == label && !$0.memberEntryIds.isEmpty) }
-        if !already {
-            let group = ModelGroup(name: label, memberEntryIds: [chatEntry.id])
-            store.addGroup(group)
-            if store.defaultPrimaryGroupId == nil {
-                store.defaultPrimaryGroupId = group.id
+        let available = Set(store.modelEntries.filter { entry in
+            guard !entry.isHidden, NanoMuseModelSlots.chats(entry),
+                  let provider = store.instance(for: entry.providerInstanceId) else { return false }
+            return provider.isEnabled && provider.hasAnyCredential
+        }.map(\.id))
+        var group = store.modelGroups.first { $0.memberEntryIds.contains(chatEntry.id) }
+            ?? store.modelGroups.first { $0.name == label }
+        if var existing = group {
+            if NanoMuseCloudDefaults.needsRepair(members: existing.memberEntryIds, available: available) {
+                if !existing.memberEntryIds.contains(chatEntry.id) { existing.memberEntryIds.append(chatEntry.id) }
+                store.updateGroup(existing)
+                group = existing
             }
+        } else {
+            let fresh = ModelGroup(name: label, memberEntryIds: [chatEntry.id])
+            store.addGroup(fresh)
+            group = fresh
         }
-        // The default group must be one that can answer.
-        let def = store.modelGroups.first { $0.id == store.defaultPrimaryGroupId }
-        if def == nil || def?.memberEntryIds.isEmpty == true {
-            store.defaultPrimaryGroupId = (store.modelGroups.first { $0.memberEntryIds.contains(chatEntry.id) }
-                ?? store.modelGroups.first { $0.name == label && !$0.memberEntryIds.isEmpty })?.id
+        let current = store.modelGroups.first { $0.id == store.defaultPrimaryGroupId }
+        if NanoMuseCloudDefaults.needsRepair(members: current?.memberEntryIds, available: available) {
+            store.defaultPrimaryGroupId = group?.id
         }
     }
 

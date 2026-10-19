@@ -7080,7 +7080,7 @@ private struct SteppedSlider: View {
 }
 
 private struct AppearanceSettingsView: View {
-    @AppStorage("appearanceMode") private var appearanceMode: Int = 0
+    @AppStorage("appearanceMode") private var appearanceMode: Int = 1 // nanoMuse: paper default
     @AppStorage("appIconMode") private var appIconMode: Int = 0
     @AppStorage("appLanguage") private var appLanguage: String = ""
     @AppStorage("launchScreen") private var launchScreen: Int = 0  // 0=Auto, 1=Last Session, 2=New Chat, 3=Home
@@ -7418,7 +7418,7 @@ private enum SettingsDestination: Hashable {
 
 private struct SettingsSheet: View {
     @Binding var showTerminal: Bool
-    @AppStorage("appearanceMode") private var appearanceMode: Int = 0
+    @AppStorage("appearanceMode") private var appearanceMode: Int = 1 // nanoMuse: paper default
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var deepLink = DeepLinkCoordinator.shared
     @State private var navPath = NavigationPath()

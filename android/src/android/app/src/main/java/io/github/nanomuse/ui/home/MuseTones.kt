@@ -20,30 +20,31 @@ object MuseTones {
 
     /** Cards, pills, round buttons, sheets, the drawer. */
     val surface: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF1C1C1E) else Color.White
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF2D3229) else Color(0xFFFBF6EC)
 
     /** A selected row, the active segment, the disc under the face. */
     val fill: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF2A2A2E) else Color(0xFFF1F1F4)
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF363C31) else Color(0xFFEEE7D9)
 
     /** The agent's message bubble and the composer pill (Muse: #E9EAEC on #FCFCFC). */
     val bubble: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF26262A) else Color(0xFFE9EAEC)
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF363C31) else Color(0xFFEEE7D9)
 
     /** The warm disc under the face (Muse's is a shade warmer than its greys). */
     val disc: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF2A2A2E) else Color(0xFFF1EFEB)
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF363C31) else Color(0xFFF7F1E6)
 
     /** Hairlines and row separators. */
     val hairline: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF3A3A3C) else Color(0xFFE5E5EA)
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF3A3A3C) else Color(0xFFD8D1C1)
 
     /** The grey canvas a page of white cards sits on (the feed). */
     val canvas: Color
-        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF000000) else Color(0xFFF3F3F5)
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFF242820) else Color(0xFFF7F1E6)
 
     /** Muse's action blue (the "Let's go" button). */
-    val action: Color = Color(0xFF0A66E4)
+    val action: Color
+        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFFB3CBA5) else Color(0xFF52694E)
 
     private fun Color.luminance(): Float = 0.2126f * red + 0.7152f * green + 0.0722f * blue
 }

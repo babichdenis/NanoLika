@@ -1165,4 +1165,9 @@
     <string name="nm_font_scale_medium">Средний</string>
     <string name="nm_font_scale_large">Крупный</string>
     <string name="nm_font_scale_extra_large">Очень крупный</string>
+
+    <string name="nm_nl_cloud_ready">Помощница уже настроена. API-ключ не нужен.</string>
+    <string name="nm_nl_own_title">Свои модели</string>
+    <string name="nm_nl_own_subtitle">Необязательно. Подключите своего провайдера для чата.</string>
+    <string name="nm_nl_cloud_use">Использовать nanoLika Cloud</string>
 </resources>

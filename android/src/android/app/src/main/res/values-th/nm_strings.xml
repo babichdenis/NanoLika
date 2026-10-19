@@ -1153,4 +1153,9 @@
     <string name="nm_font_scale_medium">ปานกลาง</string>
     <string name="nm_font_scale_large">ใหญ่</string>
     <string name="nm_font_scale_extra_large">ใหญ่มาก</string>
+
+    <string name="nm_nl_cloud_ready">ตั้งค่าผู้ช่วยแล้ว ไม่ต้องใช้คีย์ API</string>
+    <string name="nm_nl_own_title">โมเดลของคุณ</string>
+    <string name="nm_nl_own_subtitle">ไม่บังคับ เชื่อมต่อผู้ให้บริการของคุณเพื่อแชต</string>
+    <string name="nm_nl_cloud_use">ใช้ nanoLika Cloud</string>
 </resources>

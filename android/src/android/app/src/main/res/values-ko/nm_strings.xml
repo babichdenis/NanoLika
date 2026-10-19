@@ -1153,4 +1153,9 @@
     <string name="nm_font_scale_medium">중간</string>
     <string name="nm_font_scale_large">크게</string>
     <string name="nm_font_scale_extra_large">매우 크게</string>
+
+    <string name="nm_nl_cloud_ready">도우미가 설정되어 있습니다. API 키가 필요하지 않습니다.</string>
+    <string name="nm_nl_own_title">내 모델</string>
+    <string name="nm_nl_own_subtitle">선택 사항입니다. 채팅에 사용할 제공업체를 연결하세요.</string>
+    <string name="nm_nl_cloud_use">nanoLika Cloud 사용</string>
 </resources>

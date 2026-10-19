@@ -630,6 +630,7 @@ enum NanoMuseModelSlots {
 
     private static func line(for choice: NanoMuseSlotChoice, in list: [NanoMuseSlotProvider]) -> String {
         let label = list.first { $0.id == choice.providerId }?.label ?? ProviderConfigStore.shared.instance(for: choice.providerId)?.label ?? ""
+        if choice.providerId == NanoMuseCloud.instance?.id { return "nanoLika Cloud" }
         return label.isEmpty ? choice.model : "\(label) · \(choice.model)"
     }
 }

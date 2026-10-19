@@ -185,10 +185,12 @@ class HubClient(
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (stopped || ws !== webSocket) return
             webSocket.send(hello().toString())
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (stopped || ws !== webSocket) return
             val frame = runCatching { JSONObject(text) }.getOrNull() ?: return
             onFrame(frame)
         }
@@ -200,7 +202,7 @@ class HubClient(
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            if (stopped) return // our own close after stop(); see scheduleReconnect
+            if (stopped || ws !== webSocket) return // ignore a close from a superseded socket
             if (code == 4001 || code == 4002) {
                 // Bad key or bad device: the relay will say the same thing next time. Stop here
                 // and say why; a new sign-in makes a new client.
@@ -222,6 +224,7 @@ class HubClient(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (stopped || ws !== webSocket) return
             val status = response?.code
             AppLogger.info(TAG, "hub socket failed: ${t.message}" + (status?.let { " (HTTP $it)" } ?: ""))
             if (status == 401 || status == 403) {

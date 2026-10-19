@@ -1157,4 +1157,9 @@
     <string name="nm_font_scale_medium">Orta</string>
     <string name="nm_font_scale_large">Büyük</string>
     <string name="nm_font_scale_extra_large">Çok büyük</string>
+
+    <string name="nm_nl_cloud_ready">Asistanınız hazır. API anahtarı gerekmez.</string>
+    <string name="nm_nl_own_title">Kendi modelleriniz</string>
+    <string name="nm_nl_own_subtitle">İsteğe bağlı. Sohbet için kendi sağlayıcınızı bağlayın.</string>
+    <string name="nm_nl_cloud_use">nanoLika Cloud kullan</string>
 </resources>

@@ -1153,4 +1153,9 @@
     <string name="nm_font_scale_medium">Sedang</string>
     <string name="nm_font_scale_large">Besar</string>
     <string name="nm_font_scale_extra_large">Sangat besar</string>
+
+    <string name="nm_nl_cloud_ready">Asisten Anda sudah siap. Tidak perlu kunci API.</string>
+    <string name="nm_nl_own_title">Model sendiri</string>
+    <string name="nm_nl_own_subtitle">Opsional. Hubungkan penyedia sendiri untuk percakapan.</string>
+    <string name="nm_nl_cloud_use">Gunakan nanoLika Cloud</string>
 </resources>

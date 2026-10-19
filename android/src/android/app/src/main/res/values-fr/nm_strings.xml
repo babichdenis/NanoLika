@@ -1158,4 +1158,9 @@
     <string name="nm_font_scale_medium">Moyen</string>
     <string name="nm_font_scale_large">Grand</string>
     <string name="nm_font_scale_extra_large">Très grand</string>
+
+    <string name="nm_nl_cloud_ready">Votre assistante est configurée. Aucune clé API nécessaire.</string>
+    <string name="nm_nl_own_title">Vos modèles</string>
+    <string name="nm_nl_own_subtitle">Facultatif. Connectez votre fournisseur pour discuter.</string>
+    <string name="nm_nl_cloud_use">Utiliser nanoLika Cloud</string>
 </resources>

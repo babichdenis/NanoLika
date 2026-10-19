@@ -1165,4 +1165,9 @@
     <string name="nm_font_scale_medium">Średni</string>
     <string name="nm_font_scale_large">Duży</string>
     <string name="nm_font_scale_extra_large">Bardzo duży</string>
+
+    <string name="nm_nl_cloud_ready">Asystentka jest skonfigurowana. Klucz API nie jest potrzebny.</string>
+    <string name="nm_nl_own_title">Własne modele</string>
+    <string name="nm_nl_own_subtitle">Opcjonalnie. Podłącz własnego dostawcę do rozmów.</string>
+    <string name="nm_nl_cloud_use">Użyj nanoLika Cloud</string>
 </resources>

@@ -276,7 +276,7 @@ internal object ConfigBuiltins {
                 prefs = prefs,
                 key = "theme_mode",
                 cases = listOf("system", "light", "dark"),
-                defaultIndex = 0,
+                defaultIndex = 1, // nanoMuse: paper default
             )
         )
         // T-chat-title-pill: sticky session-title pill on the chat screen.

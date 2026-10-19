@@ -1161,4 +1161,9 @@
     <string name="nm_font_scale_medium">Mediu</string>
     <string name="nm_font_scale_large">Mare</string>
     <string name="nm_font_scale_extra_large">Foarte mare</string>
+
+    <string name="nm_nl_cloud_ready">Asistenta este configurată. Nu este necesară o cheie API.</string>
+    <string name="nm_nl_own_title">Modelele proprii</string>
+    <string name="nm_nl_own_subtitle">Opțional. Conectați propriul furnizor pentru conversații.</string>
+    <string name="nm_nl_cloud_use">Folosește nanoLika Cloud</string>
 </resources>

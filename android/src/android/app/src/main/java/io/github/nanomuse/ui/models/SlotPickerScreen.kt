@@ -76,7 +76,7 @@ fun SlotPickerScreen(slot: Slot, onBack: () -> Unit, onAddProvider: () -> Unit) 
     val repo = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull
     val config = repo?.config?.collectAsState()?.value
     var tick by remember { mutableIntStateOf(0) }
-    val groups = remember(config, tick) { ModelSlots.groups(context, slot) }
+    val groups = remember(config, tick) { ModelSlots.groups(context, slot).filter { slot != Slot.CHAT || !it.cloud } }
     val current = remember(config, tick) { ModelSlots.current(context, slot) }
     val videoOff = remember(tick) { slot == Slot.VIDEO && ModelSlots.videoOff(context) }
     // the three dependent slots have an *Automatic* row: nothing stored, the slot follows the order
@@ -100,7 +100,7 @@ fun SlotPickerScreen(slot: Slot, onBack: () -> Unit, onAddProvider: () -> Unit) 
         }
     }
 
-    SettingsScaffold(title = stringResource(slotTitle(slot)), onBack = onBack) {
+    SettingsScaffold(title = stringResource(if (slot == Slot.CHAT) R.string.nm_nl_own_title else slotTitle(slot)), onBack = onBack) {
         Text(
             text = stringResource(slotSubtitle(slot)),
             fontSize = 14.sp,

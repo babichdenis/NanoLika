@@ -1157,4 +1157,9 @@
     <string name="nm_font_scale_medium">Mittel</string>
     <string name="nm_font_scale_large">Groß</string>
     <string name="nm_font_scale_extra_large">Sehr groß</string>
+
+    <string name="nm_nl_cloud_ready">Ihre Assistentin ist eingerichtet. Kein API-Schlüssel nötig.</string>
+    <string name="nm_nl_own_title">Eigene Modelle</string>
+    <string name="nm_nl_own_subtitle">Optional. Verbinden Sie Ihren eigenen Anbieter für den Chat.</string>
+    <string name="nm_nl_cloud_use">nanoLika Cloud verwenden</string>
 </resources>

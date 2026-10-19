@@ -25,6 +25,18 @@ struct NanoMuseModelsView: View {
 
     var body: some View {
         NanoMusePage(title: AppLocalized("Models")) {
+            if NanoMuseCloud.isSignedIn {
+                NanoMuseCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("nanoLika Cloud", systemImage: "cloud")
+                            .font(.headline)
+                        Text(AppLocalized("nl.cloud.ready")).font(.footnote).foregroundStyle(.secondary)
+                        Button(AppLocalized("nl.cloud.use")) { activateCloud() }
+                            .buttonStyle(.bordered)
+                            .disabled(cloudOn && NanoMuseModelSlots.chatProviderId() == NanoMuseCloud.instance?.id)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                }
+            }
             NanoMuseCard {
                 ForEach(Array(NanoMuseSlot.allCases.enumerated()), id: \.element) { index, slot in
                     if index > 0 { NanoMuseRowDivider() }
@@ -86,12 +98,12 @@ struct NanoMuseModelsView: View {
                 .opacity(0.55)
         } else {
             NavigationLink {
-                NanoMuseSlotPickerView(slot: slot) {
+                NanoMuseSlotPickerView(slot: slot, ownChatOnly: slot == .chat) {
                     if slot == .chat { chatChanged = true }
                     reload()
                 }
             } label: {
-                NanoMuseSlotRow(slot: slot, value: value(slot), chevron: true)
+                NanoMuseSlotRow(slot: slot, value: slot == .chat && NanoMuseModelSlots.chatProviderId() == NanoMuseCloud.instance?.id ? AppLocalized("No model yet") : value(slot), chevron: true, ownChat: slot == .chat)
             }
             .buttonStyle(.plain)
         }
@@ -100,6 +112,19 @@ struct NanoMuseModelsView: View {
     private func value(_ slot: NanoMuseSlot) -> String {
         if slot == .video, videoOff { return AppLocalized("Off") }
         return lines[slot] ?? AppLocalized("No model yet")
+    }
+
+    private func activateCloud() {
+        Task { @MainActor in
+            guard NanoMuseCloud.setModelsOn(true) else { return }
+            _ = try? await NanoMuseCloud.refresh()
+            if let provider = NanoMuseModelSlots.cloudProvider(),
+               let model = provider.defaultModel(for: .chat) {
+                _ = NanoMuseModelSlots.useForChat(instanceId: provider.id, model: model)
+            }
+            chatChanged = true
+            reload()
+        }
     }
 
     private func reload() {
@@ -120,6 +145,7 @@ private struct NanoMuseSlotRow: View {
     let slot: NanoMuseSlot
     let value: String
     let chevron: Bool
+    var ownChat = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -128,10 +154,10 @@ private struct NanoMuseSlotRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(slot.title)
+                Text(ownChat ? AppLocalized("nl.own.title") : slot.title)
                     .font(.body)
                     .foregroundStyle(.primary)
-                Text(slot.subtitle)
+                Text(ownChat ? AppLocalized("nl.own.subtitle") : slot.subtitle)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -165,6 +191,7 @@ private struct NanoMuseSlotRow: View {
 /// row filters every group live. A tap on a model sets the slot and goes back.
 struct NanoMuseSlotPickerView: View {
     let slot: NanoMuseSlot
+    var ownChatOnly = false
     var onPick: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
@@ -182,7 +209,7 @@ struct NanoMuseSlotPickerView: View {
     /// Own providers the catalogue says could serve the slot but the iPhone cannot drive for it.
     @State private var notDriven: [String] = []
 
-    private var able: [NanoMuseSlotProvider] { providers.filter { $0.has(slot) } }
+    private var able: [NanoMuseSlotProvider] { providers.filter { $0.has(slot) && !(ownChatOnly && $0.isCloud) } }
     /// Pictures and clips can go back to the automatic order; chat is the anchor.
     private var offersAutomatic: Bool { slot == .image || slot == .video }
     /// The query as the filter reads it; empty when there is none.
@@ -197,7 +224,7 @@ struct NanoMuseSlotPickerView: View {
     }
 
     var body: some View {
-        NanoMusePage(title: slot.title) {
+        NanoMusePage(title: ownChatOnly ? AppLocalized("nl.own.title") : slot.title) {
             if offersAutomatic {
                 NanoMuseCard {
                     NanoMuseChoiceRow(
@@ -268,7 +295,8 @@ struct NanoMuseSlotPickerView: View {
 
     private var emptyLine: String {
         switch slot {
-        case .chat, .hands: return AppLocalized("Sign in to nanoMuse Cloud or add a provider")
+        case .chat: return ownChatOnly ? AppLocalized("nl.own.subtitle") : AppLocalized("Sign in to nanoMuse Cloud or add a provider")
+        case .hands: return AppLocalized("Sign in to nanoMuse Cloud or add a provider")
         case .image: return AppLocalized("None of your providers can draw. Sign in to nanoMuse Cloud, or add an Alibaba Cloud Bailian provider with an API key; the avatar is drawn with one of the two.")
         case .video: return AppLocalized("No provider that can make video yet. nanoMuse speaks Alibaba Cloud Model Studio's video API, which nanoMuse Cloud relays too. Sign in to nanoMuse Cloud, or add a Model Studio key (it can be the same one as the image model uses), and the avatar starts moving; until then it stays as still pictures.")
         }

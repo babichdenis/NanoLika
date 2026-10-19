@@ -572,7 +572,7 @@ struct MinisSafariView: View {
     let isLocalFile: Bool
     let onCollapse: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("appearanceMode") private var appearanceMode: Int = 0
+    @AppStorage("appearanceMode") private var appearanceMode: Int = 1 // nanoMuse: paper default
 
     @State private var showShareSheet: Bool = false
 
@@ -714,7 +714,7 @@ struct MinisLinkPreviewView: View {
     let browserPool: BrowserTabPool?
     var onExpand: ((WebViewHolder) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("appearanceMode") private var appearanceMode: Int = 0
+    @AppStorage("appearanceMode") private var appearanceMode: Int = 1 // nanoMuse: paper default
     @StateObject private var holder: WebViewHolder
     @State private var showShareSheet = false
     @State private var desktopMode: Bool = false

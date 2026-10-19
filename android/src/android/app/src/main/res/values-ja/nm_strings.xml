@@ -1153,4 +1153,9 @@
     <string name="nm_font_scale_medium">中</string>
     <string name="nm_font_scale_large">大きい</string>
     <string name="nm_font_scale_extra_large">とても大きい</string>
+
+    <string name="nm_nl_cloud_ready">アシスタントは設定済みです。APIキーは不要です。</string>
+    <string name="nm_nl_own_title">自分のモデル</string>
+    <string name="nm_nl_own_subtitle">任意です。チャットに使うプロバイダーを追加できます。</string>
+    <string name="nm_nl_cloud_use">nanoLika Cloud を使う</string>
 </resources>

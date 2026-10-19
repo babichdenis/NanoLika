@@ -1157,4 +1157,9 @@
     <string name="nm_font_scale_medium">Katamtaman</string>
     <string name="nm_font_scale_large">Malaki</string>
     <string name="nm_font_scale_extra_large">Napakalaki</string>
+
+    <string name="nm_nl_cloud_ready">Nakahanda na ang iyong katulong. Hindi kailangan ng API key.</string>
+    <string name="nm_nl_own_title">Sariling mga modelo</string>
+    <string name="nm_nl_own_subtitle">Opsyonal. Ikonekta ang sarili mong provider para sa chat.</string>
+    <string name="nm_nl_cloud_use">Gamitin ang nanoLika Cloud</string>
 </resources>

@@ -147,4 +147,14 @@ final class NanoMuseRound5Tests: XCTestCase {
         XCTAssertEqual(NanoMuseCloud.describe(error), NanoMuseCloud.phoneRegionSentence)
         XCTAssertFalse(NanoMuseCloud.phoneRegionSentence.isEmpty)
     }
+
+    func testCloudDefaultRepairsMissingAndStaleGroupsButKeepsAWorkingChoice() {
+        let usable: Set<String> = ["cloud-chat", "own-chat"]
+        XCTAssertTrue(NanoMuseCloudDefaults.needsRepair(members: nil, available: usable))
+        XCTAssertTrue(NanoMuseCloudDefaults.needsRepair(members: [], available: usable))
+        XCTAssertTrue(NanoMuseCloudDefaults.needsRepair(members: ["deleted", "disabled"], available: usable))
+        XCTAssertFalse(NanoMuseCloudDefaults.needsRepair(members: ["own-chat"], available: usable))
+        XCTAssertFalse(NanoMuseCloudDefaults.needsRepair(members: ["stale", "cloud-chat"], available: usable))
+    }
+
 }

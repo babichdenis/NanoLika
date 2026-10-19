@@ -398,6 +398,7 @@ struct NanoMuseFaceView: View {
     /// mood; else the drawn face's clip for this mood, or the dragon's. An emoji look (#435)
     /// has no clip: its still moves as the dragon's does.
     private var clip: URL? {
+        guard !reduceMotion, size >= 44 else { return nil }
         if let state = own.moods[mood] { return state }
         if let ownClip = own.clip { return ownClip }
         switch faces.source {
@@ -622,21 +623,21 @@ struct NanoMuseLoopingClipView: UIViewRepresentable {
 
 /// Android's MuseTones: a quiet grey palette for the shell.
 enum NanoMuseTones {
-    static let surface = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : .white })
-    static let fill = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.165, green: 0.165, blue: 0.18, alpha: 1) : UIColor(red: 0.945, green: 0.945, blue: 0.957, alpha: 1) })
-    static let bubble = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.149, green: 0.149, blue: 0.165, alpha: 1) : UIColor(red: 0.914, green: 0.918, blue: 0.925, alpha: 1) })
-    static let disc = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.165, green: 0.165, blue: 0.18, alpha: 1) : UIColor(red: 0.945, green: 0.937, blue: 0.922, alpha: 1) })
-    static let hairline = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.227, green: 0.227, blue: 0.235, alpha: 1) : UIColor(red: 0.898, green: 0.898, blue: 0.918, alpha: 1) })
-    static let canvas = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : UIColor(red: 0.953, green: 0.953, blue: 0.961, alpha: 1) })
-    static let action = Color(red: 0.039, green: 0.4, blue: 0.894)
+    static let surface = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.17647, green: 0.19608, blue: 0.16078, alpha: 1) : UIColor(red: 0.98431, green: 0.96471, blue: 0.92549, alpha: 1) })
+    static let fill = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.22353, green: 0.27843, blue: 0.20392, alpha: 1) : UIColor(red: 0.88235, green: 0.90980, blue: 0.84706, alpha: 1) })
+    static let bubble = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.21176, green: 0.23529, blue: 0.19216, alpha: 1) : UIColor(red: 0.93333, green: 0.90588, blue: 0.85098, alpha: 1) })
+    static let disc = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.21176, green: 0.23529, blue: 0.19216, alpha: 1) : UIColor(red: 0.96863, green: 0.94510, blue: 0.90196, alpha: 1) })
+    static let hairline = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.31373, green: 0.34510, blue: 0.27843, alpha: 1) : UIColor(red: 0.84706, green: 0.81961, blue: 0.75686, alpha: 1) })
+    static let canvas = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.14118, green: 0.15686, blue: 0.12549, alpha: 1) : UIColor(red: 0.96863, green: 0.94510, blue: 0.90196, alpha: 1) })
+    static let action = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.70196, green: 0.79608, blue: 0.64706, alpha: 1) : UIColor(red: 0.32157, green: 0.41176, blue: 0.30588, alpha: 1) })
     /// The chat's ink (Android's `ChatColors.userBubble` and `sendButton` since #331): your
     /// message pill, the send disc and the scroll-to-latest disc. Black on the white canvas in
     /// light, white on the black canvas in dark; `onInk` is what sits on it, the canvas colour.
-    static let ink = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .white : .black })
-    static let onInk = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : .white })
+    static let ink = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.70196, green: 0.79608, blue: 0.64706, alpha: 1) : UIColor(red: 0.32157, green: 0.41176, blue: 0.30588, alpha: 1) })
+    static let onInk = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.14118, green: 0.15686, blue: 0.12549, alpha: 1) : UIColor(red: 0.98431, green: 0.96471, blue: 0.92549, alpha: 1) })
     /// The agent's message pill, a shade off the canvas (Android's `ChatColors.assistantBubble`:
     /// #F2F2F7 in light, #1C1C1E in dark). The composer pill keeps `bubble`.
-    static let agentPill = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor(red: 0.949, green: 0.949, blue: 0.969, alpha: 1) })
+    static let agentPill = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.21176, green: 0.23529, blue: 0.19216, alpha: 1) : UIColor(red: 0.93333, green: 0.90588, blue: 0.85098, alpha: 1) })
     /// The pill bar's indicator disc and the glyph on it: the same ink as the chat, black with
     /// a white glyph in light and white with a black glyph in dark, as Android's MuseBottomBar.
     static let tabIndicator = ink

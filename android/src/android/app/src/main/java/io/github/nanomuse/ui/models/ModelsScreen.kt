@@ -135,19 +135,39 @@ fun ModelsScreen(
                 }
             }
         }
+        if (NanoMuseCloud.isSignedIn(context)) {
+            SettingsSection(footer = stringResource(R.string.nm_nl_cloud_ready)) {
+                SettingsRow(
+                    title = "nanoLika Cloud",
+                    subtitle = stringResource(R.string.nm_nl_cloud_use),
+                    icon = Icons.Outlined.CloudQueue,
+                    iconColor = MuseTones.action,
+                    onClick = {
+                        NanoMuseCloud.setModelsOn(context, true)
+                        val options = ModelSlots.groups(context, Slot.CHAT).firstOrNull { it.cloud }?.options.orEmpty()
+                        val cloud = options.firstOrNull { it.recommended } ?: options.firstOrNull()
+                        if (cloud != null) ModelSlots.choose(context, Slot.CHAT, cloud)
+                        tick++
+                    },
+                    showDivider = false,
+                )
+            }
+        }
         Slot.values().forEach { slot ->
             val value = remember(config, tick, changed) { ModelSlots.current(context, slot) }
-            val hasOptions = remember(config, tick) { ModelSlots.groups(context, slot).isNotEmpty() }
+            val hasOptions = remember(config, tick) { ModelSlots.groups(context, slot).any { slot != Slot.CHAT || !it.cloud } }
             val videoOff = remember(tick, changed) { slot == Slot.VIDEO && ModelSlots.videoOff(context) }
             val footer = buildString {
-                append(stringResource(slotSubtitle(slot)))
+                append(stringResource(if (slot == Slot.CHAT) R.string.nm_nl_own_subtitle else slotSubtitle(slot)))
                 if (slot == Slot.CHAT && changed == Slot.CHAT) append(" ").append(stringResource(R.string.nm_models_chat_applies))
             }
             SettingsSection(footer = footer) {
                 SettingsRow(
-                    title = stringResource(slotTitle(slot)),
+                    title = stringResource(if (slot == Slot.CHAT) R.string.nm_nl_own_title else slotTitle(slot)),
                     subtitle = when {
+                        slot == Slot.CHAT && value != null && value.instance.id == NanoMuseCloud.instance(context)?.id -> stringResource(R.string.nm_media_not_set)
                         value != null -> value.label(context)
+                        slot == Slot.CHAT -> stringResource(R.string.nm_media_not_set)
                         videoOff -> stringResource(R.string.nm_media_video_off_option)
                         hasOptions -> stringResource(R.string.nm_media_not_set)
                         else -> Capabilities.unavailableLine(context, slot.capability)

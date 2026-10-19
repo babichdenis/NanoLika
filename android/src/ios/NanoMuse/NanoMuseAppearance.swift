@@ -79,7 +79,7 @@ final class NanoMuseAppearance: ObservableObject {
 struct NanoMuseAppearanceView: View {
     @ObservedObject private var appearance = NanoMuseAppearance.shared
     @AppStorage(NanoMuseSteps.key) private var showSteps = NanoMuseSteps.defaultValue
-    @AppStorage("appearanceMode") private var appearanceMode = 0
+    @AppStorage("appearanceMode") private var appearanceMode = 1 // nanoMuse: paper default
     @AppStorage("nanomuse.shell.enabled") private var shellEnabled = true
     @AppStorage("nanomuse.header.enabled") private var museHeader = true
     @State private var confirmWelcome = false

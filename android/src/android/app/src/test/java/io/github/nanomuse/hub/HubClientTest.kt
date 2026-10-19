@@ -1,5 +1,10 @@
 package io.github.nanomuse.hub
 
+import okhttp3.Request
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okio.ByteString
+import java.io.IOException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -59,4 +64,38 @@ class HubClientTest {
         assertFalse(c.connected)
         assertTrue(states.isEmpty())
     }
+
+    private class TestSocket : WebSocket {
+        override fun request(): Request = Request.Builder().url("https://relay.example/v1/hub").build()
+        override fun queueSize(): Long = 0L
+        override fun send(text: String): Boolean = true
+        override fun send(bytes: ByteString): Boolean = true
+        override fun close(code: Int, reason: String?): Boolean = true
+        override fun cancel() {}
+    }
+
+    @Test fun `late callbacks from an old socket leave the new socket connected`() {
+        val states = mutableListOf<Pair<Boolean, String>>()
+        val c = client { on, detail -> states += on to detail }
+        val old = TestSocket()
+        val current = TestSocket()
+        val socketField = HubClient::class.java.getDeclaredField("ws").apply { isAccessible = true }
+        val listenerField = HubClient::class.java.getDeclaredField("listener").apply { isAccessible = true }
+        socketField.set(c, current)
+        val listener = listenerField.get(c) as WebSocketListener
+        try {
+            listener.onMessage(current, """{"type":"welcome","device_id":"phone-test","devices":[]}""")
+            assertTrue(c.connected)
+            states.clear()
+            listener.onFailure(old, IOException("late network error"), null)
+            listener.onClosed(old, 1006, "late close")
+            listener.onMessage(old, """{"type":"welcome","device_id":"old","devices":[]}""")
+            assertTrue(c.connected)
+            assertTrue(socketField.get(c) === current)
+            assertTrue(states.isEmpty())
+        } finally {
+            c.stop()
+        }
+    }
+
 }

@@ -84,7 +84,7 @@ struct MinisApp: App {
     // `UIApplicationShortcutItem` events (Home Screen Quick Actions).
     // SwiftUI's pure App lifecycle has no equivalent surface.
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @AppStorage("appearanceMode") private var appearanceMode: Int = 0
+    @AppStorage("appearanceMode") private var appearanceMode: Int = 1 // nanoMuse: paper default
     @AppStorage("appLanguage") private var appLanguage: String = ""
     @StateObject private var shareCoordinator = ShareCoordinator.shared
     @ObservedObject private var fontSettings = FontSettings.shared

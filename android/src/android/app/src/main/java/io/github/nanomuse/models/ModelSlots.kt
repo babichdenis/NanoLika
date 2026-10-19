@@ -63,7 +63,7 @@ object ModelSlots {
 
     /** What a row shows: `<provider> · <model>`. */
     data class Value(val instance: ProviderInstance, val modelId: String, val why: SlotOrder.Why? = null) {
-        fun label(context: Context): String = providerLabel(context, instance) + " · " + modelId
+        fun label(context: Context): String = if (isCloud(context, instance)) "nanoLika Cloud" else providerLabel(context, instance) + " · " + modelId
     }
 
     /** The slot last changed from the page, so it can say what a chat pick applies to under the chat row. */

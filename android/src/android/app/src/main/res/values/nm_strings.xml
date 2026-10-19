@@ -1136,4 +1136,9 @@
     <string name="nm_font_scale_medium">Medium</string>
     <string name="nm_font_scale_large">Large</string>
     <string name="nm_font_scale_extra_large">XL</string>
+
+    <string name="nm_nl_cloud_ready">Your assistant is ready. No API key needed.</string>
+    <string name="nm_nl_own_title">Your models</string>
+    <string name="nm_nl_own_subtitle">Optional. Choose your own provider for chat.</string>
+    <string name="nm_nl_cloud_use">Use nanoLika Cloud</string>
 </resources>

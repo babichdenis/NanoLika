@@ -1065,7 +1065,7 @@ extension ConfigRegistry {
             description: "Light / Dark / System color scheme.",
             userDefaultsKey: "appearanceMode",
             cases: ["system", "light", "dark"],
-            defaultIndex: 0
+            defaultIndex: 1 // nanoMuse: paper default
         ))
         r.register(AppStorageIntCodedEnumField(
             path: "appearance.appIcon",

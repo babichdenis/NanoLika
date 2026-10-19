@@ -67,22 +67,23 @@ private final class CachedViewModel: ObservableObject {
 
 // MARK: - Color Palette (clean light theme)
 
+// nanoMuse: generated paper/sage palette, scripts/nanolika_theme.py.
 enum ChatColors {
-    static let background = Color(UIColor.systemBackground)
-    static let secondaryBg = Color(UIColor.secondarySystemBackground)
-    static let inputIconBg = Color(UIColor.secondarySystemBackground)
-    static let inputIconBorder = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.35, alpha: 1) : UIColor(white: 0, alpha: 0) })
-    static let inputBg = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.12, alpha: 1) : .white })
-    static let inputBorder = Color(UIColor.separator)
-    static let primaryText = Color(UIColor.label)
-    static let secondaryText = Color(UIColor.secondaryLabel)
-    static let tertiaryText = Color(UIColor.tertiaryLabel)
-    static let userBubble = Color(UIColor.tertiarySystemFill)
-    static let toolBg = Color(UIColor.tertiarySystemGroupedBackground)
-    static let toolBorder = Color(UIColor.separator).opacity(0.5)
-    static let accent = Color(UIColor.label)
-    static let sendButton = Color(UIColor.label)
-    static let sendButtonDisabled = Color(UIColor.quaternaryLabel)
+    static let background = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.14118, green: 0.15686, blue: 0.12549, alpha: 1) : UIColor(red: 0.96863, green: 0.94510, blue: 0.90196, alpha: 1) })
+    static let secondaryBg = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.21176, green: 0.23529, blue: 0.19216, alpha: 1) : UIColor(red: 0.93333, green: 0.90588, blue: 0.85098, alpha: 1) })
+    static let inputIconBg = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.21176, green: 0.23529, blue: 0.19216, alpha: 1) : UIColor(red: 0.93333, green: 0.90588, blue: 0.85098, alpha: 1) })
+    static let inputBg = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.17647, green: 0.19608, blue: 0.16078, alpha: 1) : UIColor(red: 0.98431, green: 0.96471, blue: 0.92549, alpha: 1) })
+    static let primaryText = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.96863, green: 0.94510, blue: 0.90196, alpha: 1) : UIColor(red: 0.21961, green: 0.21569, blue: 0.18431, alpha: 1) })
+    static let secondaryText = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.72157, green: 0.74510, blue: 0.67451, alpha: 1) : UIColor(red: 0.40000, green: 0.40392, blue: 0.35686, alpha: 1) })
+    static let tertiaryText = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.62745, green: 0.66667, blue: 0.56863, alpha: 1) : UIColor(red: 0.45098, green: 0.45490, blue: 0.40000, alpha: 1) })
+    static let userBubble = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.70196, green: 0.79608, blue: 0.64706, alpha: 1) : UIColor(red: 0.32157, green: 0.41176, blue: 0.30588, alpha: 1) })
+    static let toolBg = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.17647, green: 0.19608, blue: 0.16078, alpha: 1) : UIColor(red: 0.98431, green: 0.96471, blue: 0.92549, alpha: 1) })
+    static let accent = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.70196, green: 0.79608, blue: 0.64706, alpha: 1) : UIColor(red: 0.32157, green: 0.41176, blue: 0.30588, alpha: 1) })
+    static let sendButton = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.70196, green: 0.79608, blue: 0.64706, alpha: 1) : UIColor(red: 0.32157, green: 0.41176, blue: 0.30588, alpha: 1) })
+    static let inputIconBorder = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.31373, green: 0.34510, blue: 0.27843, alpha: 1) : UIColor(red: 0.84706, green: 0.81961, blue: 0.75686, alpha: 1) })
+    static let inputBorder = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.31373, green: 0.34510, blue: 0.27843, alpha: 1) : UIColor(red: 0.84706, green: 0.81961, blue: 0.75686, alpha: 1) })
+    static let toolBorder = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.31373, green: 0.34510, blue: 0.27843, alpha: 1) : UIColor(red: 0.84706, green: 0.81961, blue: 0.75686, alpha: 1) })
+    static let sendButtonDisabled = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.31373, green: 0.34510, blue: 0.27843, alpha: 1) : UIColor(red: 0.74510, green: 0.77255, blue: 0.69020, alpha: 1) })
 }
 
 // MARK: - System Resource Monitor
