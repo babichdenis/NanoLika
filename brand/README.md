@@ -1,48 +1,11 @@
-# Brand: NanoLika
+# NanoLika artwork
 
-Продукт: **NanoLika** — личная помощница на нейросети для русскоязычных женщин 30–55 лет («как подруга»). Имя дано в честь дочки владельца (Лика). Тон — тёплый, простой, человечный, без техножаргона.
+The current application mark and avatar sources live in `assets/brand/`.
 
-## Файлы
+- `nanomuse-mark.svg`: sage fairy wings from the approved website identity.
+- `nanomuse-icon.svg`: wings on a warm paper tile, used for launchers and startup.
+- `avatar/`: Lika in the built-in mood states, stills and silent looping clips.
+- `fonts/`: the licensed website handwriting font for artwork previews.
 
-### Знаки (иконки), 512×512 PNG, прозрачный фон
-
-| Файл | Описание | Основные цвета |
-|---|---|---|
-| `icon-spark-512.png` | **Spark (искорка)** — мягкий 4-лепестковый знак, округлённые кончики. Читается хорошо до 32 px. 1 цвет. | `#E4795A` (coral) |
-| `icon-monogram-512.png` | **Monogram (NL)** — скруглённая плитка с буквами NL, слитно. Подобран вес для читаемости в малом размере. 2 цвета. | `#C05B3C` (terracotta), `#FBF1E6` (cream) |
-| `icon-leaf-512.png` | **Leaf (лист в круге)** — тёплый персиковый круг с асимметричным листом шалфейного цвета, тонкая персиковая прожилка. 2 цвета. | `#F3B693` (peach), `#7E9B77` (sage) |
-
-### Вордмарк «NanoLika», прозрачный фон
-
-| Файл | Описание | Цвет текста |
-|---|---|---|
-| `wordmark-nanolika-dark-1200.png` | Тёмный вариант для светлого фона. Ширина 1200 px. | `#3A2E28` (warm ink) |
-| `wordmark-nanolika-white-1200.png` | Белый вариант для тёмного фона. Ширина 1200 px. | `#FFFFFF` (white) |
-
-### Предпросмотры
-
-| Файл | Описание |
-|---|---|
-| `previews/icon-spark-64.png`, `previews/icon-spark-32.png` | Уменьшенные варианты иконки Spark |
-| `previews/icon-monogram-64.png`, `previews/icon-monogram-32.png` | Уменьшенные варианты монограммы NL |
-| `previews/icon-leaf-64.png`, `previews/icon-leaf-32.png` | Уменьшенные варианты листа |
-| `previews/contact-sheet.png` | Контактный лист (светлый/тёмный фоны, сравнение размеров) |
-
-### Инструменты
-
-| Файл | Описание |
-|---|---|
-| `tools/build_brand.py` | Генератор ассетов (геометрия в supersampling + премультиплицированное даунскейлинг). Детерминирован, не использует генеративные API. |
-
-## Шрифт
-
-Для вордмарка и монограммы использован **Avenir Next**:
-- Wordmark: Demi Bold (index 2)
-- Monogram NL: Bold (index 0) — для лучшей читаемости при уменьшении до 32 px
-
-## Примечания
-
-- Все PNG — с честно прозрачным альфа-каналом.
-- Иконки оптимизированы под 32 px (читабельность проверялась по альфа/цветовой сетке).
-- Не используются чужие маскоты, блёстки, единороги, розово-сердечная стилистика, панды и зверьки.
-- Палитра: см. `PALETTE.md`.
+Run `python scripts/sync-brand.py` to regenerate packaged resources. The abandoned spark,
+leaf and monogram exploration kit was removed. The internal avatar ID remains `dragon`.

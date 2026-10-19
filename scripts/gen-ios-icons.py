@@ -3,7 +3,7 @@
 
 Idempotent; re-run after every upstream pull (CONTRIBUTING.md). Writes 1024x1024 PNGs:
 
-- Assets.xcassets/AppIcon.appiconset/Icon-1024.png       the one-stroke N in the brand gradient
+- Assets.xcassets/AppIcon.appiconset/Icon-1024.png       the fairy wings in the brand gradient
                                                           on a white tile (the default icon)
 - Assets.xcassets/AppIcon.appiconset/Icon-1024-Dark.png  the same mark on the dark tile (the
                                                           automatic dark appearance)
@@ -68,10 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not ICONSET.is_dir():
         sys.exit(f"{ICONSET} not found (restore the iOS tree first)")
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        sys.exit("playwright not installed: pip install playwright && playwright install chromium")
+    # Retired upstream M artwork is not referenced by Contents.json or the icon picker.
+    for retired in ICONSET.glob("Icon-full*.png"):
+        retired.unlink()
     icons = android_icons()
     d = icons.mark_path()
     light = tile(d, icons.TILE_LIGHT, icons.STROKE_START, icons.STROKE_END)
@@ -82,21 +81,11 @@ def main(argv: list[str] | None = None) -> int:
         ALTERNATE / "AppIcon-Light.png": light,
         ALTERNATE / "AppIcon-Dark.png": dark,
         ALTERNATE / "AppIcon-LegacyLight.png": tile(d, icons.TILE_LIGHT, icons.STROKE_START),
-        ALTERNATE / "AppIcon-LegacyDark.png": tile(d, icons.TILE_DARK, "#FFFFFF"),
+        ALTERNATE / "AppIcon-LegacyDark.png": tile(d, icons.TILE_DARK, "#F7F1E6"),
     }
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": SIZE, "height": SIZE}, device_scale_factor=1)
-        for target, svg in jobs.items():
-            if not target.parent.is_dir():
-                continue
-            page.set_content(f'<body style="margin:0">{svg}</body>')
-            page.locator("svg").evaluate(
-                "(e, s) => { e.setAttribute('width', s); e.setAttribute('height', s); }", str(SIZE)
-            )
-            page.screenshot(path=str(target), clip={"x": 0, "y": 0, "width": SIZE, "height": SIZE})
-            print(f"  wrote {target.relative_to(ROOT)}")
-        browser.close()
+    from brand_render import render_jobs
+
+    render_jobs([(target, svg, SIZE) for target, svg in jobs.items()])
     return 0
 
 

@@ -3,7 +3,7 @@
 
 Idempotent; re-run after every upstream pull (CONTRIBUTING.md). Writes:
 
-- drawable/ic_launcher_foreground_nm.xml       the one-stroke N, gradient fill, 108dp canvas
+- drawable/ic_launcher_foreground_nm.xml       the fairy wings, gradient fill, 108dp canvas
 - drawable/ic_launcher_foreground_nm_dark.xml  the same path, white (the "Dark" icon skin)
 - drawable/ic_launcher_monochrome.xml          the same path, flat (Android 13+ themed icons)
 - drawable/ic_stat_nanomuse.xml                24dp flat mark for notification small icons
@@ -26,10 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BRAND = ROOT / "assets" / "brand"
 RES = ROOT / "android" / "src" / "android" / "app" / "src" / "main" / "res"
 
-STROKE_START = "#015CFB"
-STROKE_END = "#0186FB"
-TILE_LIGHT = "#FFFFFF"
-TILE_DARK = "#0F1B33"
+STROKE_START = "#52694E"
+STROKE_END = "#A8BFA4"
+TILE_LIGHT = "#F7F1E6"
+TILE_DARK = "#283126"
 SCALE, OFFSET = 0.72, 18.0
 TOKEN = re.compile(r"[MLCZ]|-?\d*\.?\d+")
 
@@ -129,7 +129,7 @@ def vectors(d: str) -> None:
             gradient_fill(x0, x1, 54),
             108,
             108,
-            "launcher foreground, the N in the brand gradient.",
+            "launcher foreground, the wings in the sage gradient.",
         ),
     )
     write(
@@ -180,11 +180,6 @@ def vectors(d: str) -> None:
 
 
 def rasters(d: str) -> None:
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print("  playwright not installed: legacy PNG icons left as they are")
-        return
     densities = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
     grad = (
         f'<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="12.6" y1="50" x2="87.8" y2="50">'
@@ -218,25 +213,13 @@ def rasters(d: str) -> None:
             for fg_name, fill in (
                 ("ic_launcher_foreground.png", "url(#g)"),
                 ("ic_launcher_foreground_light.png", "url(#g)"),
-                ("ic_launcher_foreground_dark.png", "#FFFFFF"),
+                ("ic_launcher_foreground_dark.png", "#F7F1E6"),
             ):
                 if (folder / fg_name).exists():
                     jobs.append((folder / fg_name, foreground(fill), round(108 * k)))
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        for target, svg, px in jobs:
-            page.set_viewport_size({"width": px, "height": px})
-            page.set_content(f'<body style="margin:0;background:transparent">{svg}</body>')
-            page.locator("svg").evaluate(
-                "(e, s) => { e.setAttribute('width', s); e.setAttribute('height', s); }", str(px)
-            )
-            page.screenshot(
-                path=str(target),
-                omit_background=True,
-                clip={"x": 0, "y": 0, "width": px, "height": px},
-            )
-        browser.close()
+    from brand_render import render_jobs
+
+    render_jobs(jobs)
     print(f"  {len(jobs)} legacy PNGs rendered")
 
 

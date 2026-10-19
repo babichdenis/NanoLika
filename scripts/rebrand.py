@@ -622,6 +622,9 @@ def main(argv: list[str] | None = None) -> int:
     notification_faces()
     reword()
     ios()
+    from nanolika_theme import apply as apply_paper_theme
+
+    apply_paper_theme()
     for path in sorted(set(changed)):
         print(f"  edited {path}")
     print(f"{len(set(changed))} files changed")
