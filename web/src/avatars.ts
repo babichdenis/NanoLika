@@ -1,5 +1,5 @@
 /**
- * The agent's face. Muse gives its agent a plush doll; NanoLika has its dragon — five stills,
+ * The agent's face. Muse gives its agent a plush doll; NanoLika has its fairy — five stills,
  * one per mood (public/avatars/dragon-*.webp) and four short clips that move them (idle,
  * working, waiting, happy — dragon-*.mp4, the same clips the Android app plays) — or a face the
  * person had drawn for them in the avatar studio (served from the runtime's files, stills and,
@@ -8,8 +8,9 @@
  */
 
 import { fileUrl } from "./api";
+import { BUILTIN_AVATAR_REVISION } from "./avatar-revision";
 
-/** The dragon: the default face. */
+/** The built-in Lika fairy; dragon remains the compatibility ID. */
 export const DRAGON = "dragon";
 export type DragonMood = "idle" | "working" | "waiting" | "happy" | "error";
 
@@ -35,7 +36,7 @@ export function studioUrl(id: string, mood: string): string {
 
 export function dragonUrl(mood: string): string {
   const still: DragonMood = mood === "working" || mood === "waiting" || mood === "happy" || mood === "error" ? mood : "idle";
-  return `/avatars/dragon-${still}.webp`;
+  return `/avatars/dragon-${still}.webp?v=${BUILTIN_AVATAR_REVISION}`;
 }
 
 /** The moods that move; "error" is a still, on the phone too. */
@@ -48,7 +49,7 @@ function clipMood(mood: string): ClipMood {
 /** The dragon's clip for a mood — a few seconds, looping, back in the starting pose at the end. */
 export function dragonClipUrl(mood: string): string | null {
   if (mood === "error") return null;
-  return `/avatars/dragon-${clipMood(mood)}.mp4`;
+  return `/avatars/dragon-${clipMood(mood)}.mp4?v=${BUILTIN_AVATAR_REVISION}`;
 }
 
 /**

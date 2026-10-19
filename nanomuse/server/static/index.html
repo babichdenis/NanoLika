@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
     />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#f7f1e6" />
     <script>
       // light unless dark was chosen under Settings → Appearance (or "system"): applied
       // before the first paint so a dark choice does not flash white
@@ -14,7 +14,7 @@
         var t = localStorage.getItem("nanomuse_theme") || "light";
         if (t === "system") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         document.documentElement.dataset.theme = t;
-        if (t === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#181819");
+        if (t === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#242820");
       } catch (e) {}
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,13 +25,13 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>NanoLika</title>
-    <script type="module" crossorigin src="/assets/index-BXWgmplq.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/MuseHeader-CBA-zzON.js">
-    <link rel="modulepreload" crossorigin href="/assets/external-link-le-1U3oE.js">
-    <link rel="modulepreload" crossorigin href="/assets/Form-BXzPU5KJ.js">
-    <link rel="modulepreload" crossorigin href="/assets/StarNudge-JRzcdpJp.js">
-    <link rel="modulepreload" crossorigin href="/assets/refresh-cw-D5sewHlL.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-Bqg9ZCmy.css">
+    <script type="module" crossorigin src="/assets/index-BMJTWqr3.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/MuseHeader-BjFuuIPi.js">
+    <link rel="modulepreload" crossorigin href="/assets/external-link-rlGShrzs.js">
+    <link rel="modulepreload" crossorigin href="/assets/Form-DMp6xoJY.js">
+    <link rel="modulepreload" crossorigin href="/assets/StarNudge-D3Pfha0z.js">
+    <link rel="modulepreload" crossorigin href="/assets/refresh-cw-CjCHMXaB.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-tUgtHq0s.css">
   </head>
   <body>
     <div id="root"></div>

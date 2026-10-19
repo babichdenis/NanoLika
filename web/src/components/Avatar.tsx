@@ -75,7 +75,7 @@ export function Avatar({
     <>
       <span
         className={cx("block h-full w-full overflow-hidden rounded-full will-change-transform", motion)}
-        style={dragon || studio ? { background: "#f1efeb" } : { background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))` }}
+        style={dragon || studio ? { background: "#f7f1e6" } : { background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 60%, #ffffff))` }}
       >
         {clip ? (
           <video
@@ -91,10 +91,10 @@ export function Avatar({
               noClip.add(clip);
               bump((n) => n + 1);
             }}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
           />
         ) : dragon || studio ? (
-          <img src={stillUrl} alt="" draggable={false} className="h-full w-full object-cover" />
+          <img src={stillUrl} alt="" draggable={false} className="h-full w-full object-contain" />
         ) : (
           <span className="flex h-full w-full items-center justify-center leading-none drop-shadow-sm" style={{ fontSize: size * 0.5 }}>
             {profile?.emoji ?? "✨"}

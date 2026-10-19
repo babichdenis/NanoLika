@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
     />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#f7f1e6" />
     <script>
       // light unless dark was chosen under Settings → Appearance (or "system"): applied
       // before the first paint so a dark choice does not flash white
@@ -14,7 +14,7 @@
         var t = localStorage.getItem("nanomuse_theme") || "light";
         if (t === "system") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         document.documentElement.dataset.theme = t;
-        if (t === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#181819");
+        if (t === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#242820");
       } catch (e) {}
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />

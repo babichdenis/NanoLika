@@ -40,7 +40,7 @@
   --color-fg: var(--om-fg);
   --color-muted: var(--om-muted);
   --color-accent: var(--om-accent);
-  --color-accent-fg: #ffffff;
+  --color-accent-fg: var(--om-accent-fg);
   --color-accent-soft: var(--om-accent-soft);
   --color-accent-soft-fg: var(--om-accent-soft-fg);
   --color-bubble-user: var(--om-bubble-user);
@@ -57,7 +57,7 @@
    system: light is the default everywhere, dark only when picked (src/theme.ts). */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* The palette is Muse's: white and near-black surfaces, one blue. The conversation itself is
+/* NanoLika paper and sage replace the former palette: white and near-black surfaces, one blue. The conversation itself is
    monochrome, as on the phone (ChatColors.kt): `ink` is black in the light theme and white in
    the dark one, with `ink-fg` the opposite; it is your message pill (`bubble-user`, the same
    values), the send button and the scroll-to-latest disc. The agent's pill (`bubble-agent`) is
@@ -66,40 +66,42 @@
    is the pale blue the selected tab sits on, with the ink that reads on it: the Android app's
    primaryContainer and onPrimaryContainer. */
 :root {
-  --om-bg: #ffffff;
-  --om-surface: #ffffff;
-  --om-surface-2: #f2f2f4;
-  --om-border: #e7e7ea;
-  --om-fg: #111112;
-  --om-muted: #6b6b71;
-  --om-accent: #0064d4;
-  --om-accent-soft: #e5f0ff;
-  --om-accent-soft-fg: #012f80;
-  --om-ink: #000000;
-  --om-ink-fg: #ffffff;
-  --om-bubble-user: #000000;
-  --om-bubble-user-fg: #ffffff;
+  --om-bg: #f7f1e6;
+  --om-surface: #fbf6ec;
+  --om-surface-2: #eee7d9;
+  --om-border: #d8d1c1;
+  --om-fg: #38372f;
+  --om-muted: #66675b;
+  --om-accent: #52694e;
+  --om-accent-fg: #fbf6ec;
+  --om-accent-soft: #e1e8d8;
+  --om-accent-soft-fg: #354b32;
+  --om-ink: #52694e;
+  --om-ink-fg: #fbf6ec;
+  --om-bubble-user: #52694e;
+  --om-bubble-user-fg: #fbf6ec;
   --om-bubble-user-selection: rgb(255 255 255 / 0.3);
-  --om-bubble-agent: #f2f2f7;
+  --om-bubble-agent: #eee7d9;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
-  --om-bg: #181819;
-  --om-surface: #202022;
-  --om-surface-2: #2a2a2d;
-  --om-border: #333337;
-  --om-fg: #ffffff;
-  --om-muted: #9d9da4;
-  --om-accent: #1793ff;
-  --om-accent-soft: #1a2b4a;
-  --om-accent-soft-fg: #e5f0ff;
-  --om-ink: #ffffff;
-  --om-ink-fg: #000000;
-  --om-bubble-user: #ffffff;
-  --om-bubble-user-fg: #000000;
+  --om-bg: #242820;
+  --om-surface: #2d3229;
+  --om-surface-2: #363c31;
+  --om-border: #505847;
+  --om-fg: #f7f1e6;
+  --om-muted: #b8beac;
+  --om-accent: #b3cba5;
+  --om-accent-fg: #242820;
+  --om-accent-soft: #394734;
+  --om-accent-soft-fg: #e1e8d8;
+  --om-ink: #b3cba5;
+  --om-ink-fg: #242820;
+  --om-bubble-user: #b3cba5;
+  --om-bubble-user-fg: #242820;
   --om-bubble-user-selection: rgb(0 0 0 / 0.3);
-  --om-bubble-agent: #2a2a2d;
+  --om-bubble-agent: #363c31;
   color-scheme: dark;
 }
 
