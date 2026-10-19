@@ -144,7 +144,7 @@ export function MuseHeader({ t, openProfile, useSessionStatus }: MuseHeaderProps
       : side ? h('button', { type: 'button', className: 'nm-header-back', 'aria-label': t('chMain'), title: t('chMain'), onClick: () => nav.openSession(main) }, h(IconChevronLeft, { size: 18 })) : null,
     h('div', { className: 'nm-header', role: 'status', 'aria-live': 'polite' },
       h('button', { type: 'button', className: `nm-header-face${running ? ' nm-live' : waiting ? ' nm-wait' : ''}`, 'aria-label': live.profile.name || t('brand'), title: t('railProfile'), onClick: openProfile },
-        h(Avatar, { size: 44, profile: live.profile, mood })),
+        h(Avatar, { size: 66, profile: live.profile, mood })),
       h('div', { className: 'nm-header-name' }, live.profile.name || t('brand')),
       toast
         ? h('div', { className: 'nm-header-status nm-header-toast' }, h(IconCheck, { size: 13 }), t('statusApproved', { n: toast.n }))

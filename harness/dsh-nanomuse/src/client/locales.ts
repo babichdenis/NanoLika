@@ -3,6 +3,10 @@
 export const en = {
   /** Which dictionary this is; the pages that carry two-language text pick by it. */
   langTag: 'en',
+  nlCloudReady: "Your assistant is ready. No API key needed.",
+  nlOwnSlot: "Your models",
+  nlOwnSub: "Optional. Choose your own provider for chat.",
+  nlUseCloud: "Use nanoLika Cloud",
   nav: 'NanoLika Cloud',
   brand: 'NanoLika',
   title: 'NanoLika Cloud',
@@ -1154,7 +1158,6 @@ export const en = {
   mlCloudModelsOff: 'Off: nothing runs on NanoLika Cloud unless you click "Use NanoLika Cloud this time". You stay signed in for sync and your devices.',
   mlChatOnCloud: 'Add a provider of your own first; with NanoLika Cloud off, nothing else could answer.',
   mlChat: 'Chat',
-  mlChatSub: 'The model that talks with you.',
   mlHands: 'Operating the screen',
   mlHandsSub: 'Looks at the screen and acts for you. Needs a model that can see images.',
   mlHandsExcluded: '{providers}: the hands speak the OpenAI shape only, so these models are not listed here.',
@@ -1476,6 +1479,10 @@ export const en = {
 
 export const zh: typeof en = {
   langTag: 'zh',
+  nlCloudReady: "助手已配置好，无需 API 密钥。",
+  nlOwnSlot: "自己的模型",
+  nlOwnSub: "可选：为对话连接自己的服务商。",
+  nlUseCloud: "使用 nanoLika Cloud",
   nav: 'NanoLika Cloud',
   brand: 'NanoLika',
   title: 'NanoLika Cloud',
@@ -2611,7 +2618,6 @@ export const zh: typeof en = {
   mlCloudModelsOff: '已关闭：除非你点「这次改用 NanoLika Cloud」，否则不会有任何内容在 NanoLika Cloud 上运行。账号保持登录，用于同步和你的设备。',
   mlChatOnCloud: '先添加一个自己的服务商；关掉 NanoLika Cloud 后没有别的模型能回答。',
   mlChat: '对话',
-  mlChatSub: '和你说话的模型。',
   mlHands: '操作屏幕',
   mlHandsSub: '看着屏幕替你操作，需要能看图的模型。',
   mlHandsExcluded: '{providers}：屏幕操作只会说 OpenAI 的接口格式，所以这些模型不在这里列出。',
@@ -2930,6 +2936,10 @@ export const zh: typeof en = {
 /** The same words in Russian; the house style holds here too (no dashes, no exclamation marks). */
 export const ru: typeof en = {
   langTag: 'ru',
+  nlCloudReady: "Помощница уже настроена. API-ключ не нужен.",
+  nlOwnSlot: "Свои модели",
+  nlOwnSub: "Необязательно. Подключите своего провайдера для чата.",
+  nlUseCloud: "Использовать nanoLika Cloud",
   nav: 'NanoLika Cloud',
   brand: 'NanoLika',
   title: 'NanoLika Cloud',
@@ -4027,7 +4037,6 @@ export const ru: typeof en = {
   mlCloudModelsOff: 'Выключено: через NanoLika Cloud ничего не идёт, пока вы не нажмёте «Взять NanoLika Cloud в этот раз». Вход остаётся ради синхронизации и устройств.',
   mlChatOnCloud: 'Сначала добавьте своего поставщика: с выключенным NanoLika Cloud отвечать будет некому.',
   mlChat: 'Переписка',
-  mlChatSub: 'Модель, которая с вами разговаривает.',
   mlHands: 'Управление экраном',
   mlHandsSub: 'Смотрит на экран и действует за вас. Нужна модель, которая видит картинки.',
   mlHandsExcluded: '{providers}: руки понимают только форму OpenAI, поэтому эти модели здесь не показаны.',

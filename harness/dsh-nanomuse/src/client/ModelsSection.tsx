@@ -40,7 +40,7 @@ export const DEPENDENT: readonly Slot[] = ['hands', 'image', 'video']
 
 /** `<provider> · <model>`, as the page writes a value. */
 export function valueText(provider: string, providerLabel: string, model: string): string {
-  return `${providerLabel || provider} · ${model}`
+  return provider === 'nanomuse' ? 'nanoLika Cloud' : `${providerLabel || provider} · ${model}`
 }
 
 /** `GET /models`. */
@@ -57,11 +57,11 @@ const ROUTE: Record<Slot, string> = { chat: 'chat-model', hands: 'hands-model', 
 const CAPABILITY: Record<Slot, 'chat' | 'vision' | 'image' | 'video'> = { chat: 'chat', hands: 'vision', image: 'image', video: 'video' }
 
 export function slotTitle(t: Translate, slot: Slot): string {
-  return slot === 'chat' ? t('mlChat') : slot === 'hands' ? t('mlHands') : slot === 'image' ? t('mlImage') : t('mlVideo')
+  return slot === 'chat' ? t('nlOwnSlot') : slot === 'hands' ? t('mlHands') : slot === 'image' ? t('mlImage') : t('mlVideo')
 }
 
 function slotSub(t: Translate, slot: Slot): string {
-  return slot === 'chat' ? t('mlChatSub') : slot === 'hands' ? t('mlHandsSub') : slot === 'image' ? t('mlImageSub') : t('mlVideoSub')
+  return slot === 'chat' ? t('nlOwnSub') : slot === 'hands' ? t('mlHandsSub') : slot === 'image' ? t('mlImageSub') : t('mlVideoSub')
 }
 
 function slotIcon(slot: Slot): ReactNode {
@@ -185,10 +185,15 @@ export function makeModelsSection(t: Translate) {
     const gate = providers.view
     const addLink = h('button', { type: 'button', className: 'nm-ob-link nm-inline', onClick: openAccountWays }, t('mlAddProvider'))
     const rows = SLOTS.map((slot) => {
-      const row = view.slots[slot]
+      const selected = view.slots[slot]
+      const ownChat = slot === 'chat'
+      const row = ownChat ? { ...selected, options: selected.options.filter(o => o.provider !== 'nanomuse'),
+        ...(selected.provider === 'nanomuse' ? { provider: '', providerLabel: '', model: '' } : {}) } : selected
       const empty = row.options.length === 0 && !row.model && !row.off
       let sub: ReactNode
-      if (empty) {
+      if (empty && ownChat) {
+        sub = h(Fragment, null, t('nlOwnSub'), ' ', addLink)
+      } else if (empty) {
         // the gate's sentence: who could, where the person is; the harness's stock DeepSeek without a key counts as nothing
         const sentence = gate ? t(slot === 'chat' ? 'ownKeyNoChat' : slot === 'hands' ? 'ownKeyNoVision' : slot === 'image' ? 'ownKeyNoImage' : 'ownKeyNoVideo', { providers: providersNamed(t, gate, CAPABILITY[slot]) }) : ''
         sub = h(Fragment, null, sentence, sentence ? ' ' : null, addLink)
@@ -216,8 +221,17 @@ export function makeModelsSection(t: Translate) {
       : null
     return h('div', { className: 'nm-section', 'data-testid': 'nm-models-section' },
       h('p', null, t('mlLead')),
-      cloudRow,
+      view.signedIn ? h('div', { className: 'nm-card', style: { padding: 18, marginBottom: 14 }, 'data-testid': 'nm-primary-cloud-slot' },
+        h('strong', null, 'nanoLika Cloud'), h('p', { className: 'nm-row-sub nm-wrap' }, t('nlCloudReady')),
+        h('button', { type: 'button', className: 'nm-pill nm-pill-sm',
+          disabled: busy !== null || !view.cloudModels || view.slots.chat.provider === 'nanomuse',
+          onClick: () => {
+            const cloud = view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.recommended)
+              ?? view.slots.chat.options.find(o => o.provider === 'nanomuse')
+            if (cloud) pick('chat', cloud.provider, cloud.id)
+          } }, t('nlUseCloud'))) : null,
       h('div', { className: 'nm-card' }, rows),
+      cloudRow,
       failed ? h('div', { style: errorStyle }, failed) : null,
       h('div', { style: { marginTop: 10 } }, h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: openAccountWays }, t('mlAddProvider'))))
   }

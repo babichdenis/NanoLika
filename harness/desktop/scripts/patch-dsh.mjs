@@ -12,7 +12,7 @@
 //
 // Idempotent: a second run copies the same files and finds nothing to normalise.
 
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,3 +52,32 @@ for (const name of ["index.js", "client.js"]) {
   normalised += 1;
 }
 if (normalised > 0) console.log(`patch-dsh: locale ids normalised in ${normalised} file(s)`);
+
+// 3. Russian is the product's language: with no stored preference the client picks ru, not the
+//    system language. An explicit choice in Settings → Language still wins (the preference is
+//    read before this fallback).
+const clientPath = join(lib, "client.js");
+if (existsSync(clientPath)) {
+  const text = readFileSync(clientPath, "utf8");
+  const from = 'return detectBrowserLocale(locales, languages) ?? "en";';
+  const to = '/* NanoLika: ru by default; a stored preference is applied above this fallback. */ return "ru";';
+  if (text.includes(from)) {
+    writeFileSync(clientPath, text.replace(from, to));
+    console.log("patch-dsh: default locale → ru");
+  }
+}
+
+// 4. The boot splash of the web client prints the wordmark "HARNESS" while plugins load; our
+//    product's name goes there instead ("NanoLika"). The asset is minified, so the search is
+//    the stable shape around the literal, not its variable names.
+const frontend = join(root, "node_modules", "@deepseek-ai", "dsh-web-frontend", "dist", "assets");
+if (existsSync(frontend)) {
+  for (const name of readdirSync(frontend)) {
+    if (!name.endsWith(".js")) continue;
+    const path = join(frontend, name);
+    const text = readFileSync(path, "utf8");
+    if (!/wordmark\s*,\s*"HARNESS"/.test(text)) continue;
+    writeFileSync(path, text.replace(/wordmark\s*,\s*"HARNESS"/g, 'wordmark,"NanoLika"'));
+    console.log(`patch-dsh: splash wordmark → NanoLika (${name})`);
+  }
+}

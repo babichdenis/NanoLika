@@ -21,6 +21,9 @@ import { readFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 
+const { generateAvatarRevisions } = await import('../../scripts/avatar-revision.mjs')
+generateAvatarRevisions()
+
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 /** The page's frozen module table (PLATFORM_MODULES in the harness's web client). */

@@ -76,7 +76,7 @@ export async function serveAsset(req: IncomingMessage, res: ServerResponse, face
   } catch {
     return notFound(res)
   }
-  res.writeHead(200, { 'content-type': type, 'content-length': size, 'cache-control': face ? 'public, max-age=3600' : 'public, max-age=86400' })
+  res.writeHead(200, { 'content-type': type, 'content-length': size, 'cache-control': face ? 'public, max-age=3600' : 'no-cache' })
   if (req.method === 'HEAD') {
     res.end()
     return

@@ -790,6 +790,8 @@ interface Prefs {
   proxy?: string;
   /** The relay hosts the plugin reported (its `config.baseURL`), kept on NO_PROXY with the default relay. */
   relayHosts?: string[];
+  /** The app version whose launch already opened the privacy panes; absent means never asked here. */
+  permissionsPaneFor?: string;
 }
 const PREFS_DEFAULT: Prefs = { openAtLogin: false, menuBar: true, quickChat: true };
 /** ⌥ Space on macOS as in Muse; Ctrl+Alt+Space where Alt+Space is the window menu. */
@@ -907,12 +909,12 @@ function applyOpenAtLogin(): void {
   if (process.platform === "linux") {
     // freedesktop autostart: a .desktop entry pointing at this executable (the AppImage or the installed binary)
     const dir = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "autostart");
-    const file = join(dir, "nanomuse-desktop.desktop");
+    const file = join(dir, "NanoLika.desktop");
     try {
       if (prefs.openAtLogin) {
         mkdirSync(dir, { recursive: true });
         const exe = process.env.APPIMAGE || process.execPath;
-        writeFileSync(file, `[Desktop Entry]\nType=Application\nName=NanoLika\nExec="${exe}"\nIcon=nanomuse-desktop\nX-GNOME-Autostart-enabled=true\nTerminal=false\n`);
+        writeFileSync(file, `[Desktop Entry]\nType=Application\nName=NanoLika\nExec="${exe}"\nIcon=NanoLika\nX-GNOME-Autostart-enabled=true\nTerminal=false\n`);
       } else rmSync(file, { force: true });
     } catch (exc) {
       log(`open at login: ${String(exc)}`);
@@ -1709,6 +1711,9 @@ async function ensureMacPermissionsAtLaunch(): Promise<void> {
   if (process.platform !== "darwin") return;
   // the helper first: when it runs, its grants are the ones that count and the ones asked for
   await helperReady();
+  // a fresh word from the helper, not the one cached at start: a grant may have landed while the
+  // app was closed, and asking again costs one loopback call
+  await macHelper?.status().catch(() => undefined);
   const accessibility = permissionState("accessibility");
   const screen = permissionState("screen");
   const status = macHelper?.cachedStatus();
@@ -1716,6 +1721,12 @@ async function ensureMacPermissionsAtLaunch(): Promise<void> {
   const source = macPermissions.helperInUse() ? `${HELPER_NAME} ${status?.version ?? ""}${status?.capture ? `, capture ${status.capture}` : ""}${status?.screenDetail ? `, ${status.screenDetail}` : ""}`.trim() : macPermissions.loaded() ? "native" : `systemPreferences — ${macPermissions.loadError()}`;
   log(`permissions: accessibility=${accessibility} screen=${screen} (${source}${!macPermissions.helperInUse() && macHelper ? `; helper: ${macHelper.failure()}` : ""})`);
   if (accessibility === "granted" && screen === "granted") return;
+  // NanoLika: the panes open once per version, not on every launch. macOS keeps the rows, so a
+  // person who already granted (or deliberately did not) is not sent to System Settings again;
+  // the in-app Permissions page still offers both panes on demand.
+  if (prefs.permissionsPaneFor === app.getVersion()) return;
+  prefs = { ...prefs, permissionsPaneFor: app.getVersion() };
+  writePrefs();
   if (screen !== "granted") void requestScreenRecording(true);
   if (accessibility !== "granted") requestAccessibility(false);
 }

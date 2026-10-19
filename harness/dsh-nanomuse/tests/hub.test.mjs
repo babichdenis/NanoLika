@@ -313,3 +313,49 @@ test('a ping is sent on the interval; a relay that answers nothing for two pings
   assert.deepEqual(states, [false, true])
   h.client.stop()
 })
+
+test('a socket that never opens or never receives welcome is retried', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  for (const opens of [false, true]) {
+    const sockets = []
+    const client = new HubClient({
+      url: 'wss://relay.example/v1/hub', key: async () => 'nm_test', device: () => DEVICE,
+      socket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket },
+      connectTimeoutMs: 20, backoffMs: { min: 10, max: 10 }, pingMs: 100_000,
+    })
+    try {
+      client.start()
+      await Promise.resolve()
+      if (opens) sockets[0].open()
+      t.mock.timers.tick(20)
+      t.mock.timers.tick(10)
+      await Promise.resolve()
+      assert.equal(sockets.length, 2, 'the handshake deadline must start another attempt')
+      assert.equal(sockets[0].readyState, 3)
+      const current = sockets.at(-1)
+      current.open()
+      current.push({ type: 'welcome', device_id: DEVICE.id, devices: [] })
+      t.mock.timers.tick(100)
+      await Promise.resolve()
+      assert.equal(client.connected, true, 'welcome cancels the handshake deadline')
+      assert.equal(sockets.at(-1), current)
+    } finally { client.stop() }
+  }
+})
+
+test('stopping during a handshake cancels its retry deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const sockets = []
+  const client = new HubClient({
+    url: 'wss://relay.example/v1/hub', key: async () => 'nm_test', device: () => DEVICE,
+    socket: (url) => { const s = new FakeSocket(url); sockets.push(s); return s },
+    connectTimeoutMs: 10, backoffMs: { min: 5, max: 5 },
+  })
+  client.start()
+  await Promise.resolve()
+  client.stop()
+  t.mock.timers.tick(100)
+  await Promise.resolve()
+  assert.equal(sockets.length, 1)
+  assert.equal(client.connected, false)
+})

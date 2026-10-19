@@ -27,12 +27,16 @@ import { createElement as h, useEffect, useRef, useState, type CSSProperties, ty
 import { useLive, type Live, type LiveMotion, type LiveOwnClip, type LiveProfile } from './live.ts'
 import type { Translate } from './api.ts'
 
+import { BUILTIN_AVATAR_REVISION } from './avatar-revision.ts'
+
 export type Mood = 'idle' | 'working' | 'waiting' | 'happy' | 'error'
 
 /** Below this the clip is not worth the bytes: the still shows. */
 const CLIP_MIN_PX = 44
 /** Clips that did not load: the still, and no second request. */
 const noClip = new Set<string>()
+// NanoLika: the clips stay on even under Reduce Motion — the face moving is the product.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
@@ -44,7 +48,7 @@ export function stillUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', 
   const override = ownClips?.[mood]
   if (override?.poster) return `nanomuse/avatar/own-clip-${mood}.png?v=${override.v}`
   if (ownClip?.poster) return `nanomuse/avatar/own-clip.png?v=${ownClip.v}`
-  return `nanomuse/assets/dragon-${mood}.webp`
+  return `nanomuse/assets/dragon-${mood}.webp?v=${BUILTIN_AVATAR_REVISION}`
 }
 
 /** The person's own clip, when one is set: the same for every mood, keyed by its mtime. */
@@ -66,7 +70,7 @@ export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', m
     const clip = motion.clips[mood]
     return clip ? `nanomuse/avatar/motion/${mood}.mp4?v=${clip.v}` : null
   }
-  return `nanomuse/assets/dragon-${mood}.mp4`
+  return `nanomuse/assets/dragon-${mood}.mp4?v=${BUILTIN_AVATAR_REVISION}`
 }
 
 /**
@@ -109,7 +113,7 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const live = useLive()
   const visible = useVisible()
   const video = useRef<HTMLVideoElement | null>(null)
-  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion)
+  const candidate = still || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion)
   const clip = candidate && !noClip.has(candidate) ? candidate : null
   const poster = stillUrl(profile, mood, live.ownClip, live.ownClips)
   // the whole face moves when nothing inside it does

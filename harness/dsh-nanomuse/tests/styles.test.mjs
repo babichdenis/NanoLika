@@ -124,7 +124,7 @@ test('under prefers-reduced-motion every breathing light is steady', () => {
   assert.match(steady, /animation: none; opacity: 1;/)
 })
 
-test('in the Muse look the chat is monochrome: ink pills, grey agent pills, the send disc the same ink', () => {
+test('the paper theme uses sage user bubbles and readable ink in both appearances', () => {
   // the token blocks span several lines
   const block = (selector) => {
     const at = css.indexOf(`\n${selector} {\n`)
@@ -136,18 +136,18 @@ test('in the Muse look the chat is monochrome: ink pills, grey agent pills, the 
   const tokens = (block) => Object.fromEntries([...block.matchAll(/--(nm-[a-z-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]))
   const l = tokens(light)
   const d = tokens(dark)
-  assert.equal(l['nm-user-bubble'], '#000000')
-  assert.equal(l['nm-user-bubble-fg'], '#ffffff')
-  assert.equal(l['nm-agent-bubble'], '#f2f2f7')
-  assert.equal(l['nm-canvas'], '#ffffff')
-  assert.equal(l['nm-ink'], '#000000')
-  assert.equal(l['nm-ink-fg'], '#ffffff')
-  assert.equal(d['nm-user-bubble'], '#ffffff')
-  assert.equal(d['nm-user-bubble-fg'], '#000000')
-  assert.equal(d['nm-ink'], '#ffffff')
-  assert.equal(d['nm-ink-fg'], '#000000')
+  assert.equal(l['nm-user-bubble'], '#52694e')
+  assert.equal(l['nm-user-bubble-fg'], '#fbf6ec')
+  assert.equal(l['nm-agent-bubble'], '#eee7d9')
+  assert.equal(l['nm-canvas'], '#f7f1e6')
+  assert.equal(l['nm-ink'], '#52694e')
+  assert.equal(l['nm-ink-fg'], '#fbf6ec')
+  assert.equal(d['nm-user-bubble'], '#b3cba5')
+  assert.equal(d['nm-user-bubble-fg'], '#242820')
+  assert.equal(d['nm-ink'], '#b3cba5')
+  assert.equal(d['nm-ink-fg'], '#242820')
   // the agent's dark pill keeps the same step off the near-black as the phone's off pure black
-  assert.equal(d['nm-agent-bubble'], '#242424')
+  assert.equal(d['nm-agent-bubble'], '#363c31')
   assert.equal(d['nm-canvas'], d['nm-base'])
   for (const t of [l, d]) assert.equal(t['nm-send'], 'var(--nm-ink)')
   // the user's pill carries its own text colour, and so do the remote and coding copies of it

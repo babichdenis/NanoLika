@@ -41,9 +41,9 @@ export function setMuseMode(on: boolean, placeholder?: string, steps = false): v
 
 const CSS = `
 html[data-nanomuse] {
-  --nm-accent: #c8743a;
-  --nm-blue: #2f6fd0;
-  --nm-blue-hover: #2a63ba;
+  --nm-accent: #bd705b;
+  --nm-blue: #52694e;
+  --nm-blue-hover: #40583b;
   --nm-rail: 66px;
   --nm-header-h: 108px;
   --nm-radius: 14px;
@@ -54,61 +54,67 @@ html[data-nanomuse] {
    off the canvas, the send button and the scroll-to-latest disc the same ink with the glyph in
    the opposite colour. The paper stays under the rail, the columns and the pages. */
 html[data-nanomuse] body {
-  --nm-base: #f9f9f9;
-  --nm-canvas: #ffffff;
-  --nm-field: #ffffff;
-  --nm-field-border: #e3e4e6;
-  --nm-card: #ffffff;
-  --nm-selected: #f0f0f1;
-  --nm-hover: #f1f1f2;
-  --nm-divider: #ececec;
-  --nm-agent-bubble: #f2f2f7;
-  --nm-user-bubble: #000000;
-  --nm-user-bubble-fg: #ffffff;
+  --nm-base: #f7f1e6;
+  --nm-canvas: #f7f1e6;
+  --nm-field: #fbf6ec;
+  --nm-field-border: #d8d1c1;
+  --nm-card: #fbf6ec;
+  --nm-selected: #e1e8d8;
+  --nm-hover: #eee7d9;
+  --nm-divider: #d8d1c1;
+  --nm-agent-bubble: #eee7d9;
+  --nm-user-bubble: #52694e;
+  --nm-user-bubble-fg: #fbf6ec;
   --nm-user-bubble-selection: rgb(255 255 255 / 0.3);
-  --nm-ink: #000000;
-  --nm-ink-fg: #ffffff;
+  --nm-ink: #52694e;
+  --nm-ink-fg: #fbf6ec;
   --nm-send: var(--nm-ink);
-  --nm-send-idle: #c9c9cc;
-  --dsw-alias-bg-base: #f9f9f9;
-  --dsw-alias-bg-layer-1: #f2f2f2;
-  --dsw-alias-bg-layer-2: #ececec;
-  --dsw-alias-bg-layer-3: #e3e4e6;
-  --dsw-specific-sidebar-fill: #f9f9f9;
-  --dsw-specific-bubble: #e9e9eb;
-  --dsw-specific-bubble-highlight: #dedfe2;
-  --dsw-specific-input-major: #ffffff;
-  --dsw-alias-brand-primary: #1d1d1f;
+  --nm-send-idle: #bec5b0;
+  --dsw-alias-bg-base: #f7f1e6;
+  --dsw-alias-bg-layer-1: #fbf6ec;
+  --dsw-alias-bg-layer-2: #eee7d9;
+  --dsw-alias-bg-layer-3: #e1dbc9;
+  --dsw-specific-sidebar-fill: #f7f1e6;
+  --dsw-specific-bubble: #eee7d9;
+  --dsw-specific-bubble-highlight: #e1e8d8;
+  --dsw-specific-input-major: #fbf6ec;
+  --dsw-alias-brand-primary: #52694e;
+  --dsw-alias-label-primary: #38372f;
+  --dsw-alias-label-secondary: #66675b;
+  --dsw-alias-label-tertiary: #737466;
 }
 /* Dark: one near-black, fields and cards a step lighter; the ink inverted: your pill white with
    black text, the agent's the quiet grey a step off the near-black (the step the phone's #1c1c1e
    is off pure black), the send button and the scroll-to-latest disc white with a black glyph. */
 html[data-nanomuse] body[data-ds-dark-theme] {
-  --nm-base: #171717;
-  --nm-canvas: #171717;
-  --nm-field: #2b2b2b;
-  --nm-field-border: #2b2b2b;
-  --nm-card: #2d2d2d;
-  --nm-selected: #262626;
-  --nm-hover: #222222;
-  --nm-divider: #242424;
-  --nm-agent-bubble: #242424;
-  --nm-user-bubble: #ffffff;
-  --nm-user-bubble-fg: #000000;
+  --nm-base: #242820;
+  --nm-canvas: #242820;
+  --nm-field: #2d3229;
+  --nm-field-border: #505847;
+  --nm-card: #2d3229;
+  --nm-selected: #394734;
+  --nm-hover: #363c31;
+  --nm-divider: #505847;
+  --nm-agent-bubble: #363c31;
+  --nm-user-bubble: #b3cba5;
+  --nm-user-bubble-fg: #242820;
   --nm-user-bubble-selection: rgb(0 0 0 / 0.3);
-  --nm-ink: #ffffff;
-  --nm-ink-fg: #000000;
+  --nm-ink: #b3cba5;
+  --nm-ink-fg: #242820;
   --nm-send: var(--nm-ink);
-  --nm-send-idle: #3a3a3a;
-  --dsw-alias-bg-base: #171717;
-  --dsw-alias-bg-layer-1: #1d1d1d;
-  --dsw-alias-bg-layer-2: #232323;
-  --dsw-alias-bg-layer-3: #2d2d2d;
-  --dsw-specific-sidebar-fill: #171717;
-  --dsw-specific-bubble: #242424;
-  --dsw-specific-bubble-highlight: #2f2f2f;
-  --dsw-specific-input-major: #2b2b2b;
-  --dsw-alias-brand-primary: #f2f2f4;
+  --nm-send-idle: #505847;
+  --dsw-alias-bg-base: #242820;
+  --dsw-alias-bg-layer-1: #2d3229;
+  --dsw-alias-bg-layer-2: #363c31;
+  --dsw-alias-bg-layer-3: #394734;
+  --dsw-specific-sidebar-fill: #242820;
+  --dsw-specific-bubble: #363c31;
+  --dsw-specific-bubble-highlight: #505847;
+  --dsw-specific-input-major: #2d3229;
+  --dsw-alias-brand-primary: #b3cba5;
+  --dsw-alias-label-primary: #f7f1e6;
+  --dsw-alias-label-secondary: #b8beac;
+  --dsw-alias-label-tertiary: #a0aa91;
 }
 html[data-nanomuse] body { font-family: var(--nm-font); }
 
@@ -1143,7 +1149,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 [data-conversation-content][data-content-phase="hero"] > [data-conversation-scroll] > .nm-traj { flex: 0 0 auto; width: min(var(--dsh-chat-content-width, 680px), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 /* the agent's face: a round frame; a clip or a still inside, or an emoji on its colour */
 .nm-avatar { display: block; flex: 0 0 auto; border-radius: 50%; overflow: hidden; background: var(--dsw-alias-surface-sunken, #f1efe9); will-change: transform; transform-origin: 50% 60%; }
-.nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
 .nm-avatar-emoji { display: block; width: 100%; height: 100%; text-align: center; user-select: none; }
 @keyframes nm-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 @keyframes nm-sway { 0%, 100% { transform: rotate(-4deg) translateY(0); } 25% { transform: rotate(0deg) translateY(-2%); } 50% { transform: rotate(4deg) translateY(0); } 75% { transform: rotate(0deg) translateY(-2%); } }

@@ -10,7 +10,7 @@
 # this one installs over it and keeps its place in the system's permission lists.
 appId: io.github.nanomuse.desktop
 productName: NanoLika
-executableName: nanomuse-desktop
+executableName: NanoLika
 copyright: GPL-3.0-or-later · NanoLika, built on the open-source nanoMuse project and DeepSeek Harness
 artifactName: NanoLika-Desktop-${version}-${os}-${arch}.${ext}
 directories:
@@ -53,7 +53,7 @@ linux:
       arch: [x64]
     # the same unpacked app as an archive: for machines where the AppImage cannot mount
     # (no FUSE, or fusermount not permitted — `--appimage-extract-and-run` is the other way)
-    # and the .deb does not apply; unpack anywhere and run ./nanomuse-desktop (docs/desktop.md)
+    # and the .deb does not apply; unpack anywhere and run ./NanoLika (docs/desktop.md)
     - target: tar.gz
       arch: [x64]
   artifactName: NanoLika-Desktop-${version}-linux-x64.${ext}
@@ -65,7 +65,7 @@ linux:
   synopsis: an open-source personal agent for every device you own; the desktop built on DeepSeek Harness
   desktop:
     entry:
-      StartupWMClass: nanomuse-desktop
+      StartupWMClass: NanoLika
 deb:
   depends: ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "xdotool"]
 win:
@@ -83,7 +83,7 @@ win:
   # publisher certificate (docs/desktop.md): the SHA-512 is the installer's own integrity.
   publish:
     provider: generic
-    url: "https://nanomuse.cn/dl/win/"
+    url: "https://nanolika.ru/dl/win/"
 nsis:
   oneClick: false
   perMachine: false

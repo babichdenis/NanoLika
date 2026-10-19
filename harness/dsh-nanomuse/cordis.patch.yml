@@ -59,7 +59,7 @@
     - id: nanomuse-cloud
       name: dsh-nanomuse/cloud
       config:
-        baseURL: !!js process.env.NANOMUSE_CLOUD_URL || 'https://cloud.nanomuse.cn'
+        baseURL: !!js process.env.NANOMUSE_CLOUD_URL || 'https://cloud.nanolika.ru'
         deviceName: ''
         statePath: ''
 
@@ -79,3 +79,9 @@
     # client per connection in every chat.
     - id: nanomuse-connectors
       name: dsh-nanomuse/connectors
+
+# Paper and sage are the factory theme; the Host retains a person's saved override.
+- id: ui-theme
+  config:
+    preference: light
+    fontSize: 14

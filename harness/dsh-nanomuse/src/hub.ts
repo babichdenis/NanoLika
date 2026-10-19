@@ -98,6 +98,8 @@ export interface HubClientOptions {
   /** Reconnect pauses, for tests. */
   backoffMs?: { min: number; max: number }
   pingMs?: number
+  /** Time allowed for the socket handshake and the relay welcome. */
+  connectTimeoutMs?: number
 }
 
 type Listener = () => void
@@ -129,6 +131,7 @@ export class HubClient {
   /** Counts `connect()` attempts; an attempt that finds a newer one when its key arrives gives up. */
   private generation = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  private connectTimer: ReturnType<typeof setTimeout> | undefined
   private pingTimer: ReturnType<typeof setInterval> | undefined
   /** Whether any frame arrived since the last ping went out (the pong, or anything else). */
   private heard = true
@@ -313,6 +316,13 @@ export class HubClient {
       return
     }
     this.socket = socket
+    this.connectTimer = setTimeout(() => {
+      if (this.socket !== socket || this.connected) return
+      this.closeSocket(1000, 'welcome timeout')
+      this.lastError = 'the relay did not complete the connection'
+      this.setConnected(false)
+      this.scheduleReconnect()
+    }, this.options.connectTimeoutMs ?? 20_000)
     const device = this.options.device()
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return
@@ -329,6 +339,7 @@ export class HubClient {
     socket.addEventListener('close', (event: { code?: number; reason?: string }) => {
       if (this.socket !== socket) return
       this.socket = undefined
+      this.clearConnectTimer()
       this.clearPing()
       const code = event.code ?? 1006
       const wasConnected = this.connected
@@ -373,6 +384,7 @@ export class HubClient {
     this.heard = true
     switch (frame.type) {
       case 'welcome': {
+        this.clearConnectTimer()
         this.deviceId = String(frame.device_id ?? this.options.device().id)
         this.devices = toDevices(frame.devices)
         this.attempt = 0
@@ -538,7 +550,13 @@ export class HubClient {
     this.pingTimer = undefined
   }
 
+  private clearConnectTimer(): void {
+    if (this.connectTimer) clearTimeout(this.connectTimer)
+    this.connectTimer = undefined
+  }
+
   private closeSocket(code: number, reason: string): void {
+    this.clearConnectTimer()
     const socket = this.socket
     this.socket = undefined
     this.clearPing()
