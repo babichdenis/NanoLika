@@ -63,3 +63,15 @@ Android 目前只收 H.264）。更长、更大或别的格式会被拒绝，并
 在旁边的 `own-clip.png`，和当前登录账号的其他文件归在一起；iOS 上在应用的
 `Application Support/nanomuse/avatar/own-clip.mp4`；桌面版在 `$DSH_HOME/nanomuse/avatar/own-clip.mp4`。
 换一张工作室的脸或者退回内置形象，它都还在。
+
+## 内置 Lika 形象 {#bundled-lika-artwork}
+
+内置形象已换为网站中的 Lika 精灵，内部标识和资源文件名仍使用 `dragon`，现有个人资料无需迁移。
+源文件在 `assets/brand/avatar/`，完整坐姿、鞋子和翅膀保留在圆形框内。
+无声短片分别表现呼吸、打字、等待和完成后的微笑。小尺寸或减少动态效果时显示静态图，错误反应仍较短。
+状态切换、头像大小设置和个人资料入口维持原样。
+运行 `scripts/sync-brand.py` 同步各客户端资源，然后重新构建网页。
+
+网页和桌面的内置形象地址包含内容版本，客户端构建时由
+`scripts/avatar-revision.mjs` 生成。图片或短片改变后，即使应用版本不变也会更新地址。
+桌面资源端点会重新验证内置媒体，避免重建后继续显示缓存的旧形象。

@@ -216,6 +216,28 @@ def content_check_refusal(raw: bytes | str) -> bool:
     return any(mark in text for mark in CONTENT_CHECK_MARKS)
 
 
+def upstream_budget_refusal(raw: bytes | str) -> bool:
+    """Recognize an upstream allowance refusal without treating every 403 as a bad key."""
+    try:
+        obj = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    if not isinstance(obj, dict):
+        return False
+    err = obj.get("error", obj)
+    if isinstance(err, dict):
+        text = " ".join(str(err.get(k) or "") for k in ("message", "code", "type")).lower()
+    elif isinstance(err, str):
+        text = err.lower()
+    else:
+        return False
+    return any(mark in text for mark in (
+        "insufficient_quota", "insufficient balance", "insufficient funds",
+        "user quota is not enough", "credit balance is too low",
+        "预扣费额度失败", "余额不足", "额度不足",
+    ))
+
+
 def relay_error_body(status: int, raw: bytes) -> dict:
     """What the app is told when the provider says no. A 400 is about the request and
     the provider's own words are the useful ones — except a content check, which gets a
@@ -238,6 +260,12 @@ def relay_error_body(status: int, raw: bytes) -> dict:
         message, code = "The model provider's content check declined this request; try different words", "content_rejected"
     elif status == 400:
         message, code = upstream or "The model provider refused the request", "upstream_400"
+    elif status in (402, 403, 429) and upstream_budget_refusal(raw):
+        message, code = (
+            "nanoLika Cloud cannot process this request because its upstream service allowance "
+            "is insufficient. This is a service-side issue.",
+            "upstream_budget",
+        )
     elif status in (401, 403):
         message, code = "The relay's model provider refused its key; the operator has been told", "upstream_auth"
     elif status == 404:

@@ -1,5 +1,7 @@
 # nanoMuse Cloud
 
+Upstream allowance refusals use `upstream_budget`; an invalid upstream key uses `upstream_auth`. Both concern the Cloud operator, not a user key. An upstream quota failure is not the account allowance tracked by the relay.
+
 The "start now" path: sign up with a phone number (mainland China; the code comes by SMS)
 or an e-mail address, get a free allowance, and use nanoMuse without an API key of your own.
 Bringing your own key still works exactly as before: this is one more

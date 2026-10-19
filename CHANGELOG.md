@@ -4,6 +4,19 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Connection recovery
+
+- Recovered the iPhone chat model from the authenticated Cloud menu when a secondary model fetch failed or the default group contained only unavailable entries, while keeping working choices and a Cloud opt-out.
+
+- Kept replacement device connections online when the old socket detached during its close, and failed calls from the replaced connection explicitly.
+- Retried desktop hub connections when the handshake or welcome stalled, and ignored late Android callbacks from a replaced socket.
+
+### Appearance
+
+- Bundled avatar URLs changed with their image and clip content, and desktop assets were revalidated, preventing same-version rebuilds from showing the cached dragon.
+
+- Replaced the bundled dragon artwork with the full-body Lika fairy, added silent looping clips, and replaced the N startup and launcher mark with sage wings. Paper and sage became the default light appearance across clients while saved appearance choices stayed in place.
+
 ### Cloud
 
 - **Gmail dot/plus aliases and disposable mail domains no longer open duplicate free pools, and invite settlement ignores same-IP and tiny probes.** `parse()` now strips `+tag` subaddresses from every e-mail local part and canonicalises `gmail.com` and `googlemail.com` addresses by folding `googlemail.com` to `gmail.com` and removing dots from the local part, while `Database.account_by_hashes` still matches and upgrades existing accounts whose `id_hash` was recorded with dots before canonicalisation. New sign-ups from disposable mail domains (`DEFAULT_SIGNUP_DOMAIN_BLOCK` plus `SIGNUP_DOMAIN_BLOCK`, overridable via `SIGNUP_DOMAIN_ALLOW`) are refused with `429 domain_limited`, and the default `SIGNUP_PER_DOMAIN_DAY` for non-well-known domains is lowered from 20 to 5. Invite bonuses (`settle_invite`) no longer settle when the inviter and invitee share the same non-local `first_ip` or before the invitee either registers a Hub device or spends at least `INVITE_SETTLE_MIN_SPENT_UY` (200 micro-yuan by default).
@@ -1977,3 +1990,7 @@ The first release: an open-source personal AI agent inspired by Meta's Muse. One
 ### Command line
 
 `nanomuse chat`, `run`, `serve`, `daemon`, `goals`, `reminders`, `triggers`, `calendar`, `contacts`, `skills`, `memory`, `vault`, `phone`, `audit`, `config`, `doctor`.
+
+- Fixed the packaged desktop profile to connect to nanoLika Cloud by default.
+
+- Distinguished upstream service allowance refusals from invalid provider keys in Cloud errors.

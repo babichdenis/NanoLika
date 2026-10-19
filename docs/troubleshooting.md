@@ -43,3 +43,10 @@ Start with `nanomuse doctor`: it prints the config file in use, the data directo
 **The chat says the model provider's content check declined the request.** The provider that answers (nanoMuse Cloud's upstream, or the vendor behind a key of your own: Alibaba Cloud's `DataInspectionFailed`, for one) read something in the conversation it will not process, and said so before any model ran. It is not an outage and nothing retries it by itself: the card offers *Try again* and *New chat*. Different words usually get through; if the refusal comes back, the words it objects to are probably earlier in the conversation, and a new chat is the way on. On the relay's Health page these refusals are counted apart from upstream errors, since they say nothing about the provider's health.
 
 **Reset everything.** Stop the server and delete `~/.nanomuse` (or your `data_dir`). The vault key lives there too, so export secrets first if you need them.
+
+
+## iPhone says no model is configured
+
+This message is shown before the app calls a model. It means the phone could not resolve a chat model from its saved choices, not that the desktop must be running. Under Settings, Models, check that nanoMuse Cloud is signed in and enabled, or select an enabled provider of your own with a model that can chat. A task addressed to a computer still needs that computer online; an ordinary conversation does not.
+
+The iOS sign-in uses the model menu in the authenticated sign-in reply before attempting the separate model-list refresh. Checking the account again also repairs a missing chat entry or a default group whose members are all unavailable, using the account's current model menu. Working model choices and an intentional Cloud opt-out are kept. This recovery requires the updated iOS app; changing the relay alone cannot change an installed client's local model selection.

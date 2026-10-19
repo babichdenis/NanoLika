@@ -1,5 +1,7 @@
 # nanoMuse 桌面版
 
+桌面安装包的默认配置连接 nanoLika Cloud。自托管时可通过 `NANOMUSE_CLOUD_URL` 覆盖中继地址。
+
 电脑上的 Muse，装在一个窗口里：nanoMuse 建在
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）之上，窗口的
 布局一屏一屏见 [desktop-muse.md](desktop-muse.md)，账号、形象、在这台电脑屏幕上动手的

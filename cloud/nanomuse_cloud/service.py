@@ -1444,7 +1444,7 @@ class Cloud:
                 "bonus_available": False,
                 "bonus_at": caller.contribute_bonus_at,
             },
-            "models": [m.to_public() for m in self.s.models],
+            "models": [m.to_public() for m in self.s.public_models],
             "base_url": self.s.public_base,
             "recent": [self._ledger_row(r) for r in self.db.recent_ledger(caller.account_id)],
             # 0.18: when the app may ask for a star (the same object as GET /v1/nudges), so a
@@ -1529,7 +1529,7 @@ class Cloud:
             unlisted = self.s.unlisted_model(model_id, kind)
             if unlisted is not None:
                 return unlisted
-        offered = ", ".join(x.id for x in self.s.models if x.kind == kind)
+        offered = ", ".join(x.id for x in self.s.public_models if x.kind == kind)
         if m is not None:
             raise CloudError(404, "model_not_offered", f"{model_id!r} is a {m.kind} model, not a {kind} one; choose one of: {offered}")
         more = ", or any model of the provider's by its id" if self.any_model(caller) else ""
@@ -1539,7 +1539,7 @@ class Cloud:
         """The menu, and whether this account may name a model beyond it."""
         return {
             "object": "list",
-            "data": [m.to_public() for m in self.s.models],
+            "data": [m.to_public() for m in self.s.public_models],
             "nanomuse": {"any_model": self.any_model(caller)},
         }
 

@@ -1,5 +1,7 @@
 # nanoMuse Desktop
 
+The packaged desktop profile defaults to nanoLika Cloud. `NANOMUSE_CLOUD_URL` can override the relay address for a self-hosted installation.
+
 The computer's Muse, in a window: nanoMuse built on
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`), laid out
 screen by screen in [desktop-muse.md](desktop-muse.md), with the account, the face,

@@ -498,6 +498,9 @@ class Settings:
 
     upstream_base: str = field(default_factory=lambda: _env("UPSTREAM_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
     upstream_key: str = field(default_factory=lambda: _env("UPSTREAM_KEY"))
+    # Optional service branding. The upstream model and its accounting stay separate.
+    public_chat_model_id: str = field(default_factory=lambda: _env("PUBLIC_CHAT_MODEL_ID"))
+    public_chat_model_name: str = field(default_factory=lambda: _env("PUBLIC_CHAT_MODEL_NAME", "nanoLika Cloud"))
     # DashScope's native host, for drawing (its OpenAI-compatible host has no
     # images endpoint). Same key.
     dashscope_base: str = field(default_factory=lambda: _env("DASHSCOPE_BASE", "https://dashscope.aliyuncs.com/api/v1"))
@@ -742,7 +745,24 @@ class Settings:
 
         return os.path.join(os.path.dirname(self.database) or ".", "ip2region_v4.xdb")
 
+    @property
+    def public_models(self) -> tuple[ModelSpec, ...]:
+        """A branded chat route for clients, retaining original IDs as compatible routes."""
+        if not self.public_chat_model_id:
+            return self.models
+        chats = [m for m in self.models if m.kind == "chat" and "chat" in m.lanes]
+        selected = next((m for m in chats if "chat" in m.recommended_lanes), None)
+        selected = selected or next(iter(chats), None)
+        if selected is None:
+            return self.models
+        branded = replace(selected, id=self.public_chat_model_id, name=self.public_chat_model_name)
+        # A dedicated screen model and media models remain available for their own slots.
+        others = [m for m in self.models if m.kind != "chat" or ("gui" in m.lanes and "gui" not in branded.lanes)]
+        return (branded, *others)
+
     def model(self, model_id: str) -> ModelSpec | None:
+        if self.public_chat_model_id and model_id == self.public_chat_model_id:
+            return next((m for m in self.public_models if m.id == model_id), None)
         for m in self.models:
             if m.id == model_id:
                 return m

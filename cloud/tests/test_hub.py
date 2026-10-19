@@ -685,3 +685,53 @@ def test_connectors_are_merged_by_device_and_never_hold_a_secret(client):
         "face": None,
         "connectors": [],
     }
+
+
+async def test_replacement_survives_old_socket_detaching_during_close():
+    """A closing socket may detach before _attach resumes from its close await."""
+    from types import SimpleNamespace
+
+    from nanomuse_cloud.hub import Hub
+
+    hub = Hub(SimpleNamespace(db=None))
+
+    class ClosingSocket:
+        async def send_text(self, text):
+            pass
+
+        async def close(self, code, reason=""):
+            await hub._detach(old)
+
+    old = Connection(ws=ClosingSocket(), account_id="audit", key_hash="test", device_id="web-test", name="test", kind="web")
+    replacement = Connection(ws=ClosingSocket(), account_id="audit", key_hash="test", device_id="web-test", name="test", kind="web")
+    hub.online = {"audit": {"web-test": old}}
+    try:
+        await hub._attach(replacement)
+        assert hub.online["audit"]["web-test"] is replacement
+        assert hub.online_count() == 1
+        await hub._detach(old)
+        assert hub.online["audit"]["web-test"] is replacement
+    finally:
+        replacement.stop()
+
+
+def test_replacing_a_target_fails_its_inflight_call(client):
+    key = sign_up(client, "13800138000")
+    with connect(client, key) as phone, connect(client, key) as old:
+        phone.send_json(hello("phone", "phone-1", "phone"))
+        phone.receive_json()
+        phone.receive_json()
+        old.send_json(hello("computer", "pc-1", "desk"))
+        old.receive_json()
+        old.receive_json()
+        phone.receive_json()
+        phone.send_json({"type": "call", "id": "old-call", "to": "pc-1", "action": "info", "args": {}})
+        assert old.receive_json()["id"] == "old-call"
+        with connect(client, key) as replacement:
+            replacement.send_json(hello("computer", "pc-1", "desk"))
+            assert replacement.receive_json()["type"] == "welcome"
+            replacement.receive_json()
+            failure = phone.receive_json()
+            assert failure["code"] == "device_offline"
+            assert failure["id"] == "old-call"
+            phone.receive_json()

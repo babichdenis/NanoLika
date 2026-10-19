@@ -476,3 +476,21 @@ async def test_me_figures_agree_with_the_ledger():
     accounts = (await client.get("/v1/admin/accounts", headers=ADMIN)).json()["accounts"]
     row = next(a for a in accounts if a["id"] == me["account"]["id"])
     assert row["spent_cny"] == sp["total"] and row["grant_cny"] == sp["grant"] and row["left_cny"] == sp["left"]
+
+
+def test_branded_chat_route_keeps_upstream_prices_and_legacy_ids():
+    settings = Settings(public_chat_model_id="nanolika", public_chat_model_name="nanoLika Cloud")
+    original = next(m for m in settings.models if "chat" in m.recommended_lanes)
+    branded = settings.model("nanolika")
+    assert branded is not None
+    assert branded.name == "nanoLika Cloud"
+    assert branded.upstream == original.upstream
+    assert branded.chat_cost_uy(1000, 100, 500) == original.chat_cost_uy(1000, 100, 500)
+    assert settings.model(original.id) == original
+    chat_menu = [m for m in settings.public_models if "chat" in m.recommended_lanes]
+    assert [m.id for m in chat_menu] == ["nanolika"]
+
+
+def test_unbranded_menu_is_unchanged():
+    settings = Settings(public_chat_model_id="")
+    assert settings.public_models == settings.models

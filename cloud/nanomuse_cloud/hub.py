@@ -459,11 +459,14 @@ class Hub:
     async def _attach(self, conn: Connection) -> None:
         account = self.online.setdefault(conn.account_id, {})
         old = account.get(conn.device_id)
-        if old is not None:
-            old.stop()
-            await self._close(old.ws, 4003, "replaced by a newer connection")
+        # Publish the replacement before closing the old socket. Its receive loop can
+        # detach during the await; it must see that it no longer owns this device's seat.
         account[conn.device_id] = conn
         conn.start()
+        if old is not None:
+            old.stop()
+            await self._fail_pending_for(old)
+            await self._close(old.ws, 4003, "replaced by a newer connection")
         if conn.kind != "web":
             self.db.upsert_device(conn.account_id, conn.device_id, conn.name, conn.kind, conn.os, conn.version, json.dumps(conn.actions))
         # the id and the account masked like every other line; the device's name is the

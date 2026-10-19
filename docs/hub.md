@@ -311,3 +311,12 @@ Muse's approvals are answered by the person who asked, never by the other Muse. 
 the relay and takes it off the hub; the *Devices* list on the phone and the
 console shows every device that has ever signed in, so a device you no longer
 recognise is visible, and *Forget* removes it once it is offline.
+
+
+## Connection recovery
+
+A phone's ordinary chat runs on the phone with its configured model provider. Closing the desktop app removes that computer from the available devices, but does not move or stop the phone's own agent. A task delegated to that computer needs its app and runtime to be running. A web console connected to a runtime on a computer also needs that runtime. Check the phone's Models page separately from Devices: a model served on a computer's localhost or LAN address is unavailable when that computer stops.
+
+On replacement of a device's socket, the relay publishes the new connection before awaiting closure of the old one. A late detach of the old connection cannot remove the replacement or its account's presence entry. Calls that were in flight on the replaced socket fail explicitly rather than waiting for their deadline.
+
+The desktop retries if the WebSocket handshake or relay welcome does not finish within 20 seconds, as well as when an established connection stops answering pings. Android ignores messages, closes and failures from a socket that has already been replaced. These rules do not make a suspended phone run in the background: Android's background restrictions and iOS's foreground limits still apply.

@@ -2404,3 +2404,22 @@ async def test_me_says_where_the_person_is_and_orders_the_ways_on_by_it(tmp_path
     # the public config names the OpenRouter page next to the Bailian one
     cfg = (await client2.get("/v1/config")).json()
     assert cfg["openrouter_url"] == "https://openrouter.ai/keys"
+
+
+def test_upstream_budget_refusals_are_not_bad_keys():
+    from nanomuse_cloud.api import relay_error_body
+
+    for body in (
+        {"error": {"message": "预扣费额度失败, 用户剩余额度不足"}},
+        {"error": {"message": "Insufficient balance"}},
+        {"error": {"code": "insufficient_quota"}},
+        {"message": "user quota is not enough"},
+    ):
+        for status in (402, 403, 429):
+            error = relay_error_body(status, json.dumps(body).encode())["error"]
+            assert error["code"] == "upstream_budget"
+            assert "service-side issue" in error["message"]
+    for body in (b'{"error":{"message":"Invalid API key"}}', b'not JSON'):
+        assert relay_error_body(403, body)["error"]["code"] == "upstream_auth"
+    assert relay_error_body(401, b'{"error":{"code":"insufficient_quota"}}')["error"]["code"] == "upstream_auth"
+    assert relay_error_body(429, b'{"error":{"message":"Rate limit exceeded"}}')["error"]["code"] == "upstream_busy"
