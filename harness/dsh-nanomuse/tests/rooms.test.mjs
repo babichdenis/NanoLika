@@ -2,7 +2,7 @@
 // title a goal gets before the agent names it.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { goalTitle, parseArray } from '../lib/rooms.js'
+import { goalTitle, languageName, parseArray } from '../lib/rooms.js'
 
 test('parseArray takes the last fenced json block', () => {
   const text = 'Here is a draft:\n```json\n[{"title": "draft"}]\n```\nFinal:\n```json\n[{"title": "a"}, {"title": "b"}]\n```\n'
@@ -45,4 +45,17 @@ test('zip writes an archive Python can read back', async () => {
   assert.equal(py.stdout.trim().split('\n')[0], 'None')
   assert.equal(py.stdout.trim().split('\n')[1], 'nanomuse/rooms.json,构件/读我.txt')
   assert.equal(py.stdout.trim().split('\n')[2], '5000')
+})
+
+test('the prompt names the person\'s own language, not English by default', () => {
+  // The interface ships a Russian dictionary; the feed prompt used to answer "English" for it,
+  // so a person reading Russian got English posts. Any language now has a name.
+  assert.equal(languageName('ru'), 'Russian')
+  assert.equal(languageName('ru-RU'), 'Russian')
+  assert.equal(languageName('be'), 'Belarusian', 'unnamed languages are named by the platform')
+  assert.equal(languageName('zh-CN'), 'Simplified Chinese')
+  assert.equal(languageName('zh-TW'), 'Traditional Chinese')
+  assert.equal(languageName('ja-JP'), 'Japanese')
+  assert.equal(languageName(''), 'English', 'no tag at all is the one language this file is written in')
+  assert.equal(languageName('---'), 'English', 'an unparseable tag never throws')
 })

@@ -37,6 +37,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Desktop
 
+- **The Feed, the Ideas list and the step descriptions are written in the person's own language, not only in Chinese or English.** The prompt named the language with a list of seven, and every language outside it (Russian among them) came back as English, so a person reading the interface in Russian got an English feed. The list now covers Russian, Ukrainian, Portuguese, Italian, Turkish, Polish, Dutch, Indonesian, Vietnamese, Thai, Hindi and Arabic, and any other tag is named by the platform's own display names instead of defaulting to English.
+
 - **Synced turns from another computer stay above a newer local prompt and arrive without a reload.** On the desktop, a hub `sync` frame that arrived while a pull was already running was dropped until the next minute tick, and a remote bubble inserted before this computer's first prompt or from a device with a skewed clock stayed below the new local prompt until the window was reloaded. An in-flight pull now runs a follow-up pull when a newer `sync` frame arrives, reconnecting the hub socket or bringing the window back to the front pulls as well, and remote bubbles record when they were received locally and reposition inside the chat flow as new prompts mount. For #395.
 
 - **Windows installed ready updates on a normal user quit and stayed closed.** Quit reused the restart update's integrity check and work protection, while restart still reopened the app. Without a ready update, the normal protected exit was unchanged. Closing to the tray, idling, a crash or system shutdown did not request installation, and a failed installer launch kept the app running.

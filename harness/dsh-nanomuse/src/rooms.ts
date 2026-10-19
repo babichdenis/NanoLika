@@ -2118,14 +2118,45 @@ function today(lang: string): string {
   }
 }
 
+/** The languages with a name of their own here; any other is named by the platform. */
+const LANGUAGE_NAMES: ReadonlyArray<readonly [string, string]> = [
+  ['ja', 'Japanese'],
+  ['ko', 'Korean'],
+  ['de', 'German'],
+  ['fr', 'French'],
+  ['es', 'Spanish'],
+  ['ru', 'Russian'],
+  ['uk', 'Ukrainian'],
+  ['pt', 'Portuguese'],
+  ['it', 'Italian'],
+  ['tr', 'Turkish'],
+  ['pl', 'Polish'],
+  ['nl', 'Dutch'],
+  ['id', 'Indonesian'],
+  ['vi', 'Vietnamese'],
+  ['th', 'Thai'],
+  ['hi', 'Hindi'],
+  ['ar', 'Arabic'],
+]
+
 export function languageName(lang: string): string {
   const base = lang.toLowerCase()
   if (base.startsWith('zh')) return base.includes('tw') || base.includes('hk') || base.includes('hant') ? 'Traditional Chinese' : 'Simplified Chinese'
-  if (base.startsWith('ja')) return 'Japanese'
-  if (base.startsWith('ko')) return 'Korean'
-  if (base.startsWith('de')) return 'German'
-  if (base.startsWith('fr')) return 'French'
-  if (base.startsWith('es')) return 'Spanish'
+  for (const [prefix, name] of LANGUAGE_NAMES) if (base.startsWith(prefix)) return name
+  // Every language the list does not name was answered with English, which is how a person
+  // reading the interface in Russian got an English feed: `ru` was simply not in it.
+  return englishNameOf(base)
+}
+
+/** An unnamed tag, in English by the platform's own name for it; English only as a last resort. */
+function englishNameOf(lang: string): string {
+  const tag = lang || 'en'
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'language' }).of(tag)
+    if (name && name !== 'root' && name !== tag) return name.charAt(0).toUpperCase() + name.slice(1)
+  } catch {
+    // an unparseable tag: the one language this file is written in
+  }
   return 'English'
 }
 
