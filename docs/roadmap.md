@@ -58,6 +58,26 @@ The apps are in English and Chinese; the Android app carries fifteen more locale
 - Read: the *Every string in every language* section of [CONTRIBUTING.md](../CONTRIBUTING.md).
 - First task: open the app in a language you speak, note every string that reads wrong, and fix the file for that locale.
 
+### What ships in the box
+
+The desktop is DeepSeek Harness with our plugins, and the harness alone is 289 packages; most of what people ask for first is already one of them. `dsh-skill-office` carries the `office-docx`, `office-pptx` and `office-xlsx` skills, `libreoffice-kit` renders pages and converts to PDF through a prebuilt engine for each platform, `dsh-client-ui-sidebar-documentpreview` shows Office files, PDFs and images beside the chat, `dsh-client-file-upload` with `dsh-api-workspace-files` and `dsh-file-reference-local` brings a file into a conversation, and `dsh-experimental-voice-input-bundle` transcribes speech locally with SenseVoice, downloading its runtime on first use. The rule for us: a capability a package already has goes into the bundle as a dependency and a row in `cordis.patch.yml`, never rebuilt as a tool of ours or as an MCP server beside it. The mail subscription is the case that went wrong: the runtime already has `ReadEmails` and `SendEmail`, so a second mail server on the side was the wrong shape.
+
+Two things really are missing. A PDF the agent can read: the sidebar shows one, but nothing turns its pages into text without a skill and `pdftotext`. And the camera: no package looks through a lens, so a webcam, or the phone's camera as one more hub action, is ours to build.
+
+- Module: `harness/dsh-nanomuse/package.json` and `cordis.patch.yml` for what the bundle loads; `nanomuse/tools/` for what the runtime already has.
+- Read: each package's reference under `node_modules/@deepseek-ai/dsh-*`, [desktop.md](desktop.md), [parity.md](parity.md).
+- First task: put `dsh-skill-office`, `libreoffice-kit` with an engine for every platform the installers ship, the document preview and the file upload into the bundle, then open a `.docx`, a `.xlsx` and a `.pdf` in a chat and check that the agent reads all three and that the window shows them.
+
+The engine is picked by architecture, and the copy in today's app is `libreoffice-kit-darwin-x64` alone. An Apple Silicon build has to resolve `libreoffice-kit-darwin-arm64`, or Office rendering is dead on every M-series machine.
+
+### The chat apps
+
+The runtime answers in Feishu, DingTalk, WeCom and Telegram (`nanomuse/channels/`, one long connection per vendor, no public address needed). MAX, the Russian one, is next. Each vendor means its own socket, pairing flow and limits, so the shape to aim at is one gateway in front of them: one bot identity per vendor behind it, one allowlist, one pair of pairing codes, and the channel only saying which vendor a message came from.
+
+- Module: `nanomuse/channels/` (`base.py` is the contract; `telegram.py` is the closest to what MAX needs), [channels.md](channels.md).
+- Read: [channels.md](channels.md), the vendor's bot API.
+- First task: a `max.py` that answers in a private chat with a text reply, pairing codes and the *deliver here* switch on the same contract as `telegram.py`.
+
 ## Next
 
 - **An open evaluation suite.** The hands' failures above, turned into a fixed set of phone and computer tasks anyone can run, with the simulated phone from the showcase ([showcase.md](showcase.md), `demo/mobilegym/`) as the harness. A number per release, not an impression.
@@ -66,6 +86,8 @@ The apps are in English and Chinese; the Android app carries fifteen more locale
 - **Shareable skills.** A skill is a folder today (`nanomuse/skills/`); it should be something you can hand to a friend, install from a link, and trust because its risk is declared.
 - **More devices as hands.** A browser extension so the agent can act in your signed-in browser; a watch for the shortest front door; the car and the home as places the agent can see and act. Each is a new client of the hub ([hub.md](hub.md)), not a new agent.
 - **A gadget as a device.** A small board over Bluetooth that speaks a few hub frames (a light to turn on, a sensor to read) as the first step towards the physical world below.
+- **Pictures and clips that are honest about their price.** The relay's default menu already carries one picture model and two clip models, and the free grant pays for them at 30,000 tokens a picture and 200,000 a five-second clip. The app should say that in the same sentence as the button, and an operator should be able to turn one kind off without turning the others off.
+- **A relay that does more than sign people in.** Today it signs in, serves the model menu, keeps the hub and syncs conversations. The parts the clients already ask for: a push to a phone with no socket open, one store for skills people can share, and per-account limits that say why a call was refused.
 
 ## Later: looking up
 
