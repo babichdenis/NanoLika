@@ -97,6 +97,14 @@ export interface Spend {
   inviteBonusCny?: number
   inviteeBonusCny?: number
   ownKeyDocs?: string
+  /** 0.27: the rates money is shown by — rubles per $1 the operator buys at, the top-up
+   *  fee in per cent — and the same pool figures in those rubles (0 = not priced in rubles). */
+  rubPerUsd?: number
+  topupFeePct?: number
+  totalRub?: number
+  grantRub?: number
+  leftRub?: number
+  todayRub?: number
 }
 
 /** The switch over what the relay keeps of the account's chats, and what it holds so far. */
@@ -235,6 +243,19 @@ function toSpend(raw: unknown): Spend | undefined {
   if (inviteBonusCny !== undefined) spend.inviteBonusCny = inviteBonusCny
   const inviteeBonusCny = num(s.invitee_bonus_cny)
   if (inviteeBonusCny !== undefined) spend.inviteeBonusCny = inviteeBonusCny
+  // 0.27: what the same figures cost in the operator's rubles (0 when rubles are off)
+  const rubPerUsd = num(s.rub_per_usd)
+  if (rubPerUsd !== undefined) spend.rubPerUsd = rubPerUsd
+  const topupFeePct = num(s.topup_fee_pct)
+  if (topupFeePct !== undefined) spend.topupFeePct = topupFeePct
+  const totalRub = num(s.total_rub)
+  if (totalRub !== undefined) spend.totalRub = totalRub
+  const grantRub = num(s.grant_rub)
+  if (grantRub !== undefined) spend.grantRub = grantRub
+  const leftRub = num(s.left_rub)
+  if (leftRub !== undefined) spend.leftRub = leftRub
+  const todayRub = num(s.today_rub)
+  if (todayRub !== undefined) spend.todayRub = todayRub
   if (typeof s.own_key_docs === 'string' && s.own_key_docs) spend.ownKeyDocs = s.own_key_docs
   return spend
 }

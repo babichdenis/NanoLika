@@ -24,6 +24,7 @@ import { firstRunNeeded, stageOf, dotOf, type Stage } from '../firstrun.ts'
 import { call, type CloudStatus, type Translate, failureText } from './api.ts'
 import { useCloudConfig, type AccountSheet } from './AccountPage.tsx'
 import { Avatar } from './Avatar.tsx'
+import { cash } from './money.ts'
 import { BrandMark } from './BrandMark.tsx'
 import { gatedPermissions, openLink, type PermissionKind } from './bridge.ts'
 import { permissionSub, permissionTitle, usePermissions, type Permissions } from './permissions.ts'
@@ -304,7 +305,7 @@ export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
         inviteOpen
           ? h('input', { className: 'nm-field', value: invite, placeholder: t('obInviteCode'), autoComplete: 'off', autoCapitalize: 'characters', 'aria-label': t('obInviteCode'), onChange: (e: FormEvent<HTMLInputElement>) => setInvite(e.currentTarget.value.replace(/[^0-9a-zA-Z-]/g, '').slice(0, 16)) })
           : h('button', { type: 'button', className: 'nm-ob-link nm-inline', disabled: busy, onClick: () => setInviteOpen(true) }, t('obHaveInvite')),
-        inviteOpen ? h('p', { className: 'nm-ob-fine' }, t('obInviteHint', { bonus: config.invitee_bonus_cny ?? 5 })) : null,
+        inviteOpen ? h('p', { className: 'nm-ob-fine' }, t('obInviteHint', { bonus: cash(config.invitee_bonus_cny ?? 5, config) })) : null,
         error ? h('div', { className: 'nm-ob-error', role: 'alert' }, error) : null,
         h(Pill, { disabled: busy || code.length !== 6, onClick: () => verify(code), className: 'nm-ob-wide' }, busy ? t('signingIn') : t('obNext')),
         h('div', { className: 'nm-ob-links' },
@@ -332,7 +333,7 @@ export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
         sub: t('frTagline'),
         primary: { label: t('frSignIn'), onClick: () => { setError(undefined); setSignIn('identifier') } },
         secondary: { label: t('frWelcomeOwnKey'), onClick: () => { setModelsSkipped(false); choose('own') } },
-        fine: config.allowance_cny ? `${t('frWelcomeFine')} ${t('obFreeAmount', { allowance: config.allowance_cny })}` : t('frWelcomeFine'),
+        fine: config.allowance_cny ? `${t('frWelcomeFine')} ${t('obFreeAmount', { allowance: cash(config.allowance_cny, config) })}` : t('frWelcomeFine'),
         learnMore: PRIVACY_URL,
         t,
       },

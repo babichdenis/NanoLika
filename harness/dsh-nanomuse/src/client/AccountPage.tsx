@@ -22,16 +22,21 @@ export interface AccountSheet {
   account?: { id?: string; channel?: string; hint?: string; member?: boolean; has_password?: boolean; sessions?: number; signed_in_via?: string; created_at?: number; region?: string }
   /** Where the account is, as the relay sees it (0.1.34): `cn` or `intl`. */
   region?: string
-  spend?: { total?: number; grant?: number; left?: number | null; unlimited?: boolean; warn?: boolean; usd_cny?: number; invite_bonus_cny?: number; invitee_bonus_cny?: number; own_key_docs?: string; guidance?: Guidance }
+  /** The pool and the rates money is shown by (0.27): `*_rub` are the same figures in the
+   *  operator's rubles, 0 everywhere while RUB_PER_USD is off; the rates let an app convert
+   *  a figure of its own the same way the relay does. */
+  spend?: { total?: number; grant?: number; left?: number | null; unlimited?: boolean; warn?: boolean; usd_cny?: number; today?: number; today_usd?: number; invite_bonus_cny?: number; invitee_bonus_cny?: number; own_key_docs?: string; rub_per_usd?: number; topup_fee_pct?: number; total_rub?: number; grant_rub?: number; left_rub?: number; today_rub?: number; guidance?: Guidance }
   usage?: { today?: { by_kind?: UsageRow[] }; total?: { by_kind?: UsageRow[]; by_model?: UsageRow[] } }
-  invite?: { code?: string; url?: string; invites?: number; bonus_cny?: number; invitee_bonus_cny?: number; earned_cny?: number }
+  invite?: { code?: string; url?: string; invites?: number; bonus_cny?: number; invitee_bonus_cny?: number; earned_cny?: number; bonus_rub?: number; earned_rub?: number }
 }
-export interface UsageRow { kind?: string; model?: string; requests?: number; prompt_tokens?: number; completion_tokens?: number; cost_cny?: number }
+export interface UsageRow { kind?: string; model?: string; requests?: number; prompt_tokens?: number; completion_tokens?: number; cost_cny?: number; cost_rub?: number }
 interface Session { prefix: string; device: string; via: string; created_at: number; last_used_at: number | null; current: boolean }
 interface AccountEvent { ts: number; kind: string; detail: string }
 
-/** `GET /v1/config` on the relay (0.15): the amounts a client prints before anyone signs in. */
-export interface CloudConfig { version?: string; signup_open?: boolean; allowance_cny?: number; invite_bonus_cny?: number; invitee_bonus_cny?: number; star_url?: string }
+/** `GET /v1/config` on the relay (0.15): the amounts a client prints before anyone signs in.
+ *  0.27 adds the rates money is shown by — `allowance_rub` is the same allowance in the
+ *  operator's rubles, 0 while RUB_PER_USD is off. */
+export interface CloudConfig { version?: string; signup_open?: boolean; allowance_cny?: number; invite_bonus_cny?: number; invitee_bonus_cny?: number; star_url?: string; usd_cny?: number; rub_per_usd?: number; topup_fee_pct?: number; allowance_rub?: number; invite_bonus_rub?: number }
 let configCache: CloudConfig | undefined
 let configPending: Promise<CloudConfig> | undefined
 /** The relay's public config, fetched once per window; `{}` until it arrives or when the relay is older. */
@@ -171,7 +176,7 @@ export function AccountPage({ t, status, locale, onEnded }: AccountPageProps): R
     sheet ? h(StarNudgeOnce, { t, moment: 'signed_in' }) : null,
     h('h3', { style: heading }, t('acAllowance')),
     sheet ? h(Allowance, { t, sheet, member }) : h('div', { style: muted }, t('loading')),
-    sheet?.invite?.code ? h(Fragment, null, h('h3', { style: heading }, t('acInvite')), h(InviteBlock, { t, invite: sheet.invite })) : null,
+    sheet?.invite?.code ? h(Fragment, null, h('h3', { style: heading }, t('acInvite')), h(InviteBlock, { t, invite: sheet.invite, rub: (sheet.spend?.rub_per_usd ?? 0) > 0 })) : null,
     h('h3', { style: heading }, t('acUsage')),
     sheet ? h(Usage, { t, sheet }) : null,
     h('h3', { style: heading }, t('acPassword')),
@@ -189,8 +194,13 @@ const heading: Record<string, string | number> = { fontSize: 14, fontWeight: 600
 
 function Allowance({ t, sheet, member }: { t: Translate; sheet: AccountSheet; member: boolean }): ReactNode {
   const s = sheet.spend
+  // 0.27: the relay's rubles when it prices in them, yuan until then — the sign follows
+  // the figure, and both are printed (the fine line keeps the other currencies)
+  const rub = (s?.rub_per_usd ?? 0) > 0 && s?.total_rub !== undefined
+  const at = (cny: number | null | undefined, r: number | null | undefined): string =>
+    rub && typeof r === 'number' ? `₽${r.toFixed(r % 1 === 0 ? 0 : 2)}` : yuan(cny)
   if (!s || member || s.unlimited || s.grant === undefined) {
-    return h('div', { style: muted }, member ? t('acMemberNoLimit') : t('acNoPool', { total: yuan(s?.total ?? 0) }))
+    return h('div', { style: muted }, member ? t('acMemberNoLimit') : t('acNoPool', { total: at(s?.total, s?.total_rub) }))
   }
   const grant = s.grant
   const left = s.left ?? Math.max(0, grant - (s.total ?? 0))
@@ -200,9 +210,12 @@ function Allowance({ t, sheet, member }: { t: Translate; sheet: AccountSheet; me
   return h('div', { className: 'nm-card nm-usage' },
     h('div', { className: 'nm-usage-row' },
       h('span', { className: 'nm-usage-plan' }, t('gnPlanFree')),
-      h('span', { className: 'nm-usage-pct' }, t('acLeftOf', { left: yuan(left), grant: yuan(grant) }))),
+      h('span', { className: 'nm-usage-pct' }, t('acLeftOf', { left: at(left, s.left_rub), grant: at(grant, s.grant_rub) }))),
     h('div', { className: 'nm-usage-bar', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100 }, h('span', { style: { width: `${pct}%` } })),
-    h('div', { className: 'nm-usage-fine' }, s.usd_cny ? t('acSpentUsd', { total: yuan(s.total ?? 0), usd: ((s.total ?? 0) / s.usd_cny).toFixed(2) }) : t('acSpent', { total: yuan(s.total ?? 0) })),
+    h('div', { className: 'nm-usage-fine' },
+      rub
+        ? t('acSpentRub', { total: at(s.total ?? 0, s.total_rub), cny: yuan(s.total ?? 0), usd: ((s.total ?? 0) / (s.usd_cny || 1)).toFixed(2) })
+        : s.usd_cny ? t('acSpentUsd', { total: yuan(s.total ?? 0), usd: ((s.total ?? 0) / s.usd_cny).toFixed(2) }) : t('acSpent', { total: yuan(s.total ?? 0) })),
     low ? h(WaysOn, { t, exhausted, sheet }) : null)
 }
 
@@ -221,7 +234,7 @@ function WaysOn({ t, exhausted, sheet }: { t: Translate; exhausted: boolean; she
 
 // ---- the invite ----------------------------------------------------------------------------
 
-function InviteBlock({ t, invite }: { t: Translate; invite: NonNullable<AccountSheet['invite']> }): ReactNode {
+function InviteBlock({ t, invite, rub }: { t: Translate; invite: NonNullable<AccountSheet['invite']>; rub: boolean }): ReactNode {
   const [copied, setCopied] = useState<'code' | 'link' | undefined>()
   const copy = (what: 'code' | 'link', text: string) => {
     void navigator.clipboard?.writeText(text).then(() => {
@@ -229,12 +242,16 @@ function InviteBlock({ t, invite }: { t: Translate; invite: NonNullable<AccountS
       window.setTimeout(() => setCopied(undefined), 1800)
     }).catch(() => undefined)
   }
+  // 0.27: a figure with its own sign — the relay's rubles when it prices in them, yuan
+  // until then (the strings carry no currency of their own)
+  const at = (cny: number, r?: number): string =>
+    rub && typeof r === 'number' ? `₽${r.toFixed(r % 1 === 0 ? 0 : 2)}` : `¥${cny.toFixed(cny % 1 === 0 ? 0 : 2)}`
   const earned = invite.earned_cny ?? 0
   return h('div', { className: 'nm-card' },
     h('div', { className: 'nm-row' },
       h('div', { className: 'nm-row-main' },
         h('span', { className: 'nm-row-title' }, invite.code ?? ''),
-        h('span', { className: 'nm-row-sub nm-wrap' }, t('inviteText', { bonus: invite.bonus_cny ?? 5 }))),
+        h('span', { className: 'nm-row-sub nm-wrap' }, t('inviteText', { bonus: at(invite.bonus_cny ?? 5, invite.bonus_rub) }))),
       h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: () => copy('code', invite.code ?? '') }, h(IconCopy, { size: 14 }), copied === 'code' ? t('inviteCopied') : t('inviteCopy'))),
     invite.url
       ? h('div', { className: 'nm-row' },
@@ -242,7 +259,7 @@ function InviteBlock({ t, invite }: { t: Translate; invite: NonNullable<AccountS
             h('span', { className: 'nm-row-title', style: { fontWeight: 400, fontSize: 13 } }, invite.url)),
           h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: () => copy('link', invite.url ?? '') }, h(IconCopy, { size: 14 }), copied === 'link' ? t('inviteCopied') : t('inviteCopy')))
       : null,
-    h('div', { className: 'nm-row' }, h('span', { className: 'nm-row-sub' }, t('inviteStats', { n: invite.invites ?? 0, earned: earned.toFixed(earned % 1 === 0 ? 0 : 2) }))))
+    h('div', { className: 'nm-row' }, h('span', { className: 'nm-row-sub' }, t('inviteStats', { n: invite.invites ?? 0, earned: at(earned, invite.earned_rub) }))))
 }
 
 // ---- usage by kind and by model -----------------------------------------------------------
@@ -251,13 +268,18 @@ function Usage({ t, sheet }: { t: Translate; sheet: AccountSheet }): ReactNode {
   const [which, setWhich] = useState<'today' | 'total'>('total')
   const rows = (which === 'today' ? sheet.usage?.today?.by_kind : sheet.usage?.total?.by_kind) ?? []
   const models = sheet.usage?.total?.by_model ?? []
+  // 0.27: the row's cost in the relay's rubles when it prices in them, yuan until then
+  const rub = (sheet.spend?.rub_per_usd ?? 0) > 0
   const kindWord = (k: string | undefined) => (k === 'chat' ? t('acKindChat') : k === 'image' ? t('acKindImage') : k === 'video' ? t('acKindVideo') : k === 'realtime' ? t('acKindCalls') : (k ?? ''))
   const line = (r: UsageRow, label: string) =>
     h('div', { key: label, className: 'nm-row' },
       h('div', { className: 'nm-row-main' },
         h('span', { className: 'nm-row-title' }, label),
         h('span', { className: 'nm-row-sub' }, t('acUsageLine', { n: r.requests ?? 0, tokens: ((r.prompt_tokens ?? 0) + (r.completion_tokens ?? 0)).toLocaleString() }))),
-      h('span', { className: 'nm-usage-pct' }, yuan(r.cost_cny ?? 0)))
+      h('span', { className: 'nm-usage-pct' },
+        rub && typeof r.cost_rub === 'number'
+          ? `₽${r.cost_rub.toFixed(r.cost_rub % 1 === 0 ? 0 : 2)}`
+          : yuan(r.cost_cny ?? 0)))
   return h(Fragment, null,
     h('div', { className: 'nm-seg', role: 'tablist', style: { alignSelf: 'flex-start' } },
       (['today', 'total'] as const).map((w) => h('button', { key: w, type: 'button', role: 'tab', className: `nm-seg-btn${which === w ? ' nm-active' : ''}`, 'aria-selected': which === w, onClick: () => setWhich(w) }, t(w === 'today' ? 'acToday' : 'acTotal')))),

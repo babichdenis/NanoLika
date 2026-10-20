@@ -64,7 +64,7 @@
     realtime: "实时通话", on: "开", off: "关", pwMin: (n) => `密码至少 ${n} 位`,
     // runtime settings (relay 0.15): changed here, in force at once, kept across restarts
     rtTitle: "额度（即时生效）", rtNote: "在这里改，所有客户端立刻按新数字走：新注册拿新额度，账号页、登录页、用完时的提示都读服务器的数字，不用发版、用户不用做任何事。留空恢复环境变量的值。调低只影响之后注册的人，不会从任何人的池子里扣。",
-    rtAllowance: "每个新账号的免费额度（¥）", rtBonus: "邀请奖励（¥，双方各得）", rtSignup: "开放注册", rtSignupOff: "关闭后只有白名单和成员能登录；已登录的人不受影响。",
+    rtAllowance: "每个新账号的免费额度（¥）", rtBonus: "邀请奖励（¥，双方各得）", rtUsdCny: "汇率：1 美元 = 多少人民币", rtRub: "我的美元价格（1 美元 = 多少卢布，0 = 不显示卢布）", rtFee: "充值手续费（%）", rtSignup: "开放注册", rtSignupOff: "关闭后只有白名单和成员能登录；已登录的人不受影响。",
     rtEnv: (v) => `环境变量：${v}`, rtSet: "页面已设置", rtSave: "保存", rtSaved: "已保存，已生效。", rtApply: (n) => `把当前额度补给 ${n} 个老账号`, rtApplyNone: "所有账号拿到的额度都不低于当前值。",
     rtApplyConfirm: (n, c) => `给 ${n} 个拿到的额度低于 ¥${c} 的账号补齐差额？每个账号的流水会记一笔「额度调整」。`, rtApplied: (n) => `已补给 ${n} 个账号。`,
     rtCreditAll: "给所有人加额度", rtCreditAllPrompt: "给每个受额度限制的账号加多少元？负数扣减。（节日、补偿；成员除外）", rtSetAll: "统一设置所有人额度", rtSetAllPrompt: (n) => `给全部 ${n} 个受限账号设置额度。\n写法：=5 → 每人剩余设为 ¥5；总额=20 → 每人总额度设为 ¥20；+3 / -2 → 每人加 ¥3 / 扣 ¥2。`, rtCreditAllConfirm: (c, n) => `给 ${n} 个账号各加 ¥${c}？`, rtCredited: (n) => `已给 ${n} 个账号加额度。`,
@@ -203,7 +203,7 @@
     perMinute: (n) => (n > 0 ? `${n} a minute` : "no rate limit"), capLine: (c, u, b) => (c > 0 ? `¥${c} (≈ $${u}) in all for non-members · +¥${b} an invite, to both sides` : "no spend limit"), signupOpen: "sign-up open", signupClosed: "members only",
     realtime: "Real-time calls", on: "on", off: "off", pwMin: (n) => `passwords ≥ ${n} chars`,
     rtTitle: "Allowance (in force at once)", rtNote: "Change it here and every client follows at once: new sign-ups get the new allowance, and the account pages, the sign-in pages and the used-up notice all read the server's figures; no release, nothing for anyone to do. Empty puts the environment's value back. A lower figure only changes what new accounts get; nothing is taken from anyone's pool.",
-    rtAllowance: "Free allowance for each new account (¥)", rtBonus: "Invite bonus (¥, to both sides)", rtSignup: "Sign-up open", rtSignupOff: "Closed, only members and the list may sign in; whoever is signed in is unaffected.",
+    rtAllowance: "Free allowance for each new account (¥)", rtBonus: "Invite bonus (¥, to both sides)", rtUsdCny: "Rate: ¥ per $1", rtRub: "My dollar price (₽ per $1; 0 = no rubles)", rtFee: "Top-up fee (%)", rtSignup: "Sign-up open", rtSignupOff: "Closed, only members and the list may sign in; whoever is signed in is unaffected.",
     rtEnv: (v) => `environment: ${v}`, rtSet: "set here", rtSave: "Save", rtSaved: "Saved and in force.", rtApply: (n) => `Bring ${n} older account${n === 1 ? "" : "s"} up to the current allowance`, rtApplyNone: "Every account has at least the current allowance.",
     rtApplyConfirm: (n, c) => `Top up the ${n} account(s) that were given less than ¥${c}? Each gets a ledger line saying so.`, rtApplied: (n) => `${n} account(s) topped up.`,
     rtCreditAll: "Credit everyone", rtCreditAllPrompt: "How many yuan into every limited account's pool? Negative takes away. (a holiday, an apology; members left out)", rtSetAll: "Set everyone's pool", rtSetAllPrompt: (n) => `Set the pool of all ${n} limited accounts.\nWrite: =5 → ¥5 left each; total=20 → a ¥20 pool each; +3 / -2 → ¥3 more / ¥2 less each.`, rtCreditAllConfirm: (c, n) => `¥${c} to each of ${n} accounts?`, rtCredited: (n) => `${n} account(s) credited.`,
@@ -1552,7 +1552,7 @@
   let rtMsg = "", rtBusy = false;
   async function rtSave() {
     const body = {};
-    for (const key of ["allowance_cny", "invite_bonus_cny", "signup_open"]) if (key in RT_DRAFT) body[key] = RT_DRAFT[key] === "" ? null : RT_DRAFT[key];
+    for (const key of ["allowance_cny", "invite_bonus_cny", "signup_open", "usd_cny", "rub_per_usd", "topup_fee_pct"]) if (key in RT_DRAFT) body[key] = RT_DRAFT[key] === "" ? null : RT_DRAFT[key];
     if (!Object.keys(body).length) return;
     rtBusy = true; rtMsg = ""; draw();
     try { await api("POST", "/v1/admin/settings", body); for (const k of Object.keys(RT_DRAFT)) delete RT_DRAFT[k]; rtMsg = T.rtSaved; } catch (e) { rtMsg = e.message; }
@@ -1590,8 +1590,8 @@
     const c = ov.accounts || {};
     const limited = Math.max(0, Number(c.total || 0) - Number(c.unlimited || 0) - Number(c.disabled || 0));
     const note = (key) => h("span", { class: "fine" }, (set[key] ? T.rtSet + " · " : "") + T.rtEnv(typeof env[key] === "boolean" ? (env[key] ? T.on : T.off) : env[key]));
-    const num = (key, label) => [h("b", {}, label), h("span", { class: "rt" },
-      h("input", { type: "number", step: "0.5", min: "0", "data-focus": "rt-" + key, value: key in RT_DRAFT ? RT_DRAFT[key] : (v[key] ?? ""), oninput: (e) => { RT_DRAFT[key] = e.target.value; draw(); } }), note(key))];
+    const num = (key, label, step) => [h("b", {}, label), h("span", { class: "rt" },
+      h("input", { type: "number", step: step || "0.5", min: "0", "data-focus": "rt-" + key, value: key in RT_DRAFT ? RT_DRAFT[key] : (v[key] ?? ""), oninput: (e) => { RT_DRAFT[key] = e.target.value; draw(); } }), note(key))];
     const on = "signup_open" in RT_DRAFT ? RT_DRAFT.signup_open : !!v.signup_open;
     const dirty = Object.keys(RT_DRAFT).length > 0;
     return h("div", { class: "panel" }, h("h2", {}, T.rtTitle, h("span", { class: "sp" }), h("button", { class: "btn sm", disabled: dirty && !rtBusy ? null : "", onclick: rtSave }, T.rtSave)),
@@ -1599,6 +1599,9 @@
       h("div", { class: "kv" },
         ...num("allowance_cny", T.rtAllowance),
         ...num("invite_bonus_cny", T.rtBonus),
+        ...num("usd_cny", T.rtUsdCny, "0.1"),
+        ...num("rub_per_usd", T.rtRub, "1"),
+        ...num("topup_fee_pct", T.rtFee, "0.5"),
         h("b", {}, T.rtSignup), h("span", { class: "rt" }, h("label", { class: "sw" }, h("input", { type: "checkbox", checked: on ? "" : null, onchange: (e) => { RT_DRAFT.signup_open = e.target.checked; draw(); } }), " ", on ? T.on : T.off), note("signup_open"), h("span", { class: "fine" }, T.rtSignupOff))),
       h("div", { class: "acts", style: "padding:0 16px 12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center" },
         Number(v.allowance_cny) > 0 && rt.below_allowance > 0

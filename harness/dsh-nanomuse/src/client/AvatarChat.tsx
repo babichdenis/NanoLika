@@ -16,6 +16,7 @@ import { AvatarShareSheet } from './AvatarShare.tsx'
 import { composerCard, composerEditable } from './composer.ts'
 import { IconClose, IconSpinner } from './icons.tsx'
 import { useLive } from './live.ts'
+import { useMoney } from './money.ts'
 import { peekWin } from './win.ts'
 
 type Phase = 'idle' | 'cost' | 'drawing' | 'pick' | 'finalizing' | 'done' | 'failed'
@@ -231,6 +232,7 @@ export function makeAvatarChat(t: Translate) {
 }
 
 function Cost({ t, flow }: { t: Translate; flow: FlowState }): ReactNode {
+  const { cash } = useMoney()
   const e = flow.estimate
   // the clips count when the account would draw them after the face (C3)
   const what = e?.clips ? t('fcWhatClips', { n: FACE_PICTURES, clips: e.clips }) : t('fcWhat', { n: FACE_PICTURES })
@@ -239,8 +241,8 @@ function Cost({ t, flow }: { t: Translate; flow: FlowState }): ReactNode {
   else if (flow.estimateError) line = h('p', null, t('fcUnknown', { what }))
   else if (!e) line = h('p', { className: 'nm-ac-status nm-live' }, h(IconSpinner, { size: 14 }), t('fcChecking'))
   else line = h('div', null,
-    h('p', null, t('fcAbout', { what, cny: e.cny.toFixed(2) })),
-    e.leftCny !== null && e.leftCny !== undefined ? h('p', null, e.affordable ? t('fcLeft', { cny: e.leftCny.toFixed(2) }) : t('fcShort')) : null)
+    h('p', null, t('fcAbout', { what, cny: cash(e.cny) })),
+    e.leftCny !== null && e.leftCny !== undefined ? h('p', null, e.affordable ? t('fcLeft', { cny: cash(e.leftCny) }) : t('fcShort')) : null)
   const can = flow.estimateError !== 'signed_out'
   return h('div', { className: 'nm-ac-cost' },
     h('p', { className: 'nm-ac-desc' }, `“${flow.desc}”`),

@@ -54,12 +54,23 @@ export function makeUsagePill(t: Translate) {
     const today = todayOf(sheet)
     // signed in but the sheet not read yet: one quiet dash, the pill stays out of the way
     if (!sheet) return h('span', { className: 'nm-usage-pill nm-usage-pill-empty', title: t('usageLoading') }, '—')
+    // 0.27: rubles when the relay prices in them — the figure as ₽, and the full line
+    // (¥ ≈ $ ≈ ₽) under the pointer; yuan until then, exactly as before
+    const rub = (spend?.rub_per_usd ?? 0) > 0 && typeof spend?.today_rub === 'number'
+    const at = (n: number | null | undefined): string =>
+      typeof n === 'number' ? `₽${n.toFixed(n % 1 === 0 ? 0 : 2)}` : '—'
     const left = spend && !spend.unlimited ? spend.left ?? Math.max(0, (spend.grant ?? 0) - (spend.total ?? 0)) : null
-    const title = spend?.unlimited
+    const leftWords = spend?.unlimited
       ? t('usagePillUnlimited')
       : left === null
         ? t('usagePillTitle')
-        : t('usagePillLeft', { left: yuan(left), grant: yuan(spend?.grant ?? 0) })
+        : rub
+          ? t('usagePillLeft', { left: at(spend?.left_rub), grant: at(spend?.grant_rub) })
+          : t('usagePillLeft', { left: yuan(left), grant: yuan(spend?.grant ?? 0) })
+    const cny = spend?.today ?? today.cny
+    const title = rub
+      ? `${yuan(cny)} ≈ $${(cny / (spend?.usd_cny || 1)).toFixed(2)} ≈ ${at(spend?.today_rub)} · ${leftWords}`
+      : leftWords
     const low = left !== null && left <= ((spend?.grant ?? 0) * 0.2)
     return h(
       'button',
@@ -69,7 +80,7 @@ export function makeUsagePill(t: Translate) {
         title,
         onClick: () => settingsBus.openSection?.('nanomuse-cloud'),
       },
-      h('span', { className: 'nm-usage-pill-money' }, yuan(today.cny)),
+      h('span', { className: 'nm-usage-pill-money' }, rub && typeof spend?.today_rub === 'number' ? at(spend?.today_rub) : yuan(today.cny)),
       today.tokens > 0 ? h('span', { className: 'nm-usage-pill-tokens' }, t('usagePillTokens', { n: tokens(today.tokens) })) : null,
     )
   }

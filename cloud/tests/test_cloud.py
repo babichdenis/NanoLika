@@ -682,18 +682,26 @@ async def test_open_signup_members_unlimited_everyone_else_has_one_allowance():
         "left_usd": 0.0003,
         "today": 0,
         "today_usd": 0,
+        # 0.27: the same figures in the operator's rubles; RUB_PER_USD=0 (the dev default)
+        # keeps every one of them 0 and the apps on yuan
+        "rub_per_usd": 0,
+        "topup_fee_pct": 6,
+        "total_rub": 0.0,
+        "grant_rub": 0.0,
+        "left_rub": 0.0,
+        "today_rub": 0.0,
         "allowance_cny": 0.002,
         "invite_bonus_cny": 5,
         "invitee_bonus_cny": 5,
         # the 0.5 co-creation bonus is gone; the names stay for the apps of the time
         "contribute_bonus_cny": 0,
         "contribute_bonus_available": False,
-        "own_key_docs": "https://nanomuse.cn/own-key",
+        "own_key_docs": "https://nanolika.ru/help",
         "openrouter_url": "https://openrouter.ai/keys",
         # 0.17: a mainland phone account is pointed to Bailian first, then OpenRouter, then an invite;
         # 0.21 adds the catalogue's facts to the two key ways (additive) and the whole card as `guidance`
         "ways": [
-            {"id": "bailian", "url": "https://nanomuse.cn/own-key", "mainland_only": True, **WAY_FACTS["bailian"]},
+            {"id": "bailian", "url": "https://nanolika.ru/help", "mainland_only": True, **WAY_FACTS["bailian"]},
             {"id": "openrouter", "url": "https://openrouter.ai/keys", "mainland_only": False, **WAY_FACTS["openrouter"]},
             {"id": "invite", "url": guest["invite"]["url"], "bonus_cny": 5},
         ],
@@ -741,10 +749,10 @@ async def test_open_signup_members_unlimited_everyone_else_has_one_allowance():
     assert r.status_code == 429
     err = r.json()["error"]
     assert err["code"] == "allowance_exhausted" and "¥0.002" in err["message"] and "keep working" in err["message"]
-    assert err["left"] == 0 and err["grant"] == 0.002 and err["own_key_docs"] == "https://nanomuse.cn/own-key"
+    assert err["left"] == 0 and err["grant"] == 0.002 and err["own_key_docs"] == "https://nanolika.ru/help"
     assert (
-        err["invite_url"].startswith("https://nanomuse.cn/web/?invite=")
-        and len(err["invite_url"]) == len("https://nanomuse.cn/web/?invite=") + 8
+        err["invite_url"].startswith("https://nanolika.ru/?invite=")
+        and len(err["invite_url"]) == len("https://nanolika.ru/?invite=") + 8
     )
     assert "co-creation" not in err["message"] and "invite a friend" in err["message"] and "own model key" in err["message"]
     assert err["invite_bonus_cny"] == 5 and err["invitee_bonus_cny"] == 5
@@ -1639,7 +1647,7 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     assert r.status_code == 200
     me = (await client.get("/v1/me", headers=headers)).json()
     assert me["contribute"]["on"] is False and me["contribute"]["samples"] == 0 and me["contribute"]["default_on"] is False
-    assert me["contribute"]["privacy_url"] == "https://nanomuse.cn/privacy/" and "what you wrote" in me["contribute"]["keeps"]["kept"]
+    assert me["contribute"]["privacy_url"] == "https://nanolika.ru/privacy/" and "what you wrote" in me["contribute"]["keeps"]["kept"]
     assert me["contribute"]["bonus_cny"] == 0 and me["contribute"]["bonus_available"] is False
     assert (await client.get("/v1/admin/samples", headers=admin)).json() == {"samples": [], "total": 0, "places": {}}
 
@@ -2356,7 +2364,7 @@ async def test_me_says_where_the_person_is_and_orders_the_ways_on_by_it(tmp_path
     # the ways on, in order: the mainland to Bailian, the rest to OpenRouter, the invitation last
     cn_ways = (await client.get("/v1/me", headers=auth(phone, "8.8.8.8"))).json()["spend"]["ways"]
     assert [w["id"] for w in cn_ways] == ["bailian", "openrouter", "invite"]
-    assert cn_ways[0] == {"id": "bailian", "url": "https://nanomuse.cn/own-key", "mainland_only": True, **WAY_FACTS["bailian"]}
+    assert cn_ways[0] == {"id": "bailian", "url": "https://nanolika.ru/help", "mainland_only": True, **WAY_FACTS["bailian"]}
     assert cn_ways[1] == {"id": "openrouter", "url": "https://openrouter.ai/keys", "mainland_only": False, **WAY_FACTS["openrouter"]}
     assert (
         cn_ways[2]["id"] == "invite" and cn_ways[2]["url"].startswith("https://nanomuse.cn/web/?invite=") and cn_ways[2]["bonus_cny"] == 5
@@ -2385,7 +2393,7 @@ async def test_me_says_where_the_person_is_and_orders_the_ways_on_by_it(tmp_path
     assert "OpenRouter, with one account, one key and pay as you go, or OpenAI first" in err["message"]
     assert "Alibaba Cloud Bailian only signs up accounts from mainland China" in err["message"]
     assert "a plan you already pay for (ChatGPT, Claude or Kimi" in err["message"]
-    assert err["openrouter_url"] == "https://openrouter.ai/keys" and err["own_key_docs"] == "https://nanomuse.cn/own-key"
+    assert err["openrouter_url"] == "https://openrouter.ai/keys" and err["own_key_docs"] == "https://nanolika.ru/help"
     assert [p["id"] for p in err["guidance"]["providers"][:2]] == ["openrouter", "openai"]
     err = await exhaust(nowhere, "9.9.9.9")
     assert err["region"] == "unknown" and "OpenRouter or OpenAI outside mainland China, Alibaba Cloud Bailian inside" in err["message"]

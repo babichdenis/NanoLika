@@ -14,6 +14,7 @@ import { createElement as h, Fragment, useEffect, useRef, useState, type FormEve
 import { StarNudgeOnce } from './AccountPage.tsx'
 import { call, errorCode, type Translate, failureText } from './api.ts'
 import { useLive } from './live.ts'
+import { useMoney } from './money.ts'
 import type { Words } from './locales.ts'
 import { useOwnClipChooser } from './OwnClipChooser.tsx'
 import { UnavailableLine, useProviders } from './OwnKey.tsx'
@@ -121,6 +122,7 @@ export async function png(b64: string): Promise<string> {
 }
 
 export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: { t: Translate; initial: string; style: string; onClose(): void }): ReactNode {
+  const { cash } = useMoney()
   const [stage, setStage] = useState<Stage>('describe')
   const [text, setText] = useState(initial)
   const [style, setStyle] = useState(initialStyle in STYLES ? initialStyle : 'muse')
@@ -230,9 +232,9 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
           : !estimate ? t('stEstimating')
           : estimate.source === 'provider' ? t('stDrawnWith', { label: estimate.label ?? '', model: estimate.imageModel })
           : estimate.unlimited ? (estimate.clips ? t('stCostUnlimitedClips', { n: 8, clips: estimate.clips }) : t('stCostUnlimited', { n: 8 }))
-          : cannot ? t('stCannotAfford', { cost: estimate.cny.toFixed(2), left: estimate.leftCny.toFixed(2) })
-          : estimate.clips ? t('stCostClips', { cost: estimate.cny.toFixed(2), left: estimate.leftCny.toFixed(2) })
-          : t('stCost', { cost: estimate.cny.toFixed(2), left: estimate.leftCny.toFixed(2) })),
+          : cannot ? t('stCannotAfford', { cost: cash(estimate.cny), left: cash(estimate.leftCny) })
+          : estimate.clips ? t('stCostClips', { cost: cash(estimate.cny), left: cash(estimate.leftCny) })
+          : t('stCost', { cost: cash(estimate.cny), left: cash(estimate.leftCny) })),
       error ? h('div', { className: 'nm-room-error' }, error) : null,
       // a clip of the person's own instead (#324): this computer's alone
       h('div', { className: 'nm-oc-section' },

@@ -575,6 +575,13 @@ class Settings:
     # setting either way. State the default in the relay's privacy policy.
     improve_default: bool = field(default_factory=lambda: _env("IMPROVE_DEFAULT", "0") in ("1", "true", "yes"))
     usd_cny: float = field(default_factory=lambda: float(_env("USD_CNY", "7.1")))
+    # Rubles, what the operator's money really costs (nanolika): RUB_PER_USD is the price of
+    # a dollar the operator buys at — his own rate, not the market's — and TOPUP_FEE_PCT is
+    # the commission added on a top-up (DeepSeek's VAT). One figure follows from these and
+    # USD_CNY: ¥ → $ at the USD/CNY rate, $ → ₽ at the operator's price, plus the fee.
+    # RUB_PER_USD = 0 (the default) keeps the apps on yuan and dollars, as upstream.
+    rub_per_usd: float = field(default_factory=lambda: float(_env("RUB_PER_USD", "0")))
+    topup_fee_pct: float = field(default_factory=lambda: float(_env("TOPUP_FEE_PCT", "6")))
     # INVITE_URL is the link the apps offer to share; the code is appended.
     # OWN_KEY_DOCS is the guide the apps open when the allowance is used up and
     # the person wants to bring their own model key.
@@ -846,6 +853,14 @@ class Settings:
 
     def cny_to_usd(self, cny: float) -> float:
         return round(cny / self.usd_cny, 4) if self.usd_cny > 0 else 0.0
+
+    def cny_to_rub(self, cny: float) -> float:
+        """What this yuan of provider spend costs the operator in rubles: through the
+        USD/CNY rate, at the operator's own dollar price, plus the top-up commission.
+        0 when rubles are off (RUB_PER_USD = 0)."""
+        if self.rub_per_usd <= 0 or self.usd_cny <= 0:
+            return 0.0
+        return round(cny / self.usd_cny * self.rub_per_usd * (1 + self.topup_fee_pct / 100), 2)
 
     @property
     def dev_mode(self) -> bool:

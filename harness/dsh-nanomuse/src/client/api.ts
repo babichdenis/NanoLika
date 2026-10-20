@@ -10,8 +10,9 @@ export interface Account {
   hint: string
   member: boolean
   tokens: { unlimited: boolean; granted: number; used: number; remaining: number }
-  /** The pool in yuan (relay 0.14+): what was spent, the grant, what is left, and the 80% heads-up. */
-  spend?: { grant?: number; total: number; left: number | null; unlimited: boolean; warn: boolean; usdCny?: number; inviteBonusCny?: number; inviteeBonusCny?: number; ownKeyDocs?: string }
+  /** The pool in yuan (relay 0.14+): what was spent, the grant, what is left, and the 80% heads-up.
+   *  0.27 adds the rates and the same figures in the operator's rubles (`*Rub`, 0 when off). */
+  spend?: { grant?: number; total: number; left: number | null; unlimited: boolean; warn: boolean; usdCny?: number; inviteBonusCny?: number; inviteeBonusCny?: number; ownKeyDocs?: string; rubPerUsd?: number; topupFeePct?: number; totalRub?: number; grantRub?: number; leftRub?: number; todayRub?: number }
   /** Data controls (relay 0.9); absent on an older relay. */
   contribute?: { on: boolean; samples: number; defaultOn?: boolean; privacyUrl: string }
 }

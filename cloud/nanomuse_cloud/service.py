@@ -353,6 +353,12 @@ RUNTIME_SETTINGS: dict[str, tuple[type, float, float]] = {
     "allowance_cny": (float, 0.0, 1000.0),
     "invite_bonus_cny": (float, 0.0, 100.0),
     "signup_open": (bool, 0.0, 1.0),
+    # The rates money is shown by (0.27): dollars per ¥, rubles per $ the operator buys at,
+    # and the top-up commission in per cent. All three are display-only — a charge never
+    # depends on them.
+    "usd_cny": (float, 0.0, 1000.0),
+    "rub_per_usd": (float, 0.0, 10000.0),
+    "topup_fee_pct": (float, 0.0, 100.0),
 }
 
 
@@ -612,6 +618,14 @@ class Cloud:
             "invite_bonus_cny": self.s.invite_bonus_cny,
             "invitee_bonus_cny": self.s.invite_bonus_cny,
             "usd_cny": self.s.usd_cny,
+            # 0.27: the same figures in the operator's rubles — RUB_PER_USD is his own price
+            # for a dollar and the fee rides on top; 0 everywhere while he does not price in
+            # them, and the apps keep showing yuan (the rate itself travels so a sign-in page
+            # can convert a figure of its own the same way)
+            "rub_per_usd": self.s.rub_per_usd,
+            "topup_fee_pct": self.s.topup_fee_pct,
+            "allowance_rub": self.s.cny_to_rub(self.s.allowance_cny),
+            "invite_bonus_rub": self.s.cny_to_rub(self.s.invite_bonus_cny),
             "invite_url": self.s.invite_url,
             "own_key_docs": self.s.own_key_docs,
             "openrouter_url": self.s.openrouter_url,
@@ -946,12 +960,16 @@ class Cloud:
             "bonus_cny": self.s.invite_bonus_cny,
             # 0.9: the friend who signs up with the code gets the same
             "invitee_bonus_cny": self.s.invite_bonus_cny,
+            # 0.27: the same bonus and the same earnings in the operator's rubles (0 = off)
+            "bonus_rub": self.s.cny_to_rub(self.s.invite_bonus_cny),
             # the bonus is paid to both sides at the friend's first charged request, not at
             # sign-up: how many friends have been paid for and how many are still to be
             "bonus_when": "first_use",
             "settled": settled,
             "pending": max(0, len(friends) - settled),
             "earned_cny": earned,
+            # 0.27: the money invites brought, in the operator's rubles (0 = off)
+            "earned_rub": self.s.cny_to_rub(earned),
             # 0.4 names, one more version: the money invites brought (there is no separate
             # credit any more, it is all one pool) and no clips to count
             "credit_cny": earned,
@@ -1204,6 +1222,8 @@ class Cloud:
             for r in rs:
                 d = dict(r)
                 d["cost_cny"] = self.s.uy_to_cny(int(d.pop("cost_uy", 0) or 0))
+                # 0.27: the same cost in the operator's rubles (0 when rubles are off)
+                d["cost_rub"] = self.s.cny_to_rub(d["cost_cny"])
                 for k in ("requests", "prompt_tokens", "completion_tokens", "charged"):
                     d[k] = int(d.get(k) or 0)
                 out.append(d)
@@ -1403,6 +1423,16 @@ class Cloud:
                 "left_usd": None if left_cny is None else self.s.cny_to_usd(left_cny),
                 "today": self.s.uy_to_cny(spent_today_uy),
                 "today_usd": self.s.cny_to_usd(self.s.uy_to_cny(spent_today_uy)),
+                # 0.27: what the same figures cost the operator in rubles — the rates are
+                # sent too, so a client can convert a figure of its own the same way.
+                # rub_per_usd 0 = the operator does not price in rubles: every *_rub is 0
+                # and the apps keep showing yuan and dollars.
+                "rub_per_usd": self.s.rub_per_usd,
+                "topup_fee_pct": self.s.topup_fee_pct,
+                "total_rub": self.s.cny_to_rub(self.s.uy_to_cny(spent_uy)),
+                "grant_rub": self.s.cny_to_rub(grant_cny),
+                "left_rub": None if left_cny is None else self.s.cny_to_rub(left_cny),
+                "today_rub": self.s.cny_to_rub(self.s.uy_to_cny(spent_today_uy)),
                 # how the pool grows, for the account page
                 "allowance_cny": self.s.allowance_cny,
                 "invite_bonus_cny": self.s.invite_bonus_cny,

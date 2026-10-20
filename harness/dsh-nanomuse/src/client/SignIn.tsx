@@ -7,6 +7,7 @@
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useState, type FormEvent, type ReactNode } from 'react'
 import { useCloudConfig } from './AccountPage.tsx'
+import { cash } from './money.ts'
 import { call, column, errorStyle, muted, row, type CloudStatus, type Translate, failureText } from './api.ts'
 
 export interface SignInProps {
@@ -95,7 +96,7 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
       inviteOpen
         ? h('div', { style: column },
             h(Input, { value: invite, onChange: (e: FormEvent<HTMLInputElement>) => setInvite(e.currentTarget.value.replace(/[^0-9a-zA-Z-]/g, '').slice(0, 16)), placeholder: t('obInviteCode'), autoComplete: 'off', autoCapitalize: 'characters', 'aria-label': t('obInviteCode') }),
-            h('div', { style: muted }, t('obInviteHint', { bonus: config.invitee_bonus_cny ?? 5 })))
+            h('div', { style: muted }, t('obInviteHint', { bonus: cash(config.invitee_bonus_cny ?? 5, config) })))
         : h('div', null, h('button', { type: 'button', className: 'nm-ob-link nm-inline', disabled: busy, onClick: () => setInviteOpen(true) }, t('obHaveInvite'))),
       error ? h('div', { style: errorStyle, role: 'alert' }, error) : null,
       h('div', { style: row },

@@ -11,14 +11,18 @@ import { call, type Translate, failureText } from './api.ts'
 import { IconCopy, IconGift } from './icons.tsx'
 import { useLive } from './live.ts'
 import { mainChatId } from './MuseChats.tsx'
+import { useMoney } from './money.ts'
 import { win } from './win.ts'
 
 interface Invite {
   code: string
   url: string
   invites: number
-  bonusCny: number
-  earnedCny: number
+  /** The relay sends these in yuan (`_cny`) with their ruble twin (`_rub`), snake_case. */
+  bonus_cny?: number
+  earned_cny?: number
+  bonus_rub?: number
+  earned_rub?: number
 }
 
 function copyText(text: string): Promise<void> {
@@ -50,6 +54,7 @@ export function makeInviteButton(t: Translate) {
 }
 
 function InviteDialog({ t, onClose }: { t: Translate; onClose(): void }): ReactNode {
+  const { cash } = useMoney()
   const [invite, setInvite] = useState<Invite | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [copied, setCopied] = useState<'code' | 'link' | undefined>()
@@ -68,7 +73,7 @@ function InviteDialog({ t, onClose }: { t: Translate; onClose(): void }): ReactN
   }
   return h(Modal, { open: true, title: t('inviteTitle'), closeLabel: t('close'), onClose, className: 'nm-invite-modal' },
     h('div', { className: 'nm-invite-card' },
-      h('p', { className: 'nm-lead' }, t('inviteText', { bonus: invite?.bonusCny ?? 5 })),
+      h('p', { className: 'nm-lead' }, t('inviteText', { bonus: cash(invite?.bonus_cny ?? 5) })),
       error ? h('div', { className: 'nm-ob-error', role: 'alert' }, error) : null,
       invite
         ? h('div', { className: 'nm-invite-card' },
@@ -81,6 +86,6 @@ function InviteDialog({ t, onClose }: { t: Translate; onClose(): void }): ReactN
                   h('div', null, invite.url, ' ',
                     h('button', { type: 'button', className: 'nm-ob-link nm-inline', onClick: () => copy('link', invite.url) }, copied === 'link' ? t('inviteCopied') : t('inviteCopy'))))
               : null,
-            h('div', { className: 'nm-invite-link' }, t('inviteStats', { n: invite.invites, earned: invite.earnedCny.toFixed(invite.earnedCny % 1 === 0 ? 0 : 2) })))
+            h('div', { className: 'nm-invite-link' }, t('inviteStats', { n: invite.invites, earned: cash(invite.earned_cny ?? 0) })))
         : error ? null : h('div', { className: 'nm-spinner', style: { margin: '12px auto' } })))
 }

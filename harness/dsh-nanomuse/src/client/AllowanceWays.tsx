@@ -16,6 +16,7 @@ import { openLink } from './bridge.ts'
 import { settingsBus } from './bus.ts'
 import { IconChevronRight, IconClose, IconCopy, IconGift, IconHeart, IconKey, IconSparkle, IconUser } from './icons.tsx'
 import { useLive } from './live.ts'
+import { useMoney } from './money.ts'
 import { ACCOUNT_SECTION, ChatGptRow, coverage, groupsOf, useProviders, WaysOnRows } from './OwnKey.tsx'
 import { roomsCall, type NudgeAsk } from './rooms.ts'
 
@@ -91,19 +92,21 @@ export interface AllowanceWaysProps {
  */
 export function AllowanceHeadsUp({ t }: { t: Translate }): ReactNode {
   const live = useLive()
+  const { cash } = useMoney()
   const up = live.headsUp
   if (!up) return null
   const seen = () => { void call('allowance/seen', {}).catch(() => undefined) }
   return h('div', { className: 'nm-headsup', role: 'status', 'data-testid': 'nm-headsup' },
     h('span', { className: 'nm-headsup-icon' }, h(IconSparkle, { size: 14 })),
     h('span', { className: 'nm-headsup-text' },
-      t('huText', { left: up.left.toFixed(2), grant: up.grant.toFixed(0), bonus: up.bonus.toFixed(0) }), ' ',
+      t('huText', { left: cash(up.left), grant: cash(up.grant), bonus: cash(up.bonus) }), ' ',
       h('button', { type: 'button', className: 'nm-ob-link nm-inline', onClick: () => { seen(); settingsBus.openSection?.(ACCOUNT_SECTION) } }, t('huSee'))),
     h('button', { type: 'button', className: 'nm-icon-btn nm-headsup-close', 'aria-label': t('huDismiss'), title: t('huDismiss'), onClick: seen }, h(IconClose, { size: 14 })))
 }
 
 /** The three ways on, and the star once. */
 export function AllowanceWays({ t, info, sheet, exhausted, lead, inSettings = false, onChanged }: AllowanceWaysProps): ReactNode {
+  const { cash } = useMoney()
   const zh = t('langTag') === 'zh'
   const bonus = info.inviteBonusCny ?? 5
   const docs = info.ownKeyDocs || info.guidance?.docs || OWN_KEY_DOCS
@@ -149,7 +152,7 @@ export function AllowanceWays({ t, info, sheet, exhausted, lead, inSettings = fa
   const changed = () => onChanged?.()
 
   return h('div', { className: 'nm-ways nm-allowance', 'data-testid': 'nm-allowance-ways' },
-    h('div', { className: 'nm-ways-lead' }, lead ?? (exhausted ? t('awExhausted') : t('awNearlyOut', { left: (info.left ?? 0).toFixed(2), grant: (info.grant ?? 0).toFixed(0) }))),
+    h('div', { className: 'nm-ways-lead' }, lead ?? (exhausted ? t('awExhausted') : t('awNearlyOut', { left: cash(info.left ?? 0), grant: cash(info.grant ?? 0) }))),
     h('div', { className: 'nm-way-sub nm-wrap', style: muted }, t('awThreeWays')),
     // 1. your own key
     h('div', { className: 'nm-way' },
@@ -190,7 +193,7 @@ export function AllowanceWays({ t, info, sheet, exhausted, lead, inSettings = fa
     h('div', { className: 'nm-way' },
       h('span', { className: 'nm-way-icon' }, h(IconGift, { size: 15 })),
       h('div', { className: 'nm-way-main' },
-        h('div', { className: 'nm-way-title' }, t('awInvite', { bonus: bonus.toFixed(0) })),
+        h('div', { className: 'nm-way-title' }, t('awInvite', { bonus: cash(bonus) })),
         link
           ? h('div', { style: row },
               h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: () => void copy() }, h(IconCopy, { size: 14 }), copied ? t('inviteCopied') : t('awCopyLink')),

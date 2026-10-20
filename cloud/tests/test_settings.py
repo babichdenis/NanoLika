@@ -22,7 +22,7 @@ async def test_public_config_needs_no_auth_and_follows_the_settings():
     assert r.status_code == 200 and "max-age" in r.headers.get("cache-control", "")
     cfg = r.json()
     assert cfg["allowance_cny"] == 25 and cfg["invite_bonus_cny"] == 5 and cfg["invitee_bonus_cny"] == 5
-    assert cfg["signup_open"] is True and cfg["repo_url"].startswith("https://github.com/")
+    assert cfg["signup_open"] is True and cfg["repo_url"] == "https://nanolika.ru/source"
     assert cfg["privacy_url"] and cfg["own_key_docs"] and cfg["invite_url"] and cfg["version"]
     assert "upstream" not in r.text and "secret" not in r.text
 
@@ -41,7 +41,14 @@ async def test_settings_change_at_once_and_reach_older_accounts_only_when_asked(
     # The page reads what is in force, what the environment says, and what it set itself.
     rt = (await client.get("/v1/admin/settings", headers=ADMIN)).json()
     assert rt["values"]["allowance_cny"] == 25 and rt["env"]["allowance_cny"] == 25
-    assert rt["overridden"] == {"allowance_cny": False, "invite_bonus_cny": False, "signup_open": False}
+    assert rt["overridden"] == {
+        "allowance_cny": False,
+        "invite_bonus_cny": False,
+        "signup_open": False,
+        "usd_cny": False,
+        "rub_per_usd": False,
+        "topup_fee_pct": False,
+    }
     assert rt["below_allowance"] == 0
 
     # Lowered: the next sign-up gets the new figure; the first account keeps its pool.
@@ -75,10 +82,57 @@ async def test_settings_change_at_once_and_reach_older_accounts_only_when_asked(
     assert me1["spend"]["grant"] == 30
 
     # Bounds and unknown keys.
-    for bad in ({"allowance_cny": 5000}, {"allowance_cny": "ten"}, {"invite_bonus_cny": -1}, {"signup_open": "maybe"}, {"usd_cny": 7}):
+    for bad in ({"allowance_cny": 5000}, {"allowance_cny": "ten"}, {"invite_bonus_cny": -1}, {"signup_open": "maybe"}, {"usd_cny": 5000}, {"rub_per_usd": -1}, {"topup_fee_pct": 200}):
         r = await client.post("/v1/admin/settings", headers=ADMIN, json=bad)
         assert r.status_code == 400, bad
     assert (await client.post("/v1/admin/settings", json={"allowance_cny": 1})).status_code == 401
+
+
+async def test_money_is_shown_in_rubles_once_the_operator_prices_in_them_and_off_until_then():
+    """0.27: RUB_PER_USD is the operator's own price for a dollar — nanolika: what the $10
+    quota at new-api really costs him, not the market's rate — and the top-up fee rides on
+    top; every figure the apps and the consoles print follows them (the pool, the day, the
+    rows of usage, the invitation) and nothing else moves: a charge is a charge in yuan
+    whatever the exchange rate says. All display, no restart."""
+    app, client, sender, up, cloud, settings = make(allowance_cny=10)
+    a = await sign_up(client, sender, "13800138000", "pixel")
+    headers = auth(a["api_key"])
+
+    # Off: the dev default RUB_PER_USD=0 — every ruble figure is 0 and the apps stay on ¥.
+    me = (await client.get("/v1/me", headers=headers)).json()
+    assert me["spend"]["rub_per_usd"] == 0 and me["spend"]["grant_rub"] == 0 and me["spend"]["total_rub"] == 0
+    assert (await client.get("/v1/config")).json()["allowance_rub"] == 0
+
+    # On: a dollar at ₽100 and 6 % on top — ¥10 is ₽149.30, read in one hop by every screen.
+    r = await client.post("/v1/admin/settings", headers=ADMIN, json={"usd_cny": 7.1, "rub_per_usd": 100, "topup_fee_pct": 6})
+    assert r.status_code == 200, r.text
+    cfg = (await client.get("/v1/config")).json()
+    assert cfg["rub_per_usd"] == 100 and cfg["topup_fee_pct"] == 6
+    assert cfg["allowance_rub"] == round(10 / 7.1 * 100 * 1.06, 2) == 149.3
+    assert cfg["invite_bonus_rub"] == round(5 / 7.1 * 100 * 1.06, 2) == 74.65
+    me = (await client.get("/v1/me", headers=headers)).json()
+    assert me["spend"]["rub_per_usd"] == 100 and me["spend"]["topup_fee_pct"] == 6
+    assert me["spend"]["grant_rub"] == 149.3 and me["spend"]["left_rub"] == 149.3
+
+    # A charged request moves the ruble figures with the yuan ones, and only the display:
+    # 100 prompt + 50 completion tokens at ¥3 / ¥12 per million are still ¥0.0009.
+    r = await client.post("/v1/chat/completions", headers=headers, json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200, r.text
+    me = (await client.get("/v1/me", headers=headers)).json()
+    assert me["spend"]["total"] == 0.0009 and me["spend"]["left"] == 9.9991
+    assert me["spend"]["total_rub"] == round(0.0009 / 7.1 * 100 * 1.06, 2) == 0.01
+    assert me["spend"]["today_rub"] == 0.01
+    assert me["spend"]["left_rub"] == round(9.9991 / 7.1 * 100 * 1.06, 2) == 149.28
+    rows = me["usage"]["today"]["by_kind"]
+    assert len(rows) == 1 and rows[0]["cost_cny"] == 0.0009 and rows[0]["cost_rub"] == 0.01
+    # The invitation says the same bonus in the same rubles.
+    assert me["invite"]["bonus_rub"] == 74.65 and me["invite"]["earned_rub"] == 0
+
+    # Cleared: back to yuan at once, and the ledger does not move.
+    r = await client.post("/v1/admin/settings", headers=ADMIN, json={"rub_per_usd": None})
+    assert r.status_code == 200 and not r.json()["overridden"]["rub_per_usd"]
+    me = (await client.get("/v1/me", headers=headers)).json()
+    assert me["spend"]["rub_per_usd"] == 0 and me["spend"]["total_rub"] == 0 and me["spend"]["total"] == 0.0009
 
 
 async def test_signup_can_be_closed_from_the_page():
