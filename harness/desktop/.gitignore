@@ -4,6 +4,8 @@ dist/
 # staged by scripts/prepare-dsh.mjs and scripts/desktop-app/build-runtime.py --target
 dsh/
 runtime/
+# staged by scripts/prepare-node.mjs: the Node the office skills run their scripts with
+node/
 # the macOS helper app, built by mac/computer-use/build.sh
 mac/computer-use/build/
 *.log

@@ -36,6 +36,12 @@ extraResources:
   - from: runtime
     to: runtime
     filter: ["**/*"]
+  # the Node the office skills run their scripts with (scripts/prepare-node.mjs); Electron
+  # is not Node, so without this the skills have nothing to spawn. The folder may be empty
+  # on a machine that never fetched it, and then the skills use the Node on the PATH.
+  - from: node
+    to: node
+    filter: ["**/*"]
 asar: true
 # the operator's native addon (@computer-use/nut-js → libnut's prebuilt .node per platform) is
 # loaded with require() from a real file, not from inside the archive (src/operator.ts)

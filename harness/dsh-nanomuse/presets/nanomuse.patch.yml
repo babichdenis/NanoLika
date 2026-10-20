@@ -55,6 +55,11 @@
           # real one, not the Electron binary (see docs/roadmap.md).
           - id: skill-office
             name: '@deepseek-ai/dsh-skill-office'
+            config:
+              # The scripts the skills run are Node programs. The desktop shell stages the
+              # official build and names it here (NANOMUSE_NODE); a dev run of dsh uses its
+              # own Node, and a person's PATH is the last resort.
+              node: !!js process.env.NANOMUSE_NODE || undefined
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: command-goal

@@ -237,6 +237,24 @@ The check chooses a free loopback port and captures startup logs in a temporary 
 runtime is still not ready after 60 seconds, it reports the end of the log and stops the child
 process before removing the check's data directories.
 
+### The Node the office skills use
+
+Electron is not Node: inside the app `process.execPath` is the app itself, so the office
+skills, which run their scripts as Node programs, have nothing to spawn. `npm run dist` and
+`npm run dist:dir` therefore stage the official build first:
+
+```sh
+cd harness/desktop
+npm run prepare:node          # 22.19.0 for this platform into node/, digests checked
+```
+
+`scripts/prepare-node.mjs` downloads the archive from nodejs.org for the platform and
+architecture being built, compares its SHA-256 with the published `SHASUMS256.txt`, and writes
+`node/bin/node` (`node/bin/node.exe` on Windows). electron-builder copies `node/` into the app's
+resources, and the shell hands the path to the harness as `NANOMUSE_NODE`; the preset row
+`skill-office` reads it. A build that skips the step still works and leaves the skills to the
+`node` on the PATH, which a person running an installer does not have.
+
 ## Config and data
 
 `~/.nanomuse/desktop` (`NANOMUSE_DESKTOP_HOME` moves it) is the app's dsh home: the

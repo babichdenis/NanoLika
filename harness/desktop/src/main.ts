@@ -189,6 +189,17 @@ function bundledRuntime(): string | undefined {
 }
 
 /**
+ * The Node the office skills run their scripts with (scripts/prepare-node.mjs): Electron's
+ * `process.execPath` is the app, not an interpreter, so a skill that spawns Node needs a real
+ * one. The preset row `skill-office` reads this as `NANOMUSE_NODE`; without it the skills fall
+ * back to the `node` on the PATH, which a person running the packaged app does not have.
+ */
+function bundledNode(): string | undefined {
+  const exe = join(resourcesDir(), "node", "bin", process.platform === "win32" ? "node.exe" : "node");
+  return existsSync(exe) ? exe : undefined;
+}
+
+/**
  * The profile the Host boots: `~/.nanomuse/desktop/profiles/nanomuse`. Three small files the
  * harness reads (the manifest with the bundle list, the empty root, the person's own patch
  * layer, which dsh writes settings into) and one link: `node_modules/dsh-nanomuse` → the copy
@@ -353,6 +364,9 @@ function startHost(): Promise<string> {
         if (hostProxy) log(`proxy: providers through ${maskProxyUrl(hostProxy)}; never for ${proxied.NO_PROXY}`);
         const runtime = bundledRuntime();
         if (!env.NANOMUSE_PY && runtime) env.NANOMUSE_PY = runtime;
+        // The office skills spawn their own scripts: they get the Node we ship, not the app.
+        const node = bundledNode();
+        if (!env.NANOMUSE_NODE && node) env.NANOMUSE_NODE = node;
         // Loud when the hands have nothing to run: a packaged build without its runtime, or
         // NANOMUSE_PY (from the login shell) pointing at a file that is not there. The
         // Computer-use page shows the same with the fix; this is for the log people send in.
