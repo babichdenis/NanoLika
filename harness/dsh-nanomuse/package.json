@@ -51,7 +51,11 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./voice": {
+      "types": "./lib/types/voice.d.ts",
+      "default": "./lib/voice.js"
+    }
   },
   "files": [
     "lib",

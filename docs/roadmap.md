@@ -88,6 +88,7 @@ The runtime answers in Feishu, DingTalk, WeCom and Telegram (`nanomuse/channels/
 - **A gadget as a device.** A small board over Bluetooth that speaks a few hub frames (a light to turn on, a sensor to read) as the first step towards the physical world below.
 - **Pictures and clips that are honest about their price.** The relay's default menu already carries one picture model and two clip models, and the free grant pays for them at 30,000 tokens a picture and 200,000 a five-second clip. The app should say that in the same sentence as the button, and an operator should be able to turn one kind off without turning the others off.
 - **A relay that does more than sign people in.** Today it signs in, serves the model menu, keeps the hub and syncs conversations. The parts the clients already ask for: a push to a phone with no socket open, one store for skills people can share, and per-account limits that say why a call was refused.
+- **A conversation, not a dictation.** The microphone fills the box and `speak` reads an answer, but a person still presses Send and waits. The whole thing is one loop away: keep the microphone open while the answer is spoken, stop the voice when the person starts talking, and treat a pause as the end of a sentence. The hard part is not the audio, it is knowing when to stop talking. A voice of our own on the relay is a separate question of money: 0.1.22 removed calls from every app because a real-time socket is expensive for everyone to carry.
 
 ## Later: looking up
 

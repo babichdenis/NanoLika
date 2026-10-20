@@ -190,6 +190,13 @@
           # without one the tools answer that it is not signed in.
           - id: nanomuse-reach
             name: dsh-nanomuse/reach
+          # The voice out loud: `speak` (src/voice.ts) reads an answer in the
+          # person's language with the system's own voice: macOS `say`, Windows'
+          # own synthesizer, `spd-say` on Linux. A conversation can be heard
+          # instead of read. The listening half is the bundle's voice input rows
+          # (`speech-to-text` and `ui-voice-input`).
+          - id: nanomuse-voice
+            name: dsh-nanomuse/voice
           # The rooms from inside a chat: `goals_room_update`, `feed_post`,
           # `library_add` (src/rooms-tools.ts) and the prompt context listing
           # the person's goals. Needs the `nanomuse-rooms` row of the bundle.
