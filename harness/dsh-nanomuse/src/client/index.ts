@@ -39,6 +39,7 @@ import { makeIdeasPanel } from './IdeasPanel.tsx'
 import { makeLibraryPanel } from './LibraryPanel.tsx'
 import { IconPanelLeft, IconPlus } from './icons.tsx'
 import { makeInviteButton } from './Invite.tsx'
+import { makeUsagePill } from './UsagePill.tsx'
 import { useLive } from './live.ts'
 import { en, ru, zh } from './locales.ts'
 import type { ChatActions } from './MuseChats.tsx'
@@ -381,6 +382,10 @@ export function apply(ctx: ClientContext): void {
   const InviteButton = makeInviteButton(t)
   slots.inject('conversation.session.header.utilities', () =>
     slots.register({ name: 'conversation.session.header.utilities', id: 'nanomuse-invite', order: -20, locale: 'nanomuse' }, InviteButton))
+  // What today cost, beside Invite: yuan and tokens; a click opens the account.
+  const UsagePill = makeUsagePill(t)
+  slots.inject('conversation.session.header.utilities', () =>
+    slots.register({ name: 'conversation.session.header.utilities', id: 'nanomuse-usage', order: -19, locale: 'nanomuse' }, UsagePill))
   const ProfileDrawer = makeProfileDrawer(t, stop)
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'nanomuse.profile', locale: 'nanomuse', inject: () => ({ openSchedules: () => { selectPanel('schedules') } }) }, ProfileDrawer))

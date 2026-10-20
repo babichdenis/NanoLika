@@ -49,6 +49,10 @@ _RELAY: dict[str, tuple[str, str]] = {
         "relay",
         "The relay's model provider refused its key; the operator has been told. Your own key under Connections works meanwhile.",
     ),
+    "upstream_budget": (
+        "relay",
+        "nanoLika Cloud has used up its model allowance; the operator has been told. Top up the balance to keep going, or add your own key under Connections.",
+    ),
     "upstream_model": (
         "model",
         "The model provider does not know this model right now; pick another under Connections.",

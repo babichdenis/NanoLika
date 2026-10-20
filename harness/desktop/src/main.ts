@@ -725,7 +725,9 @@ type PermissionState = "granted" | "denied" | "not-determined" | "not-needed";
  */
 function permissionState(kind: PermissionKind): PermissionState {
   if (process.platform !== "darwin") return "not-needed";
+  // the helper client first, so its grants — not the app's own rows — are the ones read below
   if (kind !== "microphone") {
+    helper();
     const native = macPermissions.status(kind);
     if (native === "authorized") return "granted";
     if (native === "not determined") return "not-determined";
@@ -778,7 +780,7 @@ async function helperReady(): Promise<boolean> {
 
 /** What the permission dialogs name as the switch to flip. */
 function permissionTarget(): string {
-  return macPermissions.helperInUse() ? HELPER_NAME : "NanoLika Desktop";
+  return macPermissions.helperOwnsGrants() ? HELPER_NAME : "NanoLika Desktop";
 }
 
 let awakeBlocker: number | null = null;
@@ -1001,7 +1003,7 @@ function registerBridge(): void {
       accessibility: permissionState("accessibility"),
       screen: permissionState("screen"),
       microphone: permissionState("microphone"),
-      helper: macPermissions.helperInUse(),
+      helper: macPermissions.helperOwnsGrants(),
     };
   });
   ipcMain.handle("nanomuse:permissions:request", async (_e, kind: PermissionKind) => {
@@ -1638,7 +1640,7 @@ async function guidePermissions(): Promise<Record<PermissionKind, PermissionStat
   if (process.platform !== "darwin") return state();
   // the helper first, so the dialogs name its rows and its grants are the ones read
   await helperReady();
-  const viaHelper = macPermissions.helperInUse();
+  const viaHelper = macPermissions.helperOwnsGrants();
   const target = permissionTarget();
   if (permissionState("accessibility") !== "granted") {
     const { response } = await dialog.showMessageBox({
@@ -1690,6 +1692,16 @@ async function requestScreenRecording(openPane = true): Promise<void> {
     watchScreenGrant();
     return;
   }
+  if (macPermissions.helperOwnsGrants()) {
+    // The bundle is there but did not start: only the helper may ask for this permission —
+    // an ask in the app's own name would put the wrong entry on the pane's list (the app's
+    // grant cannot be honoured by the process that takes the screenshots). Ask it to start
+    // and ask (mac-permissions.ts), open the pane meanwhile so the switch is at hand.
+    macPermissions.askScreen();
+    if (openPane) void shell.openExternal(PERMISSION_PANES.screen);
+    watchScreenGrant();
+    return;
+  }
   if (!macPermissions.askScreen()) {
     try {
       await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } });
@@ -1703,9 +1715,13 @@ async function requestScreenRecording(openPane = true): Promise<void> {
 
 /** The Accessibility dialog (`AXIsProcessTrustedWithOptions` with the prompt — it also lists the app in the pane), then the pane when it is still off. */
 function requestAccessibility(openPane = true): void {
-  if (macPermissions.helperInUse()) {
-    // the helper's dialog and row; the pane when its grant is still off
-    void macHelper?.request("accessibility", openPane && permissionState("accessibility") !== "granted").catch(() => undefined);
+  if (macPermissions.helperOwnsGrants()) {
+    // the helper's dialog and its own row on the pane, running or started for the ask
+    const ask = (): void => {
+      void macHelper?.request("accessibility", openPane && permissionState("accessibility") !== "granted").catch(() => undefined);
+    };
+    if (macPermissions.helperInUse()) ask();
+    else void helperReady().then((started) => started && ask());
     return;
   }
   const asked = macPermissions.askAccessibility();
@@ -1732,8 +1748,8 @@ async function ensureMacPermissionsAtLaunch(): Promise<void> {
   const screen = permissionState("screen");
   const status = macHelper?.cachedStatus();
   // the helper's word on the screen (ScreenCaptureKit on macOS 14+) goes next to the TCC state: `screen=granted (capture ScreenCaptureKit)` is the line to look for when a screenshot is in doubt
-  const source = macPermissions.helperInUse() ? `${HELPER_NAME} ${status?.version ?? ""}${status?.capture ? `, capture ${status.capture}` : ""}${status?.screenDetail ? `, ${status.screenDetail}` : ""}`.trim() : macPermissions.loaded() ? "native" : `systemPreferences — ${macPermissions.loadError()}`;
-  log(`permissions: accessibility=${accessibility} screen=${screen} (${source}${!macPermissions.helperInUse() && macHelper ? `; helper: ${macHelper.failure()}` : ""})`);
+  const source = macPermissions.helperOwnsGrants() ? `${HELPER_NAME} ${status?.version ?? ""}${status?.capture ? `, capture ${status.capture}` : ""}${status?.screenDetail ? `, ${status.screenDetail}` : ""}${macPermissions.helperInUse() ? "" : macHelper ? `, ${macHelper.failure()}` : ""}`.trim() : macPermissions.loaded() ? "native" : `systemPreferences — ${macPermissions.loadError()}`;
+  log(`permissions: accessibility=${accessibility} screen=${screen} (${source}${!macPermissions.helperOwnsGrants() && macHelper ? `; helper: ${macHelper.failure()}` : ""})`);
   if (accessibility === "granted" && screen === "granted") return;
   // NanoLika: the panes open once per version, not on every launch. macOS keeps the rows, so a
   // person who already granted (or deliberately did not) is not sent to System Settings again;
@@ -1795,9 +1811,9 @@ function watchScreenGrant(): void {
     }
     if (screenGrantWatch) clearInterval(screenGrantWatch);
     screenGrantWatch = null;
-    if (macPermissions.helperInUse()) {
+    if (macPermissions.helperOwnsGrants()) {
       // the grant is the helper's: a quiet restart of that one process, nothing to ask
-      log("permissions: Screen Recording granted to the helper while running — restarting it");
+      log("permissions: Screen Recording granted to the helper — restarting it");
       void macHelper?.restart();
       return;
     }

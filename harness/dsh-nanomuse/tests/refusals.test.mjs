@@ -110,6 +110,20 @@ test('401 bad_key: signed out; 403: disabled; 404 model_not_offered: model', () 
   assert.equal(parseRelayFailure(relayLine(404, { message: 'Model not offered.', code: 'model_not_offered' }))?.kind, 'model')
 })
 
+test('403 upstream_budget: the relay’s model allowance is spent, not its key', () => {
+  const inner = { message: 'nanoLika Cloud has used up its model allowance; the operator has been told. Top up the balance to keep going.', type: 'upstream', code: 'upstream_budget' }
+  const r = parseRelayFailure(relayLine(403, inner), 'INVALID_REQUEST')
+  assert.equal(r?.kind, 'upstream_budget')
+  assert.equal(r?.code, 'upstream_budget')
+  // by the code alone, whatever the status the adapter saw (a stream may carry 0)
+  assert.equal(classifyRefusal(403, 'upstream_budget', inner.message), 'upstream_budget')
+  assert.equal(classifyRefusal(0, 'upstream_budget', inner.message), 'upstream_budget')
+  // the finish chunk: our code, our sentence
+  const out = relayFailure({ message: relayLine(403, inner), code: 'INVALID_REQUEST' })
+  assert.equal(out?.failure.code, 'nanomuse/upstream_budget')
+  assert.equal(refusalCard('upstream_budget').showRelayText, false)
+})
+
 test('429 without the allowance code is "busy", with retry_after in milliseconds; daily_cap keeps its own card', () => {
   const r = parseRelayFailure(relayLine(429, { message: 'Too many requests in flight.', code: 'too_many_in_flight', retry_after: 2.5 }), 'RATE_LIMIT')
   assert.equal(r?.kind, 'busy')

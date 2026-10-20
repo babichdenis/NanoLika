@@ -2418,7 +2418,7 @@ def test_upstream_budget_refusals_are_not_bad_keys():
         for status in (402, 403, 429):
             error = relay_error_body(status, json.dumps(body).encode())["error"]
             assert error["code"] == "upstream_budget"
-            assert "service-side issue" in error["message"]
+            assert "Top up the balance" in error["message"]
     for body in (b'{"error":{"message":"Invalid API key"}}', b'not JSON'):
         assert relay_error_body(403, body)["error"]["code"] == "upstream_auth"
     assert relay_error_body(401, b'{"error":{"code":"insufficient_quota"}}')["error"]["code"] == "upstream_auth"

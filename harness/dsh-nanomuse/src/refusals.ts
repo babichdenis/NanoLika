@@ -25,6 +25,8 @@ export type RefusalKind =
   | 'content_rejected'
   /** 401: the key was retired elsewhere; sign in again. */
   | 'signed_out'
+  /** 403 `upstream_budget` (relay with the budget fix): the relay's own model allowance is spent — the operator tops it up, the person can switch to their own key. */
+  | 'upstream_budget'
   /** 403: the account is disabled, or this relay does not take it. */
   | 'disabled'
   /** 429 `daily_cap`: today's share is spent (a relay that sets one). */
@@ -48,7 +50,7 @@ export type RefusalKind =
   /** Any other refusal: the relay's own sentence is shown. */
   | 'other'
 
-export const REFUSAL_KINDS: readonly RefusalKind[] = ['exhausted', 'allowance_paused', 'too_large', 'content_rejected', 'signed_out', 'disabled', 'daily_cap', 'busy', 'model', 'relay_down', 'unreachable', 'service_paused', 'sync_paused', 'hub_paused', 'cloud_off', 'other']
+export const REFUSAL_KINDS: readonly RefusalKind[] = ['exhausted', 'allowance_paused', 'too_large', 'content_rejected', 'signed_out', 'upstream_budget', 'disabled', 'daily_cap', 'busy', 'model', 'relay_down', 'unreachable', 'service_paused', 'sync_paused', 'hub_paused', 'cloud_off', 'other']
 
 /** The operator's switches (relay 0.22, `docs/cloud.md` → Controls): the code is the kind. */
 const PAUSED_CODES: Record<string, RefusalKind> = { service_paused: 'service_paused', sync_paused: 'sync_paused', hub_paused: 'hub_paused' }
@@ -160,6 +162,7 @@ export function classifyRefusal(status: number, code: string, message: string, p
   if (status === 413 || code === 'too_large') return 'too_large'
   if (code === 'content_rejected' || (status === 400 && contentCheck(message))) return 'content_rejected'
   if (status === 400 && CONTEXT.test(message)) return 'too_large'
+  if (code === 'upstream_budget') return 'upstream_budget'
   if (status === 401) return 'signed_out'
   if (status === 403) return 'disabled'
   if (code === 'daily_cap') return 'daily_cap'
@@ -225,6 +228,8 @@ export function refusalSentence(refusal: RelayRefusal): string {
       return "The model provider's content check declined this request. Try different words, or start a new chat if it keeps happening: the words it objects to can be earlier in the conversation."
     case 'signed_out':
       return 'This sign-in is no longer valid. Sign in again under Settings → NanoLika Cloud.'
+    case 'upstream_budget':
+      return refusal.message || 'nanoLika Cloud has used up its model allowance; the operator has been told. Top up the balance, or add a key of your own under Settings → NanoLika Cloud.'
     case 'disabled':
       return refusal.message || 'This account cannot use NanoLika Cloud right now.'
     case 'daily_cap':
@@ -304,6 +309,9 @@ export function refusalCard(kind: RefusalKind): { actions: RefusalAction[]; show
       return { actions: ['new-chat', 'retry'], showRelayText: false }
     case 'signed_out':
       return { actions: ['sign-in'], showRelayText: false }
+    case 'upstream_budget':
+      // the relay's own model allowance is spent: the operator tops it up; the person can switch to their own key meanwhile
+      return { actions: ['settings', 'retry'], showRelayText: false }
     case 'disabled':
       return { actions: ['settings'], showRelayText: true }
     case 'daily_cap':

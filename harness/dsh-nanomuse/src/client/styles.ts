@@ -307,6 +307,13 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
 .nm-stop:disabled { opacity: 0.5; cursor: default; }
 .nm-invite { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border: 0; border-radius: 999px; background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; cursor: pointer; }
 .nm-invite:hover { background: var(--dsw-alias-bg-layer-2); }
+/* the spend pill beside it: today's yuan and tokens; the quiet dash before the sheet is read */
+.nm-usage-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.nm-usage-pill:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.nm-usage-pill-low .nm-usage-pill-money { color: var(--dsw-alias-text-danger, #d0021b); }
+.nm-usage-pill-empty { cursor: default; opacity: 0.5; }
+.nm-usage-pill-empty:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
+.nm-usage-pill-tokens { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .nm-invite-card { display: flex; flex-direction: column; gap: 14px; }
 .nm-invite-code { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--dsw-alias-bg-layer-2); font-size: 22px; font-weight: 600; letter-spacing: 0.12em; }
 .nm-invite-code .nm-pill { margin-left: auto; letter-spacing: 0; }

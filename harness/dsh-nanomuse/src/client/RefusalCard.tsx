@@ -55,6 +55,8 @@ export function refusalText(t: Translate, kind: RefusalKind, message: string, re
       return t('rfContentRejected')
     case 'signed_out':
       return t('rfSignedOut')
+    case 'upstream_budget':
+      return t('rfUpstreamBudget')
     case 'disabled':
       return t('rfDisabled')
     case 'daily_cap':

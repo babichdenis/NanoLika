@@ -25,7 +25,7 @@
  * could not start. The helper's status is the last one it gave (it is re-read every two
  * seconds while it runs), because the readers here are synchronous.
  */
-import type { MacHelper } from "./mac-helper";
+import type { HelperStatus, MacHelper } from "./mac-helper";
 
 export type AuthStatus = "authorized" | "denied" | "restricted" | "not determined";
 export type MacPermissionKind = "accessibility" | "screen";
@@ -46,12 +46,29 @@ export function helperInUse(): boolean {
   return helper?.running() === true || helper?.busy() === true;
 }
 
+/**
+ * Whether the helper's bundle exists — its rows are then the ones the panes name and the
+ * only ones that count for these two permissions, whether or not it is answering right now
+ * (a failed start, the moment between two processes). The app's own rows are a leftover of
+ * builds before 0.1.38 and say nothing about the helper: reading them is how the status
+ * used to show a "granted" that no screenshot could honour, and how asking used to put the
+ * app itself on the pane's list.
+ */
+export function helperOwnsGrants(): boolean {
+  return helper?.present() === true;
+}
+
+/** One helper status as TCC words. */
+function asAuthStatus(status: HelperStatus, kind: MacPermissionKind): AuthStatus {
+  if (kind === "accessibility") return status.accessibility ? "authorized" : "denied";
+  return status.screen === "granted" ? "authorized" : status.screen === "denied" ? "denied" : "not determined";
+}
+
 /** The helper's last status as TCC words (the last one it ever gave while it restarts), or null when it is not in use. */
 function helperStatus(kind: MacPermissionKind): AuthStatus | null {
   const status = helper?.cachedStatus() ?? (helper?.busy() ? helper.lastKnownStatus() : null);
   if (!status) return null;
-  if (kind === "accessibility") return status.accessibility ? "authorized" : "denied";
-  return status.screen === "granted" ? "authorized" : status.screen === "denied" ? "denied" : "not determined";
+  return asAuthStatus(status, kind);
 }
 
 interface NodeMacPermissions {
@@ -119,6 +136,15 @@ export function loadError(): string {
 export function status(kind: MacPermissionKind): AuthStatus | null {
   const viaHelper = helperStatus(kind);
   if (viaHelper) return viaHelper;
+  if (helperOwnsGrants()) {
+    // The bundle is there, so its rows are the ones that count: the last word any process of
+    // the helper gave stands while it is down (a failed start, between two processes), and
+    // before the first ever it is "not determined". The app's own rows are never read here —
+    // they are leftovers of builds before 0.1.38 and speak about the wrong process.
+    const known = helper?.lastKnownStatus();
+    if (known) return asAuthStatus(known, kind);
+    return "not determined";
+  }
   load();
   if (!permissions) return null;
   try {
@@ -141,9 +167,18 @@ export function status(kind: MacPermissionKind): AuthStatus | null {
  * True when the request could be made.
  */
 export function askScreen(): boolean {
-  if (helper?.running()) {
-    // the helper's own dialog and pane entry; the status follows on its next reading
-    void helper.request("screen").catch(() => undefined);
+  if (helperOwnsGrants()) {
+    // The helper's own dialog and pane entry — and only it: asking in the app's own name is
+    // how the app itself ended up on the Screen Recording list with a grant no screenshot
+    // could use. Not running yet? The ask rides on the start.
+    const ask = (): void => {
+      if (helper?.running()) void helper.request("screen").catch(() => undefined);
+      else
+        void helper?.ready().then((started) => {
+          if (started) void helper?.request("screen").catch(() => undefined);
+        });
+    };
+    ask();
     return true;
   }
   load();
@@ -158,8 +193,13 @@ export function askScreen(): boolean {
 
 /** `AXIsProcessTrustedWithOptions` with the prompt: the Accessibility dialog. True when asked. */
 export function askAccessibility(): boolean {
-  if (helper?.running()) {
-    void helper.request("accessibility").catch(() => undefined);
+  if (helperOwnsGrants()) {
+    // the helper's dialog and its row on the pane, running or just being started
+    if (helper?.running()) void helper.request("accessibility").catch(() => undefined);
+    else
+      void helper?.ready().then((started) => {
+        if (started) void helper?.request("accessibility").catch(() => undefined);
+      });
     return true;
   }
   load();
