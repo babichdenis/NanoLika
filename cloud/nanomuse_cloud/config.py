@@ -698,6 +698,12 @@ class Settings:
     github_token: str = field(default_factory=lambda: _env("GITHUB_TOKEN"))
     github_collect: bool = field(default_factory=lambda: _env("GITHUB_COLLECT", "1") not in ("0", "false", "no"))
     github_api: str = field(default_factory=lambda: _env("GITHUB_API", "https://api.github.com"))
+    # Search (search.py) belongs to the free backends: a SearXNG the operator runs themselves
+    # (`CLOUD_SEARXNG_URL`, preferred), then DuckDuckGo's HTML endpoint, then the Wikipedia API,
+    # then GitHub with the token above. CLOUD_SEARCH_WIKI_LANG picks the language of the
+    # encyclopedia (the relay's own people read Russian by default).
+    searxng_url: str = field(default_factory=lambda: _env("CLOUD_SEARXNG_URL"))
+    search_wikipedia_lang: str = field(default_factory=lambda: _env("CLOUD_SEARCH_WIKI_LANG", "ru"))
     # 0.22: where a threshold rule's *notify* goes (controls.py), through the SMTP settings
     # above; empty = the rule writes its audit line and the log says there was nobody to tell.
     admin_email: str = field(default_factory=lambda: _env("ADMIN_EMAIL"))

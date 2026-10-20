@@ -55,6 +55,10 @@
     "./voice": {
       "types": "./lib/types/voice.d.ts",
       "default": "./lib/voice.js"
+    },
+    "./web-search": {
+      "types": "./lib/types/web-search.d.ts",
+      "default": "./lib/web-search.js"
     }
   },
   "files": [

@@ -48,7 +48,7 @@ import { CODING_ACTIONS, CodingService, codingBrief, GATED_CODING_ACTIONS } from
 import { HubClient, HubError, type Caller, type HubDevice } from './hub.ts'
 import { ProfileStore, type Profile } from './profile.ts'
 import { cloudOffFailure, relayFailure, transportFailure, type RelayRefusal } from './refusals.ts'
-import { Relay, RelayError, type Account, type Estimate, type Invite, type ProfileWrite, type RelayModel, type SignIn } from './relay.ts'
+import { Relay, RelayError, type Account, type RelaySearch, type Estimate, type Invite, type ProfileWrite, type RelayModel, type SignIn } from './relay.ts'
 import { TaskRunner, textOf } from './task.ts'
 import { Turns, aggregateWork, type WorkItem } from './work.ts'
 import { SCREEN_RUN_IDLE_MS, ScreenRuns, Trajectory, type ScreenRun, type StepAction, type TrajectoryView } from './trajectory.ts'
@@ -2816,6 +2816,17 @@ export default class NanomuseCloud extends Service {
       'not_allowed',
       answer === 'timeout' ? `nobody at ${this.deviceName()} answered in time` : `the person at ${this.deviceName()} did not allow it`,
     )
+  }
+
+  /**
+   * Search the web through the relay's free backends: SearXNG, DuckDuckGo, Wikipedia,
+   * GitHub. Nothing is charged and no DeepSeek account is needed, which is the point: the
+   * harness's own provider is DeepSeek's, and a person here has no key for it.
+   */
+  async search(query: string, limit = 8, signal?: AbortSignal): Promise<RelaySearch> {
+    const apiKey = await this.token()
+    if (!apiKey) throw new RelayError(401, 'no_account', 'Sign in to NanoLika Cloud to search the web')
+    return this.relay.search(apiKey, query, limit, signal)
   }
 
   /** The current account key, for a plugin that speaks to the relay itself. */

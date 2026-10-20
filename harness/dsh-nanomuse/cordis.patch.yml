@@ -80,6 +80,14 @@
     - id: nanomuse-connectors
       name: dsh-nanomuse/connectors
 
+    # Search that works out of the box: the harness's only provider is DeepSeek's and wants
+    # an account or an API key there, so with no key `web_search` failed. This row registers
+    # a second provider with the harness's web service and points it at the relay's own free
+    # backends (SearXNG, DuckDuckGo, Wikipedia, GitHub), which charge nothing. It appears
+    # only while the person is signed in; without an account the seam keeps the stock one.
+    - id: nanomuse-web-search
+      name: dsh-nanomuse/web-search
+
 # Paper and sage are the factory theme; the Host retains a person's saved override.
 - id: ui-theme
   config:

@@ -107,13 +107,14 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import Depends, FastAPI, File, Form, Header, Request, Response, UploadFile, WebSocket
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile, WebSocket
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
 from . import __version__
 from . import client as client_info
+from . import search as web_search
 from .catalog import Catalog
 from .config import ModelSpec, Settings
 from .controls import ControlError
@@ -231,11 +232,19 @@ def upstream_budget_refusal(raw: bytes | str) -> bool:
         text = err.lower()
     else:
         return False
-    return any(mark in text for mark in (
-        "insufficient_quota", "insufficient balance", "insufficient funds",
-        "user quota is not enough", "credit balance is too low",
-        "预扣费额度失败", "余额不足", "额度不足",
-    ))
+    return any(
+        mark in text
+        for mark in (
+            "insufficient_quota",
+            "insufficient balance",
+            "insufficient funds",
+            "user quota is not enough",
+            "credit balance is too low",
+            "预扣费额度失败",
+            "余额不足",
+            "额度不足",
+        )
+    )
 
 
 def relay_error_body(status: int, raw: bytes) -> dict:
@@ -262,8 +271,7 @@ def relay_error_body(status: int, raw: bytes) -> dict:
         message, code = upstream or "The model provider refused the request", "upstream_400"
     elif status in (402, 403, 429) and upstream_budget_refusal(raw):
         message, code = (
-            "nanoLika Cloud cannot process this request because its upstream service allowance "
-            "is insufficient. This is a service-side issue.",
+            "nanoLika Cloud has used up its model allowance; the operator has been told. Top up the balance to keep going.",
             "upstream_budget",
         )
     elif status in (401, 403):
@@ -548,6 +556,31 @@ def create_app(
         """What `images` pictures and `clips` clips would cost, next to what is left
         today — the app asks before a new face. Nothing is charged."""
         return cloud.estimate(caller, images, clips, image_model, video_model, size or None)
+
+    @app.get("/v1/search")
+    async def search_route(
+        q: str,
+        limit: int = 8,
+        kind: str = "web",
+        caller: Caller = Depends(caller_dep),
+    ) -> dict:
+        """Search the free backends for one of the account's devices: nothing is charged.
+
+        The desktop's own provider is DeepSeek's and needs an account there; searching
+        from the relay is what makes it work out of the box. `kind=code` asks GitHub
+        first, which is what a person looking for a workaround wants."""
+        try:
+            return await web_search.search(
+                http,
+                q,
+                limit=limit,
+                kind=kind,
+                searxng_url=settings.searxng_url,
+                github_token=settings.github_token,
+                wikipedia_lang=settings.search_wikipedia_lang,
+            )
+        except web_search.SearchError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
 
     @app.post("/v1/me/contribute")
     async def me_contribute(request: Request, caller: Caller = Depends(caller_dep)) -> dict:

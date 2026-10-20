@@ -46,6 +46,18 @@ export class RelayError extends Error {
 }
 
 /** The relay's view of the signed-in account (`GET /v1/me`, trimmed). */
+/** One hit from the relay's search: a URL and whatever words came with it. */
+export interface RelaySearchSource {
+  url: string
+  title: string
+  snippet: string
+}
+
+export interface RelaySearch {
+  sources: RelaySearchSource[]
+  backend: string
+}
+
 export interface Account {
   /** Opaque account id — never the phone number or e-mail. */
   id: string
@@ -474,6 +486,29 @@ export class Relay {
     const res = await this.fetchImpl(`${this.origin}/v1/me`, { headers: this.auth(apiKey), signal: signal ?? null })
     if (!res.ok) await fail(res)
     return toAccount((await res.json()) as Record<string, unknown>)
+  }
+
+  /**
+   * The relay's own web search (`GET /v1/search`): its free backends, nothing charged.
+   * The harness's only search provider is DeepSeek's and needs an account there, so this is
+   * how a person signed in to NanoLika Cloud searches at all.
+   */
+  async search(apiKey: string, query: string, limit = 8, signal?: AbortSignal): Promise<RelaySearch> {
+    const params = new URLSearchParams({ q: query, limit: String(Math.max(1, Math.min(20, Math.floor(limit)))) })
+    const res = await this.fetchImpl(`${this.origin}/v1/search?${params}`, { headers: this.auth(apiKey), signal: signal ?? null })
+    if (!res.ok) await fail(res)
+    const body = (await res.json()) as { sources?: unknown; backend?: unknown }
+    const sources = Array.isArray(body.sources)
+      ? body.sources
+          .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
+          .map((row) => ({
+            url: String(row.url ?? ''),
+            title: String(row.title ?? ''),
+            snippet: String(row.snippet ?? ''),
+          }))
+          .filter((row) => row.url.startsWith('http'))
+      : []
+    return { sources, backend: String(body.backend ?? '') }
   }
 
   /** The models the relay offers this key. */
