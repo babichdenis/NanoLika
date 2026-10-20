@@ -1466,6 +1466,7 @@ const zhCN: Record<string, string> = {
   "The model provider is busy; try again in a moment.": "模型服务商正忙，稍后再试。",
   "The model provider's content check declined this request; try different words.": "模型服务商的内容审核没有放行这次请求，换个说法再试。",
   "The relay's model provider refused its key; the operator has been told. Your own key under Connections works meanwhile.": "中继的模型服务商拒绝了它的 key，运营者已收到通知。这期间可以在「连接」里用你自己的 key。",
+  "nanoLika Cloud has used up its model allowance; the operator has been told. Top up the balance to keep going, or add your own key under Connections.": "NanoLika Cloud 的模型额度已用完，运营者已收到通知。请充值余额，或在「连接」里添加自己的 key。",
   "The model provider does not know this model right now; pick another under Connections.": "模型服务商暂时不认识这个模型，在「连接」里换一个。",
   "NanoLika Cloud has no model key configured; the operator has been told.": "NanoLika Cloud 还没有配置模型 key，运营者已收到通知。",
   "This NanoLika Cloud account is disabled.": "这个 NanoLika Cloud 账号已被停用。",
