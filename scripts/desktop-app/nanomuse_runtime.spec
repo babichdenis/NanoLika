@@ -25,14 +25,34 @@ hidden += collect_submodules("anyio")
 hidden += ["pydantic.deprecated.decorator", "tzdata", "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont"]
 
 datas = [
-    (os.path.join(ROOT, "nanomuse", "server", "static"), os.path.join("nanomuse", "server", "static")),
-    (os.path.join(ROOT, "nanomuse", "skills", "builtin"), os.path.join("nanomuse", "skills", "builtin")),
+    (
+        os.path.join(ROOT, "nanomuse", "server", "static"),
+        os.path.join("nanomuse", "server", "static"),
+    ),
+    (
+        os.path.join(ROOT, "nanomuse", "skills", "builtin"),
+        os.path.join("nanomuse", "skills", "builtin"),
+    ),
     (os.path.join(ROOT, "config", "config.example.toml"), "nanomuse"),
 ]
 binaries = []
 
 # packages that read their own data at run time
-for pkg in ("certifi", "ddgs", "tzdata", "mcp", "html2text", "qrcode", "pywebpush", "py_vapid"):
+# bs4 reads the parser out of a separate package (soupsieve), and `web_fetch` imports it inside
+# the function that turns HTML into Markdown: PyInstaller cannot see either import, so the
+# frozen runtime answered every HTML page with ModuleNotFoundError until both were listed here.
+for pkg in (
+    "certifi",
+    "ddgs",
+    "tzdata",
+    "mcp",
+    "html2text",
+    "bs4",
+    "soupsieve",
+    "qrcode",
+    "pywebpush",
+    "py_vapid",
+):
     try:
         d, b, h = collect_all(pkg)
     except Exception:  # noqa: BLE001 — optional on some platforms
@@ -51,7 +71,20 @@ for pkg in ("pyautogui", "pyscreeze", "pymsgbox", "pytweening", "mouseinfo", "py
     binaries += b
     hidden += h
 
-excludes = ["tkinter", "matplotlib", "numpy", "scipy", "pandas", "IPython", "jupyter", "pytest", "playwright"]
+# the browser extra (docs/every-device.md, `pip install "nanomuse[browser]"`): when it is
+# installed, the frozen runtime drives Chromium the same way the source tree does. Its browser
+# download is not bundled — the backend falls back to the Chrome already on the machine
+# (nanomuse/tools/browser_backends.py).
+for pkg in ("playwright",):
+    try:
+        d, b, h = collect_all(pkg)
+    except Exception:  # noqa: BLE001 — the extra is optional
+        continue
+    datas += d
+    binaries += b
+    hidden += h
+
+excludes = ["tkinter", "matplotlib", "numpy", "scipy", "pandas", "IPython", "jupyter", "pytest"]
 
 a = Analysis(
     [os.path.join(ROOT, "scripts", "desktop-app", "runtime_entry.py")],

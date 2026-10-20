@@ -255,6 +255,26 @@ resources, and the shell hands the path to the harness as `NANOMUSE_NODE`; the p
 `skill-office` reads it. A build that skips the step still works and leaves the skills to the
 `node` on the PATH, which a person running an installer does not have.
 
+### The browser the runtime drives
+
+The `Browser` tool reads a page that JavaScript builds, which `web_fetch` cannot, and it needs
+Playwright. The runtime the app carries is built from this repository with the extra installed:
+
+```sh
+pip install -e ".[hands,browser]" pyinstaller
+python scripts/desktop-app/build-runtime.py
+```
+
+Playwright's own Chromium is a 150 MB download and is deliberately not bundled: when Playwright
+has no Chromium of its own, `nanomuse/tools/browser_backends.py` drives the Chrome already on
+the machine (`chrome`, `msedge`, `brave`, found per platform). `NANOMUSE_BROWSER_CHANNEL` names
+one outright, and `bundled` keeps Playwright to its own browser. The profile lives under the
+workspace, so a login survives a restart, and the page is shown as a live card the person can
+take over: that is how a sign-in happens without the password ever reaching the model.
+
+A runtime built without the extra says so at build time and the tool answers that no browser is
+installed; the rest of the runtime is unaffected.
+
 ## Config and data
 
 `~/.nanomuse/desktop` (`NANOMUSE_DESKTOP_HOME` moves it) is the app's dsh home: the

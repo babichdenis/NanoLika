@@ -453,3 +453,39 @@ async def test_fetch_checks_every_redirect_hop(tmp_path: Path, monkeypatch):
     res = await tool.execute(action="fetch", url="https://shop.example/inside")
     assert not res.ok and "redirect to a private or local address" in (res.error or "")
     assert not any(c[1][0].startswith("http://169.254") for c in backend.calls if c[0] == "fetch")
+
+
+def test_a_chrome_on_the_machine_is_driven_when_playwright_has_none(monkeypatch, tmp_path):
+    """The desktop bundle carries no Chromium: an installed Chrome is the engine instead."""
+    from nanomuse.tools import browser_backends as backends
+
+    chrome = tmp_path / "Chrome"
+    chrome.write_text("")
+    monkeypatch.setattr(backends, "_installed_browsers", lambda: [("chrome", chrome)])
+    monkeypatch.setattr(backends, "_bundled_chromium_present", lambda: False)
+    monkeypatch.delenv("NANOMUSE_BROWSER_CHANNEL", raising=False)
+    assert backends._chrome_on_the_machine() == "chrome"
+
+
+def test_playwrights_own_chromium_wins_when_it_is_installed(monkeypatch, tmp_path):
+    from nanomuse.tools import browser_backends as backends
+
+    monkeypatch.setattr(backends, "_installed_browsers", lambda: [("chrome", tmp_path / "Chrome")])
+    monkeypatch.setattr(backends, "_bundled_chromium_present", lambda: True)
+    monkeypatch.delenv("NANOMUSE_BROWSER_CHANNEL", raising=False)
+    assert backends._chrome_on_the_machine() == ""
+
+
+def test_the_channel_can_be_named(monkeypatch, tmp_path):
+    from nanomuse.tools import browser_backends as backends
+
+    chrome = tmp_path / "Chrome"
+    chrome.write_text("")
+    monkeypatch.setattr(backends, "_installed_browsers", lambda: [("chrome", chrome)])
+    monkeypatch.setattr(backends, "_bundled_chromium_present", lambda: False)
+    monkeypatch.setenv("NANOMUSE_BROWSER_CHANNEL", "msedge")
+    assert backends._chrome_on_the_machine() == "msedge"
+    monkeypatch.setenv("NANOMUSE_BROWSER_CHANNEL", "bundled")
+    assert backends._chrome_on_the_machine() == ""
+    monkeypatch.setenv("NANOMUSE_BROWSER_CHANNEL", "netscape")
+    assert backends._chrome_on_the_machine() == "chrome"

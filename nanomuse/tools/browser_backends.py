@@ -23,6 +23,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import shutil
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -221,6 +224,82 @@ _FILL_JS = """
 
 
 # ---------------------------------------------------------------------- playwright
+_CHANNELS = ("chrome", "msedge", "brave")
+
+
+def _chrome_on_the_machine() -> str:
+    """Which installed Chrome-family browser to drive, or "" when there is none.
+
+    Playwright's own Chromium is a 150 MB download that the desktop bundle deliberately does
+    not carry, and a person who has Chrome already has the engine. `NANOMUSE_BROWSER_CHANNEL`
+    names one outright (`chrome`, `msedge`, `brave`, or `bundled` for Playwright's own); with
+    nothing named, the channel is used only when Playwright has no Chromium of its own.
+    """
+    named = (os.environ.get("NANOMUSE_BROWSER_CHANNEL") or "").strip().lower()
+    if named in _CHANNELS:
+        return named
+    if named == "bundled":
+        return ""
+    for channel, path in _installed_browsers():
+        if path.exists():
+            return channel
+    return ""
+
+
+def _installed_browsers() -> list[tuple[str, Path]]:
+    """Where a Chrome-family browser would be on this system, most common first."""
+    if sys.platform == "darwin":
+        mac = Path("/Applications")
+        return [
+            ("chrome", mac / "Google Chrome.app/Contents/MacOS/Google Chrome"),
+            ("msedge", mac / "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+            ("brave", mac / "Brave Browser.app/Contents/MacOS/Brave Browser"),
+        ]
+    if sys.platform.startswith("win"):
+        found: list[tuple[str, Path]] = []
+        for root in (
+            os.environ.get("PROGRAMFILES"),
+            os.environ.get("PROGRAMFILES(X86)", r"C:\\Program Files (x86)"),
+        ):
+            if not root:
+                continue
+            found += [
+                ("chrome", Path(root) / "Google/Chrome/Application/chrome.exe"),
+                ("msedge", Path(root) / "Microsoft/Edge/Application/msedge.exe"),
+            ]
+        return found
+    linux: list[tuple[str, Path]] = []
+    for binary, channel in (
+        ("google-chrome", "chrome"),
+        ("google-chrome-stable", "chrome"),
+        ("chromium", "chrome"),
+        ("chromium-browser", "chrome"),
+        ("microsoft-edge", "msedge"),
+        ("brave-browser", "brave"),
+    ):
+        path = shutil.which(binary)
+        if path:
+            linux.append((channel, Path(path)))
+    return linux
+
+
+def _bundled_chromium_present() -> bool:
+    """Whether Playwright's own Chromium was installed (`playwright install chromium`)."""
+    root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if root:
+        base = Path(root)
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches" / "ms-playwright"
+    elif sys.platform.startswith("win"):
+        base = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ms-playwright"
+    else:
+        base = Path.home() / ".cache" / "ms-playwright"
+    try:
+        return base.is_dir() and any(base.glob("chromium-*"))
+    except OSError:
+        return False
+
+
 class PlaywrightBackend(BrowserBackend):
     """Chromium through Playwright, with a persistent profile so logins survive restarts."""
 
@@ -264,8 +343,10 @@ class PlaywrightBackend(BrowserBackend):
             self._pw = await async_playwright().start()
         if self._context is None:
             self.profile_dir.mkdir(parents=True, exist_ok=True)
+            channel = _chrome_on_the_machine() if not _bundled_chromium_present() else ""
             self._context = await self._pw.chromium.launch_persistent_context(
                 str(self.profile_dir),
+                channel=channel or None,
                 headless=self.headless,
                 viewport=self.profile.viewport,
                 user_agent=self.profile.user_agent or None,

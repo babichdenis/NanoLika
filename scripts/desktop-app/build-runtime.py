@@ -143,6 +143,14 @@ def check(exe: Path) -> None:
 
 
 def main() -> None:
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        print(
+            "note: playwright is not installed, so this runtime carries no browser: "
+            'install it with pip install -e ".[hands,browser]"',
+            file=sys.stderr,
+        )
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="start it once and ask /api/health")
     ap.add_argument(
