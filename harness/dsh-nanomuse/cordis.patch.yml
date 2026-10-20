@@ -85,3 +85,21 @@
   config:
     preference: light
     fontSize: 14
+
+- insert:
+    # Voice as input: what you say lands in the composer as text. SenseVoice runs
+    # on this computer and downloads its runtime on first use, so the recording
+    # never leaves the machine. The rows are dsh's own experimental voice bundle,
+    # restated here so the desktop carries them without a second bundle.
+    - id: speech-to-text
+      name: '@deepseek-ai/dsh-experimental-speech-to-text'
+      config:
+        defaultProvider: sensevoice-local
+    - id: speech-to-text-sensevoice
+      name: '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice'
+      config:
+        dataRoot: !!js dshHomePath('speech-to-text', 'sensevoice')
+    - id: api-speech-to-text
+      name: '@deepseek-ai/dsh-experimental-api-speech-to-text'
+    - id: ui-voice-input
+      name: '@deepseek-ai/dsh-experimental-client-ui-voice-input'

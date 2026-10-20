@@ -49,6 +49,12 @@
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
+          # Word, PowerPoint and Excel: the three office skills dsh ships, next to
+          # the filesystem one. The skills come as instructions plus scripts, so
+          # they need a Node to run them with; in a packaged app that has to be a
+          # real one, not the Electron binary (see docs/roadmap.md).
+          - id: skill-office
+            name: '@deepseek-ai/dsh-skill-office'
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: command-goal
