@@ -78,6 +78,38 @@ The runtime answers in Feishu, DingTalk, WeCom and Telegram (`nanomuse/channels/
 - Read: [channels.md](channels.md), the vendor's bot API.
 - First task: a `max.py` that answers in a private chat with a text reply, pairing codes and the *deliver here* switch on the same contract as `telegram.py`.
 
+### Pages that need a browser
+
+`web_fetch` reads a page's HTML, which is enough for a document and not enough for a site that
+builds itself with JavaScript: the answer is empty or a spinner. A browser is what turns that
+into text. The desktop already carries one: Electron is Chromium, and the right sidebar's
+browser tab is already a `<webview>` of it, so nothing has to be downloaded for the engine.
+What is missing is a way for the agent to drive it: load a URL in a hidden view, wait for the
+page to settle, and hand back the text (and, later, click and type).
+
+Three ways, in the order we would try them:
+
+- **The app's own Chromium, driven by a tool.** A bridge call in the shell (`browse`: url,
+  wait, text, links) and a tool in the bundle that uses it. No new dependency, no download, the
+  same engine and proxy the person already runs, and a session partition of its own so the
+  person's signed-in tabs and the agent's page cannot see each other's cookies.
+- **Playwright over CDP, connected to that same Chromium.** When a site needs real automation
+  (selectors, clicks, waits, a PDF of the result). It starts the app's Chromium with a loopback
+  debugging port behind a token rather than downloading a second engine.
+- **A remote browser over MCP** (`browser`, `browserbase` in the connectors catalogue). The
+  only route that also works from a phone, and the one that sends the page to someone else's
+  computer, so it stays opt-in.
+
+Scraping a site is also a question of manners and of law: the robots file, the terms, and how
+often one asks. A tool that ignores all three is not one we ship as the default.
+
+- Module: `harness/desktop/src/main.ts` (the bridge), `harness/dsh-nanomuse/src/` (the tool),
+  `src/client/` (the toggle in Settings).
+- Read: [gui.md](gui.md) for how acting on a page is gated, the sidebar browser package's
+  reference.
+- First task: `browse` that returns the text of a JavaScript-heavy page, with the session
+  partition and the wait made explicit, and one test page that `web_fetch` cannot read.
+
 ## Next
 
 - **An open evaluation suite.** The hands' failures above, turned into a fixed set of phone and computer tasks anyone can run, with the simulated phone from the showcase ([showcase.md](showcase.md), `demo/mobilegym/`) as the harness. A number per release, not an impression.
