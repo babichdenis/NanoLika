@@ -243,14 +243,24 @@ class ChannelManager(ChannelBus):
             return "zh"
         if language.startswith("en"):
             return "en"
+        if language.startswith("ru"):
+            return "ru"
         return "both"
 
-    def say(self, en: str, zh: str) -> str:
+    def say(self, en: str, zh: str, ru: str = "") -> str:
+        """One system line in the language the agent was told to speak.
+
+        "both" (the default, auto) stays English then Chinese, which is what a person who
+        never chose a language gets. A line without a Russian wording falls back to
+        English rather than to Chinese.
+        """
         lang = self.lang
         if lang == "zh":
             return zh
         if lang == "en":
             return en
+        if lang == "ru":
+            return ru or en
         return f"{en}\n{zh}"
 
     @property
@@ -300,7 +310,7 @@ class ChannelManager(ChannelBus):
         if delivered and text and self.svc.ui.has_pending_question(delivered):
             self._questions.pop(key, None)
             self.svc.ui.answer_question(delivered, text)
-            await self._send(msg.channel, msg.chat_id, self.say("Passed on.", "已转达。"))
+            await self._send(msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала."))
             return
         self._questions.pop(key, None)
         paths: list[str] = []
@@ -354,20 +364,23 @@ class ChannelManager(ChannelBus):
             if not asks:
                 self._asks.pop(key, None)
         if ok:
-            text = self.say("Allowed.", "已允许。") if approved else self.say("Denied.", "已拒绝。")
+            text = self.say("Allowed.", "已允许。", "Разрешила.") if approved else self.say("Denied.", "已拒绝。", "Запретила.")
         else:
-            text = self.say("That request is no longer waiting.", "这个请求已经不在等待了。")
+            text = self.say("That request is no longer waiting.", "这个请求已经不在等待了。", "Эта просьба уже не ждёт ответа.")
         await self._send(channel, chat_id, text)
 
     def pairing_text(self, code: str) -> str:
         name = self.muse_name
         return self.say(
-            f"This chat is not paired with {name} yet. Pairing code: {code}\n"
-            f"Approve it in the app under Settings → Chat apps, or run "
-            f"`nanomuse channels approve {code}`. The code is good for 10 minutes.",
-            f"这个聊天还没有和 {name} 配对。配对码：{code}\n"
-            f"在应用的「设置 → 聊天入口」里通过，或运行 `nanomuse channels approve {code}`。"
-            f"10 分钟内有效。",
+            f"Pairing code: {code}\n"
+            f"Approve it under Settings → Chat apps in the app, or run "
+            f"`nanomuse channels approve {code}` where {name} runs. The code lasts ten minutes.",
+            f"配对码：{code}\n"
+            f"在应用的「设置 → 聊天入口」里通过，或在 {name} 所在的机器上运行 "
+            f"`nanomuse channels approve {code}`。10 分钟内有效。",
+            f"Код для привязки: {code}\n"
+            f"Подтверди его в приложении, Настройки → Каналы, или выполни "
+            f"`nanomuse channels approve {code}` там, где работает {name}. Код живёт десять минут.",
         )
 
     # ------------------------------------------------------------------ outbound helpers
@@ -555,6 +568,7 @@ class ChannelManager(ChannelBus):
                         self.say(
                             f"{self.muse_name} asks: {question}\n(Reply here to answer.)",
                             f"{self.muse_name} 问：{question}\n（直接回复即可。）",
+                            f"{self.muse_name} спрашивает: {question}\n(Ответь здесь.)",
                         ),
                     )
             return
@@ -595,6 +609,7 @@ class ChannelManager(ChannelBus):
         return self.say(
             f"{self.muse_name} needs your OK: {summary}{why}\nReply allow / deny.",
             f"{self.muse_name} 需要你确认：{summary}{why}\n回复「允许」或「拒绝」。",
+            f"{self.muse_name} просит разрешение: {summary}{why}\nОтветь allow или deny.",
         )
 
     async def _ask(self, channel: str, chat_id: str, approval_id: str, text: str) -> None:
@@ -725,6 +740,7 @@ class ChannelManager(ChannelBus):
             self.say(
                 f"Paired. This chat is now {self.muse_name}. Say what you need.",
                 f"已配对。这里现在就是 {self.muse_name}，有事直接说。",
+                f"Привязала этот чат: здесь теперь {self.muse_name}. Пиши, что нужно.",
             ),
         )
         return entry
@@ -768,6 +784,7 @@ class ChannelManager(ChannelBus):
             self.say(
                 f"Test message from {self.muse_name}: this chat is connected.",
                 f"来自 {self.muse_name} 的测试消息：这个聊天已经连上了。",
+                f"Проверка от {self.muse_name}: этот чат подключён.",
             ),
         )
         return {"ok": True, "detail": f"Sent to {chat_id}."}

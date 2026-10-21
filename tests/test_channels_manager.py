@@ -401,3 +401,14 @@ def test_reload_picks_up_cli_edits(chan):
     assert client.post("/api/channels/reload").status_code == 200
     me = next(c for c in client.get("/api/channels").json()["channels"] if c["name"] == "fake")
     assert [p["sender_id"] for p in me["paired"]] == ["u5"]
+
+
+def test_a_russian_runtime_gets_russian_system_lines(chan):
+    _client, service, _llm, manager, fake = chan
+    service.settings.agent.language = "ru"
+    pairing = manager.pairing_text("ABC234")
+    assert "Код для привязки: ABC234" in pairing
+    assert "配对码" not in pairing and "Pairing code" not in pairing
+    # a line with no Russian wording yet falls back to English, never to Chinese
+    assert manager.say("Passed on.", "已转达。") == "Passed on."
+    assert manager.say("Passed on.", "已转达。", "Передала.") == "Передала."
