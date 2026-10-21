@@ -608,11 +608,19 @@ test('C9: presence — the turn’s start and end are told after the push, once,
   assert.equal(relay.calls.filter((c) => c === 'POST /v1/sync/working').length, 2)
   assert.equal(e.error, '')
   relay.refuseWorking = false
-  // a session that does not sync tells nothing
+  // a task session syncs the person's own words (the answer already travels as the call's
+  // result), so it tells its working line like any other chat
   sessions.add('task-1', 'Task', [{ id: 'u9', role: 'user', text: 'x', at: 1 }])
   e.messageSent('task-1')
   await tick(30)
-  assert.equal(relay.calls.filter((c) => c === 'POST /v1/sync/working').length, 2)
+  assert.equal(relay.calls.filter((c) => c === 'POST /v1/sync/working').length, 3)
+  // a session of this device that is not the main chat and has side chats off tells nothing
+  const quiet = engine(relay, sessions, { sideChats: false, state: { ...emptyState(), sideChats: false, mainSession: 's-main' } })
+  await quiet.engine.accountChanged('acct-1')
+  const beforeQuiet = relay.calls.filter((c) => c === 'POST /v1/sync/working').length
+  quiet.engine.messageSent('s-local')
+  await tick(30)
+  assert.equal(relay.calls.filter((c) => c === 'POST /v1/sync/working').length, beforeQuiet)
   // the phone works on the main conversation: the line under its last prompt, the view moved
   const now = Math.floor(Date.now() / 1000)
   const before = changes()
@@ -729,7 +737,8 @@ test('C10: a session joins the account on its first push or pull; another accoun
   assert.ok(pulledSid)
   assert.equal(e.state.owners[pulledSid], 'acct-a')
   assert.deepEqual(e.view().foreign, [])
-  assert.deepEqual(new Set(e.view().sessions), new Set(['s-a', 's-local', pulledSid]))
+  // a task session's own words go up, so it is one of A's chats like any other
+  assert.deepEqual(new Set(e.view().sessions), new Set(['s-a', 's-local', pulledSid, 'task-1']))
   const aCids = { ...e.state.cids }
   const aMids = { ...e.state.mids }
   // the phone works on A's conversation: a working line
@@ -755,7 +764,7 @@ test('C10: a session joins the account on its first push or pull; another accoun
   assert.deepEqual(e.state.mids, aMids)
   assert.equal(e.state.mainSession, '')
   // A's sessions are hidden, not deleted; B owns nothing yet
-  assert.deepEqual(new Set(e.view().foreign), new Set(['s-a', 's-local', pulledSid]))
+  assert.deepEqual(new Set(e.view().foreign), new Set(['s-a', 's-local', pulledSid, 'task-1']))
   assert.deepEqual(e.view().sessions, [])
   assert.equal(e.owns('s-a'), false)
   assert.equal(await e.setMain('s-a'), '')
