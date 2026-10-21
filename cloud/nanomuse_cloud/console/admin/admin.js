@@ -17,10 +17,22 @@
 (() => {
   "use strict";
 
-  const zh = (navigator.language || "").toLowerCase().startsWith("zh");
-  document.documentElement.lang = zh ? "zh-CN" : "en"; // the markup says zh-CN; the page follows the browser
+  // Three languages: zh and en are written out in full, ru rides on top of en.
+  // The browser's language picks one; ?lang=zh|en|ru in the address overrides it and sticks for the tab.
+  const LANG = (() => {
+    const ok = (v) => ["zh", "en", "ru"].includes(v);
+    const ask = new URLSearchParams(location.search).get("lang");
+    const saved = sessionStorage.getItem("nm.admin.lang");
+    const l = (navigator.language || "").toLowerCase();
+    const pick = ok(ask) ? ask : ok(saved) ? saved : l.startsWith("zh") ? "zh" : l.startsWith("ru") ? "ru" : "en";
+    if (pick !== saved) { try { sessionStorage.setItem("nm.admin.lang", pick); } catch (_) { /* private mode */ } }
+    return pick;
+  })();
+  document.documentElement.lang = { zh: "zh-CN", en: "en", ru: "ru-RU" }[LANG] || "en"; // the markup says zh-CN; the page follows the browser
+  const localeTag = { zh: "zh-CN", ru: "ru-RU" }[LANG]; // for toLocaleString; undefined keeps the browser's English dates
   const fmt = (n) => Number(n || 0).toLocaleString();
-  const T = zh ? {
+  const dataText = (o, k) => (LANG === "zh" ? o[`${k}_zh`] : o[k]) || o[k]; // server rows carry a field and its _zh twin; every other language reads the base field
+  const T_ZH = {
     title: "nanoMuse Cloud 后台", tokenLabel: "管理口令", tokenHint: "中继 .env 里 CLOUD_ADMIN_TOKEN 的值；只留在这个标签页里。",
     enter: "进入", wrong: "口令不对。", offline: "连不上服务器。", refresh: "刷新", lock: "锁定", loading: "加载中…",
     today: "今天", week: "最近 7 天", period: (d) => `最近 ${d} 天`,
@@ -162,7 +174,11 @@
     dPerDay: "每天的体验次数", dReasons: "结束原因", dReason: { idle: "闲置超时", "time is up": "到时", "ended by the visitor": "访客自己结束", "gateway stopping": "网关重启", "failed to start": "没启动起来" }, dPlaces: "访客地区", dAll: "全部", dRunning: "进行中", dSigned: "已登录", dAnon: "未登录", dByokOnly: "自带 key",
     cSearch: "搜索模型…", cOnlyVision: "只看能看图的",
     hOk: "一切正常", hProblems: "需要看一下", hInFlight: "在飞的请求", hInFlightSub: (a, l) => `${fmt(a)} 个账号 · ${l > 0 ? `每账号最多 ${l}` : "不限"}`, hHub: "设备通道", hOnline: "在线连接", hAccountsOnline: "在线账号", hPending: "等回复的调用", hDropped: "丢掉的帧", hFlood: "因刷屏断开", hLastHour: "最近一小时", hRequests: "请求", hUpstreamErrors: "上游错误", hContentRejected: "内容审核未放行", hRefused: "超额被拒", hSignIns: "登录", hFailures: "登录失败", hDb: "数据库", hWritable: "可写", hNotWritable: "不可写", hUpstream: "上游 key", hHave: "已配置", hMissing: "没有", hServerTime: "服务器时间", hAuto: "每 30 秒自动刷新", hNote: "同一份数据，服务器上的自检定时器每 10 分钟也读一次（journalctl -t nanomuse-selfcheck）；问题持续时按配置的 ALERT_URL 通知。",
-  } : {
+    cut: "已截断", poolTotal: "总额", nSignIns: (n) => "个登录", agoNow: "刚刚", agoMin: (n) => `${n} 分钟前`, agoHour: (n) => `${n} 小时前`, agoDay: (n) => `${n} 天前`,
+  };
+
+  // English is the base every language starts from; a block below may translate only part of it.
+  const T_EN = {
     title: "nanoMuse Cloud admin", tokenLabel: "Admin token", tokenHint: "The value of CLOUD_ADMIN_TOKEN in the relay's .env; it stays in this tab only.",
     enter: "Open", wrong: "That token is not right.", offline: "Cannot reach the server.", refresh: "Refresh", lock: "Lock", loading: "Loading…",
     today: "Today", week: "Last 7 days", period: (d) => `Last ${d} days`,
@@ -295,21 +311,169 @@
     dPerDay: "Demos a day", dReasons: "Ended because", dReason: { idle: "idle", "time is up": "time was up", "ended by the visitor": "visitor ended it", "gateway stopping": "gateway restarted", "failed to start": "failed to start" }, dPlaces: "Visitors by place", dAll: "All", dRunning: "Running", dSigned: "Signed in", dAnon: "Not signed in", dByokOnly: "Own key",
     cSearch: "Search models…", cOnlyVision: "Only ones that see pictures",
     hOk: "All well", hProblems: "Needs a look", hInFlight: "Requests under way", hInFlightSub: (a, l) => `${fmt(a)} accounts · ${l > 0 ? `${l} per account at most` : "no limit"}`, hHub: "Device hub", hOnline: "Connections", hAccountsOnline: "Accounts online", hPending: "Calls awaiting a reply", hDropped: "Frames dropped", hFlood: "Closed for flooding", hLastHour: "Last hour", hRequests: "Requests", hUpstreamErrors: "Upstream errors", hContentRejected: "Content check declined", hRefused: "Refused: over budget", hSignIns: "Sign-ins", hFailures: "Failed sign-ins", hDb: "Database", hWritable: "writable", hNotWritable: "not writable", hUpstream: "Upstream key", hHave: "set", hMissing: "missing", hServerTime: "Server time", hAuto: "refreshes every 30 s", hNote: "The self-check timer on the server reads the same figures every ten minutes (journalctl -t nanomuse-selfcheck); a problem that stays goes to ALERT_URL when one is set.",
+    cut: "cut", poolTotal: "total", nSignIns: (n) => "sign-ins", agoNow: "just now", agoMin: (n) => `${n} min ago`, agoHour: (n) => `${n} h ago`, agoDay: (n) => `${n} d ago`,
   };
+
+  // Russian rides on the English base: deep-merged over it, so a key left out here falls back to English.
+  const mergeT = (base, over) => {
+    const out = { ...base };
+    for (const k of Object.keys(over)) {
+      const b = out[k], o = over[k];
+      out[k] = b && o && typeof b === "object" && typeof o === "object" ? mergeT(b, o) : o;
+    }
+    return out;
+  };
+  const T_RU = {
+    title: "nanoMuse Cloud — админка", tokenLabel: "Админ-токен", tokenHint: "Значение CLOUD_ADMIN_TOKEN из .env релея; остаётся только в этой вкладке.",
+    enter: "Открыть", wrong: "Токен неверный.", offline: "офлайн", refresh: "Обновить", lock: "Заблокировать", loading: "Загрузка…",
+    today: "Сегодня", week: "За 7 дней", period: (d) => `За ${d} дн.`,
+    kSamples: "Сохранённые реплики", kSamplesSub: (n) => `${n} аккаунтов с включённой «Помогать улучшать модели»`, exportSamples: "Экспорт JSONL", exportFailed: (why) => `Экспорт не прошёл: ${why}. Попробуйте ещё раз; если повторится, смотрите docker logs nanomuse-relay на сервере.`, exportCut: "загрузка оборвалась", exportEmpty: "Пока нечего экспортировать.", contributes: "участвует в улучшении", samples: "Сохранённые диалоги (последние)", samplesNote: "Хранится только для аккаунтов с включённым «Помогать улучшать модели»: что написал человек, что ответила модель и какие инструменты вызвала; без системного промпта, результатов инструментов и картинок; в экспорте нет id аккаунтов.", user: "пользователь", assistant: "ответ", more: "Показать ещё", noSamples: "Пока нет",
+    kAccounts: "Аккаунты", kAccountsSub: (c) => `${c.with_password || 0} с паролем · ${c.unlimited || 0} участников · ${c.disabled || 0} отключено`,
+    kActive: "Активные аккаунты", kActiveSub: (n) => `${n} новых`, kSpent: "Потрачено", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
+    kOnline: "Устройств онлайн", kOnlineSub: (k, s) => `${k} запомненных · ${s} живых входов`, kSignals: "События за сегодня",
+    kSignalsSub: (s) => `${s.sign_ins} входов · ${s.sign_in_failures} неудачных · ${s.budget_refusals} сверх лимита · ${s.upstream_errors} ошибок провайдера · ${s.content_rejected} отклонено проверкой контента · ${s.calls} звонков`,
+    byKind: "По типу", byModel: "По модели", byDay: (d) => `Расход по дням · за ${d} дн.`, top: (d) => `Крупнейшие плательщики · за ${d} дн.`, events: "Активность", accounts: "Все аккаунты", config: "Конфигурация",
+    kinds: { chat: "Чат", image: "Картинки", video: "Видео", realtime: "Звонки", grant: "Начисление токенов", credit: "Кредит" },
+    lanes: { chat: "чат", gui: "руки" }, laneDefault: (l) => `${l} по умолчанию`, laneTitle: (l) => `предлагается в выборе «${l}»`, laneDefaultTitle: (l) => `выбор «${l}» по умолчанию`,
+    thWho: "Аккаунт", thJoined: "Создан", thSpent: "Потрачено всего / за сегодня", thTokens: "Токены всего / за сегодня", thReqs: "Запросы", thActive: "Последняя активность", thDevices: "Устройства",
+    never: "никогда", phone: "телефон", email: "e-mail", disabled: "отключён", locked: "заблокирован", member: "участник", listed: "в списке", review: "ревью", reviewNote: "вход проверяющего из магазина приложений (REVIEW_ADDRESSES): фиксированный код, в счёт регистраций не входит", password: "пароль", noAccounts: "Ещё никто не входил.", search: "Номер, e-mail, id, адрес, устройство, версия, пригласивший…",
+    reqs: (n) => `${fmt(n)} зап.`, tokens: (n) => `${fmt(n)} токенов`, seconds: (n) => `${fmt(n)} с`, pictures: (n) => `${fmt(n)} карт.`, inOut: (i, o) => `${fmt(i)} вх. · ${fmt(o)} исх.`,
+    all: "Все", signIns: "Входы", refusals: "Отказы", errors: "Ошибки", contentChecks: "Проверки контента", calls: "Звонки", passwords: "Пароли",
+    eventName: {
+      "account.created": "Регистрация", "sign_in.code": "Вход по коду", "sign_in.password": "Вход по паролю", "sign_in.session": "Получен ключ сессии", "sign_in.failed": "Неудачный вход", "password.set": "Пароль задан", "password.changed": "Пароль изменён",
+      "password.cleared": "Пароль удалён", "sign_out": "Выход", "sign_out.all": "Выход на всех устройствах", "pool.set": "Пул задан", "pool.set.many": "Пулы заданы", "budget.refused": "Отказ: сверх лимита", "upstream.error": "Ошибка провайдера", "content.rejected": "Отклонено проверкой контента", "call.ended": "Звонок завершён", "contribute.on": "«Help improve» включено", "contribute.default": "Новый аккаунт: «help improve» включено по умолчанию", "contribute.bonus": "Бонус раннего соавторства +¥10", "contribute.off": "«Help improve» выключено", "contribute.deleted": "Сохранённые реплики удалены", "invite.accepted": "Пригласил друга", "invite.used": "Регистрация по приглашению", "invite.unknown": "Неизвестный код приглашения", "invite.settled": "Бонус за приглашение выплачен", "invite.clawback": "Кредит за приглашение возвращён", "signup.domain_limited": "Домен упёрся в лимит регистраций", "credit.granted": "Кредит начислен", "grant.tokens": "Начисление токенов скорректировано", "account.disabled": "Аккаунт отключён", "account.enabled": "Аккаунт включён", "account.deleted": "Аккаунт удалён", "member.set": "Назначен участником", "member.unset": "Участие снято", "profile.put": "Профиль обновлён", "profile.clear": "Профиль очищен", "profile.connectors": "Коннекторы обновлены", "settings.changed": "Настройки изменены", "nudges.changed": "Политика просьб о звезде изменена", "control.switch": "Переключатель переброшен", "control.rule": "Сработало пороговое правило",
+    },
+    spendToday: "Сегодня", spendTotal: "Всего", requests: "Запросы", cap: "Пул", noCap: "без лимита", left: "осталось", usageToday: "Сегодня", usagePeriod: (d) => `За ${d} дн.`, usageTotal: "Всё время",
+    sessions: "Входы (вкл. отозванные)", revoked: "отозван", via: { code: "код", password: "пароль", session: "ключ сессии" }, lastUsed: "посл. использование", devices: "Устройства", firstSeen: "первый", lastSeen: "последний",
+    ledger: "Все запросы", timeline: "Хронология", lgCredits: "Кредиты", lgSearch: "Поиск: модель / заметка…", tlSearch: "Поиск: деталь / тип…", noRequestsYet: "Этот аккаунт ещё не делал запросов.", none: "—", online: "онлайн", version: "Версия",
+    thClient: "Клиент / IP", addresses: "Адреса / IP", addrNote: "Адрес, записываемый при входах, каждом запросе и каждом событии (настоящий — тот, что за Caddy). Нажмите на адрес, чтобы увидеть все аккаунты, замеченные с него.", addrOnly: "только этот аккаунт", addrShared: (n) => `${n} других аккаунтов приходили с этого адреса`,
+    atAddress: (ip) => `Аккаунты, замеченные с ${ip}`, back: "Назад к аккаунту", times: (n) => `${fmt(n)}×`, firstIp: "Первый адрес", lastIp: "Последний адрес", lastClient: "Последний клиент", lastSeenAt: "Последний раз",
+    shown: (n, total) => `показано ${fmt(n)} из ${fmt(total)}`, allShown: (total) => `все ${fmt(total)} показаны`, loadMore: "Загрузить ещё", feedLoaded: (n) => `${fmt(n)} загружено`,
+    samplesAll: "Сохранённые диалоги", exportThis: "Экспортировать JSONL этого аккаунта", expand: "Развернуть весь диалог", collapse: "Свернуть", roles: { system: "system", user: "user", assistant: "ответ", tool: "результат инструмента" }, toolCall: "вызов инструмента", omitted: "(не сохранено)", lengthNote: (n) => `${fmt(n)} сообщений`,
+    byAccount: "По аккаунтам", bSearch: "Поиск: аккаунт / модель…", bHint: "Аккаунт", bTurns: "Реплики", bTokens: "Токены вх. / исх.", bFirst: "Первый", bLast: "Последний", bModels: "Модели", bSwitch: "Переключали", bOn: "вкл", bOff: "выкл", noByAccount: "Ни один аккаунт ещё не сохранял реплики.",
+    demo: (d) => `Телефон в браузере (demo.nanomuse.dev) · за ${d} дн.`, demoOff: "Не подключено: задайте SHOWCASE_ADMIN_TOKEN на шлюзе, а WEB_ADMIN_URL (…/api/demo/admin) с WEB_ADMIN_TOKEN — на релее.", demoVisitors: "Посетители", demoVisits: "Демо", demoActive: "Идут сейчас", demoNoSignin: "без входа", demoCreated: "зарегистрировался здесь",
+    dvHint: "Посетитель", dvSearch: "Поиск посетителей…", dvSignins: "Входы", dvSessions: "Демо", dvFirst: "Первый", dvLast: "Последний", dvClient: "Клиент / IP", dvNone: "Никто ещё не пробовал.", dtWhen: "Начало", dtLength: "Длина", dtUsed: "Израсходовано", dtWhy: "Чем закончилось", dtRunning: "идёт", dtByok: "свой ключ", dtAnon: "без входа",
+    usedLine: (v) => [`${fmt(v.requests)} зап.`, `${fmt(v.tokens)} токенов`, v.pictures ? `${fmt(v.pictures)} карт.` : "", v.clips ? `${fmt(v.clips)} клипов` : ""].filter(Boolean).join(" · "), dur: (s) => (s < 60 ? `${Math.round(s)} с` : s < 3600 ? `${Math.round(s / 60)} мин` : `${(s / 3600).toFixed(1)} ч`),
+    demoOfAccount: "Телефон в браузере", demoAccountLine: (v) => `${fmt(v.signins)} входов · ${fmt(v.sessions)} демо · первый ${when(v.first_seen)} · последний ${when(v.last_seen)}${v.created ? " · аккаунт создан на демо-странице" : ""}`, demoNoneHere: "Этот аккаунт не пробовал демо.",
+    recorded: "Что записывается", recordedNote: "По аккаунту: телефон / e-mail (зашифрованы), дата создания и последний показ, первый и последний адрес, последний клиент (платформа, версия); по входу: имя устройства, способ входа, адрес, клиент; по запросу: модель, токены, стоимость, адрес, клиент; по событию: тип, адрес, клиент; по устройству: имя, ОС, версия, адрес. У аккаунтов с включённым «help improve» хранится ещё и текст реплик. Всё это уходит вместе с аккаунтом при удалении.",
+    grant: "Начислить токены", grantPrompt: (who) => `Сколько токенов для ${who}? Отрицательное число — отнять.`, credit: "Начислить кредит", creditPrompt: (who) => `Сколько юаней для ${who}? Отрицательное — отнять. (сразу в пул; не сгорает)`, creditNote: "Заметка (например, PR #12)", setPool: "Задать пул", setPoolPrompt: (who, left) => `Каким задать пул ${who}? Сейчас осталось ${left}.\nПишите: =5 → осталось ¥5; total=20 → пул ¥20; +3 / -2 → на ¥3 больше / на ¥2 меньше.`, setPoolMany: (n) => `Задать пул этим ${n}`, setPoolManyPrompt: (n) => `Задать пул ${n} показанным аккаунтам.\nПишите: =5 → каждому осталось ¥5; total=20 → каждому пул ¥20; +3 / -2 → каждому на ¥3 больше / на ¥2 меньше. Участников не трогает.`, setPoolManyConfirm: (w, n) => `«${w}» для ${n} аккаунтов?`, setPoolDone: (n) => `Пулов задано: ${n}.`, poolBad: "Не понято. Пишите =5, total=20, +3 или -2.", poolLine: (g, l, n, b) => `пул ${g}${l === null ? "" : ` (осталось ${l})`} · приглашено ${n}${b ? " · взял бонус раннего соавторства" : ""}`, invitedBy: "пригласил", disable: "Отключить", enable: "Включить", makeMember: "Сделать участником", unmakeMember: "Снять участие",
+    memberConfirm: (who) => `Сделать ${who} участником? У участников нет лимита расхода; счёт платите вы.`, listedNote: "в списке сервера; чтобы убрать, правьте ALLOWED_IDENTIFIERS",
+    disableConfirm: (who) => `Отключить ${who}? Все его устройства отключатся немедленно и больше не смогут войти.`, remove: "Удалить аккаунт",
+    removeConfirm: (who) => `Удалить аккаунт, ключи, статистику и устройства ${who}? Это необратимо.`, hasPassword: "есть пароль", noPassword: "нет пароля", identifierNote: "расшифровывается только для этого просмотра",
+    allowed: "Участники (без лимита)", allowedNone: "(нет)", sender: "Отправитель кода", models: "Модели", prices: "Цены (¥)", rate: "Курс", rateLine: (r) => `1 USD = ${r} CNY (только для показа)`,
+    perMinute: (n) => (n > 0 ? `${n} в минуту` : "без лимита частоты"), capLine: (c, u, b) => (c > 0 ? `¥${c} (≈ $${u}) всего для не-участников · +¥${b} за приглашение, обеим сторонам` : "лимита расхода нет"), signupOpen: "регистрация открыта", signupClosed: "только участники",
+    realtime: "Звонки в реальном времени", on: "вкл", off: "выкл", pwMin: (n) => `пароли от ${n} символов`,
+    rtTitle: "Баланс (действует сразу)", rtNote: "Меняйте здесь — все клиенты подхватят сразу: новые регистрации получают новый баланс, а страницы аккаунтов, страницы входа и уведомление об исчерпании читают цифры сервера; релиз не нужен, никому ничего делать не надо. Пустое поле возвращает значение из окружения. Меньшая цифра меняет лишь то, что получают новые аккаунты; из чьего-либо пула ничего не вычитается.",
+    rtAllowance: "Бесплатный баланс каждому новому аккаунту (¥)", rtBonus: "Бонус за приглашение (¥, обеим сторонам)", rtUsdCny: "Курс: ¥ за $1", rtRub: "Мой курс доллара (₽ за $1; 0 = без рублей)", rtFee: "Комиссия при пополнении (%)", rtSignup: "Регистрация открыта", rtSignupOff: "Закрыта: входить могут только участники и список; уже вошедшие не затронуты.",
+    rtEnv: (v) => `окружение: ${v}`, rtSet: "задано здесь", rtSave: "Сохранить", rtSaved: "Сохранено и действует.", rtApply: (n) => `Довести баланс ${n} ${n % 10 === 1 && n % 100 !== 11 ? "старого аккаунта" : "старых аккаунтов"} до текущего уровня`, rtApplyNone: "У всех аккаунтов баланс не ниже текущего.",
+    rtApplyConfirm: (n, c) => `Пополнить ${n} аккаунт(ов), получивших меньше ¥${c}? Каждому добавится строка в книге.`, rtApplied: (n) => `Пополнено аккаунтов: ${n}.`,
+    rtCreditAll: "Начислить всем", rtCreditAllPrompt: "Сколько юаней в пул каждого аккаунта с лимитом? Отрицательное — отнять. (праздник, извинение; участников не касается)", rtSetAll: "Задать пул всем", rtSetAllPrompt: (n) => `Задать пул всем ${n} аккаунтам с лимитом.\nПишите: =5 → каждому осталось ¥5; total=20 → каждому пул ¥20; +3 / -2 → каждому на ¥3 больше / на ¥2 меньше.`, rtCreditAllConfirm: (c, n) => `¥${c} каждому из ${n} аккаунтов?`, rtCredited: (n) => `Начислено аккаунтов: ${n}.`,
+    ndTitle: "Просьбы о звезде (действуют сразу)", ndNote: "Когда приложения могут просить звезду на GitHub. Каждый клиент (Android, iPhone, десктоп, веб) читает это раз в день, а при недоступности релея возвращается к встроенным значениям. Меняйте здесь; релиз не нужен. «Не сейчас» считается просьбой; устройство, дошедшее до GitHub, больше не спрашивают.",
+    ndEnabled: "Просьбы включены", ndEnabledOff: "Выключено: просьб нет вовсе; строки «Star on GitHub» в настройках остаются.", ndMoments: "Моменты", ndSignedIn: "Впервые замечен входом (строка на странице аккаунта)", ndNewLook: "После отрисовки нового лица", ndExhausted: "Когда бесплатный баланс исчерпан (строка в карточке включённого)", ndGoalDone: "Когда цель отмечена выполненной",
+    ndTasks: "После задачи №", ndTasksHint: "Через запятую, например 3, 10, 30. Задача — реплика, начатая человеком и закончившаяся ответом; диалог именования и фоновые запуски не считаются.", ndDays: "В день использования №", ndDaysHint: "Через запятую, например 7, 30: n-й отдельный день открытия приложения.",
+    ndCooldown: "Дней между двумя просьбами, не меньше", ndMax: "Просьб на устройство, не больше", ndUrl: "Ссылка",
+    ndTextEn: "Текст карточки (English)", ndTextZh: "Текст карточки (中文)", ndTextHint: "Пусто: каждое приложение покажет своё предложение. Не больше 200 символов.", ndTextLeft: (n) => `осталось ${n} симв.`, ndSave: "Сохранить", ndReset: "Вернуть значения по умолчанию", ndResetConfirm: "Вернуть встроенные значения? Клиенты подхватят в течение суток.", ndSaved: "Сохранено; клиенты подхватят в течение суток.", ndResetDone: "Возвращено к значениям по умолчанию.",
+    ndVersion: (v, t) => (t ? `версия ${v} · сохранено ${t}` : `версия ${v} · встроенные значения`), ndStored: "задано здесь", ndDefault: "встроенные значения",
+    priceLine: (p) => [p.per_m_input || p.per_m_output ? `${p.per_m_input} вх. / ${p.per_m_output} исх. за 1 млн токенов` : null,
+      p.per_image ? `${p.per_image} за картинку${p.per_image_2k ? ` (${p.per_image_2k} при 2k)` : ""}` : null, p.per_second ? `${p.per_second} за секунду` : null].filter(Boolean).join("; "),
+    foot: "Телефон или адрес расшифровывается только когда вы открываете этот аккаунт, с админ-токеном; в базе лежит шифротекст. Сетевые адреса и клиент записываются при каждом входе, запросе и событии и уходят вместе с аккаунтом при удалении. Текст чата хранится только пока у аккаунта включено «Help improve nanoMuse's AI models», и лишь то, что написал человек, что ответила модель и какие инструменты вызвала (см. «Данные»). Не делитесь скриншотами этой страницы. Деньги считаются по пекинским прейскурантам провайдера.",
+    trends: (d) => `Аккаунты · за ${d} дн.`, site: (d) => `Сайт: визиты и загрузки · за ${d} дн.`, siteOff: "Цифр по трафику ещё нет: поставьте на сервер nanomuse-traffic (demo/showcase/mirror/traffic.py) и направьте TRAFFIC_DB релея на его базу.",
+    siteUpdated: (t) => `обновлено ${t}`, siteNote: "Из журнала доступа Caddy (хранится семь дней): подсчёт по дням; посетитель — хэш адреса и браузера под солью, своей на каждый день. Адреса не хранятся.",
+    sPages: "Просмотры страниц", sVisitors: "Посетители", sBots: "Краулеры / мониторы", sMirror: "Загрузки с зеркала", sGithub: "Загрузки с GitHub", sStars: "Звёзды", sPeriod: "за период", sDelta: (n) => (n > 0 ? `+${fmt(n)} за период` : n < 0 ? `${fmt(n)} за период` : "без изменений за период"),
+    sFiles: "Скачанные файлы", sMirrorCol: "зеркало", sGithubCol: "GitHub, всё время", sRefs: "Сайты-источники", sTop: "Страницы", sNone: "Пока ничего", sSince: (d) => `с ${d}`,
+    mSignIns: "Входы", mNew: "Новые аккаунты", mActive: "Активные аккаунты", mInvites: "Пришли по приглашению", mContribute: "Включили «help improve»", mCalls: "Звонки", mRefused: "Отказы: сверх лимита", mErrors: "Ошибки провайдера", mContentRejected: "Отклонено проверкой контента",
+    devKinds: { phone: "телефоны", computer: "компьютеры", web: "веб" }, invitesTitle: "Приглашения", invitesLine: (f) => `${fmt(f.with_code)} сделали код приглашения · ${fmt(f.inviters)} привели кого-то · ${fmt(f.invited)} пришли по коду`,
+    data: (d) => `Данные · за ${d} дн.`, dOn: "Аккаунты с включённым «help improve»", dOnSub: (on, total) => `${fmt(total)} аккаунтов · ${fmt(on)} вкл · ${fmt(Math.max(0, total - on))} выкл`, dOff: "Кто выключал", dOffSub: "когда-либо отключали сами", dTurns: "Сохранённые реплики", dTurnsSub: (all, acc) => `${fmt(all)} всего · от ${fmt(acc)} аккаунтов`, dTokens: "Токены в сохранённых репликах", dTokensSub: (i, o) => `${fmt(i)} вх. · ${fmt(o)} исх.`, dDefault: (on) => (on ? "Новые аккаунты получают его включённым (IMPROVE_DEFAULT=1)" : "Новые аккаунты получают его выключенным (IMPROVE_DEFAULT=0)"), dKeeps: (k) => `Сохраняется: ${k.kept.join(", ")}. Не сохраняется: ${k.not_kept.join(", ")}.`,
+    syTitle: "Синхронизация диалогов", syOn: "Аккаунты с включённой синхронизацией", syOnSub: (off) => `${fmt(off)} выключили`, syWith: "Аккаунты с синхронизированными данными", syConvs: "Диалоги", syMsgs: "Сообщения", syMsgsSub: (limit) => `не больше ${fmt(limit)} на аккаунт`, syBytes: "Объём текста", syNote: "0.19: текст диалогов, синхронизируемых между устройствами аккаунта. Только тексты пользователя и ассистента и имена с размерами вложений; без файлов и картинок. Здесь показаны только итоги, никогда не сам текст; релей удаляет сразу, когда переключатель выключают или человек просит.",
+    mTurns: "Сохранённые реплики", mTurnAccounts: "Аккаунты с сохранёнными репликами", mOn: "Включили", mDefaultOn: "Включено по умолчанию (новые аккаунты)", mOff: "Выключили", mDeleted: "Удалено", dModels: "По моделям", dApps: "По приложениям", dRecent: "Новейшие сохранённые реплики (все — в карточке аккаунта)", dPlatforms: { android: "Android", windows: "рантайм на Windows", macos: "рантайм на macOS", linux: "рантайм на Linux", runtime: "рантайм", browser: "браузер", other: "другое" },
+    webTitle: "nanoMuse Web (nanomuse.cn/web)", webLine: (w) => (w ? `${fmt(w.accounts)} аккаунтов со своим Muse (лимит ${fmt(w.max_accounts)}) · ${fmt(w.running)} запущено (лимит ${fmt(w.max_running)})` : "Не подключено: направьте WEB_INFO_URL релея на /api/web/info шлюза."), webOff: "nanoMuse Web выключен",
+    places: (d) => `Откуда · за ${d} дн.`, placesNote: "Угадывается по адресу (офлайн-база ip2region: до города в Китае, страна / штат в остальном мире); третьих лиц не спрашиваем. Это точка сетевого выхода; мобильный интернет и прокси искажают картину.", placesOff: "Базы локаций пока нет: релей после старта скачивает ip2region_v4.xdb (около 11 МБ) в свой каталог данных; CLOUD_GEOIP=0 это отключает.", placesFetching: "Скачиваем базу локаций…", placesError: (e) => `Не удалось скачать базу локаций: ${e}`,
+    pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
+    catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
+    cModel: "Модель", cKind: "Тип", cSees: "Видит картинки", cVerified: "Проверена", cYes: "да", cNo: "нет", cUnusable: "Модели, от которых отказывается провайдер (приложениям не предлагаются)", cNoUnusable: "Таких нет.", cCount: (n, v) => `${fmt(n)} чат-моделей · ${fmt(v)} видят картинки`,
+    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки" },
+    ctl: {
+      title: "Управление", note: "Каждый переключатель действует сразу и переживает перезапуск; кто, что и когда менял — в журнале ниже. Перед переключением переключатель точно описывает, что отключит.",
+      names: { free_allowance: "Бесплатный баланс", signups: "Регистрации", cloud_service: "Облачный сервис", sync: "Синхронизация диалогов", hub: "Хаб устройств" },
+      what: {
+        free_allowance: "Выкл: аккаунту с лимитом без собственного ключа модели отказывают в моделях (HTTP 429, код allowance_exhausted с paused: true и сообщение, что баланс приостановлен). Участников не касается; вход, устройства и синхронизация работают.",
+        signups: "Выкл: номеру телефона или адресу без аккаунта отказывают в коде и во входе (HTTP 403, код signup_closed). Существующие аккаунты входят и работают как раньше.",
+        cloud_service: "Выкл: каждый вызов API, кроме проверки здоровья, /v1/config и этой консоли, отвечает HTTP 503 (код service_paused); все сокеты хаба закрыты (4003 hub_paused). Ничего не удаляется.",
+        sync: "Выкл: синхронизация диалогов (push и pull) отвечает HTTP 503 (код sync_paused); сохранённое остаётся, каждое устройство работает само.",
+        hub: "Выкл: хаб устройств отклоняет новые сокеты и закрывает открытые (4003 hub_paused); /v1/devices отвечает 503. Каждое устройство работает само.",
+      },
+      confirm: (name, on, what) => `${on ? `Включить «${name}»?` : `Выключить «${name}»?`}\n\n${on ? "Всё, чем оно управляет, снова заработает." : what}`,
+      actor: "Ваше имя", actorHint: "для журнала аудита", why: "Причина (необязательно)", byLine: (who, t) => `${who} · ${t}`,
+      rules: "Пороги", rulesNote: "Когда число аккаунтов достигает N, сделать одно дело. Правило срабатывает один раз (проверяется при создании аккаунта и раз в минуту); «перезарядить» позволяет сработать снова.",
+      rThreshold: "Аккаунтов достигло", rAction: "Действие", rEnabled: "Включено", rLastFired: "Сработало", rNote: "Заметка", rAdd: "Добавить правило", rRearm: "Перезарядить", rDelete: "Удалить", rNever: "ещё ни разу", rFiredAt: (n, t) => `${t} · тогда аккаунтов: ${fmt(n)}`,
+      rDeleteConfirm: "Удалить это правило?", rNow: (n) => `сейчас ${fmt(n)} аккаунтов`, rNext: (n) => `следующий порог ${fmt(n)}`, rNone: "Правил пока нет", rCheck: "Проверить сейчас",
+      actions: { close_signups: "Закрыть регистрации", pause_allowance: "Приостановить бесплатный баланс", pause_sync: "Приостановить синхронизацию диалогов", notify: "Написать админу" },
+      notifyOk: "Уведомления настроены (ADMIN_EMAIL + SMTP)", notifyNo: "Уведомления не настроены: задайте ADMIN_EMAIL и SMTP_HOST / SMTP_FROM в окружении", notifyTest: "Отправить тестовое", notifySent: "отправлено", notifyFailed: "не отправлено (см. журнал)",
+      audit: "Журнал аудита", aWhen: "Когда", aWho: "Кто", aWhat: "Что", aTarget: "Цель", aDetail: "Детали", aNone: "Пока ничего",
+      strip: (off) => (off.length ? `Выкл: ${off.join(", ")}` : "Все переключатели включены"), stripNext: (n, total) => `${fmt(total)} аккаунтов · следующий порог ${fmt(n)}`,
+      saved: "Сохранено", failed: (e) => `Не получилось: ${e}`, closed: (n) => `сокетов закрыто: ${fmt(n)}`, turnOn: "Включить", turnOff: "Выключить",
+    },
+    st: {
+      title: "Статистика", note: "У каждой цифры написано, как она считается (наведите на ⓘ). Дни по UTC; рядом в таблице ваша локальная дата. У каждой диаграммы есть таблица и CSV.",
+      csv: "Скачать CSV", how: "Как считается", rows: (n) => `${fmt(n)} строк`, none: "Пока ничего", utc: "UTC", local: "местное",
+      showTable: "Таблица", hideTable: "Скрыть таблицу", generated: (t) => `составлено ${t}`,
+    },
+    gh: {
+      title: "GitHub", refresh: "Обновить сейчас", refreshing: "Читаем…", lastOk: (t) => `последнее чтение ${t}`, never: "ещё не читалось", error: (e) => `последняя попытка не удалась: ${e}`, off: "Репозиторий не задан: укажите GITHUB_REPO (owner/name) или REPO_URL в окружении",
+      stars: "Звёзды", forks: "Форки", watchers: "Наблюдатели", issues: "Открытые issues", downloads: "Загрузки", newStars: "Новые звёзды", newDownloads: "Новые загрузки", assets: "Загрузки по файлам", platforms: "По платформам", releases: "По релизам", token: "с GITHUB_TOKEN", noToken: "без токена (60 запросов в час, хватает)",
+      note: "Читается раз в день (при старте и далее каждые 6 часов; на день остаётся последнее чтение) в базу релея; если GitHub недоступен, остаётся последний снимок. «Новые» — цифра дня минус предыдущий снимок.",
+      refreshed: (s, d) => `Обновлено: ${fmt(s)} звёзд · ${fmt(d)} загрузок`,
+    },
+    seeAll: "Показать все", loadFailed: (e) => `Не удалось загрузить: ${e}`, retry: "Повторить",
+    fRegion: "Регион", fProvince: "Провинция / штат", fCity: "Город", fChannel: "Канал", fStatus: "Статус", fActivity: "Активность", fSpend: "Расход", fClient: "Клиент", fSort: "Сортировка", fClear: "Сбросить фильтры", fAny: "Любой", fCount: (n, t) => (n === t ? `${fmt(t)} аккаунтов` : `${fmt(n)} из ${fmt(t)} аккаунтов`),
+    stat: { member: "участники", disabled: "отключённые", locked: "заблокированные", password: "с паролем", nopassword: "без пароля", contributes: "«help improve» вкл", exhausted: "лимит исчерпан", online: "устройство онлайн", new: "новые за период" },
+    act: { today: "последние 24 ч", "7d": "последние 7 дней", "30d": "последние 30 дней", older: "давнее", never: "не пользовался" },
+    bucket: { 0: "¥0", lt1: "<¥1", "1to5": "¥1–5", "5to10": "¥5–10", ge10: "≥¥10" },
+    sortBy: { active: "последняя активность", joined: "дата создания", spent: "потрачено", today: "потрачено сегодня", tokens: "токены", requests: "запросы", left: "осталось", region: "регион", invites: "приглашения" },
+    // 0.26: поиск добрался дальше и три новых фильтра
+    searchHint: "Несколько слов через пробел должны совпасть все; нажмите / на любой странице, чтобы начать поиск.", searchKeys: "Ищет по номеру или e-mail, id аккаунта, адресам, именам устройств, клиенту и версии, региону, пригласившему и коду приглашения.",
+    fJoined: "Создан", joinedIn: { today: "последние 24 ч", "7d": "последние 7 дней", "30d": "последние 30 дней", older: "давнее" },
+    fSource: "Откуда", cameVia: { invited: "по приглашению", organic: "самостоятельно", inviter: "привёл кого-то" }, fVersion: "Версия",
+    // кто кого пригласил: вид Invites и список в карточке аккаунта
+    invNote: "Кого кто привёл. Пригласившие — по числу аккаунтов, приведённых их кодом; откройте строку для приведённых людей, имя — для страницы аккаунта.", invSearch: "Поиск пригласивших…", invNone: "По приглашениям пока никто не пришёл.", invNoMatch: "Пригласивших не найдено.",
+    invKpiCode: "аккаунтов", invKpiInviters: "привели кого-то", invKpiInvited: "пришли по коду", invKpiActive: "из них пользовались", invKpiSameIp: "с адреса пригласившего",
+    invThWho: "Пригласивший", invThInvited: "Привёл", invThActive: "Пользовались", invThSameIp: "Тот же адрес", invThSpent: "Потратили", invThEarned: "Заработал", invThLast: "Последний",
+    invSort: { invited: "привёл", active: "пользовался", same_ip: "тот же адрес", spent: "потратил", earned: "заработал", latest: "последний" },
+    invRecorded: (n) => `записано ${fmt(n)}`, invSameIp: "тот же адрес", invGone: "удалён", invSeeRanking: "посмотреть, кто кого привёл", invMore: (n) => `ещё ${fmt(n)}; на странице аккаунта перечислены все`,
+    invSameIpNote: "«Тот же адрес» значит, что первый или последний адрес приглашённого совпадает с одним из адресов самого пригласившего — так выглядит накрутка собственного пула; «записано» — счётчик приглашений, он не уменьшается, когда приглашённый удаляет аккаунт. Бонус за приглашение достаётся обеим сторонам при первом платном запросе приглашённого; «в ожидании» — те, кто ещё не воспользовался.",
+    invitedList: (n) => `Привёл · ${fmt(n)}`, invPill: (n) => `${fmt(n)} приглашено`, invEarnedLine: (m) => `${m} заработано на приглашениях`, invNewest: (n, total) => `новейшие ${fmt(n)} из ${fmt(total)}`,
+    invPending: (n) => `${fmt(n)} в ожидании`, invPendingPill: "в ожидании", invSettledPill: "выплачено",
+    // действие одним кликом: вернуть кредит за приглашение, и что добавляют две галочки
+    invAbuseDisable: "отключить аккаунт", invAbuseDelete: "удалить приведённые аккаунты, которые не пользовались", invAbuseGo: "Вернуть кредит за приглашение",
+    invAbuseConfirm: (who, amount, disable, del) => `Вернуть кредит за приглашение ${who}${amount ? ` (можно вернуть ${amount}; потраченное останется)` : ""}?${disable ? "\nЗаодно отключить аккаунт: все устройства отключатся сейчас, новый вход будет отклонён." : ""}${del ? "\nЗаодно удалить приведённые аккаунты, которые не сделали ни одного запроса и ничего не потратили; это необратимо. Те, что пользовались, останутся." : ""}`,
+    invAbuseDone: (r) => `Возвращено ${r.reclaimed}${r.disabled ? ", аккаунт отключён" : ""}${r.deleted || r.kept ? `, удалено неиспользованных приведённых аккаунтов: ${fmt(r.deleted)}, осталось ${fmt(r.kept)}` : ""}.`,
+    cSignups: "Регистрации", cRegions: "По регионам", cRegionsIn: (c) => `${c} · по регионам`, cSpend: "По расходу", cActivity: "По активности", cChannel: "По каналу", cClients: "По клиенту", cClickNote: "Каждая часть диаграммы — фильтр: нажмите, чтобы оставить только это; ещё раз — отпустить.", up: "Уровнем выше",
+    thRegion: "Регион", moreRows: (n) => `Показать ещё ${fmt(n)}`, exportCsv: "Экспорт CSV", csvNote: "Текущая выборка, как её показывает таблица, включая телефоны и адреса; файл держите при себе.",
+    byDayLabel: "по дням", byWeekLabel: "по неделям",
+    pMetric: "Количество", pTopCountries: "Страны / регионы", pTopProvinces: "Провинции / штаты", pRowHint: "Нажмите на строку, чтобы под «Людьми» увидеть аккаунты только этого региона.",
+    kindAll: "Все типы", mShare: "Куда уходят деньги", mTop: "Крупнейшие аккаунты", mPrices: "Цены",
+    aSearch: "Поиск: подсказка / детали…", aCount: (n) => `${fmt(n)} событий`,
+    dPerDay: "Демо за день", dReasons: "Чем закончилось", dReason: { idle: "простой", "time is up": "время вышло", "ended by the visitor": "закончил посетитель", "gateway stopping": "шлюз перезапускался", "failed to start": "не удалось запустить" }, dPlaces: "Посетители по местам", dAll: "Все", dRunning: "Идут", dSigned: "Вошли", dAnon: "Без входа", dByokOnly: "Со своим ключом",
+    cSearch: "Поиск моделей…", cOnlyVision: "Только те, что видят картинки",
+    hOk: "Всё в порядке", hProblems: "Требует внимания", hInFlight: "Запросов в работе", hInFlightSub: (a, l) => `${fmt(a)} аккаунтов · ${l > 0 ? `не больше ${l} на аккаунт` : "без лимита"}`, hHub: "Хаб устройств", hOnline: "Соединений", hAccountsOnline: "Аккаунтов онлайн", hPending: "Звонков ждёт ответа", hDropped: "Потеряно кадров", hFlood: "Закрыт из-за флуда", hLastHour: "Последний час", hRequests: "Запросы", hUpstreamErrors: "Ошибки провайдера", hContentRejected: "Отклонено проверкой контента", hRefused: "Отказы: сверх лимита", hSignIns: "Входы", hFailures: "Неудачные входы", hDb: "База данных", hWritable: "доступна на запись", hNotWritable: "не доступна на запись", hUpstream: "Ключ провайдера", hHave: "задан", hMissing: "не задан", hServerTime: "Время на сервере", hAuto: "обновляется каждые 30 с", hNote: "Таймер самопроверки на сервере читает те же цифры каждые десять минут (journalctl -t nanomuse-selfcheck); застаревшая проблема уходит на ALERT_URL, если он задан.",
+    cut: "обрезано", poolTotal: "всего", nSignIns: (n) => (n % 10 === 1 && n % 100 !== 11 ? "вход" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "входа" : "входов"), agoNow: "только что", agoMin: (n) => `${n} мин назад`, agoHour: (n) => `${n} ч назад`, agoDay: (n) => `${n} дн назад`,
+  };
+
+  const T = LANG === "zh" ? T_ZH : LANG === "ru" ? mergeT(T_EN, T_RU) : T_EN; // zh полон сам; ru ложится поверх английского там, где T_RU молчит
 
   const moneyN = (v) => { const c = Number(v || 0); return c >= 100 ? c.toFixed(0) : c >= 1 ? c.toFixed(2) : c > 0 && c < 0.01 ? c.toFixed(4) : c.toFixed(2); };
   const money = (cny) => `¥${moneyN(cny)}`;
   const usd = (cny, rate) => (rate > 0 ? `$${moneyN(Number(cny || 0) / rate)}` : "");
-  const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString(zh ? "zh-CN" : undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : T.never);
-  const dateOf = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString(zh ? "zh-CN" : undefined, { year: "numeric", month: "short", day: "numeric" }) : T.never);
-  const day = (ts) => new Date(ts * 1000).toLocaleDateString(zh ? "zh-CN" : undefined, { month: "numeric", day: "numeric" });
+  const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString(localeTag, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : T.never);
+  const dateOf = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString(localeTag, { year: "numeric", month: "short", day: "numeric" }) : T.never);
+  const day = (ts) => new Date(ts * 1000).toLocaleDateString(localeTag, { month: "numeric", day: "numeric" });
   const iso = (ts) => (ts ? new Date(ts * 1000).toISOString() : "");
   const nowS = () => Math.floor(Date.now() / 1000);
   const ago = (ts) => {
     if (!ts) return T.never;
     const s = Math.max(0, nowS() - ts);
-    if (s < 90) return zh ? "刚刚" : "just now"; if (s < 3600) return zh ? `${Math.floor(s / 60)} 分钟前` : `${Math.floor(s / 60)} min ago`;
-    if (s < 86400) return zh ? `${Math.floor(s / 3600)} 小时前` : `${Math.floor(s / 3600)} h ago`; return zh ? `${Math.floor(s / 86400)} 天前` : `${Math.floor(s / 86400)} d ago`;
+    if (s < 90) return T.agoNow; if (s < 3600) return T.agoMin(Math.floor(s / 60));
+    if (s < 86400) return T.agoHour(Math.floor(s / 3600)); return T.agoDay(Math.floor(s / 86400));
   };
   const svg = (paths) => `<svg viewBox="0 0 24 24">${paths}</svg>`;
   const ICON = {
@@ -742,7 +906,7 @@
     };
     paint();
     const head = h("div", { class: "s" }, when(smp.ts), opts.who && smp.hint ? [" · ", h("span", { class: "tap", onclick: (e) => { e.stopPropagation(); openAccount(smp.account_id); } }, identOf(smp.account_id, smp.hint))] : null,
-      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", meta.ip ? [" · ", ipChip(meta.ip, smp.account_id)] : null, smp.cut ? ` · ${zh ? "已截断" : "cut"}` : "");
+      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", meta.ip ? [" · ", ipChip(meta.ip, smp.account_id)] : null, smp.cut ? ` · ${T.cut}` : "");
     return h("div", { class: "row sample", style: "align-items:flex-start" }, h("div", { class: "txt", style: "white-space:pre-wrap;word-break:break-word;min-width:0" }, head, body, toggle));
   }
   /** The relay's own series: sign-ins, accounts, invites, the data switch, calls — and the devices and nanoMuse Web as they stand. */
@@ -796,7 +960,7 @@
     if ((m = /^([+-])(\d+(?:\.\d+)?)$/.exec(s))) { const d = parseFloat(m[2]) * (m[1] === "-" ? -1 : 1); return d ? { delta_cny: d } : null; }
     return null;
   }
-  const poolWords = (c) => c.left_cny !== undefined ? `= ¥${c.left_cny}` : c.grant_cny !== undefined ? `${zh ? "总额" : "total"} ¥${c.grant_cny}` : `${c.delta_cny > 0 ? "+" : "−"}¥${Math.abs(c.delta_cny)}`;
+  const poolWords = (c) => c.left_cny !== undefined ? `= ¥${c.left_cny}` : c.grant_cny !== undefined ? `${T.poolTotal} ¥${c.grant_cny}` : `${c.delta_cny > 0 ? "+" : "−"}¥${Math.abs(c.delta_cny)}`;
   async function doSetPool(a) {
     const v = prompt(T.setPoolPrompt(who(a), money(a.left_cny || 0)), "=5");
     if (v === null) return;
@@ -1248,7 +1412,7 @@
         h("td", { class: "num" }, money(a.spent_cny), h("span", { class: "sub" }, money(a.spent_today_cny)), cap > 0 ? h("div", { class: "meter sm", title: `${T.cap} ${money(cap)} · ${T.left} ${money(a.left_cny || 0)}` }, h("i", { class: frac >= 1 ? "bad" : frac >= 0.8 ? "warn" : "", style: `width:${Math.round(frac * 100)}%` })) : null),
         h("td", { class: "num hide-sm" }, fmt(a.used), h("span", { class: "sub" }, fmt(a.used_today))),
         h("td", { class: "num hide-sm" }, fmt(a.requests)),
-        h("td", { class: "hide-sm" }, a.last_active_at ? ago(a.last_active_at) : T.never, h("span", { class: "sub" }, `${a.live_keys || 0} ${zh ? "个登录" : "sign-ins"}`)),
+        h("td", { class: "hide-sm" }, a.last_active_at ? ago(a.last_active_at) : T.never, h("span", { class: "sub" }, `${a.live_keys || 0} ${T.nSignIns(a.live_keys || 0)}`)),
         h("td", { class: "hide-sm" }, a.last_ua || a.last_ip ? [a.last_ua ? h("div", {}, clientLine(a.last_ua) || String(a.last_ua).split(" ")[0]) : null, a.last_ip ? h("div", {}, ipChip(a.last_ip, a.id)) : null] : T.none),
         h("td", {}, (a.devices || []).length ? h("div", { class: "dev" }, ...(a.devices || []).map((d) => h("span", { title: `${d.kind || ""} ${d.os || ""} · ${d.online ? T.online : ago(d.last_seen)}` }, h("i", { class: "dot" + (d.online ? " on" : "") }), d.name || d.id))) : T.none));
     });
@@ -1787,8 +1951,8 @@
   // ── 0.22: the statistics — every metric from stats.py, with its table and CSV ──
   const ST_OPEN = new Set(JSON.parse(SS.getItem("nm.admin.st") || "[]"));
   const dayUtc = (ts) => new Date(ts * 1000).toISOString().slice(0, 10);
-  const dayLocal = (ts) => new Date(ts * 1000).toLocaleDateString(zh ? "zh-CN" : undefined, { month: "numeric", day: "numeric" });
-  const colLabel = (c) => (zh ? c.label_zh : c.label) || c.key;
+  const dayLocal = (ts) => new Date(ts * 1000).toLocaleDateString(localeTag, { month: "numeric", day: "numeric" });
+  const colLabel = (c) => dataText(c, "label") || c.key;
   const numKind = (c) => c.kind === "int" || c.kind === "cny";
   function cell(v, kind) {
     if (v === null || v === undefined) return h("span", { class: "fine" }, "—");
@@ -1805,7 +1969,7 @@
     download(new Blob(["\ufeff" + await r.text()], { type: "text/csv;charset=utf-8" }), `nanomuse-${id}-${new Date().toISOString().slice(0, 10)}.csv`);
   }
   function statPanel(m) {
-    const title = zh ? m.title_zh : m.title, how = zh ? m.how_zh : m.how;
+    const title = dataText(m, "title"), how = dataText(m, "how");
     const cols = m.columns || [], rows = m.rows || [];
     const open = m.shape !== "series" || ST_OPEN.has(m.id);
     let body = null;
@@ -1836,7 +2000,7 @@
     // 0.26: the metrics' names up top, each a jump to its panel; the page is long
     const metrics = sv.metrics || [];
     const panels = metrics.map((m) => { const p = statPanel(m); p.id = `st-${m.id}`; return p; });
-    const jump = h("div", { class: "filter", style: "border-bottom:0;padding-top:0" }, ...metrics.map((m) => h("button", { onclick: () => { const el = document.getElementById(`st-${m.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }, zh ? m.title_zh : m.title)));
+    const jump = h("div", { class: "filter", style: "border-bottom:0;padding-top:0" }, ...metrics.map((m) => h("button", { onclick: () => { const el = document.getElementById(`st-${m.id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }, dataText(m, "title"))));
     return [h("div", { class: "panel" }, h("h2", {}, T.st.title, h("span", { class: "sp" }), h("span", { class: "fine" }, `${T.st.utc} · ${T.st.local}: ${T.st.localTz()} · ${T.st.generated(when(sv.generated_at))}`)), h("div", { class: "fine", style: "padding:12px 16px" }, T.st.note), jump),
       ...panels];
   }

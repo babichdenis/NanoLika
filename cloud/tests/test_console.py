@@ -1,6 +1,6 @@
 """The console's files as the relay serves them (after 0.22): revalidated on every load, so a
 deploy reaches the next reload; and the web console's error table knows every code the
-relay can answer a signed-in person with, in both languages."""
+relay can answer a signed-in person with, in all three languages."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ async def test_console_files_are_revalidated_on_every_load():
 def test_web_console_translates_every_refusal_in_both_languages():
     source = (CONSOLE / "app.js").read_text(encoding="utf-8")
     tables = re.findall(r"errors: \{(.*?)\},\n", source, flags=re.S)
-    assert len(tables) == 2, "one error table for 简体中文, one for English"
-    zh, en = tables
+    assert len(tables) == 3, "one error table each for русский, 简体中文 and English"
+    ru, zh, en = tables
     # account_disabled is the code the relay sends (service.sign_in); the table once said
     # "disabled", which nothing sends, so a disabled person read the server's English
     for code in CODES_0_22 + [
@@ -58,15 +58,16 @@ def test_web_console_translates_every_refusal_in_both_languages():
         "sync_off",
         "invite_code",
     ]:
+        assert f"{code}:" in ru, f"{code} has no Russian sentence"
         assert f"{code}:" in zh, f"{code} has no Chinese sentence"
         assert f"{code}:" in en, f"{code} has no English sentence"
-    assert "disabled:" not in zh.replace("account_disabled:", "") and "disabled:" not in en.replace("account_disabled:", "")
+    assert all("disabled:" not in t.replace("account_disabled:", "") for t in (ru, zh, en))
     # the step marker for a failed step is a word in each language, not a punctuation mark
-    assert len(re.findall(r"\bfailed: \"", source)) == 2 and 'k: "!"' not in source
+    assert len(re.findall(r"\bfailed: \"", source)) == 3 and 'k: "!"' not in source
     # a paused allowance (429 with paused: true) is said as paused, not as spent
-    assert zh.count("e.paused") == 1 and en.count("e.paused") == 1
+    assert all(t.count("e.paused") == 1 for t in (ru, zh, en))
     # no exclamation marks in what a person reads
-    assert "!" not in re.sub(r"[!=]==?|!\w", "", zh + en) and "！" not in zh
+    assert "!" not in re.sub(r"[!=]==?|!\w", "", ru + zh + en) and "！" not in zh + ru
 
 
 def test_web_console_is_one_hub_device_per_tab():
@@ -82,24 +83,32 @@ def test_web_console_is_one_hub_device_per_tab():
 
 
 def test_console_copy_has_no_dashes_in_sentences():
-    """The house rule: what a person reads carries no em dash. Checked on the two string
-    tables (`const T = zh ? {...} : {...}`) of each console; the one-character placeholder
-    for an empty cell (`none: "—"`, `"—"`) is a glyph, not a sentence, and is let through."""
-    for path in (CONSOLE / "app.js", CONSOLE / "admin" / "admin.js"):
+    """The house rule: what a person reads in Chinese or English carries no em dash.
+    Russian is let through: its typography sets the dash, and the consoles' own Russian
+    strings already do (`const T_RU = {...}` rides on T_EN through mergeT). Checked on
+    app.js's zh and en tables inside `const T = zh ? {...} : {...}` and on admin.js's
+    `T_ZH` / `T_EN`; the one-character placeholder for an empty cell (`none: "—"`) is a
+    glyph, not a sentence, and is let through."""
+    plans = {
+        CONSOLE / "app.js": [r"const T = zh \? \{(.*?)\n  \};"],
+        CONSOLE / "admin" / "admin.js": [r"const T_ZH = \{(.*?)\n  \};", r"const T_EN = \{(.*?)\n  \};"],
+    }
+    for path, patterns in plans.items():
         source = path.read_text(encoding="utf-8")
-        m = re.search(r"const T = zh \? \{(.*?)\n  \};", source, flags=re.S)
-        assert m, f"{path.name}: the T tables were not found"
-        tables = m.group(1).replace('"—"', "")
-        for line in tables.splitlines():
-            assert "—" not in line, f"{path.name}: an em dash in a sentence: {line.strip()[:80]}"
+        for pattern in patterns:
+            m = re.search(pattern, source, flags=re.S)
+            assert m, f"{path.name}: a string table was not found"
+            body = m.group(1).replace('"—"', "")
+            for line in body.splitlines():
+                assert "—" not in line, f"{path.name}: an em dash in a sentence: {line.strip()[:80]}"
 
 
 def test_admin_console_names_the_star_card_text_in_both_languages():
-    """The star asks card (after relay 0.22) has the two text inputs and their hint, in the
-    简体中文 table and in the English one, and the panel draws them."""
+    """The star asks card (after relay 0.22) has the two text inputs and their hint, in all
+    three tables (T_ZH, T_EN and the T_RU overlay), and the panel draws them."""
     source = (CONSOLE / "admin" / "admin.js").read_text(encoding="utf-8")
     for key in ("ndTextEn", "ndTextZh", "ndTextHint", "ndTextLeft"):
-        assert source.count(f"{key}:") == 2, f"{key} is in one table only"
+        assert source.count(f"{key}:") == 3, f"{key} is in one table only"
     assert 'ndTextEn: "卡片文字（英文）"' in source and 'ndTextEn: "Card text (English)"' in source
     assert 'ndTextZh: "卡片文字（中文）"' in source and 'ndTextZh: "Card text (中文)"' in source
     assert "留空时各端显示自己的句子。最多 200 字。" in source
@@ -110,8 +119,8 @@ def test_admin_console_names_the_star_card_text_in_both_languages():
 
 def test_admin_console_has_the_invites_view_in_both_languages():
     """The Invites view (who brought whom, the inviters that brought most first) is in the
-    side navigation, reads `/v1/admin/invites`, and every string it draws is in the 简体中文
-    table and in the English one; the account drawer names the inviter and lists the people
+    side navigation, reads `/v1/admin/invites`, and every string it draws is in all three
+    tables (T_ZH, T_EN, T_RU); the account drawer names the inviter and lists the people
     brought."""
     source = (CONSOLE / "admin" / "admin.js").read_text(encoding="utf-8")
     assert '"invites"' in source[source.index("const VIEWS = ") : source.index("const PAGE = ")]
@@ -154,7 +163,7 @@ def test_admin_console_has_the_invites_view_in_both_languages():
         "invAbuseDone",
     )
     for key in keys:
-        assert source.count(f"{key}:") == 2, f"{key} is in one table only"
+        assert source.count(f"{key}:") == 3, f"{key} is in one table only"
     assert 'invites: "邀请"' in source and 'invites: "Invites"' in source
     assert 'invThWho: "邀请人"' in source and 'invThWho: "Inviter"' in source
     # the first KPI is the account count, not "made a code": every account has a code
@@ -172,11 +181,11 @@ def test_admin_console_has_the_invites_view_in_both_languages():
     action = source[source.index("async function doInviteAbuse(") : source.index("function inviteAbuseRow(")]
     assert '"/v1/admin/invites/abuse"' in action and "delete_unused" in action and "confirm(" in action
     assert 'forget("invites")' in action and "T.invAbuseDone(" in action
-    # new event kinds are named in both tables of both consoles
+    # new event kinds are named in all three tables of both consoles
     for kind in ("invite.settled", "invite.clawback", "signup.domain_limited"):
-        assert source.count(f'"{kind}":') == 2, kind
+        assert source.count(f'"{kind}":') == 3, kind
     app_js = (CONSOLE / "app.js").read_text(encoding="utf-8")
-    assert app_js.count('"invite.settled":') == 2
+    assert app_js.count('"invite.settled":') == 3
 
 
 def test_web_console_prints_the_relays_code_lifetime_and_password_length():
@@ -184,7 +193,7 @@ def test_web_console_prints_the_relays_code_lifetime_and_password_length():
     reads them from ``/v1/config`` since 0.25 instead of saying ten minutes and 8 characters."""
     source = (CONSOLE / "app.js").read_text(encoding="utf-8")
     assert '"/v1/config"' in source and "cfg.code_ttl_s" in source and "cfg.password_min_len" in source
-    assert source.count("codeSent: (m) =>") == 2 and source.count("pwShort: (n) =>") == 2 and source.count("pwWhy: (n) =>") == 2
+    assert source.count("codeSent: (m) =>") == 3 and source.count("pwShort: (n) =>") == 3 and source.count("pwWhy: (n) =>") == 3
     assert "十分钟" not in source and "ten minutes" not in source
     assert "8 个字符" not in source and "8 位" not in source and "8 characters" not in source
     # the default stands for a relay that does not send the fields yet
@@ -195,7 +204,7 @@ def test_admin_console_searches_and_filters_further():
     """0.26: the People search reaches more fields and takes several words, three filters
     joined it, the drawer's statement and timeline filter through the relay (`?kind=&q=`),
     the Activity feed pages with `before`, the Demo and Data tables search, and every new
-    string is in the 简体中文 table and in the English one. A new page closes the drawer."""
+    string is in all three tables (T_ZH, T_EN, T_RU). A new page closes the drawer."""
     source = (CONSOLE / "admin" / "admin.js").read_text(encoding="utf-8")
     keys = (
         "searchHint",
@@ -214,7 +223,7 @@ def test_admin_console_searches_and_filters_further():
         "feedLoaded",
     )
     for key in keys:
-        assert source.count(f"{key}:") == 2, f"{key} is in one table only"
+        assert source.count(f"{key}:") == 3, f"{key} is in one table only"
         assert f"T.{key}" in source, f"nothing draws {key}"
     assert 'fJoined: "注册时间"' in source and 'fJoined: "Joined"' in source
     people = source[source.index("function peopleView()") : source.index("function exportCsv(")]
