@@ -63,6 +63,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Desktop
 
+- **The share sheet invites as well as shows.** Under the share button in the profile drawer the postcards were only pictures of the face, so the one thing worth passing on stayed in Settings → Account. A third card, offered when there is an account, draws the face on a paper ticket with the account's invite code and link, and the sheet gains *Copy the link* and *Copy the code*, so a picture forward and a pasted link lead to the same place: nanolika.ru's invite bar, which hands the code on to a friend's app.
+
 - **A Workspace answers a right-click.** Renaming one and taking it off the list sat behind an ellipsis that appears only on hover, and the row had no context menu at all: a right-click on the folder in the harness's sidebar now offers *Rename workspace* and *Close workspace*, the second naming the folder it closes and saying that its chats and files stay. Escape, a click elsewhere or a choice closes the menu, and a refusal from the host is shown in it rather than swallowed.
 
 - **The face over the chat no longer covers the name.** The header drew a 66px picture inside a 44px button, so the face spilled 11px past its box and sat on the first line of the name under it. The box is now the picture's own size and the header holds 22px more room on every platform (130px, 158px with the macOS title bar, 144px on Windows), which the thread keeps clear.
