@@ -56,6 +56,10 @@ Two kinds of request travel over the hub:
   back as an `event {stage:"approval"}` and the asking device shows its usual
   card (RiskGate on the phone, the terminal prompt on the desktop, a card in the
   web console). The answer goes back as `approve {approval_id, allow}`.
+  On the device that takes the task, the person's words appear as their own bubble
+  in the chat the task runs in, with a quiet note under them saying which device
+  asked; the sync engine recognises that note and leaves the turn out of the push,
+  so the asking device never receives its own words back.
   The asking device may end a task it started with `stop {call}` (the id of
   its `task` frame) or `stop {conversation}` (the conversation it named, or
   its own per-device one when it named none): the target cancels the run

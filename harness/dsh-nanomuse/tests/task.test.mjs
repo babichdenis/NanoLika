@@ -4,7 +4,7 @@
 // `stop {call}` cancelling the run, busy and timeout handling.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { TaskRunner, frame, preview, textOf } from '../lib/task.js'
+import { MIRROR_NOTE, TaskRunner, frame, preview, textOf } from '../lib/task.js'
 
 /** The slice of a dsh Context the runner touches. */
 function fakeContext() {
@@ -85,9 +85,11 @@ function runner(h) {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 test('frame, textOf and preview', () => {
-  assert.ok(frame('Phone', 'Desk', 'tidy up').startsWith('[Asked from Phone'))
-  assert.ok(frame('Phone', 'Desk', 'tidy up').includes('the Muse on Desk'))
-  assert.ok(frame('Phone', 'Desk', 'tidy up').endsWith('\ntidy up'))
+  // the person's words first (the chat draws them as their own bubble), the note after them
+  assert.ok(frame('Phone', 'Desk', 'tidy up').startsWith('tidy up\n'))
+  assert.ok(frame('Phone', 'Desk', 'tidy up').includes('work on Desk'))
+  assert.ok(frame('Phone', 'Desk', 'tidy up').includes(`${MIRROR_NOTE}Phone`))
+  assert.ok(frame('Phone', 'Desk', 'tidy up').endsWith('goes back to Phone)_'))
   assert.equal(textOf([{ type: 'text', text: 'a' }, { type: 'image', data: 'x' }, { type: 'text', text: 'b' }]), 'a\nb')
   assert.equal(textOf(undefined), '')
   assert.equal(preview('bash', '{"command":"ls   -la\\n"}'), 'bash: ls -la')
@@ -108,7 +110,10 @@ test('a task opens a named session, streams the run and resolves with the answer
   const agent = h.agents.get('session-1')
   assert.equal(agent.sent.length, 1)
   assert.equal(agent.sent[0].role, 'user')
-  assert.ok(agent.sent[0].content[0].text.endsWith('\nwhat time is it'))
+  assert.ok(agent.sent[0].content[0].text.startsWith('what time is it'))
+  // `user`, so the chat shows the bubble instead of an answer from nowhere; the note marks it
+  assert.equal((agent.sent[0].source ?? {}).kind, 'user')
+  assert.ok(agent.sent[0].content[0].text.includes(MIRROR_NOTE))
   assert.equal(r.running, 1)
   assert.deepEqual(notices, [['Phone', 'what time is it']])
 

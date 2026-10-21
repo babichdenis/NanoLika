@@ -58,9 +58,16 @@ export interface TaskRunnerOptions {
   closed?: () => boolean
 }
 
-/** The text a task arrives as: the model learns where it came from and where it is, as the runtime's bubble says. */
+/** Where the note under a task's words begins: it marks a message that came over the hub, so
+ * the sync engine leaves it alone (a task is a turn of the chat the person wrote in, not a
+ * second copy of it: see `sessionLines` in cloud.ts). */
+export const MIRROR_NOTE = '_(asked from '
+
+/** The text a task arrives as: the person's own words first, so the chat shows the bubble they
+ * wrote elsewhere, then a quiet note of where it came from and where it is, which the model
+ * reads as the reason it is here at all. */
 export function frame(from: string, here: string, text: string): string {
-  return `[Asked from ${from}, another device on this account. You are the Muse on ${here}: do it here, on ${here}, and answer briefly — the answer goes back to ${from}.]\n${text}`
+  return `${text}\n\n${MIRROR_NOTE}${from}, another device on this account: work on ${here} and answer briefly, the answer goes back to ${from})_`
 }
 
 /** Plain text out of content blocks (what the asker sees of a tool result or an answer). */
@@ -154,9 +161,10 @@ export class TaskRunner {
     this.options.log('info', `nanomuse task: ${from.name || from.id} asked: ${text.replace(/\s+/g, ' ').slice(0, 80)}`)
     this.options.notice?.(from.name || from.id, text.replace(/\s+/g, ' ').slice(0, 120))
     try {
-      // `nanomuse-task` (not `user`): the words came from another device over the hub, so
-      // the sync must not carry them back to it as something typed here
-      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'nanomuse' } }))
+      // `user`, so the chat shows the bubble the person wrote on the other device instead of
+      // an answer that comes out of nowhere; the note `frame` puts under the words
+      // (`MIRROR_NOTE`) keeps the sync from carrying them back as something typed here
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
       const final = await settled
       return { text: final, conversation, thread: sessionId, device: this.options.deviceName() }
     } finally {

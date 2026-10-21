@@ -49,7 +49,7 @@ import { HubClient, HubError, type Caller, type HubDevice } from './hub.ts'
 import { ProfileStore, type Profile } from './profile.ts'
 import { cloudOffFailure, relayFailure, transportFailure, type RelayRefusal } from './refusals.ts'
 import { Relay, RelayError, type Account, type RelaySearch, type Estimate, type Invite, type ProfileWrite, type RelayModel, type SignIn } from './relay.ts'
-import { TaskRunner, textOf } from './task.ts'
+import { MIRROR_NOTE, TaskRunner, textOf } from './task.ts'
 import { Turns, aggregateWork, type WorkItem } from './work.ts'
 import { SCREEN_RUN_IDLE_MS, ScreenRuns, Trajectory, type ScreenRun, type StepAction, type TrajectoryView } from './trajectory.ts'
 import { RemoteStore, SyncEngine, SyncRelay, type RemoteLine, type SessionInfo, type SessionLine, type SyncState } from './sync.ts'
@@ -581,6 +581,16 @@ export function declined(step: string, why: string): ToolExecutionResult {
 
 const ARG_KEYS = ['action', 'label', 'text', 'device', 'command', 'task', 'path', 'url'] as const
 
+/** Whether the event is a prompt the person typed *here*: the words of a task from another
+ * device arrive as a `user` message too, but they are that chat's turn, not this device's, and
+ * `MIRROR_NOTE` is what tells the two apart (the sync must not carry them back). */
+function isOwnWords(data: unknown): boolean {
+  const source = (data as { source?: { kind?: string } })?.source
+  if (source?.kind !== 'user') return false
+  const content = (data as { content?: readonly ContentBlock[] })?.content
+  return !textOf(content).includes(MIRROR_NOTE)
+}
+
 export default class NanomuseCloud extends Service {
   static inject = ['credentials', 'settings']
   static Config = Config
@@ -855,7 +865,7 @@ export default class NanomuseCloud extends Service {
             this.logChanged(id)
             if (event.type === 'turn/end' && this.cloudOnce.has(id)) void this.cloudOnceDone(id)
             if (event.type === 'turn/end') sync.turnEnded(id)
-            else if (event.type === 'user/message' && (event.data as { source?: { kind?: string } }).source?.kind === 'user') sync.messageSent(id)
+            else if (event.type === 'user/message' && isOwnWords(event.data)) sync.messageSent(id)
             else if ((event as { type: string }).type === 'session/title') sync.sessionRenamed(String(session.id))
           }),
         'nanomuse cloud: sync turns',
@@ -3219,7 +3229,11 @@ export default class NanomuseCloud extends Service {
       let first = ''
       for (const event of inspection.events as ReadonlyArray<{ type: string; data: unknown }>) {
         if (event.type === 'session/title') title = String((event.data as { title?: string }).title ?? '')
-        else if (!first && event.type === 'user/message' && (event.data as { source?: { kind?: string } }).source?.kind === 'user') first = textOf((event.data as { content?: readonly ContentBlock[] }).content)
+        else if (!first && event.type === 'user/message' && (event.data as { source?: { kind?: string } }).source?.kind === 'user') {
+          // a task's mirrored words are the chat's, not this one's opening line (see MIRROR_NOTE)
+          const words = textOf((event.data as { content?: readonly ContentBlock[] }).content)
+          if (!words.includes(MIRROR_NOTE)) first = words
+        }
       }
       const out = (title || first).replace(/\s+/g, ' ').trim().slice(0, 120)
       entry.title = { at: updatedAt, title: out }
@@ -3243,7 +3257,7 @@ export default class NanomuseCloud extends Service {
           const data = event.data as unknown as { id?: string; content?: readonly ContentBlock[]; source?: { kind?: string } }
           if (data.source?.kind !== 'user') continue
           const text = textOf(data.content)
-          if (text && !text.startsWith('[Asked from ')) lines.push({ id: String(data.id ?? `u${event.seq}`), role: 'user', text, at: event.time })
+          if (text && !text.includes(MIRROR_NOTE)) lines.push({ id: String(data.id ?? `u${event.seq}`), role: 'user', text, at: event.time })
         } else if (event.type === 'assistant/message') {
           const data = event.data as unknown as { message?: { id?: string; content?: readonly ContentBlock[] }; interrupted?: true }
           const text = textOf(data.message?.content)
