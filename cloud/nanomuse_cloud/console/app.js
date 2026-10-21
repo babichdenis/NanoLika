@@ -143,6 +143,11 @@
   let ws = null, wsState = "off", hubPaused = false, backoff = 1000, devices = [], selected = params.get("device") || LS.getItem("nm.selected") || "";
   const pending = new Map(); // call id → {onEvent, resolve, reject}
   const chats = new Map(); // device id → {messages:[], busy:false, callId:null}
+  // The account's own history lives in the relay's sync store, not in this browser: the
+  // Account sheet's switch turns it off (off deletes what is stored), and until it is on
+  // nothing is pulled. `live` follows the turns: a cleared feed stays cleared until the page
+  // reloads, a hub `sync` frame only appends what the page already shows.
+  let sync = { on: null, loaded: false, live: false, seq: 0, msgs: [] };
   // One hub device per tab, not per browser: the id lives in sessionStorage, so a reload
   // keeps it and a second tab gets its own. Two tabs sharing one id took turns replacing
   // each other on the hub (close 4003) and reconnecting, for as long as both stayed open.
@@ -301,6 +306,7 @@
       let f; try { f = JSON.parse(ev.data); } catch (_) { return; }
       if (f.type === "welcome") { wsState = "on"; hubPaused = false; backoff = 1000; devices = f.devices || []; drawAll(); }
       else if (f.type === "devices") { devices = f.devices || []; drawSide(); drawHead(); }
+      else if (f.type === "sync") pullHistory();
       else if (f.type === "error" && !f.id) {
         if (f.code === "bad_key") { signOut(true); }
         else console.warn("hub:", f.code, f.message);
@@ -355,6 +361,38 @@
     let c = LS.getItem("nm.conv." + deviceId);
     if (!c) { c = "web-" + Math.random().toString(36).slice(2, 12); LS.setItem("nm.conv." + deviceId, c); }
     return c;
+  }
+  const syncMsg = (m, names) => ({
+    role: m.role === "user" ? "me" : "them",
+    text: (m.text || "") || (m.attachments || []).map((a) => a.name).filter(Boolean).join(", "),
+    from: names[m.cid] || m.device_name || "",
+  });
+  async function syncEnabled() {
+    if (sync.on !== null) return sync.on;
+    try { sync.on = !!(await api("GET", "/v1/sync/state", null, key)).enabled; } catch (_) { sync.on = false; }
+    return sync.on;
+  }
+  async function loadHistory() {
+    if (sync.loaded || !(await syncEnabled())) return;
+    try {
+      const r = await api("GET", "/v1/sync/changes?since=0&tail=300&scope=all", null, key);
+      const names = {}; for (const cv of r.conversations || []) names[cv.cid] = cv.device_name || cv.title || "";
+      sync.seq = Number(r.cursor || 0); sync.loaded = true; sync.live = true;
+      sync.msgs = (r.messages || []).map((m) => (m.deleted ? null : syncMsg(m, names))).filter((m) => m && m.text);
+      drawChat();
+    } catch (e) { if (e.code === "sync_off") { sync.on = false; sync.loaded = false; } }
+  }
+  async function pullHistory() {
+    if (!sync.live || !sync.on) return;
+    try {
+      const r = await api("GET", `/v1/sync/changes?since=${sync.seq}&limit=200`, null, key);
+      sync.seq = Number(r.cursor || sync.seq);
+      const names = {}; for (const cv of r.conversations || []) names[cv.cid] = cv.device_name || cv.title || "";
+      const fresh = (r.messages || []).map((m) => (m.deleted ? null : syncMsg(m, names))).filter((m) => m && m.text);
+      if (!fresh.length) return;
+      sync.msgs.push(...fresh);
+      drawChat();
+    } catch (_) { /* the next frame tries again */ }
   }
   const dev = (id) => devices.find((d) => d.id === id);
   const kindLabel = (k) => T[k] || k;
@@ -428,7 +466,7 @@
   const glyph = (kind) => ICON[kind] || ICON.computer;
   function pickDevice(id) {
     selected = id; LS.setItem("nm.selected", id); history.replaceState(null, "", "?device=" + encodeURIComponent(id));
-    drawSide(); drawChatShell();
+    drawSide(); drawChatShell(); loadHistory();
     if (window.matchMedia("(max-width: 760px)").matches) { els.side.classList.add("hidden"); }
   }
   function drawSide() {
@@ -472,7 +510,7 @@
       h("span", { class: "tile", html: glyph(d.kind) }),
       h("div", {}, h("div", { class: "name" }, d.name), h("div", { class: "sub" }, `${kindLabel(d.kind)} · ${d.os || ""} · ${d.online ? T.online : T.offline}`)),
       h("span", { class: "spacer" }),
-      h("button", { class: "btn quiet sm", onclick: () => { const c = chat(d.id); c.messages = []; persist(d.id); LS.removeItem("nm.conv." + d.id); drawChat(); } }, T.clear),
+      h("button", { class: "btn quiet sm", onclick: () => { const c = chat(d.id); c.messages = []; persist(d.id); LS.removeItem("nm.conv." + d.id); sync.msgs = []; sync.live = false; drawChat(); } }, T.clear),
       d.online ? null : h("button", { class: "btn quiet sm", onclick: () => { if (!confirm(T.forgetConfirm(d.name))) return; if (ws && wsState === "on") ws.send(JSON.stringify({ type: "forget", device_id: d.id })); LS.removeItem("nm.conv." + d.id); if (selected === d.id) { selected = ""; LS.removeItem("nm.selected"); history.replaceState(null, "", location.pathname); } devices = devices.filter((x) => x.id !== d.id); drawSide(); drawChatShell(); } }, T.forget),
     );
     drawComposer();
@@ -481,7 +519,7 @@
     const d = dev(selected); if (!els.messages || !d) return;
     const c = chat(d.id);
     const nodes = [];
-    for (const m of c.messages) {
+    for (const m of sync.msgs.concat(c.messages)) {
       if (m.role === "me") nodes.push(h("div", { class: "msg me" }, h("div", { class: "bubble" }, m.text)));
       else if (m.role === "approval") nodes.push(h("div", { class: "approval" + (m.state !== "open" ? " done" : "") },
         h("div", { class: "t" }, T.approvalTitle(d.name)),
@@ -552,6 +590,7 @@
       const [m, s, ev, sy] = await Promise.all([api("GET", "/v1/me", null, key), api("GET", "/v1/me/sessions", null, key), api("GET", "/v1/me/events?limit=12", null, key),
         api("GET", "/v1/sync/state", null, key).catch(() => null)]);  // 0.19; an older relay has no sync and the card is left out
       me = { ...m, sessions: s.sessions || [], events: ev.events || [], sync: sy }; meErr = "";
+      if (sy) { sync.on = !!sy.enabled; if (!sync.on) { sync.msgs = []; sync.live = false; sync.seq = 0; } }
       // 0.27: the rates money is shown by, for every figure on the page (see cash() below)
       if (m && m.spend) RATES = { usd_cny: Number(m.spend.usd_cny || 0), rub_per_usd: Number(m.spend.rub_per_usd || 0), topup_fee_pct: Number(m.spend.topup_fee_pct || 0) };
     } catch (e) { if (e.code === "bad_key" || e.code === "account_deleted" || e.code === "http_401") { signOut(true); return; } meErr = errText(e); }
@@ -628,8 +667,8 @@
           h("div", { class: "txt" }, h("div", { class: "t" }, T.syncTitle), h("div", { class: "s" }, sy.enabled ? T.contributeOn : T.contributeOff, " · ", has ? T.syncCount(n.conversations || 0, n.messages || 0) : T.syncEmpty)),
           h("button", { class: "btn quiet sm", role: "switch", "aria-checked": sy.enabled ? "true" : "false", onclick: async () => {
             if (sy.enabled && has && !(await ask(T.syncTitle, T.syncOffConfirm, L("Turn off", "关闭", "Выключить"), true))) return;
-            try { await api("PUT", "/v1/sync/state", { enabled: !sy.enabled }, key); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, sy.enabled ? L("Turn off", "关闭", "Выключить") : L("Turn on", "开启", "Включить"))),
-        has ? h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.deleteSync, T.deleteSyncConfirm, T.deleteSync, true)) { try { await api("DELETE", "/v1/sync/changes", null, key); alert(T.syncDeleted); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } } }, h("span", { class: "tile bad", html: ICON.out }), h("div", { class: "txt" }, h("div", { class: "t" }, T.deleteSync))) : null,
+            try { await api("PUT", "/v1/sync/state", { enabled: !sy.enabled }, key); sync = { on: !sy.enabled, loaded: false, live: false, seq: 0, msgs: [] }; drawChat(); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, sy.enabled ? L("Turn off", "关闭", "Выключить") : L("Turn on", "开启", "Включить"))),
+        has ? h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.deleteSync, T.deleteSyncConfirm, T.deleteSync, true)) { try { await api("DELETE", "/v1/sync/changes", null, key); sync = { on: true, loaded: false, live: false, seq: 0, msgs: [] }; drawChat(); alert(T.syncDeleted); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } } }, h("span", { class: "tile bad", html: ICON.out }), h("div", { class: "txt" }, h("div", { class: "t" }, T.deleteSync))) : null,
         h("p", { class: "fine", style: "padding:0 16px 12px" }, T.syncWhy)));
     }
     // usage by kind / by model
