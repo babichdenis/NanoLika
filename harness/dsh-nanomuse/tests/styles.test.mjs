@@ -182,8 +182,13 @@ test('in the Muse look the header is a scrim over the thread, not a bar with a l
   const thread = 'html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-conversation-content]'
   assert.match(rule(`${thread} > [data-conversation-scroll]`), /padding-top:\s*var\(--nm-header-h\)/)
   assert.match(rule('header[data-window-drag]:has(.nm-header)'), /min-height:\s*var\(--nm-header-h\)/)
-  assert.match(rule("html[data-nm-platform='darwin']:not([data-nm-fullscreen])"), /--nm-header-h:\s*136px/)
-  assert.match(rule("html[data-nm-platform='win32']:not([data-nm-fullscreen])"), /--nm-header-h:\s*122px/)
+  assert.match(rule("html[data-nm-platform='darwin']:not([data-nm-fullscreen])"), /--nm-header-h:\s*158px/)
+  assert.match(rule("html[data-nm-platform='win32']:not([data-nm-fullscreen])"), /--nm-header-h:\s*144px/)
+  // the face box is the avatar's own size (66px in MuseHeader), so the picture cannot spill
+  // over the name under it
+  assert.match(rule('.nm-header-face'), /width:\s*66px/)
+  assert.match(rule('.nm-header-face'), /height:\s*66px/)
+
   // the chat's canvas: white in the light, and the harness's own base token follows it there
   const content = rule(thread)
   assert.match(content, /background:\s*var\(--nm-canvas\)/)

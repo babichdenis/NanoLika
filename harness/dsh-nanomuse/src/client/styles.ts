@@ -45,7 +45,7 @@ html[data-nanomuse] {
   --nm-blue: #52694e;
   --nm-blue-hover: #40583b;
   --nm-rail: 66px;
-  --nm-header-h: 108px;
+  --nm-header-h: 130px;
   --nm-radius: 14px;
   --nm-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
 }
@@ -163,12 +163,12 @@ html:is([data-nm-platform='darwin'], [data-nm-platform='win32']) header[data-win
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header-drag { height: 36px; }
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header { top: 40px; }
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header-back { top: 42px; }
-html[data-nm-platform='darwin']:not([data-nm-fullscreen]) { --nm-header-h: 136px; }
+html[data-nm-platform='darwin']:not([data-nm-fullscreen]) { --nm-header-h: 158px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-rail-top { height: 24px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header-drag { height: 22px; right: 150px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header { top: 26px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header-back { top: 28px; }
-html[data-nm-platform='win32']:not([data-nm-fullscreen]) { --nm-header-h: 122px; }
+html[data-nm-platform='win32']:not([data-nm-fullscreen]) { --nm-header-h: 144px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) [data-slot="conversation.session.header"] > :first-child { padding-right: 150px; min-height: 40px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-ob-pager { top: 48px; }
 /* Windows, out of full screen: the caption buttons cover the top right corner, so each top bar
@@ -286,7 +286,9 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
    untransformed boxes, and a transformed, pointer-events:none box over a drag region left the
    face unclickable on macOS. The header block itself is the no-drag island (see desk-a below). */
 .nm-header { position: absolute; left: 0; right: 0; top: 12px; width: fit-content; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; z-index: 2; max-width: min(60%, 520px); }
-.nm-header-face { position: relative; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; cursor: pointer; box-shadow: 0 0 0 2px transparent; transition: box-shadow 300ms; }
+/* 66px: the same size as the Avatar the header draws (MuseHeader.tsx), or the picture
+   overflows its box and covers the name under it. */
+.nm-header-face { position: relative; width: 66px; height: 66px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; cursor: pointer; box-shadow: 0 0 0 2px transparent; transition: box-shadow 300ms; }
 .nm-header-face.nm-live { box-shadow: 0 0 0 2px var(--nm-accent); }
 .nm-header-face.nm-wait { box-shadow: 0 0 0 2px var(--dsw-alias-state-warn-primary, #d98c1f); }
 .nm-header-face:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: 2px; }

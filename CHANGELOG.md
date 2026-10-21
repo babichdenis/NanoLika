@@ -63,6 +63,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Desktop
 
+- **The face over the chat no longer covers the name.** The header drew a 66px picture inside a 44px button, so the face spilled 11px past its box and sat on the first line of the name under it. The box is now the picture's own size and the header holds 22px more room on every platform (130px, 158px with the macOS title bar, 144px on Windows), which the thread keeps clear.
+
 - **A question asked from another device shows up as the bubble it was.** A task that arrived over the hub (`[Asked from …]`) was stored with its own source kind, so the chat drew only the answer and the person's own words were missing from the conversation they were reading. The task is now a `user` message whose text comes first and whose note of where it came from sits under it, and the sync engine recognises that note (`MIRROR_NOTE`) and leaves the turn out of the push, so the other device does not receive its own words back.
 
 - **The agent can say an answer out loud.** The `speak` tool reads a short answer in the person's own language with the voice the computer already has (`say` on macOS, the system synthesizer on Windows, `spd-say` on Linux), with the Markdown stripped and the text cut at a sentence; nothing is sent anywhere and no model is involved. The microphone half is the voice input rows beside it.
