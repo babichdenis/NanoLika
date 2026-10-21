@@ -32,7 +32,28 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from nanomuse.logger import logger
 from nanomuse.schema import RiskLevel
 
-DEFAULT_DATA_DIR = Path.home() / ".nanomuse"
+# The runtime's home. It was ~/.nanomuse while the project was called nanoMuse; an existing
+# folder of that name is renamed once, on the first start after the rename, so the vault, the
+# workspace and the sessions of an install carry on without anyone copying files.
+LEGACY_DATA_DIR = Path.home() / ".nanomuse"
+DEFAULT_DATA_DIR = Path.home() / ".nanolika"
+
+
+def adopt_legacy_data_dir(home: Path = None) -> Path:
+    """The data dir to use: ``~/.nanolika``, with ``~/.nanomuse`` renamed into it once."""
+    target = home or DEFAULT_DATA_DIR
+    # a sibling of the target: ~/.nanomuse next to ~/.nanolika, whatever the home really is
+    legacy = target.with_name(LEGACY_DATA_DIR.name)
+    if not target.exists() and legacy.exists():
+        try:
+            legacy.rename(target)
+            logger.info("data dir: {} renamed to {}", legacy, target)
+        except OSError as exc:  # a read-only home, or another process got there first
+            logger.warning("data dir: could not rename {} to {}: {}", legacy, target, exc)
+            return legacy
+    return target
+
+
 _ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 

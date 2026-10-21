@@ -6,7 +6,7 @@ Search order:
 
 1. `--config PATH` / `NANOMUSE_CONFIG`
 2. `./config/config.toml`
-3. `~/.nanomuse/config.toml`
+3. `~/.nanolika/config.toml` (`~/.nanomuse` is renamed into it once)
 
 Any string value may contain `${VAR}` or `${VAR:-default}`; it is replaced with the environment variable when the file is loaded, so API keys never need to be written down. `api_key`, `address` and `password` may also be `{{vault:NAME}}`: the value is read from the encrypted vault when the client is built, never shown to the model.
 
@@ -22,7 +22,7 @@ These win over the file. They cover the settings people change most often and wh
 |---|---|
 | `NANOMUSE_LLM_PROVIDER`, `NANOMUSE_LLM_MODEL`, `NANOMUSE_LLM_BASE_URL`, `NANOMUSE_LLM_API_KEY`, `NANOMUSE_LLM_TOOL_MODE`, `NANOMUSE_LLM_VISION`, `NANOMUSE_LLM_IMAGE_MODEL`, `NANOMUSE_LLM_VIDEO_MODEL`, `NANOMUSE_LLM_VIDEO_BASE_URL` | `[llm]` (`video_base_url`: the asynchronous video API on another host than the chat model's; a relaying host such as the showcase gateway names itself here) |
 | `DEEPSEEK_API_KEY`, `OPENAI_API_KEY` | used as `llm.api_key` when it is empty: DeepSeek's for a `*.deepseek.com` `base_url`, OpenAI's for every other host (OpenAI itself, OpenRouter, a gateway, vLLM) |
-| `NANOMUSE_DATA_DIR` | `data_dir` (default `~/.nanomuse`) |
+| `NANOMUSE_DATA_DIR` | `data_dir` (default `~/.nanolika`) |
 | `NANOMUSE_WORKSPACE` | `agent.workspace` (default: `./workspace` when the current directory has one, else `<data_dir>/workspace`) |
 | `NANOMUSE_SENTINEL_MODE` | `sentinel.mode` |
 | `NANOMUSE_SEARCH_PROVIDER`, `NANOMUSE_SEARCH_API_KEY`, `NANOMUSE_SEARCH_BASE_URL` | `[connectors.search]` |
@@ -465,7 +465,7 @@ but metered or unknown networks wait for a manual download. See [desktop.md](des
 
 | Path | Contents |
 |---|---|
-| `~/.nanomuse/` (`data_dir`) | everything below |
+| `~/.nanolika/` (`data_dir`) | everything below |
 | `memory.db`, `goals.db` | SQLite |
 | `vault.enc`, `vault.key` | encrypted secrets and the key (or `NANOMUSE_VAULT_KEY`) |
 | `audit.jsonl` | append-only audit log |

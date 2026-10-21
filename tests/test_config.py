@@ -187,3 +187,28 @@ anything = 1
     assert settings.llm.model == "deepseek-chat"  # the known keys are read as before
     assert [w for w in warnings if "llm.modle" in w and "ignored" in w]
     assert not [w for w in warnings if "channels" in w]
+
+
+def test_the_old_home_is_taken_over_once(tmp_path: Path) -> None:
+    """~/.nanomuse was the runtime's home until the rename; an install keeps its vault."""
+    from nanomuse.config import adopt_legacy_data_dir
+
+    home = tmp_path / ".nanolika"
+    old = tmp_path / ".nanomuse"
+    old.mkdir()
+    (old / "vault.key").write_text("k")
+    assert adopt_legacy_data_dir(home) == home
+    assert (home / "vault.key").read_text() == "k"
+    assert not old.exists()
+    # a second start finds its own home and touches nothing
+    (home / "later.txt").write_text("x")
+    assert adopt_legacy_data_dir(home) == home
+    assert (home / "later.txt").exists()
+
+
+def test_a_new_install_gets_the_new_home(tmp_path: Path) -> None:
+    from nanomuse.config import adopt_legacy_data_dir
+
+    home = tmp_path / ".nanolika"
+    assert adopt_legacy_data_dir(home) == home
+    assert not home.exists()  # created by the runtime when it needs it

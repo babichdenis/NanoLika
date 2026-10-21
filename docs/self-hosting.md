@@ -57,7 +57,7 @@ Every app signs in against `https://cloud.nanomuse.cn` unless you tell it otherw
 
 - **Android** (0.1.38). *Use a different server* under the sign-in form takes the relay's address; *Check* asks its `/healthz` and shows the version, *Use this server* keeps the address across launches. `https://` is required outside your own network; plain `http://` is accepted for a private address (`10.x`, `172.16-31.x`, `192.168.x`, `localhost`, a `.local` or `.ts.net` name). Settings → Account shows the server with *Change*, which signs the phone out first ([android.md](android.md)).
 - **iPhone / iPad.** The same link on the sign-in sheet, with the same rules.
-- **nanoMuse Desktop.** The relay is the `baseURL` of the plugin's cloud row. Add this to `cordis.patch.yml` in the desktop's profile, `~/.nanomuse/desktop/profiles/nanomuse/` (`%USERPROFILE%\.nanomuse\desktop\profiles\nanomuse\` on Windows; `NANOMUSE_DESKTOP_HOME` moves it), and restart the app:
+- **nanoMuse Desktop.** The relay is the `baseURL` of the plugin's cloud row. Add this to `cordis.patch.yml` in the desktop's profile, `~/.nanolika/desktop/profiles/nanolika/` (`%USERPROFILE%\.nanolika\desktop\profiles\nanolika\` on Windows; `NANOLIKA_DESKTOP_HOME` moves it), and restart the app:
 
   ```yaml
   - id: nanomuse-cloud

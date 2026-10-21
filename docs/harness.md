@@ -360,7 +360,7 @@ a community project with no affiliation) apply unchanged.
    (`ELECTRON_RUN_AS_NODE`, `--expose-internals`; the harness's `require-builtin` addon
    fingerprints the Electron it was built for, so the shell pins one exact Electron version), from a `dsh`
    that npm installed under `resources/dsh` together with the bundle at build time,
-   against a profile of its own under `~/.nanomuse/desktop` that names the bundle and
+   against a profile of its own under `~/.nanolika/desktop` that names the bundle and
    links it from the copy inside the app. The runtime for the hands rides along as a
    PyInstaller build, and `NANOMUSE_PY` points the preset at it. `desktop-app.yml` builds
    the Windows installer, the macOS dmg/zip for both architectures and the Linux

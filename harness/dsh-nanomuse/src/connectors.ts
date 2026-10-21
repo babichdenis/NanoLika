@@ -37,6 +37,7 @@ import { dshHome, json, message, sameOrigin, send } from './cloud.ts'
 import { CATALOGUE, catalogueEntry, type CatalogueAuth } from './connectors-catalogue.ts'
 import { hasUserinfo, USERINFO_TEXT } from './providers.ts'
 import { RelayError } from './relay.ts'
+import { stateDir, statePath } from './paths.ts'
 
 export const API_PREFIX = '/nanomuse/connectors'
 /** The loopback port tried first (so OAuth clients registered once keep their redirect URI); any free one otherwise. */
@@ -731,7 +732,7 @@ export default class NanomuseConnectors extends Service {
   // ---- the file ---------------------------------------------------------------------------
 
   private get file(): string {
-    return join(dshHome(), 'nanomuse', 'connectors.json')
+    return statePath('connectors.json')
   }
 
   private async read(): Promise<Store> {
@@ -745,7 +746,7 @@ export default class NanomuseConnectors extends Service {
 
   private save(): Promise<void> {
     this.writing = this.writing.then(async () => {
-      await mkdir(join(dshHome(), 'nanomuse'), { recursive: true })
+      await mkdir(stateDir(), { recursive: true })
       const tmp = `${this.file}.${process.pid}.tmp`
       await writeFile(tmp, JSON.stringify(this.store, null, 2), { mode: 0o600 })
       await rename(tmp, this.file)

@@ -23,8 +23,8 @@ from nanomuse import __version__
 from nanomuse.channels.cli import channels_app
 from nanomuse.chatgpt_cli import chatgpt_app
 from nanomuse.config import (
-    DEFAULT_DATA_DIR,
     Settings,
+    adopt_legacy_data_dir,
     find_config_file,
     load_settings,
     unknown_keys,
@@ -1475,7 +1475,7 @@ def config_path() -> None:
         console.print(str(found))
         return
     # no file: the data directory still follows NANOMUSE_DATA_DIR, as every command does
-    data_dir = Path(os.environ.get("NANOMUSE_DATA_DIR") or DEFAULT_DATA_DIR).expanduser()
+    data_dir = Path(os.environ.get("NANOMUSE_DATA_DIR") or adopt_legacy_data_dir()).expanduser()
     console.print(f"[dim]none found (defaults + env). Data dir: {data_dir}[/dim]")
 
 

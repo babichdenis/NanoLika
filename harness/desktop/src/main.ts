@@ -39,7 +39,7 @@ import { windowsNetworkCost } from "./windows-network-cost";
  * (docs/desktop.md, docs/harness.md).
  */
 
-const PROFILE = "nanomuse";
+const PROFILE = "nanolika";
 // The composition: the harness's base and Web app, its Schedule (the goals' automations and
 // the agent's reminders — an optional bundle of the harness, on by default here), then ours.
 const BUNDLES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@deepseek-ai/dsh-experimental-schedule-bundle", "dsh-nanomuse", "@absolutemikhail/dsh-locale-ru"];
@@ -136,13 +136,20 @@ function harnessHome(): string {
   if (resolvedHome) return resolvedHome;
   const fromEnv = process.env.NANOMUSE_DESKTOP_HOME || process.env.NANOMUSE_HARNESS_HOME;
   if (fromEnv) return (resolvedHome = fromEnv);
-  const home = join(homedir(), ".nanomuse", "desktop");
+  const home = join(homedir(), ".nanolika", "desktop");
   const previous = join(homedir(), ".nanomuse", "harness");
-  if (!existsSync(home) && existsSync(join(previous, "profiles"))) {
-    try {
-      renameSync(previous, home);
-    } catch {
-      return (resolvedHome = previous);
+  const before = join(homedir(), ".nanomuse", "desktop");
+  if (!existsSync(home)) {
+    // the app was called nanoMuse until 0.1.x: its home is renamed once, so the account,
+    // the chats and the profile of that install carry on instead of a fresh start
+    for (const old of [before, previous]) {
+      if (!existsSync(old)) continue;
+      try {
+        renameSync(old, home);
+        break;
+      } catch {
+        return (resolvedHome = old);
+      }
     }
   }
   return (resolvedHome = home);
@@ -208,6 +215,15 @@ function bundledNode(): string | undefined {
  */
 function ensureProfile(dshDir: string): string {
   const dir = join(harnessHome(), "profiles", PROFILE);
+  const oldProfile = join(harnessHome(), "profiles", "nanomuse");
+  // the profile was named after the old app: keep its settings, which dsh writes into it
+  if (!existsSync(dir) && existsSync(oldProfile)) {
+    try {
+      renameSync(oldProfile, dir);
+    } catch {
+      /* a fresh profile is made below */
+    }
+  }
   mkdirSync(join(dir, "node_modules"), { recursive: true });
   const manifestPath = join(dir, "package.json");
   let manifest: Record<string, unknown> = {};

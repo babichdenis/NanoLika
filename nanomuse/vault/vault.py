@@ -7,7 +7,7 @@ resolve their own configuration right before use. Tool output is scrubbed of
 any secret value before it is handed back to the model.
 
 Key management: ``$NANOMUSE_VAULT_KEY`` (base64 Fernet key) or a key file at
-``~/.nanomuse/vault.key`` created on first use with ``0600`` permissions.
+``~/.nanolika/vault.key`` created on first use with ``0600`` permissions.
 """
 
 from __future__ import annotations

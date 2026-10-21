@@ -59,6 +59,7 @@ import { DEFAULT_VIDEO_MODEL, hostOf, KNOWN_DASHSCOPE_MODELS, looksLikeVideoMode
 import { editImage as ownEditImage, generateImage as ownGenerateImage, imageShapeOf, type ImageEndpoint } from './images.ts'
 import { checkMove, checkScreenshot, displayInfo, isBlack, runtimeInfo, screenHead, type MoveCheck, type RuntimeInfo, type ScreenshotCheck } from './hands-check.ts'
 import { apiOf, baseUrlFor, CAPABILITIES, capabilitiesForAuth, capabilitiesOf, CHATGPT_KEY_REF, CHATGPT_PROVIDER, ChatGptDesk, hasUserinfo, keyRefFor, listModelRows, listModels, loadCatalogue, modelsOf, ownProviderRow, parseModelReasoning, regionOf, typedModelIds, USERINFO_TEXT, type Capability, type ChatGptState, type LoginView, type OwnModel, type OwnProvider, type ProviderEntry, type Region } from './providers.ts'
+import { stateDir, statePath } from './paths.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -783,7 +784,7 @@ export default class NanomuseCloud extends Service {
       // The account's conversations, the same on every device (C7, C8): the person's words go up as
       // they are sent and the model's when the turn ends; the other devices' conversations are chats
       // here, their turns kept in the host's own store for the transcript and handed to the model as context.
-      const kept = new RemoteStore(join(dshHome(), 'nanomuse', 'sync-remote.json'), (error) => this.ctx.logger.warn('nanomuse cloud: remote turns not saved: %s', message(error)))
+      const kept = new RemoteStore(statePath('sync-remote.json'), (error) => this.ctx.logger.warn('nanomuse cloud: remote turns not saved: %s', message(error)))
       this.kept = kept
       const sync = new SyncEngine({
         relay: new SyncRelay(this.config.baseURL),
@@ -3160,7 +3161,7 @@ export default class NanomuseCloud extends Service {
   }
 
   private dir(): string {
-    return this.config.statePath ? dirname(this.config.statePath) : join(dshHome(), 'nanomuse')
+    return this.config.statePath ? dirname(this.config.statePath) : stateDir()
   }
 
   private statePath(): string {
@@ -3750,11 +3751,8 @@ export function providerRowFor(openaiBase: string, models: RelayModel[]): Record
 }
 
 /** `$DSH_HOME`, or `~/.dsh`: the same rule the launcher applies. */
-export function dshHome(): string {
-  const configured = process.env.DSH_HOME
-  if (configured) return configured
-  return join(process.env.HOME ?? process.env.USERPROFILE ?? '.', '.dsh')
-}
+export { dshHome } from './paths.ts'
+
 
 /** The reason of a `hand_over` action (the agent gives the screen to the person), or nothing. */
 export function handOverOf(args: unknown): string | undefined {

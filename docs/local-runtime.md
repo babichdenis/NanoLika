@@ -41,7 +41,7 @@ Everything is under the app's private files directory (`/data/data/io.github.nan
 | Path | Inside the box | What |
 | --- | --- | --- |
 | `rootfs/` | `/` | Alpine + python + `nanomuse`. Replaced whole when the app updates |
-| `home/` | `/root` | The data dir (`~/.nanomuse`), the workspace, npm's globals, uv's cache. Kept across updates |
+| `home/` | `/root` | The data dir (`~/.nanolika`), the workspace, npm's globals, uv's cache. Kept across updates |
 | `etc/resolv.conf`, `etc/hosts` | `/etc/…` | Written from the phone's network settings before each start |
 | `proc/` | `/proc/stat` … | Stand-ins for the `/proc` files Android hides from apps |
 | `tmp/` | `/tmp` | Also PRoot's own scratch space |

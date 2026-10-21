@@ -277,7 +277,7 @@ installed; the rest of the runtime is unaffected.
 
 ## Config and data
 
-`~/.nanomuse/desktop` (`NANOMUSE_DESKTOP_HOME` moves it) is the app's dsh home: the
+`~/.nanolika/desktop` (`NANOLIKA_DESKTOP_HOME` moves it; a home kept as `~/.nanomuse/desktop` is renamed into it on the first start) is the app's dsh home: the
 profile under `profiles/nanomuse` (the bundle list, the person's own `cordis.patch.yml`
 where Settings and the sign-in write the `nanoMuse Cloud` provider), dsh's credential
 store with the account key, the sessions, `desktop.log` with the shell's and the Host's
@@ -458,7 +458,7 @@ reach the model as if it were the screen. What the chat and `computer_screen` sa
 The pre-0.1.38 `desktopCapturer` path remains only for a build without the helper bundle
 (below).
 
-**Checking it on a Mac.** `~/.nanomuse/desktop/desktop.log` has the chain:
+**Checking it on a Mac.** `~/.nanolika/desktop/desktop.log` has the chain:
 
 - `helper: nanoMuse Computer Use <version> (pid …) at http://127.0.0.1:… — screen granted,
   accessibility true, capture ScreenCaptureKit`: the helper is up and, on macOS 14+, says
@@ -634,5 +634,5 @@ helper, on the pre-0.1.38 path.
   it under Settings → Permissions. Text outside ASCII is typed through the clipboard
   (`xclip`/`xsel` are not needed; Electron's clipboard is used) and Ctrl+V; the previous
   clipboard content is put back afterwards.
-- The log is `~/.nanomuse/desktop/desktop.log` (each operator action is a line, `operator:
+- The log is `~/.nanolika/desktop/desktop.log` (each operator action is a line, `operator:
   click at 1249,1096`); the launcher's side is in `journalctl --user -n 200`.

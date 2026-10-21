@@ -55,6 +55,7 @@ import type {} from './cloud.ts'
 import { dshHome, json, message, sameOrigin, send } from './cloud.ts'
 import { RelayError } from './relay.ts'
 import { textOf } from './task.ts'
+import { STATE_DIR, stateDir, statePath } from './paths.ts'
 
 export const API_PREFIX = '/nanomuse/rooms'
 
@@ -430,7 +431,7 @@ export default class NanomuseRooms extends Service {
   // ---- the first run and the first conversation (C4) -----------------------------------
 
   private get firstRunPath(): string {
-    return join(dshHome(), 'nanomuse', 'firstrun.json')
+    return statePath('firstrun.json')
   }
 
   firstRunState(): FirstRunState {
@@ -555,7 +556,7 @@ export default class NanomuseRooms extends Service {
   // ---- the star nudges (C1) ------------------------------------------------------------
 
   private get nudgesPath(): string {
-    return join(dshHome(), 'nanomuse', 'nudges.json')
+    return statePath('nudges.json')
   }
 
   private nudgesView(): NudgesView {
@@ -665,7 +666,7 @@ export default class NanomuseRooms extends Service {
   }
 
   private async writeSmall(path: string, snapshot: string): Promise<void> {
-    await mkdir(join(dshHome(), 'nanomuse'), { recursive: true })
+    await mkdir(stateDir(), { recursive: true })
     const tmp = `${path}.${process.pid}.tmp`
     await writeFile(tmp, snapshot, { mode: 0o600 })
     await rename(tmp, path)
@@ -963,11 +964,11 @@ export default class NanomuseRooms extends Service {
         else if (info.size <= 64 * 1024 * 1024) entries.push({ name: `${under}${name}`, data: await readFile(full), at: info.mtime })
       }
     }
-    await add(join(home, 'nanomuse'), 'nanomuse/', (name) => name.endsWith('.tmp'))
+    await add(stateDir(), `${STATE_DIR}/`, (name) => name.endsWith('.tmp'))
     await add(join(home, 'sessions'), 'sessions/')
     const prefs = join(home, 'desktop.json')
     if (await stat(prefs).catch(() => null)) entries.push({ name: 'desktop.json', data: await readFile(prefs), at: new Date() })
-    entries.push({ name: 'README.txt', at: new Date(), data: Buffer.from(['Your NanoLika data, exported ' + new Date().toISOString(), '', 'nanomuse/cloud.json    the account snapshot (no sign-in token)', 'nanomuse/profile.json  the agent’s name and look; faces/ its pictures', 'nanomuse/rooms.json    feed, ideas, goals, the library index and memory', 'sessions/              the chats, as DeepSeek Harness keeps them (zstd-compressed JSON lines)', ''].join('\n'))})
+    entries.push({ name: 'README.txt', at: new Date(), data: Buffer.from(['Your NanoLika data, exported ' + new Date().toISOString(), '', 'nanolika/cloud.json    the account snapshot (no sign-in token)', 'nanolika/profile.json  the agent’s name and look; faces/ its pictures', 'nanolika/rooms.json    feed, ideas, goals, the library index and memory', 'sessions/              the chats, as DeepSeek Harness keeps them (zstd-compressed JSON lines)', ''].join('\n'))})
     await writeFile(out, zip(entries), { mode: 0o600 })
     const sc = this.ctx.get('sessionController')
     if (sc) await sc.openWorkspacePath({ path: out, action: 'reveal' }, new AbortController().signal).catch(() => undefined)
@@ -981,8 +982,8 @@ export default class NanomuseRooms extends Service {
     this.automations = {}
     await this.save()
     await this.ctx.nanomuseCloud.signOut().catch(() => undefined)
-    await rm(join(dshHome(), 'nanomuse', 'profile.json'), { force: true }).catch(() => undefined)
-    await rm(join(dshHome(), 'nanomuse', 'faces'), { recursive: true, force: true }).catch(() => undefined)
+    await rm(statePath('profile.json'), { force: true }).catch(() => undefined)
+    await rm(statePath('faces'), { recursive: true, force: true }).catch(() => undefined)
   }
 
   get feedInstructions(): string {
@@ -1770,7 +1771,7 @@ export default class NanomuseRooms extends Service {
   // ---- storage ---------------------------------------------------------------------------
 
   private get path(): string {
-    return join(dshHome(), 'nanomuse', 'rooms.json')
+    return statePath('rooms.json')
   }
 
   private async read(): Promise<Store> {
@@ -1797,7 +1798,7 @@ export default class NanomuseRooms extends Service {
     const snapshot = JSON.stringify(this.store, null, 2) + '\n'
     this.writing = this.writing.then(async () => {
       const path = this.path
-      await mkdir(join(dshHome(), 'nanomuse'), { recursive: true })
+      await mkdir(stateDir(), { recursive: true })
       const tmp = `${path}.${process.pid}.tmp`
       await writeFile(tmp, snapshot, { mode: 0o600 })
       await rename(tmp, path)
@@ -1834,7 +1835,7 @@ export default class NanomuseRooms extends Service {
         return record ? send(res, 200, record) : send(res, 404, { error: { code: 'not_found', message: 'No record of that chat' } })
       }
       if (req.method === 'GET' && route === '/docs') return send(res, 200, this.docs())
-      if (req.method === 'GET' && route === '/files') return send(res, 200, { home: homeDir(), library: this.libraryFolder(), downloads: await downloadsDir(), state: join(dshHome(), 'nanomuse') })
+      if (req.method === 'GET' && route === '/files') return send(res, 200, { home: homeDir(), library: this.libraryFolder(), downloads: await downloadsDir(), state: stateDir() })
       if (req.method === 'GET' && route === '/library/file') return this.serveFile(res, url.searchParams.get('id') ?? '', url.searchParams.get('raw') === '1')
       if (req.method !== 'POST') return send(res, 404, { error: { code: 'not_found', message: `No ${req.method ?? ''} ${route}` } })
       const body = await json(req)
@@ -1948,7 +1949,7 @@ export default class NanomuseRooms extends Service {
           const sc = this.ctx.get('sessionController')
           if (!sc) return send(res, 503, { error: { code: 'no_sessions', message: 'Not available yet' } })
           const which = String(body.which ?? '')
-          const folder = which === 'home' ? homeDir() : which === 'downloads' ? await downloadsDir() : which === 'state' ? join(dshHome(), 'nanomuse') : which === 'runtime' ? join(homeDir(), '.nanomuse') : this.libraryFolder()
+          const folder = which === 'home' ? homeDir() : which === 'downloads' ? await downloadsDir() : which === 'state' ? stateDir() : which === 'runtime' ? join(homeDir(), '.nanomuse') : this.libraryFolder()
           await mkdir(folder, { recursive: true })
           await sc.openWorkspacePath({ path: folder, action: 'reveal' }, new AbortController().signal)
           return send(res, 204)

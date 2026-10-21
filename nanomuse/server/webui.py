@@ -88,7 +88,7 @@ class WebUI:
         self.workspace = workspace
         # directories inside the workspace that are nanoMuse's own (the data dir, when
         # someone points both at the same place) — never artifacts. A data dir that
-        # *contains* the workspace (~/.nanomuse and ~/.nanomuse/workspace) is not inside
+        # *contains* the workspace (~/.nanolika and ~/.nanolika/workspace) is not inside
         # it and must not blank the whole scan.
         ws = workspace.resolve() if workspace is not None else None
         self.exclude = tuple(
