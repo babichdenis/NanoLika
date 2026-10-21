@@ -35,6 +35,10 @@
       "types": "./lib/types/rooms-tools.d.ts",
       "default": "./lib/rooms-tools.js"
     },
+    "./memory-tools": {
+      "types": "./lib/types/memory-tools.d.ts",
+      "default": "./lib/memory-tools.js"
+    },
     "./connectors": {
       "types": "./lib/types/connectors.d.ts",
       "default": "./lib/connectors.js"

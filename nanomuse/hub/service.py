@@ -126,7 +126,15 @@ class HubService:
     def _extra_actions(self) -> tuple[str, ...]:
         from nanomuse.coding.service import ACTIONS as CODING_ACTIONS
 
-        return ("task", "stop", "approve", *CODING_ACTIONS)
+        return (
+            "task",
+            "stop",
+            "approve",
+            "memory.add",
+            "memory.search",
+            "memory.forget",
+            *CODING_ACTIONS,
+        )
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -687,7 +695,11 @@ class HubService:
             ok = self.svc.decide(approval_id, bool(call.args.get("allow")), "once")
             await call.result({"ok": ok})
             return
-        if not self.settings.hub.remote_control and call.action != "info":
+        if (
+            not self.settings.hub.remote_control
+            and call.action != "info"
+            and not call.action.startswith("memory.")
+        ):
             await call.fail(
                 "not_allowed", f"{self.device_name} is set not to be operated from other devices"
             )
@@ -703,6 +715,9 @@ class HubService:
             return
         if call.action == "task":
             await self._task(call)
+            return
+        if call.action.startswith("memory."):
+            await self._memory_call(call)
             return
         if call.action == "stop":
             # only the device that asked may stop its task (docs/hub.md): a `call` id must be
@@ -731,6 +746,60 @@ class HubService:
             await call.result(result)
             return
         await call.fail("unknown_action", f"this computer does not do '{call.action}'")
+
+    async def _memory_call(self, call: IncomingCall) -> None:
+        """The account's facts, for every device: this machine keeps the one store (the phone
+        and the computer keep no copy of their own), and the hub is how they read and write
+        it — `memory.add {content, category?}`, `memory.search {query, limit?}`,
+        `memory.forget {id | query}`."""
+        store = self.svc.app.memory
+        if store is None:
+            # `[memory] enabled = false`: this computer keeps no facts, so it cannot be the
+            # account's memory either (the desktop refuses rather than writing a local copy)
+            await call.fail("not_available", "memory is off on this computer")
+            return
+        a = call.args
+        try:
+            if call.action == "memory.add":
+                content = str(a.get("content") or "").strip()
+                if not content:
+                    await call.fail("usage", "content is required")
+                    return
+                item = store.add(content, category=str(a.get("category") or "general"))
+                self.svc.bus.publish({"kind": "memory"})
+                await call.result({"id": item.id, "content": item.content})
+                return
+            if call.action == "memory.search":
+                query = str(a.get("query") or "").strip()
+                limit = max(1, min(50, int(a.get("limit") or 8)))
+                # the runtime's own search: rare shared words count most, and the embedder
+                # is used when one is attached (nanomuse/memory/store.py)
+                found = await store.search_async(query, limit=limit) if query else []
+                await call.result(
+                    {
+                        "items": [
+                            {"id": m.id, "content": m.content, "category": m.category}
+                            for m in found
+                        ]
+                    }
+                )
+                return
+            if call.action == "memory.forget":
+                mid = str(a.get("id") or "").strip()
+                if mid:
+                    await call.result({"forgotten": 1 if store.forget(mid) else 0})
+                    return
+                query = str(a.get("query") or "").strip()
+                if not query:
+                    await call.fail("usage", "id or query is required")
+                    return
+                self.svc.bus.publish({"kind": "memory"})
+                await call.result({"forgotten": store.forget_matching(query)})
+                return
+        except (ValueError, TypeError) as exc:
+            await call.fail("failed", str(exc))
+            return
+        await call.fail("unknown_action", f"this device does not do '{call.action}'")
 
     async def _coding_call(self, call: IncomingCall) -> None:
         """Another device looking at, or steering, the coding agents on this computer."""

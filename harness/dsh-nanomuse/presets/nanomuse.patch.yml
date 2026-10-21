@@ -207,6 +207,15 @@
           # the person's goals. Needs the `nanomuse-rooms` row of the bundle.
           - id: nanomuse-rooms-tools
             name: dsh-nanomuse/rooms-tools
+          # The account's facts from inside a chat: `remember`, `recall`, `forget`
+          # (src/memory-tools.ts) go over the hub to the device that keeps the one
+          # memory, the NanoLika runtime on the always-on computer, found by what it
+          # answers to `info`. A fact said here is known on the phone and through the
+          # bot, and the other way round; this computer keeps no copy, and with that
+          # device offline the tools refuse instead of writing a local one. Needs the
+          # cloud row (`nanomuse-cloud`).
+          - id: nanomuse-memory-tools
+            name: dsh-nanomuse/memory-tools
           # The services connected on Settings → Connectors: one MCP client per
           # connection (src/connectors-tools.ts), through the host row
           # `nanomuse-connectors`' loopback proxy, which holds the credentials.

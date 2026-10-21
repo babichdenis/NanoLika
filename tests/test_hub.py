@@ -1056,6 +1056,38 @@ def test_delegate_tool_asks_the_device_and_passes_the_answer_on(hub_server) -> N
     assert task_call["args"]["from"] == "Desk"
 
 
+def test_the_account_memory_is_read_and_written_from_another_device(hub_server) -> None:
+    """A fact said on the phone lands in this computer's one memory (docs/hub.md)."""
+    client, service, _llm, relay = hub_server
+    sign_in(client)
+    wait_for(lambda: client.get("/api/hub").json()["state"] == "connected")
+    # the announcement is what a client looks for when it needs the keeper
+    assert "memory.add" in relay.hello["device"]["actions"]
+    assert "memory.search" in relay.hello["device"]["actions"]
+
+    relay.call_runtime("memory.add", {"content": "Denis works in the evenings", "category": "routine"}, "m1")
+    res = relay.next_frame("result")
+    assert res["id"] == "m1" and res["ok"] is True
+    mid = res["body"]["id"]
+    assert mid.startswith("m_")
+    assert service.app.memory.get(mid).content == "Denis works in the evenings"
+
+    relay.call_runtime("memory.search", {"query": "evenings", "limit": 5}, "m2")
+    res = relay.next_frame("result")
+    assert res["ok"] is True
+    assert [m["content"] for m in res["body"]["items"]] == ["Denis works in the evenings"]
+
+    # an empty fact is a usage error, not a silent write
+    relay.call_runtime("memory.add", {"content": "   "}, "m3")
+    res = relay.next_frame("result")
+    assert res["ok"] is False and res["error"] == "usage"
+
+    relay.call_runtime("memory.forget", {"id": mid}, "m4")
+    res = relay.next_frame("result")
+    assert res["ok"] is True and res["body"]["forgotten"] == 1
+    assert service.app.memory.get(mid) is None
+
+
 def test_coding_actions_are_served_to_other_devices(
     hub_server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
