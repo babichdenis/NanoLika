@@ -661,7 +661,7 @@ class ChannelManager(ChannelBus):
             body = text or ", ".join(n for n in files if n)
             name = str(event.get("via_device_name") or event.get("via_device") or "").strip()
             if body and name:
-                await self.deliver(f"{name}: {body}", exclude_thread=thread)
+                await self.echo(name, body, exclude_thread=thread)
             return
         if kind == "assistant":
             text = str(event.get("text") or "")
@@ -776,6 +776,26 @@ class ChannelManager(ChannelBus):
         n = 0
         for channel, chat_id in self._targets(exclude_thread):
             await self._send(channel, chat_id, text)
+            n += 1
+        return n
+
+    async def echo(self, device: str, text: str, *, exclude_thread: str = "") -> int:
+        """A line the person wrote on another device of the account, put into every chat
+        marked "deliver here" as *their* words rather than as an answer: a channel that can
+        mark it that way does (Telegram: a dot in NanoLika's colour and a quote block), the
+        rest get it with the device named in front. It never rings (see
+        :meth:`TelegramChannel.echo`); returns how many chats got it."""
+        n = 0
+        for channel, chat_id in self._targets(exclude_thread):
+            mark = getattr(self.channels.get(channel), "echo", None)
+            if mark is not None:
+                try:
+                    await mark(chat_id, device, text)
+                    n += 1
+                    continue
+                except Exception as exc:  # noqa: BLE001 — a vendor refusal; the plain line follows
+                    logger.warning("channel {}: echo to {} failed: {}", channel, chat_id, exc)
+            await self._send(channel, chat_id, f"{device}: {text}")
             n += 1
         return n
 

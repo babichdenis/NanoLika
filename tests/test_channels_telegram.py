@@ -256,3 +256,30 @@ async def test_bad_token_fails_to_start(tg: FakeTelegram):
     tg.fail_token = True
     with pytest.raises(TelegramError, match="Unauthorized"):
         await channel(tg).start(Bus())
+
+
+async def test_echo_is_quiet_quoted_and_marked(tg: FakeTelegram):
+    """A line written on another device goes in as the person's words: a dot in NanoLika's
+    colour, the device named, the text quoted, and no notification (the chat has it when it
+    is opened). A Telegram Business chat sends through the person's own account."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    assert await ch.echo("1001", "MacBook-Pro-Babich.local", "Тест <b>не жирный</b> & так")
+    sent = tg.of("sendMessage")[-1]
+    assert sent["chat_id"] == "1001"
+    assert sent["disable_notification"] is True
+    assert sent["parse_mode"] == "HTML"
+    assert sent["text"] == (
+        "🟢 <b>MacBook-Pro-Babich.local</b>\n"
+        "<blockquote>Тест &lt;b&gt;не жирный&lt;/b&gt; &amp; так</blockquote>"
+    )
+    assert "business_connection_id" not in sent
+    # empty words are nothing to show
+    assert await ch.echo("1001", "iPhone", "   ") == ""
+    await ch.stop()
+    # a Business chat carries the connection id, and stays quiet by default
+    business = channel(tg, business_connection_id="bc-1")
+    await business.start(Bus())
+    await business.echo("1001", "iPhone", "Привет")
+    assert tg.of("sendMessage")[-1]["business_connection_id"] == "bc-1"
+    await business.stop()

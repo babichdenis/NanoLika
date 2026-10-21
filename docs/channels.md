@@ -205,6 +205,16 @@ it from the chat), a question that needs you. One Muse may deliver to several ch
 each decides for itself. `POST /api/channels/deliver {"text": …}` sends a line to all
 of them, useful from a script or a reminder.
 
+A line the person typed on another device of the account (the computer, the phone) arrives
+in a *deliver here* chat too, because the conversation is one conversation wherever it is
+written. It comes in as their own words rather than as an answer: Telegram adds a dot in
+NanoLika's colour, names the device, puts the text in a quote block and sends it with
+`disable_notification`, so the chat stays quiet and holds the message when it is opened. The
+Bot API can colour neither a bubble nor a line of text, which is why the dot and the quote
+are the mark; a chat connected through Telegram Business (`business_connection_id`) sends
+through the person's own account instead, and the other channels get the device name in
+front of the text.
+
 ## Security
 
 * Secrets go to the vault and never come back out of the API; the settings file holds

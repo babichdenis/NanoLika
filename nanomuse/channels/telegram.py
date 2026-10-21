@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import mimetypes
 from contextlib import suppress
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,12 @@ _BUTTONS = {
 POLL_TIMEOUT_S = 50
 TEXT_LIMIT = 4000  # Telegram allows 4096 per message
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+# NanoLika's colour, the sage of nanolika.ru. The Bot API cannot paint a bubble or a line of
+# text (the client draws both), so the honest mark of a line written on another device is a
+# dot in that colour and a quote block under it, quiet (see :meth:`TelegramChannel.echo`).
+LIKA_COLOR = "#52694e"
+ECHO_MARK = "🟢"
 
 
 class TelegramError(RuntimeError):
@@ -307,6 +314,35 @@ class TelegramChannel(Channel):
             await self._send_file(chat_id, path)
         return message_id
 
+    async def echo(self, chat_id: str, device: str, text: str, *, silent: bool = True) -> str:
+        """A line the person wrote on another device of the account, shown here as what it
+        is: their words, not an answer from the Muse.
+
+        The bubble cannot be coloured (the Bot API does not paint one), so the line carries a
+        dot in NanoLika's colour and the words go inside a quote block, with the device that
+        wrote them naming itself above. ``silent`` keeps the chat from ringing: the message
+        is already there the next time it is opened. When the chat is a Telegram Business
+        one (``business_connection_id`` set), it is sent through the person's own account.
+        """
+        body = text.strip()
+        if not body:
+            return ""
+        head = f"{ECHO_MARK} <b>{_html(device)}</b>" if device.strip() else ECHO_MARK
+        room = TEXT_LIMIT - len(head) - len("<blockquote>\n</blockquote>")
+        if len(body) > room:
+            body = body[: max(0, room - 1)] + "…"
+        params: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": f"{head}\n<blockquote>{_html(body)}</blockquote>",
+            "parse_mode": "HTML",
+            "disable_notification": bool(silent),
+        }
+        connection = str(self.settings.get("business_connection_id") or "").strip()
+        if connection:
+            params["business_connection_id"] = connection
+        result = await self._call("sendMessage", params)
+        return str(result.get("message_id") or "")
+
     async def _send_file(self, chat_id: str, path: Path) -> None:
         if self._http is None:
             raise TelegramError("Not connected.")
@@ -388,6 +424,12 @@ class TelegramChannel(Channel):
             with suppress(Exception):
                 await self._call("sendChatAction", {"chat_id": chat_id, "action": "typing"})
             await asyncio.sleep(4.5)
+
+
+def _html(text: str) -> str:
+    """What the Bot API's HTML parse mode lets through: everything else is escaped, so a
+    person's own words never break a message (``<`` in code, a stray ``&``)."""
+    return escape(text, quote=False)
 
 
 def _chunks(text: str, limit: int = TEXT_LIMIT) -> list[str]:
