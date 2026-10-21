@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Copy, ExternalLink, KeyRound, LogIn, Share2, Sp
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { getLocale, useT } from "../i18n";
+import { useMoney } from "../money";
 import { useStore } from "../store";
 import { coversLine, OWN_KEY_DOCS_URL, plans, presetFor, providerName, providersFor, regionOf } from "../providers";
 import { ownKeyLine, ownKeyWay } from "../region";
@@ -80,6 +81,7 @@ export function AllowanceWays({
   onChanged?: () => void;
 }) {
   const t = useT();
+  const cur = useMoney();
   const { toast, setTab, state } = useStore();
   const account = state.hub?.account;
   const way = ownKeyWay(account);
@@ -126,7 +128,7 @@ export function AllowanceWays({
   const starLine = useStarSentence(starText(t, "exhausted"));
   const lead = exhausted
     ? t("The free allowance is used up.")
-    : t("Nearly used up: ¥{left} of ¥{grant} left.", { left: (info.left ?? 0).toFixed(2), grant: (info.grant ?? 0).toFixed(0) });
+    : cur.s(t("Nearly used up: ¥{left} of ¥{grant} left.", { left: cur.value(info.left ?? 0).toFixed(2), grant: cur.value(info.grant ?? 0).toFixed(0) }));
 
   return (
     <div className={cx("space-y-2.5", !compact && "pt-1")}>
@@ -189,7 +191,7 @@ export function AllowanceWays({
         )}
       </Way>
 
-      <Way icon={<Users size={16} />} tone="bg-violet-500/12 text-violet-600 dark:text-violet-300" title={t("Invite a friend: +¥{bonus} for you and +¥{bonus} for them, once a new person who signed up with your link makes their first request.", { bonus: inviteBonus.toFixed(0) })}>
+      <Way icon={<Users size={16} />} tone="bg-violet-500/12 text-violet-600 dark:text-violet-300" title={cur.s(t("Invite a friend: +¥{bonus} for you and +¥{bonus} for them, once a new person who signed up with your link makes their first request.", { bonus: cur.value(inviteBonus).toFixed(0) }))}>
         {link ? (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void share()} className={cx(secondaryBtn, "inline-flex items-center gap-1.5")}>
@@ -251,6 +253,7 @@ const WARNED_KEY = "nm.cloud.warned_grant";
  */
 export function AllowanceHeadsUp() {
   const t = useT();
+  const cur = useMoney();
   const { state, setTab } = useStore();
   const [info, setInfo] = useState<AllowanceInfo | null>(null);
   const lastCheck = useRef(0);
@@ -309,10 +312,10 @@ export function AllowanceHeadsUp() {
     <div className="rise mx-3 mb-1.5 flex items-start gap-2 rounded-2xl bg-amber-500/12 px-3 py-2 text-[12.5px] leading-snug text-amber-800 dark:text-amber-200">
       <Sparkles size={14} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
-        {t("Nearly used up: ¥{left} of ¥{grant} left.", { left: (info.left ?? 0).toFixed(2), grant: (info.grant ?? 0).toFixed(0) })}{" "}
-        {t("Invite a friend (+¥{invite} for each of you) or bring your own key; your sign-in keeps working either way.", {
-          invite: (info.invite_bonus_cny ?? 5).toFixed(0),
-        })}{" "}
+        {cur.s(t("Nearly used up: ¥{left} of ¥{grant} left.", { left: cur.value(info.left ?? 0).toFixed(2), grant: cur.value(info.grant ?? 0).toFixed(0) }))}{" "}
+        {cur.s(t("Invite a friend (+¥{invite} for each of you) or bring your own key; your sign-in keeps working either way.", {
+          invite: cur.value(info.invite_bonus_cny ?? 5).toFixed(0),
+        }))}{" "}
         <button
           type="button"
           onClick={() => {

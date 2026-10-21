@@ -23,7 +23,9 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 - **Gmail dot/plus aliases and disposable mail domains no longer open duplicate free pools, and invite settlement ignores same-IP and tiny probes.** `parse()` now strips `+tag` subaddresses from every e-mail local part and canonicalises `gmail.com` and `googlemail.com` addresses by folding `googlemail.com` to `gmail.com` and removing dots from the local part, while `Database.account_by_hashes` still matches and upgrades existing accounts whose `id_hash` was recorded with dots before canonicalisation. New sign-ups from disposable mail domains (`DEFAULT_SIGNUP_DOMAIN_BLOCK` plus `SIGNUP_DOMAIN_BLOCK`, overridable via `SIGNUP_DOMAIN_ALLOW`) are refused with `429 domain_limited`, and the default `SIGNUP_PER_DOMAIN_DAY` for non-well-known domains is lowered from 20 to 5. Invite bonuses (`settle_invite`) no longer settle when the inviter and invitee share the same non-local `first_ip` or before the invitee either registers a Hub device or spends at least `INVITE_SETTLE_MIN_SPENT_UY` (200 micro-yuan by default).
 
-### Runtime
+### Web app
+
+- **Prices are printed in the operator's rubles.** The relay answers every figure in yuan (its provider's currency) and, when the operator prices in rubles, in rubles too; the app kept showing `¥` regardless, so a person billed in rubles read a currency he is never charged in. The account page, the allowance card, the sign-in invite line, the avatar price lines and the usage table now print `₽` with the converted figure, and a relay that does not price in rubles still shows yuan.
 
 - **`sandbox.mode = bwrap` now refuses to run instead of running unboxed.** Insisting on a box only wrote an error to the log, so a machine without bubblewrap quietly ran every command with no confinement at all. `shell` and `python_execute` now fail with the reason and a way out.
 

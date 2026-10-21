@@ -2,6 +2,7 @@ import { KeyRound, Loader2, MessageSquareText } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { api } from "../api";
 import { useT } from "../i18n";
+import { useMoney } from "../money";
 import { isMainland, looksLikeForeignNumber } from "../region";
 import { cx } from "../util";
 import { markFirstSignIn } from "./FirstSignInSteps";
@@ -57,6 +58,7 @@ export function SignIn({
   autoFocus?: boolean;
 }) {
   const t = useT();
+  const cur = useMoney();
   const ids = useId();
   const cfg = useCloudConfig();
   const [mode, setMode] = useState<"code" | "password">("code");
@@ -218,7 +220,7 @@ export function SignIn({
                 placeholder="ABCD2345"
                 className={cx(inputCls, "mt-1 tracking-[0.2em] uppercase")}
               />
-              <p className="mt-1.5 text-[12px] text-muted">{t("A friend's code counts for a new account: you both get ¥{invite} after your first request.", { invite: (cfg.invite_bonus_cny ?? 5).toFixed(0) })}</p>
+              <p className="mt-1.5 text-[12px] text-muted">{cur.s(t("A friend's code counts for a new account: you both get ¥{invite} after your first request.", { invite: cur.value(cfg.invite_bonus_cny ?? 5).toFixed(0) }))}</p>
             </div>
           ) : (
             <button type="button" onClick={() => setInviteOpen(true)} className="text-[12px] text-muted underline-offset-2 hover:underline">

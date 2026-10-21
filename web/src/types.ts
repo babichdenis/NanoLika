@@ -404,6 +404,11 @@ export interface CloudConfig {
   invite_bonus_cny?: number;
   invitee_bonus_cny?: number;
   usd_cny?: number;
+  /** relay 0.27: the operator prices in his own rubles (0 = he does not, and apps show yuan) */
+  rub_per_usd?: number;
+  topup_fee_pct?: number;
+  allowance_rub?: number;
+  invite_bonus_rub?: number;
   invite_url?: string;
   own_key_docs?: string;
   privacy_url?: string;
@@ -447,6 +452,12 @@ export interface CloudMe {
     unlimited: boolean;
     warn?: boolean;
     usd_cny?: number;
+    /** relay 0.27: the same figures in the operator's rubles, and the rates that made them */
+    rub_per_usd?: number;
+    topup_fee_pct?: number;
+    total_rub?: number;
+    grant_rub?: number;
+    left_rub?: number | null;
     allowance_cny?: number;
     invite_bonus_cny?: number;
     /** relay 0.9: the friend who signs up with the code gets the same */

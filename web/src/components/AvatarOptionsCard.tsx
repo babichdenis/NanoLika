@@ -2,6 +2,7 @@ import { Check, Loader2, RefreshCw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { api, fileUrl } from "../api";
 import { useT } from "../i18n";
+import { useMoney } from "../money";
 import { useStore } from "../store";
 import type { AvatarEvent } from "../types";
 import { cx } from "../util";
@@ -18,6 +19,7 @@ const MOOD_ORDER = ["idle", "working", "waiting", "happy", "error"];
  */
 export function AvatarOptionsCard({ event, name = "NanoLika" }: { event: AvatarEvent; name?: string }) {
   const t = useT();
+  const cur = useMoney();
   const { toast } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const cost = event.cost ?? {};
@@ -42,11 +44,11 @@ export function AvatarOptionsCard({ event, name = "NanoLika" }: { event: AvatarE
     if (cost.cloud === false) return t("{what}, made with your own key at your provider's prices.", { what });
     if (cost.error) return t("The cost could not be checked: {error}", { error: cost.error });
     if (typeof cost.cny !== "number") return t("Checking the cost…");
-    if (cost.unlimited) return t("About ¥{cny} for {what}; your account has no limit.", { cny: cost.cny.toFixed(2), what });
-    const left = typeof cost.left_cny === "number" ? cost.left_cny.toFixed(2) : "?";
+    if (cost.unlimited) return cur.s(t("About ¥{cny} for {what}; your account has no limit.", { cny: cur.value(cost.cny).toFixed(2), what }));
+    const left = typeof cost.left_cny === "number" ? cur.value(cost.left_cny).toFixed(2) : "?";
     return cost.affordable === false
-      ? t("About ¥{cny} for {what}, more than the ¥{left} left in your allowance.", { cny: cost.cny.toFixed(2), what, left })
-      : t("About ¥{cny} for {what}; ¥{left} left in your allowance.", { cny: cost.cny.toFixed(2), what, left });
+      ? cur.s(t("About ¥{cny} for {what}, more than the ¥{left} left in your allowance.", { cny: cur.value(cost.cny).toFixed(2), what, left }))
+      : cur.s(t("About ¥{cny} for {what}; ¥{left} left in your allowance.", { cny: cur.value(cost.cny).toFixed(2), what, left }));
   })();
 
   return (

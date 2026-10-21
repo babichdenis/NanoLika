@@ -9,6 +9,7 @@ import { primaryBtn, secondaryBtn } from "../components/Form";
 import { StarNudgeOnce } from "../components/StarNudge";
 import { useMenuKeys } from "../components/useMenuKeys";
 import { getLocale, useT } from "../i18n";
+import { useMoney } from "../money";
 import { regionOf, unavailableLine } from "../providers";
 import { useStore } from "../store";
 import type { StudioSession, StudioView } from "../types";
@@ -32,6 +33,7 @@ const DEFAULT_DESCRIPTION = "a round, custard-yellow baby dragon with small oran
 export function AvatarStudioScreen() {
   const { state, setTab, toast, draft, refreshSettings } = useStore();
   const t = useT();
+  const cur = useMoney();
   const profile = state.profile;
   const name = profile?.name ?? "NanoLika";
   const [view, setView] = useState<StudioView | null>(null);
@@ -102,11 +104,11 @@ export function AvatarStudioScreen() {
   const costLine = (() => {
     if (cost.error) return t("The cost could not be checked: {error}", { error: cost.error });
     if (typeof cost.cny !== "number") return t("Checking the cost…");
-    if (cost.unlimited) return t("About ¥{cny} for {what}; your account has no limit.", { cny: cost.cny.toFixed(2), what });
-    const left = typeof cost.left_cny === "number" ? cost.left_cny.toFixed(2) : "?";
+    if (cost.unlimited) return cur.s(t("About ¥{cny} for {what}; your account has no limit.", { cny: cur.value(cost.cny).toFixed(2), what }));
+    const left = typeof cost.left_cny === "number" ? cur.value(cost.left_cny).toFixed(2) : "?";
     return cost.affordable === false
-      ? t("About ¥{cny} for {what}, more than the ¥{left} left in your allowance.", { cny: cost.cny.toFixed(2), what, left })
-      : t("About ¥{cny} for {what}; ¥{left} left in your allowance.", { cny: cost.cny.toFixed(2), what, left });
+      ? cur.s(t("About ¥{cny} for {what}, more than the ¥{left} left in your allowance.", { cny: cur.value(cost.cny).toFixed(2), what, left }))
+      : cur.s(t("About ¥{cny} for {what}; ¥{left} left in your allowance.", { cny: cur.value(cost.cny).toFixed(2), what, left }));
   })();
 
   const styleLabel = (id: string | null | undefined) => AVATAR_STYLES.find((s) => s.id === id)?.label;

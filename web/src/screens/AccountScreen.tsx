@@ -7,6 +7,7 @@ import { inputCls, primaryBtn, secondaryBtn } from "../components/Form";
 import { SignIn } from "../components/SignIn";
 import { StarNudgeOnce, useCloudConfig } from "../components/StarNudge";
 import { useT, intlLocale } from "../i18n";
+import { money, useMoney } from "../money";
 import { useStore } from "../store";
 import { ownKeyLine } from "../region";
 import type { CloudAccount, CloudEvent, CloudMe, CloudSession, UsageRow } from "../types";
@@ -29,6 +30,7 @@ export function AccountScreen() {
   const [loading, setLoading] = useState(false);
   const signedIn = !!account?.signed_in;
   const cfg = useCloudConfig();
+  const cur = money(cfg);
 
   const load = async () => {
     if (!signedIn) return;
@@ -57,9 +59,9 @@ export function AccountScreen() {
         {!signedIn ? (
           <Section>
             <p className="text-[13.5px] text-muted leading-relaxed">
-              {t("Free. One account for all your devices, with a model and ¥{allowance} of use to start; a code the first time, a password afterwards if you like.", {
-                allowance: (cfg.allowance_cny ?? 10).toFixed(0),
-              })}
+              {cur.s(t("Free. One account for all your devices, with a model and ¥{allowance} of use to start; a code the first time, a password afterwards if you like.", {
+                allowance: cur.value(cfg.allowance_cny ?? 10).toFixed(0),
+              }))}
             </p>
             <SignIn onSignedIn={() => toast(t("Signed in to NanoLika Cloud."))} />
           </Section>
@@ -138,7 +140,9 @@ function Allowance({ me, onChanged }: { me: CloudMe; onChanged: () => void }) {
   const limited = !spend.unlimited && grant > 0;
   const pct = limited ? Math.min(100, Math.round((spent / grant) * 100)) : 0;
   const rate = spend.usd_cny ?? 0;
-  const usd = (cny: number) => (rate > 0 ? ` ≈ $${(cny / rate).toFixed(2)}` : "");
+  const cur = money(spend);
+  // the dollar line was a courtesy for a yuan bill; in rubles the ruble figure is the point
+  const usd = (cny: number) => (rate > 0 && !cur.rub ? ` ≈ $${(cny / rate).toFixed(2)}` : "");
   const exhausted = limited && (left ?? 0) <= 0;
   const warn = limited && !exhausted && (spend.warn ?? pct >= 80);
   const info = {
@@ -157,23 +161,23 @@ function Allowance({ me, onChanged }: { me: CloudMe; onChanged: () => void }) {
           <div className="text-[28px] font-bold tracking-tight leading-none">
             {limited ? (
               <>
-                ¥{(left ?? 0).toFixed(2)}
-                <span className="text-[14px] font-medium text-muted"> {t("left of ¥{grant}", { grant: grant.toFixed(0) })}</span>
+                {cur.text(left ?? 0)}
+                <span className="text-[14px] font-medium text-muted"> {cur.s(t("left of ¥{grant}", { grant: cur.value(grant).toFixed(0) }))}</span>
               </>
             ) : (
-              <>¥{spent.toFixed(2)}</>
+              <>{cur.text(spent)}</>
             )}
           </div>
           <div className="mt-1 text-[12.5px] text-muted">
             {limited
-              ? t("¥{spent} used{usd}; the allowance does not reset.", { spent: spent.toFixed(2), usd: usd(spent) })
+              ? cur.s(t("¥{spent} used{usd}; the allowance does not reset.", { spent: cur.value(spent).toFixed(2), usd: usd(spent) }))
               : t("No limit on this account.")}
           </div>
         </div>
         <div className="text-right text-[12.5px] text-muted">
           <div>{t("All time")}</div>
-          <div className="text-[15px] font-semibold text-fg">¥{spend.total.toFixed(2)}</div>
-          {rate > 0 && <div className="text-[11.5px]">≈ ${(spend.total / rate).toFixed(2)}</div>}
+          <div className="text-[15px] font-semibold text-fg">{cur.text(spend.total)}</div>
+          {rate > 0 && !cur.rub && <div className="text-[11.5px]">≈ ${(spend.total / rate).toFixed(2)}</div>}
         </div>
       </div>
       {limited && (
@@ -183,10 +187,10 @@ function Allowance({ me, onChanged }: { me: CloudMe; onChanged: () => void }) {
       )}
       {limited && (
         <p className="text-[12.5px] text-muted">
-          {t("¥{allowance} to start, +¥{invite} for each friend you invite, and +¥{invite} for them; after that, your own key keeps the model going.", {
-            allowance: (spend.allowance_cny ?? 10).toFixed(0),
-            invite: (info.invite_bonus_cny ?? 5).toFixed(0),
-          })}{" "}
+          {cur.s(t("¥{allowance} to start, +¥{invite} for each friend you invite, and +¥{invite} for them; after that, your own key keeps the model going.", {
+            allowance: cur.value(spend.allowance_cny ?? 10).toFixed(0),
+            invite: cur.value(info.invite_bonus_cny ?? 5).toFixed(0),
+          }))}{" "}
           {!exhausted && !warn && ownKeyLine(t, { signed_in: true, channel: me.account.channel, region: me.account.region })}
         </p>
       )}
@@ -229,6 +233,7 @@ function DataControlsLink({ me }: { me: CloudMe }) {
 /** Invite a friend: the code and link, what each friend's first request adds, and what came of it so far. */
 function Invite({ invite: inv }: { invite: NonNullable<CloudMe["invite"]> }) {
   const t = useT();
+  const cur = useMoney();
   const { toast } = useStore();
   const link = inv.url || `https://nanolika.ru/?invite=${inv.code}`;
   const earned = inv.earned_cny ?? inv.invites * inv.bonus_cny;
@@ -256,7 +261,7 @@ function Invite({ invite: inv }: { invite: NonNullable<CloudMe["invite"]> }) {
   return (
     <Section title={t("Invite a friend")}>
       <p className="text-[12.5px] text-muted">
-        {t("When a friend signs up with your code and makes their first request, you both get ¥{bonus}. It never expires.", { bonus: inv.bonus_cny.toFixed(0) })}
+        {cur.s(t("When a friend signs up with your code and makes their first request, you both get ¥{bonus}. It never expires.", { bonus: cur.value(inv.bonus_cny).toFixed(0) }))}
       </p>
       <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-2/70 px-3 py-2">
         <div>
@@ -277,7 +282,7 @@ function Invite({ invite: inv }: { invite: NonNullable<CloudMe["invite"]> }) {
       </div>
       <p className="text-[12.5px] text-muted">
         {t("{n} friends joined", { n: String(inv.invites) })}
-        {earned > 0 && <> · {t("¥{amount} added by invitations", { amount: earned.toFixed(0) })}</>}
+        {earned > 0 && <> · {cur.s(t("¥{amount} added by invitations", { amount: cur.value(earned).toFixed(0) }))}</>}
       </p>
     </Section>
   );
@@ -293,6 +298,7 @@ const KIND_META: Record<string, { label: string; icon: ReactNode; tone: string }
 /** By kind (today and all time) and by model: what the account has actually been used for. */
 function Usage({ me }: { me: CloudMe }) {
   const t = useT();
+  const cur = useMoney();
   const [range, setRange] = useState<"today" | "total">("today");
   const rows: UsageRow[] = range === "today" ? me.usage.today.by_kind : me.usage.total.by_kind;
   const kinds = me.usage.kinds.length ? me.usage.kinds : ["chat", "image", "video", "realtime"];
@@ -330,7 +336,7 @@ function Usage({ me }: { me: CloudMe }) {
                 <span className={cx("flex h-5 w-5 items-center justify-center rounded-md text-white", meta?.tone ?? "bg-fg/40")}>{meta?.icon}</span>
                 {t(meta?.label ?? k)}
               </div>
-              <div className="mt-1.5 text-[17px] font-semibold tracking-tight">¥{(r?.cost_cny ?? 0).toFixed(2)}</div>
+              <div className="mt-1.5 text-[17px] font-semibold tracking-tight">{cur.text(r?.cost_cny ?? 0)}</div>
               <div className="text-[11.5px] text-muted">
                 {r
                   ? k === "realtime"
@@ -353,7 +359,7 @@ function Usage({ me }: { me: CloudMe }) {
                 <span className={cx("h-2 w-2 shrink-0 rounded-full", KIND_META[m.kind]?.tone ?? "bg-fg/40")} />
                 <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{m.model}</span>
                 <span className="text-muted">{fmtTokens(m.prompt_tokens + m.completion_tokens)}</span>
-                <span className="w-16 text-right font-medium">¥{m.cost_cny.toFixed(2)}</span>
+                <span className="w-16 text-right font-medium">{cur.text(m.cost_cny)}</span>
               </li>
             ))}
           </ul>
