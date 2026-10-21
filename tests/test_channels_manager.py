@@ -453,3 +453,21 @@ def test_the_first_chat_can_claim_a_bot_nobody_owns(chan):
     fake.bus.inbound(dm("hello", sender="stranger", chat="chatB"))
     wait_for(lambda: len(fake.sent) > n)
     assert not manager.pairing.is_approved("fake", "stranger")
+
+
+def test_the_greeting_offers_what_the_channel_was_given(chan):
+    _client, _service, _llm, manager, fake = chan
+    data = dict(manager.store._file.load())
+    entry = dict(data.get("fake", {}))
+    # the app keeps its fields under "settings", which then wins over the flat table
+    entry["settings"] = {
+        **entry.get("settings", {}),
+        "site_url": "https://nanolika.ru",
+        "invite_url": "https://nanolika.ru/?invite=",
+    }
+    data["fake"] = entry
+    manager.store._file.save(data)
+    buttons = manager.welcome_links("fake")
+    assert [label for label, _ in buttons] == ["Website", "Invite a friend"]
+    # nothing is offered that was not set
+    assert manager.welcome_links("feishu") == []

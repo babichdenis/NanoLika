@@ -70,6 +70,7 @@ class TelegramChannel(Channel):
         self._bot_id = 0
         self._username = ""
         self._stream_messages: dict[str, int] = {}
+
         self._typing: dict[str, asyncio.Task[None]] = {}
 
     # ------------------------------------------------------------------ lifecycle
@@ -354,6 +355,24 @@ class TelegramChannel(Channel):
         await self._call(
             "sendMessage",
             {"chat_id": chat_id, "text": text[:TEXT_LIMIT], "reply_markup": keyboard},
+        )
+
+    async def links(self, chat_id: str, buttons: list[tuple[str, str]], text: str = "") -> None:
+        rows = [
+            [{"text": label[:64], "url": url}]
+            for label, url in buttons
+            if url.startswith("https://") or url.startswith("http://")
+        ]
+        if not rows:
+            return
+        await self._call(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text or "…",
+                "reply_markup": {"inline_keyboard": rows},
+                "disable_web_page_preview": True,
+            },
         )
 
     async def typing(self, chat_id: str, on: bool) -> None:

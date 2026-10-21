@@ -319,7 +319,7 @@ class ChannelManager(ChannelBus):
                 logger.info(
                     "channel {}: {} claimed the empty bot as its owner", msg.channel, msg.sender_id
                 )
-                await self._send(msg.channel, msg.chat_id, self.greeting())
+                await self._greet(msg.channel, msg.chat_id)
                 return
             if msg.is_group:
                 logger.debug(
@@ -342,7 +342,7 @@ class ChannelManager(ChannelBus):
         text = msg.text.strip()
         if text.lower().split("@")[0].split()[0:1] == ["/start"]:
             # a person pressing Start, or the button Telegram shows first: greet, do not run
-            await self._send(msg.channel, msg.chat_id, self.greeting())
+            await self._greet(msg.channel, msg.chat_id)
             return
         word = text.lower().strip(" .!。！")
         # a word for an approval this chat was asked about
@@ -784,12 +784,46 @@ class ChannelManager(ChannelBus):
         if entry is None:
             return None
         self.publish()
-        await self._send(
-            entry["channel"],
-            str(entry.get("chat_id") or entry["sender_id"]),
-            self.greeting(),
-        )
+        await self._greet(entry["channel"], str(entry.get("chat_id") or entry["sender_id"]))
         return entry
+
+    def welcome_links(self, channel: str) -> list[tuple[str, str]]:
+        """Where a chat can go next, as ``(label, url)``, from the channel's own settings.
+
+        ``site_url`` is the public page, ``invite_url`` the link a person shares (the app
+        appends the code), and ``webapp_url`` the app itself when the runtime is reachable
+        over HTTPS. Nothing is offered that was not set.
+        """
+        cfg = self.store.config(channel)
+        out: list[tuple[str, str]] = []
+        site = str(cfg.settings.get("site_url") or "").strip()
+        invite = str(cfg.settings.get("invite_url") or "").strip()
+        webapp = str(cfg.settings.get("webapp_url") or "").strip()
+        if site:
+            out.append((self.say("Website", "网站", "Сайт"), site))
+        if invite:
+            out.append((self.say("Invite a friend", "邀请朋友", "Пригласить друга"), invite))
+        if webapp:
+            out.append((self.say("Open the app", "打开应用", "Открыть приложение"), webapp))
+        return out
+
+    async def _greet(self, channel: str, chat_id: str) -> None:
+        """The greeting, then the links the channel was configured with."""
+        await self._send(channel, chat_id, self.greeting())
+        buttons = self.welcome_links(channel)
+        if not buttons:
+            return
+        ch = self.channels.get(channel)
+        if ch is None:
+            return
+        try:
+            await ch.links(
+                chat_id,
+                buttons,
+                self.say("Where to go next:", "还能去哪儿：", "Куда ещё можно:"),
+            )
+        except Exception as exc:  # noqa: BLE001 — the greeting already went out
+            logger.warning("channel {}: could not send links: {}", channel, exc)
 
     def greeting(self) -> str:
         """The first thing a newly paired chat is told, and what ``/start`` answers."""

@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **The greeting carries the links a chat needs.** A newly paired Telegram chat now gets the site, the invitation link and, when the runtime is reachable over HTTPS, the app itself as three buttons under the greeting (`site_url`, `invite_url`, `webapp_url` in `[channels.<name>]`). Channels without buttons send the same three as text, and a key left empty is not offered.
+
 - **A bot can be used from the chat alone.** Approving a pairing code needed the app or a terminal on the machine running the runtime, so a person whose only client is Telegram could not get in on their own. With `first_chat_claims = true` on a channel that has no confirmed chat yet, the first person who writes becomes its owner and is greeted; everyone after them gets a code as before. `docs/channels.md` says what a chat-only person can and cannot reach, and to switch the flag off once you are in.
 
 - **A run that answers in Russian stays Russian.** The language setting reached the prompt as a tag (`ru`) rather than as a name, and product names from tool output were pasted as Chinese characters into an otherwise Russian reply. The rule now names the language and keeps a foreign product name in Latin. The approval card's two buttons, the line that says what a tool is doing, and the words a person may answer an approval with (да, ок, нет, запрещаю) follow the same language, and a newly paired chat is greeted with what the bot can actually do, in the chat's language; `/start` answers with that greeting instead of starting a run.

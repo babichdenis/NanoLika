@@ -170,6 +170,18 @@ class Channel:
         Raise on failure — the manager logs it and tells the person in the app."""
         raise NotImplementedError
 
+    async def links(self, chat_id: str, buttons: list[tuple[str, str]], text: str = "") -> None:
+        """Offer the places a chat can go: the site, an invitation, the web app.
+
+        ``buttons`` holds ``(label, url)`` pairs in the chat's language. A channel with
+        buttons shows them; one without appends the same pairs as text, so a person always
+        has somewhere to tap or copy.
+        """
+        if not buttons:
+            return
+        lines = [f"{label}: {url}" for label, url in buttons]
+        await self.send(chat_id, "\n".join(([text] if text else []) + lines))
+
     async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
         """A reply that grows: the first call sends a message, later calls update it in place,
         ``done`` is the last. Channels that cannot edit send once, when done."""

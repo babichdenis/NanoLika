@@ -140,6 +140,14 @@ Anyone who finds the bot can write to it; the Muse answers only people you let i
 Pairings and codes live in `<data_dir>/channels/pairing.json` (the data directory,
 not the workspace), so the agent's own file tools cannot change who may talk to it.
 
+## What the greeting offers
+
+A newly paired chat is greeted with what the bot can do, and then with the places it can
+send a person: `site_url` (the public page), `invite_url` (the link a person shares, the
+appending of the code is the relay's), and `webapp_url` (the app itself, once the runtime
+is reachable over HTTPS). Set them in `[channels.<name>]`; a key left empty is not
+offered, and channels without buttons send the same three as text.
+
 ## Someone who has only the chat app
 
 A phone or a computer running the app is not required. Telegram alone reaches every

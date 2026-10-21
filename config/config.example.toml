@@ -335,6 +335,10 @@ enabled = false
 # TELEGRAM_BOT_TOKEN`) and leave the placeholder here, so the token is not in a file.
 bot_token = "{{vault:TELEGRAM_BOT_TOKEN}}"
 proxy = ""                    # e.g. socks5://127.0.0.1:1080 where api.telegram.org is out of reach
+# where the greeting's buttons go; a key left empty is not offered
+site_url = "https://nanolika.ru"
+invite_url = "https://nanolika.ru/?invite="
+webapp_url = ""               # the app, once the runtime is behind HTTPS, e.g. https://app.nanolika.ru
 first_chat_claims = false     # true while the bot has no owner: the first person who writes becomes it
 allow_from = []               # vendor user ids that never need a pairing code; ["*"] lets everyone in
 group_policy = "mention"      # "mention": answer in a group only when @-mentioned; "open": every message
