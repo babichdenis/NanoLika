@@ -1,4 +1,4 @@
-"""HTTP + WebSocket API for the nanoMuse app (and anything else that wants to talk to your nanoMuse).
+"""HTTP + WebSocket API for the NanoLika app (and anything else that wants to talk to your NanoLika).
 
     GET  /api/state                      snapshot: profile, status, threads, goals, settings
     GET  /api/threads                    list threads          POST /api/threads {title}
@@ -113,7 +113,7 @@ class SendBody(BaseModel):
     # the language of the client's screens (a BCP-47 tag such as "en" or "zh-CN"); the reply
     # is written in it unless Settings fixes one. Optional: without it the message's script decides.
     language: str = Field("", max_length=20)
-    # "cloud": *Use nanoMuse Cloud this time*; this one turn runs on the account's recommended
+    # "cloud": *Use NanoLika Cloud this time*; this one turn runs on the account's recommended
     # chat model, the next is back on the configured model. 401 `signed_out` when signed out.
     via: str = Field("", max_length=20)
 
@@ -492,7 +492,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
             await svc.stop()
 
     app = FastAPI(
-        title="nanoMuse",
+        title="NanoLika",
         version=svc.settings_view()["version"],
         lifespan=lifespan,
         docs_url=None,
@@ -1351,7 +1351,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
 
     @app.post("/api/cloud/models", dependencies=dep)
     async def cloud_models(body: CloudModelsBody) -> dict[str, Any]:
-        """*Use nanoMuse Cloud models*: off, the account's models leave the automatic order
+        """*Use NanoLika Cloud models*: off, the account's models leave the automatic order
         of the hands, pictures and clips and the providers' listing; the sign-in stays.
         ``409 chat_on_cloud`` while the chat model is the account's."""
         try:
@@ -1361,7 +1361,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
 
     @app.post("/api/cloud/contribute", dependencies=dep)
     async def cloud_contribute(body: CloudContributeBody) -> dict[str, Any]:
-        """Data controls: turn "Help improve nanoMuse's AI models" on or off for the account
+        """Data controls: turn "Help improve NanoLika's AI models" on or off for the account
         (the relay keeps the text of chat turns only while it is on)."""
         try:
             return await svc.hub.set_contribute(body.on)
@@ -1536,7 +1536,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     @app.post("/api/hub/join", dependencies=dep)
     async def hub_join() -> dict[str, Any]:
         if not svc.hub.signed_in:
-            raise HTTPException(401, "Sign in to nanoMuse Cloud first.")
+            raise HTTPException(401, "Sign in to NanoLika Cloud first.")
         await svc.hub.set_enabled(True)
         return svc.hub.view()
 
@@ -2006,7 +2006,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     if STATIC_DIR.is_dir():
         from fastapi.staticfiles import StaticFiles
 
-        # nanoMuse: the avatars are WebP; older Python mimetypes tables do not know it
+        # NanoLika: the avatars are WebP; older Python mimetypes tables do not know it
         mimetypes.add_type("image/webp", ".webp")
 
         class HashedAssets(StaticFiles):
@@ -2058,7 +2058,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         async def no_frontend() -> Response:
             return JSONResponse(
                 {
-                    "message": "nanoMuse API is running, but the web app is not built. "
+                    "message": "NanoLika API is running, but the web app is not built. "
                     "Run `cd web && npm install && npm run build` or use the CLI (`nanomuse chat`).",
                 }
             )
@@ -2113,7 +2113,7 @@ async def _handle_ws_message(
         elif kind == "approval":
             approval_id = str(data.get("id", ""))
             if approval_id in svc.hub.remote_approvals:
-                # nanoMuse: a card raised by another device's run — the answer goes back over the hub
+                # NanoLika: a card raised by another device's run — the answer goes back over the hub
                 ok = await svc.hub.decide_remote(approval_id, bool(data.get("approved")))
                 if not ok:
                     await reply({"kind": "error", "error": "the device did not take the answer"})

@@ -1,4 +1,4 @@
-"""Chat channels: your nanoMuse inside Feishu, DingTalk, WeCom and Telegram.
+"""Chat channels: your NanoLika inside Feishu, DingTalk, WeCom and Telegram.
 
 Everything the vendors need is imported lazily; this package imports with none of their
 SDKs installed. See ``docs/channels.md``.

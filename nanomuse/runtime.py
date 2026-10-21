@@ -1,4 +1,4 @@
-"""Where this nanoMuse runs: on a computer, in a container, or on the phone itself.
+"""Where this NanoLika runs: on a computer, in a container, or on the phone itself.
 
 On the phone the Android app (``android/``) starts ``nanomuse serve`` inside its own Linux
 root file system — Alpine, unpacked from the APK, run under PRoot without root — and tells

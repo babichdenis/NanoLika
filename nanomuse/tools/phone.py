@@ -389,7 +389,7 @@ class PhoneTask(BaseTool):
             return ToolResult.fail("`goal` is required")
         if not self.link.connected:
             return ToolResult.fail(
-                "no phone is connected. Open the nanoMuse app on the phone (with GUI operation "
+                "no phone is connected. Open the NanoLika app on the phone (with GUI operation "
                 "turned on) or the MobileGym module, then try again."
             )
         operator: PhoneOperator = self.operator

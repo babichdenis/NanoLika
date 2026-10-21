@@ -230,7 +230,7 @@ _VIDEO_WORDS = ("i2v", "t2v", "video", "sora", "veo", "kling", "hailuo", "seedan
 
 
 def looks_like_image_model(model_id: str) -> bool:
-    """Names that mean "text to image" across the providers nanoMuse meets (the phone's
+    """Names that mean "text to image" across the providers NanoLika meets (the phone's
     ImageGen.looksLikeImageModel); edit-only models are left out — they need a picture."""
     s = model_id.lower()
     if any(w in s for w in _NOT_IMAGE) or looks_like_video_model(s):
@@ -502,16 +502,16 @@ class Connections:
     CLOUD_PRESET = "nanomuse_cloud"
 
     def _providers(self) -> dict[str, dict[str, Any]]:
-        """The catalogue, plus nanoMuse Cloud as a provider of its own while the account is
+        """The catalogue, plus NanoLika Cloud as a provider of its own while the account is
         signed in: the account's chat models, no key to paste (the account key is the key),
-        so the form says "nanoMuse Cloud" rather than a bare URL under "other endpoint"."""
+        so the form says "NanoLika Cloud" rather than a bare URL under "other endpoint"."""
         hub = getattr(self.svc, "hub", None)
         if hub is None or not hub.signed_in or not self.settings.cloud.models:
             # signed out, or the account's models switched off (``[cloud] models``)
             return PROVIDERS
         return {
             self.CLOUD_PRESET: {
-                "label": "nanoMuse Cloud",
+                "label": "NanoLika Cloud",
                 "subtitle": "your account's model, with a free allowance",
                 "group": "cloud",
                 "provider": "openai",
@@ -531,7 +531,7 @@ class Connections:
         if not key:
             key_source = "none"
         elif self.vault.has_placeholders(key):
-            # nanoMuse: whichever vault entry the placeholder names (LLM_API_KEY for a key
+            # NanoLika: whichever vault entry the placeholder names (LLM_API_KEY for a key
             # pasted here, NANOMUSE_CLOUD_KEY when the Cloud relay is the model)
             try:
                 key_source = "vault" if self.vault.resolve(key) else "missing"
@@ -564,7 +564,7 @@ class Connections:
                 "proxy": mask_proxy(s.llm.proxy),
                 "key_source": key_source,
                 "from_app": bool(self.data.get("llm")),
-                # the model is the nanoMuse Cloud account's (the form says so instead of a URL)
+                # the model is the NanoLika Cloud account's (the form says so instead of a URL)
                 "cloud": bool(
                     s.llm.base_url
                     and getattr(self.svc, "hub", None) is not None
@@ -723,7 +723,7 @@ class Connections:
         if llm.get("tool_mode") not in (None, "", "auto", "native", "prompt"):
             raise ValueError("tool_mode must be 'auto', 'native' or 'prompt'")
         if body.get("proxy") is not None:
-            # this provider's requests through one proxy, never nanoMuse Cloud; "" clears
+            # this provider's requests through one proxy, never NanoLika Cloud; "" clears
             llm["proxy"] = normalize_proxy(str(body["proxy"]))
         api_key = body.get("api_key")
         if api_key:
@@ -936,7 +936,7 @@ class Connections:
         that is not saved yet; otherwise the vault key is used when the endpoint is the
         configured one. Never touches settings — what the user typed in the form stays.
 
-        For nanoMuse Cloud the answer also says which chat models are on the relay's menu
+        For NanoLika Cloud the answer also says which chat models are on the relay's menu
         and which are the other usable models under the operator's key (``menu`` /
         ``catalog``, likewise ``image_catalog`` / ``video_catalog``), and which chat models
         read pictures (``vision``), so the pickers show a member the whole list in groups.

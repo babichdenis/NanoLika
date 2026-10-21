@@ -4,7 +4,7 @@ interactive elements; actions refer to those numbers.
 Where the page renders is a :class:`~nanomuse.tools.browser_backends.BrowserBackend`: a
 Playwright Chromium on the computer (``pip install "nanomuse[browser]" && playwright install
 chromium``), with a profile kept under the workspace so logins survive a restart; or the
-nanoMuse app's own WebView on the phone, signed in to whatever the user is signed in to.
+NanoLika app's own WebView on the phone, signed in to whatever the user is signed in to.
 ``backend="auto"`` takes Playwright when it is installed and the phone otherwise.
 
 What the browser shows is also shown to the user: after every action a JPEG frame of the
@@ -213,9 +213,9 @@ class Browser(BaseTool):
             if not device_ready:
                 raise RuntimeError(
                     "no browser is available: playwright is not installed here and no phone "
-                    "with the nanoMuse app is connected"
+                    "with the NanoLika app is connected"
                     if mode == "auto"
-                    else "no phone with the nanoMuse app is connected to lend its browser"
+                    else "no phone with the NanoLika app is connected to lend its browser"
                 )
             backend: BrowserBackend = DeviceBackend(
                 self.link,

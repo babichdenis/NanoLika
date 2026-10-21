@@ -101,7 +101,7 @@ class BlackScreen(RuntimeError):
 
 
 BLACK_SCREEN_HINT = (
-    "the screenshot came back all black. On macOS, switch on nanoMuse Desktop (only that "
+    "the screenshot came back all black. On macOS, switch on NanoLika Desktop (only that "
     "entry) in System Settings → Privacy & Security → Screen Recording, then quit and reopen "
     "the app: macOS applies that permission only to freshly started processes. On Linux, "
     "the hands need an X11 session (or XWayland)."

@@ -11,7 +11,7 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "release-docs.py"
 
-README = """# nanoMuse
+README = """# NanoLika
 
 Latest: **1.0.0 Keel**.
 
@@ -19,9 +19,9 @@ Latest: **1.0.0 Keel**.
 
 - `2026-10-07` 📄 Our paper is available on [arXiv](https://arxiv.org/abs/2610.08699).
 - `2026-10-09` 🚀 Version [1.0.0 Keel](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.0) is out.
-- `2026-09-25` 🎉 nanoMuse is released.
+- `2026-09-25` 🎉 NanoLika is released.
 
-| **Android** | [nanoMuse-1.0.0-arm64.apk](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.0/nanoMuse-1.0.0-arm64.apk) |
+| **Android** | [NanoLika-1.0.0-arm64.apk](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.0/NanoLika-1.0.0-arm64.apk) |
 """
 
 ISSUE_FORM = """      description: Settings → About, e.g. 1.0.0 (43)
@@ -49,10 +49,10 @@ def test_news_lines_stay_as_written_and_the_version_moves_elsewhere(
         "- `2026-10-07` 📄 Our paper is available on [arXiv](https://arxiv.org/abs/2610.08699).",
         "- `2026-10-09` 🚀 Version [1.0.0 Keel]"
         "(https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.0) is out.",
-        "- `2026-09-25` 🎉 nanoMuse is released.",
+        "- `2026-09-25` 🎉 NanoLika is released.",
     ]
     assert "Latest: **1.0.1 Still**." in text
-    assert "download/v1.0.1/nanoMuse-1.0.1-arm64.apk" in text
+    assert "download/v1.0.1/NanoLika-1.0.1-arm64.apk" in text
     assert left == 0
     # the list is still one block in the same place
     assert lines.index(news[0]) == README.split("\n").index(news[0])
@@ -82,11 +82,11 @@ def test_a_milestone_line_keeps_its_words_through_two_releases(release_docs: Mod
 
 
 def test_a_page_without_news_only_moves_the_version(release_docs: ModuleType) -> None:
-    page = "Download [v1.0.0](…/tag/v1.0.0) · 1.0.0 Keel · nanoMuse-1.0.0-arm64.apk · 1.0.0-win"
+    page = "Download [v1.0.0](…/tag/v1.0.0) · 1.0.0 Keel · NanoLika-1.0.0-arm64.apk · 1.0.0-win"
     text, left = release_docs.edit_page(page, "1.0.0", "1.0.1", "Keel", "Still")
     assert (
         text
-        == "Download [v1.0.1](…/tag/v1.0.1) · 1.0.1 Still · nanoMuse-1.0.1-arm64.apk · 1.0.1-win"
+        == "Download [v1.0.1](…/tag/v1.0.1) · 1.0.1 Still · NanoLika-1.0.1-arm64.apk · 1.0.1-win"
     )
     assert left == 0
 
@@ -155,7 +155,7 @@ def test_a_major_version_asks_for_a_news_line_by_hand(
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
     # the script wrote the version everywhere but the News list, and added no line to it
     assert "Latest: **2.0.0 Reach**." in readme
-    assert "download/v2.0.0/nanoMuse-2.0.0-arm64.apk" in readme
+    assert "download/v2.0.0/NanoLika-2.0.0-arm64.apk" in readme
     news = [line for line in readme.split("\n") if release_docs.NEWS_LINE.match(line)]
     assert news == [line for line in README.split("\n") if release_docs.NEWS_LINE.match(line)]
     assert "## [2.0.0] - 2027-01-01 · Reach" in (tmp_path / "CHANGELOG.md").read_text(

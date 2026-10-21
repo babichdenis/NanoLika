@@ -3,7 +3,7 @@
 A skill is a folder with a ``SKILL.md`` in it — the `Agent Skills
 <https://agentskills.io>`_ format, so recipes written for other agents work here and the
 ones written here work there. The file starts with a short front matter (``name``,
-``description``, optionally ``license``, ``allowed-tools``, ``metadata`` and nanoMuse's
+``description``, optionally ``license``, ``allowed-tools``, ``metadata`` and NanoLika's
 ``channel`` — how the job is done: ``api``, ``cli``, ``web``, ``browser`` or ``gui`` for one
 that needs the phone's screen) and continues with the instructions in Markdown; ``scripts/``, ``references/`` and ``assets/`` next to
 it hold what the instructions point at.
@@ -11,7 +11,7 @@ it hold what the instructions point at.
 The model sees only the index (name and description of each skill) in its system prompt
 and loads the instructions of the one it needs with the ``skills`` tool, or the user
 invokes one directly by starting a message with ``/name``. Skills come from two places:
-the ones shipped with nanoMuse (``nanomuse/skills/builtin``) and your own, in
+the ones shipped with NanoLika (``nanomuse/skills/builtin``) and your own, in
 ``<data_dir>/skills`` — a folder of yours with a built-in's name replaces it. The agent
 can write a skill of its own after a job went well, which asks first: a skill is a
 standing instruction, and planting one is the obvious thing for a hostile web page to try.
@@ -497,7 +497,7 @@ async def fetch_skill_text(url: str) -> str:
     try:
         async with (
             httpx.AsyncClient(timeout=20, follow_redirects=True) as client,
-            client.stream("GET", url, headers={"User-Agent": "nanoMuse"}) as r,
+            client.stream("GET", url, headers={"User-Agent": "NanoLika"}) as r,
         ):
             if r.status_code >= 400:
                 raise ValueError(f"HTTP {r.status_code} for {url}")

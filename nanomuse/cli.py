@@ -32,7 +32,7 @@ from nanomuse.config import (
 
 app = typer.Typer(
     name="nanomuse",
-    help="nanoMuse: an open-source personal agent for every device you own. This is its runtime: the agent, the Sentinel that decides what may run, and the web app.",
+    help="NanoLika: an open-source personal agent for every device you own. This is its runtime: the agent, the Sentinel that decides what may run, and the web app.",
     no_args_is_help=True,
     rich_markup_mode="rich",
     pretty_exceptions_show_locals=False,
@@ -91,7 +91,7 @@ def _root(
         is_eager=True,
     ),
 ) -> None:
-    """nanoMuse: an open-source personal agent for every device you own. This is its runtime: the agent, the Sentinel that decides what may run, and the web app."""
+    """NanoLika: an open-source personal agent for every device you own. This is its runtime: the agent, the Sentinel that decides what may run, and the web app."""
     from nanomuse import loopback
 
     loopback.install()  # Windows: a self-pipe that fails with a reason instead of hanging
@@ -117,7 +117,7 @@ def _settings(config: Path | None, auto: bool = False) -> Settings:
     except ValidationError as exc:
         where = find_config_file(config)
         console.print(
-            f"[red]config.toml has {exc.error_count()} setting(s) nanoMuse does not understand[/red] ({where}):"
+            f"[red]config.toml has {exc.error_count()} setting(s) NanoLika does not understand[/red] ({where}):"
         )
         for err in exc.errors():
             console.print(f"  [bold]{'.'.join(str(x) for x in err['loc'])}[/bold]: {err['msg']}")
@@ -130,7 +130,7 @@ def _settings(config: Path | None, auto: bool = False) -> Settings:
     vault = CredentialVault(settings.vault_file, settings.vault_key_file)
     if not llm_ready(settings.llm, vault, settings.data_dir):
         console.print(
-            "[yellow]No model yet.[/yellow] Sign in to nanoMuse Cloud in the app, set "
+            "[yellow]No model yet.[/yellow] Sign in to NanoLika Cloud in the app, set "
             "[bold]llm.api_key[/bold] in config.toml (run `nanomuse config init`), "
             "or export DEEPSEEK_API_KEY / OPENAI_API_KEY."
         )
@@ -177,9 +177,9 @@ def _agent_name(settings: Settings) -> str:
 
 def _banner(settings: Settings) -> None:
     name = _agent_name(settings)
-    who = f"  ·  [bold]{name}[/bold]" if name and name != "nanoMuse" else ""
+    who = f"  ·  [bold]{name}[/bold]" if name and name != "NanoLika" else ""
     console.print(
-        f"[bold magenta]nanoMuse[/bold magenta] v{__version__}{who}  ·  model [cyan]{settings.llm.model}[/cyan] "
+        f"[bold magenta]NanoLika[/bold magenta] v{__version__}{who}  ·  model [cyan]{settings.llm.model}[/cyan] "
         f"via {settings.llm.provider}  ·  sentinel [yellow]{settings.sentinel.mode}[/yellow]  ·  "
         f"config [dim]{settings.source}[/dim]"
     )
@@ -365,7 +365,7 @@ def serve(
     no_qr: Annotated[bool, typer.Option("--no-qr", help="Do not print the QR code")] = False,
     auto: AutoOpt = False,
 ) -> None:
-    """Run the always-on nanoMuse with the mobile-first web app (chat, goals, ideas, memory, approvals)."""
+    """Run the always-on NanoLika with the mobile-first web app (chat, goals, ideas, memory, approvals)."""
     settings = _settings(config, auto=auto)
     if no_auth:
         settings.server.auth = False
@@ -384,7 +384,7 @@ def serve(
     except PermissionError as exc:
         console.print(
             f"[red]the data directory is not writable[/red] ({settings.data_dir}): {exc.strerror or exc}\n"
-            "nanoMuse keeps its access token, timelines and vault there. Point NANOMUSE_DATA_DIR at a "
+            "NanoLika keeps its access token, timelines and vault there. Point NANOMUSE_DATA_DIR at a "
             "folder you can write to, or set server.token in config.toml."
         )
         raise typer.Exit(1) from exc
@@ -1079,7 +1079,7 @@ def memory_tidy(
 ) -> None:
     """Merge lines that say the same thing, keep the newer fact, drop what was never a fact.
 
-    The model proposes, nanoMuse checks (nothing invented, nothing you wrote dropped), and every change is logged so `memory restore` can undo it.
+    The model proposes, NanoLika checks (nothing invented, nothing you wrote dropped), and every change is logged so `memory restore` can undo it.
     """
     from nanomuse.app import NanoMuseApp
     from nanomuse.console import ConsoleUI
@@ -1572,7 +1572,7 @@ def version() -> None:
 def mcp(config: ConfigOpt = None) -> None:
     """Serve this computer's screen and hands over MCP on stdio (for the desktop app).
 
-    Another host, such as nanoMuse on DeepSeek Harness (docs/harness.md), connects here. The connectors config.toml turns on (mailbox, calendar, contacts) are served too. Nothing is printed on stdout but the protocol; the hands, gui and connectors sections of the config are read when it exists."""
+    Another host, such as NanoLika on DeepSeek Harness (docs/harness.md), connects here. The connectors config.toml turns on (mailbox, calendar, contacts) are served too. Nothing is printed on stdout but the protocol; the hands, gui and connectors sections of the config are read when it exists."""
     import sys
 
     from nanomuse.bridge.mcp_server import connector_tools, hands_tools, serve

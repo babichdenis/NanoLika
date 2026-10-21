@@ -1,5 +1,5 @@
 """A vendor that wants one id per conversation (OpenCode Go's ``x-opencode-session``) gets it,
-with nanoMuse's own user agent; every other vendor gets neither."""
+with NanoLika's own user agent; every other vendor gets neither."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ async def test_go_calls_carry_the_conversation_and_name_nanomuse(wire: Wire):
         await llm.ask([Message.user("another chat")])
     assert str(wire.requests[0].url) == f"{GO}/chat/completions"
     assert wire.headers("x-opencode-session") == ["thread-1", "thread-1", "thread-2"]
-    assert wire.headers("user-agent") == [f"nanoMuse/{__version__}"] * 3
+    assert wire.headers("user-agent") == [f"NanoLika/{__version__}"] * 3
 
 
 async def test_a_call_outside_a_conversation_carries_the_clients_own_stable_id(wire: Wire):
@@ -135,7 +135,7 @@ async def test_other_vendors_get_neither_header(wire: Wire):
         with session.conversation("t"):
             await llm.ask([Message.user("hi")])
     assert wire.headers("x-opencode-session") == [None, None, None]
-    assert not any((ua or "").startswith("nanoMuse/") for ua in wire.headers("user-agent"))
+    assert not any((ua or "").startswith("NanoLika/") for ua in wire.headers("user-agent"))
 
 
 async def test_a_user_agent_the_person_set_stands(wire: Wire):

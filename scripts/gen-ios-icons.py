@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the nanoMuse app icon for android/src/ios from assets/brand/.
+"""Generate the NanoLika app icon for android/src/ios from assets/brand/.
 
 Idempotent; re-run after every upstream pull (CONTRIBUTING.md). Writes 1024x1024 PNGs:
 

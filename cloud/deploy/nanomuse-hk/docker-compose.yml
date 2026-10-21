@@ -1,4 +1,4 @@
-# nanoMuse Cloud on nanomuse-hk — the relay only. TLS and the public ports
+# NanoLika Cloud on nanomuse-hk — the relay only. TLS and the public ports
 # belong to the showcase's Caddy on the same box (demo/showcase); this
 # container joins its `showcase_edge` network and is reached there as
 # `nanomuse-relay:8787` by sites.d/cloud.nanomuse.cn.caddy. Nothing is
@@ -19,7 +19,7 @@ services:
     environment:
       # the operator's page, beyond the relay's own tables: the site's daily counts
       # (demo/showcase/mirror/traffic.py, /var/lib/nanomuse-traffic on the host) and
-      # nanoMuse Web's numbers from the showcase gateway on the edge network
+      # NanoLika Web's numbers from the showcase gateway on the edge network
       TRAFFIC_DB: /srv/nanomuse-cloud/traffic/traffic.db
       WEB_INFO_URL: http://gateway:8000/api/web/info
       # the showcase's visitors — where from, with what, every demo — for the admin page;
@@ -41,7 +41,7 @@ networks:
   edge:
     external: true
     name: showcase_edge
-  # nanoMuse Web's kept containers (demo/showcase) reach the relay here as nanomuse-relay:8787
+  # NanoLika Web's kept containers (demo/showcase) reach the relay here as nanomuse-relay:8787
   web:
     external: true
     name: nanomuse-web

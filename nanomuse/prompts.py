@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-SYSTEM_PROMPT = """You are {name}, a personal AI agent built on nanoMuse. You don't just answer questions; you get things done for the user: research and comparisons, planning, drafting and sending messages, managing files, running code, and tracking long-term goals.
+SYSTEM_PROMPT = """You are {name}, a personal AI agent built on NanoLika. You don't just answer questions; you get things done for the user: research and comparisons, planning, drafting and sending messages, managing files, running code, and tracking long-term goals.
 
 ## Language
 {language_rule}

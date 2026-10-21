@@ -185,7 +185,7 @@ async def test_server_over_stdio(tmp_path: Path) -> None:
     )
     async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
         init = await session.initialize()
-        assert "nanoMuse" in (init.instructions or "")
+        assert "NanoLika" in (init.instructions or "")
         listed = await session.list_tools()
         # the hands, plus the address book the default config keeps on
         assert sorted(t.name for t in listed.tools) == [

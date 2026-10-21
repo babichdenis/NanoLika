@@ -3,7 +3,7 @@
 OpenCode Go asks every client to name itself with its own user agent and to send one stable id
 per conversation in ``x-opencode-session`` (opencode.ai/docs/go, "Where can I use it?"). The
 catalogue names such a header in an entry's ``session_header``; the chat clients add it to each
-request with :func:`session_id`, and name nanoMuse with :data:`USER_AGENT`.
+request with :func:`session_id`, and name NanoLika with :data:`USER_AGENT`.
 
 The agent loop says which conversation it is working on with :func:`conversation`, a context
 variable, so every call made while the turn runs (the hands' model included) carries the same
@@ -28,8 +28,8 @@ _conversation: ContextVar[str | None] = ContextVar("nanomuse_conversation", defa
 _HEADER_SAFE = re.compile(r"^[\x21-\x7e]{1,128}$")
 _NAMESPACE = uuid.UUID("5b0f7c1e-3a52-4f4e-9d0e-6e616e6f4d75")
 
-#: the user agent nanoMuse names itself with where a vendor asks for the client's own
-USER_AGENT = f"nanoMuse/{__version__}"
+#: the user agent NanoLika names itself with where a vendor asks for the client's own
+USER_AGENT = f"NanoLika/{__version__}"
 
 
 @contextmanager
@@ -66,7 +66,7 @@ def session_id(fallback: str) -> str:
 
 def client_headers(extra: dict[str, str] | None, session_header: str) -> dict[str, str]:
     """The headers a client sends on every request: the slot's ``extra_headers``, plus
-    nanoMuse's own user agent for a vendor that wants the client named (one the person set
+    NanoLika's own user agent for a vendor that wants the client named (one the person set
     in ``extra_headers`` stands)."""
     headers = dict(extra or {})
     if session_header and not any(k.lower() == "user-agent" for k in headers):

@@ -1,7 +1,7 @@
 """The user's other devices, through the hub: ``devices``, the ``device_*`` actions and
 ``delegate``.
 
-These exist only while this computer is on the hub (signed in to nanoMuse Cloud, ``[hub]
+These exist only while this computer is on the hub (signed in to NanoLika Cloud, ``[hub]
 enabled``). Each ``device_*`` tool is one hub action on one device (docs/hub.md): a command
 in its shell, a folder listing, a file each way, a URL, its screen, a notification.
 ``delegate`` hands a whole task, in words, to the Muse running on that device and waits for
@@ -100,7 +100,7 @@ class _DeviceTool(BaseTool):
 class Devices(_DeviceTool):
     name: str = "devices"
     description: str = (
-        "The user's other devices on the nanoMuse hub (phone, other computers) and whether "
+        "The user's other devices on the NanoLika hub (phone, other computers) and whether "
         "each is online. Use a device's name as listed here in the device_* tools and delegate."
     )
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
@@ -122,7 +122,7 @@ class Devices(_DeviceTool):
 class DeviceShell(_DeviceTool):
     name: str = "device_shell"
     description: str = (
-        "Run a shell command on another device. On a phone it runs inside the nanoMuse app's "
+        "Run a shell command on another device. On a phone it runs inside the NanoLika app's "
         "Linux sandbox (Alpine), not on Android itself; the phone's own apps are reached with "
         "`delegate`. Returns stdout, stderr and the exit code."
     )
@@ -414,10 +414,10 @@ class DeviceNotify(_DeviceTool):
         )
 
     async def _run(
-        self, device: str = "", text: str = "", title: str = "nanoMuse", **_: Any
+        self, device: str = "", text: str = "", title: str = "NanoLika", **_: Any
     ) -> ToolResult:
         d = self._device(device)
-        r = await self._call(d, "notify", {"text": text, "title": title or "nanoMuse"})
+        r = await self._call(d, "notify", {"text": text, "title": title or "NanoLika"})
         return ToolResult(output=_json({"device": d["name"], **r}))
 
 

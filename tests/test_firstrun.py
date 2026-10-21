@@ -159,12 +159,12 @@ def test_intro_and_addendum_per_phase():
     assert "on this computer" in en[1] and "what should I call you?" in en[2]
     assert "这台电脑" in zh[1] and "称呼" in zh[2]
     s = fresh()
-    ask = firstrun.prompt_addendum(s, "en", "nanoMuse")
+    ask = firstrun.prompt_addendum(s, "en", "NanoLika")
     assert ask is not None and "```nanomuse-naming" in ask and '"user_address"' in ask
     assert "  > Before we start, what should I call you?" in ask
     assert "Siri, Alexa" in ask
     asking = firstrun.after_turn(s, ASK).state
-    name = firstrun.prompt_addendum(asking, "en", "nanoMuse")
+    name = firstrun.prompt_addendum(asking, "en", "NanoLika")
     assert name is not None and '"Pip", "Wren"' in name and '(meaning "Pip")' in name
     assert '"agent_name"' in name and 'goes by "Lin"' in name
     picked = firstrun.pick_name(asking, "Wren")
@@ -172,7 +172,7 @@ def test_intro_and_addendum_per_phase():
     named = firstrun.prompt_addendum(picked, "en", "Wren")
     assert named is not None and 'named you "Wren"' in named and "```" not in named
     assert firstrun.prompt_addendum(firstrun.dismiss_chooser(asking), "en", "Wren") is None
-    assert firstrun.prompt_addendum(firstrun.FirstRunState(), "en", "nanoMuse") is None
+    assert firstrun.prompt_addendum(firstrun.FirstRunState(), "en", "NanoLika") is None
 
 
 def test_address_memory_writes_and_replaces_the_line():

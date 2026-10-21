@@ -20,7 +20,7 @@ PEOPLE = [
     {"login": "bob", "id": 2, "type": "User", "contributions": 1},
 ]
 
-README = """# nanoMuse
+README = """# NanoLika
 
 ## Community Contributors
 
@@ -91,7 +91,7 @@ def test_main_rewrites_every_readme_and_check_reports_the_ones_behind(
     for f in files:
         text = f.read_text(encoding="utf-8")
         assert "old" not in text and 'alt="alice"' in text and 'alt="bob"' in text
-        assert text.startswith("# nanoMuse\n") and text.endswith("## License\n")
+        assert text.startswith("# NanoLika\n") and text.endswith("## License\n")
 
     assert script.main(["--check", "--from-json", str(people), "--root", str(tmp_path)]) == 0
     assert "contributors current (alice, bob)" in capsys.readouterr().out

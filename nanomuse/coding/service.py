@@ -395,7 +395,7 @@ class CodingService:
         if action not in (dev.get("actions") or []):
             raise CodingError(
                 "not_supported",
-                f"{dev.get('name') or device} runs an older nanoMuse without coding agents",
+                f"{dev.get('name') or device} runs an older NanoLika without coding agents",
             )
         try:
             return await hub.call(

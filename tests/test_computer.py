@@ -360,7 +360,7 @@ async def test_operator_runs_on_the_computer(settings: Settings, fake_screen) ->
         [
             step("open", "Open the text editor", text="gedit"),
             step("left_click", "Click in the document", coordinate=[499, 499]),
-            step("type", "Type the note", text="hello from nanoMuse"),
+            step("type", "Type the note", text="hello from NanoLika"),
             step("key", "Save with Ctrl+S", keys=["ctrl", "s"]),
             step("answer", "Report", text="Saved the note."),
         ]
@@ -384,7 +384,7 @@ async def test_operator_runs_on_the_computer(settings: Settings, fake_screen) ->
     assert outcome.status == "done" and outcome.message == "Saved the note." and outcome.steps == 5
     assert hands.calls[0] == ("open", "gedit")
     assert hands.calls[1] == ("click", 959.0, 539.5, "left", 1)  # 999-grid → 1920×1080
-    assert ("type", "hello from nanoMuse") in hands.calls and ("key", ("ctrl", "s")) in hands.calls
+    assert ("type", "hello from NanoLika") in hands.calls and ("key", ("ctrl", "s")) in hands.calls
     # the save went through the Sentinel as a sensitive step
     assert [r.summary for r in ui.requests] == ["computer_act: press ctrl+s in Firefox (firefox)"]
     report = outcome.report()

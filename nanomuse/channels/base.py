@@ -1,6 +1,6 @@
 """What every chat channel looks like from the inside.
 
-A *channel* puts your nanoMuse inside a chat app you already use — Feishu, DingTalk, WeCom,
+A *channel* puts your NanoLika inside a chat app you already use — Feishu, DingTalk, WeCom,
 Telegram. The vendor's long connection (or long polling) brings messages in; nothing here
 needs a public URL. A channel knows how to connect, how to turn a vendor event into an
 :class:`InboundMessage`, and how to send text and files back. Everything else — who may talk

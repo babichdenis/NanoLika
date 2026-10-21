@@ -31,7 +31,7 @@ DEFAULT_NUDGES: dict[str, Any] = {
     "version": 1,
     "star": {
         "enabled": True,
-        "url": "https://github.com/nano-muse/nanoMuse",
+        "url": "https://github.com/babichdenis/NanoLika",
         "moments": {
             "signed_in": True,
             "tasks": [3, 10, 30],
@@ -226,7 +226,7 @@ class NudgesPolicy:
             return self.view()
         self.tried_at = self._clock()
         url = self.base_url + "/v1/nudges"
-        headers = {"User-Agent": f"nanoMuse/{__version__}", "Accept": "application/json"}
+        headers = {"User-Agent": f"NanoLika/{__version__}", "Accept": "application/json"}
         try:
             if self._client is not None:
                 r = await self._client.get(url, headers=headers, timeout=TIMEOUT_S)

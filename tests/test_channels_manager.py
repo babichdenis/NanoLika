@@ -339,6 +339,59 @@ def test_deliver_here_gets_background_events(chan):
     assert client.put("/api/channels/fake/chats/nobody", json={"deliver": True}).status_code == 404
 
 
+def test_synced_turns_from_other_devices_are_delivered(chan):
+    """A turn another device wrote (relay sync, `synced: true`) reaches the chats marked
+    "deliver here", named after the device that wrote it. A synced row without a device
+    name goes nowhere, and this chat's own thread is never echoed back into itself."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    # a real chat writes once after pairing; that registers its thread as ours
+    own = thread_id_for("fake", "chat1")
+    fake.bus.inbound(dm("one more"))
+    wait_for(lambda: own in manager.routes)
+    assert client.put("/api/channels/fake/chats/u1", json={"deliver": True}).status_code == 200
+    emit(
+        manager,
+        {
+            "kind": "event",
+            "event": {
+                "type": "user",
+                "text": "book a table for two",
+                "synced": True,
+                "mid": "m-sync-1",
+                "via_device": "pc-dsh-1",
+                "via_device_name": "MacBook",
+            },
+        },
+    )
+    wait_for(lambda: ("chat1", "MacBook: book a table for two", []) in fake.sent)
+    # no device name on the row: not a turn from elsewhere this chat should hear
+    emit(
+        manager,
+        {
+            "kind": "event",
+            "event": {"type": "assistant", "text": "mystery", "synced": True, "mid": "m-sync-2"},
+        },
+    )
+    # our own chat's thread: its words are already in the chat
+    emit(
+        manager,
+        {
+            "kind": "event",
+            "event": {
+                "type": "user",
+                "text": "own words",
+                "synced": True,
+                "thread": own,
+                "via_device_name": "MacBook",
+            },
+        },
+    )
+    time.sleep(0.4)
+    leaked = [t for t in fake.texts() if "mystery" in t or "own words" in t]
+    assert not leaked, f"leaked: {leaked!r}"
+
+
 def test_files_in_and_out(chan, settings: Settings):
     client, service, llm, manager, fake = chan
     pair(client, fake)

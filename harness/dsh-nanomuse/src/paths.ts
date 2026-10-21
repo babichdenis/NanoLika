@@ -1,7 +1,7 @@
 /**
  * Where the plugin keeps its own state: `$DSH_HOME/nanolika`.
  *
- * It was `$DSH_HOME/nanomuse` while the app was called nanoMuse. A folder of that name is
+ * It was `$DSH_HOME/nanomuse` while the app was called NanoLika. A folder of that name is
  * taken over once, on the first start after the rename, so the account, the rooms, the
  * profile and the drawn faces of an existing install carry on without anyone copying files.
  */

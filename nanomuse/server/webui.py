@@ -86,7 +86,7 @@ class WebUI:
         self.approval_timeout = approval_timeout
         self.show_thinking = show_thinking
         self.workspace = workspace
-        # directories inside the workspace that are nanoMuse's own (the data dir, when
+        # directories inside the workspace that are NanoLika's own (the data dir, when
         # someone points both at the same place) — never artifacts. A data dir that
         # *contains* the workspace (~/.nanolika and ~/.nanolika/workspace) is not inside
         # it and must not blank the whole scan.
@@ -115,7 +115,7 @@ class WebUI:
         # Events emitted meanwhile are tagged so the Feed can show what happened while you
         # were away.
         self.background: dict[str, str] = {}
-        # threads on *Use nanoMuse Cloud this time* → the model id; the turn's reply and a
+        # threads on *Use NanoLika Cloud this time* → the model id; the turn's reply and a
         # failure of it carry it as `model_used`
         self.model_once: dict[str, str] = {}
         # called with every persisted event; the service decides what deserves a push
@@ -130,7 +130,7 @@ class WebUI:
     # ------------------------------------------------------------------ run lifecycle
     def begin_run(self, thread: str, background: str | None = None, model_used: str = "") -> None:
         """Called by the service before each agent run in ``thread``. ``model_used`` names
-        the model of a turn running on *Use nanoMuse Cloud this time*."""
+        the model of a turn running on *Use NanoLika Cloud this time*."""
         self.reply_shown.discard(thread)
         if model_used:
             self.model_once[thread] = model_used

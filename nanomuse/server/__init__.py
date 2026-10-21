@@ -1,4 +1,4 @@
-"""nanoMuse app server: the always-on agent behind the mobile-first web app.
+"""NanoLika app server: the always-on agent behind the mobile-first web app.
 
     nanomuse serve                     # http://127.0.0.1:8787
     nanomuse serve --host 0.0.0.0      # reachable from your phone on the same Wi-Fi
@@ -47,7 +47,7 @@ def lan_ip() -> str | None:
 
 
 def port_taken(host: str, port: int, timeout: float = 0.5) -> str | None:
-    """What already answers on ``host:port``, if anything: ``"nanoMuse <version>"`` when it
+    """What already answers on ``host:port``, if anything: ``"NanoLika <version>"`` when it
     is one of ours (its ``/api/health`` says so), ``"another program"`` otherwise, ``None``
     when nothing listens there. A connect, not a bind: a bind would mistake the previous
     run's closing connections for a listener."""
@@ -68,7 +68,7 @@ def port_taken(host: str, port: int, timeout: float = 0.5) -> str | None:
     except Exception:  # noqa: BLE001 - not HTTP, not JSON, not answering: not ours
         return "another program"
     if isinstance(health, dict) and health.get("ok") is True and health.get("version"):
-        return f"nanoMuse {health['version']}"
+        return f"NanoLika {health['version']}"
     return "another program"
 
 
@@ -89,7 +89,7 @@ def serve(
     loopback.install()
     problem = loopback.check()
     if problem:
-        print(f"nanoMuse: {problem}", file=sys.stderr, flush=True)
+        print(f"NanoLika: {problem}", file=sys.stderr, flush=True)
         raise SystemExit(78)
     host = host or settings.server.host
     port = port or settings.server.port
@@ -99,11 +99,11 @@ def serve(
         # announce itself as ready, link included, and only then die on uvicorn's bind error
         advice = (
             "That one keeps running: open it in the browser, or stop it before starting another."
-            if taken.startswith("nanoMuse")
+            if taken.startswith("NanoLika")
             else "Stop it, or choose another port with --port."
         )
         print(
-            f"nanoMuse: port {port} on {host} is already in use by {taken}. {advice}",
+            f"NanoLika: port {port} on {host} is already in use by {taken}. {advice}",
             file=sys.stderr,
             flush=True,
         )
@@ -122,7 +122,7 @@ def serve(
     # the banner once the socket is about to open (a desktop shell reads the log when the
     # app takes long to answer); the services may still be coming up behind it, and
     # /api/health says which one
-    print(f"nanoMuse {__version__} starting on {host}:{port} (pid {os.getpid()})", flush=True)
+    print(f"NanoLika {__version__} starting on {host}:{port} (pid {os.getpid()})", flush=True)
     serving = threading.Event()
 
     def on_ready() -> None:
@@ -163,7 +163,7 @@ def _watch_startup(serving: threading.Event, after: tuple[float, ...] = (20, 40)
 
 
 def _dump_threads(why: str) -> None:
-    lines = [f"nanoMuse: {why}; where every thread is:"]
+    lines = [f"NanoLika: {why}; where every thread is:"]
     names = {t.ident: t.name for t in threading.enumerate()}
     for ident, frame in sys._current_frames().items():
         lines.append(f"--- thread {names.get(ident, '?')} ({ident})")
@@ -188,9 +188,9 @@ def _print_banner(url: str, service: MuseService, print_qr: bool) -> None:
 
     console = Console()
     name = (service.profile.name or "").strip()
-    # "nanoMuse · Lumi is ready."; before the agent has a name of its own, "nanoMuse is ready."
-    who = f" · [bold]{name}[/bold]" if name and name != "nanoMuse" else ""
-    console.print(f"[bold magenta]nanoMuse[/bold magenta]{who} is ready.")
+    # "NanoLika · Lumi is ready."; before the agent has a name of its own, "NanoLika is ready."
+    who = f" · [bold]{name}[/bold]" if name and name != "NanoLika" else ""
+    console.print(f"[bold magenta]NanoLika[/bold magenta]{who} is ready.")
     if not STATIC_DIR.is_dir():
         console.print(
             "[yellow]web app not built[/yellow]: run `cd web && npm install && npm run build`"
@@ -211,5 +211,5 @@ def _print_banner(url: str, service: MuseService, print_qr: bool) -> None:
         except Exception:  # noqa: BLE001  pragma: no cover
             pass
     console.print(
-        "[dim]Press Ctrl+C to stop. Your nanoMuse keeps working in the background while it runs.[/dim]"
+        "[dim]Press Ctrl+C to stop. Your NanoLika keeps working in the background while it runs.[/dim]"
     )

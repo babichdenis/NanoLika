@@ -117,7 +117,7 @@ def _controls(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="nanomuse-cloud", description="nanoMuse Cloud relay")
+    ap = argparse.ArgumentParser(prog="nanomuse-cloud", description="NanoLika Cloud relay")
     sub = ap.add_subparsers(dest="cmd")
     serve = sub.add_parser("serve", help="run the relay (the default)")
     for p in (ap, serve):

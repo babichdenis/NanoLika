@@ -1,4 +1,4 @@
-# nanoMuse configuration
+# NanoLika configuration
 # Copy to config/config.toml (or ~/.nanomuse/config.toml) and edit.
 # String values may reference environment variables: "${VAR}" or "${VAR:-default}".
 
@@ -73,12 +73,12 @@ pass_reasoning = false
 # extra_body = { "thinking" = { "type" = "enabled" } }
 # An HTTP(S) or SOCKS proxy for this slot's requests only, when this machine's network
 # cannot reach the provider directly; empty, the environment's HTTPS_PROXY applies.
-# Honoured by the ChatGPT sign-in too; never used for nanoMuse Cloud.
+# Honoured by the ChatGPT sign-in too; never used for NanoLika Cloud.
 # proxy = "http://127.0.0.1:7890"
 
 # ------------------------------------------------------------------------------
 [agent]
-name = "nanoMuse"
+name = "NanoLika"
 max_steps = 30
 # workspace = "./workspace"     # the agent's files. Default: ./workspace when the current directory has one, else <data_dir>/workspace
 # Directories outside the workspace the files tool may use. Reads there count as
@@ -358,12 +358,12 @@ group_policy = "mention"      # "mention": answer in a group only when @-mention
 side_chats = false
 
 # ------------------------------------------------------------------------------
-# nanoMuse Cloud: the relay this runtime signs in to (docs/cloud.md)
+# NanoLika Cloud: the relay this runtime signs in to (docs/cloud.md)
 # ------------------------------------------------------------------------------
 [cloud]
 base_url = "https://cloud.nanomuse.cn"   # a relay you run yourself: its public address (docs/self-hosting.md)
 required = true          # the first run does not finish without an account; false for a runtime with no relay at all
-models = true            # the account's models as a source (the apps' "Use nanoMuse Cloud models" switch); false keeps the sign-in for sync and the devices only
+models = true            # the account's models as a source (the apps' "Use NanoLika Cloud models" switch); false keeps the sign-in for sync and the devices only
 sync = true              # default for the account-wide Data controls → Sync switch (the person's choice, once made, counts)
 
 # ------------------------------------------------------------------------------

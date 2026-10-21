@@ -3,7 +3,7 @@
 Three backends do the same eight things — click (left, right, middle, double), move, drag,
 scroll, type, press keys, open an application:
 
-* ``desktop``: the nanoMuse Desktop app's own operator (UI-TARS-desktop's nut.js operator,
+* ``desktop``: the NanoLika Desktop app's own operator (UI-TARS-desktop's nut.js operator,
   :mod:`nanomuse.computer.operator`), reached over loopback when the app started this
   runtime (``NANOMUSE_OPERATOR_URL``). Preferred whenever it is there: the app is the
   process the system grants input and screen capture to.

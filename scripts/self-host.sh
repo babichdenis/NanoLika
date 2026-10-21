@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# nanoMuse Cloud — your own relay in one command.
+# NanoLika Cloud — your own relay in one command.
 #
 #   bash scripts/self-host.sh           # a server with a domain: Caddy fetches the certificate
 #   bash scripts/self-host.sh --local   # this machine only: http://127.0.0.1:8787, codes in the log
@@ -15,7 +15,7 @@
 #   --no-start         write cloud/.env only
 #
 # Needs: docker with the compose plugin (or docker-compose), curl. docs/self-hosting.md
-# explains the three ways to run nanoMuse yourself; this script is the second.
+# explains the three ways to run NanoLika yourself; this script is the second.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -147,7 +147,7 @@ if [ "$SENDER" = smtp ] || [ "$SENDER" = both ]; then
   ask V "     SMTP user" "$(get SMTP_USER)"; set_kv SMTP_USER "$V"
   ask_secret V "     SMTP password" "$([ -n "$(get SMTP_PASSWORD)" ] && echo 1 || echo 0)"
   [ -n "$V" ] && set_kv SMTP_PASSWORD "$V"
-  ask V "     From (e.g. nanoMuse <no-reply@$DOMAIN>)" "$(get SMTP_FROM)"; set_kv SMTP_FROM "$V"
+  ask V "     From (e.g. NanoLika <no-reply@$DOMAIN>)" "$(get SMTP_FROM)"; set_kv SMTP_FROM "$V"
 fi
 if [ "$SENDER" = aliyun ] || [ "$SENDER" = both ]; then
   ask V "     Aliyun AccessKey id" "$(get ALIYUN_ACCESS_KEY_ID)"; set_kv ALIYUN_ACCESS_KEY_ID "$V"
@@ -225,7 +225,7 @@ if [ "$ok" = 0 ]; then
 fi
 
 say
-say "nanoMuse Cloud is up."
+say "NanoLika Cloud is up."
 say
 say "  Console   $BASE/app/           sign in here; the web console lives on the relay"
 say "  Admin     $BASE/app/admin/     accounts, allowance, usage"

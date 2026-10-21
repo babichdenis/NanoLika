@@ -1,4 +1,4 @@
-# nanoMuse Cloud without TLS: the relay alone, on a loopback port, codes in the log.
+# NanoLika Cloud without TLS: the relay alone, on a loopback port, codes in the log.
 #
 # An override for a home server, a LAN or a Tailscale network — and for testing.
 # Caddy stays out of the way (it is moved behind the `tls` profile), the relay

@@ -373,7 +373,7 @@ def make_ics(
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//nanoMuse//EN",
+        "PRODID:-//NanoLika//EN",
         "BEGIN:VEVENT",
         f"UID:{uid}",
         f"DTSTAMP:{now}",

@@ -1,4 +1,4 @@
-"""nanoMuse Cloud from the runtime: sign in with a code, look at the account, the models
+"""NanoLika Cloud from the runtime: sign in with a code, look at the account, the models
 the relay offers, and the hub's address.
 
 The relay (``cloud/`` in this repository, ``docs/cloud.md``) is one more OpenAI-compatible
@@ -44,8 +44,8 @@ MESSAGES = {
     "allowance_exhausted": "The free allowance is used up. Invite a friend (the relay adds to both your allowances) or add your own model key; your sign-in and your devices keep working either way.",
     "daily_cap": "Today's token quota is used up; it comes back tomorrow.",
     "upstream": "The model provider did not answer.",
-    "upstream_unconfigured": "nanoMuse Cloud has no model key configured.",
-    "offline": "nanoMuse Cloud cannot be reached.",
+    "upstream_unconfigured": "NanoLika Cloud has no model key configured.",
+    "offline": "NanoLika Cloud cannot be reached.",
     "bad_credentials": "That address and password do not match.",
     "no_password": "This account has no password yet; sign in with a code and set one under Account.",
     "locked": "Too many wrong passwords; wait a while or sign in with a code.",
@@ -89,7 +89,7 @@ class CloudClient:
         self._client = httpx.AsyncClient(
             timeout=timeout,
             headers={
-                "User-Agent": f"nanoMuse/{__version__} ({platform.system()})",
+                "User-Agent": f"NanoLika/{__version__} ({platform.system()})",
                 "Accept": "application/json",
             },
         )

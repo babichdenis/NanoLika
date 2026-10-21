@@ -1,7 +1,7 @@
 """The phone as a device the agent can operate: screens in, actions out.
 
 Meta's Muse leans on services with APIs. Most of what a person in China does on a phone
-has no API — 12306, WeChat, Alipay, Meituan — so nanoMuse can also work those apps the way
+has no API — 12306, WeChat, Alipay, Meituan — so NanoLika can also work those apps the way
 the person would: look at the screen, tap, type, swipe. Two things provide that screen:
 
 * the Android app, through an accessibility service (the real phone), and

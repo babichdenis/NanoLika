@@ -210,7 +210,7 @@ class NanoMuseApp:
 
     def cloud_models_on(self) -> bool:
         """Whether the account's models are a source: signed in and ``[cloud] models`` not
-        switched off (the apps' *Use nanoMuse Cloud models*). Every automatic rung that
+        switched off (the apps' *Use NanoLika Cloud models*). Every automatic rung that
         would reach the relay (the hands, pictures, clips, the providers' listing) asks
         this, not :meth:`cloud_signed_in`; the sign-in is a different question."""
         return self.cloud_signed_in() and self.settings.cloud.models
@@ -407,7 +407,7 @@ class NanoMuseApp:
 
         async def app_gate(app_id: str, label: str) -> bool:
             # "Let <Muse> use <App>?" — the agent's name as the person set it
-            muse = str(self.settings.agent.name or "nanoMuse")
+            muse = str(self.settings.agent.name or "NanoLika")
             return await self.sentinel.allow_app(app_id, label, muse)
 
         act = ComputerAct(link=self.computer, gui=gui, holds=self.holds, app_gate=app_gate)

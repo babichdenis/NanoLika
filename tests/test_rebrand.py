@@ -49,12 +49,12 @@ def test_soul_default_round_trip_survives_rebranding(
     rebrand.product_name()
     rebrand.soul_defaults()
 
-    assert 'name = "nanoMuse"' in soul.read_text(encoding="utf-8")
+    assert 'name = "NanoLika"' in soul.read_text(encoding="utf-8")
     assert 'DISPLAY_EMOJI = "🐾"' in soul.read_text(encoding="utf-8")
     if include_test:
         text = edge.read_text(encoding="utf-8")
         assert "assertEquals(SoulMetadata.DEFAULT.name, back.metadata.name)" in text
-        assert "// nanoMuse:" in text
+        assert "// NanoLika:" in text
         # A stored name supplied by the test is independent of the product's default.
         assert 'assertEquals("Minis", explicitlyNamed.metadata.name)' in text
 

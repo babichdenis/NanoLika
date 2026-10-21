@@ -87,7 +87,7 @@ def test_add_lists_the_models_and_keeps_the_key_in_the_vault(server, listed, set
     relay = client.post(
         "/api/connections/endpoints", json={"base_url": settings.cloud.base_url + "/v1"}
     )
-    assert relay.status_code == 400 and "nanoMuse Cloud" in relay.json()["detail"]
+    assert relay.status_code == 400 and "NanoLika Cloud" in relay.json()["detail"]
     added = client.post(
         "/api/connections/endpoints",
         json={"base_url": "gateway.example/v1", "api_key": "sk-gateway-1", "models": "my-typed"},

@@ -293,7 +293,7 @@ class ChannelManager(ChannelBus):
 
     @property
     def muse_name(self) -> str:
-        return self.svc.profile.name or "nanoMuse"
+        return self.svc.profile.name or "NanoLika"
 
     # ------------------------------------------------------------------ inbound
     def _allowed(self, msg: InboundMessage) -> bool:
@@ -573,6 +573,19 @@ class ChannelManager(ChannelBus):
         kind = event.get("type")
         thread = str(event.get("thread") or "")
         ours = thread in self.routes
+        if kind in ("user", "assistant") and event.get("synced") and not ours:
+            # A turn another device wrote (the computer, the phone): relay sync lands it in
+            # the timeline as it is pulled (sync engine `_apply_message`). The chats marked
+            # "deliver here" hear it as it happens, named after the device that wrote it —
+            # the relay's echo filter already dropped this device's own rows, and `ours`
+            # keeps this chat's own turns out of its own feed.
+            text = str(event.get("text") or "").strip()
+            files = [str(f.get("name") or "") for f in event.get("files") or [] if isinstance(f, dict)]
+            body = text or ", ".join(n for n in files if n)
+            name = str(event.get("via_device_name") or event.get("via_device") or "").strip()
+            if body and name:
+                await self.deliver(f"{name}: {body}", exclude_thread=thread)
+            return
         if kind == "assistant":
             text = str(event.get("text") or "")
             if event.get("quiet"):

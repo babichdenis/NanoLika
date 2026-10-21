@@ -59,16 +59,16 @@ _RELAY: dict[str, tuple[str, str]] = {
     ),
     "upstream_unconfigured": (
         "relay",
-        "nanoMuse Cloud has no model key configured; the operator has been told.",
+        "NanoLika Cloud has no model key configured; the operator has been told.",
     ),
-    "account_disabled": ("account", "This nanoMuse Cloud account is disabled."),
+    "account_disabled": ("account", "This NanoLika Cloud account is disabled."),
     "bad_key": (
         "account",
-        "The nanoMuse Cloud sign-in is no longer valid; sign in again under Account.",
+        "The NanoLika Cloud sign-in is no longer valid; sign in again under Account.",
     ),
     "model_not_offered": (
         "model",
-        "That model is not offered by nanoMuse Cloud; pick another under Connections.",
+        "That model is not offered by NanoLika Cloud; pick another under Connections.",
     ),
     # 413: the request body passed the relay's cap or the model's window
     "too_large": (
@@ -91,7 +91,7 @@ _RELAY: dict[str, tuple[str, str]] = {
     ),
     "service_paused": (
         "relay",
-        "nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.",
+        "NanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.",
     ),
     "sync_paused": (
         "relay",
@@ -105,11 +105,11 @@ _RELAY: dict[str, tuple[str, str]] = {
     # model for one visit, and the showcase's for the day, not a provider's rate limit
     "session_budget": (
         "allowance",
-        "This demo Muse has used its share of the model for this visit. Start over for a new one, or install nanoMuse and use your own key.",
+        "This demo Muse has used its share of the model for this visit. Start over for a new one, or install NanoLika and use your own key.",
     ),
     "daily_budget": (
         "allowance",
-        "The showcase has used today's share of the model; it comes back tomorrow. Install nanoMuse and use your own key to keep going.",
+        "The showcase has used today's share of the model; it comes back tomorrow. Install NanoLika and use your own key to keep going.",
     ),
 }
 

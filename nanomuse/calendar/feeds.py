@@ -138,7 +138,7 @@ class CalendarFeeds:
         if url.startswith(("http://", "https://")):
             async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
                 async with client.stream(
-                    "GET", url, headers={"User-Agent": "nanoMuse calendar"}
+                    "GET", url, headers={"User-Agent": "NanoLika calendar"}
                 ) as response:
                     response.raise_for_status()
                     chunks: list[bytes] = []

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, sign, name and (optionally) publish a nanoMuse release APK.
+# Build, sign, name and (optionally) publish a NanoLika release APK.
 #
 #   scripts/release-apk.sh <version> [--publish] [--publish-only] [--target COMMIT]
 #                          [--notes FILE] [--allow-debug-key] [--prerelease]
@@ -9,7 +9,7 @@
 # 2. makes sure the native artifacts and rclone.aar exist (scripts/android/build-natives.sh),
 # 3. ./gradlew :app:assembleRelease — signed with android/keystore.properties when present,
 # 4. verifies the signature and refuses the debug key unless --allow-debug-key,
-# 5. writes dist/nanoMuse-<version>-arm64.apk and .sha256,
+# 5. writes dist/NanoLika-<version>-arm64.apk and .sha256,
 # 6. with --publish: tags v<version> (annotated, at --target or HEAD, unless the tag already
 #    exists), pushes the tag, then gh release create v<version> --latest with the APK, the
 #    checksum and the notes (default docs/releases/v<version>.md, with What's Changed / New
@@ -52,7 +52,7 @@ done
 build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
 # macOS has no sha256sum; shasum writes and checks the same lines
 command -v sha256sum >/dev/null 2>&1 || sha256sum() { shasum -a 256 "$@"; }
-out="$NM_ROOT/dist/nanoMuse-$version-arm64.apk"
+out="$NM_ROOT/dist/NanoLika-$version-arm64.apk"
 
 # Every part of the release carries the same version: the runtime, the desktop app, the web
 # app, the iPhone app's MARKETING_VERSION (the APK is checked by badging below). Packages are
@@ -147,7 +147,7 @@ if [ $publish = 1 ]; then
   }
   if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
     echo "== tag $tag -> $(git rev-parse --short "$commit")"
-    git tag -a "$tag" "$commit" -m "nanoMuse $version"
+    git tag -a "$tag" "$commit" -m "NanoLika $version"
   fi
   git push origin "refs/tags/$tag"
 

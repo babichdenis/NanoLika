@@ -349,7 +349,7 @@ class Database:
         if "cost_uy" not in cols("ledger"):
             self._conn.execute("ALTER TABLE ledger ADD COLUMN cost_uy INTEGER NOT NULL DEFAULT 0")
         if "expires_at" not in cols("api_keys"):
-            # 0.13: a session key (nanoMuse Web's containers) stops working at this time
+            # 0.13: a session key (NanoLika Web's containers) stops working at this time
             self._conn.execute("ALTER TABLE api_keys ADD COLUMN expires_at INTEGER")
         if "extra" not in cols("ledger"):
             self._conn.execute("ALTER TABLE ledger ADD COLUMN extra TEXT NOT NULL DEFAULT ''")

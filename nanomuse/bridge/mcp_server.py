@@ -1,6 +1,6 @@
 """The hands as an MCP server: ``nanomuse mcp``.
 
-A host that is not our runtime — nanoMuse on DeepSeek Harness (docs/harness.md) — gets
+A host that is not our runtime — NanoLika on DeepSeek Harness (docs/harness.md) — gets
 this computer's screen and hands the way it gets any other capability: as an MCP server
 on stdio. The two tools are the runtime's own ``computer_screen`` and ``computer_act``
 (:mod:`nanomuse.tools.computer`), with their descriptions and schemas, so a model that
@@ -12,7 +12,7 @@ What the Sentinel does in the runtime, the bridge does at the model's level: a c
 runtime would ask the person about — Enter or a submit, a heavy shortcut, a click on words
 from the sensitive list (password, pay, …) — is refused with the reason, unless the call
 carries ``confirmed``. With ``NANOMUSE_MCP_CONFIRM`` in the server's environment (the
-nanoMuse desktop sets it: one random secret per launch, shared with its plugin), only the
+NanoLika desktop sets it: one random secret per launch, shared with its plugin), only the
 host can confirm: ``confirmed`` must be the ticket :func:`ticket` computes over the call's
 arguments with that secret, which the plugin produces after the person said yes on the
 permission card — a ``true`` the model wrote on its own is refused. Without the variable
@@ -223,7 +223,7 @@ async def serve(tools: list[BaseTool]) -> None:
 
     by_name = {t.name: t for t in tools}
     instructions = (
-        "This computer's screen and hands, from nanoMuse. Look first (computer_screen), act "
+        "This computer's screen and hands, from NanoLika. Look first (computer_screen), act "
         "in small steps (computer_act), look again. Coordinates are pixels of the last "
         "screenshot."
     )

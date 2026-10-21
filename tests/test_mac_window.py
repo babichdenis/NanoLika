@@ -396,7 +396,7 @@ HELPER_WINDOWS: list[dict[str, Any]] = [
      "bounds": [0, 0, 1440, 24], "layer": 24, "on_screen": True},
 ]  # fmt: skip
 HELPER_SCREEN_TEXT = (
-    "macOS: switch on nanoMuse Computer Use under System Settings → Privacy & Security → "
+    "macOS: switch on NanoLika Computer Use under System Settings → Privacy & Security → "
     "Screen Recording. The helper restarts by itself; the app does not need to."
 )
 
@@ -447,7 +447,7 @@ def test_the_operator_window_adapter_lists_and_captures_through_the_helper(
     # the helper's Screen Recording row is off: the operator's 403, in its words, retried
     # on the next look (WindowUnavailable, not a broken layer)
     mac_operator.refuse_window = (403, f"window 41 could not be captured: {HELPER_SCREEN_TEXT}")
-    with pytest.raises(mw.WindowUnavailable, match="nanoMuse Computer Use") as exc:
+    with pytest.raises(mw.WindowUnavailable, match="NanoLika Computer Use") as exc:
         hands.look("Safari")
     assert not isinstance(exc.value, mw.WindowLayerBroken)
     mac_operator.refuse_window = None
@@ -459,7 +459,7 @@ def test_the_operator_window_adapter_lists_and_captures_through_the_helper(
     # the helper itself is gone (503): the layer failed — `auto` mode parks on the screen
     mac_operator.refuse_window = (
         503,
-        "window 41 could not be captured: nanoMuse Computer Use did not start (no port after 10 s)",
+        "window 41 could not be captured: NanoLika Computer Use did not start (no port after 10 s)",
     )
     with pytest.raises(mw.WindowLayerBroken, match="did not start"):
         hands.look("Safari")
@@ -502,7 +502,7 @@ async def test_the_link_works_in_a_window_through_the_helper_under_the_app(
     # which the operator refuses with the same words — the tool's error names the helper
     mac_operator.refuse_window = (403, f"window 41 could not be captured: {HELPER_SCREEN_TEXT}")
     mac_operator.refuse_shot = (403, f"no screenshot: {HELPER_SCREEN_TEXT}")
-    with pytest.raises(DeviceError, match="nanoMuse Computer Use"):
+    with pytest.raises(DeviceError, match="NanoLika Computer Use"):
         await link.screen()
     assert link.in_window_mode()  # not parked: a grant is retried, a broken layer is not
 

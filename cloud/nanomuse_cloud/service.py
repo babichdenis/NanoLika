@@ -270,7 +270,7 @@ class Caller:
     # spent is the ledger's sum, read when needed.
     grant_uy: int = 0
     contribute_bonus_at: int | None = None
-    # Data controls: "Help improve nanoMuse's AI models" is on for this account — only then
+    # Data controls: "Help improve NanoLika's AI models" is on for this account — only then
     # does the relay keep the text of what was said (service.keep_sample says exactly what).
     contribute: bool = False
 
@@ -997,7 +997,7 @@ class Cloud:
 
     def session_key(self, caller: Caller, device: str, ttl_s: int) -> tuple[str, int]:
         """A key that stops working on its own after `ttl_s` (at most 90 days), for a place
-        that should not hold a standing one — nanoMuse Web's container gets one at start and
+        that should not hold a standing one — NanoLika Web's container gets one at start and
         the gateway keeps nothing. Issued to the account of the key making the request; the
         requesting key is untouched (the caller revokes it if it has no further use for it).
         A session key cannot mint another: otherwise a key that lapses in an hour could
@@ -1382,7 +1382,7 @@ class Cloud:
             # so on the account page before a request is refused
             "paused": [k for k, v in self.controls.paused().items() if v],
             "account": {
-                # an opaque id (not the identifier): what nanoMuse Web keys a person's kept
+                # an opaque id (not the identifier): what NanoLika Web keys a person's kept
                 # Muse to, so a sign-in from another browser lands in the same one
                 "id": caller.account_id,
                 "channel": caller.channel,
@@ -1563,7 +1563,7 @@ class Cloud:
         if m is not None:
             raise CloudError(404, "model_not_offered", f"{model_id!r} is a {m.kind} model, not a {kind} one; choose one of: {offered}")
         more = ", or any model of the provider's by its id" if self.any_model(caller) else ""
-        raise CloudError(404, "model_not_offered", f"nanoMuse Cloud does not offer {model_id!r}; choose one of: {offered}{more}")
+        raise CloudError(404, "model_not_offered", f"NanoLika Cloud does not offer {model_id!r}; choose one of: {offered}{more}")
 
     def models_for(self, caller: Caller) -> dict:
         """The menu, and whether this account may name a model beyond it."""
@@ -1610,7 +1610,7 @@ class Cloud:
             raise CloudError(
                 402,
                 "out_of_tokens",
-                "Your nanoMuse Cloud grant is used up. Add your own model key under Settings → Providers to keep going.",
+                "Your NanoLika Cloud grant is used up. Add your own model key under Settings → Providers to keep going.",
             )
         t = now()
         if self.in_flight.full(caller.account_id):
@@ -1717,7 +1717,7 @@ class Cloud:
         """An event on the account's timeline (never message content)."""
         self.db.add_event(account_id, kind, detail)
 
-    # -- data controls: "Help improve nanoMuse's AI models" ----------------------------------
+    # -- data controls: "Help improve NanoLika's AI models" ----------------------------------
     #
     # With the switch on, each chat request's conversation and the model's reply are kept
     # for the community's own model — nothing else changes, and the person can turn it off
@@ -2186,14 +2186,14 @@ class Cloud:
         if images:
             m = self.model_for(image_model, "image", caller) if image_model else next((x for x in self.s.models if x.kind == "image"), None)
             if m is None:
-                raise CloudError(404, "model_not_offered", "nanoMuse Cloud offers no image model")
+                raise CloudError(404, "model_not_offered", "NanoLika Cloud offers no image model")
             c = m.image_cost_uy(size) * images
             cost += c
             parts.append({"kind": "image", "model": m.id, "count": images, "cny": self.s.uy_to_cny(c)})
         if clips:
             m = self.model_for(video_model, "video", caller) if video_model else next((x for x in self.s.models if x.kind == "video"), None)
             if m is None:
-                raise CloudError(404, "model_not_offered", "nanoMuse Cloud offers no video model")
+                raise CloudError(404, "model_not_offered", "NanoLika Cloud offers no video model")
             c = m.video_cost_uy(m.clip_seconds) * clips
             cost += c
             parts.append({"kind": "video", "model": m.id, "count": clips, "seconds": m.clip_seconds, "cny": self.s.uy_to_cny(c)})

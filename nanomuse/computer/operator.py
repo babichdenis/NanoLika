@@ -1,6 +1,6 @@
 """The desktop app's operator as this runtime's hands.
 
-nanoMuse Desktop (Electron, ``harness/desktop``) runs the mouse, the keyboard and the
+NanoLika Desktop (Electron, ``harness/desktop``) runs the mouse, the keyboard and the
 screenshot itself — UI-TARS-desktop's nut.js operator, ported — and offers them to the
 runtime it starts over loopback HTTP: ``NANOMUSE_OPERATOR_URL`` and
 ``NANOMUSE_OPERATOR_TOKEN`` in the runtime's environment. The brain stays here (the agent
@@ -20,7 +20,7 @@ The contract (``harness/desktop/src/operator-server.ts``), JSON both ways, beare
   On Linux under Wayland the operator refuses (503) with the same reason ``/info`` gives.
 * ``POST /execute {action, x, y, x2, y2, dy, text, submit, clear, keys, seconds}`` →
   ``{ok, note}``; coordinates in the hands' space. Errors are 4xx/5xx with ``{error}``.
-* macOS, with the app's helper *nanoMuse Computer Use* (``/info`` says
+* macOS, with the app's helper *NanoLika Computer Use* (``/info`` says
   ``helper.present``): ``GET /windows`` → ``{windows: [{id, pid, app, bundle_id, title,
   bounds: [x, y, w, h], layer, on_screen}]}`` and ``POST /window {id, max_pixels?,
   format?, quality?}`` → ``{base64, mime, width, height, window: {id, x, y, width,

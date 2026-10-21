@@ -121,9 +121,10 @@ def platform_of(ua: str) -> str:
     the runtime on each system (which serves the web app, the desktop and the harness),
     a browser, or something else."""
     ua = str(ua or "")
-    if ua.startswith("nanoMuse-Android"):
+    # the apps that were built as nanoMuse still say so; they are the same clients
+    if ua.startswith(("NanoLika-Android", "nanoMuse-Android")):
         return "android"
-    if ua.startswith("nanoMuse/"):
+    if ua.startswith(("NanoLika/", "nanoMuse/")):
         system = ua[ua.find("(") + 1 : ua.find(")")].lower() if "(" in ua and ")" in ua else ""
         return {"windows": "windows", "darwin": "macos", "linux": "linux"}.get(system, "runtime")
     if ua.startswith("Mozilla/"):
@@ -132,10 +133,10 @@ def platform_of(ua: str) -> str:
 
 
 def client_version(ua: str) -> str:
-    """The version the client names in its user agent (``nanoMuse-Android/0.1.26 …``,
-    ``nanoMuse/0.1.26 (linux)``), or an empty string."""
+    """The version the client names in its user agent (``NanoLika-Android/0.1.26 …``,
+    ``NanoLika/0.1.26 (linux)``), or an empty string."""
     ua = str(ua or "")
     head = ua.split(" ", 1)[0]
-    if "/" in head and head.startswith("nanoMuse"):
+    if "/" in head and head.startswith(("NanoLika", "nanoMuse")):
         return head.split("/", 1)[1][:24]
     return ""

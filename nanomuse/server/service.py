@@ -1,4 +1,4 @@
-"""The always-on nanoMuse: threads, background workers, goals scheduler, ideas, profile.
+"""The always-on NanoLika: threads, background workers, goals scheduler, ideas, profile.
 
 This is the piece that keeps working after you close the app. It owns one
 :class:`~nanomuse.app.NanoMuseApp` (LLM, tools, Sentinel, vault, memory, goals)
@@ -199,7 +199,7 @@ _SHUTDOWN_GRACE_S = 5.0
 
 @dataclass
 class Profile:
-    name: str = "nanoMuse"
+    name: str = "NanoLika"
     # the face: "dragon" (the one the Android app wears; stills per mood), a face drawn in
     # the avatar studio (its id names files under the workspace), or "" for the emoji; the
     # red panda and the dolls of 0.1.22 are gone — a profile naming one wears the dragon
@@ -280,7 +280,7 @@ class Profile:
             p.proactivity = "default" if data["proactive"] else "off"
         if p.proactivity not in PROACTIVITY:
             p.proactivity = "default"
-        p.name = (str(p.name).strip() or "nanoMuse")[:NAME_MAX]
+        p.name = (str(p.name).strip() or "NanoLika")[:NAME_MAX]
         if "avatar" not in data:
             # a profile from before the dolls: keep the emoji it has
             p.avatar = ""
@@ -1084,7 +1084,7 @@ class MuseService:
         ``files`` are workspace paths of attachments (uploaded first with ``save_upload``);
         a message may be attachments alone. ``language`` is the BCP-47 tag of the client's
         screens when the client said; the agent answers in it (see MuseAgent.run).
-        ``via="cloud"`` is *Use nanoMuse Cloud this time*: this one turn runs on the
+        ``via="cloud"`` is *Use NanoLika Cloud this time*: this one turn runs on the
         account's recommended chat model (see :meth:`cloud_once`); the next is back on
         the configured model. A CloudError when that is not possible."""
         text = text.strip()
@@ -1139,7 +1139,7 @@ class MuseService:
             self.sync.message_sent(thread)
             if not attachments and self.ui.answer_question(thread_id, text):
                 return event
-            # nanoMuse: a request for a new look (or the pick among four candidates) is the
+            # NanoLika: a request for a new look (or the pick among four candidates) is the
             # studio's, not the agent's — the card in the chat takes it from here; a picture
             # attached to the request is the reference the candidates are drawn from
             if (
@@ -1173,7 +1173,7 @@ class MuseService:
         return event
 
     def cloud_once(self) -> tuple[BaseLLM | None, str]:
-        """The client for *Use nanoMuse Cloud this time* (the own-key models contract, §4)
+        """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
         the vault, for one turn. ``[llm]``, ``[cloud] models`` and the conversation stay as
         they are; a turn later the thread is back on the configured model. Refused with a
@@ -1181,7 +1181,7 @@ class MuseService:
         on the account there is nothing to switch: the client is None, the id is the
         configured model's."""
         if not self.app.cloud_signed_in():
-            raise CloudError(401, "signed_out", "Sign in to nanoMuse Cloud first.")
+            raise CloudError(401, "signed_out", "Sign in to NanoLika Cloud first.")
         if self.app.llm_is_cloud():
             return None, self.settings.llm.model
         model = self.hub.chat_models[0] if self.hub.chat_models else DEFAULT_CHAT_MODEL
@@ -1249,7 +1249,7 @@ class MuseService:
                 thread.busy = True
                 thread.agent.inbox = thread.inbox
                 if incoming.llm is not None:
-                    # *Use nanoMuse Cloud this time*: this turn on the account's model, the
+                    # *Use NanoLika Cloud this time*: this turn on the account's model, the
                     # configured client back when it ends (or whatever a switch meanwhile set)
                     thread.agent.llm = incoming.llm
                 self.bus.publish({"kind": "thread", "thread": thread.meta()})
@@ -1296,7 +1296,7 @@ class MuseService:
 
     def _release_llm(self, thread: Thread) -> None:
         """A run ended: the thread goes back to the configured model client. The client the
-        run held, when it is another one (the one-turn Cloud client of *Use nanoMuse Cloud
+        run held, when it is another one (the one-turn Cloud client of *Use NanoLika Cloud
         this time*, or the client a model switch replaced while this turn was running; see
         ``Connections._swap_llm``), is closed once no other running turn still holds it."""
         held = thread.agent.llm

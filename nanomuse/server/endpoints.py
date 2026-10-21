@@ -227,7 +227,7 @@ class Endpoints:
         if not re.match(r"^https?://[^/\s]+", url):
             raise ValueError("the address must start with http:// or https://")
         if self._same(url, model_url(self.conn.settings.cloud.base_url)):
-            raise ValueError("that is nanoMuse Cloud; it is the account, not an endpoint")
+            raise ValueError("that is NanoLika Cloud; it is the account, not an endpoint")
         return url
 
     def _check_unique(self, url: str, except_id: str = "") -> None:

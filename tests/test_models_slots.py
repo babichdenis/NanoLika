@@ -352,7 +352,7 @@ def test_pictures_follow_the_chat_provider_then_the_account(
 def test_cloud_models_off_takes_the_account_out_of_every_automatic_rung(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """*Use nanoMuse Cloud models* off (``[cloud] models``): the hands, the pictures and
+    """*Use NanoLika Cloud models* off (``[cloud] models``): the hands, the pictures and
     the clips no longer fall to the relay, the providers' listing and the chat picker leave
     the account out, a sign-in changes no slot; the sign-in itself stays. On again, the
     order is as before."""

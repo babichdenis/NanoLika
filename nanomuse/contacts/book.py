@@ -228,7 +228,7 @@ class ContactBook:
     async def _fetch(self, url: str) -> str:
         async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             async with client.stream(
-                "GET", url, headers={"User-Agent": "nanoMuse contacts"}
+                "GET", url, headers={"User-Agent": "NanoLika contacts"}
             ) as response:
                 response.raise_for_status()
                 chunks: list[bytes] = []

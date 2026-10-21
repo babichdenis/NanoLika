@@ -1,4 +1,4 @@
-"""Is there a newer nanoMuse? The download mirror's index first, GitHub Releases second,
+"""Is there a newer NanoLika? The download mirror's index first, GitHub Releases second,
 kept for a day, a failed check for an hour (contract C2: every client shows the installed
 and the latest version).
 
@@ -28,9 +28,9 @@ from nanomuse.logger import logger
 
 INDEX_URL = "https://nanomuse.cn/dl/index.json"
 DOWNLOAD_PAGE = "https://nanomuse.cn/dl/"
-RELEASES_API = "https://api.github.com/repos/nano-muse/nanoMuse/releases/latest"
-RELEASES_PAGE = "https://github.com/nano-muse/nanoMuse/releases/latest"
-RELEASE_TAG_PAGE = "https://github.com/nano-muse/nanoMuse/releases/tag/{tag}"
+RELEASES_API = "https://api.github.com/repos/babichdenis/NanoLika/releases/latest"
+RELEASES_PAGE = "https://github.com/babichdenis/NanoLika/releases/latest"
+RELEASE_TAG_PAGE = "https://github.com/babichdenis/NanoLika/releases/tag/{tag}"
 CACHE_S = 24 * 3600
 # a check that failed (the runtime came up before the network did) is tried again sooner
 RETRY_S = 3600
@@ -127,7 +127,7 @@ class UpdateCheck:
     async def _check(self) -> None:
         self.checked_at = time.monotonic()
         self.checked_wall = datetime.now(UTC).isoformat(timespec="seconds")
-        headers = {"User-Agent": f"nanoMuse/{self.current}"}
+        headers = {"User-Agent": f"NanoLika/{self.current}"}
         errors: list[str] = []
         async with httpx.AsyncClient(follow_redirects=True) as client:
             # 1. the download mirror's index (short timeout: it is the quick way, not the only one)

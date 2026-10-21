@@ -140,7 +140,7 @@ function harnessHome(): string {
   const previous = join(homedir(), ".nanomuse", "harness");
   const before = join(homedir(), ".nanomuse", "desktop");
   if (!existsSync(home)) {
-    // the app was called nanoMuse until 0.1.x: its home is renamed once, so the account,
+    // the app was called NanoLika until 0.1.x: its home is renamed once, so the account,
     // the chats and the profile of that install carry on instead of a fresh start
     for (const old of [before, previous]) {
       if (!existsSync(old)) continue;

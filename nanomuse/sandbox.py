@@ -1,6 +1,6 @@
 """A small box for every command the agent runs.
 
-Muse gives each user's agent a VM of its own. nanoMuse runs on your machine, so the next
+Muse gives each user's agent a VM of its own. NanoLika runs on your machine, so the next
 best thing is to give each ``shell`` and ``python_execute`` call its own namespace with
 `bubblewrap <https://github.com/containers/bubblewrap>`_ (Linux, unprivileged):
 

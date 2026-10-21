@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Move every version file of nanoMuse to the next version, for the release commit.
+# Move every version file of NanoLika to the next version, for the release commit.
 #
 #   scripts/release-bump.sh <old> <new> <old-code> <new-code> [<relay-old> <relay-new>]
 #   scripts/release-bump.sh 0.1.40 0.1.41 41 42            # the apps and the runtime

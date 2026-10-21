@@ -13,7 +13,7 @@
     GET  /v1/me/sessions                                        → live sign-ins (device, via, when; the current one marked)
     DELETE /v1/me/sessions/{prefix}                             → 204 (sign one device out)
     GET  /v1/me/events                                          → the account's own timeline (sign-ins, password changes…)
-    POST /v1/me/contribute {on}                                 → Data controls: "help improve nanoMuse's AI models" — keep the text of my chat turns (the default for new accounts is IMPROVE_DEFAULT)
+    POST /v1/me/contribute {on}                                 → Data controls: "help improve NanoLika's AI models" — keep the text of my chat turns (the default for new accounts is IMPROVE_DEFAULT)
     DELETE /v1/me/samples                                       → delete every turn kept from me
     GET  /v1/sync/state                                         → 0.19: {enabled, cursor, counts, limits, working[]} — conversation sync between the account's devices
     PUT  /v1/sync/state       {enabled}                         → the switch; off deletes everything stored
@@ -24,7 +24,7 @@
     DELETE /v1/sync/conversations/{cid}                         → one chat tombstoned everywhere
     POST /v1/auth/sign-out                                      → 204 (revokes this key)
     POST /v1/auth/sign-out-all {all?}                           → {signed_out} (every other device; all=true takes this one too)
-    POST /v1/auth/session-key {device?, ttl_s?}                 → {api_key, expires_at} (a key that lapses on its own; nanoMuse Web's containers)
+    POST /v1/auth/session-key {device?, ttl_s?}                 → {api_key, expires_at} (a key that lapses on its own; NanoLika Web's containers)
     POST /v1/auth/delete                                        → 204 (the whole account, every key)
     GET  /v1/me/profile       ?face=false                       → the agent's name, look and connectors, shared by the account's devices
     PUT  /v1/me/profile       {device, name?, avatar?, face?, connectors?} → {rev, device}; partial since 0.25
@@ -61,7 +61,7 @@
     GET  /v1/admin/usage      X-Admin-Token  ?days=14           → charged tokens and yuan per day and kind
     GET  /v1/admin/overview   X-Admin-Token  ?days=30           → the dashboard: accounts, today / week / period by kind and model, signals, events
     GET  /v1/admin/events     X-Admin-Token  ?limit=200&kind=…  → the timeline across accounts (never message content)
-    GET  /v1/admin/series     X-Admin-Token  ?days=30           → by day: sign-ins, new / active accounts, invites, data switches turned on; devices by kind and OS; nanoMuse Web's counts
+    GET  /v1/admin/series     X-Admin-Token  ?days=30           → by day: sign-ins, new / active accounts, invites, data switches turned on; devices by kind and OS; NanoLika Web's counts
     GET  /v1/admin/traffic    X-Admin-Token  ?days=30           → the site: pages, visitors, downloads per file, referrers, GitHub stars and release downloads (TRAFFIC_DB)
     GET  /v1/admin/demo       X-Admin-Token  ?days=30           → the phone in the browser: visitors with addresses and browsers, every demo and what it used (WEB_ADMIN_URL)
     GET  /v1/admin/data       X-Admin-Token  ?days=30           → Data controls: accounts with the switch on, kept turns by day / model / app / account, switches on and off, the newest turns
@@ -362,7 +362,7 @@ def create_app(
             await collector.stop()
             await http.aclose()
 
-    app = FastAPI(title="nanoMuse Cloud", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="NanoLika Cloud", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.cloud = cloud
     app.state.settings = settings
     app.state.http = http
@@ -389,7 +389,7 @@ def create_app(
     # what still answers while the *Cloud service* switch is off: the health check, the
     # console and its API, and the public figures (which say the service is paused)
     OPEN_WHILE_PAUSED = ("/healthz", "/app", "/v1/admin/", "/v1/config")
-    SERVICE_PAUSED_MESSAGE = "nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later."
+    SERVICE_PAUSED_MESSAGE = "NanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later."
 
     # whose X-Forwarded-For to believe: TRUSTED_PROXIES when set, else every non-global peer;
     # the same list uvicorn's proxy-headers middleware runs with (__main__.py)
@@ -445,7 +445,7 @@ def create_app(
 
     def upstream_headers() -> dict[str, str]:
         if not settings.upstream_key:
-            raise CloudError(503, "upstream_unconfigured", "nanoMuse Cloud has no model key configured")
+            raise CloudError(503, "upstream_unconfigured", "NanoLika Cloud has no model key configured")
         return {"Authorization": f"Bearer {settings.upstream_key}", "Content-Type": "application/json"}
 
     # -- health ----------------------------------------------------------------
@@ -647,7 +647,7 @@ def create_app(
     @app.post("/v1/auth/session-key")
     async def session_key(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
         """A key for this account that expires on its own: {"device", "ttl_s"} → {"api_key",
-        "expires_at"}. nanoMuse Web starts a person's container with one and keeps no
+        "expires_at"}. NanoLika Web starts a person's container with one and keeps no
         standing key of theirs (0.13)."""
         body = await _json(request)
         try:
@@ -823,7 +823,7 @@ def create_app(
             m = cloud.model_for(model_id, kind, caller)
         if m is None:
             more = " on the menu; add ?kind=chat|image|video to ask for one beyond it" if cloud.any_model(caller) else ""
-            raise CloudError(404, "model_not_offered", f"nanoMuse Cloud does not offer {model_id!r}{more}")
+            raise CloudError(404, "model_not_offered", f"NanoLika Cloud does not offer {model_id!r}{more}")
         return m.to_public()
 
     # -- chat -----------------------------------------------------------------------------
@@ -1046,7 +1046,7 @@ def create_app(
         except (TypeError, ValueError) as e:
             raise CloudError(400, "bad_request", "n is a whole number") from e
         if n != 1:
-            raise CloudError(400, "bad_request", "nanoMuse Cloud draws one picture per request")
+            raise CloudError(400, "bad_request", "NanoLika Cloud draws one picture per request")
         params = {"size": size, "watermark": False}
         if spec.upstream.startswith("qwen-image"):
             params["prompt_extend"] = False
@@ -1076,7 +1076,7 @@ def create_app(
     ) -> Response:
         spec = cloud.model_for(model, "image", caller)
         if n != 1:
-            raise CloudError(400, "bad_request", "nanoMuse Cloud draws one picture per request")
+            raise CloudError(400, "bad_request", "NanoLika Cloud draws one picture per request")
         # read one byte past the cap rather than the whole picture first: larger than the
         # limit is refused, so nothing beyond it is ever held
         data = await image.read(settings.max_request_bytes + 1)
@@ -1409,7 +1409,7 @@ def create_app(
         return out
 
     async def web_info() -> dict | None:
-        """nanoMuse Web's counts from the gateway next door (WEB_INFO_URL); None when it
+        """NanoLika Web's counts from the gateway next door (WEB_INFO_URL); None when it
         is not configured or does not answer — the panel then says so."""
         if not settings.web_info_url:
             return None

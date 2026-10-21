@@ -15,7 +15,7 @@ picture's size, and every ``x``/``y`` the tools accept is a pixel of it. The han
 their own screen space (``screen_w``/``screen_h``: X11 root pixels, macOS points, Windows
 physical pixels), and the one place the two meet is :class:`~nanomuse.computer.coords.Mapping`
 — applied in ``_do`` before an action and in ``_where`` before the overlay hears of it.
-When nanoMuse Desktop started this runtime, its operator (:mod:`nanomuse.computer.operator`)
+When NanoLika Desktop started this runtime, its operator (:mod:`nanomuse.computer.operator`)
 takes the screenshot and does the moving; otherwise the Python backends do.
 
 Two modes (``[hands] mode``). *Screen*: the whole screen through ``mss`` and the system

@@ -25,11 +25,11 @@ def test_forwarded_for_is_ignored_from_the_open_internet():
 
 def test_client_info_carries_the_address_and_the_platform():
     info = from_headers(
-        {"x-forwarded-for": "203.0.113.7", "user-agent": "nanoMuse-Android/0.1.40 (Pixel 8)"},
+        {"x-forwarded-for": "203.0.113.7", "user-agent": "NanoLika-Android/0.1.40 (Pixel 8)"},
         "10.0.0.2",
     )
     assert info.ip == "203.0.113.7" and info.platform == "android"
-    assert platform_of("nanoMuse/0.1.40 (darwin)") == "macos"
+    assert platform_of("NanoLika/0.1.40 (darwin)") == "macos"
     assert platform_of("Mozilla/5.0") == "browser"
 
 

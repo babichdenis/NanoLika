@@ -614,7 +614,7 @@ def test_sign_in_joins_hub_and_lists_devices(hub_server) -> None:
 def test_hosted_runtime_starts_signed_in_from_the_environment(
     settings: Settings, relay: FakeRelay, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """nanoMuse Web: the gateway hands the container the account key; the runtime comes up
+    """NanoLika Web: the gateway hands the container the account key; the runtime comes up
     signed in, on the hub under the given name, with the relay as its model and no first run."""
     settings.server.token = "secret-token"
     settings.cloud.base_url = relay.base_url

@@ -1,4 +1,4 @@
-"""Model Context Protocol client: expose tools of MCP servers as nanoMuse tools.
+"""Model Context Protocol client: expose tools of MCP servers as NanoLika tools.
 
 Configure in ``config.toml``::
 

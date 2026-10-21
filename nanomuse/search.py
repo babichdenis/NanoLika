@@ -54,7 +54,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "searxng": {"label": "SearXNG", "needs_key": False, "host": ""},
 }
 TIMEOUT = 20.0
-# On You.com requests only, at the vendor's request, so they can tell nanoMuse's traffic apart.
+# On You.com requests only, at the vendor's request, so they can tell NanoLika's traffic apart.
 YOU_USER_AGENT = "youdotcom-integration/nano-muse-nanomuse"
 
 
@@ -164,7 +164,7 @@ class WebSearchProvider:
                 query, max_results, region
             ), f"{self.label} failed ({reason}); results from DuckDuckGo"
 
-    async def probe(self, query: str = "nanoMuse personal agent") -> dict[str, Any]:
+    async def probe(self, query: str = "NanoLika personal agent") -> dict[str, Any]:
         """One search against the configured provider, no fallback — for the test button."""
         loop = asyncio.get_running_loop()
         started = loop.time()
@@ -287,7 +287,7 @@ class WebSearchProvider:
                 params=params,
                 headers={
                     "Accept": "application/json",
-                    "User-Agent": "nanoMuse",
+                    "User-Agent": "NanoLika",
                     "X-Api-Key": self.api_key(),
                 },
             )

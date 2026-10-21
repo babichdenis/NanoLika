@@ -333,7 +333,7 @@ def make_app(
             await auth.close()
 
     app = FastAPI(
-        title="nanoMuse ChatGPT proxy",
+        title="NanoLika ChatGPT proxy",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,

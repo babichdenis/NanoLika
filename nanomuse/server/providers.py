@@ -167,8 +167,8 @@ class Providers:
         hub = self.svc.hub
         return {
             "id": CLOUD_ID,
-            "name": "nanoMuse Cloud",
-            "name_zh": "nanoMuse Cloud",
+            "name": "NanoLika Cloud",
+            "name_zh": "NanoLika Cloud",
             "protocol": "openai",
             "base_url": model_url(hub.cloud.base_url),
             "base_url_global": "",

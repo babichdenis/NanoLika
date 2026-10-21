@@ -1,7 +1,7 @@
 """The CLI bridge: how a shell command the agent runs reaches the phone and the browser.
 
 A skill's script or a one-liner in the sandbox cannot call a tool — it can only run
-programs. Three small programs are on the ``PATH`` wherever nanoMuse's own Python is:
+programs. Three small programs are on the ``PATH`` wherever NanoLika's own Python is:
 
 - ``nanomuse-device`` — the phone's capabilities (clipboard, calendar, alarms, contacts,
   location, notifications, photos), when a phone is there;

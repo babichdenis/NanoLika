@@ -566,7 +566,7 @@ class Settings:
     # refuses single-line scripted probes while settling normal chat turns.
     invite_settle_min_spent_uy: int = field(default_factory=lambda: _int("INVITE_SETTLE_MIN_SPENT_UY", 200))
     day_offset_h: int = field(default_factory=lambda: _int("DAY_OFFSET_H", 8))
-    # Data controls (0.9): "Help improve nanoMuse's AI models" keeps the text of an
+    # Data controls (0.9): "Help improve NanoLika's AI models" keeps the text of an
     # account's chat turns — what the person wrote and what the model answered, the
     # model's tool calls, never the system prompt, a tool's result or a picture — for
     # the community's own model. IMPROVE_DEFAULT is what an account *created from now
@@ -675,7 +675,7 @@ class Settings:
     # the site's traffic database (demo/showcase/mirror/traffic.py), mounted read-only into
     # the container; empty = the "visits and downloads" panel says so and shows nothing
     traffic_db: str = field(default_factory=lambda: _env("TRAFFIC_DB"))
-    # nanoMuse Web's gateway on the same docker network (http://gateway:8000/api/web/info):
+    # NanoLika Web's gateway on the same docker network (http://gateway:8000/api/web/info):
     # how many kept accounts and running sessions; empty = not asked
     web_info_url: str = field(default_factory=lambda: _env("WEB_INFO_URL"))
     # the showcase's visitors (demo.nanomuse.dev/api/demo/admin, its SHOWCASE_ADMIN_TOKEN):

@@ -58,7 +58,7 @@ RETIRED = {"panda", "sunny", "moss", "sky", "fox", "bolt", "plum"}
 # how long after the last change the push goes out (Settings saves name and colour apart)
 PUSH_DELAY_S = 1.5
 # what a brand-new runtime wears: nothing to seed the relay with
-DEFAULT_LOOK = ("nanoMuse", DRAGON)
+DEFAULT_LOOK = ("NanoLika", DRAGON)
 # the relay caps the account's connector list at 64; this device keeps its share modest
 MAX_CONNECTORS = 32
 # the keys of one shared connector entry, as every client reads them
@@ -168,7 +168,7 @@ class ProfileSync:
             # a device wrote only its connectors and nobody has set a look yet: nothing to wear
             self._remember(rev)
             return False
-        patch: dict[str, Any] = {"name": str(light.get("name") or "").strip() or "nanoMuse"}
+        patch: dict[str, Any] = {"name": str(light.get("name") or "").strip() or "NanoLika"}
         face_id: str | None = None
         if avatar == DRAGON:
             patch["avatar"] = DRAGON

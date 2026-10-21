@@ -18,7 +18,7 @@ from typing import Any
 from nanomuse.bridge.tokens import BRIDGE_TOKEN_ENV, BRIDGE_URL_ENV
 
 NOT_HERE = (
-    "nanoMuse's bridge is not here: this program works inside a command the agent runs "
+    "NanoLika's bridge is not here: this program works inside a command the agent runs "
     "from `nanomuse serve` (the app), where the server sets "
     f"{BRIDGE_URL_ENV} and {BRIDGE_TOKEN_ENV} for it."
 )
@@ -59,7 +59,7 @@ class BridgeClient:
                 pass
             return {"ok": False, "error": f"{detail or exc.reason} (HTTP {exc.code})"}
         except (urllib.error.URLError, OSError) as exc:
-            return {"ok": False, "error": f"cannot reach nanoMuse at {self.url}: {exc}"}
+            return {"ok": False, "error": f"cannot reach NanoLika at {self.url}: {exc}"}
 
 
 def _print(result: dict[str, Any], as_json: bool) -> int:

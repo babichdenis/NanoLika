@@ -76,7 +76,7 @@ class FakeOperator:
                     return
                 if self.path == "/windows":
                     if fake.helper is None:
-                        return self._send(503, {"error": "window mode needs nanoMuse Computer Use"})
+                        return self._send(503, {"error": "window mode needs NanoLika Computer Use"})
                     if fake.refuse_window is not None and fake.refuse_window[0] != 404:
                         code, why = fake.refuse_window  # a 404 is one window's, not the list's
                         return self._send(code, {"error": why})
@@ -217,7 +217,7 @@ def test_operator_hands_speak_the_contract(operator: FakeOperator) -> None:
         hands.key(["hyperspace"])
     # the window routes are the helper's: without it the operator says so, with the status
     assert hands.helper_present is False
-    with pytest.raises(op.OperatorError, match="window mode needs nanoMuse Computer Use") as exc:
+    with pytest.raises(op.OperatorError, match="window mode needs NanoLika Computer Use") as exc:
         hands.client.windows()
     assert exc.value.status == 503
     # the picture: the size the runtime asks for, the screen's size next to it
@@ -328,7 +328,7 @@ async def test_linux_wayland_says_the_hands_are_off(
 
 # ----------------------------------------------------------------------------- one path on a Mac
 MAC_SCREEN_TEXT = (
-    "macOS: switch on nanoMuse Desktop under System Settings → Privacy & Security → "
+    "macOS: switch on NanoLika Desktop under System Settings → Privacy & Security → "
     "Screen Recording, then quit and reopen the app."
 )
 

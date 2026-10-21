@@ -21,7 +21,7 @@ set -eu
 
 host=${RELAY_HOST:-nanomuse-hk}
 remote=${RELAY_DIR:-/opt/nanomuse/relay}
-showcase=${SHOWCASE_DIR:-/opt/nanomuse/nanoMuse/demo/showcase}
+showcase=${SHOWCASE_DIR:-/opt/nanomuse/NanoLika/demo/showcase}
 public=${PUBLIC_BASE:-https://cloud.nanomuse.cn}
 here=$(cd "$(dirname "$0")" && pwd)
 cloud=$(cd "$here/../.." && pwd)

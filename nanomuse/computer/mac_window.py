@@ -13,8 +13,8 @@ of a synthetic click.
 Everything that talks to the system is behind :class:`MacAdapter`, a thin protocol with two
 real implementations, both imported lazily so this module imports on any platform:
 
-* :class:`OperatorWindowAdapter` — under nanoMuse Desktop, the usual case. The list of
-  windows and the picture of one come from the app's helper *nanoMuse Computer Use*
+* :class:`OperatorWindowAdapter` — under NanoLika Desktop, the usual case. The list of
+  windows and the picture of one come from the app's helper *NanoLika Computer Use*
   (``GET /windows``, ``POST /window`` of :mod:`nanomuse.computer.operator`), which holds
   the Screen Recording grant and takes the picture with ScreenCaptureKit on macOS 14 and
   later; the runtime never captures the screen itself there. The events still go out from
@@ -30,9 +30,9 @@ scroll, a typed string, a key combination — is :class:`MacWindowHands`, and ru
 fake adapter in the tests on Linux.
 
 What the person grants once: *Screen Recording* for the capture — the helper's row,
-**nanoMuse Computer Use**, under the app; *Accessibility* for the events (``CGEventPostToPid``
+**NanoLika Computer Use**, under the app; *Accessibility* for the events (``CGEventPostToPid``
 needs the posting process to be trusted), which macOS attributes to the *responsible*
-application — the desktop app that spawned this runtime — so that row is **nanoMuse** (a
+application — the desktop app that spawned this runtime — so that row is **NanoLika** (a
 runtime started from a terminal is attributed to that terminal). Without the helper the
 capture needs the app's own Screen Recording row as well. The settings page says which is
 missing. Everything here fails soft: a window that cannot be found, captured or driven
@@ -365,7 +365,7 @@ class MacWindowHands:
             ) from exc
         if not png:
             raise WindowUnavailable(
-                f"the window of {window.owner} came back empty: switch on nanoMuse Desktop "
+                f"the window of {window.owner} came back empty: switch on NanoLika Desktop "
                 "(only that entry) under System Settings → Privacy & Security → Screen "
                 "Recording, then quit and reopen the app"
             )
@@ -552,7 +552,7 @@ class QuartzAdapter:
             # on its own and the capture is attributed to whatever started it
             logger.info(
                 "window mode: the runtime captures windows itself with CGWindowListCreateImage "
-                "(no nanoMuse Computer Use helper); Screen Recording must be on for this process"
+                "(no NanoLika Computer Use helper); Screen Recording must be on for this process"
             )
             self._announced = True
         image = q.CGWindowListCreateImage(
@@ -643,7 +643,7 @@ class QuartzAdapter:
 
 # ---------------------------------------------------------------------- through the helper
 class OperatorWindowAdapter:
-    """Window mode under nanoMuse Desktop: the windows and their pictures come from the
+    """Window mode under NanoLika Desktop: the windows and their pictures come from the
     app's helper through the operator (``/windows``, ``/window``), the events go out through
     ``events`` — a :class:`QuartzAdapter` by default, a fake in the tests.
 

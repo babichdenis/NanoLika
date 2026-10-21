@@ -326,7 +326,7 @@ def test_a_relay_that_sends_codes_refuses_to_start_without_a_secret():
     """`CODE_SENDER=smtp` with no `CLOUD_SECRET` would hash every identifier with the published
     development key, so whoever holds the database alone reads the member list and any live
     code. The command line exits on this; a relay built any other way is refused as well."""
-    sending = Settings(database=":memory:", sender="smtp", smtp_host="smtp.test", smtp_from="nanoMuse <no-reply@test>")
+    sending = Settings(database=":memory:", sender="smtp", smtp_host="smtp.test", smtp_from="NanoLika <no-reply@test>")
     assert sending.dev_mode
     with pytest.raises(RuntimeError, match="CLOUD_SECRET"):
         Cloud(sending, Database(":memory:"))
@@ -988,8 +988,8 @@ async def test_the_operator_sees_addresses_clients_and_every_line(stack):
     lists the addresses, the statement and the timeline page through to the first line, and
     one address can be looked up across accounts. The training export drops the address."""
     app, client, sender, up, cloud = stack
-    phone = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1", "User-Agent": "nanoMuse-Android/0.1.27 (Pixel 8)"}
-    desk = {"X-Forwarded-For": "198.51.100.2", "User-Agent": "nanoMuse/0.1.27 (linux)"}
+    phone = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1", "User-Agent": "NanoLika-Android/0.1.27 (Pixel 8)"}
+    desk = {"X-Forwarded-For": "198.51.100.2", "User-Agent": "NanoLika/0.1.27 (linux)"}
     r = await client.post("/v1/auth/code", json={"identifier": "13800138000"}, headers=phone)
     assert r.status_code == 204
     code = sender.sent[-1][1]
@@ -1599,11 +1599,11 @@ def test_code_mail_has_text_and_html_in_both_languages():
     from nanomuse_cloud.senders import compose_code_mail
 
     msg = compose_code_mail("no-reply@mail.nanomuse.cn", "someone@example.com", "123456", 10)
-    assert msg["From"] == "nanoMuse <no-reply@mail.nanomuse.cn>" and msg["To"] == "someone@example.com"
+    assert msg["From"] == "NanoLika <no-reply@mail.nanomuse.cn>" and msg["To"] == "someone@example.com"
     assert "123456" in msg["Subject"]
     parts = {p.get_content_type(): p.get_content() for p in msg.iter_parts()}
     assert set(parts) == {"text/plain", "text/html"}
-    assert "验证码是 123456" in parts["text/plain"] and "Your nanoMuse code is 123456" in parts["text/plain"]
+    assert "验证码是 123456" in parts["text/plain"] and "Your NanoLika code is 123456" in parts["text/plain"]
     assert "1 2 3 4 5 6" in parts["text/html"] and "10 分钟" in parts["text/html"] and "10 minutes" in parts["text/html"]
     assert "<script" not in parts["text/html"]
 
@@ -1673,7 +1673,7 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     ]
     r = await client.post(
         "/v1/chat/completions",
-        headers={**headers, "User-Agent": "nanoMuse-Android/0.1.27", "Accept-Language": "zh-CN"},
+        headers={**headers, "User-Agent": "NanoLika-Android/0.1.27", "Accept-Language": "zh-CN"},
         json={"model": "qwen3.8-27b", "messages": turn},
     )
     assert r.status_code == 200
@@ -1694,7 +1694,7 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     dumped = json.dumps(first)
     assert "AAAA" not in dumped and "Ada" not in dumped and "SECRET" not in dumped
     # 0.10: the address goes with the turn for the operator (the test client has none)
-    assert first["meta"] == {"ua": "nanoMuse-Android/0.1.27", "lang": "zh-CN", "ip": first["meta"]["ip"]}
+    assert first["meta"] == {"ua": "NanoLika-Android/0.1.27", "lang": "zh-CN", "ip": first["meta"]["ip"]}
     assert first["platform"] == "android"
     assert first["prompt_tokens"] == 100 and first["completion_tokens"] == 50
     account = (await client.get(f"/v1/admin/accounts/{data['account']['id']}", headers=admin)).json()["account"]
@@ -2120,12 +2120,12 @@ async def test_admin_health_is_aggregates_only(stack):
 
 
 async def test_session_keys_expire_on_their_own(stack):
-    """nanoMuse Web starts a person's container with a key that stops working by itself,
+    """NanoLika Web starts a person's container with a key that stops working by itself,
     so the gateway keeps no standing key of theirs (0.13)."""
     app, client, sender, up, cloud = stack
     data = await sign_up(client, sender)
     headers = {"Authorization": f"Bearer {data['api_key']}"}
-    r = await client.post("/v1/auth/session-key", headers=headers, json={"device": "nanoMuse Web", "ttl_s": 120})
+    r = await client.post("/v1/auth/session-key", headers=headers, json={"device": "NanoLika Web", "ttl_s": 120})
     assert r.status_code == 200, r.text
     short = r.json()
     assert short["api_key"].startswith("nm_") and short["api_key"] != data["api_key"]
@@ -2134,7 +2134,7 @@ async def test_session_keys_expire_on_their_own(stack):
     me = (await client.get("/v1/me", headers=short_headers)).json()
     assert me["account"]["id"] == data["account"]["id"]
     sessions = {s["device"]: s for s in (await client.get("/v1/me/sessions", headers=headers)).json()["sessions"]}
-    assert sessions["nanoMuse Web"]["expires_at"] == short["expires_at"] and sessions["nanoMuse Web"]["via"] == "session"
+    assert sessions["NanoLika Web"]["expires_at"] == short["expires_at"] and sessions["NanoLika Web"]["via"] == "session"
     assert sessions["pixel"]["expires_at"] is None
     # the ceiling, and a bad ttl
     r = await client.post("/v1/auth/session-key", headers=headers, json={"ttl_s": 10**9})
@@ -2152,7 +2152,7 @@ async def test_session_keys_expire_on_their_own(stack):
     r = await client.get("/v1/me", headers=short_headers)
     assert r.status_code == 401 and r.json()["error"]["code"] == "bad_key"
     sessions = (await client.get("/v1/me/sessions", headers=headers)).json()["sessions"]
-    assert "nanoMuse Web" not in {s["device"] for s in sessions}
+    assert "NanoLika Web" not in {s["device"] for s in sessions}
 
 
 # -- 0.17: lanes, reasoning, region ----------------------------------------------------------

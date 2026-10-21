@@ -9,7 +9,7 @@
   ``## [Unreleased]`` so the Unreleased bullets fall under it; the empty ``### Cloud / Runtime /
   …`` headings for the next version are put back by hand (see the previous release commit).
 - ``README.md``, ``docs/readme/README_*.md``, ``docs/index.md``, ``docs/zh/index.md``: ``<old> <OldName>`` becomes
-  ``<new> <NewName>``, every ``v<old>`` tag and ``nanoMuse-<old>`` asset name moves to the new
+  ``<new> <NewName>``, every ``v<old>`` tag and ``NanoLika-<old>`` asset name moves to the new
   version. A *News* list (lines ``- `<date>` …``) is left as written: its lines are milestones,
   and a milestone's line keeps its date, its version and its words for good. A major version
   (``x.0.0``) is a milestone and gets a new line, written by hand and put first, in the ten
@@ -65,7 +65,7 @@ def news_blocks(lines: list[str]) -> list[tuple[int, int]]:
 def move_version(line: str, old: str, new: str, oldname: str, newname: str) -> str:
     """Every mention of the old version in one line becomes the new one."""
     line = line.replace(f"{old} {oldname}", f"{new} {newname}")
-    line = line.replace(f"v{old}", f"v{new}").replace(f"nanoMuse-{old}", f"nanoMuse-{new}")
+    line = line.replace(f"v{old}", f"v{new}").replace(f"NanoLika-{old}", f"NanoLika-{new}")
     return re.sub(rf"(?<![\d.]){re.escape(old)}-", f"{new}-", line)
 
 

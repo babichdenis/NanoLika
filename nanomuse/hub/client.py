@@ -228,7 +228,7 @@ class HubClient:
         self._set_state("connecting", self.url)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "User-Agent": f"nanoMuse/{__version__} ({platform.system()})",
+            "User-Agent": f"NanoLika/{__version__} ({platform.system()})",
         }
         async with connect(
             self.url,

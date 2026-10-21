@@ -103,16 +103,16 @@ def intro_lines(lang: str) -> list[str]:
     computer in the phone's place (the web runs against a runtime on a computer)."""
     if is_zh(lang):
         return [
-            "你好，我是 nanoMuse，住在你电脑里的私人助理。让我替你分担几件事。",
+            "你好，我是 NanoLika，住在你电脑里的私人助理。让我替你分担几件事。",
             "先说说我怎么工作：\n\n"
             "- 我就在这台电脑上工作，能跑命令、打开网页、填表单。\n"
             "- 你指给我的文件和文件夹，我能读、能整理；提醒和定时任务也可以交给我。\n"
             "- 关键的一步之前，我会先问你。\n"
-            "- 一切都在这台电脑上跑。对话发给你自己配置的模型；登录 nanoMuse Cloud 后，这段对话也会同步到你的其他设备，可以在「数据控制」里关掉。",
+            "- 一切都在这台电脑上跑。对话发给你自己配置的模型；登录 NanoLika Cloud 后，这段对话也会同步到你的其他设备，可以在「数据控制」里关掉。",
             "开始之前，我该怎么称呼你？",
         ]
     return [
-        "Hi, I'm nanoMuse, the assistant that lives on your computer. "
+        "Hi, I'm NanoLika, the assistant that lives on your computer. "
         "Let me take a few things off your plate.",
         "A bit about how I work:\n\n"
         "- I work on this computer: I can run commands, open websites and fill in forms.\n"
@@ -120,7 +120,7 @@ def intro_lines(lang: str) -> list[str]:
         "reminders and scheduled tasks.\n"
         "- Before any step that matters, I ask you first.\n"
         "- Everything runs on this computer. Your messages go to the model you configured; "
-        "signed in to nanoMuse Cloud, this conversation also follows you to your other devices; "
+        "signed in to NanoLika Cloud, this conversation also follows you to your other devices; "
         "Data controls switches that off.",
         "Before we start, what should I call you?",
     ]

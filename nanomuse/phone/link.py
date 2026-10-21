@@ -226,7 +226,7 @@ class PhoneLink:
         device = device or self.device
         if device is None or device.send is None:
             raise DeviceGone(
-                "no phone is connected. Open the nanoMuse app on the phone (with GUI operation "
+                "no phone is connected. Open the NanoLika app on the phone (with GUI operation "
                 "turned on) or the MobileGym module, then try again."
             )
         req_id = f"{device.id}:{uuid.uuid4().hex[:8]}"
@@ -303,7 +303,7 @@ class PhoneLink:
         device = self.browser_device
         if device is None:
             raise DeviceError(
-                "no phone with a browser is connected. Open the nanoMuse app on the phone, "
+                "no phone with a browser is connected. Open the NanoLika app on the phone, "
                 "then try again."
             )
         return await self.request(

@@ -172,7 +172,7 @@ class Bridge:
             have = self.device_tools()
             if not have:
                 return (
-                    "no phone is connected to this nanoMuse, so there are no device capabilities "
+                    "no phone is connected to this NanoLika, so there are no device capabilities "
                     "here (on the phone they come with the app; on a computer, connect the app)"
                 )
             names = ", ".join(sorted(t["name"] for t in have))

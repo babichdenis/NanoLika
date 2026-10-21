@@ -53,13 +53,13 @@ def main() -> None:
     d = icons.mark_path()
     logo = f'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300"><rect width="1200" height="300" fill="#f7f1e6"/><g transform="translate(45 55) scale(1.9)"><path d="{d}" fill="#7e9b7b"/></g><text x="275" y="200" font-family="Georgia,serif" font-style="italic" font-size="145" fill="#38372f">nano<tspan fill="#52694e">Lika</tspan></text><circle cx="970" cy="100" r="9" fill="#bd705b"/></svg>'
     (BRAND / "nanomuse-cover.svg").write_text(logo)
-    for dest in ["assets/brand/nanomuse-cover.png", "assets/brand/nanoMuse-logo-and-text.png", "docs/cover.png"]:
+    for dest in ["assets/brand/nanomuse-cover.png", "assets/brand/NanoLika-logo-and-text.png", "docs/cover.png"]:
         jobs.append((ROOT / dest, logo, 1200))
     render_jobs(jobs)
     # Match the same mark in the inline desktop and recorded-demo components.
     d = icons.mark_path()
     for dest in ["harness/dsh-nanomuse/src/client/BrandMark.tsx",
-                 "demo/mobilegym/apps/nanoMuse/res/mark.tsx"]:
+                 "demo/mobilegym/apps/NanoLika/res/mark.tsx"]:
         p = ROOT / dest
         text = p.read_text()
         text = re.sub(r"M(?:50\.02 79\.14|49 71)[^']+", d, text)
@@ -78,7 +78,7 @@ def main() -> None:
             name = "nm_motion" if ext == "mp4" else "nm_avatar"
             shutil.copyfile(source, dest / f"{name}_{mood}.{ext}")
     if (avatar / "idle.webp").exists():
-        shutil.copyfile(avatar / "idle.webp", ROOT / "demo/mobilegym/apps/nanoMuse/res/dragon-idle.webp")
+        shutil.copyfile(avatar / "idle.webp", ROOT / "demo/mobilegym/apps/NanoLika/res/dragon-idle.webp")
 
 
 if __name__ == "__main__":

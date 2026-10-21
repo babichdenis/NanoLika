@@ -203,7 +203,7 @@ def headers_for(token: Token) -> dict[str, str]:
         "chatgpt-account-id": token.account_id,
         "OpenAI-Beta": "responses=experimental",
         "originator": ORIGINATOR,
-        "User-Agent": f"nanoMuse/{__version__}",
+        "User-Agent": f"NanoLika/{__version__}",
         "accept": "text/event-stream",
         "content-type": "application/json",
     }

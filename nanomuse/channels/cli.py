@@ -58,7 +58,7 @@ def _settings(config: Path | None) -> Settings:
         raise typer.Exit(1) from exc
     except ValidationError as exc:
         console.print(
-            f"[red]config.toml has {exc.error_count()} setting(s) nanoMuse does not understand[/red] "
+            f"[red]config.toml has {exc.error_count()} setting(s) NanoLika does not understand[/red] "
             f"({find_config_file(config)}):"
         )
         for err in exc.errors():
@@ -290,7 +290,7 @@ def login(
         console.print(url)
 
     try:
-        result = feishu.wait_for_login(domain, settings.agent.name or "nanoMuse", show)
+        result = feishu.wait_for_login(domain, settings.agent.name or "NanoLika", show)
     except Exception as exc:  # noqa: BLE001
         _fail(exc)
         return
