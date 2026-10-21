@@ -294,3 +294,24 @@ def test_shared_directories_are_bound_and_mirrored_under_the_box_home(
     assert s.sandbox.share == [Path("~/.lark-cli")] and s.sandbox.share_read_only == [
         Path("~/.nvm")
     ]
+
+
+def test_the_data_dir_under_a_bound_prefix_is_masked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A runtime installed in /opt keeps its vault and pairings there, and /opt is bound
+    read-only into every box: the data dir has to be masked even when no root is above it."""
+    monkeypatch.setattr("nanomuse.sandbox.shutil.which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr("nanomuse.sandbox.platform.system", lambda: "Linux")
+    data = tmp_path / "data"
+    workspace = data / "workspace"
+    workspace.mkdir(parents=True)
+    box = Sandbox(SandboxSettings(), workspace=workspace, data_dir=data, probe=False)
+    joined = " ".join(box.wrap(["/bin/true"], network=False, cwd=workspace))
+    # a data dir under nothing the box binds is already out of sight; /tmp is a tmpfs anyway
+    assert f"--tmpfs {data}" not in joined
+    # now the same data dir sits under a prefix the box binds read-only
+    monkeypatch.setattr("nanomuse.sandbox.BOUND_PREFIXES", (str(tmp_path),))
+    joined = " ".join(box.wrap(["/bin/true"], network=False, cwd=workspace))
+    assert f"--tmpfs {data}" in joined
+    # the workspace is bound again after the mask, or the agent could not work there
+    after_mask = joined[joined.index(f"--tmpfs {data}") :]
+    assert f"--bind-try {workspace} {workspace}" in after_mask

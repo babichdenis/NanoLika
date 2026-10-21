@@ -37,6 +37,10 @@ from nanomuse.runtime import on_device
 
 # Programs whose job is the network. A command running one of these gets the network
 # and counts as egress for the Sentinel; everything else runs without.
+# Paths the box binds read-only into every command. A data dir under one of them is
+# visible inside the box even when no agent root sits above it, so it has to be masked.
+BOUND_PREFIXES = ("/usr", "/etc", "/opt", "/var", "/snap", "/nix", "/srv", "/home")
+
 NETWORK_PROGRAMS = frozenset(
     {
         "apt",
@@ -316,12 +320,23 @@ class Sandbox:
         roots = [self.workspace, *self.extra_roots, *self.shared]
         for root in roots:
             args += ["--bind-try", str(root), str(root)]
-        masked = self.data_dir and any(self.data_dir.is_relative_to(r) for r in roots)
-        if masked:
-            # the data dir (vault, sessions, tokens) inside a bound root: mask it
+        # The data dir (vault, sessions, pairing, tokens, audit) must not exist inside the
+        # box. It comes into view two ways: it sits inside a bound root (the usual install,
+        # where the workspace lives under it), or it sits under a prefix the box binds
+        # read-only, which is the case for a runtime installed in /opt or /srv. Mask it in
+        # both, then put back the parts of it the agent is meant to reach: the workspace and
+        # any extra root, which are already in ``roots``.
+        visible = bool(self.data_dir) and (
+            any(self.data_dir.is_relative_to(r) for r in roots)
+            or any(self.data_dir.is_relative_to(Path(p)) for p in BOUND_PREFIXES)
+        )
+        if visible:
             args += ["--tmpfs", str(self.data_dir)]
+            for root in roots:
+                if root.is_relative_to(self.data_dir):
+                    args += ["--bind-try", str(root), str(root)]
         for root in [*self.ro_roots, *self.shared_ro]:
-            under_mask = bool(masked and self.data_dir and root.is_relative_to(self.data_dir))
+            under_mask = bool(visible and self.data_dir and root.is_relative_to(self.data_dir))
             if root.is_dir() and (under_mask or not any(root.is_relative_to(r) for r in roots)):
                 args += ["--ro-bind-try", str(root), str(root)]
         home = "/tmp/home"

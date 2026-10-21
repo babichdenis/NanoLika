@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **The vault is out of reach of a boxed command.** The data directory was masked inside the bubblewrap box only when an agent root sat above it, which is not the case for a runtime installed in `/opt` or `/srv`: there the vault key, the pairing file and the sessions stayed readable from a `shell` call. It is masked whenever the box can see it, and the workspace is bound back after the mask.
+
 - **The greeting carries the links a chat needs.** A newly paired Telegram chat now gets the site, the invitation link and, when the runtime is reachable over HTTPS, the app itself as three buttons under the greeting (`site_url`, `invite_url`, `webapp_url` in `[channels.<name>]`). Channels without buttons send the same three as text, and a key left empty is not offered.
 
 - **A bot can be used from the chat alone.** Approving a pairing code needed the app or a terminal on the machine running the runtime, so a person whose only client is Telegram could not get in on their own. With `first_chat_claims = true` on a channel that has no confirmed chat yet, the first person who writes becomes its owner and is greeted; everyone after them gets a code as before. `docs/channels.md` says what a chat-only person can and cannot reach, and to switch the flag off once you are in.
