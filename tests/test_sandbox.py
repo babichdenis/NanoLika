@@ -315,3 +315,21 @@ def test_the_data_dir_under_a_bound_prefix_is_masked(tmp_path: Path, monkeypatch
     # the workspace is bound again after the mask, or the agent could not work there
     after_mask = joined[joined.index(f"--tmpfs {data}") :]
     assert f"--bind-try {workspace} {workspace}" in after_mask
+
+
+@pytest.mark.asyncio
+async def test_insisting_on_a_box_refuses_to_run_without_one(tmp_path: Path):
+    """sandbox.mode = bwrap is a promise to the operator: with no box, running anyway would
+    hand the whole machine to whatever the agent decided to do."""
+    box = Sandbox(
+        SandboxSettings(mode="bwrap"),
+        workspace=tmp_path,
+        probe=False,
+    )
+    box.active = False
+    box.reason = "bubblewrap is not installed"
+    tool = Shell(workspace=tmp_path, sandbox=box)
+    result = await tool.execute(command="echo hi")
+    assert result.ok is False
+    assert "sandbox.mode = bwrap" in result.error
+    assert "bubblewrap is not installed" in result.error

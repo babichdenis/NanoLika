@@ -224,6 +224,14 @@ async def _run(
         # the CLI bridge's call token: set on purpose, after the scrub, for this command only
         env.update(extra_env)
     boxed = sandbox is not None and sandbox.active
+    if not boxed and sandbox is not None and sandbox.settings.mode == "bwrap":
+        # the operator asked for a box and there is none: running anyway would quietly hand
+        # the whole machine to whatever the agent decided to do (a tenant's machine, too)
+        return ToolResult.fail(
+            "refused: sandbox.mode = bwrap and the sandbox does not work here ("
+            + (sandbox.reason or "unknown reason")
+            + "). Install bubblewrap, or set sandbox.mode to auto to run unboxed."
+        )
     # a box that cannot take the network away never ran the command without it
     without_network = boxed and sandbox is not None and sandbox.blocks_network and not network
     if boxed:

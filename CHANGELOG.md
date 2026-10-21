@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **`sandbox.mode = bwrap` now refuses to run instead of running unboxed.** Insisting on a box only wrote an error to the log, so a machine without bubblewrap quietly ran every command with no confinement at all. `shell` and `python_execute` now fail with the reason and a way out.
+
 - **The vault is out of reach of a boxed command.** The data directory was masked inside the bubblewrap box only when an agent root sat above it, which is not the case for a runtime installed in `/opt` or `/srv`: there the vault key, the pairing file and the sessions stayed readable from a `shell` call. It is masked whenever the box can see it, and the workspace is bound back after the mask.
 
 - **The greeting carries the links a chat needs.** A newly paired Telegram chat now gets the site, the invitation link and, when the runtime is reachable over HTTPS, the app itself as three buttons under the greeting (`site_url`, `invite_url`, `webapp_url` in `[channels.<name>]`). Channels without buttons send the same three as text, and a key left empty is not offered.
