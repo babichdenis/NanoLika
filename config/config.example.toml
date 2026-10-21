@@ -324,6 +324,24 @@ update_check = true      # say under Settings → About when a newer release is 
 start_grace = 4          # seconds the tools/MCP servers/cloud account may take before the app answers anyway (/api/health names the step still running)
 
 # ------------------------------------------------------------------------------
+# The chat apps: talk to the Muse from Telegram, Feishu, DingTalk or WeCom
+# (docs/channels.md). Set these in the app under Settings -> Chat apps, which
+# writes <data_dir>/channels/settings.json; a field written here is used until the
+# app sets its own. Who may talk to the bot is decided there too, by pairing code.
+# ------------------------------------------------------------------------------
+[channels.telegram]
+enabled = false
+# From @BotFather, /newbot. A secret: write it to the vault (`nanomuse vault set
+# TELEGRAM_BOT_TOKEN`) and leave the placeholder here, so the token is not in a file.
+bot_token = "{{vault:TELEGRAM_BOT_TOKEN}}"
+proxy = ""                    # e.g. socks5://127.0.0.1:1080 where api.telegram.org is out of reach
+allow_from = []               # vendor user ids that never need a pairing code; ["*"] lets everyone in
+group_policy = "mention"      # "mention": answer in a group only when @-mentioned; "open": every message
+# The other apps take the same table with their own fields: [channels.feishu]
+# (app_id, app_secret), [channels.dingtalk] (client_id, client_secret),
+# [channels.wecom] (corp_id, agent_id, secret, token, encoding_aes_key).
+
+# ------------------------------------------------------------------------------
 # Conversation sync: what this device sends to and takes from the account
 # (the account-wide switch is Data controls → Sync; see docs/every-device.md)
 # ------------------------------------------------------------------------------

@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **The chat apps are in the example config.** `config/config.example.toml` gained a `[channels.telegram]` table (`enabled`, `bot_token` as a vault placeholder, `proxy`, `allow_from`, `group_policy`) and a pointer to the other three apps, so a person copying the example learns that talking to the Muse from Telegram is possible at all. The app under Settings → Chat apps still wins per field.
+
 - **The packaged runtime carries the browser, and BeautifulSoup with it.** `web_fetch` turns HTML into Markdown with `bs4` and `html2text`, importing both inside the function, so PyInstaller never saw them: in the app every HTML page answered `ModuleNotFoundError`, and the runtime now collects `bs4`, `soupsieve` and `html2text`. Playwright is no longer excluded, so a runtime built with `pip install -e ".[hands,browser]"` drives a real page; when Playwright has no Chromium of its own the backend uses the Chrome already installed (`chrome`, `msedge`, `brave`, per platform), named outright by `NANOMUSE_BROWSER_CHANNEL` or kept to Playwright's own with `bundled`, and `build-runtime.py` says so when the extra is missing.
 
 - **Serply is a keyed web search provider for Google results.** `provider = "serply"` under `[connectors.search]`, or the Serply chip under *Connections → Web search*, queries `https://api.serply.io/v1/search` with `X-Api-Key` (`SEARCH_API_KEY`), passes the country from `region` as `gl`, caps `num` at 10 and falls back to DuckDuckGo with a note on error. Proposed by @googio ([#483](https://github.com/nano-muse/nanoMuse/issues/483)).
