@@ -154,7 +154,9 @@ export class TaskRunner {
     this.options.log('info', `nanomuse task: ${from.name || from.id} asked: ${text.replace(/\s+/g, ' ').slice(0, 80)}`)
     this.options.notice?.(from.name || from.id, text.replace(/\s+/g, ' ').slice(0, 120))
     try {
-      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
+      // `nanomuse-task` (not `user`): the words came from another device over the hub, so
+      // the sync must not carry them back to it as something typed here
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'nanomuse' } }))
       const final = await settled
       return { text: final, conversation, thread: sessionId, device: this.options.deviceName() }
     } finally {

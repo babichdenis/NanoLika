@@ -885,15 +885,17 @@ export class SyncEngine {
     return Object.values(this.state.pulled).includes(sessionId)
   }
 
-  /** Whether a session's turns go up: not another device's task, not another account's (C10), and a side chat only when the switch is on (C9). */
+  /** Whether a session's turns go up: another device's task (its answers already travel as the task's result, so only the person's own words go up from it), not another account's (C10), and a side chat only when the switch is on (C9). */
   private syncs(sessionId: string): boolean {
-    if (this.options.isTaskSession?.(sessionId)) return false
+    const task = this.options.isTaskSession?.(sessionId) === true
     if (!this.owns(sessionId)) return false
+    if (task) return true
     return this.state.sideChats || sessionId === this.state.mainSession
   }
 
-  /** A turn ended in a session here: the model's final text goes up after the debounce. */
+  /** A turn ended in a session here: the model's final text goes up after the debounce. A task session's answer does not: the device that asked already has it as the call's result. */
   turnEnded(sessionId: string): void {
+    if (this.options.isTaskSession?.(sessionId)) return
     if (!this.syncs(sessionId)) return
     this.dirty.add(sessionId)
     this.presence.set(sessionId, false)
@@ -999,7 +1001,10 @@ export class SyncEngine {
         if (this.state.titles[sessionId] !== title) {
           conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000) })
         }
-        const lines = await this.options.sessions.lines(sessionId)
+        // a task session's answer is the call's result over there: only the person's own
+        // words typed here go up, never the model's
+        const task = this.options.isTaskSession?.(sessionId) === true
+        const lines = (await this.options.sessions.lines(sessionId)).filter((line) => !task || line.role === 'user')
         for (const line of lines) {
           if (this.state.mids[line.id]) continue
           if (messages.length >= MAX_POST_MESSAGES) {
