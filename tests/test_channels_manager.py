@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from nanomuse.channels.base import Channel, ChannelStatus, Field, InboundFile, InboundMessage
 from nanomuse.channels.manager import ChannelManager, thread_id_for
 from nanomuse.config import Settings
+from nanomuse.hub.client import HubError
 from nanomuse.llm import MockLLM
 from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
@@ -390,6 +391,49 @@ def test_synced_turns_from_other_devices_are_delivered(chan):
     time.sleep(0.4)
     leaked = [t for t in fake.texts() if "mystery" in t or "own words" in t]
     assert not leaked, f"leaked: {leaked!r}"
+
+
+def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
+    """With `hub.primary` naming an online device, a chat's message goes there as a task and
+    its answer lands in the chat — the Muse on this machine does not answer it too."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    own = thread_id_for("fake", "chat1")
+    fake.bus.inbound(dm("one more"))
+    wait_for(lambda: own in manager.routes)
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def call(to: str, action: str, args: dict[str, Any] | None = None, timeout: float = 120, on_event=None):  # noqa: ANN001
+        calls.append((to, action, dict(args or {})))
+        if on_event is not None:
+            await on_event({"stage": "tool", "name": "open_app", "summary": "Calendar"})
+            await on_event({"stage": "text", "text": "On it."})
+        return {"text": "The first meeting is at nine."}
+
+    monkeypatch.setattr(service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True})
+    monkeypatch.setattr(service.hub, "call", call)
+    fake.bus.inbound(dm("what is my first meeting tomorrow?"))
+    wait_for(lambda: any("first meeting is at nine" in t for t in fake.texts()))
+    assert calls and calls[0][0] == "dev-1" and calls[0][1] == "task"
+    assert "first meeting" in calls[0][2]["text"]
+
+
+def test_a_primary_device_that_refuses_steps_aside(chan, monkeypatch):
+    """The device went away (or said no): the chat hears which device it was and the Muse on
+    this machine answers instead, so the chat never goes quiet."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    own = thread_id_for("fake", "chat1")
+    fake.bus.inbound(dm("one more"))
+    wait_for(lambda: own in manager.routes)
+
+    async def call(to: str, action: str, args: dict[str, Any] | None = None, timeout: float = 120, on_event=None):  # noqa: ANN001
+        raise HubError("busy", "this conversation is already busy")
+
+    monkeypatch.setattr(service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True})
+    monkeypatch.setattr(service.hub, "call", call)
+    fake.bus.inbound(dm("what is my first meeting tomorrow?"))
+    wait_for(lambda: any("MacBook" in t and "busy" in t for t in fake.texts()))
 
 
 def test_files_in_and_out(chan, settings: Settings):

@@ -612,6 +612,10 @@ class HubSettings(BaseModel):
     remote_control: bool = True
     name: str = ""
     device_id: str = ""
+    # The device the chat channels are served by (an id, a name or a unique part of one):
+    # while it is online, a chat's message goes there as a `task` and its answer comes back
+    # into the chat; empty (the default) or offline means this machine answers itself.
+    primary: str = ""
 
 
 class ServerSettings(BaseModel):

@@ -648,6 +648,17 @@ class HubService:
                 return d
         return None
 
+    def primary(self) -> dict[str, Any] | None:
+        """The device the chat channels are served by (`hub.primary`: an id, a name or a
+        unique part of one), when it is online; None means this machine answers itself."""
+        want = str(self.settings.hub.primary or "").strip()
+        if not want:
+            return None
+        device = self.find(want)
+        if device is None or not device.get("online"):
+            return None
+        return device
+
     async def call(
         self,
         to: str,

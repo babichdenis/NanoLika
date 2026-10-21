@@ -29,6 +29,7 @@ from nanomuse.channels.feishu import FeishuChannel
 from nanomuse.channels.store import ChannelSettingsStore, PairingStore
 from nanomuse.channels.telegram import TelegramChannel
 from nanomuse.channels.wecom import WeComChannel
+from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
 from nanomuse.server.events import new_id
 
@@ -94,6 +95,9 @@ DENY_WORDS = frozenset(
 EDIT_INTERVAL_S = 1.0
 THREAD_PREFIX = "channel-"
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+# How long a chat waits for `hub.primary` to finish a turn before the hub gives up (the
+# device's own task timeout is the same ten minutes).
+REMOTE_TASK_S = 600
 
 _TOOL_LABELS = {
     "web_search": ("Searching the web", "正在搜索", "Ищу в интернете"),
@@ -370,10 +374,83 @@ class ChannelManager(ChannelBus):
         if msg.is_group and msg.sender_name and text:
             text = f"{msg.sender_name}: {text}"
         thread_id = self._thread_for(msg)
+        # `hub.primary`: while that device (the person's own computer, usually) is online,
+        # the chats are served by it — the words go over the hub as a `task` and its answer
+        # comes back into the chat; offline it falls back to the Muse on this machine
+        device = self.svc.hub.primary() if text and not paths else None
+        if device is not None:
+            self._spawn(self._serve_from_device(thread_id, msg, text, device))
+            return
         try:
             self.svc.send(thread_id, text, files=paths or None)
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
+
+    async def _serve_from_device(self, thread: str, msg: InboundMessage, text: str, device: dict[str, Any]) -> None:
+        """A chat's turn handed to the device the settings name as the one that serves the
+        chats (`hub.primary`): the words go over the hub as a `task`, the device's progress
+        shows as the live status, its answer closes the bubble. A device that cannot take it
+        (offline, busy, refused) steps aside and the Muse on this machine answers here.
+
+        The device's own approvals are not decided from the chat: the card names itself and
+        the task lapses on the device's side, and nothing here is ever allowed silently.
+        """
+        hub = self.svc.hub
+        name = str(device.get("name") or device.get("id") or "")
+        live = self._live_for(thread)
+        if live is not None:
+            live.status = self.say(f"on {name}", f"在 {name} 上", f"работает {name}")
+            self._schedule_flush(thread)
+
+        async def on_event(body: dict[str, Any]) -> None:
+            stage = body.get("stage")
+            lv = self._live_for(thread)
+            if lv is None:
+                return
+            if stage == "text" and body.get("text"):
+                lv.text = str(body.get("text") or "")
+                self._schedule_flush(thread)
+            elif stage == "tool":
+                lv.status = f"{str(body.get('name') or 'tool')}: {str(body.get('summary') or '')}".strip(": ")
+                self._schedule_flush(thread)
+            elif stage == "approval":
+                preview = str(body.get("preview") or body.get("reason") or "")[:120]
+                lv.status = self.say(
+                    f"{name} asks permission: {preview}",
+                    f"{name} 请求许可: {preview}",
+                    f"{name} спрашивает разрешение: {preview}",
+                )
+                self._schedule_flush(thread)
+
+        try:
+            answer = await hub.call(
+                str(device.get("id") or ""),
+                "task",
+                {"text": text, "from": hub.device_name},
+                timeout=REMOTE_TASK_S,
+                on_event=on_event,
+            )
+        except HubError as exc:
+            # offline after all, busy, refused: the Muse on this machine answers instead
+            self._live.pop(thread, None)
+            route = self.routes.get(thread)
+            if route is not None:
+                await self._send(
+                    route[0],
+                    route[1],
+                    self.say(
+                        f"{name}: {exc.message}. Answering here.",
+                        f"{name}: {exc.message}. 由我回答。",
+                        f"{name}: {exc.message}. Отвечаю сама.",
+                    ),
+                )
+            try:
+                self.svc.send(thread, text)
+            except (ValueError, PermissionError) as error:
+                await self._send(msg.channel, msg.chat_id, _short(error))
+            return
+        final = str(answer.get("text") or "").strip()
+        await self._finish(thread, final or self.say("(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"))
 
     def _thread_for(self, msg: InboundMessage) -> str:
         thread_id = thread_id_for(msg.channel, msg.chat_id)
