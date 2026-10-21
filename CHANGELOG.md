@@ -63,6 +63,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Desktop
 
+- **A Workspace answers a right-click.** Renaming one and taking it off the list sat behind an ellipsis that appears only on hover, and the row had no context menu at all: a right-click on the folder in the harness's sidebar now offers *Rename workspace* and *Close workspace*, the second naming the folder it closes and saying that its chats and files stay. Escape, a click elsewhere or a choice closes the menu, and a refusal from the host is shown in it rather than swallowed.
+
 - **The face over the chat no longer covers the name.** The header drew a 66px picture inside a 44px button, so the face spilled 11px past its box and sat on the first line of the name under it. The box is now the picture's own size and the header holds 22px more room on every platform (130px, 158px with the macOS title bar, 144px on Windows), which the thread keeps clear.
 
 - **A question asked from another device shows up as the bubble it was.** A task that arrived over the hub (`[Asked from …]`) was stored with its own source kind, so the chat drew only the answer and the person's own words were missing from the conversation they were reading. The task is now a `user` message whose text comes first and whose note of where it came from sits under it, and the sync engine recognises that note (`MIRROR_NOTE`) and leaves the turn out of the push, so the other device does not receive its own words back.

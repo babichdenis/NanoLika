@@ -1170,6 +1170,13 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 /* ---- menus we draw ---------------------------------------------------- */
 .nm-menu { position: fixed; z-index: 80; min-width: 200px; padding: 6px; border-radius: 12px; background: var(--dsw-alias-bg-layer-3, var(--nm-base)); color: var(--dsw-alias-label-primary); box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 0 0 1px var(--nm-divider); display: flex; flex-direction: column; gap: 1px; }
 .nm-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; text-align: left; padding: 8px 10px; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
+/* the right-click menu on a Workspace in the harness's own sidebar (WorkspaceRowMenu.tsx) */
+.nm-ws-menu { width: 260px; }
+.nm-ws-ask { padding: 4px 10px 8px; font-size: 12.5px; line-height: 1.45; color: var(--dsw-alias-label-tertiary); }
+.nm-ws-input { height: 34px; margin: 0 10px; width: calc(100% - 20px); font-size: 13.5px; }
+.nm-ws-row { display: flex; gap: 8px; padding: 8px 10px 4px; }
+.nm-ws-row .nm-pill { min-height: 30px; padding: 0 14px; font-size: 13px; }
+.nm-ws-failure { padding: 0 10px 6px; font-size: 12.5px; line-height: 1.4; color: var(--dsw-alias-state-error-primary, #d2453d); }
 .nm-menu-item:hover, .nm-menu-item:focus-visible { background: var(--nm-hover); outline: none; }
 .nm-menu-item svg { color: var(--dsw-alias-label-secondary); flex: none; }
 .nm-menu-item-label { flex: 1; min-width: 0; }

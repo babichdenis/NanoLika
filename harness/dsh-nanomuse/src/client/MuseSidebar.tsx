@@ -25,6 +25,8 @@ import { useRooms } from './rooms.ts'
 import { usePrefs } from './prefs.ts'
 import { useWin, win, type RecentDoc } from './win.ts'
 import { useWindowsUpdates, updatePresentation, requestWindowsUpdate } from './windows-updates.ts'
+import { WorkspaceRowMenu } from './WorkspaceRowMenu.tsx'
+import type { WorkspaceAdmin } from './workspace-row.ts'
 
 /** The id the harness's Schedules plugin registers its global panel under. */
 const SCHEDULES_PANEL = 'schedules'
@@ -66,6 +68,8 @@ export interface MuseSidebarProps {
   useSessions?: UseSessionList | undefined
   useSessionStatus?: UseStatusMap | undefined
   useWorkspaces?: UseWorkspaceList | undefined
+  /** Rename and close a Workspace from its row's right-click; absent where the service is not ours. */
+  workspaceAdmin?: WorkspaceAdmin | undefined
 }
 
 interface RailButtonProps {
@@ -133,7 +137,7 @@ function CornerMenu({ anchor, items, onClose }: { anchor: HTMLElement; items: (M
 }
 
 export function MuseSidebar(props: MuseSidebarProps): ReactNode {
-  const { collapsed, width, t, renderSlot, startSession, toggleSidebar, selectPanel, openSettings: openSettingsHook, openProfile, openSearch, issuesUrl, chatActions, usePanels, usePanelInfo, useShortcuts, useSessions, useSessionStatus, useWorkspaces } = props
+  const { collapsed, width, t, renderSlot, startSession, toggleSidebar, selectPanel, openSettings: openSettingsHook, openProfile, openSearch, issuesUrl, chatActions, workspaceAdmin, usePanels, usePanelInfo, useShortcuts, useSessions, useSessionStatus, useWorkspaces } = props
   const live = useLive()
   const update = useWindowsUpdates()
   const updateView = update ? updatePresentation(update, t) : null
@@ -291,6 +295,7 @@ export function MuseSidebar(props: MuseSidebarProps): ReactNode {
     rail,
     chats,
     menuAnchor ? h(CornerMenu, { anchor: menuAnchor, items: menuItems, onClose: () => setMenuAnchor(null) }) : null,
+    workspaceAdmin ? h(WorkspaceRowMenu, { t, admin: workspaceAdmin }) : null,
     docMenu ? h(CornerMenu, { anchor: docMenu.anchor, items: docItems, onClose: () => setDocMenu(null) }) : null,
     notice ? h('div', { style: { position: 'fixed', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 60, pointerEvents: 'none' } },
       h(Toast, { key: notice.id, text: notice.text, holdMs: 8000, onDone: () => setNotice(null) })) : null)

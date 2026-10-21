@@ -94,6 +94,10 @@ interface WorkspaceNavigation {
 }
 interface WorkspacesService {
   create(input: { path: string }): Promise<{ workspaceId: string }>
+  rename(workspaceId: string, title: string): Promise<unknown>
+  /** Takes the folder off the list: the chats and the files inside it stay. */
+  delete(workspaceId: string): Promise<void>
+  readonly list: { getSnapshot(): { items: readonly { workspaceId: string; title: string }[] } }
 }
 interface ShortcutsService {
   catalog: unknown
@@ -295,6 +299,14 @@ export function apply(ctx: ClientContext): void {
     openSearch: () => { win.search(true) },
     issuesUrl: ISSUES_URL,
     chatActions,
+    workspaceAdmin: {
+      titleOf: (id: string) => {
+        const service = getService('workspaces') as WorkspacesService | undefined
+        return service?.list.getSnapshot().items.find((row) => row.workspaceId === id)?.title ?? ''
+      },
+      rename: (id: string, title: string) => (getService('workspaces') as WorkspacesService).rename(id, title),
+      delete: (id: string) => (getService('workspaces') as WorkspacesService).delete(id),
+    },
     hooks: { panels, shortcuts: shortcuts.catalog },
   })
   slots.inject('sidebar', () => slots.register({
