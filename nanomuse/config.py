@@ -635,6 +635,13 @@ class ServerSettings(BaseModel):
     # How long the services (tools, MCP servers, the cloud account) may take before the
     # socket opens anyway; past it the app answers and /api/health names the step still running.
     start_grace: float = 4.0
+    # Files the person sends and files the agent makes for them, in the workspace, are kept
+    # this many hours and then deleted by a sweep that runs at start and once an hour.
+    # 0 keeps them: the default, because a runtime on the person's own computer holds their
+    # own files. A runtime that serves people from a shared box (the Telegram bot, a hosted
+    # box) sets it, so the picture they sent is looked at once and the document they asked
+    # for is delivered once, never kept.
+    keep_files_hours: float = 0.0
 
 
 class Settings(BaseModel):

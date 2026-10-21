@@ -265,7 +265,9 @@ created_at, updated_at, deleted, seq}` and a message `{mid, cid, seq, device,
 device_name, role: user | assistant, text, truncated, attachments[{name, mime,
 size}], created_at, deleted}`; `cid` and `mid` are UUIDs the device makes (4–64
 characters of `a-z 0-9 . _ : -`, folded to lower case), times are Unix seconds.
-Every accepted change takes the account's next `seq`; a device keeps the
+A message never carries a picture or a file: `attachments` names them, their type
+and their size, and the bytes stay on the device that made them, so a relay holds
+no media at all. Every accepted change takes the account's next `seq`; a device keeps the
 highest `cursor` it has pulled and asks for `since=` that. A push is idempotent
 (a known `mid` is left alone unless the new row is a tombstone, a known `cid`
 takes the newer title; a time more than a week past the relay's clock, or

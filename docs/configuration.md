@@ -446,6 +446,7 @@ token            = ""            # empty → generated once, stored in <data_dir
 approval_timeout = 3600          # seconds an approval card waits before counting as "deny"
 cors_origins     = []            # only for the Vite dev server, e.g. ["http://localhost:5173"]
 max_upload_mb    = 25            # largest file the app may attach to a message
+keep_files_hours = 0             # 0 keeps them; a shared box deletes them after N hours
 update_check     = true          # Settings → About says when a newer release is out (the download index, then GitHub Releases; once a day)
 start_grace      = 4             # seconds the services may take before the app answers anyway
 ```
@@ -456,6 +457,14 @@ that failed, as when the runtime came up before its network, is tried again afte
 the version under *Settings → About* with a link to the release page; nothing is downloaded and
 nothing about the install is sent beyond the runtime's version in the request's `User-Agent`. `NANOMUSE_NO_UPDATE_CHECK=1` turns it off too, and a hosted
 web session (a runtime started with `NANOMUSE_CLOUD_KEY`) never checks; its operator updates it.
+
+`keep_files_hours` decides how long the workspace keeps what the person sends and what the
+agent makes for them. 0, the default, keeps everything: a runtime on the person's own computer
+holds their own files. A runtime that serves people from a shared box sets it, and a sweep at
+start and once an hour deletes the older files, so the picture they sent is looked at once and
+the document they asked for is delivered once. Nothing an account does leaves a picture or a
+file on a relay: the conversation sync carries text, and the name, type and size of an
+attachment, never its bytes.
 
 These settings apply to the Python runtime. The Windows desktop shell checks separately
 after startup and every six hours. Its saved automatic download switch is on by default,

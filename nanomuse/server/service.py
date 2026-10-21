@@ -32,6 +32,7 @@ from nanomuse.cloud import CLOUD_KEY, DEFAULT_CHAT_MODEL, CloudError, model_url
 from nanomuse.coding.service import CodingService
 from nanomuse.config import LLMSettings, Settings
 from nanomuse.goals import Goal
+from nanomuse.housekeeping import keep_sweeping
 from nanomuse.hub.service import HubService
 from nanomuse.llm import BaseLLM
 from nanomuse.llm.factory import create_llm, llm_ready
@@ -440,6 +441,7 @@ class MuseService:
         self.app.tools.add(CodingAgents(coding=self.coding))
         self.token = self._load_token()
         self._scheduler: asyncio.Task[None] | None = None
+        self._housekeeping: asyncio.Task[None] | None = None
         # what start() is busy with, for /api/health and the log while the app comes up
         self.starting: str = "not started"
         self._tidying = False
@@ -485,6 +487,13 @@ class MuseService:
         await self._step("cloud account and hub", self.hub.start(), 30)
         self.sync.start()
         self._scheduler = asyncio.create_task(self._goal_scheduler(), name="goal-scheduler")
+        # a runtime that serves people from a shared box keeps no files: the sweep deletes
+        # what they sent and what the agent made, once the setting says it is old enough
+        if self.settings.server.keep_files_hours > 0:
+            self._housekeeping = asyncio.create_task(
+                keep_sweeping(self.workspace(), self.settings.server.keep_files_hours),
+                name="housekeeping",
+            )
         self.starting = ""
         logger.info(
             "MuseService started ({} threads, {:.1f}s)",
@@ -507,6 +516,8 @@ class MuseService:
     async def stop(self) -> None:
         if self._scheduler:
             self._scheduler.cancel()
+        if self._housekeeping:
+            self._housekeeping.cancel()
         loop = asyncio.get_running_loop()
         workers: list[asyncio.Task[None]] = []
         for t in self.threads.values():
