@@ -32,6 +32,12 @@ from nanomuse.channels.base import (
 from nanomuse.logger import logger
 
 API = "https://api.telegram.org"
+# the two words on an approval card, by the language the run answers in
+_BUTTONS = {
+    "ru": ("Разрешить", "Запретить"),
+    "en": ("Allow", "Deny"),
+    "zh": ("允许", "拒绝"),
+}
 POLL_TIMEOUT_S = 50
 TEXT_LIMIT = 4000  # Telegram allows 4096 per message
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -335,12 +341,13 @@ class TelegramChannel(Channel):
                 for chunk in _chunks(text[TEXT_LIMIT - 1 :]):
                     await self._call("sendMessage", {"chat_id": chat_id, "text": chunk})
 
-    async def ask(self, chat_id: str, approval_id: str, text: str) -> None:
+    async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
+        allow, deny = _BUTTONS.get(lang, ("允许 · Allow", "拒绝 · Deny"))
         keyboard = {
             "inline_keyboard": [
                 [
-                    {"text": "允许 · Allow", "callback_data": f"a:y:{approval_id}"[:64]},
-                    {"text": "拒绝 · Deny", "callback_data": f"a:n:{approval_id}"[:64]},
+                    {"text": allow, "callback_data": f"a:y:{approval_id}"[:64]},
+                    {"text": deny, "callback_data": f"a:n:{approval_id}"[:64]},
                 ]
             ]
         }

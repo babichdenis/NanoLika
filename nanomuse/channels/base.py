@@ -179,10 +179,12 @@ class Channel:
     async def typing(self, chat_id: str, on: bool) -> None:
         """Show that the Muse is working on it (a typing indicator, a reaction). Optional."""
 
-    async def ask(self, chat_id: str, approval_id: str, text: str) -> None:
+    async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         """An approval the run is waiting for. ``text`` already explains the reply words
         (允许 / 拒绝); channels with buttons add two of them carrying
-        ``{"approval": approval_id, "decision": "allow" | "deny"}``."""
+        ``{"approval": approval_id, "decision": "allow" | "deny"}``. ``lang`` is the manager's
+        answer: ``en``, ``zh``, ``ru`` or ``both`` for the auto default, and it decides the
+        words on those buttons."""
         await self.send(chat_id, text)
 
     async def verify(self) -> str:

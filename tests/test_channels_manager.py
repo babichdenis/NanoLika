@@ -47,6 +47,7 @@ class FakeChannel(Channel):
         self.sent: list[tuple[str, str, list[str]]] = []
         self.streams: list[tuple[str, str, str, bool]] = []
         self.asks: list[tuple[str, str, str]] = []
+        self.ask_langs: list[str] = []
         self.typing_calls: list[tuple[str, bool]] = []
         self.stopped = False
         FakeChannel.instances.append(self)
@@ -65,8 +66,9 @@ class FakeChannel(Channel):
     async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
         self.streams.append((chat_id, stream_id, text, done))
 
-    async def ask(self, chat_id: str, approval_id: str, text: str) -> None:
+    async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         self.asks.append((chat_id, approval_id, text))
+        self.ask_langs.append(lang)
 
     async def typing(self, chat_id: str, on: bool) -> None:
         self.typing_calls.append((chat_id, on))
@@ -412,3 +414,22 @@ def test_a_russian_runtime_gets_russian_system_lines(chan):
     # a line with no Russian wording yet falls back to English, never to Chinese
     assert manager.say("Passed on.", "已转达。") == "Passed on."
     assert manager.say("Passed on.", "已转达。", "Передала.") == "Передала."
+
+
+def test_start_in_a_paired_chat_greets_without_a_run(chan):
+    client, _service, _llm, _manager, fake = chan
+    pair(client, fake)
+    fake.sent.clear()
+    fake.bus.inbound(dm("/start", sender="u1", chat="chat1"))
+    wait_for(lambda: fake.sent)
+    text = fake.sent[-1][1]
+    assert "Paired." in text  # the fake channel records plain text; the agent never saw it
+
+
+def test_a_russian_run_asks_for_approval_in_russian(chan):
+    _client, service, _llm, manager, fake = chan
+    service.settings.agent.language = "ru"
+    assert manager.lang == "ru"
+    text = manager.approval_text({"tool": "shell", "summary": "shell: ls"})
+    assert "просит разрешение" in text and "允许" not in text
+    assert manager._tool_label({"tool": "shell"}) == "Выполняю команду"

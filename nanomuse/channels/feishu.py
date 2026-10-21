@@ -574,7 +574,7 @@ class FeishuChannel(Channel):
         if done:
             self._cards.pop(stream_id, None)
 
-    async def ask(self, chat_id: str, approval_id: str, text: str) -> None:
+    async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         buttons = [
             {
                 "tag": "button",

@@ -50,7 +50,9 @@ LANGUAGE_AUTO = (
 )
 LANGUAGE_FIXED = (
     "Everything addressed to the user, progress notes, questions and the final summary, is "
-    "written in {language}, whatever language the user or the tool output uses."
+    "written in {language}, whatever language the user or the tool output uses. Product and "
+    "service names that arrive from tools stay in their Latin form: a reply written in another "
+    "language never carries a Chinese name of a product."
 )
 # The client said which language its screens are in (the `language` field of a sent message):
 # that is the language the person reads, so it wins over the script of one message.

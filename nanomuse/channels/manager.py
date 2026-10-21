@@ -56,10 +56,38 @@ ALLOW_WORDS = frozenset(
         "ok",
         "approve",
         "go ahead",
+        # Russian, as a person types it in a chat
+        "да",
+        "ок",
+        "окей",
+        "можно",
+        "разрешаю",
+        "разреши",
+        "разрешить",
+        "давай",
     }
 )
 DENY_WORDS = frozenset(
-    {"拒绝", "不行", "不要", "不", "拒绝。", "deny", "no", "n", "reject", "stop"}
+    {
+        "拒绝",
+        "不行",
+        "不要",
+        "不",
+        "拒绝。",
+        "deny",
+        "no",
+        "n",
+        "reject",
+        "stop",
+        # Russian
+        "нет",
+        "нельзя",
+        "запрещаю",
+        "запрети",
+        "откажи",
+        "не надо",
+        "стоп",
+    }
 )
 
 # how often a growing reply is pushed to the chat (edits are rate-limited everywhere)
@@ -68,17 +96,17 @@ THREAD_PREFIX = "channel-"
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 _TOOL_LABELS = {
-    "web_search": ("Searching the web", "正在搜索"),
-    "web_fetch": ("Reading a web page", "正在读网页"),
-    "files": ("Working with files", "正在处理文件"),
-    "shell": ("Running a command", "正在运行命令"),
-    "python_execute": ("Running Python", "正在运行 Python"),
-    "read_emails": ("Reading email", "正在读邮件"),
-    "send_email": ("Sending email", "正在发邮件"),
-    "browser": ("Browsing", "正在浏览网页"),
-    "goals": ("Updating goals", "正在更新目标"),
-    "remember": ("Saving a memory", "正在记下来"),
-    "recall": ("Recalling", "正在回忆"),
+    "web_search": ("Searching the web", "正在搜索", "Ищу в интернете"),
+    "web_fetch": ("Reading a web page", "正在读网页", "Читаю страницу"),
+    "files": ("Working with files", "正在处理文件", "Работаю с файлами"),
+    "shell": ("Running a command", "正在运行命令", "Выполняю команду"),
+    "python_execute": ("Running Python", "正在运行 Python", "Запускаю Python"),
+    "read_emails": ("Reading email", "正在读邮件", "Читаю почту"),
+    "send_email": ("Sending email", "正在发邮件", "Отправляю письмо"),
+    "browser": ("Browsing", "正在浏览网页", "Открываю страницу"),
+    "goals": ("Updating goals", "正在更新目标", "Обновляю цели"),
+    "remember": ("Saving a memory", "正在记下来", "Запоминаю"),
+    "recall": ("Recalling", "正在回忆", "Вспоминаю"),
 }
 
 
@@ -299,6 +327,10 @@ class ChannelManager(ChannelBus):
                 msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=msg.chat_id
             )
         text = msg.text.strip()
+        if text.lower().split("@")[0].split()[0:1] == ["/start"]:
+            # a person pressing Start, or the button Telegram shows first: greet, do not run
+            await self._send(msg.channel, msg.chat_id, self.greeting())
+            return
         word = text.lower().strip(" .!。！")
         # a word for an approval this chat was asked about
         if self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
@@ -598,9 +630,13 @@ class ChannelManager(ChannelBus):
         if title:
             return title
         tool = str(event.get("tool") or "")
-        en, zh = _TOOL_LABELS.get(tool, (f"Using {tool}", f"正在使用 {tool}"))
+        en, zh, ru = _TOOL_LABELS.get(tool, (f"Using {tool}", f"正在使用 {tool}", f"Работаю: {tool}"))
         lang = self.lang
-        return zh if lang == "zh" else en
+        if lang == "zh":
+            return zh
+        if lang == "ru":
+            return ru
+        return en
 
     def approval_text(self, event: dict[str, Any]) -> str:
         summary = str(event.get("summary") or event.get("tool") or "")
@@ -609,7 +645,8 @@ class ChannelManager(ChannelBus):
         return self.say(
             f"{self.muse_name} needs your OK: {summary}{why}\nReply allow / deny.",
             f"{self.muse_name} 需要你确认：{summary}{why}\n回复「允许」或「拒绝」。",
-            f"{self.muse_name} просит разрешение: {summary}{why}\nОтветь allow или deny.",
+            f"{self.muse_name} просит разрешение: {summary}{why}\n"
+            f"Ответь «разрешаю» или «нет», или нажми кнопку.",
         )
 
     async def _ask(self, channel: str, chat_id: str, approval_id: str, text: str) -> None:
@@ -618,7 +655,7 @@ class ChannelManager(ChannelBus):
             return
         self._asks.setdefault(f"{channel}:{chat_id}", []).append(approval_id)
         try:
-            await ch.ask(chat_id, approval_id, text)
+            await ch.ask(chat_id, approval_id, text, self.lang)
         except Exception as exc:  # noqa: BLE001
             logger.warning("channel {}: could not ask {}: {}", channel, chat_id, exc)
             self._set(channel, "error", _short(exc))
@@ -737,13 +774,22 @@ class ChannelManager(ChannelBus):
         await self._send(
             entry["channel"],
             str(entry.get("chat_id") or entry["sender_id"]),
-            self.say(
-                f"Paired. This chat is now {self.muse_name}. Say what you need.",
-                f"已配对。这里现在就是 {self.muse_name}，有事直接说。",
-                f"Привязала этот чат: здесь теперь {self.muse_name}. Пиши, что нужно.",
-            ),
+            self.greeting(),
         )
         return entry
+
+    def greeting(self) -> str:
+        """The first thing a newly paired chat is told, and what ``/start`` answers."""
+        return self.say(
+            f"Paired. This chat is now {self.muse_name}. Tell me what you need and I will do it: "
+            f"search, files, mail, plans, reminders. Files and voice notes work here too. Ask for "
+            f"something risky and I will ask you back before doing it.",
+            f"已配对。这里现在就是 {self.muse_name}，有事直接说：搜索、文件、邮件、计划、提醒。"
+            f"文件和语音也能发。危险的操作我会先问你。",
+            f"Готово, я {self.muse_name} и теперь живу в этом чате. Скажи, что нужно, и я сделаю: "
+            f"найду информацию, разберу файлы, напишу письмо, составлю план, поставлю напоминание. "
+            f"Сюда можно присылать файлы, фото и голосовые. Если дело опасное, спрошу разрешения.",
+        )
 
     async def deny(self, code: str) -> dict[str, Any] | None:
         info = self.pairing.deny(code)

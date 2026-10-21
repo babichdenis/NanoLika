@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **A run that answers in Russian stays Russian.** The language setting reached the prompt as a tag (`ru`) rather than as a name, and product names from tool output were pasted as Chinese characters into an otherwise Russian reply. The rule now names the language and keeps a foreign product name in Latin. The approval card's two buttons, the line that says what a tool is doing, and the words a person may answer an approval with (да, ок, нет, запрещаю) follow the same language, and a newly paired chat is greeted with what the bot can actually do, in the chat's language; `/start` answers with that greeting instead of starting a run.
+
 - **A silent Telegram bot can be diagnosed.** Every update the channel takes is now logged at debug level (`telegram: update 1234 (['update_id', 'message'])`), so a bot that is connected but answers nothing can be told apart from one whose messages never arrived, without adding a print and restarting by hand.
 
 - **The chat apps' own lines follow the agent's language, Russian included.** A runtime told to speak Russian answered in English and Chinese at once, because the pairing code, the approval request and the "Paired" line had only those two wordings: `nanomuse channels approve` now prints the code in Russian, and a line added later without a Russian version falls back to English instead of Chinese. The pairing text also says where to approve it when there is no app at hand.
