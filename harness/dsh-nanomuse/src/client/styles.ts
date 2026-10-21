@@ -309,6 +309,7 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
 .nm-stop:disabled { opacity: 0.5; cursor: default; }
 .nm-invite { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border: 0; border-radius: 999px; background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; cursor: pointer; }
 .nm-invite:hover { background: var(--dsw-alias-bg-layer-2); }
+.nm-invite-icon { width: 30px; padding: 0; justify-content: center; }
 /* the spend pill beside it: today's yuan and tokens; the quiet dash before the sheet is read */
 .nm-usage-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
 .nm-usage-pill:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }

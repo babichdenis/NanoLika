@@ -100,11 +100,11 @@ speaking as nanoMuse through the `nanomuse` preset, with:
   it stays on this computer as `$DSH_HOME/nanomuse/avatar/own-clip.mp4`, is never sent to
   nanoMuse Cloud, and *Default face* removes it (the fallback rule is in
   [avatar.md](avatar.md));
-- **the share sheet** from the share button at the top of this drawer, and again when a new
-  face is adopted (`src/client/AvatarShare.tsx`): postcards drawn on a canvas, the face with a
-  greeting and the face alone, saved as a PNG or copied; with an account a third one carries
-  the invite, the face and the account's code and link, so a picture passed on invites, beside
-  *Copy the link* and *Copy the code*;
+- **the share sheet** from the share button at the chat's top right, beside *Invite*, and
+  again when a new face is adopted (`src/client/AvatarShare.tsx`): postcards drawn on a
+  canvas, the face with a greeting and the face alone, saved as a PNG or copied; with an
+  account a third one carries the invite, the face and the account's code and link, so a
+  picture passed on invites, beside *Copy the link* and *Copy the code*;
 - **Hands** on this computer: `nanomuse mcp` from the bundled runtime over stdio, the
   runtime's `computer_screen` and `computer_act` tools with their approvals, so "what is
   on my screen?" and "open the settings and turn the volume down" work out of the box.

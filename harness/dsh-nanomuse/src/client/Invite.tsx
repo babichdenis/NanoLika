@@ -8,7 +8,8 @@
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useState, type ReactNode } from 'react'
 import { call, type Translate, failureText } from './api.ts'
-import { IconCopy, IconGift } from './icons.tsx'
+import { AvatarShareSheet } from './AvatarShare.tsx'
+import { IconCopy, IconGift, IconShare } from './icons.tsx'
 import { useLive } from './live.ts'
 import { mainChatId } from './MuseChats.tsx'
 import { useMoney } from './money.ts'
@@ -34,6 +35,9 @@ export function makeInviteButton(t: Translate) {
   return function InviteButton({ sessionId }: { sessionId?: string | undefined }): ReactNode {
     const live = useLive()
     const [open, setOpen] = useState(false)
+    // the postcards from the same corner of the window: a picture of the face, and with an
+    // account the one that carries the code (src/client/AvatarShare.tsx)
+    const [share, setShare] = useState(false)
     // this seat is per session: it tells the rest of the shell which chat is on
     // screen, and whether it is a side chat (Muse shows Invite on the main chat only)
     const side = sessionId !== undefined && mainChatId() !== undefined && mainChatId() !== sessionId
@@ -46,9 +50,14 @@ export function makeInviteButton(t: Translate) {
         win.current(null)
       }
     }, [sessionId, side])
-    if (!live.cloud.signedIn || side) return null
+    if (side) return null
+    const name = live.profile.name || t('brand')
     return h('span', null,
-      h('button', { type: 'button', className: 'nm-invite', onClick: () => setOpen(true) }, h(IconGift, { size: 15 }), t('invite')),
+      h('button', { type: 'button', className: 'nm-invite nm-invite-icon', title: t('acShareTitle'), 'aria-label': t('acShareTitle'), onClick: () => setShare(true) }, h(IconShare, { size: 15 })),
+      live.cloud.signedIn
+        ? h('button', { type: 'button', className: 'nm-invite', onClick: () => setOpen(true) }, h(IconGift, { size: 15 }), t('invite'))
+        : null,
+      share ? h(AvatarShareSheet, { t, name, onClose: () => setShare(false) }) : null,
       open ? h(InviteDialog, { t, onClose: () => setOpen(false) }) : null)
   }
 }

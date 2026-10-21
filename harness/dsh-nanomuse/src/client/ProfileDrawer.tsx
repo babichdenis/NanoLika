@@ -2,7 +2,7 @@
  * The agent's page, the panel the face opens (android …/ui/profile/AgentProfileScreen.kt
  * on a desktop): the big face with a pen badge whose menu is the phone's — Change
  * avatar (words land in the chat, the flow in AvatarChat.tsx takes them), Edit name,
- * Your own clip… and Default face (OwnClipChooser.tsx, #324), Avatar studio… — a share button, the name, "online" under it, and four panes:
+ * Your own clip… and Default face (OwnClipChooser.tsx, #324), Avatar studio… — the name, "online" under it, and four panes:
  * Activity (what each chat did, day by day; an entry opens the task's steps),
  * Approvals (the standing "always allow" grants with Manage permissions, then the
  * answers given on cards), Daily (the goals' routines, Manage routines) and Soul &
@@ -14,8 +14,7 @@ import { createElement as h, Fragment, useEffect, useRef, useState, type FormEve
 import { call, type Translate, failureText } from './api.ts'
 import { Avatar } from './Avatar.tsx'
 import { profileBus, settingsBus, useProfileOpen } from './bus.ts'
-import { IconAlarm, IconBell, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconClose, IconList, IconPencil, IconShare, IconShield, IconSparkle, IconSpinner, IconSquare } from './icons.tsx'
-import { AvatarShareSheet } from './AvatarShare.tsx'
+import { IconAlarm, IconBell, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconClose, IconList, IconPencil, IconShield, IconSparkle, IconSpinner, IconSquare } from './icons.tsx'
 import { studioBus } from './AvatarStudio.tsx'
 import { prefillComposer } from './composer.ts'
 import { useOwnClipChooser } from './OwnClipChooser.tsx'
@@ -57,7 +56,6 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
   const [tab, setTab] = useState<Tab>('activity')
   const [editing, setEditing] = useState<'none' | 'name' | 'look'>('none')
   const [menu, setMenu] = useState(false)
-  const [share, setShare] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // a clip of the person's own as the face (#324): the dialog, the preview and the refusal live here
@@ -112,8 +110,7 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
   return h('aside', { ref: panel, tabIndex: -1, className: 'nm-pf', role: 'complementary', 'aria-label': name },
     h('div', { className: 'nm-pf-top', 'data-window-drag': true },
       h('button', { type: 'button', className: 'nm-icon-btn', 'aria-label': t('close'), onClick: () => profileBus.close() }, h(IconClose, { size: 16 })),
-      h('span', { className: 'nm-pf-top-space' }),
-      h('button', { type: 'button', className: 'nm-icon-btn', 'aria-label': t('acShareTitle'), title: t('acShareTitle'), onClick: () => setShare(true) }, h(IconShare, { size: 16 }))),
+      h('span', { className: 'nm-pf-top-space' })),
     h('div', { className: 'nm-pf-head' },
       h('div', { className: 'nm-pf-face' },
         // the face itself opens the same menu as the pen (as on the phone): the look, the name, the studio
@@ -138,7 +135,6 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
           h('button', { key: item.id, type: 'button', role: 'tab', className: `nm-seg-btn${tab === item.id ? ' nm-active' : ''}`, 'aria-selected': tab === item.id, 'aria-label': item.label, title: item.label, onClick: () => setTab(item.id) }, item.icon)))
       : null,
     h('div', { className: 'nm-pf-body' }, body),
-    share ? h(AvatarShareSheet, { t, name, onClose: () => setShare(false) }) : null,
     detail ? h(TaskDetail, { t, sessionId: detail, useSessions, onClose: () => setDetail(null) }) : null,
     clipChooser.element)
 }
