@@ -13,6 +13,14 @@ productName: NanoLika
 executableName: NanoLika
 copyright: GPL-3.0-or-later · NanoLika, built on the open-source nanoMuse project and DeepSeek Harness
 artifactName: NanoLika-Desktop-${version}-${os}-${arch}.${ext}
+# A share link from nanolika.ru ("Открыть в Лике") opens the app with the inviter's code
+# already in the sign-in field: the scheme is what makes the system hand the link over
+# (src/invite-link.ts, docs/desktop.md). macOS reads it from the bundle's CFBundleURLTypes,
+# Windows from the installer's registry, Linux from the .desktop file; all three come from here.
+protocols:
+  - name: NanoLika invite
+    schemes:
+      - nanolika
 directories:
   output: dist
   buildResources: resources

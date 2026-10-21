@@ -73,6 +73,18 @@ const bridge = {
     ipcRenderer.on("nanomuse:overlay:action", handler);
     return () => ipcRenderer.off("nanomuse:overlay:action", handler);
   },
+  /**
+   * A share link's code (nanolika://invite/CODE, from nanolika.ru): taken once, for the
+   * sign-in screen's invite field, or waited for while the app is open. "" when there is none.
+   */
+  invite: {
+    take: (): Promise<string> => ipcRenderer.invoke("nanomuse:invite:take"),
+    subscribe: (listener: (code: string) => void): (() => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, code: string) => listener(code);
+      ipcRenderer.on("nanomuse:invite", handler);
+      return () => ipcRenderer.off("nanomuse:invite", handler);
+    },
+  },
   /** The quick-chat key was pressed (or the menu bar's New chat): start a chat and focus the composer. */
   onQuickChat: (listener: () => void): (() => void) => {
     const handler = () => listener();

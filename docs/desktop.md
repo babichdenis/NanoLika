@@ -178,6 +178,10 @@ show, under the turn that did not run, in the chat:
 - **a plan you already pay for**: the ChatGPT sign-in, right there, with the relay's caveat
   about it;
 - **invite a friend**: the bonus for each of you, paid after the friend's first request, and *Copy the link*;
+  the link opens nanolika.ru with the code in it, and the site's bar hands that code on in two ways,
+  *Открыть в Лике* (`nanolika://invite/CODE`, which the app registers, so the sign-in screen's invite
+  field arrives filled) and *Скопировать код* for a machine without the app; the parsing rules are
+  `harness/desktop/src/invite-link.ts`;
 - a star on GitHub, once, when the nudge policy allows it: the card's title and buttons are
   the app's; its sentence is the app's too unless the relay's policy carries one (`star.text`,
   `star.text_zh`, up to 200 characters; a Chinese UI takes `text_zh`, else `text`;

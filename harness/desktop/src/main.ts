@@ -7,6 +7,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { GLOW_HIDE_MS, GLOW_SETTLE_MS, type Leak, LeakLog, leakIsEvidence, leakIsReal, pointerAction, REARM_DELAYS_MS, staleInstance } from "./glow";
+import { inviteFromArgv, inviteFromUrl, INVITE_SCHEME } from "./invite-link";
 import { defaultHelperPath, HELPER_NAME, MacHelper } from "./mac-helper";
 import * as macPermissions from "./mac-permissions";
 import { Operator, SCREEN_PERMISSION_TEXT, type Marker } from "./operator";
@@ -895,6 +896,22 @@ function quickChat(): void {
   win?.webContents.send("nanomuse:quick-chat");
 }
 
+/** A share link's code, waiting for the sign-in screen (src/invite-link.ts, docs/desktop.md). */
+let inviteWaiting = "";
+
+/**
+ * A link from the site's "Открыть в Лике" button carries the inviter's code: keep it for the
+ * sign-in screen and bring the window up, so the person does not type eight characters.
+ */
+function takeInviteLink(code: string): void {
+  if (!code) return;
+  inviteWaiting = code;
+  log(`invite link: the code for the sign-in screen is here`);
+  if (!app.isReady()) return;
+  const win = showWindow();
+  if (win && !win.isDestroyed()) win.webContents.send("nanomuse:invite", code);
+}
+
 function applyQuickChat(): void {
   globalShortcut.unregisterAll();
   quickChatTaken = false;
@@ -1010,6 +1027,12 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
 function registerBridge(): void {
   // appImage: the Linux build runs from an AppImage (the runtime sets APPIMAGE), so About offers the AppImage of a newer version, not the .deb
   ipcMain.handle("nanomuse:info", () => ({ version: app.getVersion(), platform: process.platform, arch: process.arch, appImage: Boolean(process.env.APPIMAGE) }));
+  // the code a share link brought, handed to the sign-in screen once and then forgotten
+  ipcMain.handle("nanomuse:invite:take", () => {
+    const code = inviteWaiting;
+    inviteWaiting = "";
+    return code;
+  });
   ipcMain.handle("nanomuse:permissions", async () => {
     // the helper's grants, fresh, when it runs — started again when it went away (the
     // "Quit & Reopen" the Screen Recording switch offers ends it); `helper` tells the page
@@ -2055,6 +2078,15 @@ function buildMenu(): void {
 if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
   app.quit();
 } else {
+  // a nanolika://invite/CODE link from nanolika.ru: macOS hands it over as an event (at startup
+  // too), Windows and Linux as a command-line argument of this or a second instance
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    takeInviteLink(inviteFromUrl(url));
+  });
+  takeInviteLink(inviteFromArgv(process.argv));
+  if (app.isPackaged) app.setAsDefaultProtocolClient(INVITE_SCHEME);
+
   app.on("second-instance", (_e, _argv, _cwd, data) => {
     // the launcher clicked while this instance runs — with its window closed, too (the
     // tray case): showWindow() makes the window again when it is gone
@@ -2067,6 +2099,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
       return;
     }
     log(`second instance: ${mainWindow ? "focusing the window" : hostUrl ? "opening the window again" : "still starting"}`);
+    takeInviteLink(inviteFromArgv(_argv));
     showWindow();
   });
   app.setAboutPanelOptions({

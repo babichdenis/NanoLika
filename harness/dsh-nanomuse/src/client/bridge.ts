@@ -100,6 +100,12 @@ export interface HarnessBridge {
   onOverlayAction?(listener: (card: string, action: string) => void): () => void
   // since 0.1.41: the Host again with the window up, so a proxy just set applies
   restartHost?(): Promise<void>
+  /**
+   * A share link's code (nanolika://invite/CODE, from nanolika.ru): taken once for the
+   * sign-in screen's invite field, and waited for while the app is open. Absent in older
+   * shells, which leave the field to be typed.
+   */
+  invite?: { take(): Promise<string>; subscribe(listener: (code: string) => void): () => void }
 }
 
 export function bridge(): HarnessBridge | undefined {

@@ -5,8 +5,9 @@
  * this only holds the form.
  */
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
-import { createElement as h, useState, type FormEvent, type ReactNode } from 'react'
+import { createElement as h, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useCloudConfig } from './AccountPage.tsx'
+import { bridge } from './bridge.ts'
 import { cash } from './money.ts'
 import { call, column, errorStyle, muted, row, type CloudStatus, type Translate, failureText } from './api.ts'
 
@@ -29,6 +30,25 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
   const [invite, setInvite] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
   const config = useCloudConfig()
+  // A share link (nanolika://invite/CODE, from nanolika.ru's "Открыть в Лике"): the shell hands
+  // the code over and the field opens with it filled, so nobody types eight characters by hand.
+  useEffect(() => {
+    const link = bridge()?.invite
+    if (!link) return
+    let alive = true
+    const fill = (raw: string) => {
+      const value = raw.replace(/[^0-9a-zA-Z-]/g, '').slice(0, 16).toUpperCase()
+      if (!alive || !value) return
+      setInvite(value)
+      setInviteOpen(true)
+    }
+    link.take().then(fill).catch(() => undefined)
+    const stop = link.subscribe(fill)
+    return () => {
+      alive = false
+      stop()
+    }
+  }, [])
   const [busy, setBusy] = useState(false)
   const [resent, setResent] = useState(false)
   const [error, setError] = useState<string | undefined>()
