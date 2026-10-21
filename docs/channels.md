@@ -140,6 +140,30 @@ Anyone who finds the bot can write to it; the Muse answers only people you let i
 Pairings and codes live in `<data_dir>/channels/pairing.json` (the data directory,
 not the workspace), so the agent's own file tools cannot change who may talk to it.
 
+## Someone who has only the chat app
+
+A phone or a computer running the app is not required. Telegram alone reaches every
+part of the Muse that does not need a screen to look at: a question, a file or photo,
+a voice note, an approval, a question it asks back, and a reminder it delivers. What
+the chat cannot do is show the conversation list, the memory, the goals or the
+settings, and it cannot reach the devices on your account.
+
+Getting in is the one step that needs a second place, because approving a code is how
+the bot learns who owns it:
+
+* **A bot you run for yourself.** Set `first_chat_claims = true` in
+  `[channels.<name>]` while the bot has no confirmed chat: the first person who writes
+  becomes its owner, greeted with what it can do, and everyone after them gets a code.
+  Turn the flag off once you are in, or someone who finds the bot before you do takes it.
+* **A bot someone else runs.** Ask them for the code path they use: they read the six
+  characters you were shown and approve them in the app or on the machine, and from
+  then on the chat is yours to use.
+
+Once in, the chat is one conversation of the Muse. Say "remember that I am in
+Kaliningrad" there and the file tool, the goals, a reminder and the same memory are
+behind it; the app, when you install it later and sign in to the same account, shows
+that conversation under *Telegram · you*.
+
 ## How a chat maps to the Muse
 
 Each chat is one conversation of the agent, with the id

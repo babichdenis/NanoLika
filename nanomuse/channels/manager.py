@@ -308,6 +308,19 @@ class ChannelManager(ChannelBus):
             return
         key = f"{msg.channel}:{msg.chat_id}"
         if not self._allowed(msg):
+            cfg = self.store.config(msg.channel)
+            if cfg.first_chat_claims and not msg.is_group and not self.pairing.approved(msg.channel):
+                # nobody owns this bot yet: the person who wrote first is the one who made it,
+                # which is how a bot can be used from a chat alone (docs/channels.md)
+                self.pairing.add(
+                    msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=msg.chat_id
+                )
+                self.publish()
+                logger.info(
+                    "channel {}: {} claimed the empty bot as its owner", msg.channel, msg.sender_id
+                )
+                await self._send(msg.channel, msg.chat_id, self.greeting())
+                return
             if msg.is_group:
                 logger.debug(
                     "channel {}: ignoring group message from unknown {}", msg.channel, msg.sender_id

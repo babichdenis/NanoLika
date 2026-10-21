@@ -102,10 +102,13 @@ class ChannelConfig:
         self.settings: dict[str, Any] = {}
         self.allow_from: list[str] = []
         self.group_policy = "mention"
+        self.first_chat_claims = False
 
     def apply(self, raw: dict[str, Any]) -> None:
         if "enabled" in raw and raw["enabled"] is not None:
             self.enabled = bool(raw["enabled"])
+        if "first_chat_claims" in raw and raw["first_chat_claims"] is not None:
+            self.first_chat_claims = bool(raw["first_chat_claims"])
         if isinstance(raw.get("allow_from"), list):
             self.allow_from = [str(x).strip() for x in raw["allow_from"] if str(x).strip()]
         if raw.get("group_policy") in GROUP_POLICIES:
@@ -113,7 +116,7 @@ class ChannelConfig:
         nested = raw.get("settings")
         values: dict[str, Any] = nested if isinstance(nested, dict) else raw
         for key, value in values.items():
-            if key in ("enabled", "allow_from", "group_policy", "settings"):
+            if key in ("enabled", "allow_from", "group_policy", "first_chat_claims", "settings"):
                 continue
             if value is None:
                 continue

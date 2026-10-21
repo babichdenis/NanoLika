@@ -433,3 +433,23 @@ def test_a_russian_run_asks_for_approval_in_russian(chan):
     text = manager.approval_text({"tool": "shell", "summary": "shell: ls"})
     assert "просит разрешение" in text and "允许" not in text
     assert manager._tool_label({"tool": "shell"}) == "Выполняю команду"
+
+
+def test_the_first_chat_can_claim_a_bot_nobody_owns(chan):
+    client, _service, _llm, manager, fake = chan
+    manager.store.update(FakeChannel, enabled=True, values={"token": "t0k"})
+    cfg = manager.store.config("fake")
+    assert not cfg.first_chat_claims  # off unless asked for
+    # turn it on the way config.toml does
+    data = dict(manager.store._file.load())
+    data["fake"] = {**data.get("fake", {}), "first_chat_claims": True}
+    manager.store._file.save(data)
+    fake.sent.clear()
+    fake.bus.inbound(dm("hello", sender="owner", chat="chatA"))
+    wait_for(lambda: fake.sent)
+    assert manager.pairing.is_approved("fake", "owner")
+    # a second stranger still gets a code, not the bot
+    n = len(fake.sent)
+    fake.bus.inbound(dm("hello", sender="stranger", chat="chatB"))
+    wait_for(lambda: len(fake.sent) > n)
+    assert not manager.pairing.is_approved("fake", "stranger")
