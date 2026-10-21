@@ -171,6 +171,9 @@ class TelegramChannel(Channel):
     async def _handle_update(self, update: dict[str, Any]) -> None:
         if self.bus is None:
             return
+        logger.debug(
+            "telegram: update {} ({})", update.get("update_id"), list(update)[:3]
+        )
         callback = update.get("callback_query")
         if isinstance(callback, dict):
             await self._handle_callback(callback)

@@ -25,6 +25,8 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Runtime
 
+- **A silent Telegram bot can be diagnosed.** Every update the channel takes is now logged at debug level (`telegram: update 1234 (['update_id', 'message'])`), so a bot that is connected but answers nothing can be told apart from one whose messages never arrived, without adding a print and restarting by hand.
+
 - **The chat apps' own lines follow the agent's language, Russian included.** A runtime told to speak Russian answered in English and Chinese at once, because the pairing code, the approval request and the "Paired" line had only those two wordings: `nanomuse channels approve` now prints the code in Russian, and a line added later without a Russian version falls back to English instead of Chinese. The pairing text also says where to approve it when there is no app at hand.
 
 - **The chat apps are in the example config.** `config/config.example.toml` gained a `[channels.telegram]` table (`enabled`, `bot_token` as a vault placeholder, `proxy`, `allow_from`, `group_policy`) and a pointer to the other three apps, so a person copying the example learns that talking to the Muse from Telegram is possible at all. The app under Settings → Chat apps still wins per field.
