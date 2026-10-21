@@ -1118,7 +1118,7 @@ function registerBridge(): void {
   ipcMain.handle("nanomuse:permissions:guide", () => guidePermissions());
   ipcMain.handle("nanomuse:content-protection", (e, on: boolean) => {
     // The main window too, while the hands work: the agent should not read its own chat off the screen.
-    if (e.sender === mainWindow?.webContents) mainWindow?.setContentProtection(on === true);
+    if (alive(mainWindow) && e.sender === mainWindow.webContents) mainWindow.setContentProtection(on === true);
   });
   ipcMain.handle("nanomuse:reveal", (_e, path: string) => {
     if (typeof path === "string" && path && existsSync(path)) shell.showItemInFolder(path);
@@ -1536,6 +1536,15 @@ function sendOverlay(win: BrowserWindow | null, state: unknown): void {
   if (win && !win.isDestroyed()) win.webContents.send("nanomuse:overlay:state", state);
 }
 
+/**
+ * A window that can still be looked at. A closing overlay panel sends its last frames while
+ * its window is already gone: touching `.webContents` of a destroyed window throws
+ * "Object has been destroyed" and, uncaught in main, shows the person an error dialog.
+ */
+function alive(win: BrowserWindow | null | undefined): win is BrowserWindow {
+  return Boolean(win) && !win!.isDestroyed();
+}
+
 /** The marker still worth showing: the operator's last action, less than MARKER_MS ago. */
 function freshMarker(): (Marker & { at: number }) | null {
   return overlayMarker && Date.now() - overlayMarker.at < MARKER_MS ? overlayMarker : null;
@@ -1616,7 +1625,7 @@ function applyOverlay(): void {
 
 function registerOverlays(): void {
   ipcMain.on("nanomuse:overlay", (e, state: OverlayState) => {
-    if (e.sender !== mainWindow?.webContents || !state || typeof state !== "object") return;
+    if (!alive(mainWindow) || e.sender !== mainWindow.webContents || !state || typeof state !== "object") return;
     const hands = state.hands && typeof state.hands === "object" ? state.hands : null;
     overlayState = {
       hands: hands
@@ -1647,20 +1656,20 @@ function registerOverlays(): void {
     applyOverlay();
   });
   ipcMain.on("nanomuse:overlay:ready", (e) => {
-    if (e.sender === glowWindow?.webContents) sendOverlay(glowWindow, overlayState.hands ? { ...overlayState.hands } : { active: false });
-    if (e.sender === capsuleWindow?.webContents) sendOverlay(capsuleWindow, { hands: overlayState.hands && (overlayState.hands.active || overlayState.hands.held) ? overlayState.hands : null, cards: overlayState.cards });
+    if (alive(glowWindow) && e.sender === glowWindow.webContents) sendOverlay(glowWindow, overlayState.hands ? { ...overlayState.hands } : { active: false });
+    if (alive(capsuleWindow) && e.sender === capsuleWindow.webContents) sendOverlay(capsuleWindow, { hands: overlayState.hands && (overlayState.hands.active || overlayState.hands.held) ? overlayState.hands : null, cards: overlayState.cards });
   });
   ipcMain.on("nanomuse:overlay:act", (e, payload: { card?: string; action?: string }) => {
-    if (e.sender !== capsuleWindow?.webContents || !payload) return;
-    mainWindow?.webContents.send("nanomuse:overlay:action", { card: String(payload.card ?? ""), action: String(payload.action ?? "") });
+    if (!alive(capsuleWindow) || e.sender !== capsuleWindow.webContents || !payload) return;
+    if (alive(mainWindow)) mainWindow.webContents.send("nanomuse:overlay:action", { card: String(payload.card ?? ""), action: String(payload.action ?? "") });
   });
   ipcMain.on("nanomuse:overlay:leak", (e, leak: unknown) => {
     // Linux: the glow's page saw the pointer — only possible when its input shape is gone
-    if (process.platform !== "linux" || e.sender !== glowWindow?.webContents || !leakIsReal(leak)) return;
+    if (process.platform !== "linux" || !alive(glowWindow) || e.sender !== glowWindow.webContents || !leakIsReal(leak)) return;
     repairGlowShape(leak);
   });
   ipcMain.on("nanomuse:overlay:resize", (e, height: number) => {
-    if (e.sender !== capsuleWindow?.webContents || typeof height !== "number") return;
+    if (!alive(capsuleWindow) || e.sender !== capsuleWindow.webContents || typeof height !== "number") return;
     const h = Math.max(48, Math.min(480, Math.round(height)));
     const b = capsuleWindow.getBounds();
     if (b.height !== h) capsuleWindow.setBounds({ ...b, height: h, ...capsulePlace(h) });
@@ -1936,6 +1945,14 @@ function createWindow(): BrowserWindow {
     callback(permission === "media" && sameOrigin(details.requestingUrl, hostUrl));
   });
   win.on("closed", mainWindowClosed);
+  // A renderer that died (its GPU process went with it, or the page crashed) leaves a white
+  // window with a live Host behind it: reload the page in place instead of asking the person
+  // to restart the whole app.
+  win.webContents.on("render-process-gone", (_event, gone) => {
+    log(`window: the renderer went (${gone.reason}); reloading it`);
+    if (!win.isDestroyed()) win.webContents.reload();
+  });
+  win.on("unresponsive", () => log("window: the renderer stopped answering"));
   // Windows logoff/shutdown may close the last window without before-quit.
   win.on("session-end", () => { sessionEnding = true; });
   // the splash: the logo in a loading ring and the wordmark (resources/loading.html) — no face
@@ -1949,7 +1966,7 @@ async function boot(): Promise<void> {
     hostUrl = await startHost();
   } catch (exc) {
     log(`start failed: ${String(exc)}`);
-    await mainWindow?.webContents.executeJavaScript(`window.__failed && window.__failed(${JSON.stringify(String((exc as Error).message ?? exc))})`).catch(() => undefined);
+    if (alive(mainWindow)) await mainWindow.webContents.executeJavaScript(`window.__failed && window.__failed(${JSON.stringify(String((exc as Error).message ?? exc))})`).catch(() => undefined);
     throw exc;
   }
   log(`ready: ${hostUrl.replace(/token=\S+/, "token=…")}`);
@@ -2059,7 +2076,7 @@ function buildMenu(): void {
     {
       label: T.view,
       submenu: [
-        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => mainWindow?.webContents.reload() },
+        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => { if (alive(mainWindow)) mainWindow.webContents.reload() } },
         { label: T.devtools, accelerator: process.platform === "darwin" ? "Alt+Cmd+I" : "Ctrl+Shift+I", click: () => mainWindow?.webContents.toggleDevTools() },
         { type: "separator" },
         { role: "resetZoom" },
