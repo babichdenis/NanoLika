@@ -648,6 +648,18 @@ class ServerSettings(BaseModel):
     keep_files_hours: float = 0.0
 
 
+class ChannelsSettings(BaseModel):
+    """The chat apps (Telegram, Feishu, DingTalk, WeCom) as one voice of the account.
+
+    ``shared_thread`` on: every chat app writes into the account's main conversation, so
+    the history — what was said on the phone, the computer and through the bot — is one,
+    while each app still answers with the Muse running here (its own tools, and no waiting
+    for a device). Off (the default): every chat has a conversation of its own.
+    """
+
+    shared_thread: bool = False
+
+
 class Settings(BaseModel):
     data_dir: Path = DEFAULT_DATA_DIR
     log_level: str = "INFO"
@@ -667,6 +679,7 @@ class Settings(BaseModel):
     cloud: CloudSettings = Field(default_factory=CloudSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
     hub: HubSettings = Field(default_factory=HubSettings)
+    channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     # Where the settings came from (informational).

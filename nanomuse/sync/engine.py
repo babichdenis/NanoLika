@@ -900,7 +900,14 @@ class ConversationSync:
         if kind == "main":
             main = self.svc.threads.get(MAIN_THREAD)
             if main is None:
-                return
+                # one memory for every chat (channels.shared_thread): the chat apps have not
+                # written here yet, but the account's main conversation exists on the relay —
+                # make the main chat now, so its history lands and the agent knows what was
+                # said on the phone and on the computer
+                self.svc.timeline(MAIN_THREAD)
+                main = self.svc.threads.get(MAIN_THREAD)
+                if main is None:
+                    return
             if thread is None or thread.id != MAIN_THREAD:
                 # the account's main chat: this device's main adopts its id and sends its
                 # own messages into it (rule 4)

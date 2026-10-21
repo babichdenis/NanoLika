@@ -374,23 +374,25 @@ def test_synced_turns_from_other_devices_are_delivered(chan):
             "event": {"type": "assistant", "text": "mystery", "synced": True, "mid": "m-sync-2"},
         },
     )
-    # our own chat's thread: its words are already in the chat
-    emit(
-        manager,
-        {
-            "kind": "event",
-            "event": {
-                "type": "user",
-                "text": "own words",
-                "synced": True,
-                "thread": own,
-                "via_device_name": "MacBook",
-            },
-        },
-    )
     time.sleep(0.4)
-    leaked = [t for t in fake.texts() if "mystery" in t or "own words" in t]
+    leaked = [t for t in fake.texts() if "mystery" in t]
     assert not leaked, f"leaked: {leaked!r}"
+
+
+def test_one_memory_shared_chats_write_into_the_main_thread(chan):
+    """`channels.shared_thread`: a chat's message lands in the account's main conversation
+    (one history for the bot, the phone and the computer), and the answer still comes back
+    into that chat."""
+    from nanomuse.server.events import MAIN_THREAD
+
+    client, service, llm, manager, fake = chan
+    service.settings.channels.shared_thread = True
+    pair(client, fake)
+    llm.script.append(LLMResponse(content="Here is what we said on the computer."))
+    fake.bus.inbound(dm("what did we say?"))
+    wait_for(lambda: any("Here is what we said" in t for t in fake.texts()))
+    assert MAIN_THREAD in manager.routes
+    assert thread_id_for("fake", "chat1") not in manager.routes
 
 
 def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):

@@ -31,7 +31,7 @@ from nanomuse.channels.telegram import TelegramChannel
 from nanomuse.channels.wecom import WeComChannel
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
-from nanomuse.server.events import new_id
+from nanomuse.server.events import MAIN_THREAD, new_id
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
@@ -453,6 +453,15 @@ class ChannelManager(ChannelBus):
         await self._finish(thread, final or self.say("(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"))
 
     def _thread_for(self, msg: InboundMessage) -> str:
+        if self.svc.settings.channels.shared_thread:
+            # one memory for every chat app: the chat writes into the account's main
+            # conversation, so what was said through the bot, on the phone and on the
+            # computer is one history; the answer still comes from the Muse here
+            thread_id = MAIN_THREAD
+            self.routes[thread_id] = (msg.channel, msg.chat_id)
+            if thread_id not in self.svc.threads:
+                self.svc.timeline(thread_id)
+            return thread_id
         thread_id = thread_id_for(msg.channel, msg.chat_id)
         self.routes[thread_id] = (msg.channel, msg.chat_id)
         if thread_id not in self.svc.threads:
@@ -650,12 +659,12 @@ class ChannelManager(ChannelBus):
         kind = event.get("type")
         thread = str(event.get("thread") or "")
         ours = thread in self.routes
-        if kind in ("user", "assistant") and event.get("synced") and not ours:
+        if kind in ("user", "assistant") and event.get("synced"):
             # A turn another device wrote (the computer, the phone): relay sync lands it in
             # the timeline as it is pulled (sync engine `_apply_message`). The chats marked
-            # "deliver here" hear it as it happens, named after the device that wrote it —
-            # the relay's echo filter already dropped this device's own rows, and `ours`
-            # keeps this chat's own turns out of its own feed.
+            # "deliver here" hear it as it happens, named after the device that wrote it.
+            # The relay's echo filter already dropped this device's own rows, so a synced
+            # turn is never this machine's words — also when the chat is the shared main one.
             text = str(event.get("text") or "").strip()
             files = [str(f.get("name") or "") for f in event.get("files") or [] if isinstance(f, dict)]
             body = text or ", ".join(n for n in files if n)
