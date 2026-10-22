@@ -1251,6 +1251,8 @@ def test_the_catalog_sorts_ids_by_their_shape():
     assert classify("deepseek-v4.1-flash") == ("chat", True)  # V4.1 reads them on Model Studio (checked)
     assert classify("deepseek-v4.2-pro") == ("chat", True) and classify("deepseek-v5") == ("chat", True)
     assert classify("deepseek-v4-flash") == ("chat", False)  # V4 does not — it guesses or returns nothing
+    assert classify("deepseek-flash") == ("chat", True)  # the relay's own id for V4.1 Flash reads pictures
+    assert classify("deepseek-pro") == ("chat", False)  # V4 Pro stays text only
     assert classify("vanchin/deepseek-v3") == ("chat", False)
     assert classify("qwen3-vl-plus") == ("chat", True)
     assert classify("qvq-max") == ("chat", True)

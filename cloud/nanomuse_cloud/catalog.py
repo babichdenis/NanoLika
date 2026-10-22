@@ -58,9 +58,12 @@ _IMAGE = re.compile(r"(^|[-/_.])(image|t2i|i2i|seedream|flux|stable-diffusion|sd
 # generations that are multimodal from the start (3.5 on), Kimi K2.5 on, DeepSeek from
 # V4.1 on (checked on Model Studio: v4.1-flash answers about a picture, v4-flash and
 # v4-pro do not — they guess or return nothing), GPT-4o/5, Gemini, Claude — the guess
-# before the probe answers
+# before the probe answers. `deepseek-flash` is the id the relay itself serves, and its
+# provider serves that name with V4.1 Flash, so it reads pictures like `deepseek-v4.1-flash`
+# does; `deepseek-pro` is V4 Pro and stays text only (docs/cloud.md, providers.json).
 _VISION = re.compile(
     r"(^|[-/_.])(vl|qvq|vision|ocr|gui|gpt-4o|gpt-5|gemini|claude|kimi-k2\.[5-9]|kimi-k[3-9])([-/_.]|$)"
+    r"|(^|[-/_.])deepseek-flash([-/_.]|$)"
     r"|qwen3\.[5-9]|qwen[4-9]|deepseek-v4\.[1-9]|deepseek-v[5-9]"
 )
 

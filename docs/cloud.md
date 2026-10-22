@@ -532,7 +532,15 @@ clips under the provider's own paths (`POST
 /api/v1/services/aigc/video-generation/video-synthesis`, `GET
 /api/v1/tasks/{id}` for the account's own tasks, `GET /api/v1/uploads`). Errors
 are `{"error": {"message", "type": "nanomuse_cloud", "code"}}` with a stable
-`code` the app turns into a sentence. Relay 0.22 adds the codes of the
+`code` the app turns into a sentence.
+A chat model whose `architecture.input_modalities` carries `image` is offered to
+the apps as a model that reads pictures, and the apps pass screenshots to it
+without a first refused request. `deepseek-flash`, the relay's own id for
+DeepSeek-V4.1-Flash, carries `image`; `deepseek-pro` (V4 Pro) and
+`grok-chat-fast` do not. The relay takes the flag from the id's shape and then
+from a probe that shows the model a picture (`catalog.py`), so a provider that
+starts serving a seeing model under a new name needs no release here.
+ Relay 0.22 adds the codes of the
 operator's [switches](#controls): `403 signup_closed`, `503 service_paused`,
 `503 sync_paused`, `503 hub_paused` (and the hub's close code `4003
 hub_paused`), and `allowance_exhausted` with `paused: true` when the free
