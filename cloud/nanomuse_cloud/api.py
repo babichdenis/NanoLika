@@ -5,6 +5,7 @@
     POST /v1/auth/code        {identifier}                      → 204 (400 phone_region: a number the SMS sender cannot reach; a disabled account gets the same 204 and no code is sent; 429 domain_limited: a new address of a domain at its day's sign-up limit)
     POST /v1/auth/verify      {identifier, code, device, invite?} → {api_key, base_url, account, tokens, models}
     POST /v1/auth/login       {identifier, password, device}    → the same, for accounts that set a password
+    POST /v1/bot/signin       X-Bot-Token {telegram_id, device?, invite?} → the same, for a chat with no app yet (0.26: the Telegram door)
     POST /v1/auth/password    {password, current?}              → 204 (set / change; "" + current removes)
     GET  /v1/me                                                 → account, tokens, spend (¥ spent / pool / left), invite, contribute, usage by kind, models, recent, nudges
     GET  /v1/nudges                                             → when the apps may ask for a star (0.18; public, cached an hour; the operator's policy over the defaults)
@@ -94,6 +95,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import json
 import logging
 import math
@@ -510,6 +512,31 @@ def create_app(
         key, caller = await asyncio.to_thread(cloud.login_password, ident, password, device, client_ip(request))
         me = cloud.me(caller, client_place(request))
         return {"api_key": key, "created": False, **me}
+
+    @app.post("/v1/bot/signin")
+    async def bot_signin(request: Request) -> dict:
+        """The bot's door: a Telegram chat becomes an account, or finds the one it made.
+
+        The bot proves itself with the shared secret in `X-Bot-Token`, not with a person's
+        code: Telegram tells it the numeric id with every message, and that is the proof the
+        chat belongs to that person, so an account can be made from a chat with nothing
+        installed. The answer has the shape of a sign-in, so the bot keeps one key per chat
+        and spends with it, which is what makes the allowance, the refusal and the top-up in
+        a chat the same ones the apps get."""
+        token = cloud.s.bot_signin_token
+        if not token:
+            raise CloudError(503, "bot_off", "The Telegram door is shut on this relay")
+        if not hmac.compare_digest(request.headers.get("x-bot-token", ""), token):
+            raise CloudError(401, "bad_bot_token", "That is not this relay's bot token")
+        body = await _json(request)
+        device = str(body.get("device", ""))[:80]
+        invite = str(body.get("invite", ""))[:32]
+        try:
+            key, caller, created = await asyncio.to_thread(cloud.sign_in_bot, str(body.get("telegram_id", "")), device, invite)
+        except BadIdentifier as e:
+            raise CloudError(400, "bad_identifier", "A Telegram account is its numeric id") from e
+        me = cloud.me(caller, client_place(request))
+        return {"api_key": key, "created": created, **me}
 
     @app.post("/v1/auth/password", status_code=204)
     async def auth_password(request: Request, caller: Caller = Depends(caller_dep)) -> Response:

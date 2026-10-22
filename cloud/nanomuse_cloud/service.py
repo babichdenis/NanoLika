@@ -31,7 +31,7 @@ from .controls import Controls
 from .crypto import IdentifierCrypto
 from .db import Database, now
 from .geo import Place
-from .identifiers import BadIdentifier, Identifier, parse
+from .identifiers import BadIdentifier, Identifier, parse, telegram
 from .nudges import BadNudges
 from .nudges import defaults as nudges_defaults
 from .nudges import merge as nudges_merge
@@ -819,17 +819,23 @@ class Cloud:
         self.db.consume_code(int(row["id"]))
         return self.sign_in(ident, device, "code", invite)
 
-    def sign_in(self, ident: Identifier, device: str, via: str, invite: str = "") -> tuple[str, Caller, bool]:
+    def sign_in(self, ident: Identifier, device: str, via: str, invite: str = "", *, reached: bool = False) -> tuple[str, Caller, bool]:
         """An identifier that has just been proven (a code, the carrier's word) becomes a
         signed-in device: the account is made on first sight, a key is issued.
-        Returns (api_key, caller, created)."""
-        if not self.allowed(ident):
+        Returns (api_key, caller, created).
+
+        ``reached`` says the caller already proved this identifier by a door of its own (the
+        bot's shared secret, with Telegram's numeric id as the whole proof), so the member
+        list and the *Sign-ups* switch do not stand in the way; the door keeps its own
+        switch. Everyone else passes the list as before."""
+        if not reached and not self.allowed(ident):
             raise CloudError(403, "not_invited", "This relay is private; that address is not on its list")
         id_hash = ident.hash(self.s.hmac_key)
         account = self._account_for(ident)
         created = account is None
         if account is None:
-            self._refuse_if_signups_closed(ident)
+            if not reached:
+                self._refuse_if_signups_closed(ident)
             self._refuse_if_domain_limited(ident)
             account_id = self.db.new_account_id()
             enc = self.crypto.encrypt(account_id, ident.value)
@@ -853,6 +859,29 @@ class Cloud:
             # sign-in does not wait on SMTP
             self.evaluate_thresholds(defer_mail=True)
         return key, caller, created
+
+    def sign_in_bot(self, telegram_id: str, device: str = "", invite: str = "") -> tuple[str, Caller, bool]:
+        """A Telegram chat that has just written to the bot, as an account of its own.
+
+        The first message makes the account: the same allowance every new account gets, a
+        key of its own, a place in the console. The key is what the chat spends with, so a
+        long conversation in Telegram costs that account and not the relay's own pool, and
+        the refusal at the end of the allowance arrives the way it does in the apps. A
+        second message finds the same account, so there is no second bonus."""
+        if not self.s.bot_signin_token:
+            raise CloudError(
+                503,
+                "bot_off",
+                "The Telegram door is shut on this relay; leave BOT_SIGNIN_TOKEN empty only while it should be.",
+            )
+        ident = telegram(telegram_id)
+        if self._account_for(ident) is None and not self.s.bot_signup_open:
+            raise CloudError(
+                403,
+                "signup_closed",
+                "New chats are closed on this relay for now; an account that already exists keeps working.",
+            )
+        return self.sign_in(ident, device or "telegram", via="telegram", invite=invite, reached=True)
 
     def evaluate_thresholds(self, *, defer_mail: bool = False) -> list[dict[str, Any]]:
         """0.22: the operator's "when accounts reach N" rules, against the count right now.

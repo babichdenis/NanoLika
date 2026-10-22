@@ -619,6 +619,15 @@ class Settings:
     # private and only members may sign in at all (the pre-release behaviour).
     allowed_identifiers: str = field(default_factory=lambda: _env("ALLOWED_IDENTIFIERS"))
     signup_open: bool = field(default_factory=lambda: _env("SIGNUP_OPEN", "1") not in ("0", "false", "no"))
+    # The bot's door: a Telegram chat that speaks to the bot becomes an account here, with
+    # the allowance every new account gets, without an address or a number first. The bot
+    # proves itself with BOT_SIGNIN_TOKEN (one shared secret, sent as `X-Bot-Token`); empty
+    # means the door is shut and /v1/bot/signin answers `bot_off`. BOT_SIGNUP_OPEN=0 keeps the
+    # door open for accounts that already exist and refuses new chats (`signup_closed`), which
+    # is what closing the bot to newcomers alone needs: SIGNUP_OPEN does not apply to a chat,
+    # and neither does the members list, since a chat has no address to list.
+    bot_signin_token: str = field(default_factory=lambda: _env("BOT_SIGNIN_TOKEN"))
+    bot_signup_open: bool = field(default_factory=lambda: _env("BOT_SIGNUP_OPEN", "1") not in ("0", "false", "no"))
     # A sign-in for an app store's reviewer, who cannot receive our codes: for the
     # e-mail addresses in REVIEW_ADDRESSES (comma-separated) a code request sends nothing and
     # answers as if it had, and /v1/auth/verify accepts exactly REVIEW_CODE (six digits) —

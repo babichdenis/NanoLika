@@ -1,7 +1,12 @@
-"""Phone numbers and e-mail addresses: normalise, mask, hash.
+"""Phone numbers, e-mail addresses and Telegram accounts: normalise, mask, hash.
 
 The relay never stores the identifier itself. `id_hash` (HMAC-SHA256 with the
 deployment secret) is the account key; `hint` is what the account page shows.
+
+Telegram is the door a person can come through with nothing else: the bot proves the
+numeric id is theirs (it comes with every message), and `telegram()` makes it an
+identifier like the other two, so an account made from a chat is an ordinary account
+with an allowance, a key and a place in the console.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from dataclasses import dataclass
 _EMAIL = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 _CN_MOBILE = re.compile(r"^1[3-9]\d{9}$")
 _E164 = re.compile(r"^\+[1-9]\d{7,14}$")
+_TELEGRAM_ID = re.compile(r"^\d{5,20}$")
 _GMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
 
 
@@ -45,12 +51,14 @@ def _canonical_email(address: str) -> str:
 
 @dataclass(frozen=True)
 class Identifier:
-    channel: str  # phone | email
-    value: str  # +8613800138000 / user@example.com (canonical)
+    channel: str  # phone | email | telegram
+    value: str  # +8613800138000 / user@example.com (canonical) / 5188775031
     raw_value: str = ""  # as typed (lower-cased for email), when different from `value`
 
     @property
     def hint(self) -> str:
+        if self.channel == "telegram":
+            return f"tg ***{self.value[-4:]}"
         if self.channel == "phone":
             digits = self.value
             if digits.startswith("+86") and len(digits) == 14:
@@ -77,6 +85,19 @@ class Identifier:
         primary = self.hash(key)
         legacy = self.legacy_hash(key)
         return (primary, legacy) if legacy and legacy != primary else (primary,)
+
+
+def telegram(raw: str) -> Identifier:
+    """A Telegram account, from the numeric id a bot is told with every message.
+
+    The id is the whole identity: it is stable, it is the bot's own proof that the chat is
+    that person's, and it needs nothing installed. A phone number the person later adds is
+    a separate identifier and a separate account until the app links the two.
+    """
+    s = str(raw or "").strip()
+    if not _TELEGRAM_ID.match(s):
+        raise BadIdentifier("telegram")
+    return Identifier("telegram", s)
 
 
 def parse(raw: str) -> Identifier:

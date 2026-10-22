@@ -168,6 +168,8 @@ for the full list. The ones that matter:
 | `CHAT_DEFAULTS` | `{"enable_thinking": false}` | merged into chat requests for fields the app did not set |
 | `SIGNUP_OPEN` | `1` | anyone may sign in; `0` = members only (a private relay). *Runtime setting* — see below |
 | `ALLOWED_IDENTIFIERS` | empty | comma-separated numbers / addresses of the **members**: no spend limit |
+| `BOT_SIGNIN_TOKEN` | empty (off) | the bot's shared secret: a Telegram chat that sends it as `X-Bot-Token` to `POST /v1/bot/signin` becomes an account of its own (the numeric id is the identifier), gets the `ALLOWANCE_CNY` allowance and a key of its own; empty keeps the door shut (`503 bot_off`) |
+| `BOT_SIGNUP_OPEN` | `1` | `0` closes the door to new chats (`403 signup_closed`) and keeps it for the accounts that already exist; `SIGNUP_OPEN` and the members list do not apply to a chat |
 | `REVIEW_ADDRESSES`, `REVIEW_CODE` | empty (off) | an app store reviewer's sign-in: for these e-mail addresses no code is sent and the six-digit `REVIEW_CODE` signs in — see *For App Store review* below |
 | `ALLOWANCE_CNY` | 10 | yuan per non-member account **for its lifetime**, at the list prices below; 0 = no limit. *Runtime setting* |
 | `INVITE_BONUS_CNY` | 5 | added to **both** pools, the inviter's and the newcomer's, per new person who signs up with the code, paid once the newcomer uses the relay (at least `INVITE_SETTLE_MIN_SPENT_UY` micro-yuan or a registered Hub device, and not from the inviter's own network address). *Runtime setting* |
