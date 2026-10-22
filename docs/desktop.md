@@ -576,6 +576,54 @@ outer app. A local macOS build wants `build.sh` run before `npm run dist:dir`; w
 electron-builder only warns that the source is missing and the app ships without the
 helper, on the pre-0.1.38 path.
 
+## Replacing plugin files inside the app, and the permissions after it
+
+The bundle is ad-hoc signed on a machine without a Developer ID, and macOS ties Screen
+Recording and Accessibility to its code signature (cdhash). Replacing any file inside
+`NanoLika.app` — including `Contents/Resources/dsh/node_modules/dsh-nanomuse/lib`, which
+is how a plugin update is applied without a full build — makes the signature invalid, and
+the permissions already granted stop applying: the app keeps reporting
+`screen denied, accessibility denied` however many times they are switched on.
+
+After every in-place change, in this order:
+
+1. sync the files (`rsync -a lib/ .../dsh-nanomuse/lib/`, `package.json` too);
+2. `codesign --force --deep --sign - /Applications/NanoLika.app`;
+3. `codesign --verify --deep --strict /Applications/NanoLika.app` — it must pass;
+4. `tccutil reset ScreenCapture io.github.nanomuse.desktop` and
+   `tccutil reset Accessibility io.github.nanomuse.desktop` (the same for
+   `io.github.nanomuse.desktop.computer-use`), then grant both permissions again in
+   System Settings;
+5. restart the app once — the running process still holds the old signature.
+
+Do not touch files inside `.app` after the permissions are granted. A full
+`npm run dist` writes the app unsigned (`identity: null`): sign it with
+`codesign --force --deep --sign -` before installing.
+
+Three more failures that read as "the app is broken":
+
+- **An empty window after a quit.** A quit that did not go through the protected exit
+  leaves the main process holding `SingletonLock` in
+  `~/Library/Application Support/nanomuse-desktop`; the next launch shows an empty window.
+  `pkill -9 -f NanoLika`, remove `Singleton*`, launch again.
+- **LaunchServices refuses the bundle** (`kLSNoExecutableErr: The executable is missing`)
+  after a re-install: `lsregister -f /Applications/NanoLika.app`.
+- **"resume failed for session"** on every chat. The sessions live in folders named after
+  the workspace paths (`~/NanoLika`, `~/Documents/deepseek-harness-default-workspace`):
+  deleting those folders leaves the chat without a workspace. Recreate them (`mkdir -p`)
+  and reload the page.
+
+Plugin rows and tool names follow two rules, both learned the hard way:
+
+- A preset row and a profile row with the same `id` are a duplicate: the plugin does not
+  load and its tools are missing ("unknown tool"). Keep a plugin in exactly one place —
+  the chat tools in `dsh-nanomuse/presets/nanomuse.patch.yml`, rows that must exist
+  outside a preset (like `nanomuse-cloud`) in the profile patch.
+- A tool name must not collide with dsh's own: `remember` is registered by dsh itself
+  (the `gateway/internal` scope), and a collision fails the whole plugin
+  registration, so the session cannot resume ("tool … is already registered in this
+  scope"). Ours are prefixed: `memory_remember`, `memory_recall`, `memory_forget`.
+
 ## Linux notes
 
 - **The `.deb` is the one to prefer** (Debian, Ubuntu and their derivatives): it installs
