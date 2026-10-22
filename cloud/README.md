@@ -206,6 +206,7 @@ for the full list. The ones that matter:
 | `CODE_SENDER` | `log` | `log`, `smtp`, `webhook` (mail over HTTPS through the site's page), `aliyun` or `both` (SMS for phones, mail for addresses) |
 | `ALIYUN_SMS_API` | `dypns` | `dypns` (号码认证服务 `SendSmsVerifyCode`) or `dysms` (短信服务 `SendSms`) |
 | `CLOUD_MODELS` | DeepSeek + Qwen chat, Qwen image, Wan video | JSON list to replace the menu, prices and lanes (`for`, `recommended_for`) included — see below |
+| `CLOUD_MODELS` entries | | the JSON model menu also carries the sale rate: `sell_in`, `sell_cached_in`, `sell_out`, in rubles per million tokens (the approved text rate is 260 / 6 / 1040). A model without one is sold at the provider's price; a ledger line keeps both, `cost_uy` (the provider's bill) and `sale_uy` (what the account paid), and the pool falls by the second |
 | `CLOUD_ANY_MODEL_MEMBERS` | `1` | members may name any model of the provider's for its kind (chat, image, video) — see below; `0` = the menu only |
 | `CLOUD_CATALOG` | `1` | list the usable models under the operator's key after the menu in a member's `/v1/models`, read from the provider's own `/models` (0.10) — see below; `0` = the menu only, a member types an id |
 | `CLOUD_CATALOG_TTL_S` | `3600` | how long that list is kept before the provider is asked again |

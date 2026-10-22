@@ -318,8 +318,22 @@ to draw on, for its lifetime, not by the day (relay 0.5):
 | rate | 30 requests per minute |
 | tokens | no ceiling; usage is metered and shown |
 
-Spend is counted at the model provider's list prices (Alibaba Cloud Model
-Studio, Beijing region, read on 2026-10-07). `deepseek-v4.1-flash`, the chat
+What the account pays and what the relay pays the provider are two different
+figures, kept apart in every ledger line: `cost_uy` is the provider's bill and
+`sale_uy` is what the account was charged. A model carries the operator's own
+rate in rubles per million tokens (`sell_in`, `sell_cached_in`, `sell_out` in the
+menu, so also in `CLOUD_MODELS`), and the text model of the approved scheme
+sells at ₽260 fresh input, ₽6 cached input and ₽1040 output; a model without
+such a rate is sold at the provider's price, as every model was before the relay
+had a rate of its own. A relay with `RUB_PER_USD=0` cannot convert a ruble rate
+and falls back to the provider's price rather than selling for nothing. The
+running tariff's share ([Tariffs](#tariffs)) comes off `sale_uy`, never off the
+token counter, and pictures, clips and voice are sold at their price with no
+tariff share. The pool falls by `sale_uy`, so what an account has spent is the
+sum of what it was charged.
+
+The provider's list prices (Alibaba Cloud Model
+Studio, Beijing region, read on 2026-10-07) decide that cost. `deepseek-v4.1-flash`, the chat
 model since 0.1.34 (it reads pictures and thinks before it answers), is ¥2 in /
 ¥8 out per million tokens from 8:00 to 22:00 Beijing time and ¥1 / ¥4 the rest
 of the night; the hour the reply comes in decides. `qwen3.8-27b`, the hands

@@ -75,6 +75,14 @@ class ModelSpec:
     # 2k tier for anything wider than 1k. Video: per output second.
     price_in: float = 0.0
     price_out: float = 0.0
+    # What the person pays, in rubles per million tokens: the operator's own rate, separate
+    # from what the provider bills him. 0 = no sale rate set, and the account is charged the
+    # provider's price in yuan, which is what the relay did before it had a rate of its own
+    # (no margin, and nothing for a tariff to take a share off). The approved text rate
+    # (2026-10-22) is ₽260 a million fresh input, ₽6 cached input, ₽1040 output.
+    sell_in: float = 0.0
+    sell_cached_in: float = 0.0
+    sell_out: float = 0.0
     # A model priced by the hour (DeepSeek on Model Studio): what a token costs in the
     # idle hours, `idle_hours` (start, end) in Beijing time, the provider's clock — 0 means
     # the day price all day. A request is priced at the hour it is charged (the reply in).
@@ -123,6 +131,9 @@ class ModelSpec:
         if len(hours) != 2 or not all(0 <= h <= 24 for h in hours):
             raise ValueError(f"{self.id}: idle_hours is [start, end] in hours of the day, Beijing time")
         object.__setattr__(self, "idle_hours", hours)
+        for name in ("sell_in", "sell_cached_in", "sell_out"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{self.id}: {name} is a price, not a negative number")
         if not 0 <= self.cached_in_rate <= 1:
             raise ValueError(f"{self.id}: cached_in_rate is a share of the input price, between 0 and 1")
 
@@ -200,6 +211,23 @@ class ModelSpec:
             return self.price_in_idle or self.price_in, self.price_out_idle or self.price_out
         return self.price_in, self.price_out
 
+    def sells_at_own_rate(self) -> bool:
+        """Whether the operator put a sale rate on this model: the account then pays that,
+        and the provider's price is only what the relay costs."""
+        return bool(self.sell_in or self.sell_out or self.sell_cached_in)
+
+    def chat_sale_rub(self, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> float:
+        """One text turn at the operator's sale rate, in rubles. The cached part of the prompt
+        is paid at `sell_cached_in`; a rate not set for one of the three is taken from the
+        fresh input rate (the cached one) or from the fresh input rate alone (the output)."""
+        prompt = max(0, prompt_tokens)
+        cached = min(prompt, max(0, cached_tokens))
+        fresh_in = self.sell_in
+        cached_in = self.sell_cached_in or self.sell_in
+        out = self.sell_out or self.sell_in
+        rub = ((prompt - cached) * fresh_in + cached * cached_in + max(0, completion_tokens) * out) / 1_000_000
+        return rub
+
     def chat_cost_uy(self, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0, at: int | float | None = None) -> int:
         """Prompt tokens at the input price — the cached part of them (a part of
         prompt_tokens, as the provider reports it) at `cached_in_rate` of it — and completion
@@ -270,6 +298,13 @@ DEFAULT_MODELS: tuple[ModelSpec, ...] = (
         price_out_idle=4.0,
         idle_hours=(22, 8),
         cached_in_rate=0.1,
+        # the approved text rate of 2026-10-22: ₽260 / ₽6 / ₽1040 a million tokens. The
+        # provider is paid its own price (the fields above, in yuan, peak and idle) and the
+        # difference is the relay's; a tariff takes its share off this figure, never off what
+        # the provider bills
+        sell_in=260.0,
+        sell_cached_in=6.0,
+        sell_out=1040.0,
     ),
     ModelSpec(
         id="qwen3.8-27b",
@@ -897,6 +932,14 @@ class Settings:
 
     def cny_to_usd(self, cny: float) -> float:
         return round(cny / self.usd_cny, 4) if self.usd_cny > 0 else 0.0
+
+    def chat_charge_uy(self, model: ModelSpec, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> int:
+        """What one text turn takes from the account, in micro-yuan: the operator's sale rate
+        where the model has one, the provider's price otherwise. A relay without a ruble rate
+        falls back to the provider's price rather than selling for nothing."""
+        if not model.sells_at_own_rate() or self.rub_per_usd <= 0 or self.usd_cny <= 0:
+            return model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens)
+        return self.rub_to_uy(model.chat_sale_rub(prompt_tokens, completion_tokens, cached_tokens))
 
     def rub_to_uy(self, rub: float) -> int:
         """Rubles back into the pool's micro-yuan: the other direction of `cny_to_rub`, with

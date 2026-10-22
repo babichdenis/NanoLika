@@ -23,6 +23,11 @@ from typing import Any
 from . import client as _client
 from .catalog import Probe
 
+# What a ledger line took from the account, in micro-yuan: the sale price where the line has
+# one, and the provider's price for a line written before the relay had a rate of its own (the
+# migration fills those, so this is the belt to its braces).
+SPENT_UY = "CASE WHEN sale_uy>0 THEN sale_uy ELSE cost_uy END"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id            TEXT PRIMARY KEY,
@@ -86,6 +91,9 @@ CREATE TABLE IF NOT EXISTS ledger (
     charged       INTEGER NOT NULL,       -- positive = spent, negative = granted
     request_id    TEXT NOT NULL DEFAULT '',
     cost_uy       INTEGER NOT NULL DEFAULT 0,  -- what the provider bills for it, in micro-yuan
+    sale_uy       INTEGER NOT NULL DEFAULT 0,  -- what the account was charged, in micro-yuan:
+                                              -- the operator's sale rate in force at the reply;
+                                              -- 0 on a line written before the relay had one
     extra         TEXT NOT NULL DEFAULT ''     -- JSON: the token split of a call (text/audio/image), seconds…
 );
 CREATE INDEX IF NOT EXISTS ledger_account_ts ON ledger(account_id, ts);
@@ -321,10 +329,12 @@ BUSY_TIMEOUT_S = 5.0
 
 # The per-account figures the invite views join in, requests made and money spent, in one
 # pass over the ledger (the same set of kinds as admin_accounts counts).
-USAGE_BY_ACCOUNT = """(SELECT account_id,
-                              SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests,
-                              SUM(CASE WHEN cost_uy>0 THEN cost_uy ELSE 0 END) AS spent_uy
-                       FROM ledger GROUP BY account_id)"""
+USAGE_BY_ACCOUNT = (
+    "(SELECT account_id,"
+    " SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests,"
+    f" SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy"
+    " FROM ledger GROUP BY account_id)"
+)
 
 
 def utc_day(ts: int) -> int:
@@ -392,6 +402,11 @@ class Database:
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN cost_uy INTEGER NOT NULL DEFAULT 0")
         if "cost_uy" not in cols("ledger"):
             self._conn.execute("ALTER TABLE ledger ADD COLUMN cost_uy INTEGER NOT NULL DEFAULT 0")
+        if "sale_uy" not in cols("ledger"):
+            self._conn.execute("ALTER TABLE ledger ADD COLUMN sale_uy INTEGER NOT NULL DEFAULT 0")
+            # 0.26: before the relay had a rate of its own an account was charged exactly the
+            # provider's price, so the old lines keep that as their sale figure
+            self._conn.execute("UPDATE ledger SET sale_uy=cost_uy WHERE sale_uy=0 AND cost_uy>0")
         if "expires_at" not in cols("api_keys"):
             # 0.13: a session key (NanoLika Web's containers) stops working at this time
             self._conn.execute("ALTER TABLE api_keys ADD COLUMN expires_at INTEGER")
@@ -699,9 +714,9 @@ class Database:
                 return None
             old = int(row["grant_uy"] or 0)
             if left_uy is not None:
-                spent = c.execute("SELECT COALESCE(SUM(cost_uy),0) FROM ledger WHERE account_id=? AND cost_uy>0", (account_id,)).fetchone()[
-                    0
-                ]
+                spent = c.execute(
+                    "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND cost_uy>0", (account_id,)
+                ).fetchone()[0]
                 new = int(spent) + max(0, int(left_uy))
             elif grant_uy is not None:
                 new = max(0, int(grant_uy))
@@ -737,7 +752,7 @@ class Database:
         with self.tx() as c:
             cur = c.execute(
                 """UPDATE accounts SET grant_uy = ? + MAX(0, credit_uy - credit_used_uy)
-                     + (SELECT COALESCE(SUM(l.cost_uy),0) FROM ledger l WHERE l.account_id=accounts.id AND l.cost_uy>0)
+                     + (SELECT COALESCE(SUM(CASE WHEN l.sale_uy>0 THEN l.sale_uy ELSE l.cost_uy END),0) FROM ledger l WHERE l.account_id=accounts.id AND l.cost_uy>0)
                    WHERE grant_uy = 0 AND allowance_uy < 0""",
                 (max(0, int(allowance_uy)),),
             )
@@ -1216,7 +1231,7 @@ class Database:
             if min_spent_uy > 0:
                 spent = int(
                     c.execute(
-                        "SELECT COALESCE(SUM(cost_uy), 0) FROM ledger WHERE account_id=? AND cost_uy>0",
+                        "SELECT COALESCE(SUM(" + SPENT_UY + "), 0) FROM ledger WHERE account_id=? AND cost_uy>0",
                         (invitee_id,),
                     ).fetchone()[0]
                     or 0
@@ -1266,7 +1281,9 @@ class Database:
             if row is None:
                 return 0
             earned = self._invite_net_uy(c, inviter_id)
-            spent = c.execute("SELECT COALESCE(SUM(cost_uy),0) FROM ledger WHERE account_id=? AND cost_uy>0", (inviter_id,)).fetchone()[0]
+            spent = c.execute(
+                "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND cost_uy>0", (inviter_id,)
+            ).fetchone()[0]
             grant = int(row["grant_uy"] or 0)
             amount = min(earned, max(0, grant - int(spent or 0)))
             if amount <= 0:
@@ -1446,7 +1463,7 @@ class Database:
         # subqueries per account row (the old form was seconds at ten thousand accounts)
         with self._lock:
             return self._conn.execute(
-                """SELECT a.*,
+                f"""SELECT a.*,
                           COALESCE(l.used_today, 0) AS used_today,
                           COALESCE(l.spent_today_uy, 0) AS spent_today_uy,
                           COALESCE(l.spent_uy, 0) AS spent_uy,
@@ -1457,8 +1474,8 @@ class Database:
                    FROM accounts a
                    LEFT JOIN (SELECT account_id,
                                      SUM(CASE WHEN ts>=? AND charged>0 THEN charged ELSE 0 END) AS used_today,
-                                     SUM(CASE WHEN ts>=? AND cost_uy>0 THEN cost_uy ELSE 0 END) AS spent_today_uy,
-                                     SUM(CASE WHEN cost_uy>0 THEN cost_uy ELSE 0 END) AS spent_uy,
+                                     SUM(CASE WHEN ts>=? AND cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_today_uy,
+                                     SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy,
                                      SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests
                               FROM ledger GROUP BY account_id) l ON l.account_id=a.id
                    LEFT JOIN (SELECT account_id, MAX(last_used_at) AS last_active_at,
@@ -1489,9 +1506,9 @@ class Database:
         `unlimited`, `grant_uy` and the money spent at list prices (stats.py)."""
         with self._lock:
             return self._conn.execute(
-                """SELECT a.id_hash, a.unlimited, a.grant_uy, COALESCE(l.spent_uy, 0) AS spent_uy
+                f"""SELECT a.id_hash, a.unlimited, a.grant_uy, COALESCE(l.spent_uy, 0) AS spent_uy
                    FROM accounts a
-                   LEFT JOIN (SELECT account_id, SUM(CASE WHEN cost_uy>0 THEN cost_uy ELSE 0 END) AS spent_uy
+                   LEFT JOIN (SELECT account_id, SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy
                               FROM ledger GROUP BY account_id) l ON l.account_id=a.id"""
             ).fetchall()
 
@@ -1684,14 +1701,21 @@ class Database:
         charged: int,
         request_id: str,
         cost_uy: int = 0,
+        sale_uy: int | None = None,
         extra: str = "",
         *,
         video_task_id: str | None = None,
     ) -> bool:
         """Record one request: the tokens on the account, the line in the ledger. What the
-        account has spent is always the ledger's sum, so there is nothing else to keep."""
+        account has spent is always the ledger's sum, so there is nothing else to keep.
+
+        ``cost_uy`` is what the provider bills the operator and ``sale_uy`` what the account
+        is charged (the sale rate, the tariff's share off, or the bonus money's base rate);
+        a line without a sale figure charged the provider's price, which was the relay's way
+        before it had a rate of its own."""
         charged = max(0, int(charged))
         cost_uy = max(0, int(cost_uy))
+        sale_uy = cost_uy if sale_uy is None else max(0, int(sale_uy))
         who = _client.current()
         with self.tx() as c:
             if video_task_id is not None:
@@ -1703,8 +1727,8 @@ class Database:
                     return False
             c.execute("UPDATE accounts SET used=used+? WHERE id=?", (charged, account_id))
             c.execute(
-                "INSERT INTO ledger(account_id, ts, kind, model, prompt_tokens, completion_tokens, charged, request_id, cost_uy, extra, ip, ua) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO ledger(account_id, ts, kind, model, prompt_tokens, completion_tokens, charged, request_id, cost_uy, sale_uy, extra, ip, ua) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     account_id,
                     now(),
@@ -1715,6 +1739,7 @@ class Database:
                     charged,
                     request_id,
                     cost_uy,
+                    sale_uy,
                     extra or "",
                     who.ip,
                     who.ua,

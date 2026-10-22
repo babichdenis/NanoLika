@@ -1005,12 +1005,13 @@ class Cloud:
         state = self.plan_state(account_id) or {}
         return {"plan": state, "credited_uy": paid_uy, "credited_rub": plan["price_rub"]}
 
-    def discount(self, charged: int, account_id: str) -> int:
-        """What a running tariff takes off a spend: 20 % on Лика and Лика+, 30 % on Лика
-        Команда, nothing without one. The provider is paid the same either way; the
-        difference is the operator's."""
+    def discount(self, money_uy: int, account_id: str) -> int:
+        """What a running tariff takes off a text turn: 20 % on Лика and Лика+, 30 % on Лика
+        Команда, nothing without one. `money_uy` is the money the turn would take from the
+        account and not a token count, since a share off a counter would be no discount at
+        all. The provider is paid the same either way; the difference is the operator's."""
         pct = self.spend_discount_pct(account_id)
-        return charged if pct <= 0 else max(1, math.ceil(charged * (100 - pct) / 100))
+        return money_uy if pct <= 0 else max(1, math.ceil(money_uy * (100 - pct) / 100))
 
     def spend_discount_pct(self, account_id: str) -> int:
         """What the running tariff takes off a spend right now; 0 when there is none."""
@@ -1886,8 +1887,11 @@ class Cloud:
         cached part of the prompt at its cached rate, the idle hours at the idle price. The
         ledger line's `extra` says when either applied, so a statement can be checked."""
         at = self.clock() if at is None else at
-        charged = self.discount(math.ceil(prompt_tokens * model.in_mult + completion_tokens * model.out_mult), caller.account_id)
+        charged = math.ceil(prompt_tokens * model.in_mult + completion_tokens * model.out_mult)
+        # what the provider bills the relay (telemetry, and the margin's other half) and what
+        # the account pays: the operator's sale rate, less the running tariff's share
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
+        sale = self.discount(self.s.chat_charge_uy(model, prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
         detail: dict[str, Any] = {}
         if cached_tokens > 0:
             detail["cached_tokens"] = min(max(0, cached_tokens), max(0, prompt_tokens))
@@ -1902,6 +1906,7 @@ class Cloud:
             charged,
             request_id,
             cost_uy=cost,
+            sale_uy=sale,
             extra=json.dumps(detail) if detail else "",
         )
         self.settle_invite(caller.account_id)
@@ -1909,7 +1914,7 @@ class Cloud:
 
     def charge_image(self, caller: Caller, model: ModelSpec, n: int, request_id: str, size: str | None = None, inputs: int = 0) -> int:
         """`n` pictures out at the tier `size` falls in; `inputs` pictures sent in (an edit)."""
-        charged = self.discount(model.per_image * max(1, n), caller.account_id)
+        charged = model.per_image * max(1, n)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
         self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost)
         self.settle_invite(caller.account_id)
@@ -1934,7 +1939,7 @@ class Cloud:
             spec = self.s.unlisted_model(model_id, "video")  # a member's own pick
         account_id = str(task["account_id"])
         # The stored money price remains payable even if the model left the menu.
-        charged = self.discount(spec.per_clip if spec is not None else 0, account_id)
+        charged = spec.per_clip if spec is not None else 0
         recorded = self.db.charge(
             account_id,
             "video",
