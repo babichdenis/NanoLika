@@ -900,6 +900,7 @@ def create_app(
         async def gen() -> AsyncIterator[bytes]:
             usage: Usage | None = None
             text_len = 0
+            text_cjk = 0
             # the assistant's words: the estimate when the provider sends no usage, and the
             # kept turn of a contributing account
             reply: list[str] = []
@@ -935,9 +936,21 @@ def create_app(
                                         usage = u
                                     for ch in obj.get("choices") or []:
                                         d = ch.get("delta") if isinstance(ch, dict) else None
-                                        if isinstance(d, dict) and isinstance(d.get("content"), str):
-                                            text_len += len(d["content"])
-                                            reply.append(d["content"])
+                                        if isinstance(d, dict):
+                                            # Count generated tool arguments and reasoning too, while keeping
+                                            # the training sample limited to the visible assistant's words.
+                                            for field in ("content", "reasoning_content", "tool_calls", "function_call"):
+                                                part = d.get(field)
+                                                if isinstance(part, str):
+                                                    metered = part
+                                                elif isinstance(part, (dict, list)) and part:
+                                                    metered = dumps(part)
+                                                else:
+                                                    continue
+                                                text_len += len(metered)
+                                                text_cjk += sum(1 for char in metered if "\u4e00" <= char <= "\u9fff")
+                                            if isinstance(d.get("content"), str):
+                                                reply.append(d["content"])
                                     obj["model"] = spec.id
                                     payload = dumps(obj)
                             yield f"data: {payload}\n\n".encode()
@@ -953,13 +966,15 @@ def create_app(
                 yield f"data: {dumps(err)}\n\n".encode()
                 yield b"data: [DONE]\n\n"
             finally:
-                if not failed:
-                    if usage is None:
-                        usage = Usage(fallback_prompt_tokens, estimate_tokens("".join(reply)))
-                    cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
-                    if sample_meta is not None:
-                        cloud.keep_sample(caller, spec.id, sample_messages, "".join(reply), usage.prompt, usage.completion, sample_meta)
-                cloud.settle(caller, request_id)
+                try:
+                    if not failed and (usage is not None or text_len > 0):
+                        if usage is None:
+                            usage = Usage(fallback_prompt_tokens, text_cjk + math.ceil((text_len - text_cjk) / 3.5))
+                        cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
+                        if sample_meta is not None:
+                            cloud.keep_sample(caller, spec.id, sample_messages, "".join(reply), usage.prompt, usage.completion, sample_meta)
+                finally:
+                    cloud.settle(caller, request_id)
 
         return StreamingResponse(
             gen(),

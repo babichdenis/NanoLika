@@ -94,6 +94,9 @@ class OperatorClient:
         self.url = url.rstrip("/")
         self._token = token
         self.timeout = timeout
+        # The operator is a local control channel, never a provider request. System
+        # proxy settings must not receive its bearer token or screenshots.
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         data = json.dumps(body or {}).encode() if method == "POST" else None
@@ -108,7 +111,7 @@ class OperatorClient:
             },
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 — loopback, our own server
+            with self._opener.open(req, timeout=self.timeout) as resp:  # noqa: S310 — loopback, our own server
                 raw = resp.read(MAX_BODY)
         except urllib.error.HTTPError as exc:
             detail = ""

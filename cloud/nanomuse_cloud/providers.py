@@ -107,10 +107,8 @@ def guidance(region: str, docs_url: str) -> dict[str, Any]:
         for p in cat["providers"]
         if p["id"] not in first and p["id"] not in LOCAL and p["id"] != "custom" and not p.get("session_header") and _fits(p, region)
     ]
-    session = [p for p in cat["providers"] if p.get("session_header") and _fits(p, region)]
     # the rest grouped by what they can do: the fuller key first, the catalogue's order within
     rest.sort(key=lambda p: -len(p["capabilities"]))
-    providers = [_public(by_id[pid], region) for pid in first] + [_public(p, region) for p in rest]
     plans = []
     for plan in PLANS:
         p = by_id.get(plan["provider"])

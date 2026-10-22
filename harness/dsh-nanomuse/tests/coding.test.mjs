@@ -605,7 +605,17 @@ test('service: coding.send with wait streams event frames with the run id and an
     // without wait: the run comes back at once, still running, then settles
     const quick = await svc.handle('coding.send', { agent: 'claude', text: 'pong', wait: false })
     assert.equal(quick.status, 'running')
-    await new Promise((r) => setTimeout(r, 1500))
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { unsubscribe(); reject(new Error('the quick run did not finish')) }, 15_000)
+      const complete = () => {
+        if (svc.listRuns().find((r) => r.id === quick.id)?.status !== 'done') return
+        clearTimeout(timer)
+        unsubscribe()
+        resolve()
+      }
+      const unsubscribe = svc.subscribe(complete)
+      complete()
+    })
     assert.equal(svc.listRuns().find((r) => r.id === quick.id).status, 'done')
   })
 })

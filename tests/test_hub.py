@@ -1065,7 +1065,9 @@ def test_the_account_memory_is_read_and_written_from_another_device(hub_server) 
     assert "memory.add" in relay.hello["device"]["actions"]
     assert "memory.search" in relay.hello["device"]["actions"]
 
-    relay.call_runtime("memory.add", {"content": "Denis works in the evenings", "category": "routine"}, "m1")
+    relay.call_runtime(
+        "memory.add", {"content": "Denis works in the evenings", "category": "routine"}, "m1"
+    )
     res = relay.next_frame("result")
     assert res["id"] == "m1" and res["ok"] is True
     mid = res["body"]["id"]

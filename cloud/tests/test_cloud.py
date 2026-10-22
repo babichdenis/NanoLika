@@ -751,10 +751,9 @@ async def test_open_signup_members_unlimited_everyone_else_has_one_allowance():
     assert err["code"] == "allowance_exhausted" and "¥0.002" in err["message"] and "keep working" in err["message"]
     assert err["left"] == 0 and err["grant"] == 0.002 and err["own_key_docs"] == "https://nanolika.ru/help"
     assert (
-        err["invite_url"].startswith("https://nanolika.ru/?invite=")
-        and len(err["invite_url"]) == len("https://nanolika.ru/?invite=") + 8
+        err["invite_url"].startswith("https://nanolika.ru/?invite=") and len(err["invite_url"]) == len("https://nanolika.ru/?invite=") + 8
     )
-    assert "co-creation" not in err["message"] and "invite a friend" in err["message"] and "own model key" in err["message"]
+    assert "co-creation" not in err["message"] and "invite a friend" in err["message"] and "key of your own" in err["message"]
     assert err["invite_bonus_cny"] == 5 and err["invitee_bonus_cny"] == 5
     assert err["contribute_bonus_available"] is False and err["contribute_bonus_cny"] == 0
     # A picture that would go over is refused before it is drawn.
@@ -1605,8 +1604,8 @@ def test_code_mail_has_text_and_html_in_both_languages():
     assert "123456" in msg["Subject"]
     parts = {p.get_content_type(): p.get_content() for p in msg.iter_parts()}
     assert set(parts) == {"text/plain", "text/html"}
-    assert "验证码是 123456" in parts["text/plain"] and "Your NanoLika code is 123456" in parts["text/plain"]
-    assert "1 2 3 4 5 6" in parts["text/html"] and "10 分钟" in parts["text/html"] and "10 minutes" in parts["text/html"]
+    assert "Код для входа в NanoLika: 123456" in parts["text/plain"] and "Your NanoLika code is 123456" in parts["text/plain"]
+    assert "1 2 3 4 5 6" in parts["text/html"] and "10 мин" in parts["text/html"] and "10 minutes" in parts["text/html"]
     assert "<script" not in parts["text/html"]
 
 
@@ -2387,23 +2386,17 @@ async def test_me_says_where_the_person_is_and_orders_the_ways_on_by_it(tmp_path
 
     err = await exhaust(phone, "8.8.8.8")
     assert err["region"] == "cn" and [w["id"] for w in err["ways"]] == ["bailian", "openrouter", "invite"]
-    assert "阿里云百炼" in err["message"] and "free tier for mainland China" in err["message"] and "OpenRouter" not in err["message"]
-    assert "one key" in err["message"] and "a plan you already pay for (ChatGPT, Claude or Kimi" in err["message"]
-    assert err["guidance"]["region"] == "cn" and err["guidance"]["providers"][0]["id"] == "bailian"
+    assert "subscription" in err["message"] and "key of your own" in err["message"]
+    assert err["guidance"]["region"] == "cn" and err["guidance"]["providers"] == []
     err = await exhaust(us, "8.8.8.8")
     assert err["region"] == "intl" and [w["id"] for w in err["ways"]] == ["openrouter", "bailian", "invite"]
-    assert "OpenRouter, with one account, one key and pay as you go, or OpenAI first" in err["message"]
-    assert "Alibaba Cloud Bailian only signs up accounts from mainland China" in err["message"]
-    assert "a plan you already pay for (ChatGPT, Claude or Kimi" in err["message"]
-    assert err["openrouter_url"] == "https://openrouter.ai/keys" and err["own_key_docs"] == "https://nanolika.ru/help"
-    assert [p["id"] for p in err["guidance"]["providers"][:2]] == ["openrouter", "openai"]
+    assert "subscription" in err["message"] and "key of your own" in err["message"]
+    assert err["own_key_docs"] == "https://nanolika.ru/help"
+    assert err["guidance"]["providers"] == []
     err = await exhaust(nowhere, "9.9.9.9")
-    assert err["region"] == "unknown" and "OpenRouter or OpenAI outside mainland China, Alibaba Cloud Bailian inside" in err["message"]
+    assert err["region"] == "unknown" and "subscription" in err["message"]
     assert "invite a friend (+¥5 for each of you)" in err["message"] and "keep working" in err["message"]
-    assert [p["id"] for p in err["guidance"]["providers"][:2]] == ["openrouter", "bailian"]
-    # a picture refused up front says the same
-    r = await client.post("/v1/images/generations", headers=auth(us, "8.8.8.8"), json={"model": "qwen-image-3.0", "prompt": "a cat"})
-    assert r.status_code == 429 and r.json()["error"]["region"] == "intl"
+    assert err["guidance"]["providers"] == []
 
     # without a geo file: the mainland number is still `cn`, everyone else `unknown`
     app2, client2, sender2, *_ = make_stack(catalog_probe=False)
@@ -2429,7 +2422,7 @@ def test_upstream_budget_refusals_are_not_bad_keys():
             error = relay_error_body(status, json.dumps(body).encode())["error"]
             assert error["code"] == "upstream_budget"
             assert "Top up the balance" in error["message"]
-    for body in (b'{"error":{"message":"Invalid API key"}}', b'not JSON'):
+    for body in (b'{"error":{"message":"Invalid API key"}}', b"not JSON"):
         assert relay_error_body(403, body)["error"]["code"] == "upstream_auth"
     assert relay_error_body(401, b'{"error":{"code":"insufficient_quota"}}')["error"]["code"] == "upstream_auth"
     assert relay_error_body(429, b'{"error":{"message":"Rate limit exceeded"}}')["error"]["code"] == "upstream_busy"

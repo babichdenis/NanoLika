@@ -563,3 +563,7 @@ Devices: `GET /v1/devices` lists the account's devices (online or last seen),
 itself; the frames are in [hub.md](hub.md). Conversations: `/v1/sync/state`,
 `/v1/sync/changes` and `/v1/sync/conversations/{cid}`; see the section
 [Conversation sync](#conversation-sync) above.
+
+## Reliable metering
+
+Provider attempts count toward the per-minute limit even when the provider refuses them. Interrupted streams include received tool-call arguments and reasoning in the fallback estimate when final usage is unavailable. Video completion and its ledger charge commit in one transaction, so a failed write can be retried without losing or duplicating the charge.

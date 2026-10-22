@@ -24,122 +24,231 @@ def replace_values(path: Path, values: dict[str, str]) -> None:
 
 def swift_color(light: str, dark: str) -> str:
     """A dynamic UIKit colour, resolved by the person's appearance choice."""
+
     def rgb(color: str) -> str:
-        channels = [int(color[i:i + 2], 16) / 255 for i in [0, 2, 4]]
-        return "UIColor(red: %.5f, green: %.5f, blue: %.5f, alpha: 1)" % tuple(channels)
+        channels = [int(color[i : i + 2], 16) / 255 for i in [0, 2, 4]]
+        return f"UIColor(red: {channels[0]:.5f}, green: {channels[1]:.5f}, blue: {channels[2]:.5f}, alpha: 1)"
+
     return f"Color(UIColor {{ $0.userInterfaceStyle == .dark ? {rgb(dark)} : {rgb(light)} }})"
 
 
 def apply() -> None:
     """Idempotent rebranding step. Stored appearance choices always win."""
-    replace_values(ANDROID / "com/openminis/app/ui/theme/Theme.kt", {
-        "TealPrimary": "52694E", "TealPrimaryContainer": "E1E8D8",
-        "TealOnPrimaryContainer": "354B32", "TealSecondary": "66675B",
-        "TealSecondaryContainer": "EEE7D9", "TealOnSecondaryContainer": "38372F",
-        "TealTertiary": "986C2F", "TealTertiaryContainer": "F0DFBD",
-        "TealOnTertiaryContainer": "4C371C", "TealBackground": "F7F1E6",
-        "TealSurface": "FBF6EC", "TealOnBackground": "38372F",
-        "TealOnSurface": "38372F", "TealSurfaceVariant": "EEE7D9",
-        "TealOnSurfaceVariant": "66675B", "TealOutline": "797B6B",
-        "TealDarkPrimary": "B3CBA5", "TealDarkOnPrimary": "242820",
-        "TealDarkPrimaryContainer": "394734", "TealDarkOnPrimaryContainer": "E1E8D8",
-        "TealDarkBackground": "242820", "TealDarkSurface": "2D3229",
-        "TealDarkOnBackground": "F7F1E6", "TealDarkOnSurface": "F7F1E6",
-        "TealDarkSurfaceVariant": "363C31", "TealDarkOnSurfaceVariant": "B8BEAC",
-        "NeutralGroupedBg": "F7F1E6", "NeutralGroupedCard": "FBF6EC",
-        "NeutralGroupedCardElevated": "EEE7D9", "NeutralOutline": "D8D1C1",
-        "NeutralDarkGroupedBg": "242820", "NeutralDarkGroupedCard": "2D3229",
-        "NeutralDarkGroupedCardElevated": "363C31", "NeutralDarkOutline": "505847",
-    })
+    replace_values(
+        ANDROID / "com/openminis/app/ui/theme/Theme.kt",
+        {
+            "TealPrimary": "52694E",
+            "TealPrimaryContainer": "E1E8D8",
+            "TealOnPrimaryContainer": "354B32",
+            "TealSecondary": "66675B",
+            "TealSecondaryContainer": "EEE7D9",
+            "TealOnSecondaryContainer": "38372F",
+            "TealTertiary": "986C2F",
+            "TealTertiaryContainer": "F0DFBD",
+            "TealOnTertiaryContainer": "4C371C",
+            "TealBackground": "F7F1E6",
+            "TealSurface": "FBF6EC",
+            "TealOnBackground": "38372F",
+            "TealOnSurface": "38372F",
+            "TealSurfaceVariant": "EEE7D9",
+            "TealOnSurfaceVariant": "66675B",
+            "TealOutline": "797B6B",
+            "TealDarkPrimary": "B3CBA5",
+            "TealDarkOnPrimary": "242820",
+            "TealDarkPrimaryContainer": "394734",
+            "TealDarkOnPrimaryContainer": "E1E8D8",
+            "TealDarkBackground": "242820",
+            "TealDarkSurface": "2D3229",
+            "TealDarkOnBackground": "F7F1E6",
+            "TealDarkOnSurface": "F7F1E6",
+            "TealDarkSurfaceVariant": "363C31",
+            "TealDarkOnSurfaceVariant": "B8BEAC",
+            "NeutralGroupedBg": "F7F1E6",
+            "NeutralGroupedCard": "FBF6EC",
+            "NeutralGroupedCardElevated": "EEE7D9",
+            "NeutralOutline": "D8D1C1",
+            "NeutralDarkGroupedBg": "242820",
+            "NeutralDarkGroupedCard": "2D3229",
+            "NeutralDarkGroupedCardElevated": "363C31",
+            "NeutralDarkOutline": "505847",
+        },
+    )
     path = ANDROID / "com/openminis/app/ui/theme/ChatColors.kt"
     text = path.read_text()
     palettes = {
-        "Light": {"background": "F7F1E6", "secondaryBg": "EEE7D9", "inputBg": "FBF6EC",
-                  "inputIconBg": "EEE7D9", "primaryText": "38372F", "secondaryText": "66675B",
-                  "tertiaryText": "737466", "userBubble": "52694E", "onUserBubble": "FBF6EC",
-                  "assistantBubble": "EEE7D9", "toolBg": "FBF6EC", "toolCapsuleBg": "EEE7D9",
-                  "sendButton": "52694E", "inlineCodeBg": "E1E8D8", "inlineCodeText": "354B32",
-                  "link": "52694E", "thinking": "52694E", "fabAccent": "52694E",
-                  "sheetHeaderBg": "FBF6EC"},
-        "Dark": {"background": "242820", "secondaryBg": "2D3229", "inputBg": "2D3229",
-                 "inputIconBg": "363C31", "primaryText": "F7F1E6", "secondaryText": "B8BEAC",
-                 "tertiaryText": "A0AA91", "userBubble": "B3CBA5", "onUserBubble": "242820",
-                 "assistantBubble": "363C31", "toolBg": "2D3229", "toolCapsuleBg": "363C31",
-                 "sendButton": "B3CBA5", "inlineCodeBg": "394734", "inlineCodeText": "E1E8D8",
-                 "link": "B3CBA5", "thinking": "B3CBA5", "fabAccent": "B3CBA5",
-                 "sheetHeaderBg": "2D3229"},
+        "Light": {
+            "background": "F7F1E6",
+            "secondaryBg": "EEE7D9",
+            "inputBg": "FBF6EC",
+            "inputIconBg": "EEE7D9",
+            "primaryText": "38372F",
+            "secondaryText": "66675B",
+            "tertiaryText": "737466",
+            "userBubble": "52694E",
+            "onUserBubble": "FBF6EC",
+            "assistantBubble": "EEE7D9",
+            "toolBg": "FBF6EC",
+            "toolCapsuleBg": "EEE7D9",
+            "sendButton": "52694E",
+            "inlineCodeBg": "E1E8D8",
+            "inlineCodeText": "354B32",
+            "link": "52694E",
+            "thinking": "52694E",
+            "fabAccent": "52694E",
+            "sheetHeaderBg": "FBF6EC",
+        },
+        "Dark": {
+            "background": "242820",
+            "secondaryBg": "2D3229",
+            "inputBg": "2D3229",
+            "inputIconBg": "363C31",
+            "primaryText": "F7F1E6",
+            "secondaryText": "B8BEAC",
+            "tertiaryText": "A0AA91",
+            "userBubble": "B3CBA5",
+            "onUserBubble": "242820",
+            "assistantBubble": "363C31",
+            "toolBg": "2D3229",
+            "toolCapsuleBg": "363C31",
+            "sendButton": "B3CBA5",
+            "inlineCodeBg": "394734",
+            "inlineCodeText": "E1E8D8",
+            "link": "B3CBA5",
+            "thinking": "B3CBA5",
+            "fabAccent": "B3CBA5",
+            "sheetHeaderBg": "2D3229",
+        },
     }
     for mood, colors in palettes.items():
         pattern = rf"val {mood}ChatPalette = ChatPalette\((.*?)\n\)"
+
         def update(match: re.Match[str], colors: dict[str, str] = colors) -> str:
             block = match.group(0)
             for name, color in colors.items():
-                block = re.sub(rf"(\b{name} = )(?:Color\([^)]*\)|Color.White)",
-                               rf"\g<1>Color(0xFF{color})", block)
+                block = re.sub(
+                    rf"(\b{name} = )(?:Color\([^)]*\)|Color.White)",
+                    rf"\g<1>Color(0xFF{color})",
+                    block,
+                )
             return block
+
         text = re.sub(pattern, update, text, flags=re.S)
     if "// NanoLika: paper/sage palette" not in text:
-        text = text.replace("val LightChatPalette", "// NanoLika: paper/sage palette generated by scripts/nanolika_theme.py.\nval LightChatPalette", 1)
+        text = text.replace(
+            "val LightChatPalette",
+            "// NanoLika: paper/sage palette generated by scripts/nanolika_theme.py.\nval LightChatPalette",
+            1,
+        )
     path.write_text(text)
     # Phone shell surfaces use the same named values as the chat.
     path = ANDROID / "io/github/nanomuse/ui/home/MuseTones.kt"
     text = path.read_text().replace("Color.White", "Color(0xFFFBF6EC)")
-    for old, new in {"1C1C1E": "2D3229", "2A2A2E": "363C31", "F1F1F4": "EEE7D9",
-                     "26262A": "363C31", "E9EAEC": "EEE7D9", "F1EFEB": "F7F1E6",
-                     "E5E5EA": "D8D1C1", "000000": "242820", "F3F3F5": "F7F1E6",
-                     "0A66E4": "52694E"}.items():
+    for old, new in {
+        "1C1C1E": "2D3229",
+        "2A2A2E": "363C31",
+        "F1F1F4": "EEE7D9",
+        "26262A": "363C31",
+        "E9EAEC": "EEE7D9",
+        "F1EFEB": "F7F1E6",
+        "E5E5EA": "D8D1C1",
+        "000000": "242820",
+        "F3F3F5": "F7F1E6",
+        "0A66E4": "52694E",
+    }.items():
         text = text.replace("0xFF" + old, "0xFF" + new)
-    text = text.replace("val action: Color = Color(0xFF52694E)", "val action: Color\n        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFFB3CBA5) else Color(0xFF52694E)")
+    text = text.replace(
+        "val action: Color = Color(0xFF52694E)",
+        "val action: Color\n        @Composable @ReadOnlyComposable get() = if (dark) Color(0xFFB3CBA5) else Color(0xFF52694E)",
+    )
     path.write_text(text)
     path = IOS / "Views/Chat/AIChatView.swift"
     text = path.read_text()
     start = text.index("enum ChatColors {")
     end = text.index("\n}", start) + 2
-    colors = {"background": ("F7F1E6", "242820"), "secondaryBg": ("EEE7D9", "363C31"),
-              "inputIconBg": ("EEE7D9", "363C31"), "inputBg": ("FBF6EC", "2D3229"),
-              "primaryText": ("38372F", "F7F1E6"), "secondaryText": ("66675B", "B8BEAC"),
-              "tertiaryText": ("737466", "A0AA91"), "userBubble": ("52694E", "B3CBA5"),
-              "toolBg": ("FBF6EC", "2D3229"), "accent": ("52694E", "B3CBA5"),
-              "sendButton": ("52694E", "B3CBA5"), "inputIconBorder": ("D8D1C1", "505847"),
-              "inputBorder": ("D8D1C1", "505847"), "toolBorder": ("D8D1C1", "505847"),
-              "sendButtonDisabled": ("BEC5B0", "505847")}
-    block = "// NanoLika: generated paper/sage palette, scripts/nanolika_theme.py.\nenum ChatColors {\n"
-    block += "\n".join(f"    static let {name} = {swift_color(*pair)}" for name, pair in colors.items()) + "\n}"
+    colors = {
+        "background": ("F7F1E6", "242820"),
+        "secondaryBg": ("EEE7D9", "363C31"),
+        "inputIconBg": ("EEE7D9", "363C31"),
+        "inputBg": ("FBF6EC", "2D3229"),
+        "primaryText": ("38372F", "F7F1E6"),
+        "secondaryText": ("66675B", "B8BEAC"),
+        "tertiaryText": ("737466", "A0AA91"),
+        "userBubble": ("52694E", "B3CBA5"),
+        "toolBg": ("FBF6EC", "2D3229"),
+        "accent": ("52694E", "B3CBA5"),
+        "sendButton": ("52694E", "B3CBA5"),
+        "inputIconBorder": ("D8D1C1", "505847"),
+        "inputBorder": ("D8D1C1", "505847"),
+        "toolBorder": ("D8D1C1", "505847"),
+        "sendButtonDisabled": ("BEC5B0", "505847"),
+    }
+    block = (
+        "// NanoLika: generated paper/sage palette, scripts/nanolika_theme.py.\nenum ChatColors {\n"
+    )
+    block += (
+        "\n".join(f"    static let {name} = {swift_color(*pair)}" for name, pair in colors.items())
+        + "\n}"
+    )
     # Replacing the whole generated block keeps a second run byte-identical.
     marker = "// NanoLika: generated paper/sage palette, scripts/nanolika_theme.py.\n"
-    if text[max(0, start - len(marker)):start] == marker:
+    if text[max(0, start - len(marker)) : start] == marker:
         start -= len(marker)
     path.write_text(text[:start] + block + text[end:])
     path = IOS / "NanoMuse/NanoMuseFaces.swift"
     text = path.read_text()
-    tones = {"surface": ("FBF6EC", "2D3229"), "fill": ("E1E8D8", "394734"),
-             "bubble": ("EEE7D9", "363C31"), "disc": ("F7F1E6", "363C31"),
-             "hairline": ("D8D1C1", "505847"), "canvas": ("F7F1E6", "242820"),
-             "action": ("52694E", "B3CBA5"), "ink": ("52694E", "B3CBA5"),
-             "onInk": ("FBF6EC", "242820"), "agentPill": ("EEE7D9", "363C31")}
+    tones = {
+        "surface": ("FBF6EC", "2D3229"),
+        "fill": ("E1E8D8", "394734"),
+        "bubble": ("EEE7D9", "363C31"),
+        "disc": ("F7F1E6", "363C31"),
+        "hairline": ("D8D1C1", "505847"),
+        "canvas": ("F7F1E6", "242820"),
+        "action": ("52694E", "B3CBA5"),
+        "ink": ("52694E", "B3CBA5"),
+        "onInk": ("FBF6EC", "242820"),
+        "agentPill": ("EEE7D9", "363C31"),
+    }
     for name, pair in tones.items():
-        text = re.sub(rf"    static let {name} = [^\n]+", f"    static let {name} = {swift_color(*pair)}", text)
+        text = re.sub(
+            rf"    static let {name} = [^\n]+",
+            f"    static let {name} = {swift_color(*pair)}",
+            text,
+        )
     path.write_text(text)
     # Light paper is the factory choice, while explicit system/dark preferences are retained.
-    for name in ["com/openminis/app/MainActivity.kt", "com/openminis/app/ui/settings/AppearanceScreen.kt"]:
+    for name in [
+        "com/openminis/app/MainActivity.kt",
+        "com/openminis/app/ui/settings/AppearanceScreen.kt",
+    ]:
         path = ANDROID / name
-        text = path.read_text().replace("getInt(KEY_THEME_MODE, 0)", "getInt(KEY_THEME_MODE, 1) /* NanoLika: paper default */")
+        text = path.read_text().replace(
+            "getInt(KEY_THEME_MODE, 0)", "getInt(KEY_THEME_MODE, 1) /* NanoLika: paper default */"
+        )
         path.write_text(text)
     path = ANDROID / "com/openminis/app/config/ConfigBuiltins.kt"
     text = path.read_text()
-    text = re.sub(r'(key = "theme_mode",\s*cases = listOf\("system", "light", "dark"\),\s*defaultIndex = )0',
-                  r'\g<1>1, // NanoLika: paper default', text).replace('1, // NanoLika: paper default,', '1, // NanoLika: paper default')
+    text = re.sub(
+        r'(key = "theme_mode",\s*cases = listOf\("system", "light", "dark"\),\s*defaultIndex = )0',
+        r"\g<1>1, // NanoLika: paper default",
+        text,
+    ).replace("1, // NanoLika: paper default,", "1, // NanoLika: paper default")
     path.write_text(text)
     for path in IOS.rglob("*.swift"):
         text = path.read_text()
-        new = re.sub(r'(@AppStorage\("appearanceMode"\) private var appearanceMode(?:: Int)? = )0',
-                     r'\g<1>1 // NanoLika: paper default', text)
+        new = re.sub(
+            r'(@AppStorage\("appearanceMode"\) private var appearanceMode(?:: Int)? = )0',
+            r"\g<1>1 // NanoLika: paper default",
+            text,
+        )
         if new != text:
             path.write_text(new)
     path = IOS / "Shared/Config/ConfigRegistry+Builtins.swift"
     text = path.read_text()
-    text = re.sub(r'(userDefaultsKey: "appearanceMode",\s*cases: \["system", "light", "dark"\],\s*defaultIndex: )0',
-                  r'\g<1>1 // NanoLika: paper default', text)
+    text = re.sub(
+        r'(userDefaultsKey: "appearanceMode",\s*cases: \["system", "light", "dark"\],\s*defaultIndex: )0',
+        r"\g<1>1 // NanoLika: paper default",
+        text,
+    )
     path.write_text(text)
 
     for folder, color in [("values", "#F7F1E6"), ("values-night", "#242820")]:
@@ -148,10 +257,12 @@ def apply() -> None:
         for item in ["android:windowBackground", "android:colorBackground"]:
             text = re.sub(rf'(<item name="{item}">)[^<]+', rf"\g<1>{color}", text)
         if "NanoLika: paper startup" not in text:
-            text = text.replace("<resources>", "<!-- NanoLika: paper startup, generated by scripts/nanolika_theme.py. -->\n<resources>")
+            text = text.replace(
+                "<resources>",
+                "<!-- NanoLika: paper startup, generated by scripts/nanolika_theme.py. -->\n<resources>",
+            )
         path.write_text(text)
 
 
 if __name__ == "__main__":
     apply()
-

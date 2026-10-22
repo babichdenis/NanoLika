@@ -54,6 +54,10 @@ def _own_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     into that data directory, and an exported ``OPENAI_API_KEY`` shows a "no key" test a
     key. Each test starts without them; one that needs a variable sets it itself.
     """
+    # Local integration servers must not travel through the developer's system proxy.
+    # A proxy-specific test can override these variables explicitly with monkeypatch.
+    monkeypatch.setenv("NO_PROXY", "*")
+    monkeypatch.setenv("no_proxy", "*")
     for name in list(os.environ):
         if name.startswith("NANOMUSE_") or name in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY"):
             monkeypatch.delenv(name, raising=False)

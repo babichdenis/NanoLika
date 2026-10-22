@@ -82,7 +82,15 @@ async def test_settings_change_at_once_and_reach_older_accounts_only_when_asked(
     assert me1["spend"]["grant"] == 30
 
     # Bounds and unknown keys.
-    for bad in ({"allowance_cny": 5000}, {"allowance_cny": "ten"}, {"invite_bonus_cny": -1}, {"signup_open": "maybe"}, {"usd_cny": 5000}, {"rub_per_usd": -1}, {"topup_fee_pct": 200}):
+    for bad in (
+        {"allowance_cny": 5000},
+        {"allowance_cny": "ten"},
+        {"invite_bonus_cny": -1},
+        {"signup_open": "maybe"},
+        {"usd_cny": 5000},
+        {"rub_per_usd": -1},
+        {"topup_fee_pct": 200},
+    ):
         r = await client.post("/v1/admin/settings", headers=ADMIN, json=bad)
         assert r.status_code == 400, bad
     assert (await client.post("/v1/admin/settings", json={"allowance_cny": 1})).status_code == 401
@@ -116,7 +124,9 @@ async def test_money_is_shown_in_rubles_once_the_operator_prices_in_them_and_off
 
     # A charged request moves the ruble figures with the yuan ones, and only the display:
     # 100 prompt + 50 completion tokens at ¥3 / ¥12 per million are still ¥0.0009.
-    r = await client.post("/v1/chat/completions", headers=headers, json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]})
+    r = await client.post(
+        "/v1/chat/completions", headers=headers, json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]}
+    )
     assert r.status_code == 200, r.text
     me = (await client.get("/v1/me", headers=headers)).json()
     assert me["spend"]["total"] == 0.0009 and me["spend"]["left"] == 9.9991

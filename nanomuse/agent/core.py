@@ -273,7 +273,11 @@ class MuseAgent:
         if fixed not in ("", "auto"):
             # the setting holds a tag ("ru", "pt-BR") or a language's own name ("Deutsch");
             # either way the prompt wants that language, never the one the message came in
-            named = prompts.language_name(fixed) or (fixed if fixed != fixed.lower() else "") or prompts.detect_language(user_input)
+            named = (
+                prompts.language_name(fixed)
+                or (fixed if fixed != fixed.lower() else "")
+                or prompts.detect_language(user_input)
+            )
             return prompts.LANGUAGE_FIXED.format(language=named)
         detected = prompts.detect_language(user_input)
         ui = prompts.language_name(self.ui_language)

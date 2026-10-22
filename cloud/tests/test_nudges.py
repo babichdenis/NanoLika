@@ -20,7 +20,7 @@ async def test_defaults_are_served_publicly_with_an_hour_of_cache():
     assert r.json() == DEFAULT_NUDGES
     star = r.json()["star"]
     assert star["moments"]["tasks"] == [3, 10, 30] and star["moments"]["days_used"] == [7, 30]
-    assert star["cooldown_days"] == 7 and star["max_asks"] == 4 and star["enabled"] is True
+    assert star["cooldown_days"] == 7 and star["max_asks"] == 4 and star["enabled"] is False
     # the admin view says nothing is stored yet
     r = await client.get("/v1/admin/nudges", headers=ADMIN)
     assert r.status_code == 200

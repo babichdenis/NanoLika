@@ -405,14 +405,22 @@ def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
     wait_for(lambda: own in manager.routes)
     calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def call(to: str, action: str, args: dict[str, Any] | None = None, timeout: float = 120, on_event=None):  # noqa: ANN001
+    async def call(
+        to: str,
+        action: str,
+        args: dict[str, Any] | None = None,
+        timeout: float = 120,
+        on_event=None,
+    ):  # noqa: ANN001
         calls.append((to, action, dict(args or {})))
         if on_event is not None:
             await on_event({"stage": "tool", "name": "open_app", "summary": "Calendar"})
             await on_event({"stage": "text", "text": "On it."})
         return {"text": "The first meeting is at nine."}
 
-    monkeypatch.setattr(service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True})
+    monkeypatch.setattr(
+        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
+    )
     monkeypatch.setattr(service.hub, "call", call)
     fake.bus.inbound(dm("what is my first meeting tomorrow?"))
     wait_for(lambda: any("first meeting is at nine" in t for t in fake.texts()))
@@ -429,10 +437,18 @@ def test_a_primary_device_that_refuses_steps_aside(chan, monkeypatch):
     fake.bus.inbound(dm("one more"))
     wait_for(lambda: own in manager.routes)
 
-    async def call(to: str, action: str, args: dict[str, Any] | None = None, timeout: float = 120, on_event=None):  # noqa: ANN001
+    async def call(
+        to: str,
+        action: str,
+        args: dict[str, Any] | None = None,
+        timeout: float = 120,
+        on_event=None,
+    ):  # noqa: ANN001
         raise HubError("busy", "this conversation is already busy")
 
-    monkeypatch.setattr(service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True})
+    monkeypatch.setattr(
+        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
+    )
     monkeypatch.setattr(service.hub, "call", call)
     fake.bus.inbound(dm("what is my first meeting tomorrow?"))
     wait_for(lambda: any("MacBook" in t and "busy" in t for t in fake.texts()))

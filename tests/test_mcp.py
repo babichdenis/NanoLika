@@ -115,7 +115,13 @@ async def test_an_unreachable_url_server_is_skipped_not_cancelled():
     resolve used to surface as a *cancellation* of the caller (a 500 from the
     Connections page, and "Attempted to exit cancel scope in a different task" in the
     log). It is a skipped server like any other, and the caller's task goes on."""
-    manager = MCPManager([MCPServerSettings(name="nowhere", url="http://mcp.invalid./mcp?key=abc")])
+    manager = MCPManager(
+        [
+            MCPServerSettings(
+                name="nowhere", url="http://mcp.invalid./mcp?key=abc", connect_timeout_s=1
+            )
+        ]
+    )
     tools = await asyncio.wait_for(manager.connect(), timeout=30)
     assert tools == []
     task = asyncio.current_task()
@@ -166,3 +172,33 @@ async def test_a_refused_key_is_not_written_to_the_log():
     assert "?key=***&v=***" in joined, joined
     # the vault's redaction is applied too, for a secret outside the query
     assert manager._scrub("spawn failed: k-123 x") == "spawn failed: [REDACTED:MCP_KEY] x"
+
+
+async def test_stalled_mcp_attempt_is_closed_and_next_server_connects(monkeypatch):
+    """A connected transport that never handshakes cannot block the next server."""
+    from types import SimpleNamespace
+
+    from nanomuse.config import MCPServerSettings
+    from nanomuse.tools.mcp_tools import MCPManager
+
+    manager = MCPManager(
+        [
+            MCPServerSettings(name="stalled", command="unused", connect_timeout_s=0.02),
+            MCPServerSettings(name="healthy", command="unused", connect_timeout_s=1),
+        ]
+    )
+    closed = []
+
+    async def open_server(cfg, transport, stack):
+        stack.callback(lambda: closed.append(cfg.name))
+        if cfg.name == "stalled":
+            await asyncio.Event().wait()
+        return object(), SimpleNamespace(tools=[])
+
+    monkeypatch.setattr(manager, "_open", open_server)
+    try:
+        assert await asyncio.wait_for(manager.connect(), 1) == []
+        assert closed == ["stalled"]
+    finally:
+        await manager.close()
+    assert closed == ["stalled", "healthy"]

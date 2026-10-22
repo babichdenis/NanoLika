@@ -158,3 +158,7 @@ DELETE /v1/devices/{id}     Bearer                            → 204; 409 devic
 中继不认识的 key 得到 `401 bad_key`；0.1.40 起，账号已被删除的 key 改为得到 `401 account_deleted`，在每一个需要 key 的调用上都如此（`/v1/me`、`/v1/models`、`/v1/chat/completions`、同步和 hub 的调用），删除后持续 90 天；中继把已删除账号的 key 哈希保留这么久，别的什么都不留。不认识这个码的客户端看到的是和以前一样的 `401`；认识的客户端（手机）在 `account_deleted` 时删除账号的本地数据，其他情况都收起来保留（[sync.md](sync.md)）。完整的错误码表在 [`cloud/README.md`](../../cloud/README.md)。
 
 设备：`GET /v1/devices` 列出账号的设备（在线或最后出现的时间），`DELETE /v1/devices/{id}` 忘记一台离线的设备，`WS /v1/hub` 就是 hub 本身；帧在 [hub.md](hub.md)。对话：`/v1/sync/state`、`/v1/sync/changes` 和 `/v1/sync/conversations/{cid}`；见上面的[对话同步](#conversation-sync)一节。
+
+## 可靠计费 {#reliable-metering}
+
+即使服务商拒绝请求，请求尝试也计入每分钟限制。流中断且没有最终用量时，估算会包含已收到的工具调用参数和推理内容。视频完成标记和账单在同一事务中提交，写入失败后重试不会漏扣或重复扣费。

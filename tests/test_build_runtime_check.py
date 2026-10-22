@@ -37,6 +37,7 @@ class LoopbackServer(TCPServer):
 Path(os.environ["NANOMUSE_DATA_DIR"], "workspace").mkdir(parents=True)
 if sys.argv[1] == "waiting":
     print("waiting forever for startup", flush=True)
+    Path(os.environ["NANOMUSE_DATA_DIR"], "fixture-ready").touch()
     time.sleep(60)
 else:
     sys.stdout.write("x" * (1024 * 1024))
@@ -73,6 +74,15 @@ def probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Probe:
             # The process, pipes/files, server, polling and cleanup remain real.
             process = subprocess.Popen([sys.executable, str(child), mode, *command[1:]], **kwargs)
             processes.append(process)
+            if mode == "waiting":
+                ready = Path(kwargs["env"]["NANOMUSE_DATA_DIR"]) / "fixture-ready"
+                deadline = time.monotonic() + 15
+                while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                if not ready.exists():
+                    process.kill()
+                    process.wait(5)
+                    raise AssertionError("the timeout fixture did not start")
             return process
 
         monkeypatch.setattr(
@@ -107,7 +117,7 @@ def probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Probe:
 
         worker = threading.Thread(target=invoke, daemon=True)
         worker.start()
-        worker.join(5 if mode == "waiting" else 15)
+        worker.join(30 if mode == "waiting" else 45)
         hung = worker.is_alive()
         if hung:
             for process in processes:
@@ -162,3 +172,31 @@ def test_probe_does_not_accept_an_existing_service_on_8765(probe: Probe) -> None
         server.shutdown()
         server.server_close()
         worker.join(2)
+
+
+def test_failed_built_runtime_does_not_replace_the_staged_copy(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("runtime_atomic_stage", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "DIST", tmp_path / "dist")
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    (staged / "old-runtime").write_text("working", encoding="utf-8")
+
+    def build_output(*_args, **_kwargs):
+        built = module.DIST / "nanomuse"
+        built.mkdir(parents=True)
+        (built / ("nanomuse.exe" if sys.platform == "win32" else "nanomuse")).write_text(
+            "new", encoding="utf-8"
+        )
+
+    monkeypatch.setattr(module, "run", build_output)
+
+    def refuse(_exe):
+        raise SystemExit("new runtime failed its health check")
+
+    monkeypatch.setattr(module, "check", refuse)
+    with pytest.raises(SystemExit, match="health check"):
+        module.build(staged, verify=True)
+    assert (staged / "old-runtime").read_text(encoding="utf-8") == "working"

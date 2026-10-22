@@ -463,3 +463,11 @@ bundle（同一身份、hardened runtime、它自己的标识符 `io.github.nano
   放回去。
 - 日志是 `~/.nanomuse/desktop/desktop.log`（操作器的每个动作一行，`operator: click at 1249,1096`）；
   启动器那边的在 `journalctl --user -n 200`。
+
+## 打包当前修改 {#packaging-current-changes}
+
+`npm run dist` 和 `npm run dist:dir` 会先重新构建 NanoLika 插件并复制到暂存的 harness，再打包应用。暂存安装不存在时，先运行一次 `prepare-dsh`。简洁聊天界面保留账户用量指示，运行时网页客户端重连后会加载遗漏的记录。
+
+外部 MCP 服务器可设置 `connect_timeout_s`，每次传输连接默认 60 秒，必须大于零且不超过 300 秒。停滞的握手会先关闭，再尝试下一个服务器。
+
+Intel Mac 的冻结运行时应像 CI 一样，在独立环境中使用 `cryptography>=42,<49` 构建。更新版本的源码构建可能链接到与 Python 不同的 OpenSSL。启用 `--check` 后，新可执行文件必须先通过健康检查，才会替换暂存的旧运行时。本机操作器和聊天入口控制 API 不经过服务商代理或系统代理。

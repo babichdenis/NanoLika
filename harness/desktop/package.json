@@ -11,14 +11,15 @@
   "main": "./out/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postinstall": "node scripts/patch-file-type.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsc -p tsconfig.json && node --test tests/*.test.mjs",
+    "test": "node scripts/patch-file-type.mjs && tsc -p tsconfig.json && node --test tests/*.test.mjs",
     "prepare-dsh": "node scripts/prepare-dsh.mjs",
     "prepare-node": "node scripts/prepare-node.mjs",
     "start": "tsc -p tsconfig.json && electron .",
     "smoke": "node scripts/smoke.mjs",
-    "dist": "tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --publish never",
-    "dist:dir": "tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --dir",
+    "dist": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --dir",
     "check:update-feed": "node scripts/update-feed-check.mjs"
   },
   "devDependencies": {

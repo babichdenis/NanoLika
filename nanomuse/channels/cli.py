@@ -91,7 +91,12 @@ class _Server:
 
         try:
             response = httpx.request(
-                method, self.base + path, json=body, headers=self.headers, timeout=15
+                method,
+                self.base + path,
+                json=body,
+                headers=self.headers,
+                timeout=15,
+                trust_env=False,
             )
         except httpx.ConnectError:
             return None

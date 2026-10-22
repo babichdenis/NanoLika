@@ -39,7 +39,7 @@ LEGACY_DATA_DIR = Path.home() / ".nanomuse"
 DEFAULT_DATA_DIR = Path.home() / ".nanolika"
 
 
-def adopt_legacy_data_dir(home: Path = None) -> Path:
+def adopt_legacy_data_dir(home: Path | None = None) -> Path:
     """The data dir to use: ``~/.nanolika``, with ``~/.nanomuse`` renamed into it once."""
     target = home or DEFAULT_DATA_DIR
     # a sibling of the target: ~/.nanomuse next to ~/.nanolika, whatever the home really is
@@ -524,6 +524,7 @@ class MCPToolPolicy(BaseModel):
 
 class MCPServerSettings(BaseModel):
     name: str
+    connect_timeout_s: float = Field(default=60.0, gt=0, le=300)
     command: str | None = None
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)

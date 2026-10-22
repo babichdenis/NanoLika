@@ -4,6 +4,14 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Reliability
+
+- Kept local operator and channel-control traffic off system proxies, and checked a newly frozen runtime before replacing its working staged copy.
+
+- Reloaded missed web chat history after reconnecting, kept account spend visible in the simplified desktop, and rebuilt the plugin before packaging installers.
+- Committed video billing atomically, metered interrupted tool and reasoning streams, and counted failed provider attempts toward request limits.
+- Bounded MCP connection attempts so a stalled server no longer blocked later connections.
+
 ### Connection recovery
 
 - Recovered the iPhone chat model from the authenticated Cloud menu when a secondary model fetch failed or the default group contained only unavailable entries, while keeping working choices and a Cloud opt-out.

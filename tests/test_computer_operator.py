@@ -545,3 +545,11 @@ async def test_fallback_backends_map_the_picture_onto_their_space(
     await link2.act({"action": "click", "x": 798, "y": 498, "label": "Reload"})
     kind, x, y, *_ = plain.calls[-1]
     assert (round(x), round(y)) == (1440, 900)
+
+
+def test_local_operator_never_uses_the_provider_proxy(operator, monkeypatch):
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    assert op.OperatorClient(operator.url, TOKEN).info()["available"] is True

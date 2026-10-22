@@ -699,3 +699,11 @@ Plugin rows and tool names follow two rules, both learned the hard way:
   clipboard content is put back afterwards.
 - The log is `~/.nanolika/desktop/desktop.log` (each operator action is a line, `operator:
   click at 1249,1096`); the launcher's side is in `journalctl --user -n 200`.
+
+## Packaging current changes
+
+`npm run dist` and `npm run dist:dir` rebuild the NanoLika plugin and copy its output into the staged harness before packaging. Run `prepare-dsh` once when that staged installation is missing. The simplified chat keeps its account spend indicator visible. The runtime web client reloads missed history after reconnecting.
+
+External MCP servers accept `connect_timeout_s` (default 60 seconds, greater than zero and at most 300) per transport attempt. A stalled handshake is closed before the next server is tried.
+
+On Intel Macs, build the frozen runtime in an isolated environment with `cryptography>=42,<49`, as in CI. Newer source builds can pick up a different OpenSSL than the Python executable. With `--check`, the new executable must pass its health probe before the previous staged runtime is replaced. The local operator and channel-control API bypass provider and system proxies.

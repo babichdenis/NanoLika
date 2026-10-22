@@ -124,11 +124,11 @@ def test_the_code_mail_states_the_lifetime_in_whole_minutes_like_the_sms(monkeyp
     mail = SmtpSender(aliyun_settings(sender="smtp", smtp_host="smtp.test", smtp_from="NanoLika <no-reply@test>"))
     mail.send(parse("dev-a@example.com"), "482913")
     body = sent[-1].get_body(("plain",)).get_content()
-    assert "482913" in body and "10 分钟内有效" in body and "expires in 10 minutes" in body
+    assert "482913" in body and "10 мин." in body and "expires in 10 minutes" in body
     short = SmtpSender(aliyun_settings(sender="smtp", smtp_host="smtp.test", smtp_from="NanoLika <no-reply@test>", code_ttl_s=30))
     short.send(parse("dev-a@example.com"), "482913")
     body = sent[-1].get_body(("plain",)).get_content()
-    assert "1 分钟内有效" in body and "expires in 1 minutes" in body and "0 分钟" not in body
+    assert "1 мин." in body and "expires in 1 minutes" in body and "0 мин." not in body
     sms = AliyunSmsSender(aliyun_settings(code_ttl_s=30))
     assert json.loads(sms.params(parse("13800138000"), "482913")["TemplateParam"]) == {"code": "482913", "min": "1"}
 

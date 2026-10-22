@@ -1599,6 +1599,9 @@ class Cloud:
                 self.db.add_event(caller.account_id, "budget.refused", e.code)
             raise
         if request_id is not None:
+            t = now()
+            if self.s.per_minute_requests > 0 and not self.db.admit_request(caller.account_id, self.s.per_minute_requests, t - 60, t):
+                raise CloudError(429, "rate_limited", "Too many requests; slow down a little")
             self.in_flight.reserve(caller.account_id, request_id, cost_uy if hold_uy is None else hold_uy)
 
     def settle(self, caller: Caller, request_id: str) -> None:
@@ -1700,18 +1703,30 @@ class Cloud:
         task_id = str(task["task_id"])
         if status and status != task["status"]:
             self.db.set_video_status(task_id, str(status))
-        if status != "SUCCEEDED" or not self.db.mark_video_charged(task_id):
+        if status != "SUCCEEDED":
             return None
         model_id = str(task["model"])
         spec = self.s.model(model_id)
         if spec is None or spec.kind != "video":
             spec = self.s.unlisted_model(model_id, "video")  # a member's own pick
-        if spec is None:
-            return 0  # a model gone from the menu since the task was submitted
+        # The stored money price remains payable even if the model left the menu.
+        charged = spec.per_clip if spec is not None else 0
         account_id = str(task["account_id"])
-        self.db.charge(account_id, "video", spec.id, 0, 0, spec.per_clip, task_id[:16], cost_uy=int(task["cost_uy"] or 0))
+        recorded = self.db.charge(
+            account_id,
+            "video",
+            model_id,
+            0,
+            0,
+            charged,
+            task_id[:16],
+            cost_uy=int(task["cost_uy"] or 0),
+            video_task_id=task_id,
+        )
+        if not recorded:
+            return None
         self.settle_invite(account_id)
-        return spec.per_clip
+        return charged
 
     def note(self, account_id: str, kind: str, detail: str = "") -> None:
         """An event on the account's timeline (never message content)."""
@@ -2937,9 +2952,9 @@ def usage_from_json(obj: dict) -> Usage | None:
     empty one, a count that is not a number) — the caller then estimates. OpenAI's shape has
     the reasoning inside `completion_tokens` with the breakdown under
     `completion_tokens_details.reasoning_tokens` (DashScope's native name is
-    `output_tokens_details`); a provider that counts the reasoning *apart* reports more
-    reasoning than completion, and then the two are added, so a thinking model's turn is
-    never billed for its answer alone. The cached part of the prompt is
+    `output_tokens_details`). Native `completion_tokens` with `output_tokens_details`
+    counts reasoning apart; OpenAI `completion_tokens_details` and Responses
+    `output_tokens` already include it. The shape, not the relative size, decides. The cached part of the prompt is
     `prompt_tokens_details.cached_tokens` (a part of `prompt_tokens`, as the provider
     reports it); the Anthropic-shaped `cache_read_input_tokens` is counted *beside*
     `input_tokens` and is added to the prompt here."""
@@ -2967,8 +2982,12 @@ def usage_from_json(obj: dict) -> Usage | None:
         return None
     if prompt <= 0 and completion <= 0:
         return None
-    if reasoning > completion:
+    # Native completion + output_tokens_details reports reasoning separately.
+    # OpenAI completion_tokens_details and Responses output_tokens include it.
+    if "completion_tokens" in u and isinstance(u.get("output_tokens_details"), dict):
         completion += reasoning
+    else:
+        completion = max(completion, reasoning)
     return Usage(max(0, prompt), max(0, completion), min(max(0, cached), max(0, prompt)))
 
 

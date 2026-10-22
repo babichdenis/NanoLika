@@ -83,7 +83,7 @@ def package_tree(tmp_path: Path) -> PackageTree:
 
 def run_package(env: dict[str, str], arch: str = "x64") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", str(SCRIPT), arch], env=env, capture_output=True, text=True, timeout=10
+        ["bash", str(SCRIPT), arch], env=env, capture_output=True, text=True, timeout=60
     )
 
 

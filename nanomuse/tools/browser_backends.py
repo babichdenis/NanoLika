@@ -248,14 +248,15 @@ def _chrome_on_the_machine() -> str:
 
 def _installed_browsers() -> list[tuple[str, Path]]:
     """Where a Chrome-family browser would be on this system, most common first."""
-    if sys.platform == "darwin":
+    current_platform = str(sys.platform)
+    if current_platform == "darwin":
         mac = Path("/Applications")
         return [
             ("chrome", mac / "Google Chrome.app/Contents/MacOS/Google Chrome"),
             ("msedge", mac / "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
             ("brave", mac / "Brave Browser.app/Contents/MacOS/Brave Browser"),
         ]
-    if sys.platform.startswith("win"):
+    if current_platform.startswith("win"):
         found: list[tuple[str, Path]] = []
         for root in (
             os.environ.get("PROGRAMFILES"),

@@ -67,66 +67,25 @@ def test_catalogue_shape():
         assert pv.provider(pid)["capabilities"] == ["chat"]
 
 
-def test_guidance_orders_by_region():
-    cn = pv.guidance("cn", DOCS)
-    assert cn["region"] == "cn" and cn["docs"] == DOCS
-    ids = [p["id"] for p in cn["providers"]]
-    assert ids[0] == "bailian" and cn["providers"][0]["one_key"] is True
-    # the mainland list has only providers that sign up mainland accounts, no local servers, no "custom"
-    assert "openai" not in ids and "anthropic" not in ids and "ollama" not in ids and "custom" not in ids
-    assert "deepseek" in ids and "zhipu" in ids and "moonshot" in ids
-    # the rest by how much the key covers: image providers before chat-only ones
-    covers = [len(p["covers"]) for p in cn["providers"][1:]]
-    assert covers == sorted(covers, reverse=True)
-    # a two-edition provider names its mainland base URL and key page here
-    moonshot = next(p for p in cn["providers"] if p["id"] == "moonshot")
-    assert moonshot["base_url"] == "https://api.moonshot.cn/v1" and "moonshot.cn" in moonshot["key_url"]
-
-    intl = pv.guidance("intl", DOCS)
-    ids = [p["id"] for p in intl["providers"]]
-    assert ids[:2] == ["openrouter", "openai"]
-    assert "bailian" not in ids and "zhipu" not in ids and "siliconflow" not in ids and "volcengine" not in ids
-    assert "anthropic" in ids and "gemini" in ids and "deepseek" in ids
-    # OpenCode Go wants a session id per conversation: listed apart, so the apps that do not
-    # send one (they read `providers` only) never offer it
-    assert "opencode-zen" in ids and "opencode-go" not in ids
-    assert [(p["id"], p["session_header"]) for p in intl["session_providers"]] == [("opencode-go", "x-opencode-session")]
-    assert pv.guidance("cn", DOCS)["session_providers"] == []
-    # …and its global edition elsewhere
-    moonshot = next(p for p in intl["providers"] if p["id"] == "moonshot")
-    assert moonshot["base_url"] == "https://api.moonshot.ai/v1" and "kimi.ai" in moonshot["key_url"]
-    minimax = next(p for p in intl["providers"] if p["id"] == "minimax")
-    assert minimax["base_url"] == "https://api.minimax.io/v1"
-
-    unknown = pv.guidance("unknown", DOCS)
-    ids = [p["id"] for p in unknown["providers"]]
-    assert ids[:2] == ["openrouter", "bailian"]
-    assert "openai" in ids and "zhipu" in ids
-    # an unexpected region string is treated as unknown
-    assert [p["id"] for p in pv.guidance("mars", DOCS)["providers"]] == ids
+def test_guidance_keeps_help_and_region_without_promoting_external_services():
+    for region in ("cn", "intl", "unknown", "mars"):
+        guide = pv.guidance(region, DOCS)
+        assert guide["docs"] == DOCS
+        assert guide["region"] == region
+        for key in ("providers", "session_providers", "plans", "local"):
+            assert guide[key] == []
+        json.dumps(guide)
+    # The own-key catalogue itself remains available to users who choose that slot.
+    assert pv.provider("openai") is not None
 
 
-def test_guidance_plans_and_local():
-    g = pv.guidance("intl", DOCS)
-    plans = {p["id"]: p for p in g["plans"]}
-    assert set(plans) == {"chatgpt", "claude", "kimi", "openrouter"}
-    # the ChatGPT sign-in: every client, chat and vision only; the others are the phones'
-    assert plans["chatgpt"]["covers"] == ["chat", "vision"] and plans["chatgpt"]["clients"] == ["android", "ios", "desktop", "web"]
-    assert plans["claude"]["clients"] == ["android", "ios"] and plans["claude"]["covers"] == ["chat", "vision"]
-    assert plans["kimi"]["auth"] == "device-kimi" and plans["openrouter"]["covers"] == ["chat", "vision", "image"]
-    assert [p["id"] for p in g["local"]] == ["ollama", "lm-studio", "vllm"]
-    assert "OpenCode" in g["caveats"]["chatgpt"] and "OpenCode" in g["caveats"]["chatgpt_zh"]
-    # the same plans on the mainland (Kimi and the rest sign people up there too)
-    assert {p["id"] for p in pv.guidance("cn", DOCS)["plans"]} == {"chatgpt", "claude", "kimi", "openrouter"}
-    # the guidance is plain JSON
-    json.dumps(g)
+def test_guidance_retains_sign_in_caveats():
+    guide = pv.guidance("intl", DOCS)
+    assert "OpenCode" in guide["caveats"]["chatgpt"]
+    assert "OpenCode" in guide["caveats"]["chatgpt_zh"]
 
 
-def test_exhausted_key_line():
-    cn = pv.exhausted_key_line("cn")
-    assert "阿里云百炼" in cn and "one key" in cn and "ChatGPT, Claude or Kimi" in cn and "OpenRouter" not in cn
-    intl = pv.exhausted_key_line("intl")
-    assert intl.startswith("add your own model key (OpenRouter") and "OpenAI first" in intl and "mainland China" in intl
-    unknown = pv.exhausted_key_line("unknown")
-    assert "OpenRouter or OpenAI outside mainland China, Alibaba Cloud Bailian inside" in unknown
-    assert pv.exhausted_key_line("mars") == unknown
+def test_exhausted_key_line_keeps_the_own_key_option():
+    for region in ("cn", "intl", "unknown", "mars"):
+        line = pv.exhausted_key_line(region)
+        assert "subscription" in line and "invite a friend" in line and "key of your own" in line

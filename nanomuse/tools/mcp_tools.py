@@ -139,7 +139,7 @@ class MCPManager:
             for transport in attempts:
                 stack = AsyncExitStack()
                 try:
-                    session, listed = await self._open(resolved, transport, stack)
+                    session, listed = await self._open_attempt(resolved, transport, stack)
                 except BaseException as exc:  # noqa: BLE001 — see the docstring
                     unwound = await _close_quietly(stack)
                     if unwound is not None:
@@ -185,6 +185,18 @@ class MCPManager:
                 original_name=t.name,
             )
             self.tools.append(tool)
+
+    async def _open_attempt(
+        self, cfg: MCPServerSettings, transport: str, stack: AsyncExitStack
+    ) -> tuple[Any, Any]:
+        # Close nested anyio scopes before the outer timeout scope exits. A timed-out
+        # server never retains a transport or prevents the remaining servers connecting.
+        async with asyncio.timeout(cfg.connect_timeout_s):
+            try:
+                return await self._open(cfg, transport, stack)
+            except BaseException:
+                await _close_quietly(stack)
+                raise
 
     async def _open(
         self, cfg: MCPServerSettings, transport: str, stack: AsyncExitStack

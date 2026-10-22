@@ -508,7 +508,7 @@ def test_the_profile_is_shared_and_announced(client):
     )
 
 
-def test_a_flooding_socket_is_slowed_then_closed(client):
+def test_a_flooding_socket_is_slowed_then_closed(client, monkeypatch):
     """One socket may send so many frames and bytes a second (hub.FRAMES_PER_S, BYTES_PER_S,
     twice that in a burst); over it frames are dropped with one error a second, and a socket
     that keeps flooding is closed. The bucket itself, with a clock of our own."""
@@ -523,6 +523,8 @@ def test_a_flooding_socket_is_slowed_then_closed(client):
     clock[0] = 100
     assert sum(1 for _ in range(50) if bucket.take()) == 20  # never more than the burst
 
+    # Wall time and a busy development machine must not refill the burst mid-test.
+    monkeypatch.setattr(hub_module, "Bucket", lambda rate, burst: Bucket(rate, burst, clock=lambda: 0.0))
     a = sign_up(client, "13800138000")
     with connect(client, a) as pa:
         pa.send_json(hello("phone", "phone-1", "A's"))

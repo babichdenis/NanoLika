@@ -313,7 +313,11 @@ class ChannelManager(ChannelBus):
         key = f"{msg.channel}:{msg.chat_id}"
         if not self._allowed(msg):
             cfg = self.store.config(msg.channel)
-            if cfg.first_chat_claims and not msg.is_group and not self.pairing.approved(msg.channel):
+            if (
+                cfg.first_chat_claims
+                and not msg.is_group
+                and not self.pairing.approved(msg.channel)
+            ):
                 # nobody owns this bot yet: the person who wrote first is the one who made it,
                 # which is how a bot can be used from a chat alone (docs/channels.md)
                 self.pairing.add(
@@ -359,7 +363,9 @@ class ChannelManager(ChannelBus):
         if delivered and text and self.svc.ui.has_pending_question(delivered):
             self._questions.pop(key, None)
             self.svc.ui.answer_question(delivered, text)
-            await self._send(msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала."))
+            await self._send(
+                msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала.")
+            )
             return
         self._questions.pop(key, None)
         paths: list[str] = []
@@ -386,7 +392,9 @@ class ChannelManager(ChannelBus):
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
 
-    async def _serve_from_device(self, thread: str, msg: InboundMessage, text: str, device: dict[str, Any]) -> None:
+    async def _serve_from_device(
+        self, thread: str, msg: InboundMessage, text: str, device: dict[str, Any]
+    ) -> None:
         """A chat's turn handed to the device the settings name as the one that serves the
         chats (`hub.primary`): the words go over the hub as a `task`, the device's progress
         shows as the live status, its answer closes the bubble. A device that cannot take it
@@ -411,7 +419,11 @@ class ChannelManager(ChannelBus):
                 lv.text = str(body.get("text") or "")
                 self._schedule_flush(thread)
             elif stage == "tool":
-                lv.status = f"{str(body.get('name') or 'tool')}: {str(body.get('summary') or '')}".strip(": ")
+                lv.status = (
+                    f"{str(body.get('name') or 'tool')}: {str(body.get('summary') or '')}".strip(
+                        ": "
+                    )
+                )
                 self._schedule_flush(thread)
             elif stage == "approval":
                 preview = str(body.get("preview") or body.get("reason") or "")[:120]
@@ -450,7 +462,13 @@ class ChannelManager(ChannelBus):
                 await self._send(msg.channel, msg.chat_id, _short(error))
             return
         final = str(answer.get("text") or "").strip()
-        await self._finish(thread, final or self.say("(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"))
+        await self._finish(
+            thread,
+            final
+            or self.say(
+                "(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"
+            ),
+        )
 
     def _thread_for(self, msg: InboundMessage) -> str:
         if self.svc.settings.channels.shared_thread:
@@ -495,9 +513,17 @@ class ChannelManager(ChannelBus):
             if not asks:
                 self._asks.pop(key, None)
         if ok:
-            text = self.say("Allowed.", "已允许。", "Разрешила.") if approved else self.say("Denied.", "已拒绝。", "Запретила.")
+            text = (
+                self.say("Allowed.", "已允许。", "Разрешила.")
+                if approved
+                else self.say("Denied.", "已拒绝。", "Запретила.")
+            )
         else:
-            text = self.say("That request is no longer waiting.", "这个请求已经不在等待了。", "Эта просьба уже не ждёт ответа.")
+            text = self.say(
+                "That request is no longer waiting.",
+                "这个请求已经不在等待了。",
+                "Эта просьба уже не ждёт ответа.",
+            )
         await self._send(channel, chat_id, text)
 
     def pairing_text(self, code: str) -> str:
@@ -666,7 +692,9 @@ class ChannelManager(ChannelBus):
             # The relay's echo filter already dropped this device's own rows, so a synced
             # turn is never this machine's words — also when the chat is the shared main one.
             text = str(event.get("text") or "").strip()
-            files = [str(f.get("name") or "") for f in event.get("files") or [] if isinstance(f, dict)]
+            files = [
+                str(f.get("name") or "") for f in event.get("files") or [] if isinstance(f, dict)
+            ]
             body = text or ", ".join(n for n in files if n)
             name = str(event.get("via_device_name") or event.get("via_device") or "").strip()
             if body and name:
@@ -742,7 +770,9 @@ class ChannelManager(ChannelBus):
         if title:
             return title
         tool = str(event.get("tool") or "")
-        en, zh, ru = _TOOL_LABELS.get(tool, (f"Using {tool}", f"正在使用 {tool}", f"Работаю: {tool}"))
+        en, zh, ru = _TOOL_LABELS.get(
+            tool, (f"Using {tool}", f"正在使用 {tool}", f"Работаю: {tool}")
+        )
         lang = self.lang
         if lang == "zh":
             return zh

@@ -11,6 +11,7 @@ import {
 import { api, AuthError, connectWs, getToken } from "./api";
 import { getLocale, t } from "./i18n";
 import { liveWorking } from "./presence";
+import { advanceConnection } from "./reconnect";
 import { registerWorker, setAppBadge } from "./push";
 import { useTheme } from "./theme";
 import { readStorage, writeStorage } from "./util";
@@ -667,10 +668,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state.loaded, state.activeThread, loadEvents]);
 
   // Reload the current thread after a reconnect so nothing is missed.
-  const wasConnected = useRef(false);
+  const connection = useRef({ connected: false, seen: false });
   useEffect(() => {
-    if (state.connected && wasConnected.current && state.loaded) void loadEvents(state.activeThread);
-    wasConnected.current = state.connected;
+    const next = advanceConnection(connection.current, state.connected);
+    connection.current = next;
+    if (next.recovered && state.loaded) void loadEvents(state.activeThread);
   }, [state.connected, state.loaded, state.activeThread, loadEvents]);
 
   const refreshGoals = useCallback(async () => {

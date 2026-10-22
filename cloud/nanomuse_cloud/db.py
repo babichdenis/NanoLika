@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS ledger (
 );
 CREATE INDEX IF NOT EXISTS ledger_account_ts ON ledger(account_id, ts);
 CREATE INDEX IF NOT EXISTS ledger_ts ON ledger(ts);
+CREATE TABLE IF NOT EXISTS request_attempts (
+    account_id TEXT NOT NULL,
+    ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS request_attempts_account_ts ON request_attempts(account_id, ts);
+CREATE INDEX IF NOT EXISTS request_attempts_ts ON request_attempts(ts);
 CREATE TABLE IF NOT EXISTS events (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id    TEXT NOT NULL DEFAULT '',   -- '' for events before an account exists (a failed sign-in)
@@ -1520,13 +1526,22 @@ class Database:
         request_id: str,
         cost_uy: int = 0,
         extra: str = "",
-    ) -> None:
+        *,
+        video_task_id: str | None = None,
+    ) -> bool:
         """Record one request: the tokens on the account, the line in the ledger. What the
         account has spent is always the ledger's sum, so there is nothing else to keep."""
         charged = max(0, int(charged))
         cost_uy = max(0, int(cost_uy))
         who = _client.current()
         with self.tx() as c:
+            if video_task_id is not None:
+                updated = c.execute(
+                    "UPDATE video_tasks SET charged=1 WHERE task_id=? AND account_id=? AND charged=0",
+                    (video_task_id, account_id),
+                )
+                if updated.rowcount != 1:
+                    return False
             c.execute("UPDATE accounts SET used=used+? WHERE id=?", (charged, account_id))
             c.execute(
                 "INSERT INTO ledger(account_id, ts, kind, model, prompt_tokens, completion_tokens, charged, request_id, cost_uy, extra, ip, ua) "
@@ -1546,6 +1561,21 @@ class Database:
                     who.ua,
                 ),
             )
+
+        return True
+
+    def admit_request(self, account_id: str, limit: int, since: int, at: int) -> bool:
+        """Count attempts before contacting a provider, independently of billing."""
+        with self.tx() as c:
+            c.execute("DELETE FROM request_attempts WHERE ts<?", (since,))
+            used = c.execute(
+                "SELECT COUNT(*) FROM request_attempts WHERE account_id=? AND ts>=?",
+                (account_id, since),
+            ).fetchone()[0]
+            if used >= limit:
+                return False
+            c.execute("INSERT INTO request_attempts(account_id, ts) VALUES (?,?)", (account_id, at))
+            return True
 
     USAGE_KINDS = ("chat", "image", "video", "realtime")
 

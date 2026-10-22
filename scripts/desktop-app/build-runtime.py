@@ -38,7 +38,7 @@ def run(*cmd: str, **kw) -> None:
     subprocess.run(cmd, check=True, **kw)
 
 
-def build(target: Path) -> Path:
+def build(target: Path, *, verify: bool = False) -> Path:
     shutil.rmtree(DIST, ignore_errors=True)
     run(
         sys.executable,
@@ -57,6 +57,9 @@ def build(target: Path) -> Path:
     exe = built / ("nanomuse.exe" if sys.platform == "win32" else "nanomuse")
     if not exe.exists():
         raise SystemExit(f"PyInstaller produced nothing at {exe}")
+    # Verify the new output before replacing the last working staged runtime.
+    if verify:
+        check(exe)
     shutil.rmtree(target, ignore_errors=True)
     # Keep PyInstaller's relative library aliases and macOS framework layout intact.
     shutil.copytree(built, target, symlinks=True)
@@ -168,8 +171,8 @@ def main() -> None:
     if args.check_only:
         exe = target / ("nanomuse.exe" if sys.platform == "win32" else "nanomuse")
     else:
-        exe = build(target)
-    if args.check or args.check_only:
+        exe = build(target, verify=args.check)
+    if args.check_only:
         check(exe)
 
 
