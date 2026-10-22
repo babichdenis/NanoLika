@@ -22,6 +22,13 @@ the refusal at the end of it arrives in the chat the way it does in an app. The
 door is the bot's shared secret (`BOT_SIGNIN_TOKEN`), the identifier is the
 numeric Telegram id, and the switch for newcomers alone is `BOT_SIGNUP_OPEN`
 ([cloud/README.md](../cloud/README.md)).
+The app joins that account later with a code from the chat: the bot asks the
+relay for one (`POST /v1/bot/link-code`, eight characters, fifteen minutes), the
+person types it in the app beside the code from their mailbox, and the address
+becomes a second way into the same account, so the allowance, the devices and the
+chats are one set. `/v1/me` lists the other ways in under `account.linked`. An
+address that already has an account of its own is refused (`409 link_taken`)
+rather than taken over, and a wrong, spent or lapsed code is `link_wrong`.
 Signing out brings that screen back
 (self-hosters: `[cloud] required = false` or `NANOMUSE_CLOUD_REQUIRED=0` on the
 runtime). The screen is a door, not a wall: *Use your own API key instead* steps

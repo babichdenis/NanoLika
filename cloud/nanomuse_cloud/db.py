@@ -270,6 +270,29 @@ CREATE TABLE IF NOT EXISTS deleted_keys (
     key_hash      TEXT PRIMARY KEY,
     deleted_at    INTEGER NOT NULL
 );
+-- 0.26: one account, more than one way in. The first identifier a person used is the
+-- account's own (`accounts.id_hash`); an address or a chat added later points at the same
+-- account through here, so the app signed in with an e-mail address and the Telegram chat
+-- that started it are one account, one allowance, one set of devices. `id_hash` is the
+-- identifier's hash with the relay secret: a row names nobody on its own.
+CREATE TABLE IF NOT EXISTS account_aliases (
+    id_hash       TEXT PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    channel       TEXT NOT NULL,              -- phone | email | telegram
+    hint          TEXT NOT NULL DEFAULT '',   -- what the account page shows for it
+    created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS account_aliases_account ON account_aliases(account_id);
+-- The one-time code that ties a second identifier to an account: made by the chat (the
+-- bot), typed in the app. Only the code's hash is kept, it is spent once, and it lapses on
+-- its own (LINK_CODE_TTL_S).
+CREATE TABLE IF NOT EXISTS link_codes (
+    code_hash     TEXT PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    created_at    INTEGER NOT NULL,
+    expires_at    INTEGER NOT NULL,
+    used_at       INTEGER
+);
 """
 
 # How long a deleted account's key hashes are remembered. Long enough for every device of the
@@ -782,6 +805,68 @@ class Database:
     def account(self, account_id: str) -> sqlite3.Row | None:
         with self._lock:
             return self._conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+
+    # -- the other ways into one account (0.26) -------------------------------------------
+
+    def alias_account(self, id_hash: str) -> sqlite3.Row | None:
+        """The account an added identifier points at, if it points at one."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT a.* FROM account_aliases x JOIN accounts a ON a.id = x.account_id WHERE x.id_hash=?",
+                (id_hash,),
+            ).fetchone()
+
+    def aliases_of(self, account_id: str) -> list[sqlite3.Row]:
+        with self._lock:
+            return list(
+                self._conn.execute(
+                    "SELECT id_hash, channel, hint, created_at FROM account_aliases WHERE account_id=? ORDER BY created_at",
+                    (account_id,),
+                )
+            )
+
+    def add_alias(self, id_hash: str, account_id: str, channel: str, hint: str = "") -> bool:
+        """Attach an identifier to an account. False when it already points somewhere: an
+        identifier that is an account of its own is never taken over silently."""
+        with self.tx() as c:
+            taken = c.execute(
+                "SELECT 1 FROM accounts WHERE id_hash=? UNION SELECT 1 FROM account_aliases WHERE id_hash=?",
+                (id_hash, id_hash),
+            ).fetchone()
+            if taken is not None:
+                return False
+            c.execute(
+                "INSERT INTO account_aliases (id_hash, account_id, channel, hint, created_at) VALUES (?,?,?,?,?)",
+                (id_hash, account_id, channel, hint, now()),
+            )
+        return True
+
+    def remove_alias(self, id_hash: str, account_id: str) -> bool:
+        with self.tx() as c:
+            cur = c.execute("DELETE FROM account_aliases WHERE id_hash=? AND account_id=?", (id_hash, account_id))
+            return cur.rowcount > 0
+
+    def add_link_code(self, code_hash: str, account_id: str, ttl_s: int) -> None:
+        ts = now()
+        with self.tx() as c:
+            # a fresh code retires the ones this account made before it: asking twice in a
+            # chat must not leave two working codes behind
+            c.execute("UPDATE link_codes SET expires_at=? WHERE account_id=? AND used_at IS NULL", (ts, account_id))
+            c.execute(
+                "INSERT INTO link_codes (code_hash, account_id, created_at, expires_at) VALUES (?,?,?,?)",
+                (code_hash, account_id, ts, ts + ttl_s),
+            )
+
+    def spend_link_code(self, code_hash: str) -> sqlite3.Row | None:
+        """The account a link code was made for, once. A second use, or one past its
+        lifetime, finds nothing and changes nothing."""
+        ts = now()
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM link_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>?", (code_hash, ts)).fetchone()
+            if row is None:
+                return None
+            c.execute("UPDATE link_codes SET used_at=? WHERE code_hash=?", (ts, code_hash))
+        return row
 
     @staticmethod
     def new_account_id() -> str:

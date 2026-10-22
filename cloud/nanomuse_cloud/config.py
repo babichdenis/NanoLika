@@ -628,6 +628,10 @@ class Settings:
     # and neither does the members list, since a chat has no address to list.
     bot_signin_token: str = field(default_factory=lambda: _env("BOT_SIGNIN_TOKEN"))
     bot_signup_open: bool = field(default_factory=lambda: _env("BOT_SIGNUP_OPEN", "1") not in ("0", "false", "no"))
+    # How long a one-time code lives that ties a second identifier to an account: the chat
+    # makes it (`POST /v1/bot/link-code`), the app types it beside its own sign-in code, and
+    # both then are one account. 0 = linking switched off.
+    link_code_ttl_s: int = field(default_factory=lambda: _int("LINK_CODE_TTL_S", 900))
     # A sign-in for an app store's reviewer, who cannot receive our codes: for the
     # e-mail addresses in REVIEW_ADDRESSES (comma-separated) a code request sends nothing and
     # answers as if it had, and /v1/auth/verify accepts exactly REVIEW_CODE (six digits) —

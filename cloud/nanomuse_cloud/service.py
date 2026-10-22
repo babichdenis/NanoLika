@@ -691,8 +691,13 @@ class Cloud:
     def _account_for(self, ident: Identifier) -> sqlite3.Row | None:
         """Look up an account by ``ident``'s canonical hash, falling back to its
         legacy pre-canonical hash when present so existing dotted Gmail accounts
-        keep matching."""
-        return self.db.account_by_hashes(ident.hashes(self.s.hmac_key))
+        keep matching, and then to the identifiers added into an account later
+        (``account_aliases``): the address the app signs in with when the chat was the
+        first way in."""
+        row = self.db.account_by_hashes(ident.hashes(self.s.hmac_key))
+        if row is not None:
+            return row
+        return self.db.alias_account(ident.hash(self.s.hmac_key))
 
     def _refuse_if_signups_closed(self, ident: Identifier) -> None:
         """0.22: the *Sign-ups* switch is off; an identifier without an account is turned
@@ -801,9 +806,13 @@ class Cloud:
         except SendError as e:
             raise CloudError(502, "send_failed", f"Could not send the code ({e})") from e
 
-    def verify_code(self, ident: Identifier, code: str, device: str, invite: str = "") -> tuple[str, Caller, bool]:
+    def verify_code(self, ident: Identifier, code: str, device: str, invite: str = "", link: str = "") -> tuple[str, Caller, bool]:
         """Returns (api_key, caller, created). The key is shown once. `invite` is
-        a friend's code; it counts only when this sign-in creates the account."""
+        a friend's code; it counts only when this sign-in creates the account.
+
+        `link` is the one-time code a chat was given (`telegram_link_code`): with it the
+        proven address joins that chat's account instead of opening one of its own, so the
+        app and the chat are one account, one allowance and one set of devices."""
         if not self.allowed(ident):
             raise CloudError(403, "not_invited", "This relay is private; that address is not on its list")
         id_hash = ident.hash(self.s.hmac_key)
@@ -817,6 +826,8 @@ class Cloud:
         if not secrets.compare_digest(str(row["code_hash"]).encode(), _code_hash(self.s.hmac_key, code.strip()).encode()):
             raise CloudError(400, "code_wrong", "That code is not right")
         self.db.consume_code(int(row["id"]))
+        if link.strip():
+            return self.link_into(ident, link.strip(), device)
         return self.sign_in(ident, device, "code", invite)
 
     def sign_in(self, ident: Identifier, device: str, via: str, invite: str = "", *, reached: bool = False) -> tuple[str, Caller, bool]:
@@ -882,6 +893,55 @@ class Cloud:
                 "New chats are closed on this relay for now; an account that already exists keeps working.",
             )
         return self.sign_in(ident, device or "telegram", via="telegram", invite=invite, reached=True)
+
+    def telegram_link_code(self, telegram_id: str, device: str = "") -> tuple[str, int]:
+        """A one-time code for the account this chat is, to be typed in the app.
+
+        The chat is the way in for someone with nothing installed; the app comes later, and
+        this code is what makes it the same account rather than a second one. Asking again
+        retires the code from before. Returns (code, expires_at)."""
+        ident = telegram(telegram_id)
+        account = self._account_for(ident)
+        if account is None:
+            # the first ask makes the account, exactly as the first message would
+            _key, caller, _created = self.sign_in_bot(telegram_id, device)
+            account = self.db.account(caller.account_id)
+        if account is None:
+            raise CloudError(500, "no_account", "Could not find the account for this chat")
+        if account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+        code = "".join(secrets.choice(alphabet) for _ in range(8))
+        self.db.add_link_code(_code_hash(self.s.hmac_key, code), str(account["id"]), self.s.link_code_ttl_s)
+        self.db.add_event(str(account["id"]), "link.code", ident.channel)
+        return code, now() + self.s.link_code_ttl_s
+
+    def link_into(self, ident: Identifier, code: str, device: str) -> tuple[str, Caller, bool]:
+        """The second way in: an identifier proven by its own code joins the account that a
+        chat's link code names, and this device signs in to that account.
+
+        An identifier that already has an account of its own is refused rather than taken
+        over: two accounts with two allowances are not merged here, and saying so beats
+        quietly opening a third. A code that is wrong, spent or lapsed is `link_wrong`."""
+        if not self.s.link_code_ttl_s:
+            raise CloudError(503, "link_off", "Linking a second way in is switched off on this relay")
+        if self._account_for(ident) is not None:
+            raise CloudError(
+                409,
+                "link_taken",
+                "That address already has an account of its own; a chat's code links a new one",
+            )
+        row = self.db.spend_link_code(_code_hash(self.s.hmac_key, code))
+        if row is None:
+            raise CloudError(400, "link_wrong", "That link code is wrong, already used, or has lapsed; ask the chat for a new one")
+        account = self.db.account(str(row["account_id"]))
+        if account is None or account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        if not self.db.add_alias(ident.hash(self.s.hmac_key), str(account["id"]), ident.channel, ident.hint):
+            raise CloudError(409, "link_taken", "That address already has an account of its own")
+        key, caller = self._issue_key(str(account["id"]), device, via="link")
+        self.db.add_event(str(account["id"]), "account.linked", ident.channel)
+        return key, caller, False
 
     def evaluate_thresholds(self, *, defer_mail: bool = False) -> list[dict[str, Any]]:
         """0.22: the operator's "when accounts reach N" rules, against the count right now.
@@ -1424,6 +1484,12 @@ class Cloud:
                 "password_set_at": caller.password_set_at,
                 "sessions": len(self.db.keys_for(caller.account_id, live_only=True)),
                 "signed_in_via": caller.via,
+                # 0.26: the other ways into this account, a chat beside the address that
+                # signed the app in; the account page says so instead of showing two accounts
+                "linked": [
+                    {"channel": row["channel"], "hint": row["hint"], "since": row["created_at"]}
+                    for row in self.db.aliases_of(caller.account_id)
+                ],
             },
             "usage": self.usage(caller.account_id, day_start),
             "tokens": {

@@ -120,3 +120,104 @@ async def test_the_bot_door_opens_a_relay_that_is_private_for_addresses():
         r = await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})
         assert r.status_code == 200, r.text
         assert r.json()["created"] is True
+
+
+def codes_of(cloud: Cloud) -> list[tuple[object, str]]:
+    return list(cloud.sender.sent)  # type: ignore[attr-defined]
+
+
+async def sign_in_with_email(client, cloud, address: str, link: str = "") -> dict:
+    """A sign-in the way the app does it: a code to the mailbox, then verify, optionally
+    with the chat's link code beside it."""
+    r = await client.post("/v1/auth/code", json={"identifier": address})
+    assert r.status_code == 204, r.text
+    _ident, code = codes_of(cloud)[-1]
+    body = {"identifier": address, "code": code, "device": "desktop"}
+    if link:
+        body["link"] = link
+    r = await client.post("/v1/auth/verify", json=body)
+    return {"status": r.status_code, **r.json()}
+
+
+async def test_the_chat_hands_the_app_a_code_and_the_two_become_one_account():
+    app, cloud = stack()
+    async with client_of(app) as client:
+        chat = (await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})).json()
+        r = await client.post("/v1/bot/link-code", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})
+        assert r.status_code == 200, r.text
+        code = r.json()["code"]
+        assert len(code) == 8 and r.json()["expires_in_s"] == 900
+
+        app_side = await sign_in_with_email(client, cloud, "denis@example.com", link=code)
+        assert app_side["status"] == 200, app_side
+        assert app_side["created"] is False
+        assert app_side["account"]["id"] == chat["account"]["id"]
+        # one allowance, not two: the account kept the figure it was made with
+        assert app_side["tokens"]["granted"] == chat["tokens"]["granted"] == 1000
+        # the account page can say both ways in rather than showing two accounts
+        me = await client.get("/v1/me", headers={"Authorization": f"Bearer {app_side['api_key']}"})
+        linked = [row["channel"] for row in me.json()["account"]["linked"]]
+        assert linked == ["email"]
+        # and the chat still finds that same account afterwards
+        again = (await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})).json()
+        assert again["account"]["id"] == chat["account"]["id"]
+        assert again["created"] is False
+
+
+async def test_a_link_code_is_spent_once():
+    app, cloud = stack()
+    async with client_of(app) as client:
+        await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})
+        code = (await client.post("/v1/bot/link-code", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})).json()["code"]
+        first = await sign_in_with_email(client, cloud, "one@example.com", link=code)
+        assert first["status"] == 200
+        second = await sign_in_with_email(client, cloud, "two@example.com", link=code)
+        assert second["status"] == 400
+        assert second["error"]["code"] == "link_wrong"
+
+
+async def test_a_wrong_link_code_leaves_the_address_to_its_own_sign_in():
+    app, cloud = stack()
+    async with client_of(app) as client:
+        refused = await sign_in_with_email(client, cloud, "solo@example.com", link="AAAAAAAA")
+        assert refused["status"] == 400
+        assert refused["error"]["code"] == "link_wrong"
+        # the same address signs in plainly afterwards: the refusal cost it nothing
+        plain = await sign_in_with_email(client, cloud, "solo@example.com")
+        assert plain["status"] == 200
+        assert plain["created"] is True
+
+
+async def test_an_address_with_an_account_of_its_own_is_not_taken_over():
+    app, cloud = stack()
+    async with client_of(app) as client:
+        own = await sign_in_with_email(client, cloud, "busy@example.com")
+        assert own["created"] is True
+        await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})
+        code = (await client.post("/v1/bot/link-code", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})).json()["code"]
+        taken = await sign_in_with_email(client, cloud, "busy@example.com", link=code)
+        assert taken["status"] == 409
+        assert taken["error"]["code"] == "link_taken"
+
+
+async def test_linking_can_be_switched_off():
+    app, cloud = stack(link_code_ttl_s=0)
+    async with client_of(app) as client:
+        await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers={"X-Bot-Token": BOT})
+        r = await client.post("/v1/auth/code", json={"identifier": "off@example.com"})
+        assert r.status_code == 204
+        _ident, code = codes_of(cloud)[-1]
+        r = await client.post(
+            "/v1/auth/verify",
+            json={"identifier": "off@example.com", "code": code, "device": "desktop", "link": "ABCDEFGH"},
+        )
+        assert r.status_code == 503
+        assert r.json()["error"]["code"] == "link_off"
+
+
+async def test_the_link_code_endpoint_needs_the_bots_token():
+    app, _cloud = stack()
+    async with client_of(app) as client:
+        r = await client.post("/v1/bot/link-code", json={"telegram_id": CHAT})
+        assert r.status_code == 401
+        assert r.json()["error"]["code"] == "bad_bot_token"
