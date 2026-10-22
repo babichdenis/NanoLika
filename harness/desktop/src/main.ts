@@ -12,7 +12,7 @@ import { defaultHelperPath, HELPER_NAME, MacHelper } from "./mac-helper";
 import * as macPermissions from "./mac-permissions";
 import { Operator, SCREEN_PERMISSION_TEXT, type Marker } from "./operator";
 import { startOperatorServer, type OperatorServer } from "./operator-server";
-import { EXTERNAL_URL, navigationVerdict, sameOrigin } from "./navigation";
+import { EXTERNAL_URL, mayHeal, needsHostUrl, navigationVerdict, sameOrigin } from "./navigation";
 import { relink } from "./profile-link";
 import { maskProxyUrl, proxyEnv, validProxyUrl } from "./proxy";
 import { HostStartWatch, maskToken, waitedText, type WaitState } from "./host-start";
@@ -1956,6 +1956,41 @@ function createWindow(): BrowserWindow {
       if (hostUrl) void win.loadURL(hostUrl);
       else win.webContents.reload();
     }
+  });
+  // A page that came up without its token: a reload that landed on a route the client left
+  // behind, a stale cookie, a first load the Host refused. It is the Host's own 401 sentence
+  // or an empty document, and there is no widget in it to type a message into, so the person
+  // sees a blank window and nothing explains it. Ask the finished page what it shows, and load
+  // the tokenised Host URL into it again; once in ten seconds, so a refusing Host cannot spin.
+  let healedAt = 0;
+  win.webContents.on("did-finish-load", () => {
+    if (win.isDestroyed() || !hostUrl) return;
+    if (!sameOrigin(win.webContents.getURL(), hostUrl)) return;
+    void win.webContents
+      .executeJavaScript(`(document.body && document.body.innerText) || ""`)
+      .then((text: unknown) => {
+        if (win.isDestroyed() || !hostUrl) return;
+        if (!needsHostUrl(win.webContents.getURL(), hostUrl, String(text ?? ""))) return;
+        if (!mayHeal(healedAt, Date.now())) return;
+        healedAt = Date.now();
+        log(`window: the page came up without its token (${String(text ?? "").trim().slice(0, 40) || "blank"}); loading the Host URL again`);
+        void win.loadURL(hostUrl);
+      })
+      .catch(() => undefined);
+  });
+  // A load that never completed leaves the same blank window when the Host was not listening
+  // yet (the first start after an install is slow): try the Host URL again, a few times, and
+  // then say so in the log rather than leaving the person with an empty frame.
+  let loadTries = 0;
+  win.webContents.on("did-fail-load", (_event, code, description, failedUrl, isMainFrame) => {
+    // -3 is ERR_ABORTED, which a navigation we started ourselves leaves behind
+    if (!isMainFrame || code === -3) return;
+    log(`window: ${failedUrl} did not load (${code} ${description})`);
+    if (!hostUrl || win.isDestroyed() || loadTries >= 3) return;
+    loadTries += 1;
+    setTimeout(() => {
+      if (!win.isDestroyed() && hostUrl) void win.loadURL(hostUrl);
+    }, 1000 * loadTries);
   });
   win.on("unresponsive", () => log("window: the renderer stopped answering"));
   // Windows logoff/shutdown may close the last window without before-quit.

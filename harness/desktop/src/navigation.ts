@@ -36,3 +36,29 @@ export function navigationVerdict(url: string, hostUrl: string | null, ownResour
   if (sameOrigin(url, hostUrl) || ownPage(url, ownResourcesHref)) return "allow";
   return EXTERNAL_URL.test(url) ? "external" : "deny";
 }
+
+/** The sentence the Host answers a request that carries no token and no cookie: a plain
+ *  reload of the page, a route opened without the URL `dsh web` printed, a stale cookie. The
+ *  window is then a document with no widget at all, and nothing can be typed into it. */
+export const LOST_TOKEN = "dsh web authentication required";
+
+/** How long after one repair another is refused: a Host that keeps refusing a good token must
+ *  not set the window spinning. */
+export const HEAL_INTERVAL_MS = 10_000;
+
+/**
+ * Whether a finished page needs the tokenised Host URL loaded into it again. It has to be on
+ * the Host's origin (the shell's own loading page is a `file:` URL and is left alone), and
+ * either show the Host's own 401 sentence or show nothing at all, which is what a document
+ * that never loaded leaves behind.
+ */
+export function needsHostUrl(here: string, hostUrl: string | null, text: string): boolean {
+  if (!sameOrigin(here, hostUrl)) return false;
+  const shown = text.trim();
+  return shown === "" || shown.startsWith(LOST_TOKEN);
+}
+
+/** Whether a repair may run now, given when the last one did. `now - last >= HEAL_INTERVAL_MS`. */
+export function mayHeal(last: number, now: number): boolean {
+  return now - last >= HEAL_INTERVAL_MS;
+}
