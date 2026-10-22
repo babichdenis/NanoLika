@@ -45,6 +45,7 @@ A code goes out every time someone signs in. `CODE_SENDER` says how:
 
 - `log`: printed to the relay's log only (`cd cloud && docker compose logs relay` shows `verification code for …`). Fine for a family: you read the code out. This is what `--local` uses.
 - `smtp`: by e-mail through a mailbox you own (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`). Any mailbox with SMTP works; a free one is enough for a few people.
+- `webhook`: by e-mail through a page on your own site over HTTPS (`MAIL_WEBHOOK_URL`, `MAIL_WEBHOOK_SECRET`), for a relay whose host closes the SMTP ports out. The page builds the MIME body, signs it with DKIM and hands it to the local mail server, so the letter leaves from the site's own domain with its SPF and DKIM; the relay posts JSON and an HMAC of it. The page has to be small and closed: one recipient per request, a sender taken from its own fixed list, a timestamp no older than five minutes, an hourly cap, and a log that keeps the domain rather than the address. Notices to `ADMIN_EMAIL` take the same road.
 - `aliyun`: by SMS to mainland China numbers through Alibaba Cloud: 号码认证服务 by default (`ALIYUN_SMS_API=dypns`, its ready-made templates), or 短信服务 with a signed template of your own (`ALIYUN_SMS_API=dysms`); the variables are in `cloud/.env.example`. `both` uses SMTP for addresses and Aliyun for numbers. SMS reaches mainland numbers only; everyone else signs in by e-mail.
 
 ### The admin page

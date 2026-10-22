@@ -194,3 +194,72 @@ def test_smtp_failures_are_logged_without_the_address():
     text = senders.smtp_error_text(sender_refused)
     assert "relay@example.com" not in text and "553" in text and "relay denied" in text
     assert senders.smtp_error_text(OSError("connection refused")).startswith("OSError: connection refused")
+
+
+def webhook_settings(**overrides) -> Settings:
+    kw = dict(
+        database=":memory:",
+        secret="s",
+        sender="webhook",
+        mail_webhook_url="https://nanolika.ru/publish/mail.php",
+        mail_webhook_secret="shh",
+        code_ttl_s=600,
+    )
+    kw.update(overrides)
+    return Settings(**kw)
+
+
+def test_a_code_goes_to_the_site_endpoint_signed_with_the_secret(monkeypatch):
+    """CODE_SENDER=webhook: the site's page sends the letter, the relay only posts JSON.
+
+    The endpoint refuses anything whose HMAC does not match the exact bytes, so the test
+    recomputes the signature the same way and checks the shape mail.php parses."""
+    seen = {}
+
+    class FakePost:
+        def __init__(self, body):
+            self.status_code = 200
+            self._body = body
+
+        def json(self):
+            return self._body
+
+    def fake_post(url, content=None, headers=None, timeout=None):
+        seen["url"] = url
+        seen["body"] = content
+        seen["headers"] = headers
+        return FakePost({"ok": True})
+
+    monkeypatch.setattr(senders.httpx, "post", fake_post)
+    s = webhook_settings()
+    sender = make_sender(s)
+    assert isinstance(sender, senders.WebhookMailSender)
+    ident = parse("someone@example.com")
+    sender.send(ident, "123456")
+
+    payload = json.loads(seen["body"])
+    assert payload["to"] == "someone@example.com"
+    assert payload["subject"] == "NanoLika: код для входа 123456"
+    assert "123456" in payload["text"] and "10 мин" in payload["text"]
+    assert isinstance(payload["ts"], int)
+    expected = hmac.new(b"shh", seen["body"], hashlib.sha256).hexdigest()
+    assert seen["headers"]["X-Nanolika-Signature"] == expected
+    assert seen["url"] == "https://nanolika.ru/publish/mail.php"
+
+
+def test_the_endpoint_saying_no_is_a_send_error(monkeypatch, caplog):
+    class FakePost:
+        status_code = 200
+
+        def json(self):
+            return {"ok": False, "error": "rate"}
+
+    monkeypatch.setattr(senders.httpx, "post", lambda *a, **k: FakePost())
+    with pytest.raises(SendError):
+        make_sender(webhook_settings()).send(parse("someone@example.com"), "123456")
+    assert "refused" in caplog.text and "123456" not in caplog.text
+
+
+def test_without_a_url_and_secret_the_sender_refuses_to_start():
+    with pytest.raises(ValueError):
+        make_sender(webhook_settings(mail_webhook_secret=""))

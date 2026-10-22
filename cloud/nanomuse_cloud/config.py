@@ -642,12 +642,18 @@ class Settings:
     # One phone/e-mail = one grant; a second device signing in with the same
     # identifier shares the account and gets a second key, not a second grant.
 
-    sender: str = field(default_factory=lambda: _env("CODE_SENDER", "log"))  # log | smtp | aliyun | both
+    sender: str = field(default_factory=lambda: _env("CODE_SENDER", "log"))  # log | smtp | webhook | aliyun | both
     smtp_host: str = field(default_factory=lambda: _env("SMTP_HOST"))
     smtp_port: int = field(default_factory=lambda: _int("SMTP_PORT", 465))
     smtp_user: str = field(default_factory=lambda: _env("SMTP_USER"))
     smtp_password: str = field(default_factory=lambda: _env("SMTP_PASSWORD"))
     smtp_from: str = field(default_factory=lambda: _env("SMTP_FROM"))
+    # Mail over HTTPS: the site's own endpoint does the sending, for a relay whose host
+    # provider closes the SMTP ports (reg.ru closes 25, 465 and 587 to addresses outside
+    # Russia). The endpoint signs its own MIME body, so SPF and DKIM pass on the site's
+    # domain; the relay only posts JSON and an HMAC of it.
+    mail_webhook_url: str = field(default_factory=lambda: _env("MAIL_WEBHOOK_URL"))
+    mail_webhook_secret: str = field(default_factory=lambda: _env("MAIL_WEBHOOK_SECRET"))
     aliyun_access_key_id: str = field(default_factory=lambda: _env("ALIYUN_ACCESS_KEY_ID"))
     aliyun_access_key_secret: str = field(default_factory=lambda: _env("ALIYUN_ACCESS_KEY_SECRET"))
     aliyun_sms_sign: str = field(default_factory=lambda: _env("ALIYUN_SMS_SIGN"))

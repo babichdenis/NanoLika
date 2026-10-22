@@ -1,4 +1,5 @@
-"""How a code reaches the person: the log (development), SMTP, or Aliyun SMS.
+"""How a code reaches the person: the log (development), SMTP, an HTTPS mail endpoint
+(the site sends it, for a relay whose host closes the SMTP ports), or Aliyun SMS.
 
 `send(identifier, code)` raises `SendError` when the message could not go out
 so the API can say so instead of letting the user wait for nothing.
@@ -102,17 +103,100 @@ def smtp_error_text(e: BaseException) -> str:
     return f"{type(e).__name__}: {str(e)[:160]}"
 
 
+class WebhookMailSender:
+    """Mail through the site's own HTTPS endpoint.
+
+    A relay whose host closes the outbound SMTP ports cannot talk to a mail server at all
+    (reg.ru closes 25, 465 and 587 to addresses outside Russia), so the message is handed to
+    a page that runs on a Russian host: it builds the MIME body, signs it with DKIM and puts
+    it in the local queue, where SPF and the relay's IP no longer matter. The relay posts
+    JSON and an HMAC of the exact bytes, so the endpoint is not an open relay and a bad
+    signature never reaches the mail server."""
+
+    def __init__(self, s: Settings) -> None:
+        if not (s.mail_webhook_url and s.mail_webhook_secret):
+            raise ValueError("MAIL_WEBHOOK_URL and MAIL_WEBHOOK_SECRET are required for CODE_SENDER=webhook")
+        self.s = s
+
+    def accepts(self, ident: Identifier) -> bool:
+        return ident.channel == "email"
+
+    def send(self, ident: Identifier, code: str) -> None:
+        if ident.channel != "email":
+            raise SendError("this deployment sends codes by e-mail only")
+        minutes = max(1, self.s.code_ttl_s // 60)
+        webhook_send(self.s, ident.value, code_mail_subject(code), code_mail_text(code, minutes))
+
+
+def webhook_send(s: Settings, to: str, subject: str, text: str) -> None:
+    """One message through MAIL_WEBHOOK_URL; SendError when it did not go."""
+    if not (s.mail_webhook_url and s.mail_webhook_secret):
+        raise SendError("mail: MAIL_WEBHOOK_URL and MAIL_WEBHOOK_SECRET are not set")
+    payload = json.dumps(
+        {"to": to, "subject": subject, "text": text, "ts": int(time.time())},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
+    signature = hmac.new(s.mail_webhook_secret.encode(), payload, hashlib.sha256).hexdigest()
+    try:
+        r = httpx.post(
+            s.mail_webhook_url,
+            content=payload,
+            headers={"Content-Type": "application/json", "X-Nanolika-Signature": signature},
+            timeout=20,
+        )
+        body = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        log.error("mail webhook request failed: %s: %s", type(e).__name__, str(e)[:160])
+        raise SendError("mail") from e
+    if r.status_code != 200 or not isinstance(body, dict) or body.get("ok") is not True:
+        # the endpoint's own words ("not configured", "rate", "sender") are the operator's to read
+        reason = body.get("error") if isinstance(body, dict) else None
+        log.error("mail webhook refused: %s %s", r.status_code, reason)
+        raise SendError("mail")
+
+
+def notice_mail_subject(subject: str) -> str:
+    return f"NanoLika Cloud · {subject}"
+
+
+def notice_mail_text(lines: list[str]) -> str:
+    return "\n".join(lines) + "\n\nNanoLika · автоматическое письмо, отвечать не нужно / automated, no reply\n"
+
+
 def compose_notice_mail(sender: str, to: str, subject: str, lines: list[str]) -> EmailMessage:
     """A plain note to the operator (0.22: a threshold rule fired). Text only, both
     languages' worth of facts in the lines the caller gives; nothing personal in it."""
     msg = EmailMessage()
     msg["From"] = sender if "<" in sender else f"NanoLika <{sender}>"
     msg["To"] = to
-    msg["Subject"] = f"NanoLika Cloud · {subject}"
+    msg["Subject"] = notice_mail_subject(subject)
     msg["Auto-Submitted"] = "auto-generated"
     msg["X-Auto-Response-Suppress"] = "All"
-    msg.set_content("\n".join(lines) + "\n\nNanoLika · автоматическое письмо, отвечать не нужно / automated, no reply\n")
+    msg.set_content(notice_mail_text(lines))
     return msg
+
+
+def code_mail_subject(code: str) -> str:
+    """The subject a code mail carries, wherever it is sent from."""
+    return f"NanoLika: код для входа {code}"
+
+
+def code_mail_text(code: str, minutes: int) -> str:
+    """The plain text of a code mail: what every client can show, and what the HTTPS
+    endpoint sends (it builds the MIME body itself, so the same words travel both ways)."""
+    return (
+        f"Код для входа в NanoLika: {code}. Он действует {minutes} мин.\n"
+        "Введите его в приложении. Никому не показывайте этот код.\n\n"
+        f"Your NanoLika code is {code}; it expires in {minutes} minutes.\n"
+        "Enter it in the app to sign in. Do not share it with anyone.\n\n"
+        f"您的 NanoLika 登录码为 {code}，{minutes} 分钟内有效。\n"
+        "请在应用中输入。请勿向任何人透露此代码。\n\n"
+        "Если это не вы, просто удалите письмо.\n"
+        "If you did not ask for this, you can ignore this message.\n"
+        "如果这不是您本人的操作，请直接删除此邮件。\n\n"
+        "NanoLika · https://nanolika.ru/ · автоматическое письмо, отвечать не нужно / automated, no reply\n"
+    )
 
 
 def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMessage:
@@ -123,18 +207,10 @@ def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMes
     msg = EmailMessage()
     msg["From"] = sender if "<" in sender else f"NanoLika <{sender}>"
     msg["To"] = to
-    msg["Subject"] = f"NanoLika: код для входа {code}"
+    msg["Subject"] = code_mail_subject(code)
     msg["Auto-Submitted"] = "auto-generated"
     msg["X-Auto-Response-Suppress"] = "All"
-    msg.set_content(
-        f"Код для входа в NanoLika: {code}. Он действует {minutes} мин.\n"
-        "Введите его в приложении. Никому не показывайте этот код.\n\n"
-        f"Your NanoLika code is {code}; it expires in {minutes} minutes.\n"
-        "Enter it in the app to sign in. Do not share it with anyone.\n\n"
-        "Если это не вы, просто удалите письмо.\n"
-        "If you did not ask for this, you can ignore this message.\n\n"
-        "NanoLika · https://nanolika.ru/ · автоматическое письмо, отвечать не нужно / automated, no reply\n"
-    )
+    msg.set_content(code_mail_text(code, minutes))
     spaced = " ".join(code)
     html = f"""<!doctype html>
 <html><body style="margin:0;padding:24px;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',Arial,sans-serif;color:#1d1d1f">
@@ -145,6 +221,7 @@ def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMes
 <tr><td style="font-size:40px;font-weight:700;letter-spacing:6px;padding:14px 0 18px;font-variant-numeric:tabular-nums">{spaced}</td></tr>
 <tr><td style="font-size:14px;line-height:22px;color:#3a3a3c">Он действует {minutes} мин. Введите его в приложении NanoLika. Никому не показывайте этот код.</td></tr>
 <tr><td style="font-size:14px;line-height:22px;color:#3a3a3c;padding-top:8px">It expires in {minutes} minutes. Enter it in the NanoLika app to sign in; do not share it with anyone.</td></tr>
+<tr><td style="font-size:14px;line-height:22px;color:#3a3a3c;padding-top:8px">您的登录码为上方数字，{minutes} 分钟内有效。请在应用中输入，请勿向任何人透露。</td></tr>
 <tr><td style="font-size:12px;line-height:18px;color:#8e8e93;padding-top:22px">Если это не вы, просто удалите письмо.<br>If you did not ask for this, you can ignore this message.</td></tr>
 </table>
 <div style="font-size:12px;color:#8e8e93;padding-top:16px">NanoLika · <a href="https://nanolika.ru/" style="color:#8e8e93">nanolika.ru</a> · автоматическое письмо, отвечать не нужно / automated, no reply</div>
@@ -272,12 +349,14 @@ def make_sender(s: Settings) -> CodeSender:
             # a relay with a public address and open sign-up that writes the codes to its log:
             # nobody receives a code, and whoever reads the log can sign in as anyone — say so at startup
             log.error(
-                "CODE_SENDER=log with SIGNUP_OPEN at %s: verification codes go to this log and nobody receives them. Set CODE_SENDER=smtp or aliyun.",
+                "CODE_SENDER=log with SIGNUP_OPEN at %s: verification codes go to this log and nobody receives them. Set CODE_SENDER=smtp, webhook or aliyun.",
                 s.public_base,
             )
         return LogSender()
     if s.sender == "smtp":
         return SmtpSender(s)
+    if s.sender == "webhook":
+        return WebhookMailSender(s)
     if s.sender == "aliyun":
         return AliyunSmsSender(s)
     if s.sender == "both":

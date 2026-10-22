@@ -198,7 +198,7 @@ for the full list. The ones that matter:
 | `LOGIN_FAIL_PER_IP_HOUR` | 30 | wrong passwords from one network address per hour across all accounts — a list of numbers tried once each never trips the per-account lock, this does (0.12); 0 = off |
 | `CODE_TTL_S`, `CODE_MAX_ATTEMPTS` | 600, 5 | how long a sign-in code is good for, and how many wrong guesses it survives |
 | `CODE_PER_IDENTIFIER_10M`, `CODE_PER_IP_HOUR` | 3, 10 | codes one number or address may request per ten minutes, and one network address per hour; past either the request is answered `429 code_too_often` |
-| `CODE_SENDER` | `log` | `log`, `smtp`, `aliyun` or `both` (SMS for phones, mail for addresses) |
+| `CODE_SENDER` | `log` | `log`, `smtp`, `webhook` (mail over HTTPS through the site's page), `aliyun` or `both` (SMS for phones, mail for addresses) |
 | `ALIYUN_SMS_API` | `dypns` | `dypns` (号码认证服务 `SendSmsVerifyCode`) or `dysms` (短信服务 `SendSms`) |
 | `CLOUD_MODELS` | DeepSeek + Qwen chat, Qwen image, Wan video | JSON list to replace the menu, prices and lanes (`for`, `recommended_for`) included — see below |
 | `CLOUD_ANY_MODEL_MEMBERS` | `1` | members may name any model of the provider's for its kind (chat, image, video) — see below; `0` = the menu only |
@@ -874,6 +874,13 @@ report can be matched to a ledger row without any content being logged.
 
 - **E-mail** (`CODE_SENDER=smtp`): any SMTP account; port 465 uses implicit
   TLS, anything else STARTTLS.
+- **E-mail over HTTPS** (`CODE_SENDER=webhook`): `MAIL_WEBHOOK_URL` and
+  `MAIL_WEBHOOK_SECRET` point at a page that does the sending, for a host that
+  closes the SMTP ports out (a Russian hosting provider closes them to
+  addresses outside Russia). The body is
+  `{"to", "subject", "text", "ts"}`, the header `X-Nanolika-Signature` is the
+  hex HMAC-SHA256 of the exact bytes, and the answer is a JSON `{"ok": true}` or `{"ok": false, "error"}`. The page
+  on the other side has to build the MIME body and sign it with DKIM itself.
 - **Mainland phones** (`CODE_SENDER=aliyun`): an Aliyun RAM user with
   `ALIYUN_ACCESS_KEY_ID/SECRET`, a signature (`ALIYUN_SMS_SIGN`) and a template
   (`ALIYUN_SMS_TEMPLATE`). `ALIYUN_SMS_API=dypns` (default) sends through

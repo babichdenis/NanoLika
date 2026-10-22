@@ -31,7 +31,7 @@ from typing import Any
 
 from .config import Settings
 from .db import Database
-from .senders import SendError, compose_notice_mail, smtp_send
+from .senders import SendError, compose_notice_mail, notice_mail_subject, notice_mail_text, smtp_send, webhook_send
 
 log = logging.getLogger("nanomuse_cloud.controls")
 
@@ -245,7 +245,14 @@ class Controls:
 
     @property
     def can_notify(self) -> bool:
-        return bool(self.s.admin_email and (self._mailer is not None or (self.s.smtp_host and self.s.smtp_from)))
+        return bool(
+            self.s.admin_email
+            and (
+                self._mailer is not None
+                or (self.s.smtp_host and self.s.smtp_from)
+                or (self.s.mail_webhook_url and self.s.mail_webhook_secret)
+            )
+        )
 
     def notify(self, subject: str, lines: list[str], actor: str = "console") -> bool:
         """An e-mail to ADMIN_EMAIL through the SMTP settings; the audit says whether it went.
@@ -254,12 +261,13 @@ class Controls:
             self.db.audit_add(actor, "notify", "", f"not sent: ADMIN_EMAIL is not set · {subject}")
             log.warning("controls: nobody to notify (ADMIN_EMAIL unset): %s", subject)
             return False
-        msg = compose_notice_mail(self.s.smtp_from or "no-reply@localhost", self.s.admin_email, subject, lines)
         try:
             if self._mailer is not None:
-                self._mailer(msg)
+                self._mailer(compose_notice_mail(self.s.smtp_from or "no-reply@localhost", self.s.admin_email, subject, lines))
+            elif self.s.mail_webhook_url and self.s.mail_webhook_secret:
+                webhook_send(self.s, self.s.admin_email, notice_mail_subject(subject), notice_mail_text(lines))
             else:
-                smtp_send(self.s, msg)
+                smtp_send(self.s, compose_notice_mail(self.s.smtp_from or "no-reply@localhost", self.s.admin_email, subject, lines))
         except SendError as e:
             self.db.audit_add(actor, "notify", "", f"failed ({e}) · {subject}")
             return False
