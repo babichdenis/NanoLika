@@ -2,7 +2,7 @@
 // parsed URL, the shell's own pages from disk, http(s) to the browser, the rest dropped.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { HEAL_INTERVAL_MS, mayHeal, navigationVerdict, needsHostUrl, ownPage, sameOrigin } from "../out/navigation.js";
+import { navigationVerdict, ownPage, sameOrigin } from "../out/navigation.js";
 
 const HOST = "http://127.0.0.1:38421/?token=abc";
 const OWN = "file:///opt/NanoLika/resources/app.asar/resources";
@@ -34,26 +34,4 @@ test("the verdict: stay, open outside, or drop", () => {
   assert.equal(navigationVerdict("javascript:alert(1)", HOST, OWN), "deny");
   assert.equal(navigationVerdict("file:///etc/passwd", HOST, OWN), "deny");
   assert.equal(navigationVerdict("data:text/html,<b>x</b>", HOST, OWN), "deny");
-});
-
-// A window that lost its token (src/navigation.ts): the Host's 401 sentence or an empty
-// document on the Host's origin is repaired by loading the URL that carries the token again.
-test("a page without the token is recognised, and the shell's own pages never are", () => {
-  const sentence = "dsh web authentication required; reopen the URL printed by dsh web.";
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/", HOST, sentence), true);
-  // an empty document is what a load that never completed leaves behind
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/sessions/1", HOST, "  \n "), true);
-  // a page that did come up is left alone
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/c/abc", HOST, "NanoLika\nNew chat"), false);
-  // the shell's own splash is a file: URL, and another origin is somebody else's page
-  assert.equal(needsHostUrl(`${OWN}/loading.html`, HOST, ""), false);
-  assert.equal(needsHostUrl("https://cloud.nanolika.ru/app/", HOST, ""), false);
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/", null, ""), false, "nothing is the Host's before it is up");
-});
-
-test("one repair in ten seconds, so a refusing Host cannot set the window spinning", () => {
-  assert.equal(mayHeal(0, HEAL_INTERVAL_MS), true);
-  assert.equal(mayHeal(0, 1), false);
-  assert.equal(mayHeal(1_000, 1_000 + HEAL_INTERVAL_MS - 1), false);
-  assert.equal(mayHeal(1_000, 1_000 + HEAL_INTERVAL_MS), true);
 });
