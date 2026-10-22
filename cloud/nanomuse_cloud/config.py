@@ -449,6 +449,15 @@ DEFAULT_SIGNUP_DOMAIN_BLOCK: tuple[str, ...] = (
 )
 
 
+# The tariffs offered when PLANS is not set: the operator's own menu (2026-10). A plain top-up
+# is not a tariff: it costs nothing extra, takes nothing off a spend and opens no connection.
+DEFAULT_PLANS = (
+    '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 20, "connect": false},'
+    ' {"id": "lika-plus", "name": "Лика+", "price_rub": 1490, "discount_pct": 20, "connect": true},'
+    ' {"id": "team", "name": "Лика Команда", "price_rub": 3900, "discount_pct": 30, "connect": true}]'
+)
+
+
 def _env(name: str, default: str = "") -> str:
     v = os.environ.get(name)
     return default if v is None or v == "" else v
@@ -632,6 +641,22 @@ class Settings:
     # makes it (`POST /v1/bot/link-code`), the app types it beside its own sign-in code, and
     # both then are one account. 0 = linking switched off.
     link_code_ttl_s: int = field(default_factory=lambda: _int("LINK_CODE_TTL_S", 900))
+    # What the relay's own connection between a person's devices costs: the devices meet
+    # through the hub only when what they have topped up in all, at any time, adds up to this
+    # many rubles (parts count). Below it every device works on its own, with its own chats,
+    # and a chat app still reaches them. 0 = off, everyone connects; a member is never held
+    # back. Said in rubles, read through the same RUB_PER_USD and TOPUP_FEE_PCT as the pool.
+    # The menu, as JSON: one row per tariff with `id`, `name`, `price_rub`, `discount_pct`
+    # (what it takes off a spend while it lasts), `connect` (may this account's devices meet
+    # through the relay) and `days` (30 by default). What a person pays goes into the pool in
+    # full at the ruble rate below; the tariff is what opens the connection and what makes a
+    # spend cheaper, and how long the balance lasts is the person's own business.
+    plans_json: str = field(default_factory=lambda: _env("PLANS", DEFAULT_PLANS))
+    # Whether the relay's connection between a person's devices needs a running tariff
+    # (`connect: true` in the menu). 0 = every account connects as before, which is what a
+    # relay whose tariffs are not sold yet must keep; 1 = the tariff is the key, and a plain
+    # top-up or Лика alone leaves each device on its own.
+    connect_requires_plan: bool = field(default_factory=lambda: _env("CONNECT_REQUIRES_PLAN", "0") not in ("0", "false", "no"))
     # A sign-in for an app store's reviewer, who cannot receive our codes: for the
     # e-mail addresses in REVIEW_ADDRESSES (comma-separated) a code request sends nothing and
     # answers as if it had, and /v1/auth/verify accepts exactly REVIEW_CODE (six digits) —
@@ -872,6 +897,15 @@ class Settings:
 
     def cny_to_usd(self, cny: float) -> float:
         return round(cny / self.usd_cny, 4) if self.usd_cny > 0 else 0.0
+
+    def rub_to_uy(self, rub: float) -> int:
+        """Rubles back into the pool's micro-yuan: the other direction of `cny_to_rub`, with
+        the same dollar price and the same commission, so a threshold said in rubles is a
+        figure the pool can be compared against."""
+        if self.rub_per_usd <= 0 or self.usd_cny <= 0:
+            return 0
+        cny = rub / (1 + self.topup_fee_pct / 100) / self.rub_per_usd * self.usd_cny
+        return self.cny_to_uy(cny)
 
     def cny_to_rub(self, cny: float) -> float:
         """What this yuan of provider spend costs the operator in rubles: through the

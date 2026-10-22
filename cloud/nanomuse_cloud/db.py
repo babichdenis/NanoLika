@@ -286,6 +286,21 @@ CREATE INDEX IF NOT EXISTS account_aliases_account ON account_aliases(account_id
 -- The one-time code that ties a second identifier to an account: made by the chat (the
 -- bot), typed in the app. Only the code's hash is kept, it is spent once, and it lapses on
 -- its own (LINK_CODE_TTL_S).
+-- 0.26: the tariff a person bought. The row keeps the terms it was sold at (price, what it
+-- takes off a spend, whether it opens the relay's connection between devices), so a later
+-- change of the menu does not rewrite what someone already paid for. One row per account:
+-- buying again extends `expires_at` and moves the terms to the new plan.
+CREATE TABLE IF NOT EXISTS subscriptions (
+    account_id    TEXT PRIMARY KEY REFERENCES accounts(id),
+    plan          TEXT NOT NULL,
+    name          TEXT NOT NULL DEFAULT '',
+    price_rub     REAL NOT NULL DEFAULT 0,
+    discount_pct  INTEGER NOT NULL DEFAULT 0,
+    connect       INTEGER NOT NULL DEFAULT 0,
+    started_at    INTEGER NOT NULL,
+    expires_at    INTEGER NOT NULL,
+    paid_uy       INTEGER NOT NULL DEFAULT 0   -- what the tariff put into the pool, micro-yuan
+);
 CREATE TABLE IF NOT EXISTS link_codes (
     code_hash     TEXT PRIMARY KEY,
     account_id    TEXT NOT NULL REFERENCES accounts(id),
@@ -415,6 +430,10 @@ class Database:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN contribute INTEGER NOT NULL DEFAULT 0")
         # 0.5: one lifetime pool instead of a daily cap; the co-creation bonus, once
         add("accounts", "grant_uy", "INTEGER NOT NULL DEFAULT 0")
+        # 0.26: what the person put in themselves, in micro-yuan, added up across top-ups;
+        # the free allowance, invites and the operator's own gifts never count here, and the
+        # figure never goes down when the pool is spent (it is a door key, not a balance)
+        add("accounts", "topped_uy", "INTEGER NOT NULL DEFAULT 0")
         add("accounts", "contribute_bonus_at", "INTEGER")
         # 0.10: the address and the client software behind sign-ins, requests, events and
         # devices (client.py) — the operator's page reads them; nothing else does
@@ -690,6 +709,10 @@ class Database:
                 new = max(0, old + int(delta_uy or 0))
             if new != old:
                 c.execute("UPDATE accounts SET grant_uy=? WHERE id=?", (new, account_id))
+                if new > old:
+                    # what the person paid in, kept apart from the pool: the door to the
+                    # relay's connection between their devices is this sum, not what is left
+                    c.execute("UPDATE accounts SET topped_uy=topped_uy+? WHERE id=?", (new - old, account_id))
                 c.execute(
                     "INSERT INTO ledger(account_id, ts, kind, charged, extra) VALUES (?,?,?,?,?)",
                     (account_id, t, "credit", 0, json.dumps({"credit_uy": new - old, "from": "operator", "note": note[:200], "set": new})),
@@ -867,6 +890,49 @@ class Database:
                 return None
             c.execute("UPDATE link_codes SET used_at=? WHERE code_hash=?", (ts, code_hash))
         return row
+
+    # -- the tariff a person bought (0.26) ------------------------------------------------
+
+    def subscription(self, account_id: str) -> sqlite3.Row | None:
+        with self._lock:
+            return self._conn.execute("SELECT * FROM subscriptions WHERE account_id=?", (account_id,)).fetchone()
+
+    def set_subscription(
+        self,
+        account_id: str,
+        plan: str,
+        name: str,
+        price_rub: float,
+        discount_pct: int,
+        connect: bool,
+        starts_at: int,
+        expires_at: int,
+        paid_uy: int,
+    ) -> None:
+        """The terms sold, and until when. A second purchase in the same month extends the
+        date and keeps the terms it now carries."""
+        with self.tx() as c:
+            c.execute(
+                """INSERT INTO subscriptions
+                     (account_id, plan, name, price_rub, discount_pct, connect, started_at, expires_at, paid_uy)
+                   VALUES (?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(account_id) DO UPDATE SET
+                     plan=excluded.plan, name=excluded.name, price_rub=excluded.price_rub,
+                     discount_pct=excluded.discount_pct, connect=excluded.connect,
+                     started_at=excluded.started_at, expires_at=excluded.expires_at,
+                     paid_uy=excluded.paid_uy""",
+                (
+                    account_id,
+                    plan,
+                    name,
+                    float(price_rub),
+                    int(discount_pct),
+                    1 if connect else 0,
+                    int(starts_at),
+                    int(expires_at),
+                    int(paid_uy),
+                ),
+            )
 
     @staticmethod
     def new_account_id() -> str:

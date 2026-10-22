@@ -581,3 +581,30 @@ itself; the frames are in [hub.md](hub.md). Conversations: `/v1/sync/state`,
 ## Reliable metering
 
 Provider attempts count toward the per-minute limit even when the provider refuses them. Interrupted streams include received tool-call arguments and reasoning in the fallback estimate when final usage is unavailable. Video completion and its ledger charge commit in one transaction, so a failed write can be retried without losing or duplicating the charge.
+
+## Tariffs
+
+The relay's own connection between a person's devices is what a tariff buys, and a
+tariff also makes a spend cheaper while it runs. The menu is the operator's
+(`PLANS`, a JSON list of `id`, `name`, `price_rub`, `discount_pct`, `connect`,
+`days`):
+
+| tariff | what it takes off a spend | the relay's connection |
+|---|---|---|
+| a plain top-up | nothing | no |
+| Лика | 20 % | no |
+| Лика+ | 20 % | yes |
+| Лика Команда | 30 % | yes |
+
+Buying one credits its whole price into the pool at the ruble rate (`RUB_PER_USD`
+and `TOPUP_FEE_PCT`): ₽590 buys the tariff and ₽590 of balance, and how long that
+balance lasts is the person's own business. The terms are kept with the account,
+so a later change of the menu does not rewrite what someone already paid for; a
+second sale inside the month adds a month to what is left instead of starting
+over. `GET /v1/config` carries the menu, `/v1/me` the account's `plan` and whether
+`connect` is open, and the operator sells one with `POST /v1/admin/plan`.
+
+`CONNECT_REQUIRES_PLAN=1` makes that the rule for `/v1/hub`: an account without a
+running `connect` tariff keeps every device on its own, and the socket is closed
+with `4004 connect_limited` ([hub.md](hub.md)). `0`, the default, keeps a relay
+that does not sell the key yet working as before: everyone connects.

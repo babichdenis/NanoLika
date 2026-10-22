@@ -626,6 +626,10 @@ class Cloud:
             "topup_fee_pct": self.s.topup_fee_pct,
             "allowance_rub": self.s.cny_to_rub(self.s.allowance_cny),
             "invite_bonus_rub": self.s.cny_to_rub(self.s.invite_bonus_cny),
+            # 0.26: the tariffs on offer, so a sign-in page or an app shows the operator's own
+            # menu (price, what it takes off a spend, whether it opens the relay's connection)
+            "plans": self.plan_menu(),
+            "connect_requires_plan": self.s.connect_requires_plan,
             "invite_url": self.s.invite_url,
             "own_key_docs": self.s.own_key_docs,
             "openrouter_url": self.s.openrouter_url,
@@ -915,6 +919,126 @@ class Cloud:
         self.db.add_link_code(_code_hash(self.s.hmac_key, code), str(account["id"]), self.s.link_code_ttl_s)
         self.db.add_event(str(account["id"]), "link.code", ident.channel)
         return code, now() + self.s.link_code_ttl_s
+
+    # -- tariffs (0.26) ---------------------------------------------------------------
+
+    def plan_menu(self) -> list[dict[str, Any]]:
+        """The tariffs on offer, in the order the operator wrote them."""
+        try:
+            raw = json.loads(self.s.plans_json or "[]")
+        except json.JSONDecodeError:
+            log.warning("PLANS is not JSON: no tariff is offered")
+            return []
+        menu: list[dict[str, Any]] = []
+        for row in raw if isinstance(raw, list) else []:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            menu.append(
+                {
+                    "id": str(row.get("id")),
+                    "name": str(row.get("name") or row.get("id")),
+                    "price_rub": float(row.get("price_rub") or 0),
+                    "discount_pct": max(0, min(90, int(row.get("discount_pct") or 0))),
+                    "connect": bool(row.get("connect")),
+                    "days": max(1, int(row.get("days") or 30)),
+                }
+            )
+        return menu
+
+    def plan_state(self, account_id: str) -> dict[str, Any] | None:
+        """The tariff this account is on, with what it takes off a spend and whether it opens
+        the relay's connection. ``None`` when it never bought one; ``active`` says whether it
+        is still running."""
+        row = self.db.subscription(account_id)
+        if row is None:
+            return None
+        expires_at = int(row["expires_at"])
+        return {
+            "id": str(row["plan"]),
+            "name": str(row["name"]),
+            "price_rub": float(row["price_rub"]),
+            "discount_pct": int(row["discount_pct"]),
+            "connect": bool(row["connect"]),
+            "started_at": int(row["started_at"]),
+            "expires_at": expires_at,
+            "active": expires_at > self.clock(),
+        }
+
+    def plan_buy(self, account_id: str, plan_id: str, actor: str = "console", note: str = "") -> dict[str, Any]:
+        """Sell one tariff: the whole price goes into the pool at the ruble rate, the terms
+        are kept with the account, and a second purchase inside the same month extends the
+        date instead of starting over. No price is charged twice: the money is the balance."""
+        account = self.db.account(account_id)
+        if account is None:
+            raise CloudError(404, "no_account", "No such account")
+        menu = {row["id"]: row for row in self.plan_menu()}
+        plan = menu.get(plan_id)
+        if plan is None:
+            raise CloudError(400, "no_plan", "That tariff is not on this relay's menu")
+        paid_uy = self.s.rub_to_uy(plan["price_rub"])
+        if paid_uy <= 0:
+            raise CloudError(400, "no_rate", "This relay has no ruble rate (RUB_PER_USD), so a tariff cannot be sold")
+        current = self.plan_state(account_id)
+        now_ts = self.clock()
+        starts_at = now_ts
+        if current is not None and current["active"]:
+            # a purchase inside the month adds a month to what is left, and the terms are the
+            # new plan's from now on
+            starts_at = current["started_at"]
+            expires_at = max(now_ts, current["expires_at"]) + plan["days"] * 86400
+        else:
+            expires_at = now_ts + plan["days"] * 86400
+        self.db.set_subscription(
+            account_id,
+            plan["id"],
+            plan["name"],
+            plan["price_rub"],
+            plan["discount_pct"],
+            plan["connect"],
+            starts_at,
+            expires_at,
+            paid_uy,
+        )
+        self.db.set_pool(account_id, delta_uy=paid_uy, note=f"tariff {plan['id']}")
+        self.db.add_event(account_id, "plan.bought", plan["id"])
+        self.db.audit_add(actor, "plan.buy", account_id[:8], f"{plan['id']} ₽{plan['price_rub']:g}{' · ' + note if note else ''}")
+        state = self.plan_state(account_id) or {}
+        return {"plan": state, "credited_uy": paid_uy, "credited_rub": plan["price_rub"]}
+
+    def discount(self, charged: int, account_id: str) -> int:
+        """What a running tariff takes off a spend: 20 % on Лика and Лика+, 30 % on Лика
+        Команда, nothing without one. The provider is paid the same either way; the
+        difference is the operator's."""
+        pct = self.spend_discount_pct(account_id)
+        return charged if pct <= 0 else max(1, math.ceil(charged * (100 - pct) / 100))
+
+    def spend_discount_pct(self, account_id: str) -> int:
+        """What the running tariff takes off a spend right now; 0 when there is none."""
+        state = self.plan_state(account_id)
+        return int(state["discount_pct"]) if state and state["active"] else 0
+
+    def connect_state(self, account_id: str) -> dict[str, Any]:
+        """Whether this account's devices may meet through the relay, and on what tariff.
+
+        The relay's connection is what a tariff buys: Лика+ and Лика Команда open it, a plain
+        top-up and Лика do not, and a member is never held back. Below it every device works
+        on its own and keeps its own chats."""
+        account = self.db.account(account_id)
+        member = bool(account["unlimited"]) if account is not None else False
+        state = self.plan_state(account_id)
+        connected = bool(state and state["active"] and state["connect"])
+        return {
+            # a relay that does not sell the key yet lets everyone connect, as before
+            "allowed": connected or member or not self.s.connect_requires_plan,
+            "required": self.s.connect_requires_plan,
+            "member": member,
+            "plan": state,
+            # the cheapest tariff that would open it, for the message a device shows
+            "open_from_rub": min((row["price_rub"] for row in self.plan_menu() if row["connect"]), default=0.0),
+        }
+
+    def connect_allowed(self, account_id: str) -> bool:
+        return bool(self.connect_state(account_id)["allowed"])
 
     def link_into(self, ident: Identifier, code: str, device: str) -> tuple[str, Caller, bool]:
         """The second way in: an identifier proven by its own code joins the account that a
@@ -1491,6 +1615,10 @@ class Cloud:
                     for row in self.db.aliases_of(caller.account_id)
                 ],
             },
+            # 0.26: the tariff the account is on (None: never bought one) and whether its
+            # devices may meet through the relay; an app shows both on the account page
+            "plan": self.plan_state(caller.account_id),
+            "connect": self.connect_state(caller.account_id),
             "usage": self.usage(caller.account_id, day_start),
             "tokens": {
                 # `unlimited` first: when it is true the app shows 「不限」 and
@@ -1758,7 +1886,7 @@ class Cloud:
         cached part of the prompt at its cached rate, the idle hours at the idle price. The
         ledger line's `extra` says when either applied, so a statement can be checked."""
         at = self.clock() if at is None else at
-        charged = math.ceil(prompt_tokens * model.in_mult + completion_tokens * model.out_mult)
+        charged = self.discount(math.ceil(prompt_tokens * model.in_mult + completion_tokens * model.out_mult), caller.account_id)
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
         detail: dict[str, Any] = {}
         if cached_tokens > 0:
@@ -1781,7 +1909,7 @@ class Cloud:
 
     def charge_image(self, caller: Caller, model: ModelSpec, n: int, request_id: str, size: str | None = None, inputs: int = 0) -> int:
         """`n` pictures out at the tier `size` falls in; `inputs` pictures sent in (an edit)."""
-        charged = model.per_image * max(1, n)
+        charged = self.discount(model.per_image * max(1, n), caller.account_id)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
         self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost)
         self.settle_invite(caller.account_id)
@@ -1804,9 +1932,9 @@ class Cloud:
         spec = self.s.model(model_id)
         if spec is None or spec.kind != "video":
             spec = self.s.unlisted_model(model_id, "video")  # a member's own pick
-        # The stored money price remains payable even if the model left the menu.
-        charged = spec.per_clip if spec is not None else 0
         account_id = str(task["account_id"])
+        # The stored money price remains payable even if the model left the menu.
+        charged = self.discount(spec.per_clip if spec is not None else 0, account_id)
         recorded = self.db.charge(
             account_id,
             "video",

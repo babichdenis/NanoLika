@@ -1679,6 +1679,18 @@ def create_app(
             raise CloudError(400, "bad_request", "cny is a number") from e
         return cloud.admin_credit(account_id, cny, str(body.get("note", ""))[:200], actor=_actor(request))
 
+    @app.post("/v1/admin/plan", dependencies=[Depends(admin_dep)])
+    async def admin_plan(request: Request) -> dict:
+        """{account_id | identifier, plan, note?}: sell one tariff of the menu (0.26).
+
+        The whole price goes into the pool at the ruble rate, the terms are kept with the
+        account, and the tariff is what takes a share off later spends and whether the
+        account's devices meet through the relay. A second sale in the same month adds a
+        month to what is left."""
+        body = await _json(request)
+        account_id = cloud.admin_resolve(str(body.get("account_id", "")), str(body.get("identifier", "")))
+        return cloud.plan_buy(account_id, str(body.get("plan", ""))[:32], actor=_actor(request), note=str(body.get("note", ""))[:200])
+
     @app.post("/v1/admin/credit-all", dependencies=[Depends(admin_dep)])
     async def admin_credit_all(request: Request) -> dict:
         """{cny, note?}: the same credit into every limited account's pool (0.15)."""
