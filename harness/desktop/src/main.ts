@@ -1953,7 +1953,7 @@ function createWindow(): BrowserWindow {
     // always through the host URL: a plain reload can land on the address the client left
     // behind (no `?token=`), and the page then answers 401 without its widgets
     if (!win.isDestroyed()) {
-      if (hostUrl) void win.loadURL(hostUrl);
+      if (hostUrl) void loadHost(win, hostUrl);
       else win.webContents.reload();
     }
   });
@@ -2090,7 +2090,7 @@ function buildMenu(): void {
     {
       label: T.view,
       submenu: [
-        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => { if (!alive(mainWindow)) return; if (hostUrl) void mainWindow.loadURL(hostUrl); else mainWindow.webContents.reload() } },
+        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => { if (!alive(mainWindow)) return; if (hostUrl) void loadHost(mainWindow, hostUrl); else mainWindow.webContents.reload() } },
         { label: T.devtools, accelerator: process.platform === "darwin" ? "Alt+Cmd+I" : "Ctrl+Shift+I", click: () => mainWindow?.webContents.toggleDevTools() },
         { type: "separator" },
         { role: "resetZoom" },
