@@ -48,7 +48,7 @@ export function apply(ctx: Context): void {
     () =>
       ctx.tools.register(
         defineTool({
-          name: 'remember',
+          name: 'memory_remember',
           description:
             'Save a durable fact about the person or their preferences in the account memory shared by all their devices (the phone and the bot see it too). Keep it short and factual. Never store passwords or payment details here.',
           parameters: {
@@ -83,7 +83,7 @@ export function apply(ctx: Context): void {
     () =>
       ctx.tools.register(
         defineTool({
-          name: 'recall',
+          name: 'memory_recall',
           description:
             'Search the account memory — the facts about the person shared by all their devices — for what is relevant to `query`.',
           parameters: {
@@ -129,7 +129,7 @@ export function apply(ctx: Context): void {
     () =>
       ctx.tools.register(
         defineTool({
-          name: 'forget',
+          name: 'memory_forget',
           description:
             'Drop a fact from the account memory shared by all the person’s devices: by its id (from recall) or by a query that matches it.',
           parameters: {
