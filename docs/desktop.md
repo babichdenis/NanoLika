@@ -596,6 +596,12 @@ After every in-place change, in this order:
    System Settings;
 5. restart the app once — the running process still holds the old signature.
 
+The plugin's `lib/` is not in git: `npm run dist` packs whatever `lib` is on disk, so a
+change in `harness/dsh-nanomuse/src` reaches the app only after
+`npm --prefix harness/dsh-nanomuse run build`. Skipping that step builds the app around a
+stale plugin — the previous behaviour comes back, and it looks like the fix was reverted.
+Last, `npm run dist` stages no runtime (see `build-runtime.py`), so the hands come up off.
+
 Do not touch files inside `.app` after the permissions are granted. A full
 `npm run dist` writes the app unsigned (`identity: null`): sign it with
 `codesign --force --deep --sign -` before installing.
