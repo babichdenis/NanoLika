@@ -1950,7 +1950,12 @@ function createWindow(): BrowserWindow {
   // to restart the whole app.
   win.webContents.on("render-process-gone", (_event, gone) => {
     log(`window: the renderer went (${gone.reason}); reloading it`);
-    if (!win.isDestroyed()) win.webContents.reload();
+    // always through the host URL: a plain reload can land on the address the client left
+    // behind (no `?token=`), and the page then answers 401 without its widgets
+    if (!win.isDestroyed()) {
+      if (hostUrl) void win.loadURL(hostUrl);
+      else win.webContents.reload();
+    }
   });
   win.on("unresponsive", () => log("window: the renderer stopped answering"));
   // Windows logoff/shutdown may close the last window without before-quit.
@@ -2076,7 +2081,7 @@ function buildMenu(): void {
     {
       label: T.view,
       submenu: [
-        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => { if (alive(mainWindow)) mainWindow.webContents.reload() } },
+        { label: T.reload, accelerator: "CmdOrCtrl+R", click: () => { if (!alive(mainWindow)) return; if (hostUrl) void mainWindow.loadURL(hostUrl); else mainWindow.webContents.reload() } },
         { label: T.devtools, accelerator: process.platform === "darwin" ? "Alt+Cmd+I" : "Ctrl+Shift+I", click: () => mainWindow?.webContents.toggleDevTools() },
         { type: "separator" },
         { role: "resetZoom" },
