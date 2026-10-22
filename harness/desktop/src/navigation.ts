@@ -48,14 +48,15 @@ export const HEAL_INTERVAL_MS = 10_000;
 
 /**
  * Whether a finished page needs the tokenised Host URL loaded into it again. It has to be on
- * the Host's origin (the shell's own loading page is a `file:` URL and is left alone), and
- * either show the Host's own 401 sentence or show nothing at all, which is what a document
- * that never loaded leaves behind.
+ * the Host's origin (the shell's own loading page is a `file:` URL and is left alone) and show
+ * the Host's own 401 sentence. An empty document is *not* a reason: the web app mounts its
+ * widgets after the document loads, so a page that is still empty a moment after
+ * `did-finish-load` is the app starting up, and reloading it there would tear the app down
+ * before it could draw anything.
  */
 export function needsHostUrl(here: string, hostUrl: string | null, text: string): boolean {
   if (!sameOrigin(here, hostUrl)) return false;
-  const shown = text.trim();
-  return shown === "" || shown.startsWith(LOST_TOKEN);
+  return text.trim().startsWith(LOST_TOKEN);
 }
 
 /** Whether a repair may run now, given when the last one did. `now - last >= HEAL_INTERVAL_MS`. */
