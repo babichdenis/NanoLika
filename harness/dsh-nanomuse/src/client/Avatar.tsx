@@ -116,8 +116,9 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const candidate = still || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion)
   const clip = candidate && !noClip.has(candidate) ? candidate : null
   const poster = stillUrl(profile, mood, live.ownClip, live.ownClips)
-  // the whole face moves when nothing inside it does
-  const motion = still || clip || reducedMotion ? '' : mood === 'working' ? ' nm-avatar-working' : mood === 'waiting' ? ' nm-avatar-waiting' : mood === 'idle' ? ' nm-avatar-idle' : ''
+  // the whole face moves as well as the clip inside it: the clips are short loops cut in
+  // different poses, so the frame breathing and swaying carries the eye over the cut
+  const motion = still || reducedMotion ? '' : mood === 'working' ? ' nm-avatar-working' : mood === 'waiting' ? ' nm-avatar-waiting' : mood === 'idle' ? ' nm-avatar-idle' : ''
 
   useEffect(() => {
     const el = video.current

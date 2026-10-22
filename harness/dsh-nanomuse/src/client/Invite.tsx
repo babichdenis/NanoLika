@@ -1,45 +1,25 @@
 /**
- * The Invite button at the top right of a chat, as the Muse desktop has it: a
- * small pill with a gift, and a card with the account's invite code and link
- * — a friend who signs up with the code gets credit on NanoLika Cloud, and so
- * does the person inviting. Occupies `conversation.session.header.utilities`;
- * nothing shows without an account.
+ * The share arrow at the top right of a chat: postcards of the face, and the card that
+ * carries the account's invite code — a friend who signs up with it gets credit on
+ * NanoLika Cloud, and so does the person inviting. Occupies
+ * `conversation.session.header.utilities`. It shows in side chats too: a share is not a
+ * property of one conversation.
  */
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useState, type ReactNode } from 'react'
-import { call, type Translate, failureText } from './api.ts'
+import { type Translate } from './api.ts'
 import { AvatarShareSheet } from './AvatarShare.tsx'
-import { IconCopy, IconGift, IconShare } from './icons.tsx'
+import { IconShare } from './icons.tsx'
 import { useLive } from './live.ts'
 import { mainChatId } from './MuseChats.tsx'
-import { useMoney } from './money.ts'
 import { win } from './win.ts'
-
-interface Invite {
-  code: string
-  url: string
-  invites: number
-  /** The relay sends these in yuan (`_cny`) with their ruble twin (`_rub`), snake_case. */
-  bonus_cny?: number
-  earned_cny?: number
-  bonus_rub?: number
-  earned_rub?: number
-}
-
-function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text)
-  return Promise.reject(new Error('clipboard unavailable'))
-}
 
 export function makeInviteButton(t: Translate) {
   return function InviteButton({ sessionId }: { sessionId?: string | undefined }): ReactNode {
     const live = useLive()
-    const [open, setOpen] = useState(false)
-    // the postcards from the same corner of the window: a picture of the face, and with an
+    // the postcards from the corner of the window: a picture of the face, and with an
     // account the one that carries the code (src/client/AvatarShare.tsx)
     const [share, setShare] = useState(false)
-    // this seat is per session: it tells the rest of the shell which chat is on
-    // screen, and whether it is a side chat (Muse shows Invite on the main chat only)
+    // this seat is per session: it tells the rest of the shell which chat is on screen
     const side = sessionId !== undefined && mainChatId() !== undefined && mainChatId() !== sessionId
     useEffect(() => {
       win.current(sessionId ?? null)
@@ -50,51 +30,12 @@ export function makeInviteButton(t: Translate) {
         win.current(null)
       }
     }, [sessionId, side])
-    if (side) return null
     const name = live.profile.name || t('brand')
+    // One control on purpose. The code and the credit a friend gets are already in the
+    // invite card of this sheet, so a second "Invite" button only repeated them; the
+    // tally of who came and what it earned lives in the account page.
     return h('span', null,
       h('button', { type: 'button', className: 'nm-invite nm-invite-icon', title: t('acShareTitle'), 'aria-label': t('acShareTitle'), onClick: () => setShare(true) }, h(IconShare, { size: 15 })),
-      live.cloud.signedIn
-        ? h('button', { type: 'button', className: 'nm-invite', onClick: () => setOpen(true) }, h(IconGift, { size: 15 }), t('invite'))
-        : null,
-      share ? h(AvatarShareSheet, { t, name, onClose: () => setShare(false) }) : null,
-      open ? h(InviteDialog, { t, onClose: () => setOpen(false) }) : null)
+      share ? h(AvatarShareSheet, { t, name, onClose: () => setShare(false) }) : null)
   }
-}
-
-function InviteDialog({ t, onClose }: { t: Translate; onClose(): void }): ReactNode {
-  const { cash } = useMoney()
-  const [invite, setInvite] = useState<Invite | undefined>()
-  const [error, setError] = useState<string | undefined>()
-  const [copied, setCopied] = useState<'code' | 'link' | undefined>()
-  useEffect(() => {
-    let alive = true
-    call<Invite>('invite')
-      .then((next) => { if (alive) setInvite(next) })
-      .catch((err: unknown) => { if (alive) setError(failureText(t, err)) })
-    return () => { alive = false }
-  }, [t])
-  const copy = (what: 'code' | 'link', text: string) => {
-    void copyText(text).then(() => {
-      setCopied(what)
-      window.setTimeout(() => setCopied(undefined), 1800)
-    }).catch(() => undefined)
-  }
-  return h(Modal, { open: true, title: t('inviteTitle'), closeLabel: t('close'), onClose, className: 'nm-invite-modal' },
-    h('div', { className: 'nm-invite-card' },
-      h('p', { className: 'nm-lead' }, t('inviteText', { bonus: cash(invite?.bonus_cny ?? 5) })),
-      error ? h('div', { className: 'nm-ob-error', role: 'alert' }, error) : null,
-      invite
-        ? h('div', { className: 'nm-invite-card' },
-            h('div', { className: 'nm-invite-code' },
-              h('span', null, invite.code),
-              h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: () => copy('code', invite.code) }, h(IconCopy, { size: 14 }), copied === 'code' ? t('inviteCopied') : t('inviteCopy'))),
-            invite.url
-              ? h('div', { className: 'nm-invite-link' },
-                  h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginBottom: 4 } }, t('inviteLink')),
-                  h('div', null, invite.url, ' ',
-                    h('button', { type: 'button', className: 'nm-ob-link nm-inline', onClick: () => copy('link', invite.url) }, copied === 'link' ? t('inviteCopied') : t('inviteCopy'))))
-              : null,
-            h('div', { className: 'nm-invite-link' }, t('inviteStats', { n: invite.invites, earned: cash(invite.earned_cny ?? 0) })))
-        : error ? null : h('div', { className: 'nm-spinner', style: { margin: '12px auto' } })))
 }

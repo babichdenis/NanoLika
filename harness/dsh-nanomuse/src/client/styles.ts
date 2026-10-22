@@ -1162,7 +1162,8 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 [data-conversation-content][data-content-phase="hero"] > [data-conversation-scroll] > .nm-traj { flex: 0 0 auto; width: min(var(--dsh-chat-content-width, 680px), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 /* the agent's face: a round frame; a clip or a still inside, or an emoji on its colour */
 .nm-avatar { display: block; flex: 0 0 auto; border-radius: 50%; overflow: hidden; background: var(--dsw-alias-surface-sunken, #f1efe9); will-change: transform; transform-origin: 50% 60%; }
-.nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+.nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 50%; animation: nm-avatar-in 180ms ease-out both; }
+@keyframes nm-avatar-in { from { opacity: 0; } to { opacity: 1; } }
 .nm-avatar-emoji { display: block; width: 100%; height: 100%; text-align: center; user-select: none; }
 @keyframes nm-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 @keyframes nm-sway { 0%, 100% { transform: rotate(-4deg) translateY(0); } 25% { transform: rotate(0deg) translateY(-2%); } 50% { transform: rotate(4deg) translateY(0); } 75% { transform: rotate(0deg) translateY(-2%); } }
@@ -1170,7 +1171,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-avatar-idle { animation: nm-breathe 4.5s ease-in-out infinite; }
 .nm-avatar-working { animation: nm-sway 2.6s ease-in-out infinite; }
 .nm-avatar-waiting { animation: nm-hop 3.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .nm-avatar-idle, .nm-avatar-working, .nm-avatar-waiting { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .nm-avatar-idle, .nm-avatar-working, .nm-avatar-waiting, .nm-avatar > img, .nm-avatar > video { animation: none; } }
 /* ---- menus we draw ---------------------------------------------------- */
 .nm-menu { position: fixed; z-index: 80; min-width: 200px; padding: 6px; border-radius: 12px; background: var(--dsw-alias-bg-layer-3, var(--nm-base)); color: var(--dsw-alias-label-primary); box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 0 0 1px var(--nm-divider); display: flex; flex-direction: column; gap: 1px; }
 .nm-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; text-align: left; padding: 8px 10px; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
