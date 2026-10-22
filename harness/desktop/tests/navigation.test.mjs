@@ -36,14 +36,13 @@ test("the verdict: stay, open outside, or drop", () => {
   assert.equal(navigationVerdict("data:text/html,<b>x</b>", HOST, OWN), "deny");
 });
 
-// A window that lost its token (src/navigation.ts): the Host's 401 sentence on the Host's
-// origin is repaired by loading the URL that carries the token again.
+// A window that lost its token (src/navigation.ts): the Host's 401 sentence or an empty
+// document on the Host's origin is repaired by loading the URL that carries the token again.
 test("a page without the token is recognised, and the shell's own pages never are", () => {
   const sentence = "dsh web authentication required; reopen the URL printed by dsh web.";
   assert.equal(needsHostUrl("http://127.0.0.1:38421/", HOST, sentence), true);
-  // an empty document is the web app before it mounts, never a reason to reload it
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/sessions/1", HOST, "  \n "), false);
-  assert.equal(needsHostUrl("http://127.0.0.1:38421/", HOST, ""), false);
+  // an empty document is what a load that never completed leaves behind
+  assert.equal(needsHostUrl("http://127.0.0.1:38421/sessions/1", HOST, "  \n "), true);
   // a page that did come up is left alone
   assert.equal(needsHostUrl("http://127.0.0.1:38421/c/abc", HOST, "NanoLika\nNew chat"), false);
   // the shell's own splash is a file: URL, and another origin is somebody else's page

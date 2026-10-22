@@ -1958,12 +1958,10 @@ function createWindow(): BrowserWindow {
     }
   });
   // A page that came up without its token: a reload that landed on a route the client left
-  // behind, a stale cookie, a first load the Host refused. It shows the Host's own 401
-  // sentence and has no widget in it, so the person sees a document with nothing to type into
-  // and no explanation. Ask the finished page what it shows, and load the tokenised Host URL
-  // into it again; once in ten seconds, so a refusing Host cannot spin. An empty document is
-  // deliberately not a reason: the web app mounts its widgets after the load, and a reload
-  // there would tear it down before it drew anything (that is what removed the panel list).
+  // behind, a stale cookie, a first load the Host refused. It is the Host's own 401 sentence
+  // or an empty document, and there is no widget in it to type a message into, so the person
+  // sees a blank window and nothing explains it. Ask the finished page what it shows, and load
+  // the tokenised Host URL into it again; once in ten seconds, so a refusing Host cannot spin.
   let healedAt = 0;
   win.webContents.on("did-finish-load", () => {
     if (win.isDestroyed() || !hostUrl) return;
@@ -1975,7 +1973,7 @@ function createWindow(): BrowserWindow {
         if (!needsHostUrl(win.webContents.getURL(), hostUrl, String(text ?? ""))) return;
         if (!mayHeal(healedAt, Date.now())) return;
         healedAt = Date.now();
-        log(`window: the page came up without its token (${String(text ?? "").trim().slice(0, 40)}); loading the Host URL again`);
+        log(`window: the page came up without its token (${String(text ?? "").trim().slice(0, 40) || "blank"}); loading the Host URL again`);
         void win.loadURL(hostUrl);
       })
       .catch(() => undefined);
@@ -1984,10 +1982,10 @@ function createWindow(): BrowserWindow {
   // yet (the first start after an install is slow): try the Host URL again, a few times, and
   // then say so in the log rather than leaving the person with an empty frame.
   let loadTries = 0;
-  win.webContents.on("did-fail-load", (_event, code, description, _failedUrl, isMainFrame) => {
+  win.webContents.on("did-fail-load", (_event, code, description, failedUrl, isMainFrame) => {
     // -3 is ERR_ABORTED, which a navigation we started ourselves leaves behind
     if (!isMainFrame || code === -3) return;
-    log(`window: the page did not load (${code} ${description})`);
+    log(`window: ${failedUrl} did not load (${code} ${description})`);
     if (!hostUrl || win.isDestroyed() || loadTries >= 3) return;
     loadTries += 1;
     setTimeout(() => {
