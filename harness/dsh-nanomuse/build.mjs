@@ -38,7 +38,7 @@ const PLATFORM_MODULES = [
 await rm(new URL('./lib/', import.meta.url), { recursive: true, force: true })
 
 await build({
-  entryPoints: ['src/index.ts', 'src/admit.ts', 'src/cloud.ts', 'src/relay.ts', 'src/reach.ts', 'src/hub.ts', 'src/profile.ts', 'src/actions.ts', 'src/task.ts', 'src/work.ts', 'src/sync.ts', 'src/rooms.ts', 'src/rooms-tools.ts', 'src/memory-tools.ts', 'src/connectors.ts', 'src/connectors-tools.ts', 'src/hands-tools.ts', 'src/images.ts', 'src/desk.ts', 'src/avatar-flow.ts', 'src/fences.ts', 'src/video.ts', 'src/motion.ts', 'src/own-clip.ts', 'src/hands-check.ts', 'src/firstrun.ts', 'src/nudges.ts', 'src/providers.ts', 'src/trajectory.ts', 'src/refusals.ts', 'src/coding.ts', 'src/coding-readers.ts', 'src/coding-runner.ts', 'src/voice.ts', 'src/web-search.ts'],
+  entryPoints: ['src/index.ts', 'src/admit.ts', 'src/cloud.ts', 'src/relay.ts', 'src/reach.ts', 'src/hub.ts', 'src/profile.ts', 'src/actions.ts', 'src/task.ts', 'src/work.ts', 'src/sync.ts', 'src/rooms.ts', 'src/rooms-tools.ts', 'src/memory-tools.ts', 'src/connectors.ts', 'src/connectors-tools.ts', 'src/hands-tools.ts', 'src/images.ts', 'src/desk.ts', 'src/avatar-flow.ts', 'src/fences.ts', 'src/video.ts', 'src/motion.ts', 'src/own-clip.ts', 'src/hands-check.ts', 'src/firstrun.ts', 'src/nudges.ts', 'src/providers.ts', 'src/trajectory.ts', 'src/refusals.ts', 'src/coding.ts', 'src/coding-readers.ts', 'src/coding-runner.ts', 'src/voice.ts', 'src/speech-whisper.ts', 'src/web-search.ts'],
   outdir: 'lib',
   format: 'esm',
   platform: 'node',
@@ -50,6 +50,10 @@ await build({
   chunkNames: 'chunks/[name]-[hash]',
   sourcemap: true,
   packages: 'external',
+  // sherpa-onnx-node is the native speech runtime the host's tree carries for SenseVoice:
+  // its addon is a platform-specific `.node` file and must be loaded from the host's own
+  // copy, never bundled (a bundled addon would be looked for next to lib/ and not found).
+  external: ['sherpa-onnx-node'],
   // The bundle's own version, baked in: `BUNDLE_VERSION` (cloud.ts) is what the update check
   // compares with the latest release and what the device tells the hub. Left to the
   // environment, nothing set it in the packaged app and every install ran as 0.0.0, so every

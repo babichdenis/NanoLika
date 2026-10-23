@@ -11,6 +11,10 @@
  * is served too, should a face ever come with clips; today it is a 404 and the
  * browser shows the still). The cloud service is its own row
  * (`dsh-nanomuse/cloud`); the face files are read through its profile store.
+ *
+ * This row also registers the local Whisper recognizer with the harness's speech seam
+ * (`speech-whisper.ts`), which is what makes voice input hear Russian; where the harness
+ * has no voice input, nothing happens.
  */
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -19,12 +23,21 @@ import { getDefaultAutoSelectFamilyAttemptTimeout, setDefaultAutoSelectFamilyAtt
 import { basename, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import z from '@deepseek-ai/schemastery'
 import { mountGuarded } from './admit.ts'
 import { packageAssetsDir } from './profile.ts'
 import type {} from './cloud.ts'
 import { MOTION_PREFIX, serveClip } from './motion.ts'
+import { Config as speechConfig, registerSpeechWhisper, type Config as SpeechConfig } from './speech-whisper.ts'
 
 export const name = 'nanomuse'
+
+export interface Config {
+  /** Voice input that hears Russian: the local Whisper recognizer, registered beside SenseVoice. */
+  speech: SpeechConfig
+}
+
+export const Config: z<Config> = z.object({ speech: speechConfig })
 
 /** Where the browser asks for the stills. */
 export const ASSETS_PREFIX = '/nanomuse/assets'
@@ -42,8 +55,13 @@ const FACE = /^\/face\/([a-f0-9]{6,40})\/([a-z]+)\.(webp|mp4)$/
  */
 const CONNECT_ATTEMPT_MS = 1500
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config): void {
   if (getDefaultAutoSelectFamilyAttemptTimeout() < CONNECT_ATTEMPT_MS) setDefaultAutoSelectFamilyAttemptTimeout(CONNECT_ATTEMPT_MS)
+  // Voice as input: a second recognizer next to SenseVoice, for the languages SenseVoice
+  // does not hear (Russian first). Registered only where the harness actually carries the
+  // speech seam — a headless composition has no voice input, and then there is no one to
+  // register with.
+  registerSpeechWhisper(ctx, config?.speech ?? {})
   const handler = (req: IncomingMessage, res: ServerResponse) => serveAsset(req, res, (id, mood, ext) => ctx.get('nanomuseCloud')?.profile.stillPath(id, mood, ext))
   mountGuarded(ctx, ASSETS_PREFIX, handler, 'nanomuse: assets')
   // The clips of a drawn face, made on this computer (`motion.ts`): `/nanomuse/avatar/motion/<mood>.mp4?v=<mtime>`;

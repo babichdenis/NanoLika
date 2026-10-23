@@ -60,6 +60,10 @@
       "types": "./lib/types/voice.d.ts",
       "default": "./lib/voice.js"
     },
+    "./speech-whisper": {
+      "types": "./lib/types/speech-whisper.d.ts",
+      "default": "./lib/speech-whisper.js"
+    },
     "./web-search": {
       "types": "./lib/types/web-search.d.ts",
       "default": "./lib/web-search.js"

@@ -494,9 +494,12 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   Desktop, Documents and Downloads. The home folder, Downloads and the app's own files are
   outside the main chat's folder on purpose; a chat opened from the Library or on a folder
   of your own writes there.
-- **Dictation**: the harness's own voice input (local SenseVoice; switched on in
-  Plugins, a microphone appears beside Send, audio stays on the computer), the microphone
-  permission on macOS, and how to use the system's dictation into the composer.
+- **Dictation**: the harness's own voice input (two recognizers, both running on this
+  computer: SenseVoice for Mandarin, English, Cantonese, Japanese and Korean, and Whisper
+  for Russian and English; switched on in Plugins, a microphone appears beside Send, audio
+  stays on the computer, and the first recording in a language downloads that recognizer's
+  model), the microphone permission on macOS, and how to use the system's dictation into
+  the composer.
 - **Devices**: this computer (its name, the remote-control switch that lets the phone
   run things here) and the other devices on the account, online dots, *Forget*.
 - **Permissions**: one page that says what the agent may touch (computer use, files,

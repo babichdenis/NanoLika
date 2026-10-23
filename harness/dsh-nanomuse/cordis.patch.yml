@@ -99,6 +99,13 @@
     # on this computer and downloads its runtime on first use, so the recording
     # never leaves the machine. The rows are dsh's own experimental voice bundle,
     # restated here so the desktop carries them without a second bundle.
+    #
+    # A second recognizer registers itself from the `nanomuse` row above and needs no
+    # row of its own: local Whisper, which hears Russian (SenseVoice does not). Its
+    # models land in $DSH_HOME/speech-to-text/whisper on first use and it borrows the
+    # Silero detector SenseVoice already downloaded. To make it the default, set
+    # `defaultProvider: whisper-local` below; its path, origins, id and language are
+    # `config.speech` of the `nanomuse` row (src/speech-whisper.ts).
     - id: speech-to-text
       name: '@deepseek-ai/dsh-experimental-speech-to-text'
       config:
