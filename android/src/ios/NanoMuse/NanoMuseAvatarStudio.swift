@@ -164,7 +164,7 @@ final class NanoMuseAvatarStudioModel: ObservableObject {
     /// Whether a picture can be drawn at all right now; the reason when not.
     var cannotDrawReason: String? {
         if usesOwnKey || NanoMuseCloud.modelsOn { return nil }
-        return AppLocalized("Sign in to nanoMuse Cloud, or add an Alibaba Cloud Bailian key under Providers; the pictures are drawn with one of the two.")
+        return AppLocalized("Sign in to nanoLika Cloud, or add an Alibaba Cloud Bailian key under Providers; the pictures are drawn with one of the two.")
     }
 
     /// Files of the candidates on screen, in order ("" where one failed).
@@ -422,7 +422,7 @@ struct NanoMuseAvatarStudioView: View {
                 Section {
                     Text(studio.usesOwnKey
                          ? AppLocalized("Pictures are drawn with your Bailian key and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods.")
-                         : AppLocalized("Pictures are drawn through nanoMuse Cloud and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods."))
+                         : AppLocalized("Pictures are drawn through nanoLika Cloud and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Text(NanoMuseImageGen.providerLine())
@@ -485,7 +485,7 @@ struct NanoMuseAvatarStudioView: View {
                 Text(own.clip != nil
                      ? AppLocalized("Your clip is on and plays for every mood; the drawn stills still show where a still is used. Default face removes it.")
                      : AppLocalized("A short video of yours plays as the face at rest, and the other moods fall back to it. MP4 or MOV with H.264 or HEVC video, up to 15 seconds and 30 MB; it plays muted in a loop."))
-                Text(AppLocalized("The clip stays on this phone. It is not uploaded to nanoMuse Cloud or synced to your other devices."))
+                Text(AppLocalized("The clip stays on this phone. It is not uploaded to nanoLika Cloud or synced to your other devices."))
             }
         }
     }

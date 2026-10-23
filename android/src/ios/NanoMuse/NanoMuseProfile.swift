@@ -35,7 +35,7 @@ enum NanoMuseRelayMedia {
     @MainActor
     private static func authorized(_ method: String, _ path: String) throws -> URLRequest {
         guard let key = NanoMuseCloud.apiKey else {
-            throw NanoMuseCloudError(code: "signed_out", message: AppLocalized("Sign in to nanoMuse Cloud first."), status: 401)
+            throw NanoMuseCloudError(code: "signed_out", message: AppLocalized("Sign in to nanoLika Cloud first."), status: 401)
         }
         guard let url = URL(string: NanoMuseCloud.baseURL + path) else {
             throw NanoMuseCloudError(code: "bad_base", message: "Bad relay address", status: 0)
@@ -80,7 +80,7 @@ enum NanoMuseRelayMedia {
                 return id
             }
         }
-        throw NanoMuseCloudError(code: "model_not_offered", message: AppLocalized("nanoMuse Cloud offers no image model right now."), status: 404)
+        throw NanoMuseCloudError(code: "model_not_offered", message: AppLocalized("nanoLika Cloud offers no image model right now."), status: 404)
     }
 
     @MainActor

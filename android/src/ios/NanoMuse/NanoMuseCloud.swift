@@ -464,7 +464,7 @@ enum NanoMuseCloud {
     nonisolated static func describe(_ error: Error) -> String {
         guard let cloud = error as? CloudError else {
             if (error as NSError).domain == NSURLErrorDomain {
-                return AppLocalized("Could not reach nanoMuse Cloud. Check the connection and try again.")
+                return AppLocalized("Could not reach nanoLika Cloud. Check the connection and try again.")
             }
             return error.localizedDescription
         }
@@ -493,9 +493,9 @@ enum NanoMuseCloud {
             return AppLocalized("The starter allowance is used up. Add a provider of your own to keep going.")
         case "allowance_exhausted" where cloud.paused:
             // relay 0.22: the operator's switch, not use — the same card, another lead
-            return AppLocalized("The free allowance is paused on this relay for now. It is not used up. Add a key of your own or sign in with a plan you already pay for, under Settings → nanoMuse Cloud. Your sign-in, your devices and what is left stay as they are.")
+            return AppLocalized("The free allowance is paused on this relay for now. It is not used up. Add a key of your own or sign in with a plan you already pay for, under Settings → nanoLika Cloud. Your sign-in, your devices and what is left stay as they are.")
         case "allowance_exhausted":
-            return AppLocalized("The free allowance is used up. Use a key of your own, or invite a friend; both are under nanoMuse Cloud in Settings.")
+            return AppLocalized("The free allowance is used up. Use a key of your own, or invite a friend; both are under nanoLika Cloud in Settings.")
         case "too_large":
             return AppLocalized("That message is too large for the model. Shorten it, leave out some attachments, or start a new chat.")
         case "content_rejected":
@@ -511,15 +511,15 @@ enum NanoMuseCloud {
             // the password endpoints: too many wrong passwords in a row, not too many requests
             return AppLocalized("Too many wrong attempts. Wait a few minutes, or sign in with a code.")
         case "model_not_offered":
-            return AppLocalized("nanoMuse Cloud no longer offers that model. Pick another under Settings → nanoMuse Cloud.")
+            return AppLocalized("nanoLika Cloud no longer offers that model. Pick another under Settings → nanoLika Cloud.")
         case "service_paused":
-            return AppLocalized("nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.")
+            return AppLocalized("nanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later.")
         case "sync_paused":
             return AppLocalized("Conversation sync is paused on this relay for now; what is stored is kept, and your devices keep working on their own.")
         case "hub_paused":
             return AppLocalized("The device hub is paused on this relay for now; each device keeps working on its own.")
         case "upstream":
-            return AppLocalized("nanoMuse Cloud did not answer. Try again in a moment.")
+            return AppLocalized("nanoLika Cloud did not answer. Try again in a moment.")
         // The relay's password codes (cloud/nanomuse_cloud/service.py): a 401 `bad_credentials`
         // at sign-in for a wrong address or password, `password_wrong` when the current password
         // given while changing or removing it is not the one set, `no_password` for an account
@@ -530,7 +530,7 @@ enum NanoMuseCloud {
         case "password_wrong":
             return AppLocalized("That password is not right.")
         case "no_password":
-            return AppLocalized("This account has no password yet. Sign in with a code and set one under nanoMuse Cloud.")
+            return AppLocalized("This account has no password yet. Sign in with a code and set one under nanoLika Cloud.")
         case "password_required":
             return AppLocalized("Enter the current password first.")
         case "password_short":
@@ -552,17 +552,17 @@ enum NanoMuseCloud {
         case "rate_limited":
             return AppLocalized("Too many requests at once. Try again shortly.")
         case "unreachable":
-            return AppLocalized("Could not reach nanoMuse Cloud. Check the connection and try again.")
+            return AppLocalized("Could not reach nanoLika Cloud. Check the connection and try again.")
         default:
             // a code we do not know: the status says what kind of thing it was
             switch cloud.status {
             case 413: return AppLocalized("That message is too large for the model. Shorten it, leave out some attachments, or start a new chat.")
             case 401: return AppLocalized("This sign-in is no longer valid. Sign in again.")
-            case 500...: return AppLocalized("nanoMuse Cloud did not answer. Try again in a moment.")
+            case 500...: return AppLocalized("nanoLika Cloud did not answer. Try again in a moment.")
             default: break
             }
             let bare = cloud.message.isEmpty || cloud.message.hasPrefix("HTTP ")
-            return bare ? AppLocalized("nanoMuse Cloud could not complete the request.") : cloud.message
+            return bare ? AppLocalized("nanoLika Cloud could not complete the request.") : cloud.message
         }
     }
 

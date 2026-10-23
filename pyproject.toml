@@ -69,6 +69,7 @@ channels = ["nanomuse[feishu,dingtalk,wecom]"]
 all = ["nanomuse[browser,hands,dev,channels]"]
 
 [project.scripts]
+nanolika-bots = "nanomuse.bot_projects:main"
 nanomuse = "nanomuse.cli:app"
 # the CLI bridge: for commands the agent runs (docs/local-runtime.md)
 nanomuse-device = "nanomuse.bridge.cli:device_main"

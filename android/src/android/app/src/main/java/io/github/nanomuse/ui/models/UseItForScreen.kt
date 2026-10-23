@@ -87,7 +87,7 @@ fun UseItForScreen(instanceId: String, onDone: () -> Unit) {
         LaunchedEffect(Unit) { onDone() }
         return
     }
-    // "nanoMuse Cloud keeps the rest" holds only while the Cloud is a model source
+    // "nanoLika Cloud keeps the rest" holds only while the Cloud is a model source
     val signedIn = remember { NanoMuseCloud.modelsOn(context) }
     val ticked = remember { mutableStateOf(offered.toSet()) }
     var busy by remember { mutableStateOf(false) }

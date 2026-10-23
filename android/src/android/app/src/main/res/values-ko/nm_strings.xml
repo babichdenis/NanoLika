@@ -41,7 +41,7 @@
 
     <!-- First conversation: the scripted opening (see io.github.nanomuse.onboarding) -->
     <string name="nm_intro_hello">안녕하세요, 저는 휴대전화 안에 사는 비서 nanoMuse예요. 몇 가지 일을 덜어 드릴게요.</string>
-    <string name="nm_intro_how_i_work">제가 일하는 방식을 조금 소개할게요:\n\n- 저만의 컴퓨터(Linux 샌드박스와 브라우저)가 있어서 명령을 실행하고, 웹사이트를 열고, 양식을 채울 수 있어요.\n- 마운트해 주신 파일과 사진을 읽고 정리하고, 알림과 예약 작업을 챙길 수 있어요.\n- 중요한 단계 앞에서는 먼저 여쭤봐요.\n- 모든 것은 이 휴대전화에서 실행돼요. 메시지는 설정한 모델에 전달되고, nanoMuse Cloud에 로그인해 두면 이 대화는 다른 기기에도 함께 보여요. 데이터 관리에서 끌 수 있어요.</string>
+    <string name="nm_intro_how_i_work">제가 일하는 방식을 조금 소개할게요:\n\n- 저만의 컴퓨터(Linux 샌드박스와 브라우저)가 있어서 명령을 실행하고, 웹사이트를 열고, 양식을 채울 수 있어요.\n- 마운트해 주신 파일과 사진을 읽고 정리하고, 알림과 예약 작업을 챙길 수 있어요.\n- 중요한 단계 앞에서는 먼저 여쭤봐요.\n- 모든 것은 이 휴대전화에서 실행돼요. 메시지는 설정한 모델에 전달되고, nanoLika Cloud에 로그인해 두면 이 대화는 다른 기기에도 함께 보여요. 데이터 관리에서 끌 수 있어요.</string>
     <string name="nm_intro_ask_name">시작하기 전에, 뭐라고 불러 드리면 될까요?</string>
 
     <!-- First conversation: the name chooser -->
@@ -353,7 +353,7 @@
     <string name="nm_own_clip_title">내 동영상</string>
     <string name="nm_own_clip_body">내 짧은 동영상이 대기 중 얼굴로 재생되고, 다른 상태에서도 같은 동영상을 씁니다. H.264 영상의 MP4 또는 MOV, 최대 15초, 30 MB까지. 음소거로 반복 재생됩니다.</string>
     <string name="nm_own_clip_on">내 동영상이 켜져 있고 모든 상태에서 재생됩니다. 정지 화면이 쓰이는 곳에서는 그린 그림이 그대로 쓰입니다. “기본 얼굴”로 제거할 수 있습니다.</string>
-    <string name="nm_own_clip_local">동영상은 이 휴대폰에만 남습니다. nanoMuse Cloud에 올라가지 않고 다른 기기와 동기화되지도 않습니다.</string>
+    <string name="nm_own_clip_local">동영상은 이 휴대폰에만 남습니다. nanoLika Cloud에 올라가지 않고 다른 기기와 동기화되지도 않습니다.</string>
     <string name="nm_own_clip_choose">동영상 선택</string>
     <string name="nm_own_clip_replace">동영상 바꾸기</string>
     <string name="nm_own_clip_default">기본 얼굴</string>
@@ -387,7 +387,7 @@
     <string name="nm_settings_no_model">아직 모델이 없습니다</string>
     <string name="nm_settings_no_model_sub">제공자를 추가하고 모델을 고르세요</string>
     <string name="nm_settings_change_model">변경</string>
-    <string name="nm_settings_version">nanoMuse %1$s (%2$d)</string>
+    <string name="nm_settings_version">nanoLika %1$s (%2$d)</string>
     <string name="nm_version_title">버전</string>
     <string name="nm_version_checking">최신 릴리스 확인 중…</string>
     <string name="nm_version_have">최신 %1$s, 사용 중입니다</string>
@@ -468,7 +468,7 @@
     <string name="nm_avatar_share_subtitle">카드를 고르세요. 시스템 공유 시트로 내보냅니다.</string>
     <string name="nm_avatar_share_system">공유</string>
     <string name="nm_avatar_share_bubble">안녕하세요, 저는 개인 AI 에이전트 %1$s예요. nanoMuse를 만나 보세요: 오픈 소스이고, 휴대전화에서 실행돼요.</string>
-    <string name="nm_avatar_share_tagline">나만의 AI 에이전트, 오픈 소스 · github.com/nano-muse/nanoMuse</string>
+    <string name="nm_avatar_share_tagline">나만의 AI 에이전트, 오픈 소스 · github.com/nano-muse/nanoLika</string>
 
     <!-- 0.1.10 · Motion -->
     <string name="nm_media_title">이미지 및 동영상 모델</string>
@@ -536,7 +536,7 @@
     <string name="nm_hands_why_default">내 키로 쓰는 손의 기본 모델</string>
     <string name="nm_hands_why_chat">고른 채팅 모델</string>
     <string name="nm_hands_why_group">기본 그룹에서 볼 수 있는 첫 모델</string>
-    <string name="nm_hands_why_menu">nanoMuse Cloud의 화면 모델</string>
+    <string name="nm_hands_why_menu">nanoLika Cloud의 화면 모델</string>
     <string name="nm_hands_why_vision_group">내 비전 그룹</string>
     <string name="nm_hands_why_any">볼 수 있는 유일하게 켜진 모델</string>
     <string name="nm_hands_section_rules">동작 방식</string>
@@ -589,9 +589,9 @@
     <string name="nm_pc_title">컴퓨터</string>
     <string name="nm_pc_none_short">없음</string>
     <string name="nm_pc_intro">여기서 말하면 컴퓨터에서 처리됩니다. 명령, 파일, 그쪽 브라우저의 페이지, 그쪽 화면 보기, 또는 그곳 nanoMuse에 맡기는 작업 전체. 휴대전화가 컴퓨터를 움직이며 그 반대는 없습니다. 모든 승인은 먼저 여기서 결정됩니다.</string>
-    <string name="nm_pc_hub_title">쉬운 방법: nanoMuse Desktop, 같은 계정</string>
-    <string name="nm_pc_hub_body">컴퓨터에 nanoMuse Desktop을 설치하고 이 휴대전화의 계정으로 로그인하세요. 몇 초 안에 계정 → 기기에 나타납니다.</string>
-    <string name="nm_pc_hub_download">nanoMuse Desktop 받기</string>
+    <string name="nm_pc_hub_title">쉬운 방법: nanoLika Desktop, 같은 계정</string>
+    <string name="nm_pc_hub_body">컴퓨터에 nanoLika Desktop을 설치하고 이 휴대전화의 계정으로 로그인하세요. 몇 초 안에 계정 → 기기에 나타납니다.</string>
+    <string name="nm_pc_hub_download">nanoLika Desktop 받기</string>
     <string name="nm_pc_hub_account">계정과 기기</string>
     <string name="nm_pc_section_paired">이 계정의 컴퓨터</string>
     <string name="nm_pc_none">아직 컴퓨터가 없습니다</string>
@@ -600,11 +600,11 @@
     <string name="nm_pc_last_seen">%1$s에 확인됨</string>
     <string name="nm_pc_offline">오프라인</string>
     <string name="nm_pc_online">온라인</string>
-    <string name="nm_pc_account_none">이 휴대전화는 아직 nanoMuse Cloud에 로그인하지 않았습니다. 먼저 로그인한 뒤 컴퓨터도 같은 계정으로 로그인하세요.</string>
+    <string name="nm_pc_account_none">이 휴대전화는 아직 nanoLika Cloud에 로그인하지 않았습니다. 먼저 로그인한 뒤 컴퓨터도 같은 계정으로 로그인하세요.</string>
     <string name="nm_pc_account_hint">이 휴대전화는 %1$s(으)로 로그인되어 있습니다. 컴퓨터도 같은 계정으로 로그인해야 합니다.</string>
     <string name="nm_pc_checking">확인 중…</string>
     <string name="nm_pc_answering">%1$s이(가) 응답합니다</string>
-    <string name="nm_pc_not_answering">%1$s이(가) 응답하지 않습니다. 그곳에서 nanoMuse Desktop이 아직 실행 중인가요?</string>
+    <string name="nm_pc_not_answering">%1$s이(가) 응답하지 않습니다. 그곳에서 nanoLika Desktop이 아직 실행 중인가요?</string>
 
     <!-- the approval card -->
     <string name="nm_risk_desc_on_computer">이 휴대전화가 아니라 컴퓨터 “%1$s”에서.</string>
@@ -626,7 +626,7 @@
     <string name="nm_welcome_fine_print">계정 하나가 기기들을 묶어 주고 무료 모델 사용량을 담습니다. 요금은 없습니다. 내 API 키는 바로 다음에 추가할 수 있습니다.</string>
     <string name="nm_setup_source_title">어떤 모델이 답할까요?</string>
     <string name="nm_setup_source_sub">계정에 이미 하나가 딸려 있습니다. 내 API 키도 추가하고 언제든 바꿀 수 있습니다.</string>
-    <string name="nm_setup_source_cloud">nanoMuse Cloud 모델 사용</string>
+    <string name="nm_setup_source_cloud">nanoLika Cloud 모델 사용</string>
     <string name="nm_setup_source_cloud_sub">채팅은 DeepSeek, 손은 Qwen. 개발자가 부담하는 계정당 무료 사용량이 있습니다. 설정할 것이 없습니다.</string>
     <string name="nm_setup_source_own_sub">OpenAI, Anthropic, DeepSeek, 바이롄(Bailian) 및 기타 OpenAI 호환 엔드포인트. 키는 이 휴대전화에 머뭅니다.</string>
     <string name="nm_setup_source_fine_print">둘은 서로 경쟁하지 않습니다. Cloud 모델은 계속 쓸 수 있고, 모델 그룹마다 각자 고릅니다.</string>
@@ -639,7 +639,7 @@
     <string name="nm_welcome_feat_hands">손: 휴대전화를 직접 씁니다</string>
     <string name="nm_welcome_feat_hands_sub">기차표를 예매하고, 식사를 주문하고, 앱에서 무언가를 찾아봅니다. 지켜보다가 언제든 멈출 수 있습니다</string>
     <string name="nm_welcome_feat_reach">원격: 내 컴퓨터를 여기서</string>
-    <string name="nm_welcome_feat_reach_sub">Mac, Windows, Linux 컴퓨터에 nanoMuse Desktop을 설치하고 같은 계정으로 로그인하면 휴대전화에서 일을 맡길 수 있습니다</string>
+    <string name="nm_welcome_feat_reach_sub">Mac, Windows, Linux 컴퓨터에 nanoLika Desktop을 설치하고 같은 계정으로 로그인하면 휴대전화에서 일을 맡길 수 있습니다</string>
     <string name="nm_welcome_notice">nanoMuse는 비영리 오픈 소스 커뮤니티 프로젝트입니다: 영원히 무료. 모델에는 개발자가 부담하는 무료 사용량이 딸려 있고, 그다음은 내 키입니다. 아무것도 팔지 않습니다. 릴레이가 보관하는 것은 개인정보 처리방침에 있고, 설정 → 데이터 관리는 내 것입니다.</string>
     <string name="nm_welcome_hands_title">휴대전화를 쓰게 허용</string>
     <string name="nm_welcome_hands_sub">권한 두 개만 있으면 앱을 열고, 탭하고, 대신 입력할 수 있습니다. 각 단계와 중지 버튼이 있는 캡슐이 화면에 머뭅니다. 로그인, 비밀번호, 인증 코드는 항상 직접 합니다.</string>
@@ -647,7 +647,7 @@
     <string name="nm_welcome_skip">지금은 건너뛰기</string>
     <string name="nm_welcome_hands_fine_print">나머지는 이것 없이도 모두 작동합니다. 원할 때 설정 → 손에서 켤 수 있습니다.</string>
     <string name="nm_welcome_meet_fine_print">되돌릴 수 없는 일(삭제, 전송, 결제) 앞에서는 멈추고 먼저 묻습니다.</string>
-    <string name="nm_cloud_signin_title">nanoMuse Cloud로 시작</string>
+    <string name="nm_cloud_signin_title">nanoLika Cloud로 시작</string>
     <string name="nm_cloud_signin_subtitle">휴대전화나 받은 편지함으로 코드를 받거나, 설정해 둔 비밀번호로.</string>
     <string name="nm_cloud_mode_code">코드로</string>
     <string name="nm_cloud_mode_password">비밀번호로</string>
@@ -672,7 +672,7 @@
     <string name="nm_cloud_server_https">내 네트워크 밖의 서버에는 https를 사용하세요. 사설 주소(10.x, 192.168.x, 172.16-31.x, localhost, .local 또는 .ts.net 이름)에는 http도 괜찮습니다.</string>
     <string name="nm_lan_only_https">암호화되지 않은 http://는 내 네트워크 안의 주소(10.x, 172.16-31.x, 192.168.x, .local 이름)에만 쓸 수 있습니다. %1$s에는 https://를 사용하세요.</string>
     <string name="nm_cloud_server_unreachable">%1$s에서 릴레이가 응답하지 않습니다. 주소와 릴레이가 실행 중인지 확인하세요.</string>
-    <string name="nm_cloud_server_default">nanoMuse Cloud로 되돌리기</string>
+    <string name="nm_cloud_server_default">nanoLika Cloud로 되돌리기</string>
     <string name="nm_cloud_server_row">서버</string>
     <string name="nm_cloud_server_change">변경</string>
     <string name="nm_cloud_server_change_confirm">이 휴대전화의 키는 현재 서버의 것입니다. 먼저 여기서 로그아웃한 뒤, 로그인 화면에서 다른 서버에 로그인하세요.</string>
@@ -693,11 +693,11 @@
     <string name="nm_cloud_used_today_open">오늘 %1$s</string>
     <string name="nm_cloud_refresh">잔액 새로 고침</string>
     <string name="nm_cloud_refreshing">새로 고치는 중…</string>
-    <string name="nm_cloud_how_it_works">nanoMuse Cloud는 이 앱에서 보통의 제공자입니다. 그 모델들은 제공자 아래에 나열되며, 모델 그룹에서 내 모델과 섞어 쓸 수 있습니다.</string>
+    <string name="nm_cloud_how_it_works">nanoLika Cloud는 이 앱에서 보통의 제공자입니다. 그 모델들은 제공자 아래에 나열되며, 모델 그룹에서 내 모델과 섞어 쓸 수 있습니다.</string>
     <string name="nm_cloud_open_provider">제공자 설정</string>
     <string name="nm_cloud_sign_out">로그아웃</string>
     <string name="nm_cloud_sign_out_sub">이 휴대전화의 키가 취소되고 Cloud 제공자가 제거됩니다. 사용량은 계정에 남습니다.</string>
-    <string name="nm_cloud_sign_out_confirm">nanoMuse Cloud 제공자와 그 모델이 이 휴대전화에서 제거됩니다.</string>
+    <string name="nm_cloud_sign_out_confirm">nanoLika Cloud 제공자와 그 모델이 이 휴대전화에서 제거됩니다.</string>
     <string name="nm_cloud_row_remaining">%1$s 남음</string>
     <string name="nm_cloud_row_sign_in">로그인</string>
     <string name="nm_cloud_err_bad_identifier">이메일 주소로 보이지 않습니다.</string>
@@ -715,7 +715,7 @@
     <string name="nm_cloud_err_allowance_abroad">무료 사용량을 다 썼습니다. 친구를 초대하거나(각자 +¥%1$s) 설정 → 제공자에서 내 키를 추가하세요. OpenRouter가 빠른 길입니다. 계정 하나, 키 하나, 쓴 만큼 냅니다.</string>
     <string name="nm_cloud_warn_line">무료 사용량이 거의 다 떨어졌습니다. ¥%2$s 중 ¥%1$s 남음. 친구를 초대하거나(각자 +¥%3$s) 내 키를 추가하세요. 둘 다 계정에 있습니다.</string>
     <string name="nm_cloud_err_rate_limited">한꺼번에 요청이 너무 많습니다. 잠시만 기다려 주세요.</string>
-    <string name="nm_cloud_err_unreachable">nanoMuse Cloud에 연결할 수 없습니다. 연결을 확인하세요.</string>
+    <string name="nm_cloud_err_unreachable">nanoLika Cloud에 연결할 수 없습니다. 연결을 확인하세요.</string>
     <string name="nm_cloud_err_generic">문제가 생겼습니다.</string>
     <string name="nm_cloud_err_bad_credentials">이메일 또는 비밀번호가 틀렸습니다.</string>
     <string name="nm_cloud_err_no_password">이 계정에는 아직 비밀번호가 없습니다. 코드로 로그인한 뒤 계정에서 설정하세요.</string>
@@ -731,10 +731,10 @@
     <string name="nm_cloud_err_content_rejected">모델 제공자의 콘텐츠 검사가 이 요청을 거부했습니다. 다른 표현으로 시도해 보세요. 계속 반복되면 새 대화를 시작하세요. 문제가 된 표현이 대화의 앞부분에 있을 수 있습니다.</string>
     <string name="nm_cloud_err_provider_busy">모델 제공자가 지금 바쁩니다. 잠시 후 다시 시도하세요.</string>
     <string name="nm_cloud_err_provider_busy_wait">모델 제공자가 지금 바쁩니다. %1$s 후에 다시 시도하세요.</string>
-    <string name="nm_cloud_err_model_not_offered">nanoMuse Cloud에서 그 모델을 더 이상 제공하지 않습니다. 설정 → nanoMuse Cloud에서 다른 모델을 고르세요.</string>
-    <string name="nm_cloud_err_relay_down">nanoMuse Cloud가 응답하지 않았습니다. 잠시 후 다시 시도하세요.</string>
-    <string name="nm_cloud_err_allowance_paused">이 릴레이의 무료 사용량이 당분간 중지되었을 뿐, 다 쓴 것이 아닙니다. 설정 → nanoMuse Cloud에서 직접 키를 추가하거나 이미 결제 중인 요금제로 로그인하세요. 로그인, 기기, 남은 사용량은 그대로 유지됩니다.</string>
-    <string name="nm_cloud_err_service_paused">nanoMuse Cloud가 운영자에 의해 당분간 중지되었습니다. 로그인과 데이터는 보관됩니다. 나중에 다시 시도하세요.</string>
+    <string name="nm_cloud_err_model_not_offered">nanoLika Cloud에서 그 모델을 더 이상 제공하지 않습니다. 설정 → nanoLika Cloud에서 다른 모델을 고르세요.</string>
+    <string name="nm_cloud_err_relay_down">nanoLika Cloud가 응답하지 않았습니다. 잠시 후 다시 시도하세요.</string>
+    <string name="nm_cloud_err_allowance_paused">이 릴레이의 무료 사용량이 당분간 중지되었을 뿐, 다 쓴 것이 아닙니다. 설정 → nanoLika Cloud에서 직접 키를 추가하거나 이미 결제 중인 요금제로 로그인하세요. 로그인, 기기, 남은 사용량은 그대로 유지됩니다.</string>
+    <string name="nm_cloud_err_service_paused">nanoLika Cloud가 운영자에 의해 당분간 중지되었습니다. 로그인과 데이터는 보관됩니다. 나중에 다시 시도하세요.</string>
     <string name="nm_cloud_err_sync_paused">이 릴레이의 대화 동기화가 당분간 중지되었습니다. 저장된 내용은 보관되고, 기기들은 각자 계속 작동합니다.</string>
     <string name="nm_cloud_err_hub_paused">이 릴레이의 기기 연결이 당분간 중지되었습니다. 각 기기는 각자 계속 작동합니다.</string>
     <string name="nm_refusal_relay_says">릴레이의 설명: %1$s</string>
@@ -820,7 +820,7 @@
     <string name="nm_cloud_ev_contribute_default">데이터 관리: 새 계정은 켬</string>
     <string name="nm_data_title">데이터 관리</string>
     <string name="nm_data_improve">nanoMuse의 AI 모델 개선 돕기</string>
-    <string name="nm_data_why">켜져 있는 동안 nanoMuse Cloud 모델과 나눈 채팅의 텍스트(내가 쓴 것, 모델이 답한 것, 모델이 호출하기로 한 도구)가 커뮤니티의 오픈 모델을 학습시키기 위해 릴레이에 보관됩니다. 메모리나 SOUL(시스템 프롬프트), 도구가 돌려준 결과, 그림은 포함되지 않고, 내가 누구인지와 함께 두는 일도 없습니다. 내 API 키는 릴레이를 거치지 않습니다.</string>
+    <string name="nm_data_why">켜져 있는 동안 nanoLika Cloud 모델과 나눈 채팅의 텍스트(내가 쓴 것, 모델이 답한 것, 모델이 호출하기로 한 도구)가 커뮤니티의 오픈 모델을 학습시키기 위해 릴레이에 보관됩니다. 메모리나 SOUL(시스템 프롬프트), 도구가 돌려준 결과, 그림은 포함되지 않고, 내가 누구인지와 함께 두는 일도 없습니다. 내 API 키는 릴레이를 거치지 않습니다.</string>
     <string name="nm_data_default_on">새 계정은 켠 상태로 시작합니다.</string>
     <string name="nm_data_default_off">새 계정은 끈 상태로 시작합니다.</string>
     <string name="nm_data_kept">지금까지 %1$d턴 보관됨.</string>
@@ -830,7 +830,7 @@
     <string name="nm_data_delete_sub">스위치가 지금 켜져 있든 꺼져 있든 이 계정에서 보관된 모든 턴을 삭제합니다. 스위치를 끄는 것만으로는 여기서 삭제하기 전까지 보관된 것이 남습니다.</string>
     <string name="nm_data_delete_confirm">보관된 대화가 서버에서 삭제됩니다. 되돌릴 수 없습니다.</string>
     <string name="nm_data_deleted">%1$d턴을 삭제했습니다.</string>
-    <string name="nm_data_sign_in">쓰려면 nanoMuse Cloud에 로그인하세요.</string>
+    <string name="nm_data_sign_in">쓰려면 nanoLika Cloud에 로그인하세요.</string>
     <string name="nm_data_privacy">개인정보 처리방침</string>
     <string name="nm_data_status_on">켬</string>
     <string name="nm_data_status_off">끔</string>
@@ -917,8 +917,8 @@
     <!-- nanoMuse: devices on the hub -->
     <string name="nm_hub_channel">내 기기에서 온 메시지</string>
     <string name="nm_hub_service_channel">내 기기와 연결됨</string>
-    <string name="nm_hub_service_title">nanoMuse · 내 기기에서 접근 가능</string>
-    <string name="nm_hub_service_connecting">nanoMuse Cloud에 연결 중…</string>
+    <string name="nm_hub_service_title">nanoLika · 내 기기에서 접근 가능</string>
+    <string name="nm_hub_service_connecting">nanoLika Cloud에 연결 중…</string>
     <string name="nm_hub_service_alone">지금 온라인인 다른 기기가 없습니다</string>
     <plurals name="nm_hub_service_devices">
         <item quantity="other">기기 %d대 온라인</item>
@@ -938,7 +938,7 @@
     <string name="nm_devices_connected">연결됨</string>
     <string name="nm_devices_connecting">연결 중…</string>
     <string name="nm_devices_off">끔</string>
-    <string name="nm_devices_none">아직 다른 기기가 없습니다. 컴퓨터에 nanoMuse Desktop을 설치하고 같은 계정으로 로그인하세요. 몇 초 안에 여기에 나타납니다.</string>
+    <string name="nm_devices_none">아직 다른 기기가 없습니다. 컴퓨터에 nanoLika Desktop을 설치하고 같은 계정으로 로그인하세요. 몇 초 안에 여기에 나타납니다.</string>
     <string name="nm_devices_online">온라인</string>
     <string name="nm_devices_offline">오프라인</string>
     <string name="nm_devices_web">웹 콘솔</string>
@@ -1020,13 +1020,13 @@
 
     <!-- Conversation sync between the account's devices (contract C7) -->
     <string name="nm_sync_title">내 기기 간 대화 동기화</string>
-    <string name="nm_sync_caption">채팅 텍스트가 nanoMuse Cloud에 보관되어 모든 기기에 같은 대화가 보입니다. 파일과 이미지는 만든 기기에 남습니다.</string>
+    <string name="nm_sync_caption">채팅 텍스트가 nanoLika Cloud에 보관되어 모든 기기에 같은 대화가 보입니다. 파일과 이미지는 만든 기기에 남습니다.</string>
     <string name="nm_sync_sign_in">동기화하려면 로그인</string>
     <string name="nm_sync_on_toast">켬. 이 휴대전화의 대화를 보내는 중입니다.</string>
     <string name="nm_sync_off_toast">끔. 보관된 것은 삭제되었습니다.</string>
     <string name="nm_sync_delete">동기화된 대화 삭제</string>
-    <string name="nm_sync_delete_sub">대화 텍스트를 nanoMuse Cloud에서 삭제합니다. 각 기기는 이미 가진 것을 유지하고, 동기화는 켜진 채로 남습니다.</string>
-    <string name="nm_sync_delete_confirm">nanoMuse Cloud에 보관된 대화가 삭제됩니다. 기기의 채팅은 그대로 남습니다.</string>
+    <string name="nm_sync_delete_sub">대화 텍스트를 nanoLika Cloud에서 삭제합니다. 각 기기는 이미 가진 것을 유지하고, 동기화는 켜진 채로 남습니다.</string>
+    <string name="nm_sync_delete_confirm">nanoLika Cloud에 보관된 대화가 삭제됩니다. 기기의 채팅은 그대로 남습니다.</string>
     <string name="nm_sync_deleted">동기화된 대화를 삭제했습니다.</string>
     <string name="nm_sync_from">%1$s에서</string>
     <string name="nm_sync_attachment_note">[첨부 파일 %1$s, 만든 기기에 남습니다]</string>
@@ -1039,7 +1039,7 @@
     <string name="nm_devices_ask_hint">온라인인 기기를 탭하면 채팅에서 그 기기에 쓸 수 있습니다. 메시지가 @와 기기 이름으로 시작하고, 그 기기가 일을 합니다.</string>
     <string name="nm_reach_the_provider">제공자</string>
     <string name="nm_reach_unreachable_title">이 네트워크에서 %1$s에 연결할 수 없습니다</string>
-    <string name="nm_reach_unreachable_body">%1$s에서 아무 응답이 없었습니다. 이 휴대전화에서 제공자까지의 경로 문제이며 nanoMuse 서버와는 관계가 없습니다.</string>
+    <string name="nm_reach_unreachable_body">%1$s에서 아무 응답이 없었습니다. 이 휴대전화에서 제공자까지의 경로 문제이며 nanoLika 서버와는 관계가 없습니다.</string>
     <string name="nm_reach_region_title">OpenAI는 이 지역에 서비스를 제공하지 않습니다</string>
     <string name="nm_reach_region_body">요청은 OpenAI에 도달했지만, 이 연결이 시작된 곳에서는 서비스를 제공하지 않는다는 응답이 왔습니다.</string>
     <string name="nm_reach_signed_out_title">ChatGPT 로그인이 더 이상 유효하지 않습니다</string>
@@ -1082,7 +1082,7 @@
     <string name="nm_network_test_fail">프록시를 통해 %1$s에 연결할 수 없습니다: %2$s</string>
     <string name="nm_network_test_status">HTTP %1$d</string>
     <string name="nm_network_invalid">호스트와 1~65535 사이의 포트를 입력하세요.</string>
-    <string name="nm_network_proxy_caption">내 키로 추가한 제공자와 ChatGPT 플랜으로 가는 요청만 프록시를 거칩니다. nanoMuse Cloud, 내 컴퓨터, 로컬 네트워크는 거치지 않습니다. 이 휴대전화에만 저장됩니다.</string>
+    <string name="nm_network_proxy_caption">내 키로 추가한 제공자와 ChatGPT 플랜으로 가는 요청만 프록시를 거칩니다. nanoLika Cloud, 내 컴퓨터, 로컬 네트워크는 거치지 않습니다. 이 휴대전화에만 저장됩니다.</string>
     <string name="nm_network_hosts_caption">프록시를 거치는 호스트: %1$s</string>
     <string name="nm_ways_title_day">오늘 몫의 무료 사용량을 다 썼습니다.</string>
     <string name="nm_ways_day_sub">날이 바뀌면 돌아옵니다. 아래 방법은 지금 바로 쓸 수 있습니다.</string>
@@ -1093,7 +1093,7 @@
     <string name="nm_ways_devices">기기</string>
     <!-- 0.1.41 Choice: Settings → Models, the "Use it for" card, one turn on the Cloud -->
     <string name="nm_models_title">모델</string>
-    <string name="nm_models_intro">어떤 모델이 무엇을 맡는지. 각 행을 열면 선택 화면이 나오고, nanoMuse Cloud와 추가한 제공자가 맞는 모델과 함께 나옵니다.</string>
+    <string name="nm_models_intro">어떤 모델이 무엇을 맡는지. 각 행을 열면 선택 화면이 나오고, nanoLika Cloud와 추가한 제공자가 맞는 모델과 함께 나옵니다.</string>
     <string name="nm_models_chat_title">채팅</string>
     <string name="nm_models_chat_sub">나와 대화하는 모델.</string>
     <string name="nm_models_hands_title">화면 조작</string>
@@ -1105,20 +1105,20 @@
     <string name="nm_models_chat_applies">메인 채팅과 새 채팅에 적용됩니다. 사이드 채팅은 각자의 모델을 유지합니다.</string>
     <string name="nm_models_media_more">이미지와 영상 옵션 더 보기</string>
     <string name="nm_models_media_more_sub">모델 이름을 직접 입력하거나, 각 모델이 없으면 무엇이 멈추는지 보거나, 키로 쓸 수 있는 영상 모델을 다시 확인합니다.</string>
-    <string name="nm_models_cloud_switch">nanoMuse Cloud 모델 사용</string>
-    <string name="nm_models_cloud_on_sub">nanoMuse Cloud는 아래 항목의 출처 중 하나이며, 여기서 실행된 내용은 사용량에서 차감됩니다.</string>
-    <string name="nm_models_cloud_off_sub">끄면 \"이번에는 nanoMuse Cloud 사용\"을 누르지 않는 한 nanoMuse Cloud에서 아무것도 실행되지 않습니다. 동기화와 기기를 위해 로그인은 유지됩니다.</string>
-    <string name="nm_models_cloud_off_refused">먼저 자신의 제공자를 추가하세요. nanoMuse Cloud를 끄면 답할 수 있는 모델이 없습니다.</string>
+    <string name="nm_models_cloud_switch">nanoLika Cloud 모델 사용</string>
+    <string name="nm_models_cloud_on_sub">nanoLika Cloud는 아래 항목의 출처 중 하나이며, 여기서 실행된 내용은 사용량에서 차감됩니다.</string>
+    <string name="nm_models_cloud_off_sub">끄면 \"이번에는 nanoLika Cloud 사용\"을 누르지 않는 한 nanoLika Cloud에서 아무것도 실행되지 않습니다. 동기화와 기기를 위해 로그인은 유지됩니다.</string>
+    <string name="nm_models_cloud_off_refused">먼저 자신의 제공자를 추가하세요. nanoLika Cloud를 끄면 답할 수 있는 모델이 없습니다.</string>
     <string name="nm_chat_no_model">지금 답할 수 있는 모델이 없습니다. 설정 › 모델에서 하나를 고르세요.</string>
-    <string name="nm_cloud_provider_no_delete">이 제공자는 nanoMuse Cloud 계정 자체입니다. 모델 사용을 멈추려면 위 스위치를 끄고, 로그아웃하려면 설정 › nanoMuse Cloud를 여세요.</string>
+    <string name="nm_cloud_provider_no_delete">이 제공자는 nanoLika Cloud 계정 자체입니다. 모델 사용을 멈추려면 위 스위치를 끄고, 로그아웃하려면 설정 › nanoLika Cloud를 여세요.</string>
     <string name="nm_welcome_own_key">내 API 키 사용</string>
     <string name="nm_useit_title">어디에 쓸지</string>
-    <string name="nm_useit_body">이 키가 맡을 일을 고르세요. 나머지는 nanoMuse Cloud가 계속 맡습니다.</string>
+    <string name="nm_useit_body">이 키가 맡을 일을 고르세요. 나머지는 nanoLika Cloud가 계속 맡습니다.</string>
     <string name="nm_useit_body_signed_out">이 키가 맡을 일을 고르세요.</string>
     <string name="nm_useit_use">쓰기</string>
     <string name="nm_useit_not_now">나중에</string>
     <string name="nm_useit_footnote">설정 › 모델에서 언제든 바꿀 수 있습니다.</string>
-    <string name="nm_retry_on_cloud">이번에는 nanoMuse Cloud 쓰기</string>
+    <string name="nm_retry_on_cloud">이번에는 nanoLika Cloud 쓰기</string>
     <string name="nm_hands_why_chat_provider">채팅 제공자의 손 기본 모델</string>
     <string name="nm_models_auto">자동</string>
     <string name="nm_models_auto_currently">현재 %1$s</string>

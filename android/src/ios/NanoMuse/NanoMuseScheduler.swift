@@ -340,7 +340,7 @@ final class NanoMuseScheduler: ObservableObject {
         } else {
             content.title = r.label.isEmpty ? AppLocalized("Routine") : r.label
         }
-        content.body = AppLocalized("Open nanoMuse to run it. The phone cannot run the agent while the app is asleep.")
+        content.body = AppLocalized("Open nanoLika to run it. The phone cannot run the agent while the app is asleep.")
         content.sound = .default
         content.categoryIdentifier = Self.notificationCategory
         var info: [String: Any] = ["nanomuse.routine": r.id]

@@ -52,7 +52,7 @@ VERSION_NAME = "1.0.5"
 VERSION_CODE = 48
 REPO = "nano-muse/nanoMuse"
 REPO_URL = f"https://github.com/{REPO}"
-PRIVACY_URL = f"{REPO_URL}/blob/main/docs/privacy.md"
+PRIVACY_URL = "https://nanolika.ru/privacy.html"
 
 # X-Minis-Token is a protocol header; MinisSkills is a path. The tail is an ASCII
 # lookahead rather than \b so that "Minis가" (Korean particle) is still caught.
@@ -597,6 +597,77 @@ def check() -> int:
     return problems
 
 
+def privacy_links() -> None:
+    """Keep our native clients on the operator's policy after an upstream pull."""
+    for relative in (
+        "android/src/ios/NanoMuse/NanoMuseSettings.swift",
+        "android/src/android/app/src/main/java/io/github/nanomuse/cloud/NanoMuseCloud.kt",
+    ):
+        path = ROOT / relative
+        if path.exists():
+            before = path.read_text(encoding="utf-8")
+            after = re.sub(r"https://(?:nanomuse\.cn|nanolika\.ru)/privacy/", PRIVACY_URL, before)
+            if after != before:
+                path.write_text(after, encoding="utf-8")
+                changed.append(str(path.relative_to(ROOT)))
+
+
+def customer_branding(base: Path = ROOT) -> None:
+    """Rebrand native display literals while preserving class names, URLs and wire values."""
+    old = re.compile(r"\b(?:nanoMuse|NanoMuse|NANOMUSE)\b")
+    literal = re.compile(r'"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"')
+
+    def display(match: re.Match[str]) -> str:
+        value = match.group(0)
+        if re.search(r"https?://|(?:nanoMuse|NanoMuse|NANOMUSE)[.:/_-][A-Za-z0-9]", value):
+            return value
+        return old.sub("nanoLika", value)
+
+    native = base / "android/src"
+    paths = list((native / "ios/NanoMuse").rglob("*.swift"))
+    paths += list((native / "android/app/src/main/java/io/github/nanomuse").rglob("*.kt"))
+    for path in paths:
+        before = path.read_text(encoding="utf-8")
+        after = literal.sub(display, before)
+        if after != before:
+            path.write_text(after, encoding="utf-8")
+            changed.append(str(path.relative_to(base)))
+    for path in (native / "android/app/src/main/res").glob("values*/*.xml"):
+        if path.name not in ("strings.xml", "nm_strings.xml"):
+            continue
+        before = path.read_text(encoding="utf-8")
+        after = re.sub(r">[^<>]*<", lambda m: old.sub("nanoLika", m.group(0)), before)
+        if after != before:
+            ET.fromstring(after.encode("utf-8"))
+            path.write_text(after, encoding="utf-8")
+            changed.append(str(path.relative_to(base)))
+    path = native / "ios/Localizable.xcstrings"
+    if path.exists():
+        before = path.read_text(encoding="utf-8")
+        data = json.loads(before)
+
+        def transform(value: object) -> object:
+            if isinstance(value, str):
+                return value if "https://" in value else old.sub("nanoLika", value)
+            if isinstance(value, list):
+                return [transform(v) for v in value]
+            if isinstance(value, dict):
+                out = {}
+                for key, item in value.items():
+                    new_key = old.sub("nanoLika", key) if "https://" not in key else key
+                    new_item = transform(item)
+                    if new_key in out and out[new_key] != new_item:
+                        raise ValueError("Conflicting native translation keys after rebrand")
+                    out[new_key] = new_item
+                return out
+            return value
+
+        after = xcstrings_dumps(transform(data), before)
+        if after != before:
+            path.write_text(after, encoding="utf-8")
+            changed.append(str(path.relative_to(base)))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if args in (["-h"], ["--help"]):
@@ -622,6 +693,8 @@ def main(argv: list[str] | None = None) -> int:
     notification_faces()
     reword()
     ios()
+    privacy_links()
+    customer_branding()
     from nanolika_theme import apply as apply_paper_theme
 
     apply_paper_theme()

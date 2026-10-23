@@ -147,7 +147,7 @@ object Hub {
 
     @Throws(HubException::class)
     fun call(to: String, action: String, args: JSONObject = JSONObject(), timeoutMs: Long = 120_000L, onEvent: ((JSONObject) -> Unit)? = null): JSONObject {
-        val c = client ?: throw HubException("disconnected", "this phone is not on the hub; sign in to nanoMuse Cloud and turn on Devices")
+        val c = client ?: throw HubException("disconnected", "this phone is not on the hub; sign in to nanoLika Cloud and turn on Devices")
         return c.call(to, action, args, timeoutMs, onEvent)
     }
 

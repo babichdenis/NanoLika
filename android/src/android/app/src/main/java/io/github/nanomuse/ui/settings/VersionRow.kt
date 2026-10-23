@@ -61,7 +61,7 @@ private fun rememberVersionState(): UpdateCheck.State {
 }
 
 /**
- * Settings → About: "Version — nanoMuse 0.1.35 (36)" with the latest release under it and an
+ * Settings → About: "Version — nanoLika 0.1.35 (36)" with the latest release under it and an
  * Update pill when a newer one is out. A Muse row, so it sits in the card with the others.
  */
 @Composable

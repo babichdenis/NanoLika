@@ -419,7 +419,7 @@ enum NanoMuseProxy {
         defer { session.finishTasksAndInvalidate() }
         guard let u = URL(string: url) else { return Probe(ok: false, status: 0, millis: 0, host: host, failure: nil) }
         var request = URLRequest(url: u)
-        request.setValue("nanoMuse", forHTTPHeaderField: "User-Agent")
+        request.setValue("nanoLika", forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await session.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0

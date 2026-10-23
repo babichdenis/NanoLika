@@ -112,7 +112,7 @@ object NanoMuseCloud {
     private const val MODELS_FRESH_MS = 60 * 60 * 1000L
 
     /** Where the privacy policy is when the relay did not name one. */
-    const val PRIVACY_URL = "https://nanolika.ru/privacy/"
+    const val PRIVACY_URL = "https://nanolika.ru/privacy.html"
 
     /**
      * A refusal of the relay's: its stable [code], its own sentence, the HTTP [status]; relay
@@ -216,7 +216,7 @@ object NanoMuseCloud {
         val inviteeBonusCny: Double = 0.0,
         val inviteEarnedCny: Double = 0.0,
         /**
-         * Data controls — "Help improve nanoMuse's AI models": whether the relay keeps this
+         * Data controls — "Help improve nanoLika's AI models": whether the relay keeps this
          * account's chat turns for the community's model, and how many it holds so far.
          */
         val contribute: Boolean = false,
@@ -408,7 +408,7 @@ object NanoMuseCloud {
     }
 
     /**
-     * Data controls — flip "Help improve nanoMuse's AI models": while on, the relay keeps this
+     * Data controls — flip "Help improve nanoLika's AI models": while on, the relay keeps this
      * account's chat turns (the training view: what was written, what was answered, the tool
      * calls) for the community's own model. Nothing about the allowance changes. Returns the
      * account as the relay now describes it.
@@ -799,7 +799,7 @@ object NanoMuseCloud {
         if (chatEntry != null) {
             // Ours already, with the recommended model or with the person's own choice
             // (a member who swapped the recommended model for another must not get a
-            // second "nanoMuse Cloud" group with the old one back on signing in again).
+            // second "nanoLika Cloud" group with the old one back on signing in again).
             val already = config.modelGroups.any { chatEntry.id in it.memberEntryIds || (it.name == LABEL && it.memberEntryIds.isNotEmpty()) }
             if (!already) {
                 // A group of ours left empty by an earlier sign-out is reused rather

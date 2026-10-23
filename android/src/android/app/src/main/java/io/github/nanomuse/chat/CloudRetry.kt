@@ -8,7 +8,7 @@ import io.github.nanomuse.cloud.NanoMuseCloud
 import io.github.nanomuse.models.ModelSlots
 
 /**
- * "Use nanoMuse Cloud this time" (0.1.41 "Choice", contract section 4). A turn on a model of
+ * "Use nanoLika Cloud this time" (0.1.41 "Choice", contract section 4). A turn on a model of
  * the person's own that failed never falls back to the relay by itself: that would spend the
  * allowance without a word and hide a key that is wrong. The rejection card offers one button
  * instead, shown only when signed in and the turn ran on a provider that is not the relay; it

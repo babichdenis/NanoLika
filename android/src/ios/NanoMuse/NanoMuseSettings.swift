@@ -175,7 +175,7 @@ struct NanoMuseSettingsHomeView: View {
 
     private var aboutCard: some View {
         NanoMuseCard {
-            NanoMuseLinkRow(title: AppLocalized("About nanoMuse")) { AboutView() }
+            NanoMuseLinkRow(title: AppLocalized("About nanoLika")) { AboutView() }
             NanoMuseRowDivider()
             NanoMuseActionRow(title: AppLocalized("Privacy Policy")) {
                 openURL(NanoMuseLinks.privacy)
@@ -218,7 +218,7 @@ struct NanoMuseSettingsHomeView: View {
 /// The project's public pages.
 enum NanoMuseLinks {
     /// The policy on the site (docs/privacy.md is its source), as Android's PRIVACY_URL.
-    static let privacy = URL(string: "https://nanomuse.cn/privacy/")!
+    static let privacy = URL(string: "https://nanolika.ru/privacy.html")!
     /// The own-key guide on the site (docs/own-key.md), when the relay sent no address of its own (Android's OWN_KEY_DOCS).
     static let ownKeyDocs = "https://nanomuse.cn/own-key"
 

@@ -29,7 +29,7 @@ private let logger = AppLogger(category: "VoicePromptIntent")
 struct VoicePromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Voice Prompt"
     static var description = IntentDescription(
-        "Opens nanoMuse and starts listening. What you say lands in the composer; you send it with a tap."
+        "Opens nanoLika and starts listening. What you say lands in the composer; you send it with a tap."
     )
 
     /// Listening needs the panel on screen (see the file header).
@@ -42,7 +42,7 @@ struct VoicePromptIntent: AppIntent {
     var session: SessionEntity?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Voice prompt to nanoMuse") {
+        Summary("Voice prompt to nanoLika") {
             \.$session
         }
     }
@@ -52,7 +52,7 @@ struct VoicePromptIntent: AppIntent {
         let target = session?.id
         NanoMuseVoicePrompt.shared.request(session: target)
         if let sid = target, !sid.isEmpty {
-            // The route a notification tap and "Ask nanoMuse" already take: the buffer for a
+            // The route a notification tap and "Ask nanoLika" already take: the buffer for a
             // cold launch, the event for an app that is running (ContentView and the Muse shell
             // both listen). The chat that comes up then finds the request addressed to it.
             NotificationNavigationStore.shared.setPending(sid)

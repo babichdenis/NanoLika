@@ -17,6 +17,7 @@
   const L = (en, zhText, ruText) => (ru ? ruText : zh ? zhText : en);
   const RU = {
     tagline: "Каждое ваше устройство — ваша помощница.",
+    signedIn: (h) => `Вы вошли как ${h}`, signedOut: "Вы вышли из аккаунта",
     identifier: "Электронная почта", smsRegion: "", code: "Код из письма", password: "Пароль", sendCode: "Отправить код", signIn: "Войти", another: "Войти в другой аккаунт",
     byCode: "По коду", byPassword: "По паролю", forgot: "Забыли пароль? Войдите по коду", show: "Показать", hide: "Скрыть",
     codeSent: (m) => `Код отправлен. Он действует ${m} мин.`, relay: "Сервер", fine: "После входа эта страница покажет все устройства вашего аккаунта, которые сейчас на связи, и позволит каждой помощнице делать своё дело. Сама страница ничего не запускает.",
@@ -55,6 +56,7 @@
 
   const T = zh ? {
     tagline: "你的每一台设备，都是你的 Muse。",
+    signedIn: (h) => `已登录：${h}`, signedOut: "已退出登录",
     identifier: "中国大陆手机号或邮箱", smsRegion: "短信验证码只能发到中国大陆手机号。其他地区请用邮箱登录。", code: "验证码", password: "密码", sendCode: "发送验证码", signIn: "登录", another: "换一个账号",
     byCode: "验证码登录", byPassword: "密码登录", forgot: "忘了密码？用验证码登录", show: "显示", hide: "隐藏",
     codeSent: (m) => `验证码已发送，${m} 分钟内有效。`, relay: "服务器", fine: "登录后，这个页面能看到你账号下所有在线的设备，并让它们各自的 Muse 去做事。网页本身不操作任何设备。",
@@ -90,6 +92,7 @@
       bad_request: "请求有误，请刷新页面再试。", too_large: "内容太大，服务器不接收。", no_session: "这个登录已经不存在了。", device_online: "这台设备现在在线，先在它上面退出登录。", sync_off: "这个账号关闭了对话同步。", invite_code: "暂时生成不了邀请码，请稍后再试。", not_found: "没有这个东西。" },
     email: "邮箱", hubPaused: "设备互联已暂停",
   } : (ru ? RU : {    tagline: "Every device you own, a Muse of yours.",
+    signedIn: (h) => `Signed in as ${h}`, signedOut: "Signed out",
     identifier: "Mainland China phone number or e-mail", smsRegion: "Text-message codes reach mainland-China numbers only. Use an e-mail address instead.", code: "Verification code", password: "Password", sendCode: "Send code", signIn: "Sign in", another: "Use another account",
     byCode: "With a code", byPassword: "With a password", forgot: "Forgot it? Sign in with a code", show: "Show", hide: "Hide",
     codeSent: (m) => `A six-digit code is on its way; it is good for ${m} ${m === 1 ? "minute" : "minutes"}.`, relay: "Server", fine: "Once signed in, this page shows every device of your account that is online and lets each device's Muse do things. The page itself operates nothing.",
@@ -454,6 +457,15 @@
 
   // ── main view ────────────────────────────────────────────────────
   let els = {};
+  // A short line at the bottom that goes away by itself: after a sign-in the person should see
+  // that it worked instead of guessing from a page that happens to look different.
+  function toast(text) {
+    if (!text) return;
+    const el = h("div", { class: "toast" }, text);
+    document.body.appendChild(el);
+    setTimeout(() => el.classList.add("gone"), 3400);
+    setTimeout(() => el.remove(), 4000);
+  }
   function renderMain() {
     els = {};
     els.side = h("aside", { class: "side" });
@@ -744,8 +756,9 @@
     if (stored === key) return;
     key = stored;
     hint = stored ? LS.getItem("nm.hint") || "" : "";
-    if (key) { renderMain(); connect(); return; }
+    if (key) { renderMain(); connect(); toast(T.signedIn(hint)); return; }
     if (ws) { try { ws.onclose = null; ws.close(); } catch (_) { /* ignore */ } ws = null; }
+    toast(T.signedOut);
     closeSheet();
     renderSignIn();
   }

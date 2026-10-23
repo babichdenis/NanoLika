@@ -95,7 +95,7 @@ private struct NanoMuseReachSheet: View {
                     TextField(AppLocalized("A short note"), text: $note, axis: .vertical)
                         .lineLimit(1...4)
                     Button(AppLocalized("Send the note")) {
-                        run("notify", ["text": note.trimmingCharacters(in: .whitespacesAndNewlines), "title": "nanoMuse"]) { _ in
+                        run("notify", ["text": note.trimmingCharacters(in: .whitespacesAndNewlines), "title": "nanoLika"]) { _ in
                             AppLocalized("Sent.")
                         }
                     }

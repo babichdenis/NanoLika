@@ -635,7 +635,7 @@ enum NanoMuseModelSlots {
     }
 }
 
-// MARK: - "Use nanoMuse Cloud this time"
+// MARK: - "Use nanoLika Cloud this time"
 
 /// A turn on a key of one's own failed and the person asked for nanoMuse Cloud once: while
 /// armed, the chat resolves its model to the relay's chat model (one `// nanoMuse:` line at the

@@ -41,7 +41,7 @@ struct NanoMuseNetworkView: View {
             } header: {
                 Text(AppLocalized("HTTP proxy for own providers"))
             } footer: {
-                Text(AppLocalized("Only the requests to the providers you added with your own key, and to the ChatGPT plan, go through it. nanoMuse Cloud, your computers and the local network never do. Kept on this phone only."))
+                Text(AppLocalized("Only the requests to the providers you added with your own key, and to the ChatGPT plan, go through it. nanoLika Cloud, your computers and the local network never do. Kept on this phone only."))
             }
 
             Section {

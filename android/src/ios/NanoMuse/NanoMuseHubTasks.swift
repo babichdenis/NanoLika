@@ -85,11 +85,11 @@ enum NanoMuseHubTasks {
         let text = (args["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .failure(code: "usage", message: "text is required") }
         guard RootfsManager.shared.isInstalled else {
-            return .failure(code: "not_ready", message: "nanoMuse on the iPhone is still starting")
+            return .failure(code: "not_ready", message: "nanoLika on the iPhone is still starting")
         }
         let store = ProviderConfigStore.shared
         guard store.defaultPrimaryGroupId != nil || !store.modelEntries.isEmpty else {
-            return .failure(code: "no_model", message: "this iPhone has no model to think with; sign in to nanoMuse Cloud there")
+            return .failure(code: "no_model", message: "this iPhone has no model to think with; sign in to nanoLika Cloud there")
         }
 
         let senderId = (from["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"

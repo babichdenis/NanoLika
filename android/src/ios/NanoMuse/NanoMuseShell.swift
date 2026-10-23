@@ -373,10 +373,10 @@ struct NanoMuseHomeView: View {
     /// Reduce Motion on: the bottom bar fades out for the keyboard instead of sliding down.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The agent's name from SOUL.md, "nanoMuse" until it has one.
+    /// The agent's name from SOUL.md, "nanoLika" until it has one.
     static func currentAgentName() -> String {
         let n = SoulStore.cachedMetadata.name
-        return n.isEmpty ? "nanoMuse" : n
+        return n.isEmpty ? "nanoLika" : n
     }
 
     /// Hidden while the keyboard is up (Android's IME) and while the chat's voice panel is

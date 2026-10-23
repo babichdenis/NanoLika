@@ -455,7 +455,7 @@ struct NanoMuseOwnClipPreview: View {
                 onCancel()
             }
             .frame(maxWidth: .infinity)
-            Text(AppLocalized("The clip stays on this phone. It is not uploaded to nanoMuse Cloud or synced to your other devices."))
+            Text(AppLocalized("The clip stays on this phone. It is not uploaded to nanoLika Cloud or synced to your other devices."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

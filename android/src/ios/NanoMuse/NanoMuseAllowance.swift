@@ -94,7 +94,7 @@ final class NanoMuseAllowance: ObservableObject {
             d.removeObject(forKey: Keys.warnHidden)
         }
         guard !d.bool(forKey: Keys.warnHidden) else { headsUp = nil; return }
-        headsUp = String(format: AppLocalized("Nearly used up: ¥%@ of ¥%@ of the free allowance left. A key of your own or a plan you already pay for keeps you going, under Settings → nanoMuse Cloud."), Self.money(left), Self.money(grant))
+        headsUp = String(format: AppLocalized("Nearly used up: ¥%@ of ¥%@ of the free allowance left. A key of your own or a plan you already pay for keeps you going, under Settings → nanoLika Cloud."), Self.money(left), Self.money(grant))
     }
 
     /// The heads-up was waved away: not again for this pool size.

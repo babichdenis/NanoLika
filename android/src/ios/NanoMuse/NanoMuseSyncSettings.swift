@@ -30,7 +30,7 @@ struct NanoMuseSyncSection: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else if sync.conversationCount > 0 || sync.messageCount > 0 {
-                        Text(String(format: AppLocalized("%d conversations, %d messages on nanoMuse Cloud."), sync.conversationCount, sync.messageCount))
+                        Text(String(format: AppLocalized("%d conversations, %d messages on nanoLika Cloud."), sync.conversationCount, sync.messageCount))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -68,7 +68,7 @@ struct NanoMuseSyncSection: View {
             }
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(AppLocalized("The text of your chats is kept on nanoMuse Cloud so every device shows the same conversations. Files and images stay on the device they were made on."))
+                Text(AppLocalized("The text of your chats is kept on nanoLika Cloud so every device shows the same conversations. Files and images stay on the device they were made on."))
                 if let message, !message.isEmpty {
                     Text(message)
                 }
@@ -89,12 +89,12 @@ struct NanoMuseSyncSection: View {
                         Task { @MainActor in
                             defer { busy = false }
                             await sync.deleteSynced()
-                            message = sync.lastError ?? AppLocalized("The synced conversations are removed from nanoMuse Cloud. The chats on your devices stay.")
+                            message = sync.lastError ?? AppLocalized("The synced conversations are removed from nanoLika Cloud. The chats on your devices stay.")
                         }
                     }
                     Button(AppLocalized("Cancel"), role: .cancel) {}
                 } message: {
-                    Text(AppLocalized("Removes what nanoMuse Cloud holds of your conversations. Every device keeps its own chats; the switch stays as it is."))
+                    Text(AppLocalized("Removes what nanoLika Cloud holds of your conversations. Every device keeps its own chats; the switch stays as it is."))
                 }
             } footer: {
                 Text(AppLocalized("Deleting a chat on one device deletes it on all of them. Nobody but your devices can read the text; the operator sees counts, not words."))

@@ -66,7 +66,7 @@ enum NanoMuseHubErrors {
         case "not_controllable", "self_call": return AppLocalized("That device cannot be asked to do things.")
         case "unknown_agent": return AppLocalized("That coding agent is not on the computer.")
         case "no_session": return AppLocalized("That session is not on the computer any more.")
-        case "unknown_action": return AppLocalized("The computer runs an older nanoMuse that does not know this action.")
+        case "unknown_action": return AppLocalized("The computer runs an older nanoLika that does not know this action.")
         case "bad_key", "bad_device": return AppLocalized("Signed out on the relay; sign in again.")
         default:
             if !message.isEmpty { AppLogger(category: "NanoMuseHub").info("hub failure \(code): \(message)") }
@@ -376,7 +376,7 @@ final class NanoMuseHub: ObservableObject {
 
     /// Asks another device for something; resolves with its `result` body. Progress arrives on `onEvent`.
     func call(to: String, action: String, args: [String: Any] = [:], timeout: TimeInterval = 120, onEvent: (([String: Any]) -> Void)? = nil) async throws -> [String: Any] {
-        guard connected else { throw HubError(code: "disconnected", message: "this iPhone is not on the hub; sign in to nanoMuse Cloud and turn on Devices") }
+        guard connected else { throw HubError(code: "disconnected", message: "this iPhone is not on the hub; sign in to nanoLika Cloud and turn on Devices") }
         let id = String(UUID().uuidString.lowercased().prefix(12))
         return try await withCheckedThrowingContinuation { cont in
             var finished = false
@@ -439,13 +439,13 @@ final class NanoMuseHub: ObservableObject {
                     if ok {
                         self.reply(id, body: ["ok": true, "url": raw])
                     } else {
-                        self.refuse(id, "not_opened", "this iPhone did not open \(raw): nothing handles it, or nanoMuse is not in the foreground")
+                        self.refuse(id, "not_opened", "this iPhone did not open \(raw): nothing handles it, or nanoLika is not in the foreground")
                     }
                 }
             }
         case "notify":
             guard let text = args["text"] as? String, !text.isEmpty else { refuse(id, "usage", "text is required"); return }
-            let title = (args["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "nanoMuse"
+            let title = (args["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "nanoLika"
             notify(title: title, text: text, from: from) { ok in
                 Task { @MainActor in self.reply(id, body: ["ok": ok, "shown": ok]) }
             }
@@ -467,7 +467,7 @@ final class NanoMuseHub: ObservableObject {
             let sender = frame["from"] as? [String: Any] ?? [:]
             reply(id, body: ["stopped": NanoMuseHubTasks.stop(args: args, from: sender)])
         case "shell", "files", "file.get", "file.put", "approve":
-            refuse(id, "not_supported", "nanoMuse on iOS does not do '\(action)' for other devices yet; ask on the phone itself")
+            refuse(id, "not_supported", "nanoLika on iOS does not do '\(action)' for other devices yet; ask on the phone itself")
         default:
             refuse(id, "unknown_action", "this iPhone does not do '\(action)'")
         }
@@ -491,9 +491,9 @@ final class NanoMuseHub: ObservableObject {
             "name": name,
             "os": "iOS \(UIDevice.current.systemVersion)",
             "model": UIDevice.current.model,
-            "app": "nanoMuse \(Self.version)",
+            "app": "nanoLika \(Self.version)",
             "actions": Self.actions,
-            "note": "iOS answers info, open, notify and task (its Muse runs the task while nanoMuse is open); no shell, files or screen",
+            "note": "iOS answers info, open, notify and task (its Muse runs the task while nanoLika is open); no shell, files or screen",
         ]
     }
 

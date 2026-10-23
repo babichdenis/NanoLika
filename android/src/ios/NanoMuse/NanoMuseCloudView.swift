@@ -128,7 +128,7 @@ struct NanoMuseCloudView: View {
                     Label(AppLocalized("Data controls"), systemImage: "hand.raised")
                 }
             } footer: {
-                Text(AppLocalized("nanoMuse Cloud is an ordinary provider in this app: its models are listed under Providers and can be mixed with your own in a model group."))
+                Text(AppLocalized("nanoLika Cloud is an ordinary provider in this app: its models are listed under Providers and can be mixed with your own in a model group."))
             }
         }
     }
@@ -186,7 +186,7 @@ struct NanoMuseCloudView: View {
         switch confirm {
         case .everywhere: return AppLocalized("Every device signed in to this account loses its key, this phone included. The account stays; sign in again any time.")
         case .delete: return AppLocalized("The account, its sign-ins, usage and history are deleted at the relay, and this account's chats, memory, feed, goals and face are removed from this phone. This cannot be undone.")
-        case .here, .none: return AppLocalized("The nanoMuse Cloud provider and its models will be removed from this phone.")
+        case .here, .none: return AppLocalized("The nanoLika Cloud provider and its models will be removed from this phone.")
         }
     }
 
@@ -195,7 +195,7 @@ struct NanoMuseCloudView: View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppLocalized("Free, open source, non-profit")).font(.subheadline.weight(.semibold))
-                Text(AppLocalized("nanoMuse is a non-profit open-source community project, free, forever. The model comes with a free allowance paid by the developer; after that, your own key. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours."))
+                Text(AppLocalized("nanoLika is a non-profit open-source community project, free, forever. The model comes with a free allowance paid by the developer; after that, your own key. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours."))
                     .font(.caption).foregroundStyle(.secondary)
                 Text(AppLocalized("Found a bug, want a feature, have a patch? The GitHub repository is the place."))
                     .font(.caption).foregroundStyle(.secondary)

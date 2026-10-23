@@ -50,7 +50,7 @@ struct NanoMuseModelsView: View {
             // automatic order; the sign-in stays. Not a delete: the Cloud instance is the account.
             if NanoMuseCloud.isSignedIn {
                 NanoMuseCard {
-                    NanoMuseToggleRow(title: AppLocalized("Use nanoMuse Cloud models"), isOn: Binding(
+                    NanoMuseToggleRow(title: AppLocalized("Use nanoLika Cloud models"), isOn: Binding(
                         get: { cloudOn },
                         set: { on in
                             // Off is refused while the chat model is the account's and no model
@@ -63,7 +63,7 @@ struct NanoMuseModelsView: View {
                         }
                     ))
                     if cloudRefused {
-                        Text(AppLocalized("Add a provider of your own first; with nanoMuse Cloud off, nothing else could answer."))
+                        Text(AppLocalized("Add a provider of your own first; with nanoLika Cloud off, nothing else could answer."))
                             .font(.footnote)
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,8 +72,8 @@ struct NanoMuseModelsView: View {
                     }
                 }
                 NanoMuseCaption(text: cloudOn
-                    ? AppLocalized("nanoMuse Cloud is one of the sources for the chat, pictures and clips; what runs on it comes off your allowance.")
-                    : AppLocalized("Off: nothing runs on nanoMuse Cloud unless you choose it yourself. You stay signed in for sync and your devices."))
+                    ? AppLocalized("nanoLika Cloud is one of the sources for the chat, pictures and clips; what runs on it comes off your allowance.")
+                    : AppLocalized("Off: nothing runs on nanoLika Cloud unless you choose it yourself. You stay signed in for sync and your devices."))
             }
             NanoMuseCard {
                 NanoMuseActionRow(title: AppLocalized("Add a provider"), titleColor: NanoMuseTones.action, chevron: false) { adding = true }
@@ -295,17 +295,17 @@ struct NanoMuseSlotPickerView: View {
 
     private var emptyLine: String {
         switch slot {
-        case .chat: return ownChatOnly ? AppLocalized("nl.own.subtitle") : AppLocalized("Sign in to nanoMuse Cloud or add a provider")
-        case .hands: return AppLocalized("Sign in to nanoMuse Cloud or add a provider")
-        case .image: return AppLocalized("None of your providers can draw. Sign in to nanoMuse Cloud, or add an Alibaba Cloud Bailian provider with an API key; the avatar is drawn with one of the two.")
-        case .video: return AppLocalized("No provider that can make video yet. nanoMuse speaks Alibaba Cloud Model Studio's video API, which nanoMuse Cloud relays too. Sign in to nanoMuse Cloud, or add a Model Studio key (it can be the same one as the image model uses), and the avatar starts moving; until then it stays as still pictures.")
+        case .chat: return ownChatOnly ? AppLocalized("nl.own.subtitle") : AppLocalized("Sign in to nanoLika Cloud or add a provider")
+        case .hands: return AppLocalized("Sign in to nanoLika Cloud or add a provider")
+        case .image: return AppLocalized("None of your providers can draw. Sign in to nanoLika Cloud, or add an Alibaba Cloud Bailian provider with an API key; the avatar is drawn with one of the two.")
+        case .video: return AppLocalized("No provider that can make video yet. nanoLika speaks Alibaba Cloud Model Studio's video API, which nanoLika Cloud relays too. Sign in to nanoLika Cloud, or add a Model Studio key (it can be the same one as the image model uses), and the avatar starts moving; until then it stays as still pictures.")
         }
     }
 
     /// The sentence naming the providers the iPhone cannot draw or film through (`%@`), and why.
     private var notDrivenLine: String {
         switch slot {
-        case .video: return AppLocalized("Not offered here: %@. Clips go through Alibaba Cloud Model Studio's video API, which nanoMuse Cloud relays too.")
+        case .video: return AppLocalized("Not offered here: %@. Clips go through Alibaba Cloud Model Studio's video API, which nanoLika Cloud relays too.")
         default: return AppLocalized("Not offered here: %@. On the iPhone, pictures with a key of your own go through Alibaba Cloud Model Studio's image API; the desktop app also draws through providers that speak the OpenAI images API.")
         }
     }
@@ -526,7 +526,7 @@ struct NanoMuseUseItForView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(NanoMuseCloud.modelsOn
-                     ? AppLocalized("Pick what this key should handle. nanoMuse Cloud keeps the rest.")
+                     ? AppLocalized("Pick what this key should handle. nanoLika Cloud keeps the rest.")
                      : AppLocalized("Pick what this key should handle."))
                     .font(.body)
                     .foregroundStyle(.secondary)
