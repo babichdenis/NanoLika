@@ -145,13 +145,51 @@ echo "== zip"
 rm -f "$out/$name.zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$out/$name.zip"
 
+app_file="$(basename "$app")"
+here="$(cd "$(dirname "$0")" && pwd)"
 echo "== dmg"
 stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
+# окно образа: фон в цветах сайта и две иконки — приложение слева, «Программы» справа.
+# Картинку кладём в .background, то же имя прописываем в настройках окна Finder.
+mkdir -p "$stage/.background"
+if [ -f "$here/resources/dmg-background.png" ]; then
+  cp "$here/resources/dmg-background.png" "$stage/.background/background.png"
+fi
 rm -f "$out/$name.dmg"
-hdiutil create -volname "$app_name $version" -srcfolder "$stage" -ov -fs APFS -format UDZO -quiet "$out/$name.dmg"
-rm -rf "$stage"
+# сначала записываемый образ, чтобы выставить вид окна, потом сжимаем в UDZO
+rw="$stage/rw.dmg"
+hdiutil create -volname "$app_name $version" -srcfolder "$stage" -ov -fs APFS -format UDRW -quiet "$rw"
+mount_dir="$(mktemp -d)"
+if hdiutil attach -quiet -noautoopen -mountpoint "$mount_dir" "$rw"; then
+  osascript <<APPLESCRIPT || echo "layout skipped: Finder did not take the window settings"
+tell application "Finder"
+  tell disk "$app_name $version"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set bounds of container window to {200, 140, 840, 540}
+    set theViewOptions to the icon view options of container window
+    set arrangement of theViewOptions to not arranged
+    set icon size of theViewOptions to 128
+    try
+      set background picture of theViewOptions to file ".background:background.png"
+    end try
+    set position of item "$app_file" of container window to {170, 220}
+    set position of item "Applications" of container window to {470, 220}
+    close
+  end tell
+end tell
+APPLESCRIPT
+  sync
+  hdiutil detach -quiet "$mount_dir" || true
+else
+  hdiutil detach -quiet "$mount_dir" || true
+fi
+hdiutil convert -quiet "$rw" -format UDZO -o "$out/$name.dmg"
+rm -rf "$stage" "$mount_dir"
 hdiutil verify -quiet "$out/$name.dmg"
 echo "dmg ok"
 if [ "$identity" != "-" ]; then
