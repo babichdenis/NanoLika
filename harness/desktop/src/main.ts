@@ -2124,7 +2124,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
   app.on("second-instance", (_e, _argv, _cwd, data) => {
     // the launcher clicked while this instance runs — with its window closed, too (the
     // tray case): showWindow() makes the window again when it is gone
-    if (process.platform === "linux" && staleInstance(app.getVersion(), data)) {
+    if ((process.platform === "linux" || process.platform === "win32") && staleInstance(app.getVersion(), data)) {
       // Linux: a package upgrade (.deb) leaves the old copy running in the tray; the
       // launcher then starts the new binary, which only wakes the old one. Hand over.
       log(`second instance is ${(data as { version: string }).version}, this is ${app.getVersion()}: relaunching into the installed version`);
