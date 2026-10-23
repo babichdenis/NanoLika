@@ -2800,6 +2800,10 @@ class Cloud:
         a["listed"] = id_hash in self.member_hashes
         a["member"] = a["unlimited"] or a["listed"]
         a["review"] = id_hash in self.review_hashes
+        # the paid tier and the relay connection, so the operator sees them in the card
+        # and can sell or extend a plan without leaving the console
+        a["plan"] = self.plan_state(account_id)
+        a["connect"] = self.connect_state(account_id)
         a["locked"] = bool(row["locked_until"] and int(row["locked_until"]) > t)
         spent_total = self.db.spent_since(account_id, 0)
         self._pool_fields(a, spent_cny=self.s.uy_to_cny(spent_total))

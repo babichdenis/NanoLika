@@ -41,6 +41,9 @@
     kActive: "活跃账号", kActiveSub: (n) => `${n} 个新注册`, kSpent: "花费", kSpentSub: (r, t) => `${fmt(r)} 次 · ${fmt(t)} tokens`,
     kOnline: "在线设备", kOnlineSub: (k, s) => `记住了 ${k} 台 · ${s} 个有效登录`, kSignals: "今天的信号",
     kSignalsSub: (s) => `${s.sign_ins} 次登录 · ${s.sign_in_failures} 次失败 · ${s.budget_refusals} 次超额 · ${s.upstream_errors} 次上游错误 · ${s.content_rejected} 次内容审核未放行 · ${s.calls} 通电话`,
+    paySell: "开通套餐", payUntil: "到", payExpired: "已过期", payConnect: "设备互联",
+    payDays: "天", payNoPlans: "套餐菜单是空的：运维端还没有配置 PLANS",
+    paySellPrompt: (who) => `为 ${who} 开通哪个套餐`,
     payOrders: "订单", paySum: "金额", payRefunded: "退款", payAll: "全部状态",
     payNote: "按创建时间", payReadOnly: "只有查看，退款在银行确认后走回调",
     byKind: "按类型", byModel: "按模型", byDay: (d) => `每日花费 · 最近 ${d} 天`, top: (d) => `花费最多 · 最近 ${d} 天`, events: "最近动态", accounts: "全部账号", config: "当前配置",
@@ -189,6 +192,9 @@
     kActive: "Active accounts", kActiveSub: (n) => `${n} new`, kSpent: "Spent", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
     kOnline: "Devices online", kOnlineSub: (k, s) => `${k} remembered · ${s} live sign-ins`, kSignals: "Signals today",
     kSignalsSub: (s) => `${s.sign_ins} sign-ins · ${s.sign_in_failures} failed · ${s.budget_refusals} over budget · ${s.upstream_errors} upstream errors · ${s.content_rejected} content checks · ${s.calls} calls`,
+    paySell: "Sell a plan", payUntil: "until", payExpired: "expired", payConnect: "devices connected",
+    payDays: "days", payNoPlans: "the plan menu is empty: PLANS is not configured on the relay",
+    paySellPrompt: (who) => `Which plan for ${who}`,
     payOrders: "Orders", paySum: "Amount", payRefunded: "Refunded", payAll: "All statuses",
     payNote: "by creation time", payReadOnly: "read only; refunds go through the bank callback",
     byKind: "By kind", byModel: "By model", byDay: (d) => `Spend by day · last ${d} days`, top: (d) => `Top spenders · last ${d} days`, events: "Activity", accounts: "All accounts", config: "Configuration",
@@ -336,6 +342,9 @@
     kActive: "Активные аккаунты", kActiveSub: (n) => `${n} новых`, kSpent: "Потрачено", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
     kOnline: "Устройств онлайн", kOnlineSub: (k, s) => `${k} запомненных · ${s} живых входов`, kSignals: "События за сегодня",
     kSignalsSub: (s) => `${s.sign_ins} входов · ${s.sign_in_failures} неудачных · ${s.budget_refusals} сверх лимита · ${s.upstream_errors} ошибок провайдера · ${s.content_rejected} отклонено проверкой контента · ${s.calls} звонков`,
+    paySell: "Продать тариф", payUntil: "до", payExpired: "истёк", payConnect: "устройства связаны",
+    payDays: "дн.", payNoPlans: "меню тарифов пустое: на релее не задан PLANS",
+    paySellPrompt: (who) => `Какой тариф выдать ${who}`,
     payOrders: "Заказы", paySum: "Сумма", payRefunded: "Возвращено", payAll: "Все статусы",
     payNote: "по времени создания", payReadOnly: "только чтение; возврат идёт через банк",
     byKind: "По типу", byModel: "По модели", byDay: (d) => `Расход по дням · за ${d} дн.`, top: (d) => `Крупнейшие плательщики · за ${d} дн.`, events: "Активность", accounts: "Все аккаунты", config: "Конфигурация",
@@ -610,9 +619,10 @@
     controls: () => "/v1/admin/controls",
     stats: (d) => `/v1/admin/stats?days=${d}`,
     github: (d) => `/v1/admin/github?days=${d}`,
+    config: () => "/v1/config",
     payments: (d) => `/v1/admin/payments?days=${d}`,
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config"]);
   const CACHE = new Map();
   const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
@@ -990,6 +1000,20 @@
     try { await api("POST", "/v1/admin/grant", { account_id: a.id, tokens: n }); } catch (e) { alert(e.message); }
     await Promise.all([load(), detail ? openAccount(a.id) : null]);
   }
+  async function doPlan(a) {
+    let menu = (CACHE.get(cacheKey("config")) || {}).value;
+    if (!menu) { try { menu = await load("config"); } catch (e) { alert(e.message); return; } }
+    const plans = (menu && menu.plans) || [];
+    if (!plans.length) { alert(T.payNoPlans); return; }
+    const list = plans.map((p, i) => `${i + 1}. ${p.id} — ${p.name} · ${p.price_rub} ₽ · ${p.days} ${T.payDays}`).join("\n");
+    const v = prompt(`${T.paySellPrompt(who(a))}\n${list}`, plans[0].id);
+    if (v === null) return;
+    const picked = plans.find((p) => p.id === v.trim()) || plans[Number(v.trim()) - 1];
+    const plan = picked ? picked.id : v.trim();
+    if (!plan) return;
+    try { await api("POST", "/v1/admin/plan", { account_id: a.id, plan }); } catch (e) { alert(e.message); }
+    await Promise.all([load(), detail ? openAccount(a.id) : null]);
+  }
   /** "=5" → what is left; "total=20" / "总额=20" → the lifetime pool; "+3" / "-2" → a difference. */
   function parsePool(v) {
     const s = String(v || "").replace(/[\s,¥]/g, "").toLowerCase();
@@ -1192,6 +1216,8 @@
       a.disabled ? h("span", { class: "pill bad" }, T.disabled) : null,
       a.locked ? h("span", { class: "pill warn" }, T.locked) : null,
       a.contribute ? h("span", { class: "pill cyan" }, T.contributes) : null,
+      a.plan ? h("span", { class: "pill " + (a.plan.active ? "ok" : "grey"), title: `${T.payUntil} ${when(a.plan.expires_at)}` }, `${a.plan.name}${a.plan.active ? "" : ` · ${T.payExpired}`}`) : null,
+      a.connect && a.connect.allowed ? h("span", { class: "pill violet" }, T.payConnect) : null,
     ];
     const cap = a.member ? 0 : Number(sp.grant_cny || 0), frac = cap > 0 ? Math.min(1, Number(sp.total_cny || 0) / cap) : 0;
     box.replaceChildren(
@@ -1213,6 +1239,7 @@
         h("div", { class: "acts" },
           s.unlimited ? null : h("button", { class: "btn quiet", onclick: () => doGrant(a) }, T.grant),
           h("button", { class: "btn quiet", onclick: () => doCredit(a) }, T.credit),
+          h("button", { class: "btn quiet", onclick: () => doPlan(a) }, T.paySell),
           a.member ? null : h("button", { class: "btn quiet", onclick: () => doSetPool(a) }, T.setPool),
           a.listed ? null : h("button", { class: "btn quiet", onclick: () => doMember(a) }, a.unlimited ? T.unmakeMember : T.makeMember),
           h("button", { class: "btn quiet", onclick: () => doDisable(a) }, a.disabled ? T.enable : T.disable),

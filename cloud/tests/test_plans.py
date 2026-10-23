@@ -169,3 +169,18 @@ def test_the_operator_sells_a_tariff_through_the_admin_door():
     assert r.status_code == 200, r.text
     assert r.json()["plan"]["id"] == "lika-plus"
     assert client.post("/v1/admin/plan", json={"account_id": me["account"]["id"], "plan": "gold"}, headers=ADMIN).status_code == 400
+
+def test_the_admin_card_shows_the_tariff_and_the_connection():
+    """Карточка аккаунта в админке отдаёт тариф и состояние связи: по ним оператор
+    видит, что человек купил, и может продать следующий тариф не выходя из консоли."""
+    client, _cloud, sender = stack()
+    _key, me = sign_up(client, sender)
+    account_id = me["account"]["id"]
+    before = client.get(f"/v1/admin/accounts/{account_id}", headers=ADMIN).json()["account"]
+    assert before["plan"] is None
+    client.post("/v1/admin/plan", json={"account_id": account_id, "plan": "lika-plus"}, headers=ADMIN)
+    after = client.get(f"/v1/admin/accounts/{account_id}", headers=ADMIN).json()["account"]
+    assert after["plan"]["id"] == "lika-plus" and after["plan"]["active"] is True
+    assert after["plan"]["expires_at"] > 0
+    assert after["connect"]["allowed"] is True
+    assert after["connect"]["plan"]["id"] == "lika-plus"
