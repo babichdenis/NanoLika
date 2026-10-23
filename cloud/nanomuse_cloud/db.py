@@ -352,6 +352,23 @@ def _like(text: str) -> str:
     return f"%{t}%"
 
 
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS bot_projects (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL CHECK(platform IN ('telegram','max')),
+    provider_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    secret_hash TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    UNIQUE(platform,provider_id)
+);
+CREATE INDEX IF NOT EXISTS bot_projects_account ON bot_projects(account_id);
+"""
+
+
 class Database:
     def __init__(self, path: str):
         self.path = path
@@ -2208,3 +2225,55 @@ class Database:
                 "checked_at=excluded.checked_at, note=excluded.note",
                 (probe.model_id, 1 if probe.works else 0, 1 if probe.vision else 0, int(probe.checked_at), probe.note[:200]),
             )
+
+    # -- Local bot projects: metadata only, no source, tokens, files or messages.
+    def bot_projects(self, account_id: str) -> list[dict]:
+        with self._lock:
+            return [
+                dict(r)
+                for r in self._conn.execute("SELECT * FROM bot_projects WHERE account_id=? ORDER BY created_at", (account_id,)).fetchall()
+            ]
+
+    def bot_project(self, project_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM bot_projects WHERE id=?", (project_id,)).fetchone()
+        return dict(row) if row is not None else None
+
+    def bot_project_for_provider(self, platform: str, provider_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM bot_projects WHERE platform=? AND provider_id=?", (platform, provider_id)).fetchone()
+        return dict(row) if row is not None else None
+
+    def add_bot_project(
+        self, project_id: str, account_id: str, platform: str, provider_id: str, label: str, token_hash: str, secret_hash: str
+    ) -> dict:
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO bot_projects(id,account_id,platform,provider_id,label,token_hash,secret_hash,enabled,created_at) VALUES(?,?,?,?,?,?,?,1,?)",
+                (project_id, account_id, platform, provider_id, label, token_hash, secret_hash, int(time.time())),
+            )
+        return self.bot_project(project_id)
+
+    def set_bot_project_enabled(self, project_id: str, enabled: bool) -> None:
+        with self.tx() as c:
+            c.execute("UPDATE bot_projects SET enabled=? WHERE id=?", (int(enabled), project_id))
+
+    def refresh_bot_project_secret(self, project_id: str, secret_hash: str) -> None:
+        with self.tx() as c:
+            c.execute("UPDATE bot_projects SET secret_hash=? WHERE id=?", (secret_hash, project_id))
+
+    def delete_bot_project(self, project_id: str) -> None:
+        with self.tx() as c:
+            c.execute("DELETE FROM bot_projects WHERE id=?", (project_id,))
+
+    def bot_gateway_subscription(self, account_id: str) -> dict | None:
+        """Compatibility with older relays: no paid-subscription store means no access.
+
+        DEMO payment wallets, positive balances and unlimited flags are never consulted.
+        """
+        with self._lock:
+            exists = self._conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='subscriptions'").fetchone()
+            if not exists:
+                return None
+            row = self._conn.execute("SELECT * FROM subscriptions WHERE account_id=?", (account_id,)).fetchone()
+            return dict(row) if row is not None else None

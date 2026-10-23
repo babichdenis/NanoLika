@@ -1,8 +1,51 @@
 # Changelog
 
+- Russian Telegram/MAX permission cards explain the operation and task, with technical previews behind a non-approving Details button.
+
+- Telegram/MAX approval cards preserve explicitly selected conversation or persistent action permissions, bound to the pending card and chat.
+
+- Clarify that device presence is app-control connectivity, independent of messenger delivery; show Telegram/MAX typing during model-only replies and stop it while waiting. Desktop-origin chat copies use a compact sender label.
+
 All notable changes to nanoMuse. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Unreleased changes are on `main`.
 
 ## [Unreleased]
+
+- Added operator default-avatar preview, validated immutable media sets, explicit publication and rollback. Added Cloud browser, runtime web and desktop source readers while preserving personal faces and clips. Older native clients still need an update; no installer was built.
+- 新增默认形象预览、经过验证的不可变媒体套装、明确发布和回退。Cloud 浏览器、运行时网页及桌面源码加入读取支持，保留个人形象和视频。旧原生客户端仍需更新，未构建安装包。
+
+- Fixed Telegram/MAX menu navigation after restart or expiry, explained expired actions, and acknowledged MAX callbacks. Added an isolated installable Cloud web client with local-only documents/history and private chat requests.
+- 修复 Telegram/MAX 菜单重启或过期后无响应，解释过期操作并确认 MAX 回调。新增可安装 Cloud 网页客户端，对话及文档本地保存，聊天禁用样本收集。
+
+- Reconciled full and partial T-Bank DEMO refunds with the test wallet exactly once, preserved refunded order state against late confirmations, restored remaining package rights from their original purchase history, and showed refund status in checkout.
+- 修复 T-Bank 测试退款对账：完整及部分退款只冲销一次，迟到确认不会重新入账，套餐权益按原购买历史重算，结算页显示退款状态。
+
+- Show a plain payment-failure message for rejected, failed, cancelled and expired checkout orders; verified DEMO card rejection without crediting either wallet.
+- 为被拒绝、认证失败、取消及过期的订单显示清晰的付款失败提示；已验证测试卡拒付不会向任何钱包入账。
+
+- Added private Telegram/MAX menus for conversation access, account balance, website payment and reply language; confirmed a bank-hosted DEMO card payment without changing real funds.
+- 新增 Telegram/MAX 私人菜单，可设置对话权限、查询余额、打开网站付款及选择回复语言；完成银行托管页面测试卡验证，未改变真实资金。
+
+- Add owner-device bot projects and a paid-connectivity gateway with local durable delivery acknowledgements; document live-payment and Telegram transport activation blockers. No native package built.
+- 新增客户设备上的机器人项目与付费连接网关，本地持久确认投递；记录正式支付和 Telegram 传输的上线前置条件，未构建原生安装包。
+
+- Documented the bot hosting security contract: tenant sandbox invariants, plan-gated Telegram egress through the Riga tunnel, and a verification checklist for the relay.
+- 记录机器人托管的安全约定：租户沙箱要求、按套餐放行的 Telegram 出口（经里加隧道），以及中继侧的验证清单。
+
+- Routed synced Telegram and MAX conversations back only to their paired chats, with persistent duplicate filtering instead of cross-chat broadcasts.
+- 将 Telegram 和 MAX 的同步消息仅发送至对应的配对聊天，并通过持久投递记录过滤重复消息，避免跨聊天广播。
+
+- Gave new bot conversations and computer task sessions stable channel names and preserved custom renames.
+- 为新机器人对话和电脑任务会话使用固定的渠道名称，并保留自定义名称。
+
+- Added illustrated channel introductions and deterministic greetings with text fallback; fixed MAX approval language handling.
+- 新增渠道欢迎插图和不调用模型的问候，图片失败时仍发送文字；修复 MAX 确认消息的语言参数。
+
+- Relay: required explicit sample opt-in, added a cross-channel registration hold and showed data-handling information before checkout email entry.
+- 中继：对话样本需明确开启，新增跨渠道暂停注册开关，并在结账邮箱输入前展示数据处理说明。
+
+### Cloud in Russia
+
+- Added `scripts/cloud-migrate.sh` and [the runbook](docs/cloud-migration-ru.md) for moving the relay's personal data to a server in Russia: a consistent `.backup` dump streamed in one archive, a restore that waits for `/healthz`, and a read-only verification of the public pages and the certificate.
 
 ### Reliability
 
@@ -29,7 +72,7 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 - **A turn now has a sale price and a cost, and the account pays the first.** A model carries the operator's own rate in rubles per million tokens, and the chat model sells at ₽260 fresh input, ₽6 cached input and ₽1040 output; a model without a rate is still sold at the provider's price, as every model was before. Every ledger line keeps both figures (`cost_uy`, the provider's bill, and `sale_uy`, what the account paid), the pool falls by the second, and the running tariff's share comes off that money rather than off a token counter, so a discount is finally a discount; pictures and clips are sold at their price with no tariff share. A relay with `RUB_PER_USD=0` falls back to the provider's price instead of selling for nothing, and lines written before this change keep the provider's price as their sale figure.
 
-- **A tariff is what buys the relay's connection between a person's devices, and what makes a spend cheaper.** A plain top-up and Лика (₽590, 20 % off a spend) keep each device on its own; Лика+ (₽1490) and Лика Команда (₽3900, 30 % off) open the hub. The whole price goes into the pool at the ruble rate, so ₽590 buys the tariff and ₽590 of balance, and the terms are kept with the account: a change of the menu does not rewrite what someone already paid, and a second sale inside the month adds a month rather than starting over. `PLANS` carries the menu, `GET /v1/config` and `/v1/me` publish it with the account's `plan` and whether `connect` is open, `POST /v1/admin/plan` sells one, and a charge takes the tariff's share off `charged` while it runs. `CONNECT_REQUIRES_PLAN=1` makes the tariff the key to `/v1/hub`, whose refusal (`4004 connect_limited`) names the cheapest tariff that would open it; the default `0` keeps a relay that does not sell the key yet connecting everyone, and members are never held back.
+- **A tariff is what buys the relay's connection between a person's devices, and what makes a spend cheaper.** A plain top-up and Лика (₽590, 20 % off a spend) keep each device on its own; Лика+ (₽1490) and Лика Команда (₽3900, 30 % off) open the hub. The whole price goes into the pool at the ruble rate, so ₽590 buys the tariff and ₽590 of balance, and the terms are kept with the account: a change of the menu does not rewrite what someone already paid, and a second sale inside the month adds a month rather than starting over. `PLANS` carries the menu, `GET /v1/config` and `/v1/me` publish it with the account's `plan` and whether `connect` is open, `POST /v1/admin/plan` sells one, and a charge takes the tariff's share off what the turn costs, not off a token count. `CONNECT_REQUIRES_PLAN=1` makes the tariff the key to `/v1/hub`, whose refusal (`4004 connect_limited`) names the cheapest tariff that would open it; the default `0` keeps a relay that does not sell the key yet connecting everyone, and members are never held back.
 
 - **The app joins the chat's account instead of opening a second one.** A person who started in Telegram would have signed the app in to a fresh account with its own allowance, and the chat's history, balance and devices stayed on the other one. The bot now asks the relay for a one-time code (`POST /v1/bot/link-code`, eight characters, `LINK_CODE_TTL_S` fifteen minutes by default), the app sends it as `link` beside its own sign-in code, and the proven address becomes a second way into the same account through the new `account_aliases`: one allowance, one set of devices, and `/v1/me` lists the other ways in under `account.linked`. A code is spent once, asking again retires the one before, an address that already has an account of its own is refused with `409 link_taken` rather than taken over, and `LINK_CODE_TTL_S=0` switches linking off. `docs/cloud.md` and `cloud/README.md` say how it works.
 
@@ -180,6 +223,8 @@ Lookout: the day after Compass, a second health check of the whole project toget
 - **A disabled account is told so only with its password.** `POST /v1/auth/login` answered `403 account_disabled` before looking at the password, so a probe with any password learned that the account exists and is off; the check now comes after the password, and a wrong one gets the usual `401 bad_credentials` and counts towards the lockout. The relay's shutdown waits for its two background loops, so no cancellation lands after the database is closed.
 
 ### Runtime
+
+- **A chat can spend its own Cloud account instead of the machine's.** With `cloud_per_chat`, `cloud_url` and `cloud_bot_token` in a channel's settings, every message asks the relay's bot door for that chat's account and the turn runs under its key, so a public bot costs the person writing to it and not whoever runs the machine; the key is kept in memory for ten minutes. A turn the relay refuses, an exhausted allowance first of all, is now said in the chat instead of leaving it silent.
 
 - **A shared box keeps no files while `[server] keep_files_hours` says so.** A sweep at start and once an hour deletes what the person sent and what the agent made for them once it is older than that many hours, and the runtime that answers the Telegram bot has it on: a picture is looked at once, a document is delivered once. 0, the default, keeps everything, which is what a runtime on the person's own computer does. The relay never held media: a synced message names an attachment, its type and its size, never its bytes.
 
@@ -2085,3 +2130,10 @@ The first release: an open-source personal AI agent inspired by Meta's Muse. One
 - Fixed the packaged desktop profile to connect to nanoLika Cloud by default.
 
 - Distinguished upstream service allowance refusals from invalid provider keys in Cloud errors.
+
+
+## Unreleased
+
+- Fixed MAX confirmation delivery failing when the channel manager supplied a language.
+
+- Added isolated T-Bank DEMO checkout with signed confirmations and idempotent test credits.

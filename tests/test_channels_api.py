@@ -25,11 +25,17 @@ def server(settings: Settings) -> Iterator[tuple[TestClient, MuseService]]:
         yield client, service
 
 
-def test_view_lists_the_four_channels_off(server):
+def test_view_lists_supported_channels_off(server):
     client, service = server
     assert client.get("/api/channels", headers={"Authorization": ""}).status_code == 401
     view = client.get("/api/channels").json()
-    assert [c["name"] for c in view["channels"]] == ["feishu", "dingtalk", "wecom", "telegram"]
+    assert [c["name"] for c in view["channels"]] == [
+        "feishu",
+        "dingtalk",
+        "wecom",
+        "telegram",
+        "max",
+    ]
     assert view["pending"] == []
     for item in view["channels"]:
         assert item["enabled"] is False and item["status"]["state"] == "off"

@@ -1648,7 +1648,7 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     assert r.status_code == 200
     me = (await client.get("/v1/me", headers=headers)).json()
     assert me["contribute"]["on"] is False and me["contribute"]["samples"] == 0 and me["contribute"]["default_on"] is False
-    assert me["contribute"]["privacy_url"] == "https://nanolika.ru/privacy/" and "what you wrote" in me["contribute"]["keeps"]["kept"]
+    assert me["contribute"]["privacy_url"] == "https://nanolika.ru/privacy.html" and "what you wrote" in me["contribute"]["keeps"]["kept"]
     assert me["contribute"]["bonus_cny"] == 0 and me["contribute"]["bonus_available"] is False
     assert (await client.get("/v1/admin/samples", headers=admin)).json() == {"samples": [], "total": 0, "places": {}}
 
@@ -1746,53 +1746,51 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     assert cloud.db.sample_count() == 0
 
 
-async def test_improve_default_applies_to_new_accounts_only():
-    """IMPROVE_DEFAULT=1: an account made from now on starts with the switch on, said on its
-    timeline as the relay's default (not as a choice), and may turn it off; an account from
-    before keeps what it had. The invite bonus goes to both sides either way."""
-    app, client, sender, up, cloud = make_stack(allowance_cny=10, invite_bonus_cny=5)
-    before = await sign_up(client, sender, identifier="dev-a@example.com")
-    assert before["contribute"]["on"] is False
-    cloud.s = dataclasses.replace(cloud.s, improve_default=True)  # the operator sets IMPROVE_DEFAULT=1 and restarts
-    me = (await client.get("/v1/me", headers={"Authorization": f"Bearer {before['api_key']}"})).json()
-    assert me["contribute"]["on"] is False and me["contribute"]["default_on"] is True
-    code = (await client.get("/v1/me/invite", headers={"Authorization": f"Bearer {before['api_key']}"})).json()["code"]
-
-    after = await sign_up(client, sender, identifier="dev-b@example.com", invite=code)
-    assert after["contribute"]["on"] is True and after["contribute"]["samples"] == 0 and after["contribute"]["default_on"] is True
+async def test_improve_default_cannot_opt_accounts_in():
+    _, client, sender, _, cloud = make_stack(improve_default=True)
+    after = await sign_up(client, sender)
     headers = {"Authorization": f"Bearer {after['api_key']}"}
-    kinds = [e["kind"] for e in (await client.get("/v1/me/events", headers=headers)).json()["events"]]
-    assert "contribute.default" in kinds and "contribute.on" not in kinds
-    r = await client.post(
-        "/v1/chat/completions", headers=headers, json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]}
-    )
-    assert r.status_code == 200 and cloud.db.sample_count() == 1
-    # +¥5 for each of them at the newcomer's first request (the one just made): the
-    # newcomer's pool is ¥15, the inviter's too; at sign-up it was the allowance alone
-    assert after["spend"]["grant"] == 10 and after["invite"]["invitee_bonus_cny"] == 5
-    me_after = (await client.get("/v1/me", headers=headers)).json()
-    assert me_after["spend"]["grant"] == 15
-    credits = [r_["detail"] for r_ in me_after["recent"] if r_["kind"] == "credit"]
-    assert {"credit_uy": 5_000_000, "from": "invited", "friend": before["account"]["id"][:8]} in credits
-    me = (await client.get("/v1/me", headers={"Authorization": f"Bearer {before['api_key']}"})).json()
-    assert me["spend"]["grant"] == 15 and me["invite"]["invites"] == 1 and me["invite"]["earned_cny"] == 5
-    # the newcomer turns it off: nothing more is kept
-    r = await client.post("/v1/me/contribute", headers=headers, json={"on": False})
-    assert r.json()["on"] is False and r.json()["samples"] == 1
-    await client.post(
-        "/v1/chat/completions", headers=headers, json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]}
-    )
+    assert after["contribute"]["on"] is False
+    assert after["contribute"]["default_on"] is False
+    body = {"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hi"}]}
+    assert (await client.post("/v1/chat/completions", headers=headers, json=body)).status_code == 200
+    assert cloud.db.sample_count() == 0
+    # A historical default-on account is not evidence of an explicit choice.
+    account_id = after["account"]["id"]
+    cloud.db.set_contribute(account_id, True)
+    cloud.db.add_event(account_id, "contribute.default", "on")
+    await client.post("/v1/chat/completions", headers=headers, json=body)
+    assert cloud.db.sample_count() == 0
+    await client.post("/v1/me/contribute", headers=headers, json={"on": True})
+    await client.post("/v1/chat/completions", headers=headers, json=body)
     assert cloud.db.sample_count() == 1
-    dv = (await client.get("/v1/admin/data?days=1", headers={"X-Admin-Token": "admin"})).json()
-    assert dv["default_on"] is True and dv["accounts"] == {
-        "total": 2,
-        "on": 0,
-        "off": 2,
-        "share": 0.0,
-        "turned_off_ever": 1,
-        "with_samples": 1,
-    }
-    assert dv["days"][0]["default_on"] == 1 and dv["days"][0]["turned_off"] == 1 and dv["days"][0]["turned_on"] == 0
+    await client.post("/v1/me/contribute", headers=headers, json={"on": False})
+    await client.post("/v1/chat/completions", headers=headers, json=body)
+    assert cloud.db.sample_count() == 1
+
+
+async def test_registration_hold_covers_email_bot_and_direct_signin():
+    from nanomuse_cloud.identifiers import telegram
+
+    _, client, sender, _, cloud = make_stack(bot_signin_token="fixture")
+    existing = await sign_up(client, sender)
+    cloud.s = dataclasses.replace(cloud.s, registration_hold=True)
+    sender.sent.clear()
+    r = await client.post("/v1/auth/code", json={"identifier": "new@example.invalid"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "signup_closed"
+    assert sender.sent == []
+    for ident, reached in [(parse("new@example.invalid"), False), (telegram("123456789"), True)]:
+        with pytest.raises(CloudError) as err:
+            cloud.sign_in(ident, "fixture", "fixture", reached=reached)
+        assert err.value.code == "signup_closed"
+    with pytest.raises(CloudError):
+        cloud.sign_in_bot("123456789")
+    with pytest.raises(CloudError):
+        cloud.link_into(parse("new@example.invalid"), "unused", "fixture")
+    # Existing users can obtain another code and keep using their current API key.
+    r = await client.post("/v1/auth/code", json={"identifier": "13800138000"})
+    assert r.status_code == 204 and len(sender.sent) == 1
+    assert (await client.get("/v1/me", headers={"Authorization": "Bearer " + existing["api_key"]})).status_code == 200
 
 
 def test_long_samples_are_cut_whole_and_old_cut_rows_still_load():

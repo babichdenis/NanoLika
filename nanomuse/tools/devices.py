@@ -101,7 +101,9 @@ class Devices(_DeviceTool):
     name: str = "devices"
     description: str = (
         "The user's other devices on the NanoLika hub (phone, other computers) and whether "
-        "each is online. Use a device's name as listed here in the device_* tools and delegate."
+        "each has a live app control connection. Offline does not mean Telegram/MAX or chat "
+        "sync cannot deliver messages. not_allowed denies device control, not chat delivery. "
+        "Use a device's name as listed here in the device_* tools and delegate."
     )
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
     risk: RiskLevel = RiskLevel.SAFE
@@ -116,7 +118,16 @@ class Devices(_DeviceTool):
                 "not connected to the hub"
                 + ("" if hub.signed_in else "; the user can sign in under Settings → Devices")
             )
-        return ToolResult(output=_json({"this": hub.device_name, "devices": others}))
+        return ToolResult(
+            output=_json(
+                {
+                    "this": hub.device_name,
+                    "devices": others,
+                    "presence_scope": "app_control_connection_only",
+                    "delivery_note": "Device online/offline describes the app control socket, not Telegram/MAX delivery or chat synchronization. An offline iPhone app can still receive bot replies through its messenger. not_allowed means remote device control is disabled; it does not prohibit chat delivery.",
+                }
+            )
+        )
 
 
 class DeviceShell(_DeviceTool):

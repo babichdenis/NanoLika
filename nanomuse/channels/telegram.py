@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from nanomuse.channels.approval_choices import choices
 from nanomuse.channels.base import (
     Channel,
     ChannelBus,
@@ -79,6 +80,7 @@ class TelegramChannel(Channel):
         self._stream_messages: dict[str, int] = {}
 
         self._typing: dict[str, asyncio.Task[None]] = {}
+        self._approval_cards: dict[tuple[str, str], tuple[str, str, list]] = {}
 
     # ------------------------------------------------------------------ lifecycle
     def _make_http(self) -> httpx.AsyncClient:
@@ -170,7 +172,7 @@ class TelegramChannel(Channel):
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 60.0)
                 continue
-            if self.bus is not None and updates and delay == 2.0:
+            if self.bus is not None:
                 self.bus.set_status(
                     self.name, "connected", f"@{self._username}" if self._username else ""
                 )
@@ -260,7 +262,19 @@ class TelegramChannel(Channel):
         value: dict[str, Any] = {}
         if raw.startswith("a:") and raw.count(":") >= 2:
             _, decision, approval_id = raw.split(":", 2)
-            value = {"approval": approval_id, "decision": "allow" if decision == "y" else "deny"}
+            if decision in {"y", "n", "c", "p", "d"}:
+                value = {
+                    "approval": approval_id,
+                    "decision": "details"
+                    if decision == "d"
+                    else "deny"
+                    if decision == "n"
+                    else "allow",
+                }
+                if decision in {"c", "p"}:
+                    value["scope"] = {"c": "conversation", "p": "always"}[decision]
+        if raw.startswith("m:") and len(raw.encode()) <= 64:
+            value = {"menu": raw[2:]}
         message = callback.get("message") or {}
         chat_id = str((message.get("chat") or {}).get("id") or "")
         sender_id = str((callback.get("from") or {}).get("id") or "")
@@ -269,7 +283,7 @@ class TelegramChannel(Channel):
         if value:
             self.bus.action(self.name, chat_id, sender_id, value)
             # take the buttons off the card
-            if message.get("message_id"):
+            if message.get("message_id") and value.get("decision") != "details":
                 with suppress(Exception):
                     await self._call(
                         "editMessageReplyMarkup",
@@ -377,19 +391,66 @@ class TelegramChannel(Channel):
                     await self._call("sendMessage", {"chat_id": chat_id, "text": chunk})
 
     async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
-        allow, deny = _BUTTONS.get(lang, ("允许 · Allow", "拒绝 · Deny"))
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": allow, "callback_data": f"a:y:{approval_id}"[:64]},
-                    {"text": deny, "callback_data": f"a:n:{approval_id}"[:64]},
-                ]
-            ]
-        }
-        await self._call(
+        await self.ask_scoped(chat_id, approval_id, text, lang, ["once"])
+
+    async def ask_scoped(
+        self, chat_id: str, approval_id: str, text: str, lang: str, scopes: list[str]
+    ) -> None:
+        rows = []
+        for code, label, _scope in choices(scopes, lang):
+            data = f"a:{code}:{approval_id}"
+            if len(data.encode("utf-8")) <= 64:
+                rows.append([{"text": label, "callback_data": data}])
+        rows = [rows[0] + rows[-1]] + rows[1:-1]
+        label = {"ru": "Подробности", "zh": "详情"}.get(lang, "Details")
+        detail_data = f"a:d:{approval_id}"
+        if len(detail_data.encode("utf-8")) <= 64:
+            rows.append([{"text": label, "callback_data": detail_data}])
+        result = await self._call(
             "sendMessage",
-            {"chat_id": chat_id, "text": text[:TEXT_LIMIT], "reply_markup": keyboard},
+            {
+                "chat_id": chat_id,
+                "text": text[:TEXT_LIMIT],
+                "reply_markup": {"inline_keyboard": rows},
+            },
         )
+
+        self._approval_cards[(chat_id, approval_id)] = (
+            str(result.get("message_id") or ""),
+            text,
+            rows,
+        )
+        while len(self._approval_cards) > 256:
+            self._approval_cards.pop(next(iter(self._approval_cards)))
+
+    async def expand_approval(
+        self, chat_id: str, approval_id: str, details: str, lang: str, scopes: list[str]
+    ) -> None:
+        card = self._approval_cards.get((chat_id, approval_id))
+        if card is None or not card[0]:
+            # A recoverable fallback still keeps decision buttons below the details.
+            await self.ask_scoped(chat_id, approval_id, details, lang, scopes)
+            return
+        message_id, original, rows = card
+        prompt = {
+            "ru": "Решение ещё не принято. Выберите действие ниже.",
+            "zh": "尚未授权，请在下方选择。",
+        }.get(lang, "No decision yet. Choose an action below.")
+        body = original[:1100] + "\n\n" + details[:2600] + "\n\n" + prompt
+        decision_rows = rows[:-1]
+        try:
+            await self._call(
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": body,
+                    "reply_markup": {"inline_keyboard": decision_rows},
+                },
+            )
+        except TelegramError as exc:
+            if "not modified" not in str(exc):
+                raise
 
     async def links(self, chat_id: str, buttons: list[tuple[str, str]], text: str = "") -> None:
         rows = [

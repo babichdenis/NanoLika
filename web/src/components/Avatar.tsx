@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useOperatorAvatar } from "../operator-avatar";
 import { dragonClipUrl, dragonUrl, isDragon, studioClipUrl, studioUrl } from "../avatars";
 import { useT } from "../i18n";
 import { useMood } from "../mood";
@@ -54,9 +55,10 @@ export function Avatar({
   const dragon = !profile || isDragon(profile.avatar);
   // a face from the studio: anything else that is not the emoji
   const studio = !dragon && profile?.avatar ? profile.avatar : null;
+  const operator = useOperatorAvatar(dragon);
   const pose = wiggle ? "happy" : still ? "idle" : mood;
   // the clip for this pose, when one may exist and is wanted here
-  const clipCandidate = still || reducedMotion || size < CLIP_MIN_PX ? null : dragon ? dragonClipUrl(pose) : studio ? studioClipUrl(studio, pose) : null;
+  const clipCandidate = still || reducedMotion || size < CLIP_MIN_PX ? null : dragon ? operator?.clips[pose] ?? dragonClipUrl(pose) : studio ? studioClipUrl(studio, pose) : null;
   const clip = clipCandidate && !noClip.has(clipCandidate) ? clipCandidate : null;
   const motion = wiggle
     ? "avatar-wiggle"
@@ -67,7 +69,7 @@ export function Avatar({
         : state === "waiting"
           ? "avatar-waiting"
           : "avatar-idle";
-  const stillUrl = dragon ? dragonUrl(pose) : studio ? studioUrl(studio, pose) : "";
+  const stillUrl = dragon ? operator?.stills[pose] ?? dragonUrl(pose) : studio ? studioUrl(studio, pose) : "";
 
   const label = t("{name}'s avatar", { name: profile?.name ?? "NanoLika" });
   const box = cx("relative inline-block shrink-0 select-none rounded-full", className);
@@ -94,7 +96,7 @@ export function Avatar({
             className="h-full w-full object-contain"
           />
         ) : dragon || studio ? (
-          <img src={stillUrl} alt="" draggable={false} className="h-full w-full object-contain" />
+          <img src={stillUrl} onError={event => { const local = dragon ? dragonUrl(pose) : ""; if (local && event.currentTarget.getAttribute("src") !== local) event.currentTarget.src = local; }} alt="" draggable={false} className="h-full w-full object-contain" />
         ) : (
           <span className="flex h-full w-full items-center justify-center leading-none drop-shadow-sm" style={{ fontSize: size * 0.5 }}>
             {profile?.emoji ?? "✨"}

@@ -148,7 +148,9 @@ def test_first_message_gets_a_pairing_code_and_approval_pairs(chan):
     pending = client.get("/api/channels").json()["pending"]
     assert len(pending) == 1 and pending[0]["sender_name"] == "Ann"
     code = pending[0]["code"]
-    assert chat == "chat1" and code in text and "nanomuse channels approve" in text
+    assert (
+        chat == "chat1" and code in text and "nanoLika" in text and "nanomuse" not in text.lower()
+    )
     # nothing reached the agent
     assert "channel-fake-chat1" not in service.threads and llm.calls == []
     # the same code again while it is good; a bad code is a 404
@@ -160,7 +162,7 @@ def test_first_message_gets_a_pairing_code_and_approval_pairs(chan):
     r = client.post(f"/api/channels/pairing/{code}/approve")
     assert r.status_code == 200 and r.json()["paired"]["sender_id"] == "u1"
     wait_for(lambda: len(fake.sent) >= 3)
-    assert "Paired" in fake.sent[2][1]
+    assert "I am Lika" in fake.sent[2][1]
     me = next(c for c in r.json()["channels"] if c["name"] == "fake")
     assert (
         me["paired"][0]["sender_id"] == "u1" and me["paired"][0]["thread"] == "channel-fake-chat1"
@@ -340,43 +342,29 @@ def test_deliver_here_gets_background_events(chan):
     assert client.put("/api/channels/fake/chats/nobody", json={"deliver": True}).status_code == 404
 
 
-def test_synced_turns_from_other_devices_are_delivered(chan):
-    """A turn another device wrote (relay sync, `synced: true`) reaches the chats marked
-    "deliver here", named after the device that wrote it. A synced row without a device
-    name goes nowhere, and this chat's own thread is never echoed back into itself."""
-    client, service, llm, manager, fake = chan
+def test_unrelated_synced_turns_are_not_broadcast(chan):
+    client, _service, _llm, manager, fake = chan
     pair(client, fake)
-    # a real chat writes once after pairing; that registers its thread as ours
-    own = thread_id_for("fake", "chat1")
-    fake.bus.inbound(dm("one more"))
-    wait_for(lambda: own in manager.routes)
+    fake.sent.clear()
     assert client.put("/api/channels/fake/chats/u1", json={"deliver": True}).status_code == 200
-    emit(
-        manager,
-        {
-            "kind": "event",
-            "event": {
+    import asyncio
+
+    future = asyncio.run_coroutine_threadsafe(
+        manager._route_event(
+            {
                 "type": "user",
-                "text": "book a table for two",
+                "thread": "main",
+                "text": "private unrelated chat",
                 "synced": True,
-                "mid": "m-sync-1",
-                "via_device": "pc-dsh-1",
-                "via_device_name": "MacBook",
-            },
-        },
+                "mid": "fixture-unrelated",
+                "via_device": "fixture-pc",
+                "ts": "2099-01-01T00:00:00+00:00",
+            }
+        ),
+        manager._loop,
     )
-    wait_for(lambda: ("chat1", "MacBook: book a table for two", []) in fake.sent)
-    # no device name on the row: not a turn from elsewhere this chat should hear
-    emit(
-        manager,
-        {
-            "kind": "event",
-            "event": {"type": "assistant", "text": "mystery", "synced": True, "mid": "m-sync-2"},
-        },
-    )
-    time.sleep(0.4)
-    leaked = [t for t in fake.texts() if "mystery" in t]
-    assert not leaked, f"leaked: {leaked!r}"
+    future.result(timeout=5)
+    assert not fake.sent
 
 
 def test_one_memory_shared_chats_write_into_the_main_thread(chan):
@@ -402,7 +390,8 @@ def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
     pair(client, fake)
     own = thread_id_for("fake", "chat1")
     fake.bus.inbound(dm("one more"))
-    wait_for(lambda: own in manager.routes)
+    wait_for(lambda: llm.calls)
+    wait_for(lambda: not service.threads[own].busy)
     calls: list[tuple[str, str, dict[str, Any]]] = []
 
     async def call(
@@ -426,6 +415,8 @@ def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
     wait_for(lambda: any("first meeting is at nine" in t for t in fake.texts()))
     assert calls and calls[0][0] == "dev-1" and calls[0][1] == "task"
     assert "first meeting" in calls[0][2]["text"]
+    assert calls[0][2]["conversation"] == own
+    assert calls[0][2]["channel"] == "fake"
 
 
 def test_a_primary_device_that_refuses_steps_aside(chan, monkeypatch):
@@ -435,7 +426,8 @@ def test_a_primary_device_that_refuses_steps_aside(chan, monkeypatch):
     pair(client, fake)
     own = thread_id_for("fake", "chat1")
     fake.bus.inbound(dm("one more"))
-    wait_for(lambda: own in manager.routes)
+    wait_for(lambda: llm.calls)
+    wait_for(lambda: not service.threads[own].busy)
 
     async def call(
         to: str,
@@ -538,7 +530,7 @@ def test_start_in_a_paired_chat_greets_without_a_run(chan):
     fake.bus.inbound(dm("/start", sender="u1", chat="chat1"))
     wait_for(lambda: fake.sent)
     text = fake.sent[-1][1]
-    assert "Paired." in text  # the fake channel records plain text; the agent never saw it
+    assert "I am Lika" in text  # the agent never saw this greeting
 
 
 def test_a_russian_run_asks_for_approval_in_russian(chan):
@@ -586,3 +578,241 @@ def test_the_greeting_offers_what_the_channel_was_given(chan):
     assert [label for label, _ in buttons] == ["Website", "Invite a friend"]
     # nothing is offered that was not set
     assert manager.welcome_links("feishu") == []
+
+
+def test_plain_greeting_does_not_run_tools(chan):
+    client, _service, llm, _manager, fake = chan
+    pair(client, fake)
+    fake.sent.clear()
+    before = len(llm.calls)
+    fake.bus.inbound(dm("Привет", sender="u1", chat="chat1"))
+    wait_for(lambda: fake.sent)
+    assert "Lika" in fake.sent[-1][1]
+    assert len(llm.calls) == before
+
+
+def test_artwork_failure_still_sends_welcome_text(chan, monkeypatch):
+    client, _service, llm, _manager, fake = chan
+    pair(client, fake)
+    fake.sent.clear()
+
+    async def fail(*args):
+        raise RuntimeError("fixture failure")
+
+    monkeypatch.setattr("nanomuse.channels.manager.send_welcome_art", fail)
+    before = len(llm.calls)
+    fake.bus.inbound(dm("/start", sender="u1", chat="chat1"))
+    wait_for(lambda: fake.sent)
+    assert "I am Lika" in fake.sent[-1][1]
+    assert len(llm.calls) == before
+
+
+def test_explicit_computer_command_uses_dedicated_handoff(chan, monkeypatch):
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    fake.sent.clear()
+    before = len(llm.calls)
+    received = []
+    device = {"id": "fixture-pc", "online": True, "kind": "computer", "actions": ["task"]}
+    monkeypatch.setattr(service.hub, "others", lambda: [device])
+
+    async def handoff(thread, msg, text, target, *, fallback=True):
+        received.append((thread, text, target, fallback))
+
+    monkeypatch.setattr(manager, "_serve_from_device", handoff)
+    fake.bus.inbound(dm("/computer Reply only: connected"))
+    wait_for(lambda: received)
+    assert received[0][1] == "Reply only: connected"
+    assert received[0][2] == device
+    assert received[0][3] is False
+    assert len(llm.calls) == before
+
+
+def test_computer_command_without_online_device_never_runs_on_server(chan, monkeypatch):
+    client, service, llm, _manager, fake = chan
+    pair(client, fake)
+    fake.sent.clear()
+    before = len(llm.calls)
+    monkeypatch.setattr(service.hub, "others", lambda: [])
+    fake.bus.inbound(dm("/computer Edit my file"))
+    wait_for(lambda: fake.sent)
+    assert "available computer" in fake.sent[-1][1]
+    assert len(llm.calls) == before
+
+
+def test_pairing_registers_channel_session_before_first_task(chan):
+    client, service, llm, _manager, fake = chan
+    pair(client, fake)
+    assert "channel-fake-chat1" in service.threads
+    assert llm.calls == []
+    thread_count = len(service.threads)
+    fake.bus.inbound(dm("/start"))
+    wait_for(lambda: len(fake.sent) >= 2)
+    assert len(service.threads) == thread_count
+    assert llm.calls == []
+
+
+def test_bot_conversation_titles_are_stable_and_keep_user_renames(chan):
+    _client, service, llm, manager, _fake = chan
+    for channel, label in (("telegram", "Telegram"), ("max", "MAX")):
+        msg = InboundMessage(
+            channel=channel, chat_id="fixture", sender_id="fixture-user", sender_name="Fixture name"
+        )
+        tid = manager._thread_for(msg)
+        assert service.threads[tid].title == label + " · nanoLika"
+        service.rename_thread(tid, "My own title")
+        assert manager._thread_for(msg) == tid
+        assert service.threads[tid].title == "My own title"
+    assert llm.calls == []
+
+
+def test_linked_desktop_messages_go_only_to_their_own_bot(chan):
+    import asyncio
+
+    from nanomuse.channels.sync_delivery import SyncDeliveryReceipts
+
+    _client, service, _llm, manager, _fake = chan
+    targets = {}
+    for name in ("telegram", "max"):
+        cls = type("Linked" + name, (FakeChannel,), {"name": name})
+        ch = cls({"token": "fixture-token"})
+        manager.types[name] = cls
+        manager.channels[name] = ch
+        manager.store.update(cls, enabled=True, values={"token": "fixture-token"})
+        manager.pairing.add(name, "fixture-user", chat_id=name + "-chat")
+        targets[name] = ch
+    manager.routes.clear()  # routing must survive a restart without a new inbound bot message
+
+    def route(event):
+        asyncio.run_coroutine_threadsafe(manager._route_event(event), manager._loop).result(
+            timeout=5
+        )
+
+    def event(channel, role, mid):
+        return {
+            "type": role,
+            "thread": thread_id_for(channel, channel + "-chat"),
+            "text": mid,
+            "synced": True,
+            "mid": mid,
+            "via_device": "fixture-pc",
+            "ts": "2099-01-01T00:00:00+00:00",
+        }
+
+    user = event("telegram", "user", "telegram-user")
+    route(user)
+    assert targets["telegram"].sent == [("telegram-chat", "💻 You\ntelegram-user", [])]
+    assert not targets["max"].sent
+    route(user)
+    manager.sync_receipts = SyncDeliveryReceipts(manager.sync_receipts.path)
+    route(user)
+    assert len(targets["telegram"].sent) == 1
+    answer = event("telegram", "assistant", "telegram-answer")
+    route(answer)
+    assert targets["telegram"].sent[-1][1] == "telegram-answer"
+    assert not targets["max"].sent
+    route(event("max", "assistant", "max-answer"))
+    assert targets["max"].sent == [("max-chat", "max-answer", [])]
+    ignored = event("telegram", "user", "own-echo")
+    ignored["via_device"] = service.hub.device_id
+    route(ignored)
+    assert len(targets["telegram"].sent) == 2
+    ignored = event("telegram", "assistant", "old-plan")
+    ignored["ts"] = "2000-01-01T00:00:00+00:00"
+    route(ignored)
+    assert len(targets["telegram"].sent) == 2
+    manager.pairing.remove("telegram", "fixture-user")
+    route(event("telegram", "assistant", "after-unpair"))
+    assert len(targets["telegram"].sent) == 2
+
+
+def test_short_bot_greeting_is_synced_once_without_model(chan):
+    import asyncio
+
+    _client, service, llm, manager, _fake = chan
+    cls = type("LinkedTelegram", (FakeChannel,), {"name": "telegram"})
+    ch = cls({"token": "fixture-token"})
+    manager.types["telegram"] = cls
+    manager.channels["telegram"] = ch
+    manager.store.update(cls, enabled=True, values={"token": "fixture-token"})
+    manager.pairing.add("telegram", "fixture-user", chat_id="fixture-chat")
+    msg = InboundMessage(
+        channel="telegram", sender_id="fixture-user", chat_id="fixture-chat", text="Привет"
+    )
+
+    async def run():
+        await manager._handle_inbound(msg)
+        await asyncio.sleep(0.05)
+
+    asyncio.run_coroutine_threadsafe(run(), manager._loop).result(timeout=5)
+    tid = thread_id_for("telegram", "fixture-chat")
+    events = [e for e in service.timeline(tid).events if e.get("channel_static")]
+    assert [e["type"] for e in events] == ["user", "assistant"]
+    assert events[1]["final"] is True and not events[1].get("quiet")
+    assert len(ch.sent) == 1
+    assert not llm.calls
+    assert service.threads[tid].agent.messages[-1].role == "assistant"
+
+
+def test_plain_model_reply_has_typing_without_tool_calls(chan):
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    fake.typing_calls.clear()
+    llm.script.append(LLMResponse(content="A plain answer without tools."))
+    fake.bus.inbound(dm("Please answer a simple question"))
+    wait_for(lambda: any("A plain answer without tools." in t for t in fake.texts()))
+    wait_for(lambda: ("chat1", False) in fake.typing_calls)
+    assert ("chat1", True) in fake.typing_calls
+    assert fake.typing_calls.index(("chat1", True)) < fake.typing_calls.index(("chat1", False))
+
+
+def test_scoped_approval_is_bound_to_card_chat_and_offered_options(chan):
+    import asyncio
+
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    decisions = []
+    service.decide = lambda *args: decisions.append(args) or True
+
+    def run(coro):
+        return asyncio.run_coroutine_threadsafe(coro, manager._loop).result(timeout=5)
+
+    run(manager._ask("fake", "chat1", "scope-fixture", "Approve", ["once", "conversation"]))
+    run(manager._decide("fake", "other-chat", "scope-fixture", True, "conversation"))
+    run(manager._decide("fake", "chat1", "scope-fixture", True, "always"))
+    assert decisions == []
+    run(manager._decide("fake", "chat1", "scope-fixture", True, "conversation"))
+    assert len(decisions) == 1
+    assert decisions[0][2] == "conversation"
+    run(manager._decide("fake", "chat1", "scope-fixture", True, "conversation"))
+    assert len(decisions) == 1
+
+
+def test_details_does_not_approve_and_is_bound_to_chat(chan):
+    import asyncio
+
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    decisions = []
+    service.decide = lambda *args: decisions.append(args) or True
+
+    def run(coro):
+        return asyncio.run_coroutine_threadsafe(coro, manager._loop).result(timeout=5)
+
+    run(manager._ask("fake", "chat1", "detail-fixture", "Approve", ["once"]))
+    manager._approval_details["detail-fixture"] = "Fixture technical details"
+    before = len(fake.sent)
+    run(
+        manager._handle_action(
+            "fake", "other-chat", "u1", {"approval": "detail-fixture", "decision": "details"}
+        )
+    )
+    assert len(fake.sent) == before
+    run(
+        manager._handle_action(
+            "fake", "chat1", "u1", {"approval": "detail-fixture", "decision": "details"}
+        )
+    )
+    assert any("Fixture technical details" in text for text in fake.texts())
+    assert decisions == []
+    assert "detail-fixture" in manager._asks["fake:chat1"]

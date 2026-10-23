@@ -33,10 +33,10 @@
   const fmt = (n) => Number(n || 0).toLocaleString();
   const dataText = (o, k) => (LANG === "zh" ? o[`${k}_zh`] : o[k]) || o[k]; // server rows carry a field and its _zh twin; every other language reads the base field
   const T_ZH = {
-    title: "nanoMuse Cloud 后台", tokenLabel: "管理口令", tokenHint: "中继 .env 里 CLOUD_ADMIN_TOKEN 的值；只留在这个标签页里。",
+    title: "nanoLika Cloud 后台", tokenLabel: "管理口令", tokenHint: "中继 .env 里 CLOUD_ADMIN_TOKEN 的值；只留在这个标签页里。",
     enter: "进入", wrong: "口令不对。", offline: "连不上服务器。", refresh: "刷新", lock: "锁定", loading: "加载中…",
     today: "今天", week: "最近 7 天", period: (d) => `最近 ${d} 天`,
-    kSamples: "保存的对话", kSamplesSub: (n) => `${n} 个账号开启了「帮助改进」`, exportSamples: "导出 JSONL", exportFailed: (why) => `导出没有成功：${why}。可以再试一次；如果一直这样，看服务器上 docker logs nanomuse-relay。`, exportCut: "下载中途断开", exportEmpty: "还没有可导出的对话。", contributes: "帮助改进", samples: "保存的对话（最近）", samplesNote: "只有开启了「帮助改进 nanoMuse 的 AI 模型」的账号才会保存这些内容：用户写的、模型回答的和它调用的工具，不含系统提示、工具返回的内容和图片；导出的文件不带账号 id。", user: "用户", assistant: "回答", more: "查看更多", noSamples: "还没有",
+    kSamples: "保存的对话", kSamplesSub: (n) => `${n} 个账号开启了「帮助改进」`, exportSamples: "导出 JSONL", exportFailed: (why) => `导出没有成功：${why}。可以再试一次；如果一直这样，看服务器上 docker logs nanomuse-relay。`, exportCut: "下载中途断开", exportEmpty: "还没有可导出的对话。", contributes: "帮助改进", samples: "保存的对话（最近）", samplesNote: "只有开启了「帮助改进 nanoLika 的 AI 模型」的账号才会保存这些内容：用户写的、模型回答的和它调用的工具，不含系统提示、工具返回的内容和图片；导出的文件不带账号 id。", user: "用户", assistant: "回答", more: "查看更多", noSamples: "还没有",
     kAccounts: "账号", kAccountsSub: (c) => `${c.with_password || 0} 个设了密码 · ${c.unlimited || 0} 个成员 · ${c.disabled || 0} 个已停用`,
     kActive: "活跃账号", kActiveSub: (n) => `${n} 个新注册`, kSpent: "花费", kSpentSub: (r, t) => `${fmt(r)} 次 · ${fmt(t)} tokens`,
     kOnline: "在线设备", kOnlineSub: (k, s) => `记住了 ${k} 台 · ${s} 个有效登录`, kSignals: "今天的信号",
@@ -89,7 +89,7 @@
     ndVersion: (v, t) => (t ? `第 ${v} 版 · 保存于 ${t}` : `第 ${v} 版 · 内置默认值`), ndStored: "页面已设置", ndDefault: "内置默认值",
     priceLine: (p) => [p.per_m_input || p.per_m_output ? `输入 ${p.per_m_input} / 输出 ${p.per_m_output} 每百万 tokens` : null,
       p.per_image ? `每张 ${p.per_image}${p.per_image_2k ? `（2k ${p.per_image_2k}）` : ""}` : null, p.per_second ? `每秒 ${p.per_second}` : null].filter(Boolean).join("；"),
-    foot: "手机号 / 邮箱只在打开某个账号时用管理口令解出来看；数据库里存的是加密后的值。来访地址和客户端信息随每次登录、请求和动态一起记录，删账号时一并删除。对话文字只有在账号开启了「帮助改进 nanoMuse 的 AI 模型」时才保存，并且只存用户写的、模型回答的和它调用的工具（见「数据控制」）。请不要把这个页面截图发出去。金额按模型服务商的北京地区标价估算。",
+    foot: "手机号 / 邮箱只在打开某个账号时用管理口令解出来看；数据库里存的是加密后的值。来访地址和客户端信息随每次登录、请求和动态一起记录，删账号时一并删除。对话文字只有在账号开启了「帮助改进 nanoLika 的 AI 模型」时才保存，并且只存用户写的、模型回答的和它调用的工具（见「数据控制」）。请不要把这个页面截图发出去。金额按模型服务商的北京地区标价估算。",
     // trends and the site
     trends: (d) => `账号趋势 · 最近 ${d} 天`, site: (d) => `官网访问与下载 · 最近 ${d} 天`, siteOff: "还没接上访问统计：服务器上装 nanomuse-traffic（demo/showcase/mirror/traffic.py），relay 设 TRAFFIC_DB 指向它的数据库。",
     siteUpdated: (t) => `更新于 ${t}`, siteNote: "来自 Caddy 的访问日志（保留 7 天）：按天计数，访客用当天的随机盐对地址和浏览器做哈希，不存 IP。",
@@ -98,7 +98,7 @@
     mSignIns: "登录", mNew: "新注册", mActive: "活跃账号", mInvites: "通过邀请注册", mContribute: "开启「帮助改进」", mCalls: "通话", mRefused: "超额被拒", mErrors: "上游错误", mContentRejected: "内容审核未放行",
     devices: "设备", devKinds: { phone: "手机", computer: "电脑", web: "网页版" }, invitesTitle: "邀请", invitesLine: (f) => `${fmt(f.with_code)} 人生成了邀请码 · ${fmt(f.inviters)} 人邀请成功 · ${fmt(f.invited)} 人经邀请注册`,
     // data controls
-    data: (d) => `数据控制 · 最近 ${d} 天`, dOn: "开启「帮助改进」的账号", dOnSub: (on, total) => `共 ${fmt(total)} 个账号 · ${fmt(on)} 开启 · ${fmt(Math.max(0, total - on))} 关闭`, dOff: "主动关闭过的账号", dOffSub: "曾经把开关关掉的人数", dTurns: "保存的对话", dTurnsSub: (all, acc) => `累计 ${fmt(all)} 轮 · 来自 ${fmt(acc)} 个账号`, dTokens: "保存对话的 tokens", dTokensSub: (i, o) => `输入 ${fmt(i)} · 输出 ${fmt(o)}`, dDefault: (on) => on ? "新账号默认开启（IMPROVE_DEFAULT=1）" : "新账号默认关闭（IMPROVE_DEFAULT=0）", dKeeps: () => "保存：用户写的、模型回答的、它选择调用的工具，以及模型、token 数、客户端和语言。不保存：系统提示（记忆、SOUL、指令）、工具返回的内容、图片 / 音频 / 视频、用户的身份。",
+    data: (d) => `数据控制 · 最近 ${d} 天`, dOn: "开启「帮助改进」的账号", dOnSub: (on, total) => `共 ${fmt(total)} 个账号 · ${fmt(on)} 开启 · ${fmt(Math.max(0, total - on))} 关闭`, dOff: "主动关闭过的账号", dOffSub: "曾经把开关关掉的人数", dTurns: "保存的对话", dTurnsSub: (all, acc) => `累计 ${fmt(all)} 轮 · 来自 ${fmt(acc)} 个账号`, dTokens: "保存对话的 tokens", dTokensSub: (i, o) => `输入 ${fmt(i)} · 输出 ${fmt(o)}`, dDefault: () => "新账号默认关闭，需要用户单独开启", dKeeps: () => "保存：用户写的、模型回答的、它选择调用的工具，以及模型、token 数、客户端和语言。不保存：系统提示（记忆、SOUL、指令）、工具返回的内容、图片 / 音频 / 视频、用户的身份。",
     syTitle: "对话同步", syOn: "开启同步的账号", syOnSub: (off) => `${fmt(off)} 个账号关闭了`, syWith: "有同步数据的账号", syConvs: "对话", syMsgs: "消息", syMsgsSub: (limit) => `每个账号最多 ${fmt(limit)} 条`, syBytes: "存储的文字", syNote: "0.19：账号各设备之间同步的对话文字。只有用户和助手的文字、附件的名字和大小；没有文件和图片。这里只有合计数，看不到任何内容；关闭开关或删除时，中继立刻删除。",
     mTurns: "保存的对话", mTurnAccounts: "有对话保存的账号", mOn: "开启", mDefaultOn: "默认开启（新账号）", mOff: "关闭", mDeleted: "删除", dModels: "按模型", dApps: "按客户端", dRecent: "最近保存的对话（点开账号看全部）", dPlatforms: { android: "Android", windows: "Windows 上的 runtime", macos: "macOS 上的 runtime", linux: "Linux 上的 runtime", runtime: "runtime", browser: "浏览器", other: "其他" },
     webTitle: "网页版（nanomuse.cn/web）", webLine: (w) => (w ? `${fmt(w.accounts)} 个账号有自己的 Muse（上限 ${fmt(w.max_accounts)}）· ${fmt(w.running)} 个在运行（上限 ${fmt(w.max_running)}）` : "未接入：relay 设 WEB_INFO_URL 指向 gateway 的 /api/web/info。"), webOff: "网页版未开启",
@@ -179,10 +179,10 @@
 
   // English is the base every language starts from; a block below may translate only part of it.
   const T_EN = {
-    title: "nanoMuse Cloud admin", tokenLabel: "Admin token", tokenHint: "The value of CLOUD_ADMIN_TOKEN in the relay's .env; it stays in this tab only.",
+    title: "nanoLika Cloud admin", tokenLabel: "Admin token", tokenHint: "The value of CLOUD_ADMIN_TOKEN in the relay's .env; it stays in this tab only.",
     enter: "Open", wrong: "That token is not right.", offline: "Cannot reach the server.", refresh: "Refresh", lock: "Lock", loading: "Loading…",
     today: "Today", week: "Last 7 days", period: (d) => `Last ${d} days`,
-    kSamples: "Kept turns", kSamplesSub: (n) => `${n} accounts with “help improve” on`, exportSamples: "Export JSONL", exportFailed: (why) => `The export did not go through: ${why}. Try once more; if it keeps happening, see docker logs nanomuse-relay on the server.`, exportCut: "the download broke off", exportEmpty: "Nothing to export yet.", contributes: "helps improve", samples: "Kept conversations (recent)", samplesNote: "Kept only for accounts with “Help improve nanoMuse's AI models” on: what the person wrote, what the model answered and the tools it called; not the system prompt, tool results or pictures; the export carries no account ids.", user: "user", assistant: "reply", more: "Show more", noSamples: "None yet",
+    kSamples: "Kept turns", kSamplesSub: (n) => `${n} accounts with “help improve” on`, exportSamples: "Export JSONL", exportFailed: (why) => `The export did not go through: ${why}. Try once more; if it keeps happening, see docker logs nanomuse-relay on the server.`, exportCut: "the download broke off", exportEmpty: "Nothing to export yet.", contributes: "helps improve", samples: "Kept conversations (recent)", samplesNote: "Kept only for accounts with “Help improve nanoLika's AI models” on: what the person wrote, what the model answered and the tools it called; not the system prompt, tool results or pictures; the export carries no account ids.", user: "user", assistant: "reply", more: "Show more", noSamples: "None yet",
     kAccounts: "Accounts", kAccountsSub: (c) => `${c.with_password || 0} with a password · ${c.unlimited || 0} members · ${c.disabled || 0} disabled`,
     kActive: "Active accounts", kActiveSub: (n) => `${n} new`, kSpent: "Spent", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
     kOnline: "Devices online", kOnlineSub: (k, s) => `${k} remembered · ${s} live sign-ins`, kSignals: "Signals today",
@@ -231,17 +231,17 @@
     ndVersion: (v, t) => (t ? `version ${v} · saved ${t}` : `version ${v} · built-in defaults`), ndStored: "set here", ndDefault: "built-in defaults",
     priceLine: (p) => [p.per_m_input || p.per_m_output ? `${p.per_m_input} in / ${p.per_m_output} out per M tokens` : null,
       p.per_image ? `${p.per_image} a picture${p.per_image_2k ? ` (${p.per_image_2k} at 2k)` : ""}` : null, p.per_second ? `${p.per_second} a second` : null].filter(Boolean).join("; "),
-    foot: "A phone number or address is decrypted only when you open that account, with the admin token; the database holds ciphertext. Network addresses and the client are recorded with every sign-in, request and event, and go when the account is deleted. The text of a chat is kept only while the account has “Help improve nanoMuse's AI models” on, and only what the person wrote, what the model answered and the tools it called (see Data controls). Do not share screenshots of this page. Money is estimated at the provider's Beijing list prices.",
+    foot: "A phone number or address is decrypted only when you open that account, with the admin token; the database holds ciphertext. Network addresses and the client are recorded with every sign-in, request and event, and go when the account is deleted. The text of a chat is kept only while the account has “Help improve nanoLika's AI models” on, and only what the person wrote, what the model answered and the tools it called (see Data controls). Do not share screenshots of this page. Money is estimated at the provider's Beijing list prices.",
     trends: (d) => `Accounts · last ${d} days`, site: (d) => `The site: visits and downloads · last ${d} days`, siteOff: "No traffic figures yet: install nanomuse-traffic on the server (demo/showcase/mirror/traffic.py) and point the relay's TRAFFIC_DB at its database.",
     siteUpdated: (t) => `updated ${t}`, siteNote: "From Caddy's access log (kept seven days): counted by day; a visitor is a hash of address and browser under a salt made for that day. No addresses are stored.",
     sPages: "Page views", sVisitors: "Visitors", sBots: "Crawlers / monitors", sMirror: "Mirror downloads", sGithub: "GitHub downloads", sStars: "Stars", sPeriod: "this period", sDelta: (n) => (n > 0 ? `+${fmt(n)} this period` : n < 0 ? `${fmt(n)} this period` : "no change this period"),
     sFiles: "Files downloaded", sMirrorCol: "mirror", sGithubCol: "GitHub, all time", sRefs: "Referring sites", sTop: "Pages", sNone: "Nothing yet", sSince: (d) => `since ${d}`,
     mSignIns: "Sign-ins", mNew: "New accounts", mActive: "Active accounts", mInvites: "Signed up via invite", mContribute: "“Help improve” turned on", mCalls: "Calls", mRefused: "Refused: over budget", mErrors: "Upstream errors", mContentRejected: "Content check declined",
     devices: "Devices", devKinds: { phone: "phones", computer: "computers", web: "web" }, invitesTitle: "Invites", invitesLine: (f) => `${fmt(f.with_code)} made an invite code · ${fmt(f.inviters)} brought someone · ${fmt(f.invited)} came through one`,
-    data: (d) => `Data controls · last ${d} days`, dOn: "Accounts with “help improve” on", dOnSub: (on, total) => `${fmt(total)} accounts · ${fmt(on)} on · ${fmt(Math.max(0, total - on))} off`, dOff: "Accounts that turned it off", dOffSub: "ever switched it off themselves", dTurns: "Kept turns", dTurnsSub: (all, acc) => `${fmt(all)} in all · from ${fmt(acc)} accounts`, dTokens: "Tokens in kept turns", dTokensSub: (i, o) => `${fmt(i)} in · ${fmt(o)} out`, dDefault: (on) => on ? "New accounts start with it on (IMPROVE_DEFAULT=1)" : "New accounts start with it off (IMPROVE_DEFAULT=0)", dKeeps: (k) => `Kept: ${k.kept.join(", ")}. Not kept: ${k.not_kept.join(", ")}.`,
+    data: (d) => `Data controls · last ${d} days`, dOn: "Accounts with “help improve” on", dOnSub: (on, total) => `${fmt(total)} accounts · ${fmt(on)} on · ${fmt(Math.max(0, total - on))} off`, dOff: "Accounts that turned it off", dOffSub: "ever switched it off themselves", dTurns: "Kept turns", dTurnsSub: (all, acc) => `${fmt(all)} in all · from ${fmt(acc)} accounts`, dTokens: "Tokens in kept turns", dTokensSub: (i, o) => `${fmt(i)} in · ${fmt(o)} out`, dDefault: () => "Off for new accounts; requires a separate user choice", dKeeps: (k) => `Kept: ${k.kept.join(", ")}. Not kept: ${k.not_kept.join(", ")}.`,
     syTitle: "Conversation sync", syOn: "Accounts with sync on", syOnSub: (off) => `${fmt(off)} turned it off`, syWith: "Accounts with synced data", syConvs: "Conversations", syMsgs: "Messages", syMsgsSub: (limit) => `at most ${fmt(limit)} per account`, syBytes: "Text stored", syNote: "0.19: the text of conversations synced between an account's devices. User and assistant texts and attachment names and sizes only; no files, no images. Only totals are shown here, never a text; the relay deletes at once when the switch goes off or the person asks.",
     mTurns: "Kept turns", mTurnAccounts: "Accounts with turns kept", mOn: "Turned on", mDefaultOn: "On by default (new accounts)", mOff: "Turned off", mDeleted: "Deleted", dModels: "By model", dApps: "By app", dRecent: "Newest kept turns (open the account for all of them)", dPlatforms: { android: "Android", windows: "runtime on Windows", macos: "runtime on macOS", linux: "runtime on Linux", runtime: "runtime", browser: "browser", other: "other" },
-    webTitle: "nanoMuse Web (nanomuse.cn/web)", webLine: (w) => (w ? `${fmt(w.accounts)} accounts with a Muse of their own (cap ${fmt(w.max_accounts)}) · ${fmt(w.running)} running (cap ${fmt(w.max_running)})` : "Not connected: set the relay's WEB_INFO_URL to the gateway's /api/web/info."), webOff: "nanoMuse Web is off",
+    webTitle: "nanoLika Web", webLine: (w) => (w ? `${fmt(w.accounts)} accounts with a Muse of their own (cap ${fmt(w.max_accounts)}) · ${fmt(w.running)} running (cap ${fmt(w.max_running)})` : "Not connected: set the relay's WEB_INFO_URL to the gateway's /api/web/info."), webOff: "nanoLika Web is off",
     places: (d) => `Where from · last ${d} days`, placesNote: "Guessed from the address (ip2region's offline database: city level in China, country / state elsewhere); no third party is asked. It is where the network exit is; mobile data and proxies skew it.", placesOff: "The location database is not here yet: the relay fetches ip2region_v4.xdb (about 11 MB) into its data directory after start; CLOUD_GEOIP=0 turns this off.", placesFetching: "Fetching the location database…", placesError: (e) => `The location database could not be fetched: ${e}`,
     pCountry: "Country / region", pProvince: "Province / state", pAccounts: "Accounts", pNew: "New", pSignins: "Sign-ins", pRequests: "Requests", pDemo: "Demo visitors", pUnknown: "unknown", pLocal: "local network", pNone: "No visits recorded yet.", pAccountsNote: "accounts by their latest address",
     catalog: "Model catalog", catalogNote: "The models under the key beyond the menu: the relay asks each one a one-word question and then shows it a small magenta picture, to learn whether it answers and whether it sees; the answers stand for seven days. The “sees pictures” the apps show is what is here.", catalogOff: "The catalog is off (CLOUD_CATALOG=0).", catalogNames: "Guessed from names, not checked one by one (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Checking…", catalogPending: (n) => `${fmt(n)} to check`, catalogFetched: (t) => `list read ${t}`, catalogError: (e) => `The list could not be read: ${e}`,
@@ -324,7 +324,7 @@
     return out;
   };
   const T_RU = {
-    title: "nanoMuse Cloud — админка", tokenLabel: "Админ-токен", tokenHint: "Значение CLOUD_ADMIN_TOKEN из .env релея; остаётся только в этой вкладке.",
+    title: "nanoLika Cloud — админка", tokenLabel: "Админ-токен", tokenHint: "Значение CLOUD_ADMIN_TOKEN из .env релея; остаётся только в этой вкладке.",
     enter: "Открыть", wrong: "Токен неверный.", offline: "офлайн", refresh: "Обновить", lock: "Заблокировать", loading: "Загрузка…",
     today: "Сегодня", week: "За 7 дней", period: (d) => `За ${d} дн.`,
     kSamples: "Сохранённые реплики", kSamplesSub: (n) => `${n} аккаунтов с включённой «Помогать улучшать модели»`, exportSamples: "Экспорт JSONL", exportFailed: (why) => `Экспорт не прошёл: ${why}. Попробуйте ещё раз; если повторится, смотрите docker logs nanomuse-relay на сервере.`, exportCut: "загрузка оборвалась", exportEmpty: "Пока нечего экспортировать.", contributes: "участвует в улучшении", samples: "Сохранённые диалоги (последние)", samplesNote: "Хранится только для аккаунтов с включённым «Помогать улучшать модели»: что написал человек, что ответила модель и какие инструменты вызвала; без системного промпта, результатов инструментов и картинок; в экспорте нет id аккаунтов.", user: "пользователь", assistant: "ответ", more: "Показать ещё", noSamples: "Пока нет",
@@ -376,17 +376,17 @@
     ndVersion: (v, t) => (t ? `версия ${v} · сохранено ${t}` : `версия ${v} · встроенные значения`), ndStored: "задано здесь", ndDefault: "встроенные значения",
     priceLine: (p) => [p.per_m_input || p.per_m_output ? `${p.per_m_input} вх. / ${p.per_m_output} исх. за 1 млн токенов` : null,
       p.per_image ? `${p.per_image} за картинку${p.per_image_2k ? ` (${p.per_image_2k} при 2k)` : ""}` : null, p.per_second ? `${p.per_second} за секунду` : null].filter(Boolean).join("; "),
-    foot: "Телефон или адрес расшифровывается только когда вы открываете этот аккаунт, с админ-токеном; в базе лежит шифротекст. Сетевые адреса и клиент записываются при каждом входе, запросе и событии и уходят вместе с аккаунтом при удалении. Текст чата хранится только пока у аккаунта включено «Help improve nanoMuse's AI models», и лишь то, что написал человек, что ответила модель и какие инструменты вызвала (см. «Данные»). Не делитесь скриншотами этой страницы. Деньги считаются по пекинским прейскурантам провайдера.",
+    foot: "Телефон или адрес расшифровывается только когда вы открываете этот аккаунт, с админ-токеном; в базе лежит шифротекст. Сетевые адреса и клиент записываются при каждом входе, запросе и событии и уходят вместе с аккаунтом при удалении. Текст чата хранится только пока у аккаунта включено «Help improve nanoLika's AI models», и лишь то, что написал человек, что ответила модель и какие инструменты вызвала (см. «Данные»). Не делитесь скриншотами этой страницы. Деньги считаются по пекинским прейскурантам провайдера.",
     trends: (d) => `Аккаунты · за ${d} дн.`, site: (d) => `Сайт: визиты и загрузки · за ${d} дн.`, siteOff: "Цифр по трафику ещё нет: поставьте на сервер nanomuse-traffic (demo/showcase/mirror/traffic.py) и направьте TRAFFIC_DB релея на его базу.",
     siteUpdated: (t) => `обновлено ${t}`, siteNote: "Из журнала доступа Caddy (хранится семь дней): подсчёт по дням; посетитель — хэш адреса и браузера под солью, своей на каждый день. Адреса не хранятся.",
     sPages: "Просмотры страниц", sVisitors: "Посетители", sBots: "Краулеры / мониторы", sMirror: "Загрузки с зеркала", sGithub: "Загрузки с GitHub", sStars: "Звёзды", sPeriod: "за период", sDelta: (n) => (n > 0 ? `+${fmt(n)} за период` : n < 0 ? `${fmt(n)} за период` : "без изменений за период"),
     sFiles: "Скачанные файлы", sMirrorCol: "зеркало", sGithubCol: "GitHub, всё время", sRefs: "Сайты-источники", sTop: "Страницы", sNone: "Пока ничего", sSince: (d) => `с ${d}`,
     mSignIns: "Входы", mNew: "Новые аккаунты", mActive: "Активные аккаунты", mInvites: "Пришли по приглашению", mContribute: "Включили «help improve»", mCalls: "Звонки", mRefused: "Отказы: сверх лимита", mErrors: "Ошибки провайдера", mContentRejected: "Отклонено проверкой контента",
     devKinds: { phone: "телефоны", computer: "компьютеры", web: "веб" }, invitesTitle: "Приглашения", invitesLine: (f) => `${fmt(f.with_code)} сделали код приглашения · ${fmt(f.inviters)} привели кого-то · ${fmt(f.invited)} пришли по коду`,
-    data: (d) => `Данные · за ${d} дн.`, dOn: "Аккаунты с включённым «help improve»", dOnSub: (on, total) => `${fmt(total)} аккаунтов · ${fmt(on)} вкл · ${fmt(Math.max(0, total - on))} выкл`, dOff: "Кто выключал", dOffSub: "когда-либо отключали сами", dTurns: "Сохранённые реплики", dTurnsSub: (all, acc) => `${fmt(all)} всего · от ${fmt(acc)} аккаунтов`, dTokens: "Токены в сохранённых репликах", dTokensSub: (i, o) => `${fmt(i)} вх. · ${fmt(o)} исх.`, dDefault: (on) => (on ? "Новые аккаунты получают его включённым (IMPROVE_DEFAULT=1)" : "Новые аккаунты получают его выключенным (IMPROVE_DEFAULT=0)"), dKeeps: (k) => `Сохраняется: ${k.kept.join(", ")}. Не сохраняется: ${k.not_kept.join(", ")}.`,
+    data: (d) => `Данные · за ${d} дн.`, dOn: "Аккаунты с включённым «help improve»", dOnSub: (on, total) => `${fmt(total)} аккаунтов · ${fmt(on)} вкл · ${fmt(Math.max(0, total - on))} выкл`, dOff: "Кто выключал", dOffSub: "когда-либо отключали сами", dTurns: "Сохранённые реплики", dTurnsSub: (all, acc) => `${fmt(all)} всего · от ${fmt(acc)} аккаунтов`, dTokens: "Токены в сохранённых репликах", dTokensSub: (i, o) => `${fmt(i)} вх. · ${fmt(o)} исх.`, dDefault: () => "Для новых аккаунтов выключено; требуется отдельный выбор пользователя", dKeeps: (k) => `Сохраняется: ${k.kept.join(", ")}. Не сохраняется: ${k.not_kept.join(", ")}.`,
     syTitle: "Синхронизация диалогов", syOn: "Аккаунты с включённой синхронизацией", syOnSub: (off) => `${fmt(off)} выключили`, syWith: "Аккаунты с синхронизированными данными", syConvs: "Диалоги", syMsgs: "Сообщения", syMsgsSub: (limit) => `не больше ${fmt(limit)} на аккаунт`, syBytes: "Объём текста", syNote: "0.19: текст диалогов, синхронизируемых между устройствами аккаунта. Только тексты пользователя и ассистента и имена с размерами вложений; без файлов и картинок. Здесь показаны только итоги, никогда не сам текст; релей удаляет сразу, когда переключатель выключают или человек просит.",
     mTurns: "Сохранённые реплики", mTurnAccounts: "Аккаунты с сохранёнными репликами", mOn: "Включили", mDefaultOn: "Включено по умолчанию (новые аккаунты)", mOff: "Выключили", mDeleted: "Удалено", dModels: "По моделям", dApps: "По приложениям", dRecent: "Новейшие сохранённые реплики (все — в карточке аккаунта)", dPlatforms: { android: "Android", windows: "рантайм на Windows", macos: "рантайм на macOS", linux: "рантайм на Linux", runtime: "рантайм", browser: "браузер", other: "другое" },
-    webTitle: "nanoMuse Web (nanomuse.cn/web)", webLine: (w) => (w ? `${fmt(w.accounts)} аккаунтов со своим Muse (лимит ${fmt(w.max_accounts)}) · ${fmt(w.running)} запущено (лимит ${fmt(w.max_running)})` : "Не подключено: направьте WEB_INFO_URL релея на /api/web/info шлюза."), webOff: "nanoMuse Web выключен",
+    webTitle: "nanoLika Web", webLine: (w) => (w ? `${fmt(w.accounts)} аккаунтов со своим Muse (лимит ${fmt(w.max_accounts)}) · ${fmt(w.running)} запущено (лимит ${fmt(w.max_running)})` : "Не подключено: направьте WEB_INFO_URL релея на /api/web/info шлюза."), webOff: "nanoLika Web выключен",
     places: (d) => `Откуда · за ${d} дн.`, placesNote: "Угадывается по адресу (офлайн-база ip2region: до города в Китае, страна / штат в остальном мире); третьих лиц не спрашиваем. Это точка сетевого выхода; мобильный интернет и прокси искажают картину.", placesOff: "Базы локаций пока нет: релей после старта скачивает ip2region_v4.xdb (около 11 МБ) в свой каталог данных; CLOUD_GEOIP=0 это отключает.", placesFetching: "Скачиваем базу локаций…", placesError: (e) => `Не удалось скачать базу локаций: ${e}`,
     pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
     catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
@@ -620,6 +620,38 @@
     return null;
   }
   const forget = (key) => CACHE.delete(cacheKey(key));
+
+  // ── the site's visit counter ───────────────────────────────────
+  // nanolika.ru counts the visits itself (counter.php there, bots and link previews
+  // filtered); the admin only shows the totals, so the cloud keeps no visitor data.
+  const SITE_COUNTER = "https://nanolika.ru/counter.php?stats=1";
+  let siteVisits = null, siteBusy = false, siteError = "";
+  function needSiteVisits() {
+    if (siteVisits || siteBusy) return siteVisits;
+    siteBusy = true;
+    fetch(SITE_COUNTER, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((v) => { siteVisits = v || {}; })
+      .catch((e) => { siteError = String((e && e.message) || e); })
+      .then(() => { siteBusy = false; draw(); });
+    return siteVisits;
+  }
+  function siteVisitsPanel() {
+    const L3 = (ru, en, zh) => (LANG === "zh" ? zh : LANG === "ru" ? ru : en);
+    const v = needSiteVisits();
+    const title = `${T.nav.site} · ${L3("заходы", "visits", "访问")}`;
+    if (!v || !v.ok) {
+      return panel(title, h("div", { class: "empty" }, siteError ? L3(`счётчик недоступен: ${siteError}`, `counter unavailable: ${siteError}`, `计数器不可用：${siteError}`) : T.loading));
+    }
+    const last7 = (v.days || []).slice(-7).reduce((n, d) => n + (d.views || 0), 0);
+    const pages = (v.pages || []).slice(0, 5);
+    return panel([title, h("span", { class: "fine" }, ` · ${L3("считаем с", "since", "自")} ${v.since || "—"}`)],
+      h("div", { class: "kpis", style: "padding:12px 16px 4px" },
+        kpi(L3("всего заходов", "total visits", "总访问"), fmt(v.total || 0), L3("без роботов и превью ссылок", "bots and link previews filtered", "已过滤机器人与链接预览")),
+        kpi(T.today, fmt(v.today || 0), L3(`новых сегодня: ${fmt(v.uniq_today || 0)}`, `new today: ${fmt(v.uniq_today || 0)}`, `今日新访客：${fmt(v.uniq_today || 0)}`)),
+        kpi(T.week, fmt(last7), L3("за последние 7 дней", "the last 7 days", "最近 7 天"))),
+      pages.length ? h("div", { class: "kv", style: "padding:0 16px 14px" }, ...pages.flatMap((pg) => [h("b", {}, pg.name), h("span", {}, fmt(pg.hits))])) : null);
+  }
 
   async function load() {
     try {
@@ -1579,6 +1611,7 @@
         kpi(T.kOnline, fmt(ov.online_devices), T.kOnlineSub(c.devices || 0, c.live_keys || 0)),
         kpi(T.kSignals, fmt((sig.sign_ins || 0) + (sig.calls || 0)), T.kSignalsSub({ sign_ins: 0, sign_in_failures: 0, budget_refusals: 0, upstream_errors: 0, content_rejected: 0, calls: 0, ...sig })),
         samplesKpi),
+      siteVisitsPanel(),
       h("div", { class: "panel" }, h("h2", {}, T.byDay(Math.min(days, 90)), h("span", { class: "sp" }), seeAll("money")), usage ? (usage._error ? h("div", { class: "empty" }, T.loadFailed(usage._error)) : dayBars(usage.days, Math.min(days, 90), s.day_offset_h, rate)) : h("div", { class: "empty" }, T.loading)),
       h("div", { class: "grid2" },
         h("div", { class: "panel" }, h("h2", {}, T.nav.places, h("span", { class: "sp" }), seeAll("places")), h("div", { class: "pad" }, topRegions)),

@@ -16,7 +16,7 @@ import io
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from nanomuse.logger import logger
@@ -72,6 +72,13 @@ def install_channels(app: FastAPI, svc: MuseService, dep: list[Any]) -> ChannelM
     svc.channels = manager  # type: ignore[attr-defined]
     first_new = len(app.router.routes)
 
+    # This one public route uses MAX's secret; management retains Bearer authentication.
+    @app.post("/api/channels/max/webhook", include_in_schema=False)
+    async def max_webhook(request: Request) -> dict:
+        from nanomuse.channels.max import receive_webhook
+
+        return await receive_webhook(manager.channels.get("max"), request)
+
     inner = app.router.lifespan_context
 
     @contextlib.asynccontextmanager
@@ -105,6 +112,45 @@ def install_channels(app: FastAPI, svc: MuseService, dep: list[Any]) -> ChannelM
             return await manager.update(name, body.model_dump(exclude_none=True))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/channels/{name}/menu", dependencies=dep)
+    async def open_private_menu(name: str, request: Request) -> dict[str, Any]:
+        from nanomuse.channels.base import InboundMessage
+
+        _manager_name(name)
+        if name not in {"telegram", "max"}:
+            raise HTTPException(400, "This channel has no private menu")
+        body = await request.json()
+        page = body.get("page", "home")
+        if page not in {"home", "permissions", "balance", "language"}:
+            raise HTTPException(400, "Unknown menu page")
+        entries = manager.pairing.approved(name)
+        sender = str(body.get("sender_id") or "")
+        if not sender and len(entries) == 1:
+            sender = next(iter(entries))
+        entry = entries.get(sender)
+        if entry is None:
+            raise HTTPException(409, "Choose an explicitly paired owner")
+        command = {
+            "home": "/menu",
+            "permissions": "/permissions",
+            "balance": "/balance",
+            "language": "/language",
+        }[page]
+        msg = InboundMessage(
+            channel=name,
+            chat_id=str(entry.get("chat_id") or sender),
+            sender_id=sender,
+            text=command,
+        )
+        try:
+            await manager._handle_inbound(msg)
+        except Exception as exc:
+            logger.warning("channel {}: private menu failed ({})", name, type(exc).__name__)
+            raise HTTPException(
+                502, "Private menu delivery failed: " + type(exc).__name__
+            ) from None
+        return {"sent": True, "page": page}
 
     @app.post("/api/channels/reload", dependencies=dep)
     async def channels_reload() -> dict[str, Any]:

@@ -23,6 +23,10 @@ nanoMuse Cloud is the relay behind nanomuse.cn: sign-in by e-mail or phone, the 
 - **A model provider key.** The relay spends *your* money on *your* provider: everyone who signs in on your relay is billed to that key, at the provider's prices, within the allowance you set (`ALLOWANCE_CNY`, `SIGNUP_OPEN`, `SIGNUP_PER_DOMAIN_DAY`, `SIGNUP_DOMAIN_BLOCK`, members in `ALLOWED_IDENTIFIERS`; [cloud/README.md](../cloud/README.md#settings)). Without a key, sign-in and the hub work and chat does not.
 - **Docker** with the compose plugin, and `curl`.
 
+Moving an existing relay to another server, or keeping personal data inside Russia as the
+law requires, is a separate job with its own order of steps:
+[cloud-migration-ru.md](cloud-migration-ru.md) and `scripts/cloud-migrate.sh`.
+
 ### In one command
 
 ```bash

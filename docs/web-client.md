@@ -1,0 +1,13 @@
+# nanoLika browser client / PWA
+
+Entry: `https://nanolika.ru/web/`, redirecting to the isolated static client at `https://cloud.nanolika.ru/web/`. Source: `cloud/nanomuse_cloud/web_client`. No native installer build is required. Use HTTPS; the manifest and service worker are scoped to `/web/`.
+
+The first version provides existing Cloud email-code/password login, streaming Cloud chat, stop, local conversation export/deletion, a local document library, English/Chinese/Russian and an installable/offline shell. It does not expose `/api` desktop runtime endpoints, control computers, publish content, run background jobs, synchronize conversation contents, or connect personal cloud storage. Browser-only documents are not automatically model attachments. This boundary is explained in the UI and system message.
+
+Messages are transiently sent through Cloud and the model provider to answer. Conversation history and file blobs are stored in IndexedDB on the device, keyed by Cloud account ID. Logout hides that account's local data; explicit local deletion removes it. Clearing browser data/private browsing can remove files; users must download important work. Local storage is not encrypted against another person with access to the same browser profile. The account session key is browser-local, never in a URL, service-worker cache or application log.
+
+Chat requests use `store:false`. The Cloud chat handler suppresses contribution samples for these requests even if the account has opted in elsewhere. Usage/accounting metadata still exists. This flag does not prevent transient provider processing or imply a policy about provider retention. No document upload endpoint is used. The local library intentionally cannot be read by the model without the user explicitly providing content.
+
+The service worker caches only a fixed list of public shell assets. It does not intercept POST, authenticated GET, cross-origin requests or `/v1/` APIs. Offline mode supports local history/documents, not model inference. Static responses use a same-origin Content Security Policy, no-referrer and nosniff headers. No HTML from model replies is executed.
+
+Checks: `node --test tests/*.test.js` in the client directory; Cloud `pytest tests/test_web_client.py`. Browser checks cover code login, streamed safe-text rendering, file import without network upload, local reload/offline, account isolation, and widths 390/768/1440. Deployment uses a no-network canary, dual package-namespace mounts and existing relay overlays; do not replace the live legacy API with the full newer source file. Preserve billing/refund/gateway overlays and do not activate production acquiring implicitly.

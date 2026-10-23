@@ -83,6 +83,29 @@ def connector_tools(settings: Settings) -> list[BaseTool]:
     return tools
 
 
+def bot_project_tools(settings: Settings) -> list[BaseTool]:
+    """The local project manager, behind the host's signed approval tickets."""
+    from nanomuse.cloud import CLOUD_KEY
+    from nanomuse.tools.bot_projects import BotProjects
+    from nanomuse.vault.vault import CredentialVault
+
+    kept = CredentialVault(settings.vault_file, settings.vault_key_file)
+
+    class LocalCredentials:
+        def get(self, name: str) -> str | None:
+            if name == CLOUD_KEY and os.environ.get("NANOLIKA_DESKTOP_ACCOUNT") == "1":
+                return os.environ.get("NANOMUSE_CLOUD_KEY") or None
+            return kept.get(name)
+
+    return [
+        BotProjects(
+            workspace=settings.agent.workspace,
+            credentials=LocalCredentials(),
+            gateway_url=os.environ.get("NANOLIKA_CLOUD_BASE") or settings.cloud.base_url,
+        )
+    ]
+
+
 def confirm_secret() -> str:
     """The host's confirmation secret, or ``""`` when the model's own word is accepted."""
     return os.environ.get(CONFIRM_SECRET_ENV, "").strip()
@@ -278,6 +301,7 @@ async def serve(tools: list[BaseTool]) -> None:
 
 
 __all__ = [
+    "bot_project_tools",
     "CONFIRMED",
     "SERVER_NAME",
     "call",

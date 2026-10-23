@@ -161,11 +161,8 @@ a voice note (a marker stands where one was). The point is a training set for
 the community's own open model. The page shows how many turns are kept; turn
 the switch off at any time (nothing more is kept) and delete what was kept
 with one tap; deleting the account deletes it too. Nothing is credited for
-the switch either way. On `cloud.nanomuse.cn` the switch is **on for accounts
-created from relay 0.9 on, until the person turns it off**: the privacy
-policy says so, the page says so next to the switch, and accounts from before
-keep the choice they had made; a self-hosted relay sets its own default with
-`IMPROVE_DEFAULT`. The operator sees the kept turns on the admin page's *Data
+the switch either way. New accounts start with the switch off. The legacy `IMPROVE_DEFAULT` setting
+cannot turn it on. A historical default-on event is not a user choice. The operator sees the kept turns on the admin page's *Data
 controls* panel (how many accounts have it on, turns by day, model and app,
 the newest turns, every account's kept conversations in full) and exports them
 as JSON lines without account ids or addresses (`GET /v1/admin/samples/export`,
@@ -622,3 +619,45 @@ over. `GET /v1/config` carries the menu, `/v1/me` the account's `plan` and wheth
 running `connect` tariff keeps every device on its own, and the socket is closed
 with `4004 connect_limited` ([hub.md](hub.md)). `0`, the default, keeps a relay
 that does not sell the key yet working as before: everyone connects.
+
+
+## T-Bank DEMO checkout
+
+`/payments/checkout` provides same-origin email-code sign-in and bank-hosted checkout for packages or custom ruble top-ups. Configure `TBANK_TERMINAL_KEY`, `TBANK_PASSWORD` and HTTPS `TBANK_PUBLIC_BASE` in the relay environment, never the site JavaScript. Only a terminal ending in DEMO is accepted. No recurring debit is requested.
+
+The API creates an order for the authenticated account, fixes the package price on the server and stores an idempotency key and terms revision. Signed bank notifications at `/v1/payments/tbank/notify` are checked for terminal, payment ID, order and exact kopeck amount. Only successful CONFIRMED payments credit the isolated `tbank_demo_wallets`; neither real account grants nor real subscriptions are modified. An authenticated status check can reconcile a missing notification through GetState. A browser redirect cannot credit money. Notifications are acknowledged as plain OK only after processing.
+
+The bundled Russian Trusted Root CA is used only by the bank HTTP client, with hostname verification enabled. Source: https://status.tbank-online.com/certificates/ , linked RSA root downloaded over verified HTTPS. SHA-256 fingerprint: D26D2D0231B7C39F92CC738512BA54103519E4405D68B5BD703E9788CA8ECF31. Never disable certificate verification.
+
+This is an integration test release, not production acquiring. Production terminals are intentionally refused. Fiscal receipts, refund settlement, final legal/contact information and production wallet/entitlement integration must be completed before enabling real payments. DEMO balances are not model credit. Same-package test purchases extend the remaining term; switching test packages starts a fresh term and does not migrate an old cheaper period. Final commercial switching rules remain a separate decision.
+
+
+## Data handling and a registration hold
+
+`REGISTRATION_HOLD=1` pauses new identifiers before an authentication code is stored or
+sent. It covers email/phone sign-in, bot sign-in (including its separate sign-up switch),
+direct account creation and linking a new identifier. Existing identifiers and API keys
+continue to work. The hold has no reviewer or allowlist exception. The default is `0` for
+compatibility; changing source alone does not activate it on a running deployment. After
+changing the environment, restart the relay. This is not a localization guarantee.
+
+New accounts never contribute message samples automatically, even with the legacy
+`IMPROVE_DEFAULT=1` setting. Samples require the account's explicit Data controls action.
+A historical `contribute.default` event does not authorize new sample capture. Existing
+samples are not erased by this change; deletion remains a separate account action.
+The `default_on` response field is retained but is always false. A switch alone is not a
+substitute for a lawful basis and a separate, informed choice for this additional purpose.
+
+Before public onboarding, verify collection, storage, logs, backups, deletion, actual
+processors and international transfers. Moving SQLite alone leaves bot runtime history,
+memory, attachments and audit files in their old locations. A foreign transport proxy
+must not terminate application TLS or retain message bodies; metadata still needs review.
+Do not describe an entire bot runtime abroad as a content-free bridge.
+
+The checkout links to the data-handling notice before email entry. The notice describes
+the current test infrastructure and must be updated after a verified migration. Terms
+acceptance is not bundled with consent for unrelated processing. Web acquiring and sales
+inside Telegram are separate: Telegram's digital-goods rules also apply to Mini Apps.
+
+
+For the separate DEMO checkout and its full/partial refund invariants, see [T-Bank refund accounting](payment-refunds.md). This does not enable production settlement.

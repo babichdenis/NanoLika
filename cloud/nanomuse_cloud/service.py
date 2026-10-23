@@ -406,7 +406,7 @@ class Cloud:
                 len(self.member_hashes),
                 settings.allowance_cny,
                 settings.invite_bonus_cny,
-                "on" if settings.improve_default else "off",
+                "off",
             )
         else:
             log.warning("SIGNUP_OPEN=0: private relay, only the %d listed identifier(s) may sign in", len(self.member_hashes))
@@ -635,7 +635,7 @@ class Cloud:
             "openrouter_url": self.s.openrouter_url,
             "privacy_url": self.s.privacy_url,
             "repo_url": self.s.repo_url,
-            "improve_default": self.s.improve_default,
+            "improve_default": False,
             # how long a sign-in code is good for and the shortest password accepted, so the
             # sign-in and password forms print the relay's figures and not their own
             "code_ttl_s": self.s.code_ttl_s,
@@ -703,6 +703,19 @@ class Cloud:
             return row
         return self.db.alias_account(ident.hash(self.s.hmac_key))
 
+    def _refuse_if_registration_held(self, ident: Identifier) -> None:
+        """A deployment hold also covers bot sign-in and new identifier linking.
+
+        This is an operational pause, not proof of localization or legal readiness.
+        Existing identifiers remain usable. No OTP is stored or sent for a new one.
+        """
+        if self.s.registration_hold and self._account_for(ident) is None:
+            raise CloudError(
+                403,
+                "signup_closed",
+                "New sign-ups are paused on this relay for now; existing accounts keep working. Try again later.",
+            )
+
     def _refuse_if_signups_closed(self, ident: Identifier) -> None:
         """0.22: the *Sign-ups* switch is off; an identifier without an account is turned
         away (`signup_closed`); everyone who already has one carries on, and so does the
@@ -763,6 +776,7 @@ class Cloud:
         )
 
     def request_code(self, ident: Identifier, ip: str) -> None:
+        self._refuse_if_registration_held(ident)
         review = self.is_review(ident)
         if not review and not self.sender.accepts(ident):
             # the honest answer up front: a Hong Kong or overseas number gets no SMS from
@@ -843,6 +857,7 @@ class Cloud:
         bot's shared secret, with Telegram's numeric id as the whole proof), so the member
         list and the *Sign-ups* switch do not stand in the way; the door keeps its own
         switch. Everyone else passes the list as before."""
+        self._refuse_if_registration_held(ident)
         if not reached and not self.allowed(ident):
             raise CloudError(403, "not_invited", "This relay is private; that address is not on its list")
         id_hash = ident.hash(self.s.hmac_key)
@@ -858,11 +873,6 @@ class Cloud:
                 id_hash, ident.channel, ident.hint, self.s.signup_tokens, enc, account_id=account_id, grant_uy=self.s.allowance_uy
             )
             self.db.add_event(account_id, "account.created", ident.channel)
-            if self.s.improve_default:
-                # the relay's default for a new account, said on its timeline as such (not as a
-                # choice the person made); it is theirs to turn off under Data controls
-                self.db.set_contribute(account_id, True)
-                self.db.add_event(account_id, "contribute.default", "on")
             self._accept_invite(account_id, invite)
         elif account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
@@ -1048,6 +1058,7 @@ class Cloud:
         An identifier that already has an account of its own is refused rather than taken
         over: two accounts with two allowances are not merged here, and saying so beats
         quietly opening a third. A code that is wrong, spent or lapsed is `link_wrong`."""
+        self._refuse_if_registration_held(ident)
         if not self.s.link_code_ttl_s:
             raise CloudError(503, "link_off", "Linking a second way in is switched off on this relay")
         if self._account_for(ident) is not None:
@@ -1690,7 +1701,7 @@ class Cloud:
             "contribute": {
                 "on": caller.contribute,
                 "samples": self.db.sample_count(caller.account_id),
-                "default_on": self.s.improve_default,
+                "default_on": False,
                 "keeps": SAMPLE_KEEPS,
                 "privacy_url": self.s.privacy_url,
                 # 0.5 names: there is no bonus for the switch any more
@@ -1966,8 +1977,8 @@ class Cloud:
     # for the community's own model — nothing else changes, and the person can turn it off
     # and delete what was kept at any time (Settings → Data controls on every app). What a
     # kept turn holds is exactly SAMPLE_KEEPS below; keep_sample enforces it. Never the
-    # person's identity: samples carry the account id only, and are exported without it.
-    # The default for a new account is the relay's IMPROVE_DEFAULT (config.py).
+    # account id links samples to a person; removing it on export does not anonymize text.
+    # New accounts never opt in automatically. Account ids are pseudonymous, not anonymous.
 
     SAMPLE_MAX_CHARS = 200_000
 
@@ -2229,13 +2240,13 @@ class Cloud:
         """The switch under Data controls. Turning it off keeps what was kept until the person
         deletes it (delete_samples) — the count stays visible so they know there is something
         to delete. Nothing is credited for it either way (the 0.5 bonus is gone)."""
-        if on != caller.contribute:
+        if on != caller.contribute or (on and not self._contribution_explicit(caller.account_id)):
             self.db.set_contribute(caller.account_id, on)
             self.note(caller.account_id, "contribute.on" if on else "contribute.off")
         return {
             "on": on,
             "samples": self.db.sample_count(caller.account_id),
-            "default_on": self.s.improve_default,
+            "default_on": False,
             "keeps": SAMPLE_KEEPS,
             "privacy_url": self.s.privacy_url,
             # 0.5 names, for the apps of the time
@@ -2311,7 +2322,7 @@ class Cloud:
         ever = self.db.samples_totals(0)
         return {
             "generated_at": t,
-            "default_on": self.s.improve_default,
+            "default_on": False,
             "keeps": SAMPLE_KEEPS,
             "accounts": {
                 "total": total,
@@ -2343,6 +2354,11 @@ class Cloud:
             "recent": recent,
         }
 
+    def _contribution_explicit(self, account_id: str) -> bool:
+        """A legacy default is not a separate choice by the account holder."""
+        events = self.db.events_for(account_id, limit=1, kinds=("contribute.on", "contribute.off", "contribute.default"))
+        return bool(events and events[0]["kind"] == "contribute.on")
+
     def keep_sample(
         self,
         caller: Caller,
@@ -2355,7 +2371,7 @@ class Cloud:
     ) -> None:
         """Called after a chat turn for an account with the switch on; anything else is a
         no-op. Only the training view of the turn is written (_training_view)."""
-        if not caller.contribute:
+        if not caller.contribute or not self._contribution_explicit(caller.account_id):
             return
         request, cut = _fit_messages(_training_view(messages), self.SAMPLE_MAX_CHARS)
         meta = dict(meta or {})
@@ -3085,7 +3101,7 @@ class Cloud:
             "invite_bonus_cny": self.s.invite_bonus_cny,
             "invitee_bonus_cny": self.s.invite_bonus_cny,
             "contribute_bonus_cny": 0,
-            "improve_default": self.s.improve_default,
+            "improve_default": False,
             "usd_cny": self.s.usd_cny,
             "day_offset_h": self.s.day_offset_h,
             "invite_url": self.s.invite_url,

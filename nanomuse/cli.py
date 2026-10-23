@@ -1575,7 +1575,7 @@ def mcp(config: ConfigOpt = None) -> None:
     Another host, such as NanoLika on DeepSeek Harness (docs/harness.md), connects here. The connectors config.toml turns on (mailbox, calendar, contacts) are served too. Nothing is printed on stdout but the protocol; the hands, gui and connectors sections of the config are read when it exists."""
     import sys
 
-    from nanomuse.bridge.mcp_server import connector_tools, hands_tools, serve
+    from nanomuse.bridge.mcp_server import bot_project_tools, connector_tools, hands_tools, serve
     from nanomuse.config import Settings
 
     try:
@@ -1589,7 +1589,9 @@ def mcp(config: ConfigOpt = None) -> None:
         settings.agent.workspace.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
-    _run_async(serve(hands_tools(settings) + connector_tools(settings)))
+    _run_async(
+        serve(hands_tools(settings) + connector_tools(settings) + bot_project_tools(settings))
+    )
 
 
 # ============================================================================ doctor

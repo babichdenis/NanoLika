@@ -53,6 +53,7 @@ from nanomuse.tools import (
     WebSearch,
     playwright_available,
 )
+from nanomuse.tools.bot_projects import BotProjects
 from nanomuse.tools.computer import ComputerAct, ComputerScreen, ComputerTask
 from nanomuse.tools.phone import PhoneAct, PhoneScreen, PhoneTask
 from nanomuse.triggers import TriggerStore
@@ -329,6 +330,7 @@ class NanoMuseApp:
             Reminders(store=self.reminders),
             Triggers(store=self.triggers, available=self.trigger_kinds),
         )
+        tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:
             tools.add(
                 Remember(store=self.memory), Recall(store=self.memory), Forget(store=self.memory)

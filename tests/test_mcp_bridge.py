@@ -189,10 +189,18 @@ async def test_server_over_stdio(tmp_path: Path) -> None:
         listed = await session.list_tools()
         # the hands, plus the address book the default config keeps on
         assert sorted(t.name for t in listed.tools) == [
+            "bot_projects",
             "computer_act",
             "computer_screen",
             "contacts",
         ]
+        guide = await session.call_tool("bot_projects", {"action": "guide"})
+        assert "оплаченном тарифе" in guide.content[0].text
+        assert (
+            "Секреты" in guide.content[0].text
+            or "Секреты".lower() in guide.content[0].text.lower()
+            or "секреты" in guide.content[0].text
+        )
         refused = await session.call_tool("computer_act", {"action": "key", "keys": ["enter"]})
         assert getattr(refused, "is_error", getattr(refused, "isError", None)) is True
         assert "Not done" in refused.content[0].text  # type: ignore[union-attr]

@@ -283,3 +283,49 @@ async def test_echo_is_quiet_quoted_and_marked(tg: FakeTelegram):
     await business.echo("1001", "iPhone", "Привет")
     assert tg.of("sendMessage")[-1]["business_connection_id"] == "bc-1"
     await business.stop()
+
+
+async def test_scoped_buttons_preserve_selected_scope(tg: FakeTelegram):
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    try:
+        await ch.ask_scoped("1001", "ap-scope", "May I?", "ru", ["once", "conversation", "always"])
+        rows = tg.of("sendMessage")[-1]["reply_markup"]["inline_keyboard"]
+        assert rows[1][0]["callback_data"] == "a:c:ap-scope"
+        assert rows[2][0]["callback_data"] == "a:p:ap-scope"
+        await ch._handle_callback(
+            {
+                "id": "cq-scope",
+                "from": {"id": 1001},
+                "data": "a:c:ap-scope",
+                "message": {"chat": {"id": 1001}},
+            }
+        )
+        assert bus.actions[-1][3]["scope"] == "conversation"
+    finally:
+        await ch.stop()
+
+
+async def test_details_edit_original_card_with_buttons_below(tg: FakeTelegram):
+    ch = channel(tg)
+    await ch.start(Bus())
+    try:
+        await ch.ask_scoped(
+            "1001", "inline-detail", "Readable operation", "ru", ["once", "conversation"]
+        )
+        count = len(tg.of("sendMessage"))
+        original_id = ch._approval_cards[("1001", "inline-detail")][0]
+        await ch.expand_approval(
+            "1001", "inline-detail", "Technical command preview", "ru", ["once", "conversation"]
+        )
+        assert len(tg.of("sendMessage")) == count
+        edit = tg.of("editMessageText")[-1]
+        assert str(edit["message_id"]) == original_id
+        assert "Readable operation" in edit["text"] and "Technical command preview" in edit["text"]
+        buttons = edit["reply_markup"]["inline_keyboard"]
+        assert buttons[0][0]["callback_data"] == "a:y:inline-detail"
+        assert buttons[1][0]["callback_data"] == "a:c:inline-detail"
+        assert not any(b["callback_data"].startswith("a:d:") for row in buttons for b in row)
+    finally:
+        await ch.stop()

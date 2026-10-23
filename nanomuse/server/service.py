@@ -1089,6 +1089,8 @@ class MuseService:
         files: list[str] | None = None,
         language: str = "",
         via: str = "",
+        once_key: str = "",
+        once_model: str = "",
     ) -> dict[str, Any]:
         """Queue a message for a thread. Returns the timeline event that was created.
 
@@ -1097,13 +1099,17 @@ class MuseService:
         screens when the client said; the agent answers in it (see MuseAgent.run).
         ``via="cloud"`` is *Use NanoLika Cloud this time*: this one turn runs on the
         account's recommended chat model (see :meth:`cloud_once`); the next is back on
-        the configured model. A CloudError when that is not possible."""
+        the configured model. A CloudError when that is not possible.
+        ``once_key`` is a chat's own Cloud key, for a turn that must be charged to the
+        person the chat belongs to and not to this machine's account (the bot's door: a
+        Telegram chat with no app yet); with it, ``once_model`` names the model the relay's
+        menu recommended, and that account pays for the turn."""
         text = text.strip()
         language = language.strip()
         attachments = [self.attachment(path) for path in files or []]
         if not text and not attachments:
             raise ValueError("empty message")
-        once = self.cloud_once() if via == "cloud" else None
+        once = self.cloud_once(once_key, once_model) if (via == "cloud" or once_key) else None
         thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
         thread.updated_at = now_iso()
         if language:
@@ -1183,7 +1189,7 @@ class MuseService:
         self._ensure_worker(thread)
         return event
 
-    def cloud_once(self) -> tuple[BaseLLM | None, str]:
+    def cloud_once(self, key: str = "", model: str = "") -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
         the vault, for one turn. ``[llm]``, ``[cloud] models`` and the conversation stay as
@@ -1191,17 +1197,18 @@ class MuseService:
         CloudError when nobody is signed in (401 ``signed_out``). When the chat already runs
         on the account there is nothing to switch: the client is None, the id is the
         configured model's."""
-        if not self.app.cloud_signed_in():
-            raise CloudError(401, "signed_out", "Sign in to NanoLika Cloud first.")
-        if self.app.llm_is_cloud():
-            return None, self.settings.llm.model
-        model = self.hub.chat_models[0] if self.hub.chat_models else DEFAULT_CHAT_MODEL
+        if not key:
+            if not self.app.cloud_signed_in():
+                raise CloudError(401, "signed_out", "Sign in to NanoLika Cloud first.")
+            if self.app.llm_is_cloud():
+                return None, self.settings.llm.model
+        model = model or (self.hub.chat_models[0] if self.hub.chat_models else DEFAULT_CHAT_MODEL)
         llm = self.settings.llm
         merged = LLMSettings(
             provider="openai",
             model=model,
             base_url=model_url(self.hub.cloud.base_url),
-            api_key=self.app.vault.get(CLOUD_KEY) or "",
+            api_key=key or self.app.vault.get(CLOUD_KEY) or "",
             tool_mode="auto",
             stream=llm.stream,
             temperature=llm.temperature,

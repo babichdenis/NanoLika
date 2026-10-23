@@ -15,7 +15,7 @@
     GET  /v1/me/sessions                                        → live sign-ins (device, via, when; the current one marked)
     DELETE /v1/me/sessions/{prefix}                             → 204 (sign one device out)
     GET  /v1/me/events                                          → the account's own timeline (sign-ins, password changes…)
-    POST /v1/me/contribute {on}                                 → Data controls: "help improve NanoLika's AI models" — keep the text of my chat turns (the default for new accounts is IMPROVE_DEFAULT)
+    POST /v1/me/contribute {on}                                 → Data controls: "help improve NanoLika's AI models" — keep the text of my chat turns (new accounts start off and require an explicit choice)
     DELETE /v1/me/samples                                       → delete every turn kept from me
     GET  /v1/sync/state                                         → 0.19: {enabled, cursor, counts, limits, working[]} — conversation sync between the account's devices
     PUT  /v1/sync/state       {enabled}                         → the switch; off deletes everything stored
@@ -445,6 +445,14 @@ def create_app(
         if authorization and authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
         return cloud.authenticate(token)
+
+    from .payments import install as install_payments
+
+    install_payments(app, cloud, caller_dep)
+
+    from .bot_gateway import install as install_bot_gateway
+
+    install_bot_gateway(app, cloud, caller_dep)
 
     def upstream_headers() -> dict[str, str]:
         if not settings.upstream_key:
@@ -903,16 +911,17 @@ def create_app(
         # For an account that opted in, the turn is kept once it is answered (service.keep_sample)
         # with the platform and language hints from the headers and, since 0.10, the address
         # (the export for training drops the address along with the account id).
+        collect_sample = caller.contribute and body.get("store") is not False
         sample_meta = (
             {
                 "ua": (request.headers.get("user-agent") or "")[:120],
                 "lang": (request.headers.get("accept-language") or "")[:40],
                 "ip": client_ip(request),
             }
-            if caller.contribute
+            if collect_sample
             else None
         )
-        sample_messages = body.get("messages") if caller.contribute and isinstance(body.get("messages"), list) else []
+        sample_messages = body.get("messages") if collect_sample and isinstance(body.get("messages"), list) else []
 
         if not stream:
             try:
@@ -1391,6 +1400,10 @@ def create_app(
     def admin_dep(x_admin_token: str | None = Header(default=None)) -> None:
         if not settings.admin_token or not secrets.compare_digest((x_admin_token or "").encode(), settings.admin_token.encode()):
             raise CloudError(401, "admin", "admin token required")
+
+    from .avatar_releases import install_avatar_releases
+
+    install_avatar_releases(app, settings, admin_dep)
 
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])
     async def admin_accounts() -> dict:
@@ -1945,5 +1958,18 @@ def create_app(
         if request is not None:
             request.state.error_code = str(body["error"]["code"])
         return JSONResponse(status_code=status, content=body)
+
+    web_client = Path(__file__).with_name("web_client")
+    app.mount("/web", StaticFiles(directory=web_client, html=True, check_dir=False), name="web-client")
+
+    @app.middleware("http")
+    async def web_client_headers(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/web" or request.url.path.startswith("/web/"):
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        return response
 
     return app

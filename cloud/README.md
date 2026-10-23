@@ -181,8 +181,9 @@ for the full list. The ones that matter:
 | `SIGNUP_DOMAIN_ALLOW` | empty | comma-separated domains that join the built-in list of unlimited ones, your company's or school's for instance |
 | `SIGNUP_DOMAIN_BLOCK` | empty | comma-separated disposable mail domains blocked from opening new accounts in addition to the built-in blocklist (`DEFAULT_SIGNUP_DOMAIN_BLOCK`); `SIGNUP_DOMAIN_ALLOW` overrides an entry |
 | `REPO_URL` | `https://github.com/nano-muse/nanoMuse` | the repository the apps ask people to star, in `/v1/config` |
-| `IMPROVE_DEFAULT` | `0` | what *Help improve nanoMuse's AI models* (Data controls) starts as for accounts created from now on: `1` = on until the person turns it off, `0` = off until they turn it on; existing accounts keep their setting. State it in your privacy policy |
-| `PRIVACY_URL` | `https://nanomuse.cn/privacy/` | the policy the apps link from Data controls and the sign-in pages — the one that says what this relay keeps and its default |
+| `IMPROVE_DEFAULT` | ignored | legacy setting; new accounts always start with sample capture off and require a separate user choice |
+| `REGISTRATION_HOLD` | `0` | `1` refuses new identifiers before OTP storage/sending across normal, bot and linking paths; existing users keep working. Restart after changing it. Does not establish legal readiness |
+| `PRIVACY_URL` | `https://nanolika.ru/privacy.html` | the policy the apps link from Data controls and the sign-in pages — the one that says what this relay keeps and its default |
 | `INVITE_URL` | `https://nanomuse.cn/web/?invite=` | the link the apps offer to share; the code is appended |
 | `OWN_KEY_DOCS` | `https://nanomuse.cn/own-key` | the guide the apps open for bringing one's own key or signing in with a plan (every provider by region, what each covers) |
 | `OPENROUTER_URL` | `https://openrouter.ai/keys` | the page for a key from OpenRouter, the way on for people outside mainland China (0.17) — the apps order the two by the person's `region` |
@@ -789,18 +790,15 @@ person wrote, what the model answered and the tool calls it chose, plus the
 model id, token counts and the app and language headers. Never the system
 prompt (the person's memory, SOUL and instructions), never what a tool
 returned (their files, their screen, what another app showed), never a
-picture, a clip or a voice note (a marker stands where one was), and never
-next to who they are: a sample carries the account id only and the export
+picture, a clip or a voice note (a marker stands where one was), and are pseudonymous, not anonymous: a sample carries the account id and the export
 (`GET /v1/admin/samples/export`, JSON lines) leaves even that out. The person
 sees the count, turns the switch off at any time (nothing more is kept; what
 was kept stays counted so they know there is something to delete) and deletes
 what was kept with `DELETE /v1/me/samples`; deleting the account deletes them
-too. `IMPROVE_DEFAULT` is what an account **created from now on** starts with —
-`0` (the code's default) off until the person turns it on, `1` on until they
-turn it off; an account from before keeps its own setting, and a default-on
-account's timeline says `contribute.default` rather than `contribute.on`, so
-the operator can tell a choice from a default. Say the default in the privacy
-policy you link as `PRIVACY_URL`; the apps show it next to the switch. The
+too. New accounts start with sample capture off. The legacy `IMPROVE_DEFAULT`
+setting no longer enables capture. A historical `contribute.default` event is
+not an explicit choice; only a separate Data controls action permits new samples.
+State the processing purpose in the policy linked as `PRIVACY_URL`. The
 operator's page has a *Data controls* panel from `GET /v1/admin/data`: how many
 accounts have the switch on (and how many ever turned it off), turns kept by
 day, model and app, switches turned on / default-on / off / deleted by day,

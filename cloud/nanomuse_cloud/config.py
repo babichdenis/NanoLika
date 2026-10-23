@@ -613,11 +613,11 @@ class Settings:
     # Data controls (0.9): "Help improve NanoLika's AI models" keeps the text of an
     # account's chat turns — what the person wrote and what the model answered, the
     # model's tool calls, never the system prompt, a tool's result or a picture — for
-    # the community's own model. IMPROVE_DEFAULT is what an account *created from now
-    # on* starts with (1 = on until the person turns it off under Settings → Data
-    # controls; 0 = off until they turn it on). Accounts from before keep their own
-    # setting either way. State the default in the relay's privacy policy.
-    improve_default: bool = field(default_factory=lambda: _env("IMPROVE_DEFAULT", "0") in ("1", "true", "yes"))
+    # the community's own model. This additional purpose requires an explicit choice.
+    # Legacy constructor field retained for compatibility; never enables collection.
+    improve_default: bool = False
+    # Pause new identities across email, bot and linking while infrastructure is prepared.
+    registration_hold: bool = field(default_factory=lambda: _env("REGISTRATION_HOLD", "0") in ("1", "true", "yes"))
     usd_cny: float = field(default_factory=lambda: float(_env("USD_CNY", "7.1")))
     # Rubles, what the operator's money really costs (nanolika): RUB_PER_USD is the price of
     # a dollar the operator buys at — his own rate, not the market's — and TOPUP_FEE_PCT is
@@ -637,7 +637,7 @@ class Settings:
     openrouter_url: str = field(default_factory=lambda: _env("OPENROUTER_URL", "https://openrouter.ai/keys"))
     # PRIVACY_URL is the policy the apps link from Data controls and the sign-in
     # pages — the one that states what this relay keeps and its default above.
-    privacy_url: str = field(default_factory=lambda: _env("PRIVACY_URL", "https://nanolika.ru/privacy/"))
+    privacy_url: str = field(default_factory=lambda: _env("PRIVACY_URL", "https://nanolika.ru/privacy.html"))
     # REPO_URL is the project's repository, which the apps point to when they ask for a
     # star — at the first sign-in, when the allowance is used up, after the first task.
     repo_url: str = field(default_factory=lambda: _env("REPO_URL", "https://nanolika.ru/source"))

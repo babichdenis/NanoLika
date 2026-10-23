@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,7 @@ class Sentinel:
         vault: CredentialVault | None = None,
         persistent_approvals_file: Path | None = None,
     ):
+        self.channel_mode: Callable[[str], str] = lambda _: ""
         self.settings = settings
         self.policy = Policy(settings)
         self.audit = audit
@@ -169,7 +171,10 @@ class Sentinel:
         key = grant_key(self.APP_TOOL, app_id)
         task = _current_task.get()
         conversation = task.conversation_id if task else None
-        if self.settings.mode == "auto":
+        mode = self.channel_mode(task.conversation_id if task else "")
+        if mode in {"read-only", "workspace-write"}:
+            return False
+        if mode == "full-access" or self.settings.mode == "auto":
             return True
         grant = self.grants.match(key, conversation)
         if grant is not None:
@@ -230,13 +235,19 @@ class Sentinel:
         task = _current_task.get()
         result_policy = self.policy.evaluate(tool.name, args, assessment, tainted=self.tainted)
         decision, reasons = result_policy.decision, list(result_policy.reasons)
+        mode = self.channel_mode(task.conversation_id if task else "")
+        if mode:
+            from nanomuse.channels.permission_mode import scoped_decision
+
+            decision = scoped_decision(mode, tool, args, assessment, decision)
+            reasons.append("conversation access: " + mode)
         approved: bool | None = None
         scope: str | None = None
 
         if decision == Decision.ASK:
             grant = (
                 None
-                if assessment.warnings
+                if assessment.warnings or mode in {"read-only", "workspace-write"}
                 else self.grants.match(key, task.conversation_id if task else None)
             )
             # auto mode skips the question, except for a call that carries a warning or
@@ -245,7 +256,7 @@ class Sentinel:
             # mode, and the gate honours it (docs/sentinel.md), so an unattended pass asks
             # or stops rather than reading a file and mailing it somewhere
             waved_through = assessment.warnings or result_policy.tainted_ask
-            if self.settings.mode == "auto" and not waved_through:
+            if self.settings.mode == "auto" and not mode and not waved_through:
                 decision = Decision.ALLOW
                 reasons.append("auto mode: approval skipped")
             elif grant is not None:

@@ -736,5 +736,21 @@
   }
 
   // ── boot ─────────────────────────────────────────────────────────
+  // A sign-in happens in one tab, but the person keeps looking at another: the browser tells the
+  // other tabs through `storage`, and a tab that never hears about it stays on the sign-in form
+  // while the account is already open next door. Same for signing out somewhere else.
+  function followStoredSession() {
+    const stored = LS.getItem("nm.key") || "";
+    if (stored === key) return;
+    key = stored;
+    hint = stored ? LS.getItem("nm.hint") || "" : "";
+    if (key) { renderMain(); connect(); return; }
+    if (ws) { try { ws.onclose = null; ws.close(); } catch (_) { /* ignore */ } ws = null; }
+    closeSheet();
+    renderSignIn();
+  }
+  addEventListener("storage", (e) => { if (!e.key || e.key === "nm.key" || e.key === "nm.hint") followStoredSession(); });
+  addEventListener("focus", followStoredSession);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) followStoredSession(); });
   if (key) { renderMain(); connect(); } else renderSignIn();
 })();

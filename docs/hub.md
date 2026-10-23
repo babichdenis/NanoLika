@@ -339,3 +339,11 @@ A phone's ordinary chat runs on the phone with its configured model provider. Cl
 On replacement of a device's socket, the relay publishes the new connection before awaiting closure of the old one. A late detach of the old connection cannot remove the replacement or its account's presence entry. Calls that were in flight on the replaced socket fail explicitly rather than waiting for their deadline.
 
 The desktop retries if the WebSocket handshake or relay welcome does not finish within 20 seconds, as well as when an established connection stops answering pings. Android ignores messages, closes and failures from a socket that has already been replaced. These rules do not make a suspended phone run in the background: Android's background restrictions and iOS's foreground limits still apply.
+
+
+MAX approval delivery accepts the channel manager language argument. A blocked approval no longer fails before showing its buttons.
+
+
+## Optional messenger permission operation
+
+New desktop runtimes accept `channel_permissions {conversation, channel, mode}` from an authenticated paired account peer after the remote-control permission check. `channel` is `telegram` or `max`, `conversation` must use the corresponding `channel-<channel>-` namespace, and `mode` is `read-only`, `workspace-write` or `full-access`. The reply contains `{mode, conversation}` only after the session preset service accepts it. Sessions are resolved by both peer and conversation. Unsupported presets and older clients fail explicitly. Older clients can still process ordinary tasks with their existing app settings when no messenger preset is selected. See [Messenger menu](messenger-menu.md).

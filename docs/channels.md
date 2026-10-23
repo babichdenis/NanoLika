@@ -172,6 +172,22 @@ Kaliningrad" there and the file tool, the goals, a reminder and the same memory 
 behind it; the app, when you install it later and sign in to the same account, shows
 that conversation under *Telegram · you*.
 
+## A public bot whose chats pay their own way
+
+A bot anyone may write to needs every chat to spend its own money, not the machine's.
+Set `cloud_per_chat = true` beside `cloud_url` (the relay) and `cloud_bot_token` (its
+`BOT_SIGNIN_TOKEN`, a secret: put `{{vault:NAME}}` there, never the value) in the
+channel's settings, and each message asks the relay's bot door for that chat's account
+(`POST /v1/bot/signin`, see [cloud.md](cloud.md)): the turn runs under that account's
+key and is charged to it, and the chat hears about the end of its allowance in words
+instead of nothing happening. The key is kept in memory for ten minutes, so a chat
+writing twice does not sign in twice. Without these settings the chat runs on the
+configured model, as every chat did before.
+
+A public bot should also have `first_chat_claims` off and an empty `allow_from`: the
+door is the relay's, and it is the relay that opens an account, gives the trial
+balance and refuses when it is gone.
+
 ## How a chat maps to the Muse
 
 Each chat is one conversation of the agent, with the id
@@ -244,3 +260,15 @@ front of the text.
 | `nanomuse channels …` says the server refused the token | `server.token` in config.toml differs from the running server's; or run it with the same `--config` |
 
 `nanomuse channels status --json` prints the same view the app gets.
+
+
+Channel introductions and short greetings are deterministic and do not run a model or device tools. An operator may configure a shared brand illustration with NANOLIKA_WELCOME_CONFIG, pointing to a JSON file with telegram_photo and max_image_url (or max_image_token). Artwork delivery failures fall back to text. Pairing and group permissions still apply. Configure shell, email and device actions to require permission. This does not implement public bot account onboarding or automatic desktop session creation.
+
+
+Use /computer followed by a task for an explicit computer handoff. It selects exactly one online computer with task capability from the account, excludes this runtime and phones, and refuses ambiguity. Its conversation identifier is passed through to keep bot chats separate on the desktop. Failed explicit handoffs are not repeated by the server model. Ordinary text continues to use the channel conversation.
+
+
+New Telegram and MAX conversations use the channel name followed by nanoLika. New computer-task sessions use the channel name and a computer symbol. Reusing a task session does not overwrite a user rename. Desktop archive hides the session and stops current activity; it does not unpair the bot. Later messages continue the mapped session, which remains archived until restored, rather than creating a duplicate.
+
+
+Telegram and MAX linked conversations are bidirectional. A synced user turn from a computer is marked as coming from the computer; its assistant turn is sent as the answer, only to the approved chat whose conversation matches. Ordinary conversations are not broadcast. The runtime stores bounded hashed delivery receipts and ignores history older than initial activation, so enabling the bridge does not replay old plans. Receipts contain no message text or files. Three bounded delivery attempts are made; failures leave a channel error and no successful receipt. This is not exactly-once delivery during ambiguous network failures.
