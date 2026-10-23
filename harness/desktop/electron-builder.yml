@@ -86,7 +86,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: resources/app-icon.png
+  icon: resources/app-icon.ico
   # electron-updater's feed: with a publish config in place electron-builder writes the update
   # metadata (latest.yml: the version, the installer's name and its SHA-512) and the
   # .exe.blockmap next to the installer, and `npm run dist` passes --publish never so nothing
@@ -107,11 +107,12 @@ nsis:
   include: resources/installer.nsh
   # мастер установки: фирменная боковая панель и шапка (из тех же цветов, что сайт),
   # русский язык первым и подпись под кнопкой
-  installerSidebar: resources/installer-sidebar.bmp
-  installerHeader: resources/installer-header.bmp
-  installerIcon: resources/app-icon.png
-  installerHeaderIcon: resources/app-icon.png
-  language: "1059"
+  installerIcon: resources/app-icon.ico
+  installerHeaderIcon: resources/app-icon.ico
+  language: "1049"
+  installerLanguages: [ru_RU, en_US, zh_CN]
+  uninstallerSidebar: resources/installer-sidebar.bmp
+  uninstallerIcon: resources/app-icon.ico
   unicode: true
   perMachine: false
   allowToChangeInstallationDirectory: true
