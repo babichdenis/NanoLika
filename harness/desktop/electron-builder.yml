@@ -100,6 +100,14 @@ win:
     url: "https://nanolika.ru/dl/win/"
 nsis:
   oneClick: false
+  # мастер установки: фирменная боковая панель и шапка (из тех же цветов, что сайт),
+  # русский язык первым и подпись под кнопкой
+  installerSidebar: resources/installer-sidebar.bmp
+  installerHeader: resources/installer-header.bmp
+  installerIcon: resources/app-icon.png
+  installerHeaderIcon: resources/app-icon.png
+  language: "1059"
+  unicode: true
   perMachine: false
   allowToChangeInstallationDirectory: true
   shortcutName: NanoLika
