@@ -929,6 +929,11 @@ class Database:
         with self._lock:
             return self._conn.execute("SELECT * FROM subscriptions WHERE account_id=?", (account_id,)).fetchone()
 
+    def clear_subscription(self, account_id: str) -> None:
+        """Снять тариф: возврат уменьшил сумму, и права больше не оплачены."""
+        with self.tx() as c:
+            c.execute("DELETE FROM subscriptions WHERE account_id=?", (account_id,))
+
     def set_subscription(
         self,
         account_id: str,

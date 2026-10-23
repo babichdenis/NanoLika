@@ -1015,7 +1015,7 @@ class Cloud:
         state = self.plan_state(account_id) or {}
         return {"plan": state, "credited_uy": paid_uy, "credited_rub": plan["price_rub"]}
 
-    def payment_grant(self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment") -> dict[str, Any]:
+    def payment_grant(self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment", *, credit: bool = True) -> dict[str, Any]:
         """Оплата становится тарифом: права — по уровню суммы, токены — по тому, что заплатили.
 
         Тариф задаёт две вещи: разрешения (проход через релей и связь устройств) и срок.
@@ -1026,8 +1026,8 @@ class Cloud:
         account = self.db.account(account_id)
         if account is None:
             raise CloudError(404, "no_account", "No such account")
-        paid_uy = self.s.rub_to_uy(rub_amount)
-        if paid_uy <= 0:
+        paid_uy = self.s.rub_to_uy(rub_amount) if credit else 0
+        if credit and paid_uy <= 0:
             raise CloudError(400, "no_rate", "This relay has no ruble rate (RUB_PER_USD), so a tariff cannot be granted")
         now_ts = self.clock()
         current = self.plan_state(account_id)
@@ -1050,10 +1050,19 @@ class Cloud:
             expires_at,
             paid_uy,
         )
-        self.db.set_pool(account_id, delta_uy=paid_uy, note=f"payment → {tier['id']}")
+        if paid_uy:
+            self.db.set_pool(account_id, delta_uy=paid_uy, note=f"payment → {tier['id']}")
         self.db.add_event(account_id, "plan.bought", str(tier["id"]))
         self.db.audit_add(actor, "plan.grant", account_id[:8], f"{tier['id']} · ₽{rub_amount:g}")
         return {"plan": self.plan_state(account_id) or {}, "credited_uy": paid_uy}
+
+    def payment_revoke(self, account_id: str, actor: str = "payment") -> None:
+        """Возврат уменьшил сумму ниже любого тарифа: права снимаются, деньги остаются в кошельке."""
+        if self.plan_state(account_id) is None:
+            return
+        self.db.clear_subscription(account_id)
+        self.db.audit_add(actor, "plan.revoke", account_id[:8], "возврат")
+        log.info("account %s: tariff revoked after a refund", account_id[:8])
 
     def discount(self, money_uy: int, account_id: str) -> int:
         """What a running tariff takes off a text turn: 20 % on Лика and Лика+, 30 % on Лика
