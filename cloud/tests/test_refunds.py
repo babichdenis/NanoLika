@@ -106,7 +106,7 @@ async def test_refunding_package_restores_only_previously_funded_rights(monkeypa
 
     _, client, user, p, _, bank = await setup(monkeypatch)
     monkeypatch.setattr(module.time, "time", lambda: 100000)
-    earlier = await order(client, user, "earlier", plan="plus")
+    earlier = await order(client, user, "earlier", plan="lika-plus")
     p.apply(notice(p, earlier), signed=True)
     caller = p.cloud.authenticate(user["api_key"])
     original_expiry = p.wallet(caller)["expires_at"]
@@ -117,7 +117,7 @@ async def test_refunding_package_restores_only_previously_funded_rights(monkeypa
     p.apply(notice(p, topup), signed=True)
     p.apply(bank_state(p, bank, upgraded, "REFUNDED", 0), reconciled=True)
     wallet = p.wallet(caller)
-    assert wallet["plan"] == "plus" and wallet["expires_at"] == original_expiry
+    assert wallet["plan"] == "lika-plus" and wallet["expires_at"] == original_expiry
     assert wallet["balance_kopecks"] == 149000 + 30000
     p.apply(bank_state(p, bank, earlier, "REFUNDED", 0), reconciled=True)
     wallet = p.wallet(caller)

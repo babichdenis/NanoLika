@@ -86,7 +86,7 @@ async def test_confirmation_is_exactly_once_and_demo_only(monkeypatch):
     response = await client.post("/v1/payments/orders", headers=auth(user["api_key"]), json=request)
     assert response.status_code == 200, response.text
     row = response.json()
-    assert row["amount_kopecks"] == PLANS["team"]["amount"]
+    assert row["amount_kopecks"] == 390000  # цена Лика Команда в меню релея
     again = await client.post("/v1/payments/orders", headers=auth(user["api_key"]), json=request)
     assert again.json()["order_id"] == row["order_id"] and len(calls) == 1
     # Hold is not a sale. Browser return cannot credit an account either.
@@ -104,10 +104,12 @@ async def test_confirmation_is_exactly_once_and_demo_only(monkeypatch):
     assert p.order(row["order_id"])["status"] == "CONFIRMED"
     # Authentication legitimately advances last_seen_at, even when a test crosses a second.
     # Every other field, including the real financial state, must remain unchanged.
-    after = dict(p.db.account(account))
-    assert after.pop("last_seen_at") >= before.pop("last_seen_at")
-    assert after == before  # real money untouched
-    assert p.db.subscription(account) is None
+    # Новые правила: оплата сама даёт тариф, а сумма платежа уходит в пул токенами.
+    # Кошелёк при этом хранит ровно то, что заплатили, и ничего не задваивает.
+    state = p.cloud.plan_state(account)
+    assert state is not None and state["id"] == "team"
+    assert p.wallet(p.cloud.authenticate(user["api_key"]))["balance_kopecks"] == 390000
+    assert p.db.subscription(account) is not None  # право выдано оплатой, не оператором
     await client.aclose()
 
 
@@ -148,7 +150,7 @@ async def test_getstate_reconciles_missing_webhook_and_topup_does_not_extend(mon
     headers = auth(user["api_key"])
     row = (
         await client.post(
-            "/v1/payments/orders", headers=headers, json={"plan": "plus", "accept_terms": True, "idempotency_key": "idempotent_fixture_5"}
+            "/v1/payments/orders", headers=headers, json={"plan": "lika-plus", "accept_terms": True, "idempotency_key": "idempotent_fixture_5"}
         )
     ).json()
     bank[p.order(row["order_id"])["payment_id"]]["Status"] = "CONFIRMED"
@@ -231,3 +233,21 @@ async def test_the_operator_grants_the_plan_of_a_paid_order_once(monkeypatch):
     assert body["granted_by"] == "ops@console"
     again = await client.post(f"/v1/admin/payments/{order_id}/plan", headers={"X-Admin-Token": "admin"})
     assert again.status_code == 409
+
+async def test_the_tier_follows_the_money_and_the_partial_payments_count(monkeypatch):
+    """Правило владельца: уровень прав — по накопленной сумме, токены — по тому, что заплатили."""
+    app, client, user, p, calls, _ = await setup(monkeypatch)
+    keys = auth(user["api_key"])
+    # первый платёж ниже среднего тарифа: права не выдаются
+    small = (await client.post("/v1/payments/orders", headers=keys, json={"plan": "lika", "accept_terms": True, "idempotency_key": "tier_small_fixture"})).json()
+    await client.post("/v1/payments/tbank/notify", json=notice(p, small))
+    first = p.cloud.plan_state(user["account"]["id"])
+    assert first["id"] == "lika" and first["connect"] is False  # нижний тариф: связи устройств нет
+    # второй платёж доводит сумму до среднего тарифа: права появляются
+    second = (await client.post("/v1/payments/orders", headers=keys, json={"plan": "lika-plus", "accept_terms": True, "idempotency_key": "tier_middle_fixture"})).json()
+    await client.post("/v1/payments/tbank/notify", json=notice(p, second))
+    state = p.cloud.plan_state(user["account"]["id"])
+    assert state is not None and state["id"] == "lika-plus" and state["connect"] is True
+    # токены начислены по обоим платежам, а не по цене тарифа
+    wallet = p.wallet(p.cloud.authenticate(user["api_key"]))
+    assert wallet["balance_kopecks"] == small["amount_kopecks"] + second["amount_kopecks"]

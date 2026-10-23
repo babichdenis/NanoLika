@@ -1015,6 +1015,46 @@ class Cloud:
         state = self.plan_state(account_id) or {}
         return {"plan": state, "credited_uy": paid_uy, "credited_rub": plan["price_rub"]}
 
+    def payment_grant(self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment") -> dict[str, Any]:
+        """Оплата становится тарифом: права — по уровню суммы, токены — по тому, что заплатили.
+
+        Тариф задаёт две вещи: разрешения (проход через релей и связь устройств) и срок.
+        Сколько токенов начислить, решает не цена тарифа, а фактическая оплата: человек,
+        плативший частями, получает столько, сколько внёс. Поэтому сумма идёт в пул как есть,
+        а уровень тарифа берётся из меню по накопленной сумме.
+        """
+        account = self.db.account(account_id)
+        if account is None:
+            raise CloudError(404, "no_account", "No such account")
+        paid_uy = self.s.rub_to_uy(rub_amount)
+        if paid_uy <= 0:
+            raise CloudError(400, "no_rate", "This relay has no ruble rate (RUB_PER_USD), so a tariff cannot be granted")
+        now_ts = self.clock()
+        current = self.plan_state(account_id)
+        starts_at = now_ts
+        days = int(tier.get("days") or 30)
+        if current is not None and current["active"]:
+            # продление внутри срока добавляет месяц к тому, что осталось
+            starts_at = current["started_at"]
+            expires_at = max(now_ts, current["expires_at"]) + days * 86400
+        else:
+            expires_at = now_ts + days * 86400
+        self.db.set_subscription(
+            account_id,
+            str(tier["id"]),
+            str(tier["name"]),
+            float(tier["price_rub"]),
+            int(tier["discount_pct"]),
+            bool(tier["connect"]),
+            starts_at,
+            expires_at,
+            paid_uy,
+        )
+        self.db.set_pool(account_id, delta_uy=paid_uy, note=f"payment → {tier['id']}")
+        self.db.add_event(account_id, "plan.bought", str(tier["id"]))
+        self.db.audit_add(actor, "plan.grant", account_id[:8], f"{tier['id']} · ₽{rub_amount:g}")
+        return {"plan": self.plan_state(account_id) or {}, "credited_uy": paid_uy}
+
     def discount(self, money_uy: int, account_id: str) -> int:
         """What a running tariff takes off a text turn: 20 % on Лика and Лика+, 30 % on Лика
         Команда, nothing without one. `money_uy` is the money the turn would take from the

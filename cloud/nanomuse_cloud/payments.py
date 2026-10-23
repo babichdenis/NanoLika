@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .service import Caller, Cloud, CloudError
+from .service import Caller, Cloud, CloudError, log
 
 PLANS = {
     "lika": {"name": "Лика", "amount": 59000, "discount": 20, "connect": False},
@@ -128,6 +128,36 @@ class Payments:
         except (httpx.HTTPError, ValueError):
             # No response body or signed request in logs: both can contain private details.
             raise CloudError(502, "payment_bank", "Банк не подтвердил операцию. Проверьте статус заказа перед новой попыткой") from None
+
+    def plans(self) -> dict:
+        """Меню тарифов релея — один источник и для кассы, и для выдачи прав.
+
+        Раньше касса продавала свой захардкоженный список, а релей начислял по меню из
+        `PLANS`: если идентификаторы не совпадали, человек платил и не получал тариф.
+        """
+        menu = {row["id"]: row for row in self.cloud.plan_menu()}
+        if menu:
+            return menu
+        return {
+            key: {"id": key, "name": row["name"], "price_rub": row["amount"] / 100,
+                  "discount_pct": row["discount"], "connect": row["connect"], "days": 30}
+            for key, row in PLANS.items()
+        }
+
+    def tier_for_balance(self, balance_kopecks: int) -> dict | None:
+        """Какой тариф человек заработал накопленной суммой: самый дорогой из доступных."""
+        affordable = [row for row in self.plans().values() if int(round(float(row["price_rub"]) * 100)) <= balance_kopecks]
+        return max(affordable, key=lambda r: float(r["price_rub"])) if affordable else None
+
+    def _grant_for_payment(self, row: dict) -> dict | None:
+        """После оплаты: уровень прав по сумме на кошельке, токены — по этой оплате."""
+        with self.db.tx() as c:
+            wallet = c.execute("SELECT balance FROM tbank_demo_wallets WHERE account_id=?", (row["account_id"],)).fetchone()
+        balance = int(wallet["balance"]) if wallet is not None else 0
+        tier = self.tier_for_balance(balance)
+        if tier is None:
+            return None
+        return self.cloud.payment_grant(row["account_id"], tier, row["amount"] / 100, actor="payment")
 
     def orders_page(
         self, *, days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0
@@ -235,10 +265,12 @@ class Payments:
         self.ready()
         if not request.accept_terms:
             raise CloudError(400, "payment_terms", "Подтвердите ознакомление с условиями тестового оформления")
+        menu = self.plans()
         if request.plan:
-            if request.plan not in PLANS or request.amount:
+            chosen = menu.get(request.plan)
+            if chosen is None or request.amount:
                 raise CloudError(400, "payment_plan", "Выберите известный пакет без произвольной цены")
-            amount = PLANS[request.plan]["amount"]
+            amount = int(round(float(chosen["price_rub"]) * 100))
         else:
             amount = cents(request.amount)
         with self.db.tx() as c:
@@ -266,7 +298,7 @@ class Payments:
             {
                 "OrderId": order_id,
                 "Amount": amount,
-                "Description": "nanoLika DEMO: " + (PLANS[request.plan]["name"] if request.plan else "пополнение"),
+                "Description": "nanoLika DEMO: " + (menu[request.plan]["name"] if request.plan else "пополнение"),
                 "NotificationURL": self.public_base + "/v1/payments/tbank/notify",
                 "SuccessURL": self.public_base + "/payments/checkout?order=" + order_id,
                 "FailURL": self.public_base + "/payments/checkout?order=" + order_id,
@@ -391,6 +423,20 @@ class Payments:
                 self._rebuild_plan(c, row["account_id"])
             elif not row["credited"] and row["status"] not in {"REJECTED", "AUTH_FAIL", "DEADLINE_EXPIRED"}:
                 c.execute("UPDATE tbank_orders SET status=?,payment_id=? WHERE id=?", (status, payment_id, order_id))
+        settled = self.order(order_id)
+        # Оплата сама даёт права: уровень тарифа — по накопленной сумме, токены — по платежу.
+        # Сбой выдачи не отменяет платёж: он виден в списке заказов без отметки, и его можно
+        # повторить кнопкой.
+        if settled["credited"] and not settled["plan_granted_at"]:
+            try:
+                granted = self._grant_for_payment(settled)
+                if granted is not None:
+                    with self.db.tx() as c:
+                        c.execute("UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by='payment' WHERE id=?", (int(time.time()), order_id))
+            except CloudError as exc:
+                log.warning("payment %s: tariff not granted (%s: %s)", order_id[:8], exc.code, exc.message)
+            except Exception:
+                log.exception("payment %s: tariff grant failed", order_id[:8])
         return self.order(order_id)
 
     def view(self, row: dict) -> dict:
