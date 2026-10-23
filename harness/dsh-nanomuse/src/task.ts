@@ -99,6 +99,16 @@ export function preview(name: string, args: string): string {
   return shown ? `${name}: ${shown}` : name
 }
 
+/** Stable bot titles contain the channel and purpose, never a relay host name. */
+export function taskTitle(from: Caller, conversation: string, channel: unknown): string {
+  const source = channel === 'telegram' || channel === 'max'
+    ? channel
+    : conversation.startsWith('channel-telegram-') ? 'telegram'
+    : conversation.startsWith('channel-max-') ? 'max' : ''
+  if (source) return `${source === 'telegram' ? 'Telegram' : 'MAX'} · 💻`
+  return `From ${from.name || from.id}`
+}
+
 export class TaskRunner {
   private readonly bySession = new Map<SessionId, Run>()
   private readonly byCall = new Map<string, Run>()
@@ -139,7 +149,7 @@ export class TaskRunner {
     if (!text) throw new HubError('usage', 'text is required')
     const from = call.from
     const conversation = String(args.conversation ?? '').trim() || from.id || 'device'
-    const sessionId = await this.sessionFor(from, conversation)
+    const sessionId = await this.sessionFor(from, conversation, taskTitle(from, conversation, args.channel))
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw new HubError('failed', `the session could not be opened: ${String(resolved.error)}`)
     const agent = resolved.agent
@@ -175,6 +185,22 @@ export class TaskRunner {
     }
   }
 
+  /** A trusted paired-device request changes only its own channel conversation. */
+  async permissions(args: Record<string, unknown>, call: IncomingCall): Promise<Record<string, unknown>> {
+    const mode = String(args.mode ?? '')
+    if (!['read-only', 'workspace-write', 'full-access'].includes(mode)) throw new HubError('usage', 'unknown access mode')
+    const conversation = String(args.conversation ?? '').trim()
+    const channel = String(args.channel ?? '')
+    if (!['telegram', 'max'].includes(channel) || !conversation.startsWith(`channel-${channel}-`)) throw new HubError('usage', 'a channel conversation is required')
+    const sessionId = await this.sessionFor(call.from, conversation, taskTitle(call.from, conversation, channel))
+    const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
+    if ('error' in resolved) throw new HubError('failed', 'the conversation could not be opened')
+    const presets = this.ctx.get('permissionPresets') as { names: readonly string[]; set(session: Session, name: string): void } | undefined
+    if (!presets?.names.includes(mode)) throw new HubError('not_allowed', 'this access preset is unavailable')
+    presets.set(resolved.agent.session, mode)
+    return { mode, conversation }
+  }
+
   /** `stop {call}` → `{stopped}`: the run opened for that call ends; `conversation` picks by place instead. */
   async stop(args: Record<string, unknown>, call: IncomingCall): Promise<Record<string, unknown>> {
     const byCall = this.byCall.get(String(args.call ?? ''))
@@ -193,7 +219,7 @@ export class TaskRunner {
     return { ok: true }
   }
 
-  private async sessionFor(from: Caller, conversation: string): Promise<SessionId> {
+  private async sessionFor(from: Caller, conversation: string, title: string): Promise<SessionId> {
     const k = key(from.id, conversation)
     const known = this.conversations.get(k) ?? (this.options.recall?.(k) as SessionId | undefined)
     if (known) {
@@ -205,7 +231,6 @@ export class TaskRunner {
       }
     }
     const created = await this.ctx.sessionController.create({ agentPreset: 'nanomuse' })
-    const title = `From ${from.name || from.id}`
     await this.ctx.sessionController.rename({ sessionId: created.sessionId, title }).catch(() => undefined)
     this.conversations.set(k, created.sessionId)
     this.options.remember?.(k, created.sessionId)

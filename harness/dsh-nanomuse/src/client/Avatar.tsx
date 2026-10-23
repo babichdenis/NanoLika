@@ -27,6 +27,8 @@ import { createElement as h, useEffect, useRef, useState, type CSSProperties, ty
 import { useLive, type Live, type LiveMotion, type LiveOwnClip, type LiveProfile } from './live.ts'
 import type { Translate } from './api.ts'
 
+import { useOperatorAvatar } from './operator-avatar.ts'
+
 import { BUILTIN_AVATAR_REVISION } from './avatar-revision.ts'
 
 export type Mood = 'idle' | 'working' | 'waiting' | 'happy' | 'error'
@@ -35,8 +37,6 @@ export type Mood = 'idle' | 'working' | 'waiting' | 'happy' | 'error'
 const CLIP_MIN_PX = 44
 /** Clips that did not load: the still, and no second request. */
 const noClip = new Set<string>()
-// NanoLika: the clips stay on even under Reduce Motion — the face moving is the product.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
@@ -113,9 +113,12 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const live = useLive()
   const visible = useVisible()
   const video = useRef<HTMLVideoElement | null>(null)
-  const candidate = still || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion)
+  const standard = profile?.avatar !== 'face' && profile?.avatar !== 'emoji' && !live.ownClip && !live.ownClips?.[mood]
+  const operator = useOperatorAvatar(standard)
+  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? operator?.clips[mood] ?? clipUrl(profile, mood, live.motion)
   const clip = candidate && !noClip.has(candidate) ? candidate : null
-  const poster = stillUrl(profile, mood, live.ownClip, live.ownClips)
+  const localPoster = stillUrl(profile, mood, live.ownClip, live.ownClips)
+  const poster = operator?.stills[mood] ?? localPoster
   // the whole face moves as well as the clip inside it: the clips are short loops cut in
   // different poses, so the frame breathing and swaying carries the eye over the cut
   const motion = still || reducedMotion ? '' : mood === 'working' ? ' nm-avatar-working' : mood === 'waiting' ? ' nm-avatar-waiting' : mood === 'idle' ? ' nm-avatar-idle' : ''
@@ -149,7 +152,7 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
       })
     : emoji
       ? h('span', { className: 'nm-avatar-emoji', style: { background: profile.color || '#0064d4', fontSize: Math.round(size * 0.58), lineHeight: `${size}px` } }, profile.emoji || '✨')
-      : h('img', { src: poster, alt: '', width: size, height: size, draggable: false })
+      : h('img', { src: poster, onError: (event: { currentTarget: HTMLImageElement }) => { if (event.currentTarget.getAttribute('src') !== localPoster) event.currentTarget.src = localPoster }, alt: '', width: size, height: size, draggable: false })
 
   return h(
     'span',

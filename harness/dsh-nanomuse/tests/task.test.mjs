@@ -4,7 +4,7 @@
 // `stop {call}` cancelling the run, busy and timeout handling.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { MIRROR_NOTE, TaskRunner, frame, preview, textOf } from '../lib/task.js'
+import { MIRROR_NOTE, TaskRunner, frame, preview, taskTitle, textOf } from '../lib/task.js'
 
 /** The slice of a dsh Context the runner touches. */
 function fakeContext() {
@@ -246,4 +246,54 @@ test('a closed gate refuses a task with the usual busy error, and opens again', 
   h.emit('session-1', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
   await p
   off()
+})
+
+
+test('bot task titles identify channels and computer purpose without private hosts', () => {
+  const caller = { id: 'fixture-relay', name: 'fixture-host' }
+  assert.equal(taskTitle(caller, 'channel-telegram-fixture', undefined), 'Telegram · 💻')
+  assert.equal(taskTitle(caller, 'channel-max-fixture', undefined), 'MAX · 💻')
+  assert.equal(taskTitle(caller, 'fixture-thread', 'max'), 'MAX · 💻')
+  assert.equal(taskTitle(caller, 'fixture-thread', 'unknown'), 'From fixture-host')
+})
+
+test('bot tasks reuse their session and preserve a user rename', async () => {
+  const h = fakeContext()
+  const { r, off } = runner(h)
+  const first = r.task({ text: 'reply only', conversation: 'channel-max-fixture', channel: 'max' }, fakeCall('bot-first'))
+  await tick()
+  assert.equal(h.ctx.sessionController.renamed[0].title, 'MAX · 💻')
+  h.emit('session-1', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  await first
+  h.agents.get('session-1').status = 'idle'
+  await h.ctx.sessionController.rename({ sessionId: 'session-1', title: 'My own title' })
+  const count = h.ctx.sessionController.renamed.length
+  const second = r.task({ text: 'reply again', conversation: 'channel-max-fixture', channel: 'max' }, fakeCall('bot-second'))
+  await tick()
+  assert.equal(h.ctx.sessionController.created.length, 1)
+  assert.equal(h.ctx.sessionController.renamed.length, count)
+  h.emit('session-1', 'turn/end', { turn: 2, reason: { kind: 'completed' } })
+  await second
+  off()
+})
+
+test('channel access uses the installed session preset and does not cross conversations', async () => {
+  const h = fakeContext()
+  const changed = []
+  h.ctx.get = (name) => name === 'permissionPresets' ? { names: ['read-only', 'workspace-write', 'full-access'], set: (session, mode) => changed.push([session.id, mode]) } : undefined
+  const { r } = runner(h)
+  const first = await r.permissions({ conversation: 'channel-telegram-chat-one', channel: 'telegram', mode: 'full-access' }, fakeCall('p1'))
+  assert.equal(first.mode, 'full-access')
+  await r.permissions({ conversation: 'channel-max-chat-two', channel: 'max', mode: 'read-only' }, fakeCall('p2'))
+  assert.deepEqual(changed, [['session-1', 'full-access'], ['session-2', 'read-only']])
+  assert.equal(h.agents.get('session-1').sent.length, 0)
+})
+
+test('channel access rejects unsupported presets and non-channel targets', async () => {
+  const h = fakeContext()
+  h.ctx.get = () => ({ names: ['read-only'], set() { throw new Error('must not set') } })
+  const { r } = runner(h)
+  await assert.rejects(r.permissions({ conversation: 'channel-telegram-chat', channel: 'telegram', mode: 'full-access' }, fakeCall('p1')), /unavailable/)
+  await assert.rejects(r.permissions({ conversation: 'main', channel: 'telegram', mode: 'read-only' }, fakeCall('p2')), /channel conversation/)
+  await assert.rejects(r.permissions({ conversation: 'channel-max-chat', channel: 'telegram', mode: 'read-only' }, fakeCall('p3')), /channel conversation/)
 })

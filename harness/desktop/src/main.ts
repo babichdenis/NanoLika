@@ -2143,6 +2143,11 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     website: "https://nanolika.ru/",
   });
   app.whenReady().then(async () => {
+    // macOS starts the app hidden when the login item asks for openAsHidden, and LaunchServices
+    // then records it as a UIElement: no Dock tile, no application menu, and no Quit anywhere —
+    // the app is running while looking like it is not there at all (2026-10-23). Bring it back
+    // to a regular app first: the Dock, the menu bar with Quit and ⌘Q all follow from this.
+    if (process.platform === "darwin" && app.dock) app.dock.show();
     registerBridge();
     registerOverlays();
     buildMenu();

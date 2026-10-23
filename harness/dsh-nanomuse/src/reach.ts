@@ -82,7 +82,7 @@ export function apply(ctx: Context): void {
       ctx.tools.register(
         defineTool({
           name: 'devices',
-          description: "The person's other devices on NanoLika Cloud (phone, other computers): names, kinds, online or not. Call before the device_* tools when unsure which device is which.",
+          description: "The person's other devices on NanoLika Cloud (phone, other computers): names, kinds, app control connection status. Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery. Call before the device_* tools when unsure which device is which.",
           parameters: {},
           output: {
             schema: {
@@ -98,7 +98,7 @@ export function apply(ctx: Context): void {
               const list = (value.devices ?? []) as unknown as HubDevice[]
               if (!value.connected) return [{ type: 'text', text: cloud.signedIn ? 'Not connected to the hub right now.' : 'Not signed in to NanoLika Cloud.' }]
               if (list.length === 0) return [{ type: 'text', text: 'No other device is signed in to this account.' }]
-              return [{ type: 'text', text: list.map((d) => `- ${describe(d)}`).join('\n') }]
+              return [{ type: 'text', text: 'Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery.\n' + list.map((d) => `- ${describe(d)}`).join('\n') }]
             },
           },
           isConcurrencySafe: () => true,
@@ -376,6 +376,7 @@ export function apply(ctx: Context): void {
             const profile = cloud.profile.current()
             const lines = [`The person calls you ${profile.name}; answer to that name.`]
             if (profile.description) lines.push(`Your look, as the person drew it: ${profile.description.slice(0, 200)}.`)
+            lines.push('Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery.')
             if (hub.connected) {
               const others = hub.devices.filter((d) => d.id !== hub.deviceId && d.kind !== 'web')
               lines.push(

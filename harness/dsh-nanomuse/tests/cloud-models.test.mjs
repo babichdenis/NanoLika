@@ -198,7 +198,7 @@ test('signed out, the hands take the first own sighted model; a local server wit
     assert.equal(env.NANOMUSE_GUI_MODEL, 'qwen3-vl:8b')
     assert.equal(env.NANOMUSE_GUI_BASE_URL, server.url)
     assert.equal(env.NANOMUSE_GUI_API_KEY, '')
-    assert.deepEqual(await out.svc.handsEnv().then((e) => Object.keys(e).sort()), ['NANOMUSE_GUI_API_KEY', 'NANOMUSE_GUI_BASE_URL', 'NANOMUSE_GUI_ENABLED', 'NANOMUSE_GUI_MODEL', 'NANOMUSE_GUI_PROVIDER'])
+    assert.deepEqual(await out.svc.handsEnv().then((e) => Object.keys(e).sort()), ['NANOLIKA_CLOUD_BASE', 'NANOLIKA_DESKTOP_ACCOUNT', 'NANOMUSE_CLOUD_KEY', 'NANOMUSE_GUI_API_KEY', 'NANOMUSE_GUI_BASE_URL', 'NANOMUSE_GUI_ENABLED', 'NANOMUSE_GUI_MODEL', 'NANOMUSE_GUI_PROVIDER'])
   } finally {
     await server.close()
     await out.done()

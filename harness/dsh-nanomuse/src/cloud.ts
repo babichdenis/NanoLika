@@ -801,6 +801,10 @@ export default class NanomuseCloud extends Service {
           }),
         'nanomuse cloud: task',
       )
+      ctx.effect(() => this.hub.handle('channel_permissions', async (args, call) => {
+        await this.permit(call.from, 'channel_permissions', 'Change access for this messenger conversation')
+        return runner.permissions(args, call)
+      }), 'nanomuse cloud: channel permissions')
       ctx.effect(() => this.hub.handle('stop', (args, call) => runner.stop(args, call)), 'nanomuse cloud: stop')
       ctx.effect(() => this.hub.handle('approve', (args) => runner.approve(args)), 'nanomuse cloud: approve')
       ctx.effect(() => () => {
@@ -1435,8 +1439,9 @@ export default class NanomuseCloud extends Service {
    */
   async handsEnv(): Promise<Record<string, string>> {
     const body = await this.handsBody()
-    if (!body?.model) return {}
-    return { NANOMUSE_GUI_ENABLED: '1', NANOMUSE_GUI_PROVIDER: body.provider ?? 'openai', NANOMUSE_GUI_MODEL: body.model, NANOMUSE_GUI_BASE_URL: body.base_url ?? '', NANOMUSE_GUI_API_KEY: body.api_key ?? '' }
+    const accountEnv = { NANOLIKA_DESKTOP_ACCOUNT: '1', NANOLIKA_CLOUD_BASE: this.relay.origin, NANOMUSE_CLOUD_KEY: this.state.account ? (await this.token()) ?? '' : '' }
+    if (!body?.model) return accountEnv
+    return { ...accountEnv, NANOMUSE_GUI_ENABLED: '1', NANOMUSE_GUI_PROVIDER: body.provider ?? 'openai', NANOMUSE_GUI_MODEL: body.model, NANOMUSE_GUI_BASE_URL: body.base_url ?? '', NANOMUSE_GUI_API_KEY: body.api_key ?? '' }
   }
 
   /** A hands call is in flight: the MCP client is not remounted under it. */
