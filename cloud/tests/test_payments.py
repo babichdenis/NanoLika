@@ -17,7 +17,8 @@ async def setup(monkeypatch):
     monkeypatch.setenv("TBANK_TERMINAL_KEY", "fixtureDEMO")
     monkeypatch.setenv("TBANK_PASSWORD", "fixture-password")
     monkeypatch.setenv("TBANK_PUBLIC_BASE", "https://cloud.example.test")
-    app, client, sender, _, cloud, _ = make()
+    # курс рубля нужен выдаче тарифа по заказу (plan_buy считает цену в юанях)
+    app, client, sender, _, cloud, _ = make(rub_per_usd=90)
     user = await sign_up(client, sender, "payer@example.test")
     p = app.state.payments
     calls = []
@@ -210,3 +211,23 @@ async def test_admin_sees_orders_and_needs_the_token(monkeypatch):
     assert body["summary"]["orders"] >= 1
     assert any(o["order_id"] == order_id for o in body["orders"])
     assert all("identifier" not in o and "payment_url" not in o for o in body["orders"])
+
+async def test_the_operator_grants_the_plan_of_a_paid_order_once(monkeypatch):
+    """Оплаченный заказ превращается в тариф кнопкой оператора, и ровно один раз."""
+    app, client, user, p, calls, _ = await setup(monkeypatch)
+    created = await client.post(
+        "/v1/payments/orders", headers=auth(user["api_key"]),
+        json={"plan": "lika", "accept_terms": True, "idempotency_key": "admin_grant_fixture"},
+    )
+    order_id = created.json()["order_id"]
+    # ещё не оплачен: выдавать нечего
+    assert (await client.post(f"/v1/admin/payments/{order_id}/plan", headers={"X-Admin-Token": "admin"})).status_code == 409
+    with p.db.tx() as c:
+        c.execute("UPDATE tbank_orders SET credited=1, status='CONFIRMED' WHERE id=?", (order_id,))
+    granted = await client.post(f"/v1/admin/payments/{order_id}/plan", headers={"X-Admin-Token": "admin", "X-Admin-Actor": "ops@console"})
+    assert granted.status_code == 200, granted.text
+    body = granted.json()
+    assert body["plan"]["id"] == p.cloud.plan_state(user["account"]["id"])["id"]
+    assert body["granted_by"] == "ops@console"
+    again = await client.post(f"/v1/admin/payments/{order_id}/plan", headers={"X-Admin-Token": "admin"})
+    assert again.status_code == 409

@@ -41,6 +41,8 @@
     kActive: "活跃账号", kActiveSub: (n) => `${n} 个新注册`, kSpent: "花费", kSpentSub: (r, t) => `${fmt(r)} 次 · ${fmt(t)} tokens`,
     kOnline: "在线设备", kOnlineSub: (k, s) => `记住了 ${k} 台 · ${s} 个有效登录`, kSignals: "今天的信号",
     kSignalsSub: (s) => `${s.sign_ins} 次登录 · ${s.sign_in_failures} 次失败 · ${s.budget_refusals} 次超额 · ${s.upstream_errors} 次上游错误 · ${s.content_rejected} 次内容审核未放行 · ${s.calls} 通电话`,
+    payGivePlan: "开通套餐", payPlanIssued: "套餐已开通",
+    payGivePlanPrompt: (plan, who) => `按这个订单为 ${who} 开通 ${plan}`,
     paySell: "开通套餐", payUntil: "到", payExpired: "已过期", payConnect: "设备互联",
     payDays: "天", payNoPlans: "套餐菜单是空的：运维端还没有配置 PLANS",
     paySellPrompt: (who) => `为 ${who} 开通哪个套餐`,
@@ -192,6 +194,8 @@
     kActive: "Active accounts", kActiveSub: (n) => `${n} new`, kSpent: "Spent", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
     kOnline: "Devices online", kOnlineSub: (k, s) => `${k} remembered · ${s} live sign-ins`, kSignals: "Signals today",
     kSignalsSub: (s) => `${s.sign_ins} sign-ins · ${s.sign_in_failures} failed · ${s.budget_refusals} over budget · ${s.upstream_errors} upstream errors · ${s.content_rejected} content checks · ${s.calls} calls`,
+    payGivePlan: "Grant the plan", payPlanIssued: "plan granted",
+    payGivePlanPrompt: (plan, who) => `Grant ${plan} to ${who} for this order`,
     paySell: "Sell a plan", payUntil: "until", payExpired: "expired", payConnect: "devices connected",
     payDays: "days", payNoPlans: "the plan menu is empty: PLANS is not configured on the relay",
     paySellPrompt: (who) => `Which plan for ${who}`,
@@ -342,6 +346,8 @@
     kActive: "Активные аккаунты", kActiveSub: (n) => `${n} новых`, kSpent: "Потрачено", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
     kOnline: "Устройств онлайн", kOnlineSub: (k, s) => `${k} запомненных · ${s} живых входов`, kSignals: "События за сегодня",
     kSignalsSub: (s) => `${s.sign_ins} входов · ${s.sign_in_failures} неудачных · ${s.budget_refusals} сверх лимита · ${s.upstream_errors} ошибок провайдера · ${s.content_rejected} отклонено проверкой контента · ${s.calls} звонков`,
+    payGivePlan: "Выдать тариф", payPlanIssued: "тариф выдан",
+    payGivePlanPrompt: (plan, who) => `Выдать тариф ${plan} аккаунту ${who} по этому заказу`,
     paySell: "Продать тариф", payUntil: "до", payExpired: "истёк", payConnect: "устройства связаны",
     payDays: "дн.", payNoPlans: "меню тарифов пустое: на релее не задан PLANS",
     paySellPrompt: (who) => `Какой тариф выдать ${who}`,
@@ -999,6 +1005,12 @@
     if (!Number.isFinite(n) || n === 0) return;
     try { await api("POST", "/v1/admin/grant", { account_id: a.id, tokens: n }); } catch (e) { alert(e.message); }
     await Promise.all([load(), detail ? openAccount(a.id) : null]);
+  }
+  async function doGrantPlan(o) {
+    if (!confirm(T.payGivePlanPrompt(o.plan, o.hint || o.account_id.slice(0, 8)))) return;
+    try { await api("POST", `/v1/admin/payments/${o.order_id}/plan`, {}); } catch (e) { alert(e.message); }
+    forget("payments");
+    await load();
   }
   async function doPlan(a) {
     let menu = (CACHE.get(cacheKey("config")) || {}).value;
@@ -1702,7 +1714,9 @@
           h("div", { class: "txt" },
             h("div", { class: "t" }, o.plan || "—", " ", h("span", { class: "pill" }, o.status)),
             h("div", { class: "s" }, `${o.hint || o.account_id.slice(0, 8)} · ${when(o.created_at)}`)),
-          h("code", {}, rub(o.amount_kopecks) + (o.refunded_amount_kopecks ? ` − ${rub(o.refunded_amount_kopecks)}` : ""))))
+          h("code", {}, rub(o.amount_kopecks) + (o.refunded_amount_kopecks ? ` − ${rub(o.refunded_amount_kopecks)}` : "")),
+          o.plan_granted_at ? h("span", { class: "pill ok" }, T.payPlanIssued)
+            : o.credited ? h("button", { class: "btn quiet sm", onclick: (e) => { e.stopPropagation(); doGrantPlan(o); } }, T.payGivePlan) : null))
           : h("div", { class: "empty" }, T.none))),
     ];
   }

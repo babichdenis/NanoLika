@@ -89,6 +89,9 @@ class Payments:
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN refunded INTEGER NOT NULL DEFAULT 0")
             if "terminal" not in columns:
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN terminal TEXT NOT NULL DEFAULT ''")
+            if "plan_granted_at" not in columns:
+                c.execute("ALTER TABLE tbank_orders ADD COLUMN plan_granted_at INTEGER NOT NULL DEFAULT 0")
+                c.execute("ALTER TABLE tbank_orders ADD COLUMN plan_granted_by TEXT NOT NULL DEFAULT ''")
             if self.terminal.endswith("DEMO"):
                 c.execute("UPDATE tbank_orders SET terminal=? WHERE terminal=''", (self.terminal,))
             events = {row[1] for row in c.execute("PRAGMA table_info(tbank_demo_events)")}
@@ -151,7 +154,7 @@ class Payments:
             args.append(int(before))
         clause = " AND ".join(where)
         select = f"""SELECT o.id, o.account_id, o.plan, o.amount, o.status, o.credited,
-                            o.created_at, o.checked_at, o.refunded, a.hint AS hint
+                            o.created_at, o.checked_at, o.refunded, o.plan_granted_at, a.hint AS hint
                      FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
                      WHERE {clause}
                      ORDER BY o.created_at DESC, o.id DESC LIMIT ?"""
@@ -191,11 +194,35 @@ class Payments:
                     "credited": bool(r["credited"]),
                     "created_at": r["created_at"],
                     "checked_at": r["checked_at"],
+                    "plan_granted_at": r["plan_granted_at"],
                 }
                 for r in rows
             ],
             "next_before": rows[-1]["created_at"] if len(rows) == limit else 0,
         }
+
+    def grant_plan(self, order_id: str, actor: str = "console") -> dict:
+        """Выдать тариф по оплаченному заказу — то, что оператор раньше делал вручную.
+
+        Деньги заказа уже лежат в демо-кошельке, поэтому продажа идёт тем же путём, что и
+        ручная (`plan_buy`): цена уходит в пул, условия тарифа — в подписку. Повторная
+        выдача по тому же заказу отклоняется: отметка `plan_granted_at` ставится атомарно
+        вместе с проверкой, иначе двойной клик в браузере выдал бы два тарифа.
+        """
+        row = self.order(order_id)
+        if not row["credited"]:
+            raise CloudError(409, "payment_not_paid", "Заказ ещё не оплачен")
+        if row["plan_granted_at"]:
+            raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
+        state = self.cloud.plan_buy(row["account_id"], row["plan"], actor=actor, note=f"заказ {order_id[:8]}")
+        with self.db.tx() as c:
+            cur = c.execute(
+                "UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by=? WHERE id=? AND plan_granted_at=0",
+                (int(time.time()), actor, order_id),
+            )
+            if cur.rowcount != 1:
+                raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
+        return {"order_id": order_id, "plan": state.get("plan"), "granted_by": actor}
 
     def order(self, order_id: str, account_id: str | None = None) -> dict:
         with self.db.tx() as c:
@@ -475,6 +502,12 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
         return PlainTextResponse("OK")
 
     if admin_dep is not None:
+
+        @router.post("/v1/admin/payments/{order_id}/plan", dependencies=[Depends(admin_dep)])
+        async def admin_grant_plan(order_id: str, request: Request) -> dict:
+            """Выдать тариф по оплаченному заказу. Повторная выдача — 409."""
+            actor = (request.headers.get("x-admin-actor") or "console").strip() or "console"
+            return p.grant_plan(order_id, actor)
 
         @router.get("/v1/admin/payments", dependencies=[Depends(admin_dep)])
         async def admin_payments(days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0) -> dict:
