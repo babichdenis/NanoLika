@@ -84,7 +84,9 @@ function main() {
     if (dist.ext === "zip") execFileSync("powershell", ["-NoProfile", "-Command", `Expand-Archive -LiteralPath '${archive}' -DestinationPath '${work}' -Force`], { stdio: "inherit" });
     else execFileSync("tar", ["-xzf", archive, "-C", work], { stdio: "inherit" });
     const dir = join(work, dist.id);
-    stage(join(dir, "bin", dist.exe), dist.id);
+    // Windows archives keep node.exe at the root, the unix ones under bin/.
+    const exe = process.platform === "win32" ? join(dir, dist.exe) : join(dir, "bin", dist.exe);
+    stage(exe, dist.id);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
