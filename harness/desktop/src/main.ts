@@ -2127,9 +2127,32 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     if ((process.platform === "linux" || process.platform === "win32") && staleInstance(app.getVersion(), data)) {
       // Linux: a package upgrade (.deb) leaves the old copy running in the tray; the
       // launcher then starts the new binary, which only wakes the old one. Hand over.
-      log(`second instance is ${(data as { version: string }).version}, this is ${app.getVersion()}: relaunching into the installed version`);
-      app.relaunch();
-      app.quit();
+      // A copy of another version is running (a package upgrade left it in the tray, or an
+      // installer replaced the files under it). Hand over instead of dragging the person into
+      // "выковыривать процессы": ask this instance to finish its work, wait, then relaunch
+      // into the installed version. Pending work still gets the protected-exit question; after
+      // HANDOVER_MS without an answer the old process lets go anyway — the new copy is the one
+      // the person just started.
+      const stale = (data as { version?: string } | undefined)?.version ?? "unknown";
+      log(`second instance is ${stale}, this is ${app.getVersion()}: handing over to the installed version`);
+      const HANDOVER_MS = 20_000;
+      let handed = false;
+      const handOver = (why: string): void => {
+        if (handed) return;
+        handed = true;
+        log(`handover: ${why}; relaunching into the installed version`);
+        clearTimeout(timer);
+        app.relaunch();
+        quitting = true;
+        app.quit();
+      };
+      const timer = setTimeout(() => handOver("the old instance did not finish in time"), HANDOVER_MS);
+      timer.unref?.();
+      if (!exitGuard) {
+        handOver("no protected exit is up yet");
+        return;
+      }
+      void exitGuard.requestExit("restart-update", () => handOver("the person agreed to hand over"));
       return;
     }
     log(`second instance: ${mainWindow ? "focusing the window" : hostUrl ? "opening the window again" : "still starting"}`);
