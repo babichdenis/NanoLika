@@ -150,6 +150,12 @@ echo "== dmg"
 stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
+# значок самого образа (иконка файла .dmg) — тот же, что у приложения в доке
+icns_src="$(find "$app/Contents/Resources" -maxdepth 1 -name '*.icns' | head -1)"
+if [ -n "$icns_src" ]; then
+  cp "$icns_src" "$stage/.VolumeIcon.icns"
+  SetFile -a C "$stage" 2>/dev/null || true
+fi
 # окно образа: фон в цветах сайта и две иконки — приложение слева, «Программы» справа.
 # Картинку кладём в .background, то же имя прописываем в настройках окна Finder.
 mkdir -p "$stage/.background"
