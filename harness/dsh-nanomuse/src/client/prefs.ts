@@ -28,7 +28,15 @@ export interface ApprovalRecord {
 }
 
 const KEY = 'nanomuse.prefs'
-const DEFAULTS: Prefs = { showHarness: false, keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
+/**
+ * Bumped when a default changes in a way that installations which already wrote the old
+ * one must follow. 2: the harness's own controls show by default, on macOS and on Windows
+ * alike. With the Developer switch off the Muse look hides the harness's own chrome (its
+ * header bar, the composer's dock, the model picker); a window where the Muse chrome did
+ * not come up either was left with nothing at the top and at the bottom.
+ */
+const SCHEMA = 2
+const DEFAULTS: Prefs = { showHarness: true, keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
 const MAX_APPROVALS = 50
 
 let current: Prefs = read()
@@ -38,9 +46,12 @@ function read(): Prefs {
   try {
     const raw = window.localStorage.getItem(KEY)
     if (!raw) return DEFAULTS
-    const parsed = JSON.parse(raw) as Partial<Prefs>
+    const parsed = JSON.parse(raw) as Partial<Prefs> & { schema?: number }
+    // A profile written before schema 2 carries the old default (off), not a choice, so it is
+    // read as on once; a switch touched since (`schema` 2) stands as the person left it.
+    const schema = typeof parsed.schema === 'number' ? parsed.schema : 1
     return {
-      showHarness: parsed.showHarness === true,
+      showHarness: schema < SCHEMA ? true : parsed.showHarness !== false,
       keepAwake: parsed.keepAwake !== false,
       showSteps: parsed.showSteps !== false,
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals.slice(0, MAX_APPROVALS) : [],
@@ -59,7 +70,7 @@ export function getPrefs(): Prefs {
 export function setPrefs(patch: Partial<Prefs>): void {
   current = { ...current, ...patch }
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(current))
+    window.localStorage.setItem(KEY, JSON.stringify({ ...current, schema: SCHEMA }))
   } catch {
     // private mode: the switch holds for this page only
   }
