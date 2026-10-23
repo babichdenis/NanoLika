@@ -1941,8 +1941,11 @@ function createWindow(): BrowserWindow {
     if (verdict === "external") void shell.openExternal(url);
   });
   win.webContents.session.setPermissionRequestHandler((_wc, permission, callback, details) => {
-    // the microphone for voice input, for the Host's page alone; nothing else is asked for
-    callback(permission === "media" && sameOrigin(details.requestingUrl, hostUrl));
+    // the microphone for voice input and the clipboard for the copy buttons, for the Host's
+    // page alone; nothing else is asked for. Without `clipboard-sanitized-write` every
+    // `navigator.clipboard.writeText` in the page is refused, and the copy buttons do nothing.
+    const own = sameOrigin(details.requestingUrl, hostUrl);
+    callback(own && (permission === "media" || permission === "clipboard-sanitized-write"));
   });
   win.on("closed", mainWindowClosed);
   // A renderer that died (its GPU process went with it, or the page crashed) leaves a white
