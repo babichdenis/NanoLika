@@ -146,7 +146,6 @@ rm -f "$out/$name.zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$out/$name.zip"
 
 app_file="$(basename "$app")"
-here="$(cd "$(dirname "$0")" && pwd)"
 echo "== dmg"
 stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
@@ -154,8 +153,8 @@ ln -s /Applications "$stage/Applications"
 # окно образа: фон в цветах сайта и две иконки — приложение слева, «Программы» справа.
 # Картинку кладём в .background, то же имя прописываем в настройках окна Finder.
 mkdir -p "$stage/.background"
-if [ -f "$here/resources/dmg-background.png" ]; then
-  cp "$here/resources/dmg-background.png" "$stage/.background/background.png"
+if [ -f "$here/harness/desktop/resources/dmg-background.png" ]; then
+  cp "$here/harness/desktop/resources/dmg-background.png" "$stage/.background/background.png"
 fi
 rm -f "$out/$name.dmg"
 # сначала записываемый образ, чтобы выставить вид окна, потом сжимаем в UDZO
