@@ -192,3 +192,21 @@ async def test_production_terminal_cannot_be_enabled_by_accident(monkeypatch):
     p.terminal = "production-terminal"
     assert (await client.get("/v1/payments/config")).status_code == 503
     await client.aclose()
+
+async def test_admin_sees_orders_and_needs_the_token(monkeypatch):
+    """Оператор видит заказы кассы, но только со своим токеном."""
+    app, client, user, p, calls, _ = await setup(monkeypatch)
+    created = await client.post(
+        "/v1/payments/orders", headers=auth(user["api_key"]),
+        json={"plan": "lika", "accept_terms": True, "idempotency_key": "admin_list_fixture"},
+    )
+    assert created.status_code == 200, created.text
+    order_id = created.json()["order_id"]
+    assert (await client.get("/v1/admin/payments")).status_code == 401
+    ok = await client.get("/v1/admin/payments", headers={"X-Admin-Token": "admin"})
+    assert ok.status_code == 200, ok.text
+    body = ok.json()
+    assert body["test_mode"] is True
+    assert body["summary"]["orders"] >= 1
+    assert any(o["order_id"] == order_id for o in body["orders"])
+    assert all("identifier" not in o and "payment_url" not in o for o in body["orders"])

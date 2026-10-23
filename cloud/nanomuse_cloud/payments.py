@@ -126,6 +126,77 @@ class Payments:
             # No response body or signed request in logs: both can contain private details.
             raise CloudError(502, "payment_bank", "Банк не подтвердил операцию. Проверьте статус заказа перед новой попыткой") from None
 
+    def orders_page(
+        self, *, days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0
+    ) -> dict:
+        """Заказы для админки оператора: только чтение, без движений денег.
+
+        Идентификатор аккаунта здесь не расшифровывается: в списке хватает подсказки
+        `hint` и `account_id`, а полный идентификатор оператор видит в карточке аккаунта.
+        Пагинация keyset по `created_at`: `before` — время последней строки прошлой
+        страницы, поэтому новые заказы не сдвигают список во время листания.
+        """
+        limit = max(1, min(int(limit), 500))
+        days = max(1, min(int(days), 3650))
+        where = ["o.created_at >= ?"]
+        args: list = [int(time.time()) - days * 86400]
+        if status:
+            where.append("o.status = ?")
+            args.append(status)
+        if q:
+            where.append("(a.hint LIKE ? OR o.id LIKE ? OR o.plan LIKE ?)")
+            args.extend([f"%{q}%"] * 3)
+        if before:
+            where.append("o.created_at < ?")
+            args.append(int(before))
+        clause = " AND ".join(where)
+        select = f"""SELECT o.id, o.account_id, o.plan, o.amount, o.status, o.credited,
+                            o.created_at, o.checked_at, o.refunded, a.hint AS hint
+                     FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
+                     WHERE {clause}
+                     ORDER BY o.created_at DESC, o.id DESC LIMIT ?"""
+        with self.db.tx() as c:
+            rows = [dict(r) for r in c.execute(select, (*args, limit)).fetchall()]
+            summary = dict(
+                c.execute(
+                    f"""SELECT COUNT(*) AS orders, COALESCE(SUM(o.amount),0) AS amount,
+                               COALESCE(SUM(o.refunded),0) AS refunded
+                        FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
+                        WHERE {clause}""",
+                    args,
+                ).fetchone()
+            )
+            by_status = {
+                r["status"]: {"count": r["n"], "amount": r["amount"]}
+                for r in c.execute(
+                    f"""SELECT o.status, COUNT(*) AS n, COALESCE(SUM(o.amount),0) AS amount
+                        FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
+                        WHERE {clause} GROUP BY o.status""",
+                    args,
+                ).fetchall()
+            }
+        return {
+            "days": days,
+            "test_mode": True,
+            "summary": {**summary, "by_status": by_status},
+            "orders": [
+                {
+                    "order_id": r["id"],
+                    "account_id": r["account_id"],
+                    "hint": r["hint"] or "",
+                    "plan": r["plan"],
+                    "amount_kopecks": r["amount"],
+                    "refunded_amount_kopecks": r["refunded"],
+                    "status": r["status"],
+                    "credited": bool(r["credited"]),
+                    "created_at": r["created_at"],
+                    "checked_at": r["checked_at"],
+                }
+                for r in rows
+            ],
+            "next_before": rows[-1]["created_at"] if len(rows) == limit else 0,
+        }
+
     def order(self, order_id: str, account_id: str | None = None) -> dict:
         with self.db.tx() as c:
             row = c.execute("SELECT * FROM tbank_orders WHERE id=?", (order_id,)).fetchone()
@@ -321,7 +392,7 @@ class Payments:
         }
 
 
-def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None):
+def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, admin_dep=None):
     p = payments or Payments(
         cloud, os.getenv("TBANK_TERMINAL_KEY", ""), os.getenv("TBANK_PASSWORD", ""), os.getenv("TBANK_PUBLIC_BASE", "")
     )
@@ -402,5 +473,12 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None):
         else:
             p.apply(data, signed=True)
         return PlainTextResponse("OK")
+
+    if admin_dep is not None:
+
+        @router.get("/v1/admin/payments", dependencies=[Depends(admin_dep)])
+        async def admin_payments(days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0) -> dict:
+            """Заказы кассы для оператора: только чтение, движения денег нет."""
+            return p.orders_page(days=days, status=status, q=q, limit=limit, before=before)
 
     app.include_router(router)

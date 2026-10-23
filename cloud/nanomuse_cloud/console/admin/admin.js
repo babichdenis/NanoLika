@@ -41,6 +41,8 @@
     kActive: "活跃账号", kActiveSub: (n) => `${n} 个新注册`, kSpent: "花费", kSpentSub: (r, t) => `${fmt(r)} 次 · ${fmt(t)} tokens`,
     kOnline: "在线设备", kOnlineSub: (k, s) => `记住了 ${k} 台 · ${s} 个有效登录`, kSignals: "今天的信号",
     kSignalsSub: (s) => `${s.sign_ins} 次登录 · ${s.sign_in_failures} 次失败 · ${s.budget_refusals} 次超额 · ${s.upstream_errors} 次上游错误 · ${s.content_rejected} 次内容审核未放行 · ${s.calls} 通电话`,
+    payOrders: "订单", paySum: "金额", payRefunded: "退款", payAll: "全部状态",
+    payNote: "按创建时间", payReadOnly: "只有查看，退款在银行确认后走回调",
     byKind: "按类型", byModel: "按模型", byDay: (d) => `每日花费 · 最近 ${d} 天`, top: (d) => `花费最多 · 最近 ${d} 天`, events: "最近动态", accounts: "全部账号", config: "当前配置",
     kinds: { chat: "对话", image: "图片", video: "视频", realtime: "实时通话", grant: "加 tokens", credit: "加额度" },
     lanes: { chat: "聊天", gui: "动手" }, laneDefault: (l) => `${l}默认`, laneTitle: (l) => `这个模型供「${l}」选择器选用`, laneDefaultTitle: (l) => `「${l}」选择器的默认模型`,
@@ -108,7 +110,7 @@
     catalog: "模型目录", catalogNote: "key 下能用的模型（菜单之外）：relay 向每个模型各问一句话、再给一张品红色小图，确认它能回答、能不能看图；答案保存 7 天。客户端拿到的「能看图」就是这里的结果。", catalogOff: "模型目录未开启（CLOUD_CATALOG=0）。", catalogNames: "按名字推断，未逐个验证（CLOUD_CATALOG_PROBE=0）。", catalogProbing: "正在验证…", catalogPending: (n) => `${fmt(n)} 个待验证`, catalogFetched: (t) => `列表更新于 ${t}`, catalogError: (e) => `读取列表失败：${e}`,
     cModel: "模型", cKind: "类型", cSees: "看图", cVerified: "已验证", cYes: "是", cNo: "否", cUnusable: "服务商拒绝的模型（不出现在客户端）", cNoUnusable: "没有被拒绝的模型。", cCount: (n, v) => `${fmt(n)} 个对话模型 · ${fmt(v)} 个能看图`,
     // 0.14: the page in pages
-    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置" },
+    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
     // 0.22: the Controls page, the Stats page, the GitHub series
     ctl: {
       title: "控制", note: "每个开关立刻生效、重启后保持；谁在何时改了什么记在下面的日志里。关闭前会先说明确切后果。",
@@ -187,6 +189,8 @@
     kActive: "Active accounts", kActiveSub: (n) => `${n} new`, kSpent: "Spent", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
     kOnline: "Devices online", kOnlineSub: (k, s) => `${k} remembered · ${s} live sign-ins`, kSignals: "Signals today",
     kSignalsSub: (s) => `${s.sign_ins} sign-ins · ${s.sign_in_failures} failed · ${s.budget_refusals} over budget · ${s.upstream_errors} upstream errors · ${s.content_rejected} content checks · ${s.calls} calls`,
+    payOrders: "Orders", paySum: "Amount", payRefunded: "Refunded", payAll: "All statuses",
+    payNote: "by creation time", payReadOnly: "read only; refunds go through the bank callback",
     byKind: "By kind", byModel: "By model", byDay: (d) => `Spend by day · last ${d} days`, top: (d) => `Top spenders · last ${d} days`, events: "Activity", accounts: "All accounts", config: "Configuration",
     kinds: { chat: "Chat", image: "Pictures", video: "Video", realtime: "Calls", grant: "Tokens granted", credit: "Credit" },
     lanes: { chat: "chat", gui: "hands" }, laneDefault: (l) => `${l} default`, laneTitle: (l) => `offered in the ${l} picker`, laneDefaultTitle: (l) => `the ${l} picker's default`,
@@ -246,7 +250,7 @@
     pCountry: "Country / region", pProvince: "Province / state", pAccounts: "Accounts", pNew: "New", pSignins: "Sign-ins", pRequests: "Requests", pDemo: "Demo visitors", pUnknown: "unknown", pLocal: "local network", pNone: "No visits recorded yet.", pAccountsNote: "accounts by their latest address",
     catalog: "Model catalog", catalogNote: "The models under the key beyond the menu: the relay asks each one a one-word question and then shows it a small magenta picture, to learn whether it answers and whether it sees; the answers stand for seven days. The “sees pictures” the apps show is what is here.", catalogOff: "The catalog is off (CLOUD_CATALOG=0).", catalogNames: "Guessed from names, not checked one by one (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Checking…", catalogPending: (n) => `${fmt(n)} to check`, catalogFetched: (t) => `list read ${t}`, catalogError: (e) => `The list could not be read: ${e}`,
     cModel: "Model", cKind: "Kind", cSees: "Sees pictures", cVerified: "Checked", cYes: "yes", cNo: "no", cUnusable: "Models the provider refuses (not offered to the apps)", cNoUnusable: "None refused.", cCount: (n, v) => `${fmt(n)} chat models · ${fmt(v)} see pictures`,
-    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", activity: "Activity", demo: "Demo", data: "Data", site: "Site", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings" },
+    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", activity: "Activity", demo: "Demo", data: "Data", site: "Site", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
     ctl: {
       title: "Controls", note: "Each switch applies at once and survives a restart; who changed what, and when, is in the log below. A switch says exactly what turning it off does before it flips.",
       names: { free_allowance: "Free allowance", signups: "Sign-ups", cloud_service: "Cloud service", sync: "Conversation sync", hub: "Device hub" },
@@ -332,6 +336,8 @@
     kActive: "Активные аккаунты", kActiveSub: (n) => `${n} новых`, kSpent: "Потрачено", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
     kOnline: "Устройств онлайн", kOnlineSub: (k, s) => `${k} запомненных · ${s} живых входов`, kSignals: "События за сегодня",
     kSignalsSub: (s) => `${s.sign_ins} входов · ${s.sign_in_failures} неудачных · ${s.budget_refusals} сверх лимита · ${s.upstream_errors} ошибок провайдера · ${s.content_rejected} отклонено проверкой контента · ${s.calls} звонков`,
+    payOrders: "Заказы", paySum: "Сумма", payRefunded: "Возвращено", payAll: "Все статусы",
+    payNote: "по времени создания", payReadOnly: "только чтение; возврат идёт через банк",
     byKind: "По типу", byModel: "По модели", byDay: (d) => `Расход по дням · за ${d} дн.`, top: (d) => `Крупнейшие плательщики · за ${d} дн.`, events: "Активность", accounts: "Все аккаунты", config: "Конфигурация",
     kinds: { chat: "Чат", image: "Картинки", video: "Видео", realtime: "Звонки", grant: "Начисление токенов", credit: "Кредит" },
     lanes: { chat: "чат", gui: "руки" }, laneDefault: (l) => `${l} по умолчанию`, laneTitle: (l) => `предлагается в выборе «${l}»`, laneDefaultTitle: (l) => `выбор «${l}» по умолчанию`,
@@ -391,7 +397,7 @@
     pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
     catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
     cModel: "Модель", cKind: "Тип", cSees: "Видит картинки", cVerified: "Проверена", cYes: "да", cNo: "нет", cUnusable: "Модели, от которых отказывается провайдер (приложениям не предлагаются)", cNoUnusable: "Таких нет.", cCount: (n, v) => `${fmt(n)} чат-моделей · ${fmt(v)} видят картинки`,
-    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки" },
+    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
     ctl: {
       title: "Управление", note: "Каждый переключатель действует сразу и переживает перезапуск; кто, что и когда менял — в журнале ниже. Перед переключением переключатель точно описывает, что отключит.",
       names: { free_allowance: "Бесплатный баланс", signups: "Регистрации", cloud_service: "Облачный сервис", sync: "Синхронизация диалогов", hub: "Хаб устройств" },
@@ -518,7 +524,7 @@
     "control.switch": ["warn", ICON.warn], "control.rule": ["warn", ICON.warn],
   };
   const FILTERS = [["", "all"], ["sign_in.code,sign_in.password,sign_in.session,sign_in.failed,account.created", "signIns"], ["budget.refused", "refusals"], ["upstream.error", "errors"], ["content.rejected", "contentChecks"], ["call.ended", "calls"], ["password.set,password.changed,password.cleared", "passwords"]];
-  const VIEWS = ["overview", "people", "invites", "places", "money", "activity", "demo", "data", "site", "models", "health", "stats", "controls", "settings"];
+  const VIEWS = ["overview", "people", "invites", "places", "money", "activity", "demo", "data", "site", "models", "health", "stats", "controls", "settings", "payments"];
   const PAGE = 50;
 
   // ── state ──────────────────────────────────────────────────────
@@ -604,6 +610,7 @@
     controls: () => "/v1/admin/controls",
     stats: (d) => `/v1/admin/stats?days=${d}`,
     github: (d) => `/v1/admin/github?days=${d}`,
+    payments: (d) => `/v1/admin/payments?days=${d}`,
   };
   const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites"]);
   const CACHE = new Map();
@@ -1646,6 +1653,32 @@
           ...Object.entries(s.prices || {}).flatMap(([id, p]) => [h("b", {}, ...modelPills(id, s)), h("span", {}, h("code", {}, id), " ", T.priceLine(p))])))),
     ];
   }
+  /** Заказы кассы: оператор видит суммы, статусы и возвраты. Только чтение. */
+  function paymentsView() {
+    const pay = need("payments");
+    if (pay && pay._error) return [failedPanel(T.nav.payments, "payments", pay._error)];
+    if (!pay) return [loadingPanel(T.nav.payments)];
+    const rub = (k) => `₽${(Number(k || 0) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
+    const sum = pay.summary || {}, by = sum.by_status || {};
+    const status = params.get("st") || "";
+    const orders = (pay.orders || []).filter((o) => !status || o.status === status);
+    return [
+      h("div", { class: "kpis" },
+        kpi(T.payOrders, fmt(sum.orders || 0), T.period(pay.days || days)),
+        kpi(T.paySum, rub(sum.amount), T.payNote),
+        kpi(T.payRefunded, rub(sum.refunded), T.payNote)),
+      h("div", { class: "panel" },
+        h("h2", {}, T.nav.payments, h("span", { class: "pill" }, fmt(orders.length)), h("span", { class: "sp" }),
+          h("span", { class: "fine" }, T.payReadOnly)),
+        chips([["", T.payAll], ...Object.keys(by).map((k) => [k, `${k} · ${fmt(by[k].count)}`])], status, (v) => setParams({ st: v })),
+        h("div", { class: "list" }, orders.length ? orders.map((o) => h("div", { class: "row" + (o.account_id ? " tap" : ""), onclick: o.account_id ? () => openAccount(o.account_id) : null },
+          h("div", { class: "txt" },
+            h("div", { class: "t" }, o.plan || "—", " ", h("span", { class: "pill" }, o.status)),
+            h("div", { class: "s" }, `${o.hint || o.account_id.slice(0, 8)} · ${when(o.created_at)}`)),
+          h("code", {}, rub(o.amount_kopecks) + (o.refunded_amount_kopecks ? ` − ${rub(o.refunded_amount_kopecks)}` : ""))))
+          : h("div", { class: "empty" }, T.none))),
+    ];
+  }
   function activityView() {
     const sr = need("series");
     const q = (params.get("q") || "").trim().toLowerCase();
@@ -2071,7 +2104,7 @@
         h("div", {}, h("h3", {}, T.gh.releases), rankRows((latest.releases || []).map((r) => ({ name: r.tag, hits: r.downloads }))))),
       h("div", { class: "fine", style: "padding:0 16px 12px" }, T.gh.note));
   }
-  const RENDER = { overview: overviewView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView };
+  const RENDER = { overview: overviewView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
 
   // ── the shell: bar, nav, one view ──────────────────────────────
   function drawMain() {

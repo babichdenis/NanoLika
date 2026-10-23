@@ -448,7 +448,7 @@ def create_app(
 
     from .payments import install as install_payments
 
-    install_payments(app, cloud, caller_dep)
+    # платежи устанавливаются ниже, после admin_dep: у них есть админ-раздел
 
     from .bot_gateway import install as install_bot_gateway
 
@@ -1404,6 +1404,7 @@ def create_app(
     from .avatar_releases import install_avatar_releases
 
     install_avatar_releases(app, settings, admin_dep)
+    install_payments(app, cloud, caller_dep, admin_dep=admin_dep)
 
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])
     async def admin_accounts() -> dict:
