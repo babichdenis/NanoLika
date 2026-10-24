@@ -31,6 +31,7 @@ from nanomuse.channels.base import (
     InboundMessage,
     json_object,
 )
+from nanomuse.channels.telegram_topics import split_chat, topic_chat
 from nanomuse.logger import logger
 
 API = "https://api.telegram.org"
@@ -75,6 +76,7 @@ class TelegramChannel(Channel):
         self._http: httpx.AsyncClient | None = None
         self._task: asyncio.Task[None] | None = None
         self._offset = 0
+        self.topics_enabled = False
         self._bot_id = 0
         self._username = ""
         self._stream_messages: dict[str, int] = {}
@@ -99,6 +101,7 @@ class TelegramChannel(Channel):
         await super().start(bus)
         self._http = self._make_http()
         me = await self._call("getMe")
+        self.topics_enabled = bool(me.get("has_topics_enabled"))
         self._bot_id = int(me.get("id") or 0)
         self._username = str(me.get("username") or "")
         # drop whatever queued up while we were away: a reply to a day-old message helps no one
@@ -141,6 +144,12 @@ class TelegramChannel(Channel):
     async def _call(self, method: str, params: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         if self._http is None:
             raise TelegramError("Not connected.")
+        if params is not None and "chat_id" in params:
+            params = dict(params)
+            chat, topic = split_chat(str(params["chat_id"]))
+            params["chat_id"] = chat
+            if topic and (method.startswith("send") or method == "copyMessage"):
+                params["message_thread_id"] = topic
         try:
             response = await self._http.post(f"/{method}", json=params, **kwargs)
         except httpx.HTTPError as exc:
@@ -187,7 +196,14 @@ class TelegramChannel(Channel):
     async def _handle_update(self, update: dict[str, Any]) -> None:
         if self.bus is None:
             return
-        logger.debug("telegram: update {} ({})", update.get("update_id"), list(update)[:3])
+        logger.info(
+            "telegram: inbound update received ({})",
+            "callback"
+            if "callback_query" in update
+            else "message"
+            if "message" in update
+            else "other",
+        )
         callback = update.get("callback_query")
         if isinstance(callback, dict):
             await self._handle_callback(callback)
@@ -202,6 +218,12 @@ class TelegramChannel(Channel):
         chat_id = str(chat.get("id") or "")
         is_group = chat.get("type") in ("group", "supergroup")
         text = str(message.get("text") or message.get("caption") or "")
+        try:
+            from .touches import note as _note
+
+            _note("telegram", sender.get("id"), chat_id, text)
+        except Exception:
+            pass
         mentioned = not is_group or self._mentioned(message, text)
         text = self._strip_mention(text)
         files: list[InboundFile] = []
@@ -225,8 +247,11 @@ class TelegramChannel(Channel):
             )
             if item:
                 files.append(item)
-        if not text and not files:
+        topic_event = message.get("forum_topic_created") or message.get("forum_topic_edited")
+        if not text and not files and not topic_event:
             return
+        if chat.get("type") == "private" and message.get("message_thread_id"):
+            chat_id = topic_chat(chat_id, message["message_thread_id"])
         name = " ".join(p for p in (sender.get("first_name"), sender.get("last_name")) if p) or str(
             sender.get("username") or ""
         )
@@ -241,7 +266,11 @@ class TelegramChannel(Channel):
                 is_group=is_group,
                 mentioned=mentioned,
                 message_id=str(message.get("message_id") or ""),
-                chat_name=str(chat.get("title") or name),
+                chat_name=(
+                    str((topic_event or {}).get("name") or "")
+                    if split_chat(chat_id)[1]
+                    else str(chat.get("title") or name)
+                ),
             )
         )
 
@@ -277,13 +306,23 @@ class TelegramChannel(Channel):
             value = {"menu": raw[2:]}
         message = callback.get("message") or {}
         chat_id = str((message.get("chat") or {}).get("id") or "")
+        if (message.get("chat") or {}).get("type") == "private" and message.get(
+            "message_thread_id"
+        ):
+            chat_id = topic_chat(chat_id, message["message_thread_id"])
         sender_id = str((callback.get("from") or {}).get("id") or "")
         with suppress(Exception):
             await self._call("answerCallbackQuery", {"callback_query_id": callback.get("id")})
         if value:
+            if "menu" in value and message.get("message_id"):
+                value["_menu_message_id"] = str(message["message_id"])
             self.bus.action(self.name, chat_id, sender_id, value)
             # take the buttons off the card
-            if message.get("message_id") and value.get("decision") != "details":
+            if (
+                message.get("message_id")
+                and "approval" in value
+                and value.get("decision") != "details"
+            ):
                 with suppress(Exception):
                     await self._call(
                         "editMessageReplyMarkup",
@@ -361,9 +400,13 @@ class TelegramChannel(Channel):
         is_image = path.suffix.lower() in _IMAGE_SUFFIXES and path.stat().st_size < 10_000_000
         method, field_name = ("sendPhoto", "photo") if is_image else ("sendDocument", "document")
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        physical, topic = split_chat(chat_id)
+        destination: dict[str, Any] = {"chat_id": physical}
+        if topic:
+            destination["message_thread_id"] = topic
         with path.open("rb") as fh:
             response = await self._http.post(
-                f"/{method}", data={"chat_id": chat_id}, files={field_name: (path.name, fh, mime)}
+                f"/{method}", data=destination, files={field_name: (path.name, fh, mime)}
             )
         data = json_object(response)
         if not data.get("ok"):

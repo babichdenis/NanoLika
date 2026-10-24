@@ -1,7 +1,7 @@
 """The user's other devices, through the hub: ``devices``, the ``device_*`` actions and
 ``delegate``.
 
-These exist only while this computer is on the hub (signed in to NanoLika Cloud, ``[hub]
+These exist only while this computer is on the hub (signed in to nanoMuse Cloud, ``[hub]
 enabled``). Each ``device_*`` tool is one hub action on one device (docs/hub.md): a command
 in its shell, a folder listing, a file each way, a URL, its screen, a notification.
 ``delegate`` hands a whole task, in words, to the Muse running on that device and waits for
@@ -100,10 +100,8 @@ class _DeviceTool(BaseTool):
 class Devices(_DeviceTool):
     name: str = "devices"
     description: str = (
-        "The user's other devices on the NanoLika hub (phone, other computers) and whether "
-        "each has a live app control connection. Offline does not mean Telegram/MAX or chat "
-        "sync cannot deliver messages. not_allowed denies device control, not chat delivery. "
-        "Use a device's name as listed here in the device_* tools and delegate."
+        "The user's other devices on the nanoMuse hub (phone, other computers) and whether "
+        "each is online. Use a device's name as listed here in the device_* tools and delegate."
     )
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
     risk: RiskLevel = RiskLevel.SAFE
@@ -118,22 +116,13 @@ class Devices(_DeviceTool):
                 "not connected to the hub"
                 + ("" if hub.signed_in else "; the user can sign in under Settings → Devices")
             )
-        return ToolResult(
-            output=_json(
-                {
-                    "this": hub.device_name,
-                    "devices": others,
-                    "presence_scope": "app_control_connection_only",
-                    "delivery_note": "Device online/offline describes the app control socket, not Telegram/MAX delivery or chat synchronization. An offline iPhone app can still receive bot replies through its messenger. not_allowed means remote device control is disabled; it does not prohibit chat delivery.",
-                }
-            )
-        )
+        return ToolResult(output=_json({"this": hub.device_name, "devices": others}))
 
 
 class DeviceShell(_DeviceTool):
     name: str = "device_shell"
     description: str = (
-        "Run a shell command on another device. On a phone it runs inside the NanoLika app's "
+        "Run a shell command on another device. On a phone it runs inside the nanoMuse app's "
         "Linux sandbox (Alpine), not on Android itself; the phone's own apps are reached with "
         "`delegate`. Returns stdout, stderr and the exit code."
     )
@@ -425,10 +414,10 @@ class DeviceNotify(_DeviceTool):
         )
 
     async def _run(
-        self, device: str = "", text: str = "", title: str = "NanoLika", **_: Any
+        self, device: str = "", text: str = "", title: str = "nanoMuse", **_: Any
     ) -> ToolResult:
         d = self._device(device)
-        r = await self._call(d, "notify", {"text": text, "title": title or "NanoLika"})
+        r = await self._call(d, "notify", {"text": text, "title": title or "nanoMuse"})
         return ToolResult(output=_json({"device": d["name"], **r}))
 
 
@@ -457,7 +446,10 @@ class Delegate(_DeviceTool):
         return CallAssessment(
             risk=RiskLevel.MODERATE,
             target=self._device_name(args),
-            summary=f"ask {self._device_name(args)}: {str(args.get('task') or '')[:120]}",
+            # 0.29: the task text stays out of the chat. A whole instruction in words
+            # (page, click, confirm) is not a message to a person, and showing it reads as
+            # the bot talking to itself; the chat gets the short "passing it on" line.
+            summary=f"ask {self._device_name(args)}",
         )
 
     async def _run(self, device: str = "", task: str = "", **_: Any) -> ToolResult:
@@ -547,9 +539,91 @@ def _slug(name: str) -> str:
     return re.sub(r"[^\w.-]+", "_", name).strip("_")[:40] or "device"
 
 
+class ConversationOpen(_DeviceTool):
+    name: str = "conversation_open"
+    description: str = (
+        "Open this same shared conversation in Telegram, MAX or a connected desktop. This selects the "
+        "existing chat without a model task, SSH, history reset or application restart. "
+        "Omit cid for the current conversation. Telegram creates/reuses a topic; "
+        "MAX changes its selected conversation. The Telegram client view is not forced."
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "channel": {"type": "string", "enum": ["telegram", "max", "desktop"]},
+            "device": {"type": "string", "description": "Desktop device id; required if multiple computers are connected"},
+            "cid": {
+                "type": "string",
+                "description": "Existing shared conversation id; omit for this chat",
+            },
+        },
+        "required": ["channel"],
+        "additionalProperties": False,
+    }
+    risk: RiskLevel = RiskLevel.MODERATE
+
+    def assess(self, args: dict[str, Any]) -> CallAssessment:
+        channel = str(args.get("channel") or "")
+        return CallAssessment(
+            risk=RiskLevel.MODERATE,
+            target=channel,
+            summary=f"continue this conversation in {channel}",
+            egress=True,
+        )
+
+    async def _run(self, channel: str = "", cid: str = "", device: str = "", **_: Any) -> ToolResult:
+        from nanomuse.sentinel.gate import current_task
+
+        if channel not in {"telegram", "max", "desktop"}:
+            return ToolResult.fail("Choose Telegram, MAX or desktop")
+        svc = self.hub.svc
+        sync = svc.sync
+        if not sync.account_id or not sync.active:
+            return ToolResult.fail("Sign in and enable conversation sync first")
+        if not cid:
+            task = current_task()
+            thread = svc.threads.get(task.conversation_id) if task else None
+            if thread is None or not sync._mine(thread):
+                return ToolResult.fail("Choose an existing shared conversation")
+            sync.thread_changed(thread)
+            await sync.push()
+            cid = sync.cid_of(thread.id)
+        if not cid:
+            return ToolResult.fail("This conversation has not been synced yet")
+        manager = getattr(svc, "channels", None)
+        if (
+            channel != "desktop"
+            and manager is not None
+            and channel in manager.channels
+            and manager.store.config(channel).enabled
+        ):
+            from nanomuse.channels.conversation_open import open_conversation
+
+            result = await open_conversation(manager, cid, channel)
+        else:
+            hosts = [
+                d
+                for d in self.hub.others()
+                if d.get("online") and ("chat.open_desktop" if channel == "desktop" else "chat.open_channel") in (d.get("actions") or [])
+                and (not device or d.get("id") == device)
+            ]
+            if len(hosts) != 1:
+                return ToolResult.fail(
+                    "No single capable destination is available. Ask which connected computer if multiple match; do not use shell workarounds"
+                )
+            result = await self.hub.call(
+                str(hosts[0]["id"]),
+                "chat.open_desktop" if channel == "desktop" else "chat.open_channel",
+                {"cid": cid, "channel": channel},
+                timeout=45,
+            )
+        return ToolResult(output=_json(result))
+
+
 def device_tools(hub: HubService, ui: Any, workspace: Path) -> list[BaseTool]:
     return [
         Devices(hub=hub),
+        ConversationOpen(hub=hub),
         DeviceShell(hub=hub),
         DeviceFiles(hub=hub),
         DeviceGet(hub=hub, workspace=workspace),
@@ -563,6 +637,7 @@ def device_tools(hub: HubService, ui: Any, workspace: Path) -> list[BaseTool]:
 
 DEVICE_TOOL_NAMES = (
     "devices",
+    "conversation_open",
     "device_shell",
     "device_files",
     "device_get",

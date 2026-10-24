@@ -186,6 +186,8 @@ class MaxChannel(Channel):
                 and isinstance(value, dict)
                 and not self._duplicate("callback:" + key)
             ):
+                if "menu" in value:
+                    value["_menu_message_id"] = str(body.get("mid") or "")
                 self.bus.action(self.name, chat, sender, value)
             return
         if kind != "message_created":
@@ -196,6 +198,12 @@ class MaxChannel(Channel):
         sender = str(user.get("user_id") or "")
         mid = str(body.get("mid") or "")
         text = str(body.get("text") or "").strip()
+        try:
+            from .touches import note as _note
+
+            _note("max", sender, chat, text)
+        except Exception:
+            pass
         if chat and sender and mid and text and not self._duplicate("message:" + mid):
             self.bus.inbound(
                 InboundMessage(

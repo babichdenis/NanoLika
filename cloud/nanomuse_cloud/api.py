@@ -126,9 +126,9 @@ from .geo import Geo, collect_ips, group_places
 from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
+from .oauth import install_oauth
 from .provider_order import provider_order
 from .provider_prices import install_provider_prices
-from .oauth import install_oauth
 from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
 from .stats import Stats, api_group
 from .sync import DEFAULT_PAGE, SyncStore
@@ -982,6 +982,49 @@ def create_app(
         out = sync_store.wipe(caller.account_id)
         cloud.note(caller.account_id, "sync.deleted")
         return out
+
+    @app.get("/v1/sync/conversations", dependencies=[Depends(sync_dep)])
+    async def sync_conversations_list(caller: Caller = Depends(caller_dep)) -> dict:
+        """The account's conversations with what a person needs to tidy them: the title,
+        when it was last touched, how many messages. Deleted ones stay out of the list;
+        the cabinet renames and deletes by `cid`."""
+        with cloud.db.tx() as conn:
+            rows = conn.execute(
+                "SELECT c.cid, c.kind, c.title, c.device, c.created_at, c.updated_at,"
+                " (SELECT COUNT(*) FROM sync_messages m WHERE m.cid = c.cid) AS messages,"
+                " (SELECT MAX(m.seq) FROM sync_messages m WHERE m.cid = c.cid) AS last_seq"
+                " FROM sync_conversations c WHERE c.account_id = ? AND c.deleted = 0"
+                " ORDER BY last_seq DESC",
+                (caller.account_id,),
+            ).fetchall()
+        return {
+            "conversations": [
+                {
+                    "cid": row["cid"],
+                    "kind": row["kind"],
+                    "title": row["title"] or "",
+                    "device": row["device"] or "",
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "messages": row["messages"],
+                }
+                for row in rows
+            ]
+        }
+
+    @app.patch("/v1/sync/conversations/{cid}", dependencies=[Depends(sync_dep)])
+    async def sync_rename_conversation(
+        cid: str, request: Request, caller: Caller = Depends(caller_dep)
+    ) -> dict:
+        """Rename one conversation. The title travels as a conversation push, which every
+        device already applies, so no new sync frame is invented for it."""
+        body = await _json(request)
+        title = str(body.get("title") or "").strip()[:120]
+        if not title:
+            raise CloudError(400, "bad_title", "A conversation needs a name")
+        device = str(request.headers.get("x-nanomuse-device") or "cabinet")[:80]
+        out = sync_store.push(caller.account_id, device, [{"cid": cid, "title": title}], [])
+        return {"ok": True, "cid": cid, "title": title, "cursor": out.get("cursor")}
 
     @app.delete("/v1/sync/conversations/{cid}")
     async def sync_delete_conversation(cid: str, request: Request, caller: Caller = Depends(sync_dep)) -> dict:
