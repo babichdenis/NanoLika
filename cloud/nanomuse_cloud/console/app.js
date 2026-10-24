@@ -155,11 +155,11 @@
     box.id = "nm-acct";
     box.innerHTML =
       '<button class="b" type="button"><span class="a">' + String(hint || "?").slice(0, 1).toUpperCase() +
-      '</span><span>' + L("Аккаунт", "Account", "账号") + '</span><span style="opacity:.6">▾</span></button>' +
-      '<div class="m"><button class="cfg">' + L("Настройки", "Settings", "设置") +
-      '<small>' + L("профиль, расход, входы", "profile, spend, sign-ins", "资料、花费、登录") + '</small></button>' +
-      '<button class="wb">' + L("Веб-Лика", "Web Lika", "网页版") + '<small>' + L("чаты и устройства", "chats and devices", "聊天与设备") + '</small></button>' +
-      '<button class="out">' + L("Выйти", "Sign out", "退出") + '</button></div>';
+      '</span><span>' + L("Account", "账号", "Аккаунт") + '</span><span style="opacity:.6">▾</span></button>' +
+      '<div class="m"><button class="cfg">' + L("Settings", "设置", "Настройки") +
+      '<small>' + L("profile, spend, sign-ins", "资料、花费、登录", "профиль, расход, входы") + '</small></button>' +
+      '<button class="wb">' + L("Web Lika", "网页版", "Веб-Лика") + '<small>' + L("chats and devices", "聊天与设备", "чаты и устройства") + '</small></button>' +
+      '<button class="out">' + L("Sign out", "退出", "Выйти") + '</button></div>';
     document.body.appendChild(box);
     const menu = box.querySelector(".m");
     box.querySelector(".b").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("on"); });
@@ -321,11 +321,11 @@
       if (p.name === "yandex") {
         return h("button", { class: "btn yandex", type: "button", onclick: go,
                              style: "display:inline-flex;align-items:center;gap:10px;justify-content:center;background:#fff;color:#000;border:1px solid #d9d9d9;border-radius:10px;font-weight:600" },
-          h("span", { html: nmYandexLogo }), L("Войти через Яндекс", "Sign in with Yandex", "用 Yandex 登录"));
+          h("span", { html: nmYandexLogo }), L("Sign in with Yandex", "用 Yandex 登录", "Войти через Яндекс"));
       }
       return h("button", { class: "btn ghost", type: "button", onclick: go }, p.title);
     });
-    const kids = [h("div", { class: "fine", style: "margin:14px 0 6px;text-align:center" }, L("Или войти через", "Or sign in with", "或用以下方式登录")),
+    const kids = [h("div", { class: "fine", style: "margin:14px 0 6px;text-align:center" }, L("Or sign in with", "或用以下方式登录", "Или войти через")),
       h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;justify-content:center" }, ...buttons)];
     if (widget) kids.push(h("div", { style: "display:flex;justify-content:center;margin-top:8px" },
       h("script", { async: "", src: "https://telegram.org/js/telegram-widget.js?22", "data-telegram-login": widget.bot, "data-size": "medium", "data-onauth": "nmTelegramAuth(user)", "data-request-access": "write" })));
