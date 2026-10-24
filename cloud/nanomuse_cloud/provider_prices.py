@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""Цены ПОСТАВЩИКОВ: одна таблица на всех, чтобы видеть, у кого дешевле.
+
+Модуль ничего не решает и никого не переключает — он только собирает прайсы
+в один файл и говорит, у кого на каждую модель дешевле. Поставщиков можно
+добавлять: достаточно новой функции `fetch_<name>()`, возвращающей предложения
+`{model, unit, price, currency}`.
+
+Запуск вручную:
+    python -m nanomuse_cloud.provider_prices --out console/providers/prices.json
+На сервере этим занимается таймер (systemd), страница админки читает готовый
+JSON и показывает кнопку «Обновить данные».
+
+Источники по умолчанию:
+  * polza.ai      — каталог в рублях, цена карточки модели (за картинку/видео/1M);
+  * routerai.ru   — рублёвый агрегатор, цена входа и выхода за 1M токенов;
+  * api-docs.deepseek.com — официальный прайс DeepSeek в долларах.
+"""
+from __future__ import annotations
+
+import concurrent.futures as cf
+import html
+import json
+import os
+import re
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+TIMEOUT = 25
+CBR_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
+FALLBACK_USD_RUB = 90.0
+
+PRICE = re.compile(r"(\d[\d\u00a0 ]*(?:[.,]\d+)?)\s*(₽|руб\.?|\$|USD)", re.I)
+UNIT_WORDS = [
+    (r"за\s*1\s*[МM]\s*токен|per\s*1M\s*token", "1M токенов"),
+    (r"за\s*1\s*[МM]\s*символ|per\s*1M\s*char", "1M символов"),
+    (r"изображен|image", "изображение"),
+    (r"видео|video", "видео"),
+    (r"секунд|second", "секунда"),
+    (r"минут|minute", "минута"),
+    (r"запрос|request", "запрос"),
+]
+
+
+# ── сеть ────────────────────────────────────────────────────────────────
+def _ctx():
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001
+        try:
+            return ssl.create_default_context()
+        except Exception:  # noqa: BLE001
+            return None
+
+
+def get(url: str, timeout: int = TIMEOUT) -> str:
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA,
+        "Accept-Language": "ru,en;q=0.8",
+        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+    })
+    kwargs = {"timeout": timeout}
+    ctx = _ctx()
+    if ctx is not None:
+        kwargs["context"] = ctx
+    with urllib.request.urlopen(req, **kwargs) as r:
+        raw = r.read()
+    for enc in ("utf-8", "cp1251"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
+def text_of(body: str) -> str:
+    body = re.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", body)
+    body = re.sub(r"(?s)<[^>]+>", "\n", body)
+    body = html.unescape(body)
+    return "\n".join(ln.strip() for ln in body.splitlines() if ln.strip())
+
+
+def number(raw: str) -> float | None:
+    s = raw.replace("\u00a0", "").replace(" ", "").replace(",", ".")
+    if s.count(".") > 1:
+        s = s.replace(".", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def unit_near(line: str, following: str) -> str:
+    hay = f"{line} {following}"
+    low = hay.lower()
+    for pat, name in UNIT_WORDS:
+        if re.search(pat, low):
+            return name
+    return "?"
+
+
+# ── курс доллара ────────────────────────────────────────────────────────
+def usd_rub() -> tuple[float, str]:
+    try:
+        data = json.loads(get(CBR_URL, 15))
+        val = float(data["Valute"]["USD"]["Value"])
+        if 20 < val < 500:
+            return round(val, 2), "cbr"
+    except Exception:  # noqa: BLE001
+        pass
+    return FALLBACK_USD_RUB, "fallback"
+
+
+# ── поставщики ──────────────────────────────────────────────────────────
+def fetch_deepseek() -> list[dict]:
+    """Официальный прайс DeepSeek: $ за 1M токенов, peak и off-peak."""
+    body = get("https://api-docs.deepseek.com/quick_start/pricing/")
+    lines = text_of(body).splitlines()
+    start = next((i for i, ln in enumerate(lines) if "MODEL" == ln), 0)
+    models, i = [], start
+    while i < len(lines) and len(models) < 4:
+        if re.fullmatch(r"deepseek[\w.\-]*", lines[i]):
+            models.append(lines[i])
+            i += 1
+            continue
+        if lines[i].startswith("BASE URL"):
+            break
+        i += 1
+    if not models:
+        models = ["deepseek-flash", "deepseek-v4-pro"]
+    offers: list[dict] = []
+
+    # второй, надёжный проход: собираем группы по (раздел, пик/не пик)
+    groups: dict[tuple[str, str], list[float]] = {}
+    section, peak = None, False
+    for ln in lines:
+        low = ln.lower()
+        if "cache hit" in low:
+            section = "вход (кэш)"; continue
+        if "cache miss" in low:
+            section = "вход"; continue
+        if "1m output" in low:
+            section = "выход"; continue
+        if ln.strip() == "PEAK":
+            peak = True; continue
+        if ln.strip() == "OFF-PEAK":
+            peak = False; continue
+        m = re.fullmatch(r"\$(\d+(?:\.\d+)?)", ln.strip())
+        if m and section:
+            groups.setdefault((section, "peak" if peak else "off-peak"), []).append(float(m.group(1)))
+    for (sec, mode), vals in groups.items():
+        for i, val in enumerate(vals):
+            if i >= len(models):
+                break
+            kind = {"вход (кэш)": "вход, кэш", "вход": "вход", "выход": "выход"}.get(sec, sec)
+            # базой считаем вне-пиковые цены (обычный тариф, как у перепродавцов);
+            # пиковые идут отдельными строками, чтобы их не путать с базой
+            suffix = ", пик" if mode == "peak" else ""
+            offers.append(dict(model=models[i], unit=f"1M токенов ({kind}{suffix})",
+                               price=val, currency="USD", meta=mode))
+    return offers
+
+
+def _auth_get(url: str, key: str, timeout: int = 30) -> str:
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {key}",
+        "User-Agent": UA,
+        "Accept": "application/json",
+    })
+    kwargs = {"timeout": timeout}
+    ctx = _ctx()
+    if ctx is not None:
+        kwargs["context"] = ctx
+    with urllib.request.urlopen(req, **kwargs) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def fetch_routerai() -> list[dict]:
+    """routerai.ru — рубли. С ключом берём открытый каталог /api/v1/models
+    (574 модели, цены за токен); без ключа разбираем страницу каталога."""
+    key = os.environ.get("PRICE_ROUTERAI_KEY", "").strip()
+    if key:
+        data = json.loads(_auth_get("https://routerai.ru/api/v1/models", key))
+        offers = []
+        units = {
+            "prompt": "1M токенов (вход)",
+            "completion": "1M токенов (выход)",
+            "input_cache_read": "1M токенов (вход, кэш)",
+            "input_cache_write": "1M токенов (кэш-запись)",
+            "image_output": "1M токенов (картинка)",
+            "audio_output": "1M токенов (звук)",
+            "internal_reasoning": "1M токенов (размышление)",
+        }
+        for row in data.get("data", []):
+            pricing = row.get("pricing") or {}
+            per_units = row.get("pricing_units") or {}
+            for field, unit in units.items():
+                val = pricing.get(field)
+                if not isinstance(val, (int, float)) or val <= 0:
+                    continue
+                if per_units.get(field) != "token":     # за запрос и т.п. — отдельно
+                    continue
+                offers.append(dict(model=row.get("id", "?"), unit=unit,
+                                   price=round(val * 1_000_000, 4), currency="RUB"))
+            req_price = pricing.get("web_search")      # цена за ОДИН запрос, не за миллион
+            if isinstance(req_price, (int, float)) and req_price > 0:
+                offers.append(dict(model=row.get("id", "?"), unit="запрос",
+                                   price=round(req_price, 4), currency="RUB"))
+        return offers
+    # без ключа — страница каталога
+    body = get("https://routerai.ru/models")
+    lines = text_of(body).splitlines()
+    offers, model = [], None
+    slug_re = re.compile(r"^[a-z0-9][a-z0-9\-]*/[a-z0-9][a-z0-9.\-]*$")
+    for i, ln in enumerate(lines):
+        if slug_re.match(ln.strip()):
+            model = ln.strip()
+            continue
+        if not re.search(r"токены за 1M", ln, re.I):
+            continue
+        m = PRICE.search(" ".join(lines[i: i + 2]))
+        if not m:
+            continue
+        price = number(m.group(1))
+        if price is None or price <= 0:
+            continue
+        kind = "вход" if "Входящ" in ln else "выход" if "Исходящ" in ln else "?"
+        offers.append(dict(model=model or "routerai", unit=f"1M токенов ({kind})",
+                           price=price, currency="RUB"))
+    return offers
+
+
+def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
+    """polza.ai: у каждой модели своя страница, цена с единицей (₽).
+
+    На странице три разных вида записи:
+      «11,56 ₽ | Запрос / 1М | 17,16 ₽ | Ответ / 1М»   — текст, за 1M токенов;
+      «от 3 до 6,75 ₽/ изобр.»                          — картинка, диапазон;
+      «0,24 ₽ | Минута»                                 — речь по минутам.
+    """
+    data = json.loads(get("https://polza.ai/api/v1/models", 60))
+    slugs = [m["id"] for m in data.get("data", [])]
+    if limit:
+        slugs = slugs[:limit]
+
+    rec_token = re.compile(
+        r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Запрос|Ответ)\s*/\s*1М", re.I)
+    rec_range = re.compile(
+        r"от\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*до\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*/\s*"
+        r"(изобр|сек|видео|картин)", re.I)
+    rec_unit = re.compile(
+        r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Изображение|Видео|Секунда|Минута|"
+        r"Символ|Запрос|1М символов)", re.I)
+
+    def one(slug: str) -> list[dict]:
+        try:
+            page = get(f"https://polza.ai/models/{slug}", 20)
+        except Exception:  # noqa: BLE001
+            return []
+        flat = re.sub(r"\s+", " ", text_of(page))
+        out = []
+        for m in rec_token.finditer(flat):
+            price = number(m.group(1))
+            if price:
+                kind = "вход" if m.group(2).lower() == "запрос" else "выход"
+                out.append(dict(model=slug, unit=f"1M токенов ({kind})",
+                                price=price, currency="RUB"))
+        for m in rec_range.finditer(flat):
+            low, high = number(m.group(1)), number(m.group(2))
+            unit = ("секунда" if m.group(3).lower() == "сек" else
+                    "изображение" if m.group(3).lower().startswith(("изобр", "картин")) else "видео")
+            for price in (low, high):
+                if price:
+                    out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
+        for m in rec_unit.finditer(flat):
+            price = number(m.group(1))
+            raw = m.group(2).lower()
+            unit = ("изображение" if raw.startswith("изображ") else
+                    "видео" if raw == "видео" else "секунда" if raw == "секунда" else
+                    "минута" if raw == "минута" else
+                    "1M символов" if "символ" in raw else "запрос")
+            if price:
+                out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
+        # «Запрос» на карточке — та же цена, что вход за 1M токенов: не дублируем
+        inflow = {o["price"] for o in out if o["unit"] == "1M токенов (вход)"}
+        out = [o for o in out if not (o["unit"] == "запрос" and o["price"] in inflow)]
+        # без повторов: одно и то же число в одной единице
+        seen, uniq = set(), []
+        for o in out:
+            k = (o["unit"], o["price"])
+            if k in seen:
+                continue
+            seen.add(k)
+            uniq.append(o)
+        return uniq
+
+    offers: list[dict] = []
+    with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+        for rows in pool.map(one, slugs):
+            offers.extend(rows)
+    return offers
+
+
+FETCHERS = {
+    "polza": ("https://polza.ai/models", fetch_polza),
+    "routerai": ("https://routerai.ru/models", fetch_routerai),
+    "deepseek": ("https://api-docs.deepseek.com/quick_start/pricing/", fetch_deepseek),
+}
+
+
+# ── сборка ──────────────────────────────────────────────────────────────
+# одно и то же под разными именами у поставщиков
+ALIASES = {
+    "deepseek-flash": "deepseek-v4.1-flash-1017",
+    "deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    "deepseek-v4-pro": "deepseek-v4-pro-0813",
+    "deepseek-reasoner": "deepseek-v4-pro-0813",
+    "deepseek-chat": "deepseek-v4.1-flash-1017",
+}
+
+
+def model_key(provider: str, model: str) -> str:
+    """Одно и то же имя у разных поставщиков → один ключ."""
+    slug = model.strip().lower()
+    slug = re.sub(r"^[a-z0-9\-]+/", "", slug)          # фирменный префикс пути
+    slug = re.sub(r"\s+", "-", slug)
+    slug = slug.replace("deepseek/", "")
+    return ALIASES.get(slug, slug)
+
+
+def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, list[dict]]],
+          limit: int = 0) -> dict:
+    models: dict[str, dict] = {}
+    providers = []
+    for name, (url, _fn) in FETCHERS.items():
+        if name not in results:
+            continue
+        ok, note, offers = results[name]
+        providers.append(dict(name=name, url=url, ok=ok, note=note,
+                              offers=len(offers)))
+        for off in offers:
+            key = model_key(name, off["model"])
+            rub = off["price"] if off["currency"] == "RUB" else off["price"] * rate
+            group = f"{key} · {off['unit']}"     # сравниваем только одинаковые единицы
+            entry = models.setdefault(group, dict(
+                key=key, name=off["model"], unit=off["unit"], group=group, offers=[]))
+            if not entry["name"] or len(off["model"]) > len(entry["name"]):
+                entry["name"] = off["model"]
+            entry["offers"].append(dict(provider=name, unit=off["unit"],
+                                        rub=round(rub, 4),
+                                        price=off["price"], currency=off["currency"]))
+    rows = []
+    for entry in models.values():
+        if not entry["offers"]:
+            continue
+        cheapest = min(entry["offers"], key=lambda o: o["rub"] / 1 if o["rub"] else 9e9)
+        spread = max(o["rub"] for o in entry["offers"]) - min(o["rub"] for o in entry["offers"])
+        rows.append(dict(key=entry["key"], name=entry["name"], unit=entry["unit"],
+                         group=entry["group"],
+                         offers=sorted(entry["offers"], key=lambda o: o["rub"]),
+                         cheapest=cheapest["provider"],
+                         cheapest_rub=cheapest["rub"], spread=round(spread, 4)))
+    rows.sort(key=lambda r: r["key"])
+    if limit:
+        rows = rows[:limit]
+    return dict(generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                usd_rub=rate, rate_source=rate_source,
+                providers=providers, models=rows)
+
+
+# ── доступ из админки ───────────────────────────────────────────────────
+SNAPSHOT = Path(__file__).with_name("console") / "providers" / "prices.json"
+_LOCK = threading.Lock()
+_RUNNING = False
+
+
+def read_snapshot() -> dict:
+    """Что уже собрано. Пустой ответ, пока ни одного снимка нет."""
+    try:
+        return json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {"generated_at": "", "usd_rub": FALLBACK_USD_RUB, "rate_source": "none",
+                "providers": [], "models": [], "pending": _RUNNING}
+
+
+def refresh_now() -> dict:
+    """Собрать заново и записать снимок (синхронно)."""
+    rate, rate_source = usd_rub()
+    results = {}
+    for name, (url, fn) in FETCHERS.items():
+        t0 = time.time()
+        try:
+            offers = fn()
+            ok = bool(offers)
+            note = (f"{len(offers)} предложений за {time.time() - t0:.0f} с"
+                    if offers else "страница прочитана, цен не нашлось")
+        except Exception as e:  # noqa: BLE001
+            ok, note, offers = False, f"{type(e).__name__}: {e}"[:160], []
+        results[name] = (ok, note, offers)
+    payload = build(rate, rate_source, results)
+    SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
+    tmp = SNAPSHOT.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(SNAPSHOT)
+    return payload
+
+
+def refresh_async() -> bool:
+    """Сбор в фоне (кнопка в админке): True — запустили, False — уже идёт."""
+    global _RUNNING
+    with _LOCK:
+        if _RUNNING:
+            return False
+        _RUNNING = True
+
+    def work() -> None:
+        global _RUNNING
+        try:
+            refresh_now()
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            _RUNNING = False
+
+    threading.Thread(target=work, name="provider-prices", daemon=True).start()
+    return True
+
+
+def main(argv: list[str]) -> int:
+    out = None
+    limit = 0
+    i = 1
+    while i < len(argv):
+        if argv[i] in ("--out", "-o"):
+            out = argv[i + 1]
+            i += 2
+        elif argv[i] == "--limit":
+            limit = int(argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    rate, rate_source = usd_rub()
+    results = {}
+    for name, (url, fn) in FETCHERS.items():
+        t0 = time.time()
+        try:
+            offers = fn()
+            ok, note = True, f"{len(offers)} предложений за {time.time() - t0:.0f} с"
+            if not offers:
+                ok, note = False, "страница прочитана, цен не нашлось"
+        except Exception as e:  # noqa: BLE001
+            ok, note, offers = False, f"{type(e).__name__}: {e}"[:160], []
+        results[name] = (ok, note, offers)
+        print(f"{name:<10} {'ok ' if ok else 'нет'} {len(offers):>4} цен  {note}")
+    payload = build(rate, rate_source, results, limit)
+    text = json.dumps(payload, ensure_ascii=False, indent=1)
+    if out:
+        path = Path(out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"{path}: моделей {len(payload['models'])}, курс $ = {rate} ₽ ({rate_source})")
+    else:
+        print(text[:4000])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
