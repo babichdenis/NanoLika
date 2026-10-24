@@ -47,7 +47,7 @@ class ModelSpec:
     id: str
     name: str
     upstream: str
-    kind: str = "chat"  # chat | image | video
+    kind: str = "chat"  # chat | image | video | audio
     input_modalities: tuple[str, ...] = ("text",)
     output_modalities: tuple[str, ...] = ("text",)
     # The lanes a chat model serves, serialised as `for`: ("chat",), ("gui",) or both;
@@ -63,6 +63,10 @@ class ModelSpec:
     in_mult: float = 1.0
     out_mult: float = 1.0
     # Images have no token count; each one costs this many tokens of grant.
+    # Сколько токенов модель принимает на вход и сколько может выдать: клиент
+    # считает по этим числам бюджет истории и включает сжатие до отказа провайдера.
+    context_length: int = 0
+    max_output: int = 0
     per_image: int = 0
     # Nor do clips: each accepted video task costs this many (billed per output
     # second upstream, so this is set for the short clips the app makes).
@@ -99,6 +103,8 @@ class ModelSpec:
     # What the provider charges for a picture sent *in* (an edit's source picture).
     price_image_in: float = 0.0
     price_second: float = 0.0
+    price_speech: float = 0.0  # 元 for every 1000 characters said
+    price_minute: float = 0.0  # 元 for every minute of a recording heard
     # Per output second at the resolutions above the base one, by the provider's name for
     # them (("720P", 0.2), ("1080P", 0.48); a JSON object in CLOUD_MODELS); `price_second`
     # is the base, the resolution the apps ask for (480P).
@@ -106,16 +112,38 @@ class ModelSpec:
     # The clip length when the app does not say (`parameters.duration` absent):
     # Wan 2.2 always makes five seconds, MiniMax four at the least.
     clip_seconds: float = 4.0
+    # what an audio model does: speech (says words), transcribe (hears words), music (plays)
+    audio_kind: str = ""
+    per_speech: int = 0  # tokens for every 1000 characters said
+    per_minute: int = 0  # tokens for every minute of a recording heard
+    # the voice a speech model speaks with when the request names none (Polza needs one)
+    voice: str = ""
     # On the menu (the list every account gets), or asked for by name by a member
     # (Settings.unlisted_model): then `priced_as` names the menu model whose prices
     # stand in for the unknown ones in the ledger.
     listed: bool = True
     priced_as: str = ""
+    # The provider that serves this model when it is not the relay's own upstream: a name
+    # from CLOUD_PROVIDERS (see Settings.providers). Empty means UPSTREAM_BASE, as before,
+    # so a menu written without this field keeps working unchanged.
+    provider: str = ""
+    # Who makes the model, as the shelf says it ("Google", "Bytedance", "Suno"): the provider
+    # in `provider` names a relay-side connection, and the shop window needs the maker's name.
+    vendor: str = ""
+    # False while the relay has no endpoint for what the model does (music today): the shelf
+    # shows it with its price and says it is not connected yet, and no account can tick it.
+    available: bool = True
+    # Ticked on a new account's shelf. A dear model (a premium clip maker, say) stays on the
+    # menu and can be ticked by hand, but it is not what a fresh account spends on by default:
+    # `default_on: false` leaves it in the list, unticked.
+    default_on: bool = True
 
     def __post_init__(self) -> None:
         # a lane list from CLOUD_MODELS may arrive as a list; keep tuples, and only known lanes
         object.__setattr__(self, "for_", _lanes(self.for_, f"{self.id}: for"))
         object.__setattr__(self, "recommended_for", _lanes(self.recommended_for, f"{self.id}: recommended_for"))
+        if self.kind == "audio" and self.audio_kind not in AUDIO_KINDS:
+            raise ValueError(f"{self.id}: an audio model needs audio_kind, one of {', '.join(AUDIO_KINDS)}")
         if self.kind != "chat" and (self.for_ or self.recommended_for):
             raise ValueError(f"{self.id}: lanes are for chat models; a {self.kind} model has none")
         if self.recommended_for and not self.recommended:
@@ -164,8 +192,12 @@ class ModelSpec:
             },
             "nanomuse": {
                 "kind": self.kind,
+                "context_length": self.context_length,
+                "max_output": self.max_output,
                 "for": list(self.lanes),
+                "provider": self.provider,
                 "listed": self.listed,
+                "default_on": self.default_on,
                 "priced_as": self.priced_as,
                 "recommended": self.recommended,
                 "recommended_for": list(self.recommended_lanes),
@@ -173,6 +205,9 @@ class ModelSpec:
                 "out_mult": self.out_mult,
                 "per_image": self.per_image,
                 "per_clip": self.per_clip,
+                "per_speech": self.per_speech,
+                "per_minute": self.per_minute,
+                "audio_kind": self.audio_kind,
                 "clip_seconds": self.clip_seconds,
                 "price_cny": {
                     "per_m_input": self.price_in,
@@ -186,6 +221,8 @@ class ModelSpec:
                     "per_image_in": self.price_image_in,
                     "per_second": self.price_second,
                     "per_second_res": dict(self.price_second_res),
+                    "per_speech": self.price_speech,
+                    "per_minute": self.price_minute,
                 },
             },
         }
@@ -376,6 +413,8 @@ LEGACY_MODEL_IDS: dict[str, str] = {"qwen-image-3.0-pro": "qwen-image-3.0"}
 
 # What a model id may look like when a member types one (the provider's ids:
 # letters, digits, dots, dashes, underscores, a slash or a colon for namespaced ones).
+AUDIO_KINDS = ("speech", "transcribe", "music")
+
 MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:-]{0,127}$")
 
 # What each kind of request can carry in and give back, for a model the menu does
@@ -502,6 +541,61 @@ def _int(name: str, default: int) -> int:
     return int(_env(name, str(default)))
 
 
+@dataclass(frozen=True)
+class ProviderSpec:
+    """One provider the relay can ask for a model, other than its own upstream: where it
+    answers and which environment variable holds the key that pays for it."""
+
+    base: str
+    key_env: str
+
+    def key(self) -> str:
+        return _env(self.key_env)
+
+
+def _providers_from_env() -> dict[str, ProviderSpec]:
+    """CLOUD_PROVIDERS: {"polza": {"base": "https://api.polza.ai", "key_env": "POLZA_KEY"}}.
+    A broken value is refused at start, not at the first request."""
+    raw = _env("CLOUD_PROVIDERS")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError as error:
+        raise ValueError(f"CLOUD_PROVIDERS is not JSON: {error}") from error
+    out: dict[str, ProviderSpec] = {}
+    for name, entry in (data or {}).items():
+        if not isinstance(entry, dict) or not entry.get("base"):
+            raise ValueError(f"CLOUD_PROVIDERS[{name!r}] needs a base URL")
+        out[str(name)] = ProviderSpec(base=str(entry["base"]).rstrip("/"), key_env=str(entry.get("key_env", "")))
+    return out
+
+
+
+# Известные окна моделей: id (или префикс) → (контекст, разумный потолок вывода).
+# 1M/384K у DeepSeek — из их прайса; на вывод ставим меньший потолок осознанно:
+# провайдер считает окно как «промпт + запрошенный вывод», и 384K резерва
+# съедали весь бюджет истории (именно на этом «Основной» и упёрся).
+KNOWN_CONTEXT = {
+    "deepseek-flash": (1_000_000, 64_000),
+    "deepseek-pro": (1_000_000, 64_000),
+    "deepseek-v4-pro": (1_000_000, 64_000),
+    "gemini-argon": (1_000_000, 64_000),
+    "gemini-4-argon": (1_000_000, 64_000),
+    "kimi-k3": (256_000, 32_000),
+}
+
+
+def context_for(model_id: str) -> tuple[int, int]:
+    """Что известно про окно модели; 0,0 — неизвестно, клиент решает сам."""
+    if model_id in KNOWN_CONTEXT:
+        return KNOWN_CONTEXT[model_id]
+    for key, value in KNOWN_CONTEXT.items():
+        if model_id.startswith(key + "-") or model_id.endswith("-" + key):
+            return value
+    return (0, 0)
+
+
 def _models_from_env() -> tuple[ModelSpec, ...]:
     raw = _env("CLOUD_MODELS")
     if not raw:
@@ -515,7 +609,14 @@ def _models_from_env() -> tuple[ModelSpec, ...]:
             if k in item:
                 item[k] = tuple(item[k])
         out.append(ModelSpec(**item))
-    return tuple(out)
+    filled: list[ModelSpec] = []
+    for spec in out:
+        if spec.context_length:
+            filled.append(spec)
+            continue
+        ctx, cap = context_for(spec.id)
+        filled.append(spec if not ctx else replace(spec, context_length=ctx, max_output=cap))
+    return tuple(filled)
 
 
 def menu_warnings(models: tuple[ModelSpec, ...]) -> list[str]:
@@ -641,6 +742,11 @@ class Settings:
     # REPO_URL is the project's repository, which the apps point to when they ask for a
     # star — at the first sign-in, when the allowance is used up, after the first task.
     repo_url: str = field(default_factory=lambda: _env("REPO_URL", "https://nanolika.ru/source"))
+    # Providers beside UPSTREAM_BASE (0.29): a menu model names one with `provider`, and the
+    # relay asks that provider with that provider's own key — media that the relay's upstream
+    # does not serve (pictures, clips, voice) comes in this way. CLOUD_PROVIDERS is JSON, see
+    # _providers_from_env. A model without `provider` takes the old path unchanged.
+    providers: dict[str, ProviderSpec] = field(default_factory=_providers_from_env)
 
     code_ttl_s: int = field(default_factory=lambda: _int("CODE_TTL_S", 600))
     code_per_identifier_10m: int = field(default_factory=lambda: _int("CODE_PER_IDENTIFIER_10M", 3))
@@ -864,6 +970,19 @@ class Settings:
         if alias and alias != model_id:
             return self.model(alias)
         return None
+
+    def route(self, model: ModelSpec) -> tuple[str, str, str]:
+        """Where a model's requests go: (provider, base URL, key). A model with no
+        `provider` goes to the relay's own upstream, exactly as before 0.29; one that names
+        a provider from CLOUD_PROVIDERS goes there with that provider's key. An unknown name
+        comes back as an empty base, which the caller refuses loudly instead of quietly
+        sending the request to the wrong company."""
+        if not model.provider:
+            return "", self.upstream_base, self.upstream_key
+        spec = self.providers.get(model.provider)
+        if spec is None:
+            return model.provider, "", ""
+        return model.provider, spec.base, spec.key()
 
     def unlisted_model(self, model_id: str, kind: str) -> ModelSpec | None:
         """A model the menu does not carry, asked for by name for `kind` — what a

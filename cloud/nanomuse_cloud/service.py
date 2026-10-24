@@ -48,7 +48,15 @@ NUDGES_KEY = "nudges"
 
 # What one request kind is called in the apps' usage breakdown; the ledger
 # keeps the short names.
-USAGE_KINDS = ("chat", "image", "video", "realtime")
+USAGE_KINDS = ("chat", "image", "video", "audio", "realtime")
+
+# 0.28: the shelf — what an account keeps in sight of the menu, per kind of request. The
+# kinds are the ModelSpec ones that have a shelf; `speech` (voice in, voice out) comes when
+# the relay learns to bill it. At most this many of a kind: a shelf is a shortlist, and the
+# messengers draw their buttons from it.
+SHELF_KINDS = ("chat", "image", "video", "audio")
+SHELF_MAX_PER_KIND = 24
+
 
 # Where the person is, as far as the relay can tell (0.17), for the "ways on" when the
 # allowance is out: Alibaba Cloud Bailian only signs up accounts from mainland China, so
@@ -360,6 +368,23 @@ RUNTIME_SETTINGS: dict[str, tuple[type, float, float]] = {
     "rub_per_usd": (float, 0.0, 10000.0),
     "topup_fee_pct": (float, 0.0, 100.0),
 }
+
+
+UNIT_NAMES = {
+    "chat": "1M_tokens",
+    "image": "picture",
+    "video": "clip",
+    "speech": "1000_characters",
+    "transcribe": "minute",
+    "music": "track",
+}
+
+
+def _unit(spec: ModelSpec) -> str:
+    """What one charge buys, in the words the shelf shows: a kind of thing, not a price."""
+    if spec.kind == "audio":
+        return UNIT_NAMES.get(spec.audio_kind, "minute")
+    return UNIT_NAMES.get(spec.kind, "1M_tokens")
 
 
 class Cloud:
@@ -695,12 +720,10 @@ class Cloud:
     def _account_for(self, ident: Identifier) -> sqlite3.Row | None:
         """Look up an account by ``ident``'s canonical hash, falling back to its
         legacy pre-canonical hash when present so existing dotted Gmail accounts
-        keep matching, and to an account this address was linked into earlier
-        (`account_aliases`): the address the app signs in with when a chat was the first
-        way in."""
-        row = self.db.account_by_hashes(
-            ident.hashes(self.s.hmac_key), shared=ident.merged_hash(self.s.hmac_key)
-        )
+        keep matching, and then to the identifiers added into an account later
+        (``account_aliases``): the address the app signs in with when the chat was the
+        first way in."""
+        row = self.db.account_by_hashes(ident.hashes(self.s.hmac_key))
         if row is not None:
             return row
         return self.db.alias_account(ident.hash(self.s.hmac_key))
@@ -800,21 +823,15 @@ class Cloud:
         self._refuse_if_domain_limited(ident)
         account = self._account_for(ident)
         disabled = account is not None and bool(account["disabled"])
+        t = now()
+        if self.db.codes_recent_for(ident.hash(self.s.hmac_key), t - 600) >= self.s.code_per_identifier_10m:
+            raise CloudError(429, "code_too_often", "Too many codes for this address; wait a few minutes")
+        if ip and self.db.codes_recent_for_ip(ip, t - 3600) >= self.s.code_per_ip_hour:
+            raise CloudError(429, "code_too_often", "Too many codes from this network; wait an hour")
         # The reviewer's code is the fixed one and goes nowhere: the row is written like
         # anyone's, so the lifetime, the attempt limit and the rate limits are the same.
         code = self.s.review_code.strip() if review else f"{secrets.randbelow(1_000_000):06d}"
-        limited = self.db.insert_code_limited(
-            ident.hash(self.s.hmac_key),
-            _code_hash(self.s.hmac_key, code),
-            ip,
-            self.s.code_ttl_s,
-            self.s.code_per_identifier_10m,
-            self.s.code_per_ip_hour,
-        )
-        if limited == "identifier":
-            raise CloudError(429, "code_too_often", "Too many codes for this address; wait a few minutes")
-        if limited == "ip":
-            raise CloudError(429, "code_too_often", "Too many codes from this network; wait an hour")
+        self.db.insert_code(ident.hash(self.s.hmac_key), _code_hash(self.s.hmac_key, code), ip, self.s.code_ttl_s)
         if review:
             log.info("review sign-in: a code request for the reviewer's address; nothing sent")
             return
@@ -842,11 +859,16 @@ class Cloud:
         if not self.allowed(ident):
             raise CloudError(403, "not_invited", "This relay is private; that address is not on its list")
         id_hash = ident.hash(self.s.hmac_key)
-        result = self.db.check_code(id_hash, _code_hash(self.s.hmac_key, code.strip()), self.s.code_max_attempts)
-        if result == "expired":
+        row = self.db.live_code(id_hash)
+        if row is None:
             raise CloudError(400, "code_expired", "The code has expired; ask for a new one")
-        if result == "wrong":
+        attempts = self.db.bump_attempts(int(row["id"]))
+        if attempts > self.s.code_max_attempts:
+            self.db.consume_code(int(row["id"]))
+            raise CloudError(400, "code_expired", "Too many tries; ask for a new code")
+        if not secrets.compare_digest(str(row["code_hash"]).encode(), _code_hash(self.s.hmac_key, code.strip()).encode()):
             raise CloudError(400, "code_wrong", "That code is not right")
+        self.db.consume_code(int(row["id"]))
         if link.strip():
             return self.link_into(ident, link.strip(), device)
         return self.sign_in(ident, device, "code", invite)
@@ -872,33 +894,9 @@ class Cloud:
             self._refuse_if_domain_limited(ident)
             account_id = self.db.new_account_id()
             enc = self.crypto.encrypt(account_id, ident.value)
-            domain = ident.value.rpartition("@")[2].lower() if ident.channel == "email" else ""
-            domain_limit = (
-                self.s.signup_per_domain_day if domain and not self.is_review(ident) and domain not in self.s.signup_domain_allow_set else 0
+            account = self.db.create_account(
+                id_hash, ident.channel, ident.hint, self.s.signup_tokens, enc, account_id=account_id, grant_uy=self.s.allowance_uy
             )
-            account, created = self.db.create_account_limited(
-                id_hash,
-                ident.channel,
-                ident.hint,
-                self.s.signup_tokens,
-                enc,
-                account_id,
-                self.s.allowance_uy,
-                domain=domain,
-                domain_limit=domain_limit,
-                domain_since=now() - 86400,
-            )
-            if account is None:
-                self.db.add_event("", "signup.domain_limited", domain[:200])
-                raise CloudError(
-                    429,
-                    "domain_limited",
-                    "This address's domain has reached today's sign-up limit on this relay; try again tomorrow or use another address",
-                )
-            account_id = str(account["id"])
-        else:
-            account_id = str(account["id"])
-        if created:
             self.db.add_event(account_id, "account.created", ident.channel)
             self._accept_invite(account_id, invite)
         elif account["disabled"]:
@@ -1042,7 +1040,9 @@ class Cloud:
         state = self.plan_state(account_id) or {}
         return {"plan": state, "credited_uy": paid_uy, "credited_rub": plan["price_rub"]}
 
-    def payment_grant(self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment", *, credit: bool = True) -> dict[str, Any]:
+    def payment_grant(
+        self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment", *, credit: bool = True
+    ) -> dict[str, Any]:
         """Оплата становится тарифом: права — по уровню суммы, токены — по тому, что заплатили.
 
         Тариф задаёт две вещи: разрешения (проход через релей и связь устройств) и срок.
@@ -1377,10 +1377,7 @@ class Cloud:
         if locked_until and int(locked_until) > now():
             raise CloudError(429, "locked", "Too many wrong passwords; wait a while or sign in with a code")
         if not account["password_hash"]:
-            hash_password("x")
-            self._note_login_failure(ip)
-            self.db.add_event(account["id"], "sign_in.failed", device)
-            raise CloudError(401, "bad_credentials", "That address and password do not match")
+            raise CloudError(400, "no_password", "This account has no password yet; sign in with a code and set one under Account")
         if not check_password(password, account["password_hash"]):
             left = self.db.login_failed(account["id"], self.s.password_max_attempts, self.s.lockout_s)
             self._note_login_failure(ip)
@@ -1668,6 +1665,218 @@ class Cloud:
         )
         err.extra = {**err.extra, "paused": True, "reason": "allowance_paused"}
         return err
+
+    # -- 0.28: the model shelf ----------------------------------------------------------------
+
+    def _menu_by_kind(self) -> dict[str, list[ModelSpec]]:
+        """The menu's models that a shelf can hold, per kind, in menu order."""
+        out: dict[str, list[ModelSpec]] = {kind: [] for kind in SHELF_KINDS}
+        for spec in self.s.models:
+            if spec.listed and spec.kind in out:
+                out[spec.kind].append(spec)
+        return out
+
+    def _stored_shelf(self, account_id: str) -> dict[str, Any]:
+        """The shelf the account stored, decoded; {} when it never set one."""
+        raw = self.db.shelf(account_id)
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    def shelf(self, account_id: str) -> dict[str, Any]:
+        """What the account keeps in sight: `enabled` (kind → model ids) and `default`
+        (kind → one of them). Without a stored shelf the answer is the menu's models marked
+        `default_on`: a dear premium model stays on the menu but off a fresh shelf. A kind
+        whose every model is off by default falls back to all of them, so no shelf is empty,
+        and every account from before 0.28 keeps working exactly as it did."""
+        by_kind = self._menu_by_kind()
+        enabled: dict[str, list[str]] = {}
+        for kind, rows in by_kind.items():
+            fresh = [spec.id for spec in rows if getattr(spec, "default_on", True)]
+            enabled[kind] = fresh or [spec.id for spec in rows]
+        default: dict[str, str] = {}
+        for kind, rows in by_kind.items():
+            if not rows:
+                continue
+            kept = set(enabled[kind])
+            default[kind] = next(
+                (spec.id for spec in rows if spec.id in kept and spec.recommended),
+                next((spec.id for spec in rows if spec.id in kept), rows[0].id),
+            )
+        stored = self._stored_shelf(account_id)
+        raw_enabled = stored.get("enabled")
+        if isinstance(raw_enabled, dict):
+            for kind, ids in raw_enabled.items():
+                if kind not in by_kind or not isinstance(ids, list):
+                    continue
+                known = {spec.id for spec in by_kind[kind]}
+                enabled[kind] = [str(mid) for mid in ids if str(mid) in known]
+        raw_default = stored.get("default")
+        if isinstance(raw_default, dict):
+            for kind, model_id in raw_default.items():
+                if kind in enabled and str(model_id) in enabled[kind]:
+                    default[kind] = str(model_id)
+        for kind, ids in enabled.items():
+            if not ids:
+                default.pop(kind, None)
+            elif default.get(kind) not in ids:
+                default[kind] = ids[0]
+        return {"enabled": enabled, "default": default}
+
+    def catalogue_public(self) -> dict[str, Any]:
+        """The menu for anyone, key or not: what each model is for and what an account pays
+        for it. The provider's own price (yuan) and the media wholesale costs stay in the
+        operator's console, so a public page can print this answer as it stands. The apps
+        read it to mark a model instead of keeping a hand-written copy that drifts: the
+        kind, the modalities and the lanes all come from the relay's one declaration."""
+        models = []
+        for spec in self.s.models:
+            if not spec.listed:
+                continue
+            models.append(
+                {
+                    "id": spec.id,
+                    "name": spec.name,
+                    "kind": spec.kind,
+                    "for": list(spec.lanes),
+                    "recommended": spec.recommended,
+                    "default_on": getattr(spec, "default_on", True),
+                    "in": list(spec.input_modalities),
+                    "out": list(spec.output_modalities),
+                    "sell": {
+                        "currency": "RUB",
+                        "in": getattr(spec, "sell_in", 0.0),
+                        "cached_in": getattr(spec, "sell_cached_in", 0.0),
+                        "out": getattr(spec, "sell_out", 0.0),
+                    },
+                }
+            )
+        kinds = [kind for kind in SHELF_KINDS if any(m["kind"] == kind for m in models)]
+        return {"kinds": kinds, "models": models}
+
+    def catalogue(self, caller: Caller) -> dict[str, Any]:
+        """The menu as an app shows it: every listed model with its kind, the lanes it
+        serves, what it can take in and give back, and what it costs the account (the sale
+        rate in rubles where one is set, the provider's price in yuan always, and for a
+        picture or a clip the tokens of the grant one costs). Beside it, the account's shelf."""
+        shelf = self.shelf(caller.account_id)
+        models = []
+        for spec in self.s.models:
+            if not spec.listed:
+                continue
+            models.append(
+                {
+                    "id": spec.id,
+                    "name": spec.name,
+                    "upstream": spec.upstream,
+                    "vendor": spec.vendor,
+                    "available": spec.available,
+                    "unit": _unit(spec),
+                    "kind": spec.kind,
+                    "for": list(spec.lanes),
+                    "recommended": spec.recommended,
+                    "default_on": getattr(spec, "default_on", True),
+                    "in": list(spec.input_modalities),
+                    "out": list(spec.output_modalities),
+                    # what the account pays, rubles per million tokens (0 = not set yet, the
+                    # account is charged the provider's price in yuan, as before 0.27)
+                    # a relay older than the sale rate has no sell_* fields at all: 0 means
+                    # "not set yet", and the account is charged the provider's price in yuan
+                    "sell": {
+                        "currency": "RUB",
+                        "in": getattr(spec, "sell_in", 0.0),
+                        "cached_in": getattr(spec, "sell_cached_in", 0.0),
+                        "out": getattr(spec, "sell_out", 0.0),
+                    },
+                    # what the provider bills the operator, yuan per million tokens
+                    "cost": {
+                        "currency": "CNY",
+                        "in": spec.price_in,
+                        "out": spec.price_out,
+                        "cached_in_rate": spec.cached_in_rate,
+                    },
+                    # a picture or a clip has no token count of its own: this is what one
+                    # costs in tokens of the grant, and what the provider charges for it
+                    "tokens": {
+                        "per_picture": spec.per_image,
+                        "per_clip": spec.per_clip,
+                        "per_speech": spec.per_speech,
+                        "per_minute": spec.per_minute,
+                    },
+                    # what a voice model does, and the voice it speaks with by default
+                    "audio": {"kind": spec.audio_kind, "voice": spec.voice},
+                    "media": {
+                        "picture_cny": spec.price_image,
+                        "picture_2k_cny": spec.price_image_2k,
+                        "second_cny": spec.price_second,
+                        "second_by_size_cny": dict(spec.price_second_res),
+                        "speech_cny": spec.price_speech,
+                        "minute_cny": spec.price_minute,
+                        "clip_seconds": spec.clip_seconds,
+                    },
+                    # on the shelf right now, and the default of its kind
+                    "enabled": spec.id in shelf["enabled"].get(spec.kind, []),
+                    "default": shelf["default"].get(spec.kind) == spec.id,
+                }
+            )
+        return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf}
+
+    def put_shelf(self, caller: Caller, data: dict[str, Any]) -> dict[str, Any]:
+        """Store the shelf. `enabled` maps a kind to the ids it keeps there; a kind the write
+        does not name keeps what it had, so a phone that only touches picture models leaves
+        the chat list alone. `default` picks one enabled id per kind. Chat always keeps at
+        least one model — the account must have something to answer with; pictures and clips
+        may be emptied. An id that is not on the menu, or is of another kind, is 400
+        `bad_model`."""
+        raw = data.get("enabled")
+        if not isinstance(raw, dict):
+            raise CloudError(400, "bad_request", "enabled maps a kind to a list of model ids")
+        by_kind = self._menu_by_kind()
+        stored = self.shelf(caller.account_id)
+        enabled: dict[str, list[str]] = {kind: list(ids) for kind, ids in stored["enabled"].items()}
+        for kind, ids in raw.items():
+            if kind not in by_kind:
+                raise CloudError(400, "bad_kind", f"unknown kind {kind!r} (one of {', '.join(SHELF_KINDS)})")
+            if not isinstance(ids, list):
+                raise CloudError(400, "bad_request", f"enabled.{kind} is a list of model ids")
+            known = {spec.id: spec for spec in by_kind[kind]}
+            kept: list[str] = []
+            for model_id in ids:
+                spec = known.get(str(model_id))
+                if spec is None:
+                    on_menu = self.s.model(str(model_id))
+                    why = f"{model_id} is a {on_menu.kind} model" if on_menu is not None else f"{model_id} is not on the menu"
+                    raise CloudError(400, "bad_model", f"{why}, not a {kind} one")
+                if spec.id not in kept:
+                    kept.append(spec.id)
+            if len(kept) > SHELF_MAX_PER_KIND:
+                raise CloudError(400, "bad_request", f"at most {SHELF_MAX_PER_KIND} models of one kind")
+            enabled[kind] = kept
+        if not enabled.get("chat"):
+            raise CloudError(400, "no_chat_model", "keep at least one chat model on the shelf")
+        default = dict(stored["default"])
+        wanted = data.get("default")
+        if wanted is not None:
+            if not isinstance(wanted, dict):
+                raise CloudError(400, "bad_request", "default maps a kind to a model id")
+            for kind, model_id in wanted.items():
+                if kind not in by_kind:
+                    raise CloudError(400, "bad_kind", f"unknown kind {kind!r} (one of {', '.join(SHELF_KINDS)})")
+                if str(model_id) not in enabled.get(kind, []):
+                    raise CloudError(400, "bad_model", f"{model_id} is not on the {kind} shelf")
+                default[kind] = str(model_id)
+        for kind, ids in enabled.items():
+            if not ids:
+                default.pop(kind, None)
+            elif default.get(kind) not in ids:
+                default[kind] = ids[0]
+        body = {"enabled": {kind: ids for kind, ids in enabled.items()}, "default": default}
+        self.db.put_shelf(caller.account_id, json.dumps(body, ensure_ascii=False))
+        return self.shelf(caller.account_id)
 
     def me(self, caller: Caller, place: Place | None = None) -> dict:
         t = now()
@@ -2007,6 +2216,25 @@ class Cloud:
         charged = model.per_image * max(1, n)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
         self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost)
+        self.settle_invite(caller.account_id)
+        return charged
+
+    def charge_speech(self, caller: Caller, model: ModelSpec, characters: int, request_id: str) -> int:
+        """What a text says: the model is paid for every thousand characters, rounded up,
+        and never less than one thousand."""
+        thousands = max(1, -(-max(0, characters) // 1000))
+        charged = model.per_speech * thousands
+        cost = round(model.price_speech * thousands * 1_000_000)
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost)
+        self.settle_invite(caller.account_id)
+        return charged
+
+    def charge_transcribe(self, caller: Caller, model: ModelSpec, seconds: float, request_id: str) -> int:
+        """What a recording said: paid for every started minute, one minute at the least."""
+        minutes = max(1, -(-int(max(0.0, seconds)) // 60))
+        charged = model.per_minute * minutes
+        cost = round(model.price_minute * minutes * 1_000_000)
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost)
         self.settle_invite(caller.account_id)
         return charged
 

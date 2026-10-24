@@ -127,6 +127,7 @@ from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
+from .browser_auth import browser_marker
 from .provider_order import provider_order
 from .provider_prices import install_provider_prices
 from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
@@ -602,7 +603,7 @@ def create_app(
                     # Welcome mail is helpful, but must never undo a successful sign-in.
                     log.warning("first-login welcome mail failed: %s", type(exc).__name__)
         me = cloud.me(caller, client_place(request))
-        return {"api_key": key, "created": created, **me}
+        return browser_marker(JSONResponse({"api_key": key, "created": created, **me}), settings)
 
     @app.post("/v1/auth/login")
     async def auth_login(request: Request) -> dict:
@@ -618,7 +619,7 @@ def create_app(
         device = str(body.get("device", ""))[:80]
         key, caller = await asyncio.to_thread(cloud.login_password, ident, password, device, client_ip(request))
         me = cloud.me(caller, client_place(request))
-        return {"api_key": key, "created": False, **me}
+        return browser_marker(JSONResponse({"api_key": key, "created": False, **me}), settings)
 
     def bot_caller(request: Request) -> None:
         """The bot's own proof: one shared secret, and nothing a person could hold."""
@@ -836,7 +837,7 @@ def create_app(
     async def me_revoke_session(prefix: str, caller: Caller = Depends(caller_dep)) -> Response:
         cloud.revoke_session(caller, prefix)
         await _drop_signed_out(caller.account_id)
-        return Response(status_code=204)
+        return browser_marker(Response(status_code=204), settings, signed_in=False)
 
     @app.get("/v1/me/events")
     async def me_events(limit: int = 50, caller: Caller = Depends(caller_dep)) -> dict:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import html
 import json
 import logging
 import smtplib
@@ -70,6 +71,10 @@ class SmtpSender:
         msg = compose_code_mail(self.s.smtp_from, ident.value, code, max(1, self.s.code_ttl_s // 60))
         smtp_send(self.s, msg)
 
+    def send_first_login(self, ident: Identifier) -> None:
+        if ident.channel == "email":
+            smtp_send(self.s, compose_first_login_mail(self.s.smtp_from, ident.value))
+
 
 def smtp_send(s: Settings, msg: EmailMessage) -> None:
     """One message out through the relay's SMTP settings; SendError when it did not go."""
@@ -125,18 +130,65 @@ class WebhookMailSender:
         if ident.channel != "email":
             raise SendError("this deployment sends codes by e-mail only")
         minutes = max(1, self.s.code_ttl_s // 60)
-        webhook_send(self.s, ident.value, code_mail_subject(code), code_mail_text(code, minutes))
+        webhook_send(
+            self.s,
+            ident.value,
+            code_mail_subject(code),
+            code_mail_text(code, minutes),
+            # the letter the person actually opens: the plain text above stays as the fallback,
+            # and the code is never in the subject (lock-screen previews)
+            html=_brand_email_html(
+                preheader=f"Код для входа в nanoLika, действует {minutes} мин.",
+                title="Ваш код для входа",
+                paragraphs=[
+                    "Здравствуйте! Введите этот код в nanoLika — и вы на месте.",
+                    "Код одноразовый: никому его не пересылайте. Если вы не просили код, просто "
+                    "удалите письмо — без него никто не войдёт.",
+                ],
+                code=code,
+                minutes=minutes,
+                action_label="Открыть nanoLika",
+                action_url="https://cloud.nanolika.ru/app/",
+            ),
+        )
+
+    def send_first_login(self, ident: Identifier) -> None:
+        if ident.channel == "email":
+            webhook_send(
+                self.s, ident.value, "nanoLika · рады знакомству",
+                "Добро пожаловать в nanoLika!\n\n"
+                "Рады, что вы с нами. Начните с небольшой понятной просьбы — например, "
+                "попросите Лику помочь с письмом или найти нужную информацию.\n"
+                "Вы сами выбираете доступы и подтверждаете важные действия.\n\n"
+                "Идеи для первой просьбы: https://nanolika.ru/tips.html\n"
+                "nanoLika · https://nanolika.ru/",
+                html=_brand_email_html(
+                    preheader="Рады, что вы с нами: nanoLika",
+                    title="Рады знакомству!",
+                    paragraphs=[
+                        "Здравствуйте! Лика уже рядом: на компьютере, в телефоне и в браузере.",
+                        "Начните с небольшой понятной просьбы — помочь с письмом, найти нужную "
+                        "страницу, разобрать документ. Доступы вы выбираете сами, а важные "
+                        "действия Лика спрашивает перед тем, как сделать.",
+                    ],
+                    action_label="Идеи для первой просьбы",
+                    action_url="https://nanolika.ru/tips.html",
+                ),
+            )
 
 
-def webhook_send(s: Settings, to: str, subject: str, text: str) -> None:
-    """One message through MAIL_WEBHOOK_URL; SendError when it did not go."""
+def webhook_send(s: Settings, to: str, subject: str, text: str, html: str | None = None) -> None:
+    """One message through MAIL_WEBHOOK_URL; SendError when it did not go.
+
+    ``html`` is the same letter in a warm layout; the site's page builds
+    multipart/alternative from the two. A site that only knows ``text`` ignores it, so the plain
+    text has to stand on its own."""
     if not (s.mail_webhook_url and s.mail_webhook_secret):
         raise SendError("mail: MAIL_WEBHOOK_URL and MAIL_WEBHOOK_SECRET are not set")
-    payload = json.dumps(
-        {"to": to, "subject": subject, "text": text, "ts": int(time.time())},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode()
+    body: dict[str, object] = {"to": to, "subject": subject, "text": text, "ts": int(time.time())}
+    if html:
+        body["html"] = html
+    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
     signature = hmac.new(s.mail_webhook_secret.encode(), payload, hashlib.sha256).hexdigest()
     try:
         r = httpx.post(
@@ -178,32 +230,124 @@ def compose_notice_mail(sender: str, to: str, subject: str, lines: list[str]) ->
 
 
 def code_mail_subject(code: str) -> str:
-    """The subject a code mail carries, wherever it is sent from."""
-    return f"NanoLika: код для входа {code}"
+    "Keep one-time codes out of lock-screen previews and subject listings."
+    del code
+    return "nanoLika · ваш код для входа"
 
 
 def code_mail_text(code: str, minutes: int) -> str:
-    """The plain text of a code mail: what every client can show, and what the HTTPS
-    endpoint sends (it builds the MIME body itself, so the same words travel both ways)."""
+    "Friendly Russian-first copy; a verified email code can also restore access."
     return (
-        f"Код для входа в NanoLika: {code}. Он действует {minutes} мин.\n"
-        "Введите его в приложении. Никому не показывайте этот код.\n\n"
-        f"Your NanoLika code is {code}; it expires in {minutes} minutes.\n"
-        "Enter it in the app to sign in. Do not share it with anyone.\n\n"
-        f"您的 NanoLika 登录码为 {code}，{minutes} 分钟内有效。\n"
-        "请在应用中输入。请勿向任何人透露此代码。\n\n"
-        "Если это не вы, просто удалите письмо.\n"
-        "If you did not ask for this, you can ignore this message.\n"
-        "如果这不是您本人的操作，请直接删除此邮件。\n\n"
-        "NanoLika · https://nanolika.ru/ · автоматическое письмо, отвечать не нужно / automated, no reply\n"
+        f"Здравствуйте! Вот ваш код для nanoLika: {code}.\n"
+        f"Он действует {minutes} мин. Войдите по коду, а затем задайте новый пароль в настройках аккаунта, если забыли старый.\n"
+        "Никому не пересылайте код.\n\n"
+        f"Your sign-in code is {code}; it expires in {minutes} minutes. Sign in with it, then set a new password in account settings if needed. Do not forward it.\n\n"
+        "Если вы не запрашивали его, просто удалите это письмо.\n"
+        "If you did not ask for it, you can ignore this message.\n\n"
+        "nanoLika · https://nanolika.ru/"
     )
+
+def _brand_email_html(
+    *,
+    preheader: str,
+    title: str,
+    paragraphs: list[str],
+    code: str | None = None,
+    minutes: int | None = None,
+    action_label: str | None = None,
+    action_url: str | None = None,
+    safety_note: str = "Это автоматическое письмо nanoLika. Если оно не относится к вам, проигнорируйте его.",
+) -> str:
+    "Table-based paper-and-sage layout with a hosted Lika image and a text fallback."
+    esc = html.escape
+    text_rows = "".join(
+        '<tr><td style="padding:0 0 12px;font:15px/1.65 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#3e463c">'
+        + esc(line)
+        + "</td></tr>"
+        for line in paragraphs
+    )
+    code_panel = ""
+    if code is not None:
+        # non-breaking spaces: a phone that is narrow enough to wrap "4 8 2 9 1 3" must not put
+        # the last digit on its own line — the code is read once and copied by hand
+        spaced = "&nbsp;".join(esc(digit) for digit in code)
+        lifetime = f"Действует {minutes} мин. · Valid for {minutes} minutes" if minutes is not None else ""
+        code_panel = f"""<tr><td style="padding:8px 0 18px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f2e9;border:1px solid #d7ddcf;border-radius:14px"><tr><td class="nm-code" align="center" style="padding:19px 12px 10px;font:600 27px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px;color:#34483b;font-variant-numeric:tabular-nums;white-space:nowrap;word-break:keep-all;overflow-wrap:normal">{spaced}</td></tr><tr><td align="center" style="padding:0 12px 17px;font:13px/1.45 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#667260">{esc(lifetime)}</td></tr></table>
+</td></tr>"""
+    action = ""
+    if action_label and action_url:
+        parsed = urllib.parse.urlparse(action_url)
+        if parsed.scheme != "https" or parsed.hostname not in {"nanolika.ru", "cloud.nanolika.ru"}:
+            raise ValueError("customer email links must use an HTTPS NanoLika address")
+        action = f'''<tr><td align="center" style="padding:4px 0 18px"><a href="{esc(action_url, quote=True)}" style="display:inline-block;padding:12px 20px;border-radius:10px;background:#536b55;color:#fffdf8;text-decoration:none;font:600 14px/1.3 -apple-system,BlinkMacSystemFont,Arial,sans-serif">{esc(action_label)}</a></td></tr>'''
+    safe_preheader = esc(preheader)
+    safe_safety_note = esc(safety_note)
+    return f"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@media only screen and (max-width:420px){{.nm-code{{font-size:27px!important;letter-spacing:2px!important}}}}</style></head>
+<body style="margin:0;padding:0;background:#f5f1e7;color:#303a32">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">{safe_preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f1e7"><tr><td align="center" style="padding:28px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px"><tr><td style="padding:0 8px 12px;font:600 18px/1.3 Georgia,'Times New Roman',serif;letter-spacing:.2px;color:#405444"><span style="color:#c58a42">✦</span> nano<b style="color:#536b55">Lika</b></td></tr>
+<tr><td style="background:#fffdf8;border:1px solid #dedfce;border-radius:12px;padding:22px 26px 24px;box-shadow:0 8px 24px rgba(65,75,57,.07)">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="76" valign="middle" style="padding:0 16px 10px 0"><img src="https://nanolika.ru/assets/lika/idle.webp" width="64" height="64" alt="Лика, помощница nanoLika" style="display:block;width:64px;height:64px;border-radius:50%;border:1px solid #d7ddcf;object-fit:cover"></td><td valign="middle" style="padding:0 0 10px;font:14px/1.5 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#667260">Тёплый привет от Лики</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:0 0 8px;font:700 23px/1.3 Georgia,'Times New Roman',serif;color:#303a32">{esc(title)}</td></tr>
+{text_rows}{code_panel}{action}
+<tr><td style="padding:10px 0 0;border-top:1px solid #e5e4d8;font:13px/1.6 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#74796e">{safe_safety_note}</td></tr></table>
+</td></tr>
+<tr><td style="padding:15px 8px 0;font:12px/1.6 -apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#787d72">Автоматическое письмо nanoLika · <a href="https://nanolika.ru" style="color:#536b55">nanolika.ru</a> · <a href="https://nanolika.ru/privacy.html" style="color:#536b55">Конфиденциальность</a></td></tr>
+</table></td></tr></table></body></html>"""
+
+
+def compose_customer_notice_mail(
+    sender: str,
+    to: str,
+    subject: str,
+    title: str,
+    paragraphs: list[str],
+    *,
+    action_label: str | None = None,
+    action_url: str | None = None,
+    reply_allowed: bool = False,
+) -> EmailMessage:
+    "Reusable branded template for a factual service notice; callers supply approved copy."
+    msg = EmailMessage()
+    msg["From"] = sender if "<" in sender else f"NanoLika <{sender}>"
+    msg["To"] = to
+    msg["Subject"] = f"NanoLika · {subject}"
+    if not reply_allowed:
+        msg["Auto-Submitted"] = "auto-generated"
+        msg["X-Auto-Response-Suppress"] = "All"
+    plain = "\n\n".join([title, *paragraphs])
+    if action_label and action_url:
+        plain += f"\n\n{action_label}: {action_url}"
+    plain += (
+        "\n\nnanoLika · https://nanolika.ru/ · можно ответить на это письмо\n"
+        if reply_allowed else
+        "\n\nnanoLika · https://nanolika.ru/ · автоматическое письмо\n"
+    )
+    msg.set_content(plain)
+    msg.add_alternative(
+        _brand_email_html(
+            preheader=paragraphs[0] if paragraphs else title,
+            title=title,
+            paragraphs=paragraphs,
+            action_label=action_label,
+            action_url=action_url,
+            safety_note=(
+                "Ответьте на это письмо, если захотите уточнить детали."
+                if reply_allowed else
+                "Это автоматическое письмо nanoLika. Если оно не относится к вам, проигнорируйте его."
+            ),
+        ),
+        subtype="html",
+    )
+    return msg
 
 
 def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMessage:
-    """The verification mail: plain text first (what every client can show),
-    an HTML part on top with the code large enough to read off a phone.
-    Chinese and English in one message — the relay does not know the reader's
-    language, and a code mail should not need a translation either way."""
+    "Code mail with a large readable code and a plain-text fallback."
     msg = EmailMessage()
     msg["From"] = sender if "<" in sender else f"NanoLika <{sender}>"
     msg["To"] = to
@@ -211,24 +355,92 @@ def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMes
     msg["Auto-Submitted"] = "auto-generated"
     msg["X-Auto-Response-Suppress"] = "All"
     msg.set_content(code_mail_text(code, minutes))
-    spaced = " ".join(code)
-    html = f"""<!doctype html>
-<html><body style="margin:0;padding:24px;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',Arial,sans-serif;color:#1d1d1f">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-<table role="presentation" width="420" cellpadding="0" cellspacing="0" style="max-width:420px;background:#ffffff;border-radius:16px;padding:32px 28px">
-<tr><td style="font-size:15px;font-weight:600;color:#6e6e73;padding-bottom:18px">NanoLika</td></tr>
-<tr><td style="font-size:16px;line-height:24px">Код для входа / Your code</td></tr>
-<tr><td style="font-size:40px;font-weight:700;letter-spacing:6px;padding:14px 0 18px;font-variant-numeric:tabular-nums">{spaced}</td></tr>
-<tr><td style="font-size:14px;line-height:22px;color:#3a3a3c">Он действует {minutes} мин. Введите его в приложении NanoLika. Никому не показывайте этот код.</td></tr>
-<tr><td style="font-size:14px;line-height:22px;color:#3a3a3c;padding-top:8px">It expires in {minutes} minutes. Enter it in the NanoLika app to sign in; do not share it with anyone.</td></tr>
-<tr><td style="font-size:14px;line-height:22px;color:#3a3a3c;padding-top:8px">您的登录码为上方数字，{minutes} 分钟内有效。请在应用中输入，请勿向任何人透露。</td></tr>
-<tr><td style="font-size:12px;line-height:18px;color:#8e8e93;padding-top:22px">Если это не вы, просто удалите письмо.<br>If you did not ask for this, you can ignore this message.</td></tr>
-</table>
-<div style="font-size:12px;color:#8e8e93;padding-top:16px">NanoLika · <a href="https://nanolika.ru/" style="color:#8e8e93">nanolika.ru</a> · автоматическое письмо, отвечать не нужно / automated, no reply</div>
-</td></tr></table>
-</body></html>
-"""
-    msg.add_alternative(html, subtype="html")
+    msg.add_alternative(
+        _brand_email_html(
+            preheader=f"Код для входа в NanoLika. Действует {minutes} минут.",
+            title="Ваш код для nanoLika",
+            paragraphs=[
+                "Войдите по коду, а затем задайте новый пароль в настройках аккаунта, если забыли старый. Никому не пересылайте код.",
+                "Sign in with it, then set a new password in account settings if needed. Please do not forward it.",
+            ],
+            code=code,
+            minutes=minutes,
+            safety_note="Если вы не запрашивали код, удалите письмо. Никому не сообщайте код и не пересылайте его.",
+        ),
+        subtype="html",
+    )
+    return msg
+
+
+def compose_first_login_mail(sender: str, to: str) -> EmailMessage:
+    "A short welcome for a newly created email account."
+    return compose_customer_notice_mail(
+        sender, to, "рады знакомству", "Добро пожаловать в nanoLika!",
+        ["Рады, что вы с нами. Начните с небольшой понятной просьбы — например, попросите Лику помочь с письмом или найти нужную информацию.",
+         "Вы сами выбираете доступы и подтверждаете важные действия."],
+        action_label="Идеи для первой просьбы", action_url="https://nanolika.ru/tips.html",
+    )
+
+
+def compose_topup_thanks_mail(sender: str, to: str, amount: str, *, receipt_note: str = "") -> EmailMessage:
+    "Template for a confirmed live top-up; never sent for the isolated DEMO wallet."
+    paragraphs = [f"Пополнение на {amount} ₽ подтверждено. Спасибо, что выбрали nanoLika!",
+                  "Баланс можно посмотреть в приложении или в веб-версии."]
+    if receipt_note:
+        paragraphs.append(receipt_note)
+    return compose_customer_notice_mail(
+        sender, to, "пополнение подтверждено", "Спасибо за пополнение!",
+        paragraphs, action_label="Открыть nanoLika", action_url="https://cloud.nanolika.ru/web/",
+    )
+
+
+def compose_password_changed_mail(sender: str, to: str) -> EmailMessage:
+    "Security notice template; the password itself is never included."
+    return compose_customer_notice_mail(
+        sender, to, "пароль изменён", "Пароль nanoLika изменён",
+        ["Если это сделали вы, ничего делать не нужно.",
+         "Если вы не меняли пароль, напишите нам: hello@nanolika.ru."],
+        action_label="Связаться с поддержкой", action_url="https://nanolika.ru/support.html",
+    )
+
+
+def compose_payment_failed_mail(sender: str, to: str) -> EmailMessage:
+    "Template for a bank-confirmed unsuccessful payment; no charge claim before status check."
+    return compose_customer_notice_mail(
+        sender, to, "оплата не завершилась", "Не получилось завершить оплату",
+        ["Банк не подтвердил операцию. Перед новой попыткой проверьте статус заказа в nanoLika.",
+         "Если сумма списалась, а баланс не изменился, напишите в поддержку и укажите время и сумму. Данные карты присылать не нужно."],
+        action_label="Написать в поддержку", action_url="https://nanolika.ru/support.html",
+    )
+
+
+def compose_refund_notice_mail(sender: str, to: str, amount: str) -> EmailMessage:
+    "Template for a bank-confirmed refund; the caller must supply the reconciled amount."
+    return compose_customer_notice_mail(
+        sender, to, "возврат подтверждён", "Возврат подтверждён",
+        [f"Банк подтвердил возврат на {amount} ₽. Срок зачисления зависит от банка получателя.",
+         "Если у вас остались вопросы, напишите в поддержку."],
+        action_label="Написать в поддержку", action_url="https://nanolika.ru/support.html",
+    )
+
+
+def compose_support_received_mail(sender: str, to: str, ticket_ref: str = "") -> EmailMessage:
+    "Template for a future server-received support request; do not send from the mailto form."
+    paragraphs = ["Мы получили ваше письмо и вернёмся с ответом на этот адрес."]
+    if ticket_ref:
+        paragraphs.append(f"Номер обращения: {ticket_ref}.")
+    return compose_customer_notice_mail(sender, to, "мы получили ваше письмо", "Спасибо, письмо дошло!", paragraphs)
+
+
+def compose_support_reply_mail(sender: str, to: str, reply: str, *, topic: str = "ваш вопрос") -> EmailMessage:
+    "A human support reply that keeps the reply path open."
+    msg = compose_customer_notice_mail(
+        sender, to, "ответ поддержки", "Мы разобрались с вашим вопросом",
+        [f"По теме «{topic}»:", reply],
+        reply_allowed=True,
+    )
+    del msg["Subject"]
+    msg["Subject"] = f"nanoLika · ответ поддержки: {topic}"
     return msg
 
 

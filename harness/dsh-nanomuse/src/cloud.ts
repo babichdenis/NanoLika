@@ -3947,6 +3947,10 @@ export function providerRowFor(openaiBase: string, models: RelayModel[]): Record
       id: m.id,
       displayName: m.name,
       input: takesImages(m) ? ['text', 'image'] : ['text'],
+      // Окно и потолок вывода: без contextWindow сжатие истории не знает бюджета
+      // и «Основной» упирается в отказ провайдера на 620K промпта.
+      ...(m.contextLength ? { contextWindow: m.contextLength } : {}),
+      ...(m.maxOutput ? { maxTokens: m.maxOutput } : {}),
     })),
   }
 }

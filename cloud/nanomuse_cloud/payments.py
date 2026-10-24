@@ -15,6 +15,7 @@ import time
 import uuid
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import httpx
@@ -22,7 +23,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .service import Caller, Cloud, CloudError, log
+from .live_billing import LiveBilling
+from .service import Caller, Cloud, CloudError
+
+if TYPE_CHECKING:
+    from .fiscal import FiscalConfig
 
 PLANS = {
     "lika": {"name": "Лика", "amount": 59000, "discount": 20, "connect": False},
@@ -89,6 +94,8 @@ class Payments:
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN refunded INTEGER NOT NULL DEFAULT 0")
             if "terminal" not in columns:
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN terminal TEXT NOT NULL DEFAULT ''")
+            if "plan_snapshot" not in columns:
+                c.execute("ALTER TABLE tbank_orders ADD COLUMN plan_snapshot TEXT NOT NULL DEFAULT ''")
             if "plan_granted_at" not in columns:
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN plan_granted_at INTEGER NOT NULL DEFAULT 0")
                 c.execute("ALTER TABLE tbank_orders ADD COLUMN plan_granted_by TEXT NOT NULL DEFAULT ''")
@@ -100,6 +107,8 @@ class Payments:
                 c.execute(
                     "UPDATE tbank_demo_events SET amount_delta=(SELECT amount FROM tbank_orders WHERE id=order_id) WHERE status='CONFIRMED'"
                 )
+
+        self.live_billing = LiveBilling(cloud)
 
     def ready(self):
         # Intentionally no production enable switch: fiscal receipts, live account settlement and
@@ -135,45 +144,27 @@ class Payments:
         Раньше касса продавала свой захардкоженный список, а релей начислял по меню из
         `PLANS`: если идентификаторы не совпадали, человек платил и не получал тариф.
         """
-        menu = {row["id"]: row for row in self.cloud.plan_menu()}
+        menu = {row["id"]: row for row in self.cloud.plan_menu()} if hasattr(self.cloud, "plan_menu") else {}
         if menu:
             return menu
         return {
-            key: {"id": key, "name": row["name"], "price_rub": row["amount"] / 100,
-                  "discount_pct": row["discount"], "connect": row["connect"], "days": 30}
+            key: {
+                "id": key,
+                "name": row["name"],
+                "price_rub": row["amount"] / 100,
+                "discount_pct": row["discount"],
+                "connect": row["connect"],
+                "days": 30,
+            }
             for key, row in PLANS.items()
         }
 
-    def tier_for_balance(self, balance_kopecks: int) -> dict | None:
-        """Какой тариф человек заработал накопленной суммой: самый дорогой из доступных."""
-        affordable = [row for row in self.plans().values() if int(round(float(row["price_rub"]) * 100)) <= balance_kopecks]
-        return max(affordable, key=lambda r: float(r["price_rub"])) if affordable else None
-
-    def _sync_tier(self, account_id: str, *, rub_amount: float = 0.0, actor: str = "payment") -> dict | None:
-        """Привести тариф к тому, что оплачено сейчас: вверх после платежа, вниз после возврата."""
-        with self.db.tx() as c:
-            wallet = c.execute("SELECT balance FROM tbank_demo_wallets WHERE account_id=?", (account_id,)).fetchone()
-        balance = int(wallet["balance"]) if wallet is not None else 0
-        tier = self.tier_for_balance(balance)
-        current = self.cloud.plan_state(account_id)
-        if tier is None:
-            if current is not None:
-                self.cloud.payment_revoke(account_id, actor=actor)
-            return None
-        if current is not None and current["id"] == tier["id"]:
-            return None
-        return self.cloud.payment_grant(account_id, tier, rub_amount, actor=actor, credit=rub_amount > 0)
-
     def orders_page(
-        self, *, days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0
+        self, *, days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0, before_id: str = "", mode: str = "all"
     ) -> dict:
-        """Заказы для админки оператора: только чтение, без движений денег.
-
-        Идентификатор аккаунта здесь не расшифровывается: в списке хватает подсказки
-        `hint` и `account_id`, а полный идентификатор оператор видит в карточке аккаунта.
-        Пагинация keyset по `created_at`: `before` — время последней строки прошлой
-        страницы, поэтому новые заказы не сдвигают список во время листания.
-        """
+        """Payment attempts and captured money are different figures. DEMO is never revenue."""
+        if mode not in {"all", "demo", "live"}:
+            raise CloudError(400, "payment_filter", "Неизвестный режим платежей")
         limit = max(1, min(int(limit), 500))
         days = max(1, min(int(days), 3650))
         where = ["o.created_at >= ?"]
@@ -182,82 +173,82 @@ class Payments:
             where.append("o.status = ?")
             args.append(status)
         if q:
-            where.append("(a.hint LIKE ? OR o.id LIKE ? OR o.plan LIKE ?)")
-            args.extend([f"%{q}%"] * 3)
-        if before:
-            where.append("o.created_at < ?")
-            args.append(int(before))
+            where.append("(a.hint LIKE ? OR o.id LIKE ? OR o.payment_id LIKE ?)")
+            args.extend([f"%{q[:100]}%"] * 3)
+        if mode != "all":
+            where.append("o.terminal LIKE '%DEMO'" if mode == "demo" else "(o.terminal<>'' AND o.terminal NOT LIKE '%DEMO')")
         clause = " AND ".join(where)
-        select = f"""SELECT o.id, o.account_id, o.plan, o.amount, o.status, o.credited,
-                            o.created_at, o.checked_at, o.refunded, o.plan_granted_at, a.hint AS hint
-                     FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
-                     WHERE {clause}
-                     ORDER BY o.created_at DESC, o.id DESC LIMIT ?"""
+        table = "FROM tbank_orders o LEFT JOIN accounts a ON a.id=o.account_id"
+        grouping = "CASE WHEN o.terminal LIKE '%DEMO' THEN 'demo' WHEN o.terminal<>'' THEN 'live' ELSE 'unknown' END"
         with self.db.tx() as c:
-            rows = [dict(r) for r in c.execute(select, (*args, limit)).fetchall()]
-            summary = dict(
-                c.execute(
-                    f"""SELECT COUNT(*) AS orders, COALESCE(SUM(o.amount),0) AS amount,
-                               COALESCE(SUM(o.refunded),0) AS refunded
-                        FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
-                        WHERE {clause}""",
-                    args,
-                ).fetchone()
-            )
-            by_status = {
-                r["status"]: {"count": r["n"], "amount": r["amount"]}
+            # Aggregate in SQLite and paginate only the rows returned to the browser.
+            aggregate = [
+                dict(r)
                 for r in c.execute(
-                    f"""SELECT o.status, COUNT(*) AS n, COALESCE(SUM(o.amount),0) AS amount
-                        FROM tbank_orders o LEFT JOIN accounts a ON a.id = o.account_id
-                        WHERE {clause} GROUP BY o.status""",
+                    f"SELECT {grouping} AS mode, COUNT(*) AS orders, COALESCE(SUM(o.amount),0) AS requested, "
+                    "COALESCE(SUM(CASE WHEN o.credited=1 THEN o.amount ELSE 0 END),0) AS captured, "
+                    "COALESCE(SUM(o.refunded),0) AS refunded, "
+                    "COALESCE(SUM(CASE WHEN o.credited=1 THEN o.amount-o.refunded ELSE 0 END),0) AS net "
+                    f"{table} WHERE {clause} GROUP BY mode",
                     args,
-                ).fetchall()
-            }
+                )
+            ]
+            statuses = [
+                dict(r)
+                for r in c.execute(
+                    f"SELECT o.status, COUNT(*) AS count, SUM(o.amount) AS amount {table} WHERE {clause} GROUP BY o.status", args
+                )
+            ]
+            row_where, row_args = clause, list(args)
+            if before:
+                row_where += " AND (o.created_at<? OR (o.created_at=? AND o.id<?))"
+                row_args.extend([before, before, before_id])
+            rows = [
+                dict(r)
+                for r in c.execute(
+                    f"SELECT o.*, a.hint {table} WHERE {row_where} ORDER BY o.created_at DESC,o.id DESC LIMIT ?", (*row_args, limit + 1)
+                )
+            ]
+        split = {kind: {"orders": 0, "requested": 0, "captured": 0, "refunded": 0, "net": 0} for kind in ("live", "demo", "unknown")}
+        for row in aggregate:
+            split[row.pop("mode")] = row
+        totals = {
+            "orders": sum(x["orders"] for x in split.values()),
+            "amount": sum(x["requested"] for x in split.values()),
+            "refunded": sum(x["refunded"] for x in split.values()),
+            "by_status": {r["status"]: {"count": r["count"], "amount": r["amount"]} for r in statuses},
+        }
+        has_more = len(rows) > limit
+        rows = rows[:limit]
         return {
             "days": days,
             "test_mode": True,
-            "summary": {**summary, "by_status": by_status},
-            "orders": [
-                {
-                    "order_id": r["id"],
-                    "account_id": r["account_id"],
-                    "hint": r["hint"] or "",
-                    "plan": r["plan"],
-                    "amount_kopecks": r["amount"],
-                    "refunded_amount_kopecks": r["refunded"],
-                    "status": r["status"],
-                    "credited": bool(r["credited"]),
-                    "created_at": r["created_at"],
-                    "checked_at": r["checked_at"],
-                    "plan_granted_at": r["plan_granted_at"],
-                }
-                for r in rows
-            ],
-            "next_before": rows[-1]["created_at"] if len(rows) == limit else 0,
+            "summary": {**totals, **split},
+            "orders": [self.admin_view(r) for r in rows],
+            "next_before": rows[-1]["created_at"] if has_more else 0,
+            "next_before_id": rows[-1]["id"] if has_more else "",
+        }
+
+    def admin_view(self, row: dict) -> dict:
+        view = self.view(row)
+        view.pop("payment_url", None)
+        return {
+            **view,
+            "account_id": row["account_id"],
+            "hint": row.get("hint", ""),
+            "payment_id": row["payment_id"],
+            "created_at": row["created_at"],
+            "checked_at": row["checked_at"],
+            "terms_version": row["terms_version"],
+            "plan_granted_at": row.get("plan_granted_at", 0),
+            "test_mode": row["terminal"].endswith("DEMO"),
+            "mode": "demo" if row["terminal"].endswith("DEMO") else "live" if row["terminal"] else "unknown",
         }
 
     def grant_plan(self, order_id: str, actor: str = "console") -> dict:
-        """Выдать тариф по оплаченному заказу — то, что оператор раньше делал вручную.
-
-        Деньги заказа уже лежат в демо-кошельке, поэтому продажа идёт тем же путём, что и
-        ручная (`plan_buy`): цена уходит в пул, условия тарифа — в подписку. Повторная
-        выдача по тому же заказу отклоняется: отметка `plan_granted_at` ставится атомарно
-        вместе с проверкой, иначе двойной клик в браузере выдал бы два тарифа.
-        """
-        row = self.order(order_id)
-        if not row["credited"]:
-            raise CloudError(409, "payment_not_paid", "Заказ ещё не оплачен")
-        if row["plan_granted_at"]:
-            raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
-        state = self.cloud.plan_buy(row["account_id"], row["plan"], actor=actor, note=f"заказ {order_id[:8]}")
-        with self.db.tx() as c:
-            cur = c.execute(
-                "UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by=? WHERE id=? AND plan_granted_at=0",
-                (int(time.time()), actor, order_id),
-            )
-            if cur.rowcount != 1:
-                raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
-        return {"order_id": order_id, "plan": state.get("plan"), "granted_by": actor}
+        # A DEMO credit must never create real spendable money or a real subscription.
+        self.order(order_id)
+        raise CloudError(409, "payment_demo_isolated", "Тестовый платёж не выдаёт рабочий тариф")
 
     def order(self, order_id: str, account_id: str | None = None) -> dict:
         with self.db.tx() as c:
@@ -266,18 +257,27 @@ class Payments:
             raise CloudError(404, "payment_missing", "Заказ не найден")
         return dict(row)
 
-    async def create(self, caller: Caller, request: OrderRequest) -> dict:
+    async def create(self, caller: Caller, request: OrderRequest, *, fiscal: FiscalConfig | None = None, receipt_email: str = "") -> dict:
         self.ready()
         if not request.accept_terms:
             raise CloudError(400, "payment_terms", "Подтвердите ознакомление с условиями тестового оформления")
         menu = self.plans()
+        if request.plan == "plus" and "plus" not in menu and "lika-plus" in menu:
+            request = request.model_copy(update={"plan": "lika-plus"})
         if request.plan:
             chosen = menu.get(request.plan)
             if chosen is None or request.amount:
                 raise CloudError(400, "payment_plan", "Выберите известный пакет без произвольной цены")
-            amount = int(round(float(chosen["price_rub"]) * 100))
+            amount = cents(str(chosen["price_rub"]))
         else:
             amount = cents(request.amount)
+        # Explicit server-side policy only. DEMO-only ready() remains mandatory.
+        # A fixture policy used by an operator test is never persisted as merchant settings.
+        receipt = (
+            fiscal.prepare(kind="plan" if request.plan else "topup", amount_kopecks=amount, customer_email=receipt_email)
+            if fiscal is not None
+            else None
+        )
         with self.db.tx() as c:
             existing = c.execute(
                 "SELECT * FROM tbank_orders WHERE account_id=? AND idempotency=?", (caller.account_id, request.idempotency_key)
@@ -288,6 +288,8 @@ class Payments:
                 if not existing["payment_url"]:
                     raise CloudError(409, "payment_pending", "Заказ ещё проверяется. Не создавайте повторный платёж")
                 return self.view(dict(existing))
+            if not self.terminal.endswith("DEMO"):
+                self.live_billing.validate_plan_purchase(c, caller.account_id, request.plan, now=int(time.time()))
             count = c.execute(
                 "SELECT COUNT(*) FROM tbank_orders WHERE account_id=? AND created_at>?", (caller.account_id, int(time.time()) - 3600)
             ).fetchone()[0]
@@ -295,8 +297,17 @@ class Payments:
                 raise CloudError(429, "payment_rate", "Слишком много заказов. Попробуйте позднее")
             order_id = uuid.uuid4().hex
             c.execute(
-                "INSERT INTO tbank_orders(id,account_id,idempotency,plan,amount,created_at,terminal) VALUES(?,?,?,?,?,?,?)",
-                (order_id, caller.account_id, request.idempotency_key, request.plan, amount, int(time.time()), self.terminal),
+                "INSERT INTO tbank_orders(id,account_id,idempotency,plan,amount,created_at,terminal,plan_snapshot) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    order_id,
+                    caller.account_id,
+                    request.idempotency_key,
+                    request.plan,
+                    amount,
+                    int(time.time()),
+                    self.terminal,
+                    json.dumps(menu.get(request.plan, {})),
+                ),
             )
         result = await self.bank(
             "Init",
@@ -307,6 +318,7 @@ class Payments:
                 "NotificationURL": self.public_base + "/v1/payments/tbank/notify",
                 "SuccessURL": self.public_base + "/payments/checkout?order=" + order_id,
                 "FailURL": self.public_base + "/payments/checkout?order=" + order_id,
+                **({"Receipt": receipt} if receipt is not None else {}),
             },
         )
         if str(result.get("OrderId")) != order_id or type(result.get("Amount")) is not int or result["Amount"] != amount:
@@ -361,7 +373,7 @@ class Payments:
         # Replay only funded packages in their original confirmation order and at their
         # original times. A refund never starts a fresh month or removes an unrelated plan.
         rows = c.execute(
-            "SELECT o.plan, MIN(e.ts) AS confirmed_at, MIN(e.id) AS seq "
+            "SELECT o.plan, o.plan_snapshot, MIN(e.ts) AS confirmed_at, MIN(e.id) AS seq "
             "FROM tbank_orders o JOIN tbank_demo_events e ON e.order_id=o.id "
             "AND e.status='CONFIRMED' WHERE o.account_id=? AND o.credited=1 "
             "AND o.refunded<o.amount AND o.plan<>'' GROUP BY o.id ORDER BY seq",
@@ -370,11 +382,16 @@ class Payments:
         plan, expiry = "", 0
         for row in rows:
             start = max(row["confirmed_at"], expiry) if plan == row["plan"] else row["confirmed_at"]
-            plan, expiry = row["plan"], start + 30 * 86400
+            snapshot = json.loads(row["plan_snapshot"] or "{}")
+            plan, expiry = row["plan"], start + int(snapshot.get("days", 30)) * 86400
         c.execute("UPDATE tbank_demo_wallets SET plan=?,expires_at=? WHERE account_id=?", (plan, expiry, account_id))
 
     def apply(self, data: dict, *, signed: bool = False, reconciled: bool = False) -> dict:
         validated = self.validate_event(data, signed=signed)
+        if not self.terminal.endswith("DEMO"):
+            # Live collection remains gated until the fiscal and delivery release is ready.
+            self.ready()
+            return self.live_billing.apply(validated, data, reconciled=reconciled)
         order_id, payment_id, status = validated["id"], str(data["PaymentId"]), str(data["Status"])
         refund = status in {"REFUNDED", "PARTIAL_REFUNDED"}
         if refund and not reconciled:
@@ -425,30 +442,9 @@ class Payments:
                         )
                 elif not row["refunded"]:
                     c.execute("UPDATE tbank_orders SET status='CONFIRMED',payment_id=? WHERE id=?", (payment_id, order_id))
-                if refund:
-                    account_for_refund = row["account_id"]
                 self._rebuild_plan(c, row["account_id"])
             elif not row["credited"] and row["status"] not in {"REJECTED", "AUTH_FAIL", "DEADLINE_EXPIRED"}:
                 c.execute("UPDATE tbank_orders SET status=?,payment_id=? WHERE id=?", (status, payment_id, order_id))
-        settled = self.order(order_id)
-        # Оплата сама даёт права: уровень тарифа — по накопленной сумме, токены — по платежу.
-        # Сбой выдачи не отменяет платёж: он виден в списке заказов без отметки, и его можно
-        # повторить кнопкой.
-        if settled["credited"] and not settled["plan_granted_at"]:
-            try:
-                granted = self._sync_tier(settled["account_id"], rub_amount=settled["amount"] / 100)
-                if granted is not None:
-                    with self.db.tx() as c:
-                        c.execute("UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by='payment' WHERE id=?", (int(time.time()), order_id))
-            except CloudError as exc:
-                log.warning("payment %s: tariff not granted (%s: %s)", order_id[:8], exc.code, exc.message)
-            except Exception:
-                log.exception("payment %s: tariff grant failed", order_id[:8])
-        if refund and account_for_refund:
-            try:
-                self._sync_tier(account_for_refund)
-            except CloudError as exc:
-                log.warning("refund %s: tariff not revised (%s: %s)", order_id[:8], exc.code, exc.message)
         return self.order(order_id)
 
     def view(self, row: dict) -> dict:
@@ -456,6 +452,7 @@ class Payments:
         return {
             "order_id": row["id"],
             "plan": row["plan"],
+            "plan_name": json.loads(row.get("plan_snapshot") or "{}").get("name", row["plan"]),
             "amount_kopecks": row["amount"],
             "status": row["status"],
             "payment_url": row["payment_url"],
@@ -463,7 +460,7 @@ class Payments:
             "was_credited": bool(row["credited"]),
             "refunded_amount_kopecks": row["refunded"],
             "net_credited_amount_kopecks": net,
-            "test_mode": True,
+            "test_mode": row["terminal"].endswith("DEMO"),
         }
 
     def wallet(self, caller: Caller) -> dict:
@@ -481,6 +478,7 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
     p = payments or Payments(
         cloud, os.getenv("TBANK_TERMINAL_KEY", ""), os.getenv("TBANK_PASSWORD", ""), os.getenv("TBANK_PUBLIC_BASE", "")
     )
+    caller_auth = Depends(caller_dep)
     app.state.payments = p
     router = APIRouter()
     static = Path(__file__).parent / "console" / "payments"
@@ -509,7 +507,16 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
         p.ready()
         return {
             "test_mode": True,
-            "plans": PLANS,
+            "plans": {
+                key: {
+                    "name": r["name"],
+                    "amount": cents(str(r["price_rub"])),
+                    "discount": r["discount_pct"],
+                    "connect": r["connect"],
+                    "days": r.get("days", 30),
+                }
+                for key, r in p.plans().items()
+            },
             "merchant": {
                 "name": os.getenv("PAYMENT_MERCHANT_NAME", ""),
                 "inn": os.getenv("PAYMENT_MERCHANT_INN", ""),
@@ -518,15 +525,15 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
         }
 
     @router.post("/v1/payments/orders")
-    async def create(body: OrderRequest, caller: Caller = Depends(caller_dep)):
+    async def create(body: OrderRequest, caller: Caller = caller_auth):
         return await p.create(caller, body)
 
     @router.get("/v1/payments/wallet")
-    async def wallet(caller: Caller = Depends(caller_dep)):
+    async def wallet(caller: Caller = caller_auth):
         return p.wallet(caller)
 
     @router.get("/v1/payments/orders/{order_id}")
-    async def state(order_id: str, caller: Caller = Depends(caller_dep)):
+    async def state(order_id: str, caller: Caller = caller_auth):
         row = p.order(order_id, caller.account_id)
         if row["payment_id"] and row["status"] not in {"REFUNDED", "REVERSED", "CANCELED", "REJECTED", "AUTH_FAIL", "DEADLINE_EXPIRED"}:
             now = int(time.time())
@@ -568,8 +575,17 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
             return p.grant_plan(order_id, actor)
 
         @router.get("/v1/admin/payments", dependencies=[Depends(admin_dep)])
-        async def admin_payments(days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0) -> dict:
+        async def admin_payments(
+            days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0, before_id: str = "", mode: str = "all"
+        ) -> dict:
             """Заказы кассы для оператора: только чтение, движения денег нет."""
-            return p.orders_page(days=days, status=status, q=q, limit=limit, before=before)
+            return p.orders_page(days=days, status=status, q=q, limit=limit, before=before, before_id=before_id, mode=mode)
 
     app.include_router(router)
+    from .payment_jobs import install_payment_jobs
+
+    install_payment_jobs(app, p)
+    if admin_dep is not None:
+        from .payment_audit import install_payment_audit
+
+        install_payment_audit(app, cloud, p, admin_dep)

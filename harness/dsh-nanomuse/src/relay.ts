@@ -126,6 +126,10 @@ export interface RelayModel {
   inputModalities: string[]
   /** What the relay says it is for (relay 0.1.34+): `chat`, `gui`, or both; absent on an older relay. */
   for?: string[]
+  /** Окно контекста и потолок вывода в токенах (0 — релей не знает). По ним клиент
+      считает бюджет истории и включает сжатие, не дожидаясь отказа провайдера. */
+  contextLength?: number
+  maxOutput?: number
 }
 
 export interface SignIn {
@@ -546,6 +550,8 @@ export class Relay {
         kind: String(extra.kind ?? 'chat'),
         recommended: Boolean(extra.recommended),
         inputModalities: Array.isArray(arch.input_modalities) ? arch.input_modalities.map(String) : ['text'],
+        contextLength: Number(extra.context_length) || 0,
+        maxOutput: Number(extra.max_output) || 0,
         ...(Array.isArray(extra.for) ? { for: extra.for.map(String) } : {}),
       }
     })
