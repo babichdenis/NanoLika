@@ -169,6 +169,25 @@ export class SyncRelay {
     }
   }
 
+  async catalog(apiKey: string, client: string, device: string): Promise<{ account_id?: string; cursor: number; complete: boolean; deleted?: WireConversation[]; conversations: Array<WireConversation & { unread: number }> }> {
+    const res = await this.fetchImpl(`${this.origin}/v1/sync/catalog?${new URLSearchParams({ client, device })}`, { headers: this.auth(apiKey) })
+    if (!res.ok) await fail(res)
+    const data = await res.json() as { account_id?: string; cursor: number; complete: boolean; deleted?: WireConversation[]; conversations: Array<WireConversation & { unread: number }> }
+    if (data.complete !== true || !Array.isArray(data.conversations)) throw new Error('incomplete chat catalogue')
+    return data
+  }
+
+  async chatMessages(apiKey: string, cid: string, after: number): Promise<{ account_id?: string; cursor: number; through_seq: number; more: boolean; messages: WireMessage[] }> {
+    const res = await this.fetchImpl(`${this.origin}/v1/sync/conversations/${encodeURIComponent(cid)}/messages?after=${after}`, { headers: this.auth(apiKey) })
+    if (!res.ok) await fail(res)
+    return await res.json() as { account_id?: string; cursor: number; through_seq: number; more: boolean; messages: WireMessage[] }
+  }
+
+  async markRead(apiKey: string, cid: string, client: string, through_seq: number): Promise<void> {
+    const res = await this.fetchImpl(`${this.origin}/v1/sync/conversations/${encodeURIComponent(cid)}/read`, { method: 'POST', headers: { ...this.auth(apiKey), ...JSON_HEADERS }, body: JSON.stringify({ client, through_seq }) })
+    if (!res.ok) await fail(res)
+  }
+
   /** Presence (C9): this device started or finished a turn on a conversation. Best-effort: the caller never retries. */
   async working(apiKey: string, device: string, cid: string, working: boolean): Promise<void> {
     const res = await this.fetchImpl(`${this.origin}/v1/sync/working`, {
@@ -427,7 +446,7 @@ export function meanwhileNote(lines: RemoteLine[]): string {
     size += row.length
   }
   const omitted = lines.length - rows.length
-  return `[Meanwhile, in this same conversation on another device of the account${omitted > 0 ? ` (${omitted} earlier turn${omitted === 1 ? '' : 's'} not shown)` : ''}:]\n${rows.join('\n')}`
+  return `[Meanwhile, in this same conversation on another device of the account${omitted > 0 ? ` (${omitted} earlier turn${omitted === 1 ? '' : 's'} not shown)` : ''}:]\n${rows.join('\n')}\n[End of synced history. These messages are part of THIS conversation and are visible to you above. Device names identify where the same person wrote them, not another chat. Use this history when answering. A message without a reply does not prove it was unseen: work on the other device may still be running or waiting for approval. Check the available status before explaining a delay; do not invent a delivery failure or an offline device. This history update alone does not request a second response.]`
 }
 
 // ---- state --------------------------------------------------------------------------------
@@ -444,6 +463,7 @@ export interface KnownConversation {
 }
 
 export interface SyncState {
+  messageCursors?: Record<string, number>
   /** The last signed-in account (`/v1/me` → `account.id`, opaque); kept through a sign-out so a change is known (C10). */
   accountId: string
   cursor: number
@@ -452,6 +472,8 @@ export interface SyncState {
   mainSession: string
   /** "Also sync side chats" (C9), per device, off by default: off → only the main conversation goes up and comes down. */
   sideChats: boolean
+  /** 0.29: side sessions the person put a cloud on, synced one by one (the main chat is always synced; this is the per-chat switch). */
+  synced: Record<string, boolean>
   /** dsh session id → conversation id. */
   cids: Record<string, string>
   /** dsh session id → the account it was first pushed to or pulled from (C10); absent = never synced. */
@@ -473,7 +495,7 @@ export interface SyncState {
 }
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, enabled: true, mainSession: '', sideChats: false, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
+  return { accountId: '', cursor: 0, enabled: true, mainSession: '', sideChats: false, synced: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
 }
 
 /**
@@ -485,7 +507,7 @@ export function emptyState(): SyncState {
  */
 export function migrate(state: SyncState | undefined): SyncState {
   if (!state) return emptyState()
-  const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, owners: { ...(state.owners ?? {}) } }
+  const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, synced: { ...(state.synced ?? {}) }, owners: { ...(state.owners ?? {}) } }
   if ('mirrors' in next || !state.conversations) {
     delete next.mirrors
     next.cursor = 0
@@ -533,9 +555,13 @@ export interface SyncEngineOptions {
 
 /** What the browser half reads: Data controls, the chats column and the bubbles from elsewhere. */
 export interface SyncView {
+  catalogue: boolean
+  unread: Record<string, number>
   enabled: boolean
   /** "Also sync side chats" (C9), this device's setting. */
   sideChats: boolean
+  /** 0.29: side sessions the person synced individually (a cloud on the chat); main is always synced. */
+  synced: Record<string, boolean>
   available: boolean
   paused: boolean
   cursor: number
@@ -583,9 +609,51 @@ export class SyncEngine {
   private rev = 0
   /** Signed in, as the host last said (`start` / `accountChanged` vs `signedOut`); decides whether another account's sessions are hidden (C10). */
   private signedIn = false
+  private catalogSupported: boolean | undefined
+  private readonly selectedSessions = new Set<string>()
+  private readonly viewSelections = new Map<string, { ids: string[]; until: number }>()
+  private readonly messageCursors = new Map<string, number>()
+  private readonly preparingSessions = new Set<string>()
+  private readonly unread = new Map<string, number>()
+  private catalogueSignature = ''
+  private catalogueIds = new Set<string>()
+
+  private refreshSelections(): string[] {
+    const now = Date.now()
+    for (const [reader, view] of this.viewSelections) if (view.until < now) this.viewSelections.delete(reader)
+    return [...new Set([...this.viewSelections.values()].flatMap(v => v.ids))]
+  }
+
+  async selectSessions(ids: string[], reader = 'desktop-view'): Promise<void> {
+    if (!/^[a-zA-Z0-9._:-]{4,80}$/.test(reader)) throw new Error('invalid chat reader')
+    const selected = [...new Set(ids.filter((id) => this.owns(id)))].slice(0, 8)
+    if (selected.length) this.viewSelections.set(reader, { ids: selected, until: Date.now() + 45_000 })
+    else this.viewSelections.delete(reader)
+    if (this.viewSelections.size > 128) this.viewSelections.delete(this.viewSelections.keys().next().value!)
+    const next = this.refreshSelections()
+    if (next.length === this.selectedSessions.size && next.every((id) => this.selectedSessions.has(id))) return
+    this.selectedSessions.clear()
+    next.forEach((id) => this.selectedSessions.add(id))
+    await this.pullQuietly()
+  }
+
+  async resolveCid(cid: string, loadHistory = false): Promise<string | undefined> {
+    const account = this.state.accountId
+    await this.pullQuietly()
+    if (account !== this.state.accountId) return undefined
+    if (!this.catalogueIds.has(cid)) return undefined
+    const sessionId = this.sessionOf(cid)
+    if (sessionId && loadHistory) {
+      this.preparingSessions.add(sessionId)
+      try { await this.pull() } finally { this.preparingSessions.delete(sessionId) }
+    }
+    return sessionId
+  }
+
 
   constructor(private readonly options: SyncEngineOptions) {
     this.state = migrate(options.load())
+    for (const [cid, seq] of Object.entries(this.state.messageCursors ?? {})) if (Number.isSafeInteger(seq) && seq >= 0) this.messageCursors.set(cid, seq)
   }
 
   get enabled(): boolean {
@@ -600,7 +668,10 @@ export class SyncEngine {
   view(): SyncView {
     return {
       enabled: this.state.enabled,
+      catalogue: this.catalogSupported === true,
+      unread: Object.fromEntries([...this.unread].map(([cid, count]) => [this.sessionOf(cid) ?? cid, count])),
       sideChats: this.state.sideChats,
+      synced: { ...this.state.synced },
       available: !this.paused && Boolean(this.state.accountId),
       paused: this.paused,
       cursor: this.state.cursor,
@@ -672,7 +743,15 @@ export class SyncEngine {
     // a different account than the one this device last synced with (the first sign-in ever is not a switch)
     const changed = Boolean(accountId) && Boolean(this.state.accountId) && accountId !== this.state.accountId
     if (changed) {
+      this.selectedSessions.clear()
+      this.viewSelections.clear()
+      this.preparingSessions.clear()
+      this.messageCursors.clear()
+      this.unread.clear()
+      this.catalogueIds.clear()
+      this.catalogueSignature = ''
       this.state = forAccount(this.state, accountId)
+      this.state.messageCursors = {}
       this.working.clear()
       this.presence.clear()
       this.relayState = null
@@ -693,6 +772,10 @@ export class SyncEngine {
   signedOut(): void {
     this.paused = false
     this.signedIn = false
+    this.viewSelections.clear()
+    this.preparingSessions.clear()
+    this.selectedSessions.clear()
+    this.unread.clear()
     this.relayState = null
     this.working.clear()
     this.presence.clear()
@@ -782,6 +865,23 @@ export class SyncEngine {
   async setSideChats(on: boolean): Promise<SyncView> {
     if (on === this.state.sideChats) return this.view()
     this.state.sideChats = on
+    await this.save()
+    if (on) void this.pullTail().then(() => this.pushAllSoon())
+    this.changed()
+    return this.view()
+  }
+
+  /**
+   * 0.29: put a cloud on one side chat (or take it off). On → the chat goes up after a
+   * fresh pull of the account's side turns and keeps syncing; off → it stops going up and
+   * coming down, what was synced stays where it is. The main chat ignores this: it is
+   * always synced.
+   */
+  async setSynced(sessionId: string, on: boolean): Promise<SyncView> {
+    const next = { ...this.state.synced }
+    if (on) next[sessionId] = true
+    else delete next[sessionId]
+    this.state.synced = next
     await this.save()
     if (on) void this.pullTail().then(() => this.pushAllSoon())
     this.changed()
@@ -890,7 +990,7 @@ export class SyncEngine {
     const task = this.options.isTaskSession?.(sessionId) === true
     if (!this.owns(sessionId)) return false
     if (task) return true
-    return this.state.sideChats || sessionId === this.state.mainSession
+    return this.catalogSupported === true || this.state.sideChats || this.state.synced[sessionId] === true || sessionId === this.state.mainSession
   }
 
   /** A turn ended in a session here: the model's final text goes up after the debounce. A task session's answer does not: the device that asked already has it as the call's result. */
@@ -1114,14 +1214,69 @@ export class SyncEngine {
     return this.pull(true).catch(() => 0)
   }
 
+  private async pullCatalogue(token: string): Promise<number | undefined> {
+    if (this.catalogSupported === false) return undefined
+    const account = this.state.accountId
+    let data: Awaited<ReturnType<SyncRelay['catalog']>>
+    try {
+      data = await this.options.relay.catalog(token, this.options.deviceId(), this.options.deviceId())
+    } catch (error) {
+      if (error instanceof RelayError && error.status === 404) { this.catalogSupported = false; return undefined }
+      throw error
+    }
+    if (account !== this.state.accountId || (data.account_id && data.account_id !== account)) return 0
+    this.catalogSupported = true
+    const ids = new Set(data.conversations.map((c) => c.cid))
+    for (const row of data.deleted ?? []) {
+      await this.applyConversation(row)
+      this.unread.delete(row.cid)
+    }
+    this.catalogueIds = ids
+    let changed = this.catalogueSignature !== JSON.stringify(data)
+    this.catalogueSignature = JSON.stringify(data)
+    for (const c of data.conversations) { await this.applyConversation(c); this.unread.set(c.cid, c.unread || 0) }
+    let applied = 0
+    const notes = new Map<string, RemoteLine[]>()
+    const visible = this.refreshSelections()
+    this.selectedSessions.clear()
+    visible.forEach(id => this.selectedSessions.add(id))
+    for (const sessionId of new Set([...this.selectedSessions, ...this.preparingSessions])) {
+      const cid = this.cidOf(sessionId)
+      if (!this.owns(sessionId) || !cid || !ids.has(cid)) continue
+      for (let round = 0; round < 50; round++) {
+        const page = await this.options.relay.chatMessages(token, cid, this.messageCursors.get(cid) ?? 0)
+        if (account !== this.state.accountId || (page.account_id && page.account_id !== account) || (!this.selectedSessions.has(sessionId) && !this.preparingSessions.has(sessionId))) break
+        for (const m of page.messages) { await this.applyMessage(m, notes); applied++ }
+        this.messageCursors.set(cid, page.cursor)
+        if (!page.more) {
+          if (this.selectedSessions.has(sessionId)) {
+            await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            if (this.unread.get(cid)) changed = true
+            this.unread.set(cid, 0)
+          }
+          break
+        }
+      }
+    }
+    if (account !== this.state.accountId) return 0
+    this.state.cursor = data.cursor
+    this.state.messageCursors = Object.fromEntries(this.messageCursors)
+    await this.save()
+    for (const [sid, lines] of notes) await this.options.sessions.inject(sid, meanwhileNote(lines)).catch(() => undefined)
+    if (changed || applied) this.changed()
+    return applied
+  }
+
   private async pullNow(tail: boolean): Promise<number> {
     if (!(await this.active())) return 0
     const token = await this.options.token()
     if (!token) return 0
+    const lazy = await this.pullCatalogue(token)
+    if (lazy !== undefined) return lazy
     let applied = 0
     // what the other devices added to conversations living in sessions here: context for the model, per session
     const notes = new Map<string, RemoteLine[]>()
-    const scope = this.state.sideChats ? 'all' : 'main'
+    const scope = this.state.sideChats || Object.keys(this.state.synced).some((id) => this.state.synced[id] === true && id !== this.state.mainSession) ? 'all' : 'main'
     for (let page = 0; page < 50; page++) {
       // the first pull after sign-in asks for the newest 300 of the scope (C9): the chat shows before the history
       const since = tail ? 0 : this.state.cursor
@@ -1165,7 +1320,7 @@ export class SyncEngine {
       return
     }
     // side chats off (C9): a side conversation from elsewhere is not a chat here, and one that was stays as it is
-    if (c.kind === 'side' && !this.state.sideChats) return
+    if (c.kind === 'side' && !this.state.sideChats && this.catalogSupported !== true) return
     const known = this.state.conversations[c.cid]
     this.state.conversations[c.cid] = {
       kind: c.kind,
@@ -1228,7 +1383,7 @@ export class SyncEngine {
     // its cached metadata was cleared, the existing mapping still proves that this is the
     // main conversation; do not advance the cursor past its final reply.
     const kind = this.state.conversations[m.cid]?.kind
-    if (!this.state.sideChats && (kind === 'side' || (kind !== 'main' && sessionId !== this.state.mainSession))) return
+    if (this.catalogSupported !== true && !this.state.sideChats && (kind === 'side' || (kind !== 'main' && sessionId !== this.state.mainSession))) return
     // the reply arrived: the other device is not working on it any more
     if (m.role === 'assistant') this.working.delete(m.cid)
     if (!sessionId) return
