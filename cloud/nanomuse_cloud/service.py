@@ -695,6 +695,7 @@ class Cloud:
     def _account_for(self, ident: Identifier) -> sqlite3.Row | None:
         """Look up an account by ``ident``'s canonical hash, falling back to its
         legacy pre-canonical hash when present so existing dotted Gmail accounts
+<<<<<<< ours
         keep matching, and then to the identifiers added into an account later
         (``account_aliases``): the address the app signs in with when the chat was the
         first way in."""
@@ -715,6 +716,10 @@ class Cloud:
                 "signup_closed",
                 "New sign-ups are paused on this relay for now; existing accounts keep working. Try again later.",
             )
+=======
+        keep matching."""
+        return self.db.account_by_hashes(ident.hashes(self.s.hmac_key), shared=ident.merged_hash(self.s.hmac_key))
+>>>>>>> theirs
 
     def _refuse_if_signups_closed(self, ident: Identifier) -> None:
         """0.22: the *Sign-ups* switch is off; an identifier without an account is turned
