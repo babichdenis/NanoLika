@@ -24,6 +24,7 @@
     byCode: "По коду", byPassword: "По паролю", forgot: "Забыли пароль? Войдите по коду", show: "Показать", hide: "Скрыть",
     codeSent: (m) => `Код отправлен. Он действует ${m} мин.`, relay: "Сервер", fine: "После входа эта страница покажет все устройства вашего аккаунта, которые сейчас на связи, и позволит каждой помощнице делать своё дело. Сама страница ничего не запускает.",
     devices: "Устройства", noDevices: "Пока ни одного устройства. Войдите этим же аккаунтом на телефоне или запустите программу на компьютере — и они появятся здесь.",
+    unlink: "Отвязать", forgetWhy: "Устройство отвяжется от аккаунта и перестанет видеть ваши чаты.",
     online: "на связи", offline: "не на связи", phone: "телефон", computer: "компьютер", web: "браузер", thisTab: "эта страница",
     signOut: "Выйти", signOutAll: "Выйти на всех устройствах", connected: "на связи", connecting: "подключаемся…", disconnected: "связь потеряна, переподключаемся…",
     pick: "Выберите устройство", pickSub: "и напишите ему, что сделать — как сообщение. Помощница на телефоне пользуется приложениями телефона, помощница на компьютере — его окнами, файлами и экраном; и они могут помогать друг другу.",
@@ -64,6 +65,7 @@
     byCode: "验证码登录", byPassword: "密码登录", forgot: "忘了密码？用验证码登录", show: "显示", hide: "隐藏",
     codeSent: (m) => `验证码已发送，${m} 分钟内有效。`, relay: "服务器", fine: "登录后，这个页面能看到你账号下所有在线的设备，并让它们各自的 Muse 去做事。网页本身不操作任何设备。",
     devices: "设备", noDevices: "还没有设备接入。用同一个账号在手机上登录 NanoLika，或在电脑上运行 NanoLika Desktop，它们就会出现在这里。",
+    unlink: "解除", forgetWhy: "设备将与账号解绑，并无法再查看你的聊天。",
     online: "在线", offline: "离线", phone: "手机", computer: "电脑", web: "网页", thisTab: "这个页面",
     signOut: "退出登录", signOutAll: "在所有设备上退出", connected: "已连接", connecting: "连接中…", disconnected: "已断开，正在重连…",
     pick: "选一台设备", pickSub: "然后像发消息一样告诉它要做什么。手机上的 Muse 会用手机的应用和沙盒，电脑上的 Muse 会用电脑的 shell、文件和屏幕；它们也能互相帮忙。",
@@ -101,6 +103,7 @@
     byCode: "With a code", byPassword: "With a password", forgot: "Forgot it? Sign in with a code", show: "Show", hide: "Hide",
     codeSent: (m) => `A six-digit code is on its way; it is good for ${m} ${m === 1 ? "minute" : "minutes"}.`, relay: "Server", fine: "Once signed in, this page shows every device of your account that is online and lets each device's Muse do things. The page itself operates nothing.",
     devices: "Devices", noDevices: "No device yet. Sign in to NanoLika on your phone with this account, or run NanoLika Desktop on a computer, and they appear here.",
+    unlink: "Unlink", forgetWhy: "The device is unlinked and can no longer see your chats.",
     online: "online", offline: "offline", phone: "phone", computer: "computer", web: "browser", thisTab: "this tab",
     signOut: "Sign out", signOutAll: "Sign out everywhere", connected: "connected", connecting: "connecting…", disconnected: "disconnected, reconnecting…",
     pick: "Pick a device", pickSub: "then tell it what to do, like a message. The Muse on a phone uses the phone's apps and sandbox; the one on a computer uses its shell, files and screen; and they can ask each other.",
@@ -751,13 +754,6 @@
           h("div", { class: "txt" }, h("div", { class: "t" }, threadLabel(c)), h("div", { class: "s" }, c.kind === "channel" ? T.chatInApps : T.chatAlone)),
           h("span", { class: "dot" + (c.busy ? " on" : "") }),
         )) : h("div", { class: "empty" }, T.noChats))),
-      h("div", { class: "label" }, T.devices),
-      h("div", { class: "devices" }, h("div", { class: "card" },
-        others.length ? others.map((d) => h("button", { class: "row tap" + (d.id === selected ? " active" : ""), onclick: () => pickDevice(d.id) },
-          h("span", { class: "tile" + (d.online ? "" : " grey"), html: glyph(d.kind) }),
-          h("div", { class: "txt" }, h("div", { class: "t" }, d.name), h("div", { class: "s" }, `${kindLabel(d.kind)} · ${d.os || ""} · ${d.online ? T.online : `${T.lastSeen} ${ago(d.last_seen)}`}`)),
-          h("span", { class: "dot" + (d.online ? " on" : "") }),
-        )) : h("div", { class: "empty" }, T.noDevices))),
       h("div", { class: "foot card" },
         h("button", { class: "row tap", onclick: openAccount },
           h("span", { class: "tile grey", html: ICON.person }),
@@ -937,6 +933,16 @@
       ct.samples ? h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.deleteSamples, T.deleteSamplesConfirm, T.deleteSamples, true)) { try { const r = await api("DELETE", "/v1/me/samples", null, key); alert(T.deleted(r.deleted || 0)); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } } }, h("span", { class: "tile bad", html: ICON.out }), h("div", { class: "txt" }, h("div", { class: "t" }, T.deleteSamples))) : null,
       h("p", { class: "fine", style: "padding:0 16px 12px" }, T.contributeWhy, " ", T.contributeDefault(!!ct.default_on), " ",
         h("a", { href: ct.privacy_url || "https://nanolika.ru/privacy/", target: "_blank", rel: "noopener" }, T.privacy))));
+    // 0.29: devices live here, not beside the chats. A device is shown by what it is,
+    // never by whether it happens to be online, and any of them can be unlinked in one tap.
+    const shown = devices.filter((d) => d.kind !== "web");
+    kids.push(h("div", { class: "label" }, T.devices), h("div", { class: "card" },
+      shown.length ? shown.map((d) => h("div", { class: "row" },
+        h("span", { class: "tile grey", html: glyph(d.kind) }),
+        h("div", { class: "txt" }, h("div", { class: "t" }, d.name), h("div", { class: "s" }, `${kindLabel(d.kind)} · ${d.os || ""}`)),
+        h("button", { class: "btn quiet sm danger", onclick: async () => { if (await ask(d.name, T.forgetWhy, L("Unlink", "解除", "Отвязать"), true)) { try { await api("DELETE", "/v1/devices/" + encodeURIComponent(d.id), null, key); devices = devices.filter((x) => x.id !== d.id); drawAccount(body); } catch (e) { alert(errText(e)); } } } }, T.unlink)
+      )) : h("div", { class: "empty" }, T.noDevices)));
+
     // 0.19: conversation sync between the account's devices — the switch (off deletes), what is stored, the delete
     const sy = me.sync;
     if (sy && sy.counts) {
@@ -949,6 +955,11 @@
             try { await api("PUT", "/v1/sync/state", { enabled: !sy.enabled }, key); sync = { on: !sy.enabled, loaded: false, live: false, seq: 0, msgs: [] }; drawChat(); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, sy.enabled ? L("Turn off", "关闭", "Выключить") : L("Turn on", "开启", "Включить"))),
         has ? h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.deleteSync, T.deleteSyncConfirm, T.deleteSync, true)) { try { await api("DELETE", "/v1/sync/changes", null, key); sync = { on: true, loaded: false, live: false, seq: 0, msgs: [] }; drawChat(); alert(T.syncDeleted); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } } }, h("span", { class: "tile bad", html: ICON.out }), h("div", { class: "txt" }, h("div", { class: "t" }, T.deleteSync))) : null,
         h("p", { class: "fine", style: "padding:0 16px 12px" }, T.syncWhy)));
+      // 0.29: the list itself — rename and delete per conversation, in the cabinet
+      kids.push(h("div", { class: "card" },
+        h("a", { class: "row tap", href: "/app/chats/" },
+          h("div", { class: "txt" }, h("div", { class: "t" }, L("Chats: rename or delete", "聊天：重命名或删除", "Чаты: переименовать или удалить")),
+            h("div", { class: "s" }, L("Every conversation kept on the server", "服务器保存的每个会话", "Все беседы, сохранённые на сервере"))))));
     }
     kids.push(h("div", { class: "card" }, h("a", { class: "row tap", href: "/app/usage/?lang=" + encodeURIComponent(ru ? "ru" : zh ? "zh" : "en") }, ru ? "Детализация по моделям и обращениям →" : zh ? "按模型及调用查看明细 →" : "Usage by model and request →")));
     // usage by kind / by model
