@@ -32,14 +32,17 @@ const MAIN_KEY = 'nanomuse.mainChat'
  * device, which the column archives (the host has no archive) and reports back.
  */
 interface SyncList {
+  unread: Record<string, number>
   enabled: boolean
   mainSession: string
   sessions: Set<string>
   /** Sessions of another account than the one signed in (C10): not listed, not searched; empty when signed out. */
   foreign: Set<string>
   toArchive: string[]
+  /** Side sessions the person put a cloud on (0.29): synced one by one, beyond the always-synced main chat. */
+  synced: Set<string>
 }
-const NO_SYNC: SyncList = { enabled: true, mainSession: '', sessions: new Set(), foreign: new Set(), toArchive: [] }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), foreign: new Set(), toArchive: [], synced: new Set() }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -47,8 +50,8 @@ export function useSyncList(): SyncList {
   const [list, setList] = useState<SyncList>(NO_SYNC)
   useEffect(() => {
     let alive = true
-    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; foreign?: string[]; toArchive?: string[] }>('sync/state')
-      .then((v) => { if (alive) setList({ enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [] }) })
+    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; foreign?: string[]; toArchive?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
+      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], synced: new Set(v.synced ?? []) }) })
       .catch(() => undefined)
     return () => { alive = false }
   }, [rev])
@@ -154,6 +157,7 @@ function RowMenu({ anchor, items, onClose }: { anchor: HTMLElement; items: MenuI
 }
 
 interface RowProps {
+  unreadCount?: number
   t: Translate
   chat: ChatSummary
   label: string
@@ -163,9 +167,12 @@ interface RowProps {
   useSessionStatus: UseStatusMap | undefined
   actions: ChatActions
   onMakeMain(): void
+  /** 0.29: the cloud on this chat (a side chat only) and the switch that toggles it. */
+  synced: boolean
+  onToggleSync(): void
 }
 
-function ChatRow({ t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain }: RowProps): ReactNode {
+function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain, synced, onToggleSync }: RowProps): ReactNode {
   const status = typeof useSessionStatus === 'function' ? useSessionStatus((map) => map.get(chat.id)) : undefined
   const running = status?.running ?? chat.running
   const waiting = status?.pendingInteraction !== undefined
@@ -200,6 +207,7 @@ function ChatRow({ t, chat, label, main, pinned, selected, useSessionStatus, act
     ...(main ? [] : [{ id: 'pin', label: pinned ? t('chUnpin') : t('chPin'), onSelect: () => { void (pinned ? actions.unpinSession(chat.id) : actions.pinSession(chat.id)).catch(() => undefined) } }]),
     { id: 'rename', label: t('chRename'), onSelect: begin },
     ...(main ? [] : [{ id: 'archive', label: t('chArchive'), onSelect: () => { void actions.archiveSession(chat.id).catch(() => undefined) } }]),
+    ...(main ? [] : [{ id: 'sync', label: synced ? t('chUnsync') : t('chSync'), onSelect: onToggleSync }]),
     ...(main ? [] : [{ id: 'main', label: t('chMakeMain'), onSelect: onMakeMain }]),
   ]
 
@@ -208,6 +216,7 @@ function ChatRow({ t, chat, label, main, pinned, selected, useSessionStatus, act
       ? h('input', { className: 'nm-chat-edit', value: draft, autoFocus: true, 'aria-label': t('chRename'), onChange: (e: FormEvent<HTMLInputElement>) => setDraft(e.currentTarget.value), onBlur: commit, onKeyDown: onKey })
       : h('button', { type: 'button', className: 'nm-chat-open', 'aria-current': selected ? 'page' : undefined, onClick: () => actions.openSession(chat.id), onDoubleClick: begin },
           h('span', { className: 'nm-chat-title' }, label),
+          !selected && unreadCount > 0 ? h('span', { className: 'nm-chat-unread', 'aria-label': String(unreadCount) }, unreadCount > 99 ? '99+' : String(unreadCount)) : null,
           waiting
             ? h('span', { className: 'nm-chat-mark nm-wait', title: t('chWaiting'), 'aria-label': t('chWaiting') }, 'ℹ')
             : running
@@ -307,7 +316,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     h('div', { className: 'nm-chats-list' },
       mainMatches
         ? (main
-            ? h(ChatRow, { t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined })
+            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, synced: true, onToggleSync: () => undefined })
             : h('div', { className: 'nm-chat-row nm-main' },
                 h('button', { type: 'button', className: 'nm-chat-open', onClick: openMain }, h('span', { className: 'nm-chat-title' }, t('chMain')))))
         : null,
@@ -318,6 +327,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
         ? h('div', { className: 'nm-chats-empty' }, q === '' ? t('chEmpty') : t('chNoMatch'))
         : side.map((chat) => h(ChatRow, {
             key: chat.id,
+            unreadCount: sync.unread[chat.id] ?? 0,
             t,
             chat,
             label: chat.blank && !sync.sessions.has(chat.id) ? t('chBlank') : chat.displayTitle || t('chBlank'),
@@ -326,6 +336,8 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
             selected: current === chat.id,
             useSessionStatus,
             actions,
+            synced: sync.synced.has(chat.id),
+            onToggleSync: () => { void call('sync/synced', { sessionId: chat.id, on: !sync.synced.has(chat.id) }).catch(() => undefined) },
             // the host has the last word: while the account's main conversation lives in a session, that one stays the main chat
             onMakeMain: () => {
               void call<{ sessionId?: string } | undefined>('sync/main', { sessionId: chat.id })

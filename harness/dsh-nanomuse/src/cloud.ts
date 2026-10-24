@@ -1,3 +1,4 @@
+import { ConversationNavigation, type ConversationNavigationRequest } from './conversation-navigation.ts'
 /**
  * NanoLika Cloud for the harness: `ctx.nanomuseCloud`.
  *
@@ -253,6 +254,7 @@ export interface StageState {
 
 /** The live state the browser half mirrors over `/events`. */
 export interface LiveState {
+  conversationNavigation?: ConversationNavigationRequest | null
   cloud: { signedIn: boolean; hint: string }
   profile: Profile
   hub: HubState
@@ -607,6 +609,7 @@ export default class NanomuseCloud extends Service {
   /** Sessions sent through the account for one turn (*Use NanoLika Cloud this time*), with what to put back. */
   private readonly cloudOnce = new Map<string, CloudOnce>()
   /** The scoped context with the session API, once it is up. */
+  private readonly conversationNavigation = new ConversationNavigation(() => this.state.account?.id ?? '', () => this.broadcast())
   private sessionCtx: Context | undefined
   private steps = 0
   private lastCallAt = 0
@@ -790,6 +793,7 @@ export default class NanomuseCloud extends Service {
           void this.writeState().catch((error: unknown) => this.ctx.logger.warn('nanomuse: state write failed: %s', message(error)))
         },
         closed: () => this.gateClosed,
+        resolveShared: async (cid) => this.sync?.resolveCid(cid, true),
       })
       this.tasks = runner
       ctx.effect(() => runner.attach(), 'nanomuse cloud: tasks')
@@ -876,6 +880,21 @@ export default class NanomuseCloud extends Service {
         log: (level, text) => this.ctx.logger[level](text),
       })
       this.sync = sync
+      ctx.effect(() => this.hub.handle('chat.open_desktop', async (args) => {
+        const account = this.state.account?.id
+        const cid = typeof args.cid === 'string' ? args.cid : ''
+        if (!account || !cid || cid.length > 160 || !(await sync.active())) throw new HubError('not_allowed', 'Choose a shared conversation and enable sync')
+        const sessionId = await sync.resolveCid(cid, true)
+        if (!sessionId || account !== this.state.account?.id || !sync.owns(sessionId)) throw new HubError('not_allowed', 'This shared conversation is unavailable')
+        return this.conversationNavigation.open(cid, sessionId)
+      }), 'nanolika: open shared conversation on desktop')
+      ctx.effect(() => () => this.conversationNavigation.cancel(), 'nanolika: cancel pending navigation')
+      ctx.effect(() => this.hub.handle('shared_chat', async (args) => {
+        const cid = String(args.cid ?? '')
+        const sessionId = await sync.resolveCid(cid)
+        if (!sessionId) throw new HubError('not_allowed', 'this shared chat is unavailable')
+        return { cid, sessionId }
+      }), 'nanolika: shared chat capability')
       ctx.effect(
         () =>
           ctx.on('session/event', (session: Session, event: SessionEvent) => {
@@ -2238,6 +2257,7 @@ export default class NanomuseCloud extends Service {
     const account = this.state.account
     return {
       cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '' },
+      conversationNavigation: this.conversationNavigation.request,
       profile: this.profile.current(),
       hub: this.hubState(),
       hands: { calls: [...this.calls.values()], steps: this.steps, run: this.screenRuns.current() },
@@ -3266,6 +3286,7 @@ export default class NanomuseCloud extends Service {
   private actions(): string[] {
     const out = [...ACTIONS, ...REMOTE_ACTIONS]
     if (this.tasks) out.push('approve', 'task', 'stop')
+    if (this.sync) out.push('chat.open_desktop')
     out.push(...CODING_ACTIONS)
     return out
   }
@@ -3348,6 +3369,21 @@ export default class NanomuseCloud extends Service {
       this.logCache.set(sessionId, entry)
     }
     return entry
+  }
+
+  /** Select an existing account conversation in a paired messenger without a model task. */
+  async openConversation(sessionId: string, channel: string): Promise<Record<string, unknown>> {
+    if (!['telegram', 'max', 'desktop'].includes(channel)) throw new Error('Choose Telegram, MAX or desktop')
+    const sync = this.sync
+    if (!sync || !sessionId || !sync.owns(sessionId) || !(await sync.active())) throw new Error('Choose a shared conversation and enable sync')
+    sync.messageSent(sessionId)
+    await sync.push()
+    const cid = sync.cidOf(sessionId)
+    if (!cid) throw new Error('This conversation has not been synced yet')
+    if (channel === 'desktop') return this.conversationNavigation.open(cid, sessionId)
+    const hosts = this.hub.devices.filter((device) => device.id !== this.hub.deviceId && device.online && device.actions?.includes('chat.open_channel'))
+    if (hosts.length !== 1) throw new Error('No single connected messenger host is available; use the messenger menu')
+    return this.hub.call(hosts[0]!.id, 'chat.open_channel', { cid, channel }, { timeoutMs: 45_000 })
   }
 
   /** The session's title as the chats column shows it: the latest `session/title` event, else its first prompt. */
@@ -3616,6 +3652,15 @@ export default class NanomuseCloud extends Service {
       }
       if (req.method === 'POST' && route === '/data/delete-samples') return send(res, 200, await this.deleteSamples())
       // Conversations synced between the account's devices (C7, C8): the switch, the delete, the main chat, the rows from elsewhere.
+      if (req.method === 'POST' && route === '/conversation/visible') {
+        const body = await json(req)
+        const ok = this.conversationNavigation.acknowledge(String(body.id ?? ''), String(body.sessionId ?? ''))
+        return send(res, ok ? 200 : 409, { ok })
+      }
+      if (req.method === 'POST' && route === '/conversation/open') {
+        const body = await json(req)
+        return send(res, 200, await this.openConversation(String(body.sessionId ?? ''), String(body.channel ?? '')))
+      }
       if (route === '/sync/state' || route.startsWith('/sync/')) {
         const sync = this.sync
         if (!sync) return send(res, 503, { error: { code: 'not_ready', message: 'The session API is not up yet' } })
@@ -3630,11 +3675,21 @@ export default class NanomuseCloud extends Service {
           return send(res, 200, await sync.setEnabled(body.enabled !== false))
         }
         if (req.method === 'POST' && route === '/sync/delete') return send(res, 200, await sync.deleteRemote())
+        if (req.method === 'POST' && route === '/sync/open') {
+          const body = await json(req)
+          await sync.selectSessions(Array.isArray(body.sessionIds) ? body.sessionIds.map(String) : [], typeof body.reader === 'string' ? body.reader : 'desktop-view')
+          return send(res, 200, sync.view())
+        }
         if (req.method === 'POST' && route === '/sync/pull') return send(res, 200, { applied: await sync.pull(), ...sync.view() })
         if (req.method === 'POST' && route === '/sync/main') {
           // the session the column named, or the one the account's main conversation already lives in
           const body = await json(req)
           return send(res, 200, { sessionId: await sync.setMain(String(body.sessionId ?? '')) })
+        }
+        if (req.method === 'POST' && route === '/sync/synced') {
+          // 0.29: the cloud on one chat — sync this session alone (the main chat is always synced)
+          const body = await json(req)
+          return send(res, 200, await sync.setSynced(String(body.sessionId ?? ''), body.on === true))
         }
         if (req.method === 'GET' && route === '/sync/remote') {
           const sessionId = url.searchParams.get('session') ?? ''
