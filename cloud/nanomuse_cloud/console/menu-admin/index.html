@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nanoLika Cloud — прилавок моделей</title>
+    <link rel="stylesheet" href="menu-admin.css" />
+  </head>
+  <body>
+    <header>
+      <a class="back" href="/app/admin/">← в админку</a>
+      <h1>Прилавок моделей</h1>
+      <p class="intro">
+        Весь рынок с пометкой мусора. Галочка значит «видно человеку в приложении», полка — где именно.
+      </p>
+      <p class="counts" id="counts"></p>
+    </header>
+
+    <div class="bar">
+      <input id="q" type="search" placeholder="Модель, поставщик, полка" autocomplete="off" />
+      <div class="chips" id="chips"></div>
+      <label class="switch"><input id="hide-junk" type="checkbox" checked /> скрыть мусор</label>
+      <label class="switch"><input id="only-on" type="checkbox" /> только на витрине</label>
+      <button id="save" class="primary" disabled>Сохранить</button>
+    </div>
+
+    <p class="note" id="note"></p>
+    <main id="list"></main>
+    <footer id="footer"></footer>
+
+    <script type="module" src="menu-admin.js"></script>
+  </body>
+</html>
