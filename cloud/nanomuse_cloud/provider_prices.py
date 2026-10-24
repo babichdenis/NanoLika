@@ -293,15 +293,14 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
         # «Запрос» на карточке — та же цена, что вход за 1M токенов: не дублируем
         inflow = {o["price"] for o in out if o["unit"] == "1M токенов (вход)"}
         out = [o for o in out if not (o["unit"] == "запрос" and o["price"] in inflow)]
-        # без повторов: одно и то же число в одной единице
-        seen, uniq = set(), []
+        # На странице модели polza бывает несколько тарифов одной единицы
+        # (разные провайдеры, кэш, разрешения). Для сравнения берём самый дешёвый.
+        best: dict[str, dict] = {}
         for o in out:
-            k = (o["unit"], o["price"])
-            if k in seen:
-                continue
-            seen.add(k)
-            uniq.append(o)
-        return uniq
+            cur = best.get(o["unit"])
+            if cur is None or o["price"] < cur["price"]:
+                best[o["unit"]] = o
+        return list(best.values())
 
     offers: list[dict] = []
     with cf.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -310,10 +309,146 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
     return offers
 
 
+
+def _money(line: str) -> float | None:
+    m = PRICE.search(line)
+    if not m:
+        return None
+    val = number(m.group(1))
+    if val is None or val <= 0:
+        return None
+    return val
+
+
+def fetch_proxyapi() -> list[dict]:
+    """proxyapi.ru — рубли. В карточке модели подпись и цена на разных строках:
+    «Ввод | 632 ₽ | за 1М токенов», имя модели стоит выше, как «vendor/slug»."""
+    lines = text_of(get("https://proxyapi.ru/pricing")).splitlines()
+    offers, model = [], None
+    for i, ln in enumerate(lines):
+        text = ln.strip()
+        # карточка: «Название | вендор | / | slug | от | Вендор»
+        if text == "/" and i >= 2 and i + 1 < len(lines):
+            model = f"{lines[i - 1]}/{lines[i + 1]}"
+            continue
+        if not model:
+            continue
+        low = text.lower()
+        if not (low.startswith("ввод") or low.startswith("вывод") or low.startswith("изображени")):
+            continue
+        tail = " ".join(lines[i: i + 3])
+        price = _money(tail)
+        if price is None or "токен" not in tail.lower() and "изображени" not in low:
+            continue
+        unit = ("1M токенов (вход)" if low.startswith("ввод") else
+                "1M токенов (выход)" if low.startswith("вывод") else "изображение")
+        offers.append(dict(model=model, unit=unit, price=price, currency="RUB"))
+    # на странице есть дубли (карточка + сводка) и разные тарифы — берём самый дешёвый
+    best: dict[tuple[str, str], dict] = {}
+    for off in offers:
+        key = (off["model"], off["unit"])
+        if key not in best or off["price"] < best[key]["price"]:
+            best[key] = off
+    return list(best.values())
+
+
+def fetch_bothub() -> list[dict]:
+    """bothub.chat — рубли; в карточке «Ввод (за 1M токенов) 156,46 ₽»,
+    а название модели стоит сразу после блока цен."""
+    lines = text_of(get("https://bothub.chat/models")).splitlines()
+    offers, pending = [], []
+    label_re = re.compile(r"^(Ввод|Вывод|Картинка-промпт)\s*\(([^)]{1,24})\)$", re.I)
+
+    def unit_of(label: str, paren: str) -> str:
+        paren = paren.lower()
+        if "токен" in paren:
+            return "1M токенов (вход)" if label.lower().startswith("ввод") else "1M токенов (выход)"
+        if "изображ" in paren or "1k" in paren or "картин" in paren:
+            return "изображение"
+        return paren
+
+    current = None
+    for i, ln in enumerate(lines):
+        m = label_re.match(ln.strip())
+        if m:
+            price = _money(" ".join(lines[i: i + 3]))
+            if price is not None:
+                pending.append((unit_of(m.group(1), m.group(2)), price))
+            continue
+        if pending:
+            # название модели: первая «осмысленная» строка после цен
+            cand = ln.strip()
+            if 2 < len(cand) < 70 and not PRICE.search(cand) and not cand.startswith(("(", "New", "-", "Контекст")):
+                current = cand
+                for unit, price in pending:
+                    offers.append(dict(model=current, unit=unit, price=price, currency="RUB"))
+                pending = []
+    return offers
+
+
+def fetch_neuroapi() -> list[dict]:
+    """neuroapi.host — рубли за 1M токенов; у модели обычно два тарифа."""
+    lines = text_of(get("https://neuroapi.host/pricing")).splitlines()
+    offers = []
+    for i, ln in enumerate(lines):
+        if not re.match(r"^за\s*1\s*млн\s*токенов$", ln.strip(), re.I) or i == 0:
+            continue
+        model = lines[i - 1].strip()
+        if not (2 < len(model) < 60) or PRICE.search(model):
+            continue
+        # разбираем блок до следующего заголовка цены
+        j, label = i + 1, None
+        while j < len(lines) and j < i + 40:
+            low = lines[j].strip().lower()
+            if re.match(r"^за\s*1\s*млн\s*токенов$", low):
+                break
+            if low in ("вход", "входящие", "выход", "исходящие"):
+                label = low
+            elif label:
+                price = _money(lines[j])
+                if price is not None:
+                    unit = "1M токенов (вход)" if label.startswith("вход") else "1M токенов (выход)"
+                    offers.append(dict(model=model, unit=unit, price=price, currency="RUB"))
+                    label = None
+            j += 1
+    best: dict[tuple[str, str], dict] = {}
+    for off in offers:
+        key = (off["model"], off["unit"])
+        if key not in best or off["price"] < best[key]["price"]:
+            best[key] = off
+    return list(best.values())
+
+
+def fetch_openrouter() -> list[dict]:
+    """openrouter.ai — доллары за токен; пересчитываем в цену за 1M токенов."""
+    data = json.loads(get("https://openrouter.ai/api/v1/models", 60))
+    units = {"prompt": "1M токенов (вход)", "completion": "1M токенов (выход)",
+             "input_cache_read": "1M токенов (вход, кэш)",
+             "input_cache_write": "1M токенов (кэш-запись)"}
+    offers = []
+    for row in data.get("data", []):
+        pricing = row.get("pricing") or {}
+        for field, unit in units.items():
+            raw = pricing.get(field)
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if val <= 0:
+                continue
+            offers.append(dict(model=row.get("id", "?"), unit=unit,
+                               price=round(val * 1_000_000, 4), currency="USD"))
+    return offers
+
+
 FETCHERS = {
     "polza": ("https://polza.ai/models", fetch_polza),
     "routerai": ("https://routerai.ru/models", fetch_routerai),
     "deepseek": ("https://api-docs.deepseek.com/quick_start/pricing/", fetch_deepseek),
+    "proxyapi": ("https://proxyapi.ru/pricing", fetch_proxyapi),
+    "bothub": ("https://bothub.chat/models", fetch_bothub),
+    "neuroapi": ("https://neuroapi.host/pricing", fetch_neuroapi),
+    "openrouter": ("https://openrouter.ai/api/v1/models", fetch_openrouter),
 }
 
 
@@ -334,14 +469,16 @@ def model_key(provider: str, model: str) -> str:
     slug = re.sub(r"^[a-z0-9\-]+/", "", slug)          # фирменный префикс пути
     slug = re.sub(r"\s+", "-", slug)
     slug = slug.replace("deepseek/", "")
-    return ALIASES.get(slug, slug)
+    # синонимы — только для ОФИЦИАЛЬНОГО прайса DeepSeek (deepseek-chat → V4.1 Flash);
+    # у перепродавцов те же слова могут значить другую модель
+    return ALIASES.get(slug, slug) if provider == "deepseek" else slug
 
 
 def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, list[dict]]],
           limit: int = 0) -> dict:
     models: dict[str, dict] = {}
     providers = []
-    for name, (url, _fn) in FETCHERS.items():
+    for name, (url, _fn) in active_fetchers().items():
         if name not in results:
             continue
         ok, note, offers = results[name]
@@ -396,7 +533,7 @@ def refresh_now() -> dict:
     """Собрать заново и записать снимок (синхронно)."""
     rate, rate_source = usd_rub()
     results = {}
-    for name, (url, fn) in FETCHERS.items():
+    for name, (url, fn) in active_fetchers().items():
         t0 = time.time()
         try:
             offers = fn()
@@ -435,6 +572,32 @@ def refresh_async() -> bool:
     return True
 
 
+def install_provider_prices(app, admin_dep) -> None:
+    """Две ручки админки. Регистрируются из api.py одной строкой — так переживает
+    замену api.py другой сессией: достаточно снова вызвать скрипт патча."""
+    from fastapi import Depends
+
+    @app.get("/v1/admin/provider-prices", dependencies=[Depends(admin_dep)])
+    async def admin_provider_prices() -> dict:
+        return read_snapshot()
+
+    @app.post("/v1/admin/provider-prices/refresh", dependencies=[Depends(admin_dep)])
+    async def admin_provider_prices_refresh() -> dict:
+        return {"started": refresh_async()}
+
+
+# Черновые поставщики: парсеры написаны, но сверка цен показывает систематические
+# ошибки привязки модели к цене (карточка съезжает), поэтому по умолчанию выключены.
+# Включить для отладки: PRICE_DRAFT_PROVIDERS=1
+DRAFT = {"bothub", "proxyapi", "neuroapi"}
+
+
+def active_fetchers() -> dict:
+    if os.environ.get("PRICE_DRAFT_PROVIDERS", "").strip() in ("1", "true", "yes"):
+        return dict(FETCHERS)
+    return {name: v for name, v in FETCHERS.items() if name not in DRAFT}
+
+
 def main(argv: list[str]) -> int:
     out = None
     limit = 0
@@ -450,7 +613,7 @@ def main(argv: list[str]) -> int:
             i += 1
     rate, rate_source = usd_rub()
     results = {}
-    for name, (url, fn) in FETCHERS.items():
+    for name, (url, fn) in active_fetchers().items():
         t0 = time.time()
         try:
             offers = fn()
