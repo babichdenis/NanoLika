@@ -76,3 +76,4 @@ uv.lock
 
 # nanoMuse Cloud relay runtime data
 cloud/data/
+cloud/nanomuse_cloud/console/providers/prices.json
