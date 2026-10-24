@@ -19,8 +19,6 @@ from nanomuse.logger import logger
 MODES = {"full-access", "workspace-write", "read-only"}
 COPY = {
     "ru": {
-        "open_telegram": "Открыть в Telegram",
-        "open_max": "Продолжить в MAX",
         "opened_channel": "Беседа «{title}» выбрана в {channel}.",
         "unknown_command": "Эта команда не поддерживается. Выберите действие в меню: беседы создаются кнопкой, без обращения к модели.",
         "new": "Новая беседа",
@@ -72,8 +70,6 @@ COPY = {
         "lang_saved": "Язык ответов сохранён для этой беседы.",
     },
     "en": {
-        "open_telegram": "Open in Telegram",
-        "open_max": "Continue in MAX",
         "opened_channel": "Conversation “{title}” selected in {channel}.",
         "unknown_command": "This command is not supported. Choose an action in the menu; creating a chat does not call the model.",
         "new": "New chat",
@@ -125,8 +121,6 @@ COPY = {
         "lang_saved": "Reply language saved for this conversation.",
     },
     "zh": {
-        "open_telegram": "在 Telegram 中打开",
-        "open_max": "在 MAX 中继续",
         "opened_channel": "已在 {channel} 中选择对话「{title}」。",
         "unknown_command": "不支持此命令。请在菜单中选择操作；创建对话不会调用模型。",
         "new": "新对话",
@@ -457,16 +451,6 @@ class ChatMenu:
                     (c["account"], "https://cloud.nanolika.ru/web/account/?source=messenger"),
                 ],
             ]
-        if page == "home":
-            sync = getattr(self.m.svc, "sync", None)
-            cid = sync.cid_of(self.m._thread_for(msg)) if sync else None
-            if cid:
-                rows.append(
-                    [
-                        (c["open_telegram"], self.ticket(msg, "chat:open:telegram:" + cid)),
-                        (c["open_max"], self.ticket(msg, "chat:open:max:" + cid)),
-                    ]
-                )
         if page != "home":
             rows.append(
                 row(
