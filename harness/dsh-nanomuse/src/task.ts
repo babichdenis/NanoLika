@@ -55,6 +55,7 @@ export interface TaskRunnerOptions {
    * while it says true, a task is refused with the usual `busy` error: the asker sees
    * the refusal and can ask again; nothing is taken and dropped.
    */
+  resolveShared?(cid: string): Promise<string | undefined>
   closed?: () => boolean
 }
 
@@ -82,20 +83,6 @@ export function textOf(content: readonly ContentBlock[] | undefined): string {
 
 /** `name: the arguments on one line`, bounded, for the asker's step list and approval card. */
 export function preview(name: string, args: string): string {
-  const shown = mainArgument(args)
-  return shown ? `${name}: ${shown.length > 160 ? `${shown.slice(0, 159)}…` : shown}` : name
-}
-
-/**
- * What a remembered answer on the asking device covers: the tool and its whole main
- * argument, never the cut preview, whose first words two different commands can share.
- */
-export function grantKey(name: string, args: string): string {
-  const shown = mainArgument(args)
-  return shown ? `${name}: ${shown}` : name
-}
-
-function mainArgument(args: string): string {
   let shown = args.trim()
   try {
     const parsed: unknown = JSON.parse(args)
@@ -108,7 +95,9 @@ function mainArgument(args: string): string {
   } catch {
     // not JSON (a model mid-call) — show it raw
   }
-  return shown.replace(/\s+/g, ' ').trim()
+  shown = shown.replace(/\s+/g, ' ').trim()
+  if (shown.length > 160) shown = `${shown.slice(0, 159)}…`
+  return shown ? `${name}: ${shown}` : name
 }
 
 /** Stable bot titles contain the channel and purpose, never a relay host name. */
@@ -161,7 +150,10 @@ export class TaskRunner {
     if (!text) throw new HubError('usage', 'text is required')
     const from = call.from
     const conversation = String(args.conversation ?? '').trim() || from.id || 'device'
-    const sessionId = await this.sessionFor(from, conversation, taskTitle(from, conversation, args.channel))
+    const sharedCid = String(args.sync_cid ?? '')
+    const shared = sharedCid ? await this.options.resolveShared?.(sharedCid) : undefined
+    if (sharedCid && !shared) throw new HubError('not_allowed', 'the shared chat is not available on this computer')
+    const sessionId = shared ? shared as SessionId : await this.sessionFor(from, conversation, taskTitle(from, conversation, args.channel))
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw new HubError('failed', `the session could not be opened: ${String(resolved.error)}`)
     const agent = resolved.agent
@@ -186,9 +178,9 @@ export class TaskRunner {
       // `user`, so the chat shows the bubble the person wrote on the other device instead of
       // an answer that comes out of nowhere; the note `frame` puts under the words
       // (`MIRROR_NOTE`) keeps the sync from carrying them back as something typed here
-      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: shared ? text : frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
       const final = await settled
-      return { text: final, conversation, thread: sessionId, device: this.options.deviceName() }
+      return { text: final, conversation, thread: sessionId, device: this.options.deviceName(), ...(sharedCid ? { sync_cid: sharedCid } : {}) }
     } finally {
       clearTimeout(timer)
       this.bySession.delete(sessionId)
@@ -203,8 +195,11 @@ export class TaskRunner {
     if (!['read-only', 'workspace-write', 'full-access'].includes(mode)) throw new HubError('usage', 'unknown access mode')
     const conversation = String(args.conversation ?? '').trim()
     const channel = String(args.channel ?? '')
-    if (!['telegram', 'max'].includes(channel) || !conversation.startsWith(`channel-${channel}-`)) throw new HubError('usage', 'a channel conversation is required')
-    const sessionId = await this.sessionFor(call.from, conversation, taskTitle(call.from, conversation, channel))
+    const sharedCid = String(args.sync_cid ?? '')
+    if (!['telegram', 'max'].includes(channel) || (!sharedCid && !conversation.startsWith(`channel-${channel}-`))) throw new HubError('usage', 'a channel conversation is required')
+    const shared = sharedCid ? await this.options.resolveShared?.(sharedCid) : undefined
+    if (sharedCid && !shared) throw new HubError('not_allowed', 'the shared chat is unavailable')
+    const sessionId = shared ? shared as SessionId : await this.sessionFor(call.from, conversation, taskTitle(call.from, conversation, channel))
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw new HubError('failed', 'the conversation could not be opened')
     const presets = this.ctx.get('permissionPresets') as { names: readonly string[]; set(session: Session, name: string): void } | undefined
@@ -306,7 +301,6 @@ export class TaskRunner {
       stage: 'approval',
       approval_id: id,
       preview: tool ? preview(tool.name, tool.args) : req.toolName,
-      grant_key: tool ? grantKey(tool.name, tool.args) : req.toolName,
       risk: 'moderate',
       reason: req.displayReason?.en ?? req.reason ?? '',
       device: this.options.deviceName(),

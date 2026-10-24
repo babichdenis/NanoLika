@@ -36,7 +36,22 @@ const KEY = 'nanomuse.prefs'
  * not come up either was left with nothing at the top and at the bottom.
  */
 const SCHEMA = 2
-const DEFAULTS: Prefs = { showHarness: true, keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
+
+/** The desktop app's platform, from the preload's bridge, which is in place before the page's
+ *  own scripts run. Undefined in a plain browser: the web client keeps the Muse look. */
+function appPlatform(): string | undefined {
+  const bridge = (window as unknown as { nanomuseHarness?: { platform?: string } }).nanomuseHarness
+  if (typeof bridge?.platform === 'string' && bridge.platform) return bridge.platform
+  return document.documentElement?.dataset?.['nmPlatform'] || undefined
+}
+
+/** On macOS and on Windows the harness's own controls show by default; elsewhere as before. */
+function defaultShowHarness(): boolean {
+  const platform = appPlatform()
+  return platform === 'darwin' || platform === 'win32'
+}
+
+const DEFAULTS: Prefs = { showHarness: defaultShowHarness(), keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
 const MAX_APPROVALS = 50
 
 let current: Prefs = read()
@@ -51,7 +66,7 @@ function read(): Prefs {
     // read as on once; a switch touched since (`schema` 2) stands as the person left it.
     const schema = typeof parsed.schema === 'number' ? parsed.schema : 1
     return {
-      showHarness: schema < SCHEMA ? true : parsed.showHarness !== false,
+      showHarness: schema < SCHEMA ? defaultShowHarness() || parsed.showHarness === true : parsed.showHarness !== false,
       keepAwake: parsed.keepAwake !== false,
       showSteps: parsed.showSteps !== false,
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals.slice(0, MAX_APPROVALS) : [],

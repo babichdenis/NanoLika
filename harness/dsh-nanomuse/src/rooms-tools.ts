@@ -157,7 +157,7 @@ export function apply(ctx: Context): void {
     ctx.effect(
       () =>
         ctx.systemPrompt.context({
-          name: 'nanomuse-firstrun',
+          name: 'nanolika-firstrun',
           order: 56,
           text: (context) => rooms.firstRunAddendum((context as { agent?: { session?: { id?: string } } }).agent?.session?.id),
         }),
@@ -166,7 +166,7 @@ export function apply(ctx: Context): void {
     ctx.effect(
       () =>
         ctx.systemPrompt.context({
-          name: 'nanomuse-rooms',
+          name: 'nanolika-rooms',
           order: 55,
           text: () => {
             const goals = rooms.goals

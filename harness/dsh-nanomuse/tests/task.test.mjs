@@ -4,11 +4,7 @@
 // `stop {call}` cancelling the run, busy and timeout handling.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-<<<<<<< ours
 import { MIRROR_NOTE, TaskRunner, frame, preview, taskTitle, textOf } from '../lib/task.js'
-=======
-import { STREAM_INTERVAL_MS, TaskRunner, frame, grantKey, preview, textOf } from '../lib/task.js'
->>>>>>> theirs
 
 /** The slice of a dsh Context the runner touches. */
 function fakeContext() {
@@ -101,10 +97,6 @@ test('frame, textOf and preview', () => {
   assert.equal(preview('think', 'not json'), 'think: not json')
   assert.equal(preview('noop', '{}'), 'noop')
   assert.equal(preview('bash', JSON.stringify({ command: 'x'.repeat(300) })).length, 'bash: '.length + 160)
-  // the key a remembered answer is kept under: the whole argument, never the cut preview
-  assert.equal(grantKey('bash', JSON.stringify({ command: 'x'.repeat(300) })), `bash: ${'x'.repeat(300)}`)
-  assert.equal(grantKey('bash', '{"command":"ls   -la\\n"}'), 'bash: ls -la')
-  assert.equal(grantKey('noop', '{}'), 'noop')
 })
 
 test('a task opens a named session, streams the run and resolves with the answer', async () => {
@@ -304,4 +296,20 @@ test('channel access rejects unsupported presets and non-channel targets', async
   await assert.rejects(r.permissions({ conversation: 'channel-telegram-chat', channel: 'telegram', mode: 'full-access' }, fakeCall('p1')), /unavailable/)
   await assert.rejects(r.permissions({ conversation: 'main', channel: 'telegram', mode: 'read-only' }, fakeCall('p2')), /channel conversation/)
   await assert.rejects(r.permissions({ conversation: 'channel-max-chat', channel: 'telegram', mode: 'read-only' }, fakeCall('p3')), /channel conversation/)
+})
+
+test('a shared chat task uses only a verified catalogue session and does not create a mirror', async () => {
+  const h = fakeContext()
+  await h.ctx.sessionController.create({ agentPreset: 'nanomuse' })
+  const r = new TaskRunner(h.ctx, { deviceName: () => 'Desk', log: () => {}, resolveShared: async cid => cid === 'chat-one' ? 'session-1' : undefined })
+  const off = r.attach()
+  await assert.rejects(r.task({ text: 'hello', sync_cid: 'another-account' }, fakeCall('bad')), /not available/)
+  const pending = r.task({ text: 'continue here', sync_cid: 'chat-one', conversation: 'chosen-chat' }, fakeCall('shared'))
+  await tick()
+  assert.equal(h.ctx.sessionController.created.length, 1)
+  assert.equal(h.agents.get('session-1').sent[0].content[0].text, 'continue here')
+  h.emit('session-1', 'assistant/message', { message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] }, stream: [] })
+  h.emit('session-1', 'turn/end', { reason: { kind: 'completed' } })
+  assert.equal((await pending).thread, 'session-1')
+  off()
 })

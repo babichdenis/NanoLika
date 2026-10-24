@@ -13,7 +13,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { closeTopModal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useRef, type ReactNode } from 'react'
-import type { Translate } from './api.ts'
+import { call, type Translate } from './api.ts'
 import { Avatar, BrandName, type Mood } from './Avatar.tsx'
 import { makeAvatarStudio } from './AvatarStudio.tsx'
 import { bridge } from './bridge.ts'
@@ -40,7 +40,7 @@ import { makeLibraryPanel } from './LibraryPanel.tsx'
 import { IconPanelLeft, IconPlus } from './icons.tsx'
 import { makeInviteButton } from './Invite.tsx'
 import { makeUsagePill } from './UsagePill.tsx'
-import { useLive } from './live.ts'
+import { useLive, subscribeLive } from './live.ts'
 import { en, ru, zh } from './locales.ts'
 import type { ChatActions } from './MuseChats.tsx'
 import { MuseHeader, type UseSessionStatus } from './MuseHeader.tsx'
@@ -59,7 +59,7 @@ import { makeChannelsSection, makeComputerSection, makeHelpSection, makeLegalSec
 import { makeMediaSection } from './MediaSection.tsx'
 import { makeModelsSection, MODELS_SECTION } from './ModelsSection.tsx'
 import { ensureStyles, setAccent, setMuseMode } from './styles.ts'
-import { useWin, win } from './win.ts'
+import { useWin, win, peekWin } from './win.ts'
 
 export const name = 'nanomuse-client'
 /** Required services: slots, the locale table, the frame, the workspace UI's session actions, shortcuts. */
@@ -163,6 +163,26 @@ export function apply(ctx: ClientContext): void {
   const shortcuts = (ctx as unknown as { shortcuts: ShortcutsService }).shortcuts
   const getService = (name: string): unknown => (ctx as unknown as { get(name: string): unknown }).get(name)
   const shell = createShellStore()
+  ctx.effect(() => {
+    let active = '', timer: ReturnType<typeof setInterval> | undefined
+    const stop = () => { if (timer) clearInterval(timer); timer = undefined }
+    const off = subscribeLive((live) => {
+      const request = live.conversationNavigation
+      if (!request || !live.cloud.signedIn) { active = ''; stop(); return }
+      if (active === request.id) return
+      active = request.id; stop()
+      if (request.expires <= Date.now()) return
+      try { shell.close(); win.split(null); win.openDoc(null); win.search(false); workspaces.openSession(request.sessionId) } catch { return }
+      timer = setInterval(() => {
+        if (Date.now() >= request.expires) { stop(); return }
+        if (peekWin().current !== request.sessionId) return
+        stop()
+        void call('conversation/visible', { id: request.id, sessionId: request.sessionId }).catch(() => undefined)
+      }, 50)
+    })
+    return () => { off(); stop() }
+  }, 'nanolika: requested conversation navigation')
+
 
   ctx.effect(() => locale.register('nanomuse', { en, ru, zh }), 'nanomuse: dictionaries')
   const t = locale.bind('nanomuse') as Translate

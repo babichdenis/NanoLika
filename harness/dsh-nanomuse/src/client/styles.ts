@@ -233,6 +233,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-open:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: -2px; }
 .nm-chat-row.nm-main .nm-chat-title { font-weight: 500; }
 .nm-chat-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nm-chat-unread { min-width: 20px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--nm-accent); color: var(--nm-canvas, white); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
 .nm-chat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nm-accent); flex: none; }
 .nm-chat-dot.nm-live { animation: nm-pulse 2.4s ease-in-out infinite alternate; }
 .nm-chat-mark { flex: none; font-size: 12px; color: var(--dsw-alias-state-warn-primary, #d98c1f); }
@@ -1424,6 +1425,9 @@ html[data-nm-muse] [data-conversation-scroll]:has(> .nm-intro-host) [class*="_co
 .nm-md-bar { height: 4px; margin: 0 14px 12px; border-radius: 999px; background: var(--dsw-alias-bg-layer-3); overflow: hidden; }
 .nm-md-bar > span { display: block; height: 100%; background: var(--nm-accent, #0064d4); border-radius: 999px; transition: width 300ms; }
 .nm-md-failed { color: #c9302c; }
+html[data-nanomuse] .nm-conversation-controls{position:absolute;left:0;right:0;top:calc(var(--nm-header-h) - 10px);z-index:3;padding-inline:10px}header[data-window-drag]:has(.nm-conversation-controls){min-height:calc(var(--nm-header-h) + 60px)}html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-conversation-controls) ~ [data-conversation-content] > [data-conversation-scroll]{padding-top:calc(var(--nm-header-h) + 60px)}
+html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:5px 8px}html[data-nanomuse] .nm-conversation-chips button{font:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--nm-field-border,#bfc6b7);border-radius:14px;background:var(--nm-field,#fcfaf3);color:inherit;cursor:pointer}html[data-nanomuse] .nm-conversation-chips button:disabled{opacity:.5;cursor:wait}html[data-nanomuse] .nm-conversation-note{font-size:12px;text-align:center;padding:4px 10px;max-width:450px;margin:auto}
+
 `
 
 /** Put the stylesheet in the head once and mark the document as ours. */

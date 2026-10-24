@@ -14,6 +14,7 @@ import { Avatar, motionStatus, type Mood } from './Avatar.tsx'
 import { describeCall } from './Capsule.tsx'
 import { IconCheck, IconChevronLeft, IconHeart, IconMenu, IconSpinner } from './icons.tsx'
 import { useLive } from './live.ts'
+import { ConversationControls } from './ConversationControls.tsx'
 import { mainChatId } from './MuseChats.tsx'
 import { usePrefs } from './prefs.ts'
 import { statusWords } from './ProfileDrawer.tsx'
@@ -142,6 +143,7 @@ export function MuseHeader({ t, openProfile, useSessionStatus }: MuseHeaderProps
     split !== null
       ? h('button', { type: 'button', className: 'nm-header-back nm-header-chats', 'aria-label': t('railChats'), title: t('splitClose'), onClick: () => nav.split(null) }, h(IconMenu, { size: 18 }), h('span', null, t('railChats')))
       : side ? h('button', { type: 'button', className: 'nm-header-back', 'aria-label': t('chMain'), title: t('chMain'), onClick: () => nav.openSession(main) }, h(IconChevronLeft, { size: 18 })) : null,
+    h(ConversationControls, { t, sessionId: current }),
     h('div', { className: 'nm-header', role: 'status', 'aria-live': 'polite' },
       h('button', { type: 'button', className: `nm-header-face${running ? ' nm-live' : waiting ? ' nm-wait' : ''}`, 'aria-label': live.profile.name || t('brand'), title: t('railProfile'), onClick: openProfile },
         h(Avatar, { size: 66, profile: live.profile, mood })),

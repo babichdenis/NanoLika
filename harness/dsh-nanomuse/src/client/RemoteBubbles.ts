@@ -102,6 +102,7 @@ function placeAfter(target: HTMLElement, node: HTMLElement): void {
 
 /** Watch the document for the other devices' turns and show them as bubbles; returns the stop function. */
 export function renderRemoteBubbles(t: Translate): () => void {
+  const reader = 'desktop-view-' + crypto.randomUUID()
   const cache = new Map<string, Remote>()
   const inflight = new Set<string>()
   const refreshNeeded = new Set<string>()
@@ -232,8 +233,13 @@ export function renderRemoteBubbles(t: Translate): () => void {
     }
   }
 
+  let selection = ''
+  const heartbeat = setInterval(() => { if (!stopped && document.visibilityState !== 'hidden' && selection) void call('sync/open', { sessionIds: JSON.parse(selection) as string[], reader }).catch(() => undefined) }, 15_000)
   const sweep = () => {
     scheduled = undefined
+    const visible = document.visibilityState === 'hidden' ? [] : [...document.querySelectorAll<HTMLElement>('[data-conversation-content][data-conversation-session]')].filter((n) => n.getClientRects().length > 0).map((n) => n.getAttribute('data-conversation-session') ?? '').filter(Boolean)
+    const signature = JSON.stringify(visible)
+    if (signature !== selection) { selection = signature; void call('sync/open', { sessionIds: visible, reader }).catch(() => undefined) }
     for (const content of document.querySelectorAll<HTMLElement>('[data-conversation-content][data-conversation-session]')) {
       const sessionId = content.getAttribute('data-conversation-session') ?? ''
       if (!sessionId) continue
@@ -262,6 +268,11 @@ export function renderRemoteBubbles(t: Translate): () => void {
     if (records.some((m) => !ours(m))) schedule()
   })
   observer.observe(document.body, { childList: true, subtree: true })
+  const selectionVisibility = () => {
+    if (document.visibilityState === 'hidden') { selection = '[]'; void call('sync/open', { sessionIds: [], reader }).catch(() => undefined) }
+    else schedule()
+  }
+  document.addEventListener('visibilitychange', selectionVisibility)
   // the host's sync revision moved (a pull, a tombstone): the sessions on screen are read again
   let rev = -1
   const offLive = subscribeLive((live) => {
@@ -284,6 +295,9 @@ export function renderRemoteBubbles(t: Translate): () => void {
   return () => {
     stopped = true
     observer.disconnect()
+    clearInterval(heartbeat)
+    document.removeEventListener('visibilitychange', selectionVisibility)
+    void call('sync/open', { sessionIds: [], reader }).catch(() => undefined)
     offLive()
     window.removeEventListener('focus', pullOnFocus)
     document.removeEventListener('visibilitychange', pullOnFocus)

@@ -25,6 +25,7 @@ const PRIVACY_URL = 'https://nanolika.ru/privacy/'
 
 /** `GET nanomuse/cloud/sync/state`: the switch, the relay's counts, the main chat and the synced sessions (see `sync.ts`). */
 export interface SyncView {
+  catalogue?: boolean
   enabled: boolean
   /** "Also sync side chats" (contract C9), this device's setting. */
   sideChats: boolean
@@ -87,10 +88,10 @@ export function SyncControls({ t }: { t: Translate }): ReactNode {
       h('span', null, t('syncSwitch')),
       h(Switch, { checked: view?.enabled === true, onChange: flip, disabled: busy || !view, label: t('syncSwitch') })),
     h('div', { style: muted }, t('syncWhy'), ' ', view?.paused ? t('syncPaused') : stored ? t('syncKept', { c: counts.conversations, m: counts.messages }) : ''),
-    h('div', { style: { ...row, justifyContent: 'space-between', marginTop: 8 }, 'data-testid': 'nm-sync-side' },
+    view?.catalogue ? h('div', { style: muted }, t('syncShared')) : h('div', { style: { ...row, justifyContent: 'space-between', marginTop: 8 }, 'data-testid': 'nm-sync-side' },
       h('span', null, t('syncSide')),
       h(Switch, { checked: view?.sideChats === true, onChange: flipSide, disabled: busy || !view || view.enabled !== true, label: t('syncSide') })),
-    h('div', { style: muted }, t('syncSideWhy')),
+    view?.catalogue ? null : h('div', { style: muted }, t('syncSideWhy')),
     stored ? h('div', { style: { marginTop: 6 } }, h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: wipe }, t('syncDelete'))) : null,
     notice ? h('div', { style: muted }, notice) : null,
     error ? h('div', { style: errorStyle }, error) : null)

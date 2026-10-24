@@ -31,6 +31,17 @@ import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from './cloud.ts'
 import { HubError, type HubDevice } from './hub.ts'
 
+export const CONVERSATION_CHANNEL_RULES = `## Conversation and messenger controls
+- A conversation is shared account history. Its title does not choose Telegram, MAX, a device, or a delivery destination.
+- All synced conversations belong to one shared account list. New chat creates one shared conversation, not a local/MAX/Telegram type. For a request to continue an existing conversation, use the current conversation unless another is named. Ask which conversation only when ambiguous, and ask Telegram or MAX only when the destination is unclear. Use conversation_open to select that same conversation in the chosen messenger, without creating a duplicate or clearing history. A pressed Open in Telegram or Continue in MAX button needs no extra question.
+- conversation_open selects an EXISTING conversation only. Its success does not mean a new conversation was created. If the user asks for a new chat, create one using an available explicit chat-creation control first; never reuse the current cid and report it as new. For opening the current conversation on a computer, use conversation_open with channel desktop. The destination must advertise chat.open_desktop and confirm its visible chat. If no capable computer is connected, state that limitation immediately. If several match, ask which computer. Never use SSH, configuration edits, app restarts or delegate a navigation request to another model.
+- Chat creation, channel selection and topic binding are application controls, not research tasks. Use New chat, Open in Telegram, Continue in MAX, /new and /chats, or the authenticated conversation_open tool. With computer-control tools, use the visible application interface after the destination is chosen. Do not send these control commands as an ordinary prompt to another model.
+- Telegram supports separate native topics. MAX uses a selected conversation in one bot dialogue, not Telegram-style topics. The web and desktop share the same conversation identifier when sync is enabled.
+- Use only controls actually available in this client. If a tool or route is missing, explain the limitation briefly and point to the existing menu. Never discover admin endpoints, read tokens, edit pairing/session/sync files, SSH into servers, clear history, or stop/restart apps merely to create or select a chat. Full access does not turn this request into infrastructure administration.
+- Creating a new conversation preserves the old one and its messages. Resetting or deleting existing history is a separate explicit request.
+- Respect the saved delivery policy and automatic-topic settings. Choosing where to open a chat is not proof that other channels were disabled. Do not promise local-only storage or MAX-only delivery unless those controls were applied and verified.
+- Report success only after the interface or tool confirms the new conversation and its destination. If it fails, report that one failure without a long investigation or repeated model calls.`
+
 export const name = 'nanomuse-reach'
 /** The tool registry and the account; approval, attachments, llm and the system prompt are used when present. */
 export const inject = ['tools', 'nanomuseCloud']
@@ -111,6 +122,23 @@ export function apply(ctx: Context): void {
       ),
     'nanomuse reach: devices',
   )
+
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'conversation_open',
+    description: 'Open this same shared conversation in Telegram, MAX or this desktop. Desktop confirms only after its UI shows the chat. Uses account chat controls, not SSH or a model task. Preserves history. Ask the channel only when unclear. Telegram creates or reuses a topic; the person opens the topic in the Telegram client.',
+    parameters: { channel: { type: 'string', enum: ['telegram', 'max', 'desktop'], required: true } },
+    output: {
+      schema: { type: 'object', properties: { opened: { type: 'boolean' }, channel: { type: 'string' }, cid: { type: 'string' }, title: { type: 'string' }, topic_id: { type: 'integer' }, client_view_changed: { type: 'boolean' } }, additionalProperties: false },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    timeoutMs: 50_000,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      await approve(exec, 'conversation_open', `Continue this conversation in ${args.channel}`, `在 ${args.channel} 中继续当前对话`)
+      return cloud.openConversation(String(exec.agent?.session.id ?? ''), args.channel) as Promise<{ opened: boolean; channel: string; cid: string; title: string; topic_id?: number; client_view_changed: boolean }>
+    },
+    presentCall: (args) => ({ card: 'generic', title: `Continue in ${args.channel}`, kind: 'other', rawInput: { channel: args.channel } }),
+  })), 'nanolika: conversation controls')
 
   // -- device_screen -------------------------------------------------------------------
 
@@ -370,11 +398,12 @@ export function apply(ctx: Context): void {
     ctx.effect(
       () =>
         ctx.systemPrompt.context({
-          name: 'nanomuse-reach',
+          name: 'nanolika-reach',
           order: 50,
           text: () => {
             const profile = cloud.profile.current()
             const lines = [`The person calls you ${profile.name}; answer to that name.`]
+            lines.push(CONVERSATION_CHANNEL_RULES)
             if (profile.description) lines.push(`Your look, as the person drew it: ${profile.description.slice(0, 200)}.`)
             lines.push('Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery.')
             if (hub.connected) {

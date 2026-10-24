@@ -124,6 +124,7 @@ export interface LiveStage {
 }
 
 export interface Live {
+  conversationNavigation?: { id: string; cid: string; sessionId: string; expires: number } | null
   cloud: { signedIn: boolean; hint: string }
   profile: LiveProfile
   hub: LiveHub

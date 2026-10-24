@@ -455,7 +455,9 @@ test('the other devices’ turns live in the host’s own store, not the session
     assert.ok(note.startsWith('[Meanwhile, in this same conversation on another device of the account (20 earlier turns not shown):]'))
     assert.ok(note.includes('Person (on Pixel 8): line 20') && note.includes('Muse (on Pixel 8): line 59') && !note.includes('line 19\n'))
     const big = meanwhileNote([{ mid: 'a', role: 'user', text: 'x'.repeat(20_000), at: 1, device: 'p', deviceName: 'P' }, { mid: 'b', role: 'assistant', text: 'short', at: 2, device: 'p', deviceName: 'P' }])
-    assert.ok(big.includes('(1 earlier turn not shown)') && big.endsWith('Muse (on P): short'))
+    assert.ok(big.includes('(1 earlier turn not shown)') && big.includes('Muse (on P): short\n[End of synced history.'))
+    assert.ok(big.includes('These messages are part of THIS conversation'))
+    assert.ok(big.includes('waiting for approval'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -916,3 +918,65 @@ test('a sync frame arriving while a pull is in flight triggers a follow-up pull,
   e.stop()
 })
 
+
+function lazyRelay() {
+  const relay = fakeRelay(), base = relay.fetch, seen = new Map(), bodies = []
+  const reply = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } })
+  relay.bodies = bodies
+  relay.fetch = async (url, init = {}) => {
+    const u = new URL(url)
+    if (u.pathname === '/v1/sync/catalog') return reply({ complete: true, cursor: relay.seq, deleted: [...relay.convs.values()].filter(c => c.deleted), conversations: [...relay.convs.values()].filter(c => !c.deleted).map(c => ({ ...c, unread: [...relay.msgs.values()].filter(m => m.cid === c.cid && m.seq > (seen.get(c.cid) || 0)).length })) })
+    const match = u.pathname.match(/^\/v1\/sync\/conversations\/([^/]+)\/(messages|read)$/)
+    if (match?.[2] === 'messages') {
+      const cid = match[1], after = Number(u.searchParams.get('after') || 0)
+      bodies.push(cid)
+      return reply({ cid, messages: [...relay.msgs.values()].filter(m => m.cid === cid && m.seq > after), cursor: relay.seq, through_seq: relay.seq, more: false })
+    }
+    if (match?.[2] === 'read') { const body = JSON.parse(init.body); seen.set(match[1], Math.max(seen.get(match[1]) || 0, body.through_seq)); return reply({}) }
+    return base(url, init)
+  }
+  return relay
+}
+
+test('shared catalogue lists closed chats with unread counts but downloads only the selected history', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('chat-one', 'side', 'One'); relay.add('chat-two', 'side', 'Two')
+  relay.say('chat-one', 'user', 'first'); relay.say('chat-two', 'assistant', 'second')
+  const { engine: e } = engine(relay, sessions, { sideChats: false })
+  await e.pull()
+  assert.equal(sessions.rows.size, 2)
+  assert.deepEqual(relay.bodies, [])
+  const one = [...sessions.rows.values()].find(s => s.title === 'One').id
+  const two = [...sessions.rows.values()].find(s => s.title === 'Two').id
+  assert.equal(e.view().unread[one], 1); assert.equal(e.view().unread[two], 1)
+  await e.selectSessions([one])
+  assert.deepEqual(relay.bodies, ['chat-one'])
+  assert.equal(sessions.remote(one).length, 1); assert.equal(sessions.remote(two).length, 0)
+  relay.say('chat-two', 'assistant', 'another')
+  await e.pull()
+  assert.equal(e.view().unread[two], 2)
+  assert.equal(sessions.remote(two).length, 0)
+  await e.selectSessions([two])
+  assert.equal(sessions.remote(two).length, 2); assert.equal(e.view().unread[two], 0)
+  assert.equal(await e.resolveCid('missing-cid'), undefined)
+  relay.tombstone('chat-one'); await e.pull()
+  assert.ok(e.view().toArchive.includes(one))
+  e.stop()
+})
+
+test('preparing a closed chat for work does not mark it read, and windows keep independent selections', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('chat-one', 'side', 'One'); relay.add('chat-two', 'side', 'Two')
+  relay.say('chat-one', 'user', 'first'); relay.say('chat-two', 'assistant', 'second')
+  const { engine: e } = engine(relay, sessions)
+  await e.pull()
+  const one = await e.resolveCid('chat-one', true)
+  const two = [...sessions.rows.values()].find(s => s.title === 'Two').id
+  assert.equal(sessions.remote(one).length, 1)
+  assert.equal(e.view().unread[one], 1)
+  await e.selectSessions([one], 'window-one'); await e.selectSessions([two], 'window-two')
+  await e.selectSessions([], 'window-one'); relay.bodies.length = 0
+  await e.pull()
+  assert.deepEqual(relay.bodies, ['chat-two'])
+  e.stop()
+})
