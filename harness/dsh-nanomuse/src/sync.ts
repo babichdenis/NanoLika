@@ -882,6 +882,29 @@ export class SyncEngine {
     if (on) next[sessionId] = true
     else delete next[sessionId]
     this.state.synced = next
+
+    if (!on) {
+      // Снятие облачка: беседа уходит с сервера — и потому из Телеграма, MAX и веба,
+      // которые видят только серверное. Локальная копия остаётся здесь и с этого
+      // момента только читается. Главный чат облачко не теряет.
+      const cid = this.state.cids[sessionId]
+      if (cid && sessionId !== this.state.mainSession) {
+        try {
+          const token = await this.options.token()
+          if (token) await this.options.relay.deleteConversation(token, cid, this.options.deviceId())
+        } catch {
+          // сервер мог быть недоступен — локально облачко всё равно снимаем
+        }
+        delete this.state.cids[sessionId]
+        delete this.state.owners[sessionId]
+        delete this.state.titles[sessionId]
+        delete this.state.conversations[cid]
+        for (const mid of Object.keys(this.state.pulled)) {
+          if (this.state.pulled[mid] === sessionId) delete this.state.pulled[mid]
+        }
+      }
+    }
+
     await this.save()
     if (on) void this.pullTail().then(() => this.pushAllSoon())
     this.changed()
