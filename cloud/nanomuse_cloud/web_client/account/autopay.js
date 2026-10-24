@@ -1,0 +1,15 @@
+import {amountValue} from './payment-utils.js';
+const copy={ru:{title:'Карта и автопополнение',note:'Автосписания пока выключены. Можно сохранить желаемые суммы. Карта будет привязываться на защищённой странице банка после подключения этой возможности.',amount:'Сумма одного пополнения, ₽',threshold:'Пополнять при остатке ниже, ₽',limit:'Не больше за месяц, ₽',renew:'Продлевать тариф каждый месяц',topup:'Пополнять баланс автоматически',save:'Сохранить суммы',saved:'Суммы сохранены. Автосписания выключены.',invalid:'Проверьте суммы. Месячный предел должен покрывать хотя бы одно пополнение.',error:'Не удалось сохранить настройки. Попробуйте ещё раз.'},en:{title:'Card and automatic top-ups',note:'Automatic charges are off. You can save preferred amounts. Linking a card will use the bank’s secure page once available.',amount:'One top-up, RUB',threshold:'Top up below, RUB',limit:'Monthly maximum, RUB',renew:'Renew the plan monthly',topup:'Top up automatically',save:'Save amounts',saved:'Amounts saved. Automatic charges remain off.',invalid:'Check the amounts. The monthly limit must cover at least one top-up.',error:'Could not save settings. Please try again.'},zh:{title:'银行卡与自动充值',note:'自动扣款尚未启用。可先保存金额，启用后将在银行安全页面绑定银行卡。',amount:'每次充值，卢布',threshold:'低于此余额充值，卢布',limit:'每月上限，卢布',renew:'每月续订套餐',topup:'自动充值',save:'保存金额',saved:'金额已保存，自动扣款仍关闭。',invalid:'请检查金额，每月上限须不少于一次充值。',error:'无法保存，请重试。'}};
+export function installAutopay({lang,request}){
+ const T=copy[lang]||copy.ru,root=document.getElementById('autopay-settings');
+ const h=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e;};
+ async function load(){
+  try{const data=await request('/v1/me/autopay');root.replaceChildren();root.append(h('p',T.note));const form=h('form');form.className='autopay-form';const inputs=[];
+   for(const [field,label]of [['topup_amount_kopecks',T.amount],['threshold_kopecks',T.threshold],['monthly_limit_kopecks',T.limit]]){const l=h('label',label),i=h('input');i.inputMode='decimal';i.required=true;i.value=String(data.preferences[field]/100);i.dataset.field=field;l.append(i);form.append(l);inputs.push(i);}
+   for(const label of [T.renew,T.topup]){const l=h('label'),i=h('input');i.type='checkbox';i.disabled=true;l.className='autopay-switch';l.append(i,document.createTextNode(label));form.append(l);}
+   const button=h('button',T.save);button.type='submit';const status=h('p');status.setAttribute('role','status');form.append(button,status);root.append(form);
+   form.onsubmit=async e=>{e.preventDefault();const values={};for(const i of inputs){const raw=i.value.trim().replace(',','.');values[i.dataset.field]=raw==='0'?0:amountValue(raw)?.cents;}if(Object.values(values).some(v=>!Number.isInteger(v)||v<0)||values.topup_amount_kopecks<100||values.monthly_limit_kopecks<values.topup_amount_kopecks){status.textContent=T.invalid;return;}button.disabled=true;try{await request('/v1/me/autopay',{method:'PUT',body:JSON.stringify(values)});status.textContent=T.saved;}catch{status.textContent=T.error;}finally{button.disabled=false;}};
+  }catch{root.replaceChildren(h('p',T.error));}
+ }
+ return{load};
+}

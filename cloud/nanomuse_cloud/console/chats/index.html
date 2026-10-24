@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Чаты · nanoLika</title>
+  <link rel="stylesheet" href="chats.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="back" href="/app/">← В кабинет</a>
+    <div class="brand">nanoLika · Ваш кабинет</div>
+  </header>
+
+  <main>
+    <h1>Чаты</h1>
+    <p class="lede">Здесь видно всё, что сохранилось на сервере, чтобы ваши устройства показывали одно и то же. Название можно изменить, ненужный чат — удалить. Удаление затрагивает все устройства.</p>
+
+    <p class="gate" id="gate" hidden>Войдите в nanoLika, чтобы увидеть свои чаты.</p>
+
+    <div class="tools" id="tools" hidden>
+      <input id="search" type="search" placeholder="Найти по названию" autocomplete="off">
+      <span class="count" id="count"></span>
+    </div>
+
+    <ul class="list" id="list"></ul>
+    <p class="empty" id="empty" hidden>Чатов пока нет — они появятся после первой переписки.</p>
+    <p class="note" id="note" role="status"></p>
+  </main>
+
+  <script src="chats.js"></script>
+</body>
+</html>
