@@ -238,6 +238,10 @@ class Hub:
         for row in self.db.devices_for(account_id):
             c = live.get(row["id"])
             seen.add(row["id"])
+            # The relay's own node (the cloud "computer" with a virtual screen) is an
+            # operator thing, not one of the person's devices; it never shows in the list.
+            if (c.name if c else row["name"]) == "nanoLika Cloud":
+                continue
             out.append(
                 {
                     "id": row["id"],
@@ -254,6 +258,8 @@ class Hub:
             )
         for c in live.values():
             if c.device_id in seen:
+                continue
+            if c.name == "nanoLika Cloud":
                 continue
             out.append(
                 {
