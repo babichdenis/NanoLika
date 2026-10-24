@@ -26,6 +26,10 @@ import time
 import urllib.parse
 import urllib.request
 
+# Request импортируется на уровне модуля: аннотации строковые (from __future__),
+# а FastAPI разрешает их по globals модуля, иначе параметр станет query-параметром
+from fastapi import Request
+
 log = logging.getLogger("nanomuse_cloud.oauth")
 
 UA = "NanoLika-Cloud/1.0 (+https://nanolika.ru)"
@@ -188,61 +192,98 @@ def check_telegram(payload: dict) -> dict | None:
 # ── ручки ───────────────────────────────────────────────────────────────
 def install_oauth(app, cloud, settings) -> None:
     """Три ручки: список провайдеров, старт и возврат. Плюс вход по виджету Telegram."""
-    from fastapi import Body, Request
+    from fastapi import Body
     from fastapi.responses import JSONResponse, RedirectResponse
 
     from .identifiers import parse as parse_identifier, telegram as telegram_identifier
 
     base = (getattr(settings, "public_base", "") or "https://cloud.nanolika.ru").rstrip("/")
 
-    def redirect_uri(provider: str, request: Request) -> str:
-        return f"{str(request.base_url).rstrip('/')}/v1/auth/oauth/{provider}/callback"
+    # куда возвращать человека после разрешения/отказа: только свои домены
+    allowed_next = ("https://nanolika.ru", "https://cloud.nanolika.ru")
+
+    def pick_next(raw: str) -> str:
+        raw = (raw or "").strip()
+        for host in allowed_next:
+            if raw == host or raw.startswith(host + "/"):
+                return raw
+        return f"{base}/app/"
+
+    def cookie_domain() -> str:
+        host = urllib.parse.urlparse(base).hostname or ""
+        # общая кука для витрины и консоли: .nanolika.ru
+        parts = host.split(".")
+        return "." + ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+    def _back(target: str, reason: str):
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(f"{target}{sep}auth_error={urllib.parse.quote(reason)}", status_code=302)
+
+    def redirect_uri(provider: str) -> str:
+        # адрес возврата берём из PUBLIC_BASE, а не из запроса: за прокси Caddy
+        # request.base_url может прийти http-шным, и провайдер откажет
+        return f"{base}/v1/auth/oauth/{provider}/callback"
 
     @app.get("/v1/auth/oauth/providers")
     async def oauth_providers() -> dict:
         return {"providers": enabled_providers()}
 
     @app.get("/v1/auth/oauth/{provider}/start")
-    async def oauth_start(provider: str, request: Request):
+    async def oauth_start(provider: str, next: str = ""):
         if provider not in PROVIDERS:
             return JSONResponse({"error": {"code": "no_provider"}}, status_code=404)
         state = provider_state(provider)
         if not state["enabled"]:
             return JSONResponse({"error": {"code": "provider_off", "provider": provider}}, status_code=503)
         nonce = secrets.token_urlsafe(24)
-        target = authorize_url(provider, redirect_uri(provider, request), nonce)
+        target = authorize_url(provider, redirect_uri(provider), nonce)
         response = RedirectResponse(target, status_code=302)
-        response.set_cookie("nm_oauth", f"{provider}:{nonce}", max_age=STATE_TTL_S,
+        nxt = pick_next(next or "")
+        response.set_cookie("nm_oauth", f"{provider}:{nonce}:{nxt}", max_age=STATE_TTL_S,
                             httponly=True, secure=True, samesite="lax", path="/")
         return response
 
     @app.get("/v1/auth/oauth/{provider}/callback")
     async def oauth_callback(provider: str, request: Request, code: str = "", state: str = "", error: str = ""):
         cookie = request.cookies.get("nm_oauth", "")
-        want = cookie.split(":", 1)[1] if ":" in cookie else ""
+        parts = cookie.split(":", 2)
+        want = parts[1] if len(parts) >= 2 else ""
+        nxt = parts[2] if len(parts) == 3 else f"{base}/app/"
         if error or not code or not want or not hmac.compare_digest(want, state):
-            return RedirectResponse(f"{base}/app/?sso_error={urllib.parse.quote(error or 'state')}#signin",
-                                    status_code=302)
+            return _back(nxt, "denied" if error else "state")
         try:
-            profile = fetch_profile(provider, code, redirect_uri(provider, request))
+            profile = fetch_profile(provider, code, redirect_uri(provider))
         except Exception as e:                          # noqa: BLE001
             log.warning("oauth %s: %s", provider, e)
-            return RedirectResponse(f"{base}/app/?sso_error={urllib.parse.quote(type(e).__name__)}#signin",
-                                    status_code=302)
+            return _back(nxt, type(e).__name__)
         email = (profile.get("email") or "").strip().lower()
         if not email:
-            return RedirectResponse(f"{base}/app/?sso_error=no_email#signin", status_code=302)
+            return _back(nxt, "no_email")
         try:
             ident = parse_identifier(email)
             api_key, caller, created = cloud.sign_in(ident, "web", f"oauth.{provider}", reached=True)
         except Exception as e:                          # noqa: BLE001
             log.warning("oauth %s sign_in: %s", provider, e)
             code_name = getattr(e, "code", type(e).__name__)
-            return RedirectResponse(f"{base}/app/?sso_error={urllib.parse.quote(str(code_name))}#signin",
-                                    status_code=302)
+            return _back(nxt, str(code_name))
         log.info("oauth %s: account %s (%s)", provider, caller.account_id[:8],
                  "created" if created else "existing")
-        response = RedirectResponse(f"{base}/app/#sso={api_key}", status_code=302)
+        # ключ всегда уходит консоли: без него она не знает о входе; адрес возврата
+        # (витрина, профиль, любая страница) консоль откроет сама после сохранения
+        target = f"{base}/app/?next={urllib.parse.quote(nxt, safe='')}#sso={api_key}"
+        response = RedirectResponse(target, status_code=302)
+        response.delete_cookie("nm_oauth", path="/")
+        # общая метка входа для витрины: сам ключ не отдаём, только факт входа
+        response.set_cookie("nm_signed", caller.account_id[:8], max_age=30 * 86400,
+                            domain=cookie_domain(), secure=True, samesite="lax", path="/")
+        return response
+
+    @app.get("/v1/auth/logout")
+    async def oauth_logout(next: str = ""):
+        """Выход с витрины: снимает общую метку входа и уводит назад на сайт."""
+        target = pick_next(next or "https://nanolika.ru/")
+        response = RedirectResponse(target, status_code=302)
+        response.delete_cookie("nm_signed", domain=cookie_domain(), path="/")
         response.delete_cookie("nm_oauth", path="/")
         return response
 

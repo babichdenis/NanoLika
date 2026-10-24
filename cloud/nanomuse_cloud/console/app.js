@@ -8,8 +8,9 @@
   const VERSION = "1.0.5";
 
   // ── i18n ────────────────────────────────────────────────────────
-  const zh = (navigator.language || "").toLowerCase().startsWith("zh");
-  const ru = (navigator.language || "").toLowerCase().startsWith("ru");
+  const onOurDomain = /(^|\.)nanolika\.ru$/i.test(location.hostname);
+  const zh = !onOurDomain && (navigator.language || "").toLowerCase().startsWith("zh");
+  const ru = onOurDomain || (navigator.language || "").toLowerCase().startsWith("ru");
   document.documentElement.lang = zh ? "zh-CN" : ru ? "ru" : "en"; // the markup says zh-CN; the page follows the browser
   // Our Russian build: codes go by e-mail only, and the customer page does not print the relay address.
   const showRelayLine = !ru;
@@ -17,7 +18,8 @@
   const L = (en, zhText, ruText) => (ru ? ruText : zh ? zhText : en);
   const RU = {
     tagline: "Каждое ваше устройство — ваша помощница.",
-    signedIn: (h) => `Вы вошли как ${h}`, signedOut: "Вы вышли из аккаунта",
+    signedIn: (h) => `Вы вошли как ${h}`, signedOut: "Вы вышли из аккаунта", mainChat: "Основной",
+    chats: "Чаты", newChat: "Новый чат", noChats: "Пока нет чатов. Заведите первый: он появится и здесь, и в приложении.", rename: "Переименовать", renameAsk: "Название чата", attach: "Переслать документ", placeholderChat: "Написать Лике…", chatInApps: "и здесь, и в приложении", chatAlone: "только здесь", chatNote: "Ответ придёт туда же, куда писали: в MAX, в Телеграм или сюда.",
     identifier: "Электронная почта", smsRegion: "", code: "Код из письма", password: "Пароль", sendCode: "Отправить код", signIn: "Войти", another: "Войти в другой аккаунт",
     byCode: "По коду", byPassword: "По паролю", forgot: "Забыли пароль? Войдите по коду", show: "Показать", hide: "Скрыть",
     codeSent: (m) => `Код отправлен. Он действует ${m} мин.`, relay: "Сервер", fine: "После входа эта страница покажет все устройства вашего аккаунта, которые сейчас на связи, и позволит каждой помощнице делать своё дело. Сама страница ничего не запускает.",
@@ -56,7 +58,8 @@
 
   const T = zh ? {
     tagline: "你的每一台设备，都是你的 Muse。",
-    signedIn: (h) => `已登录：${h}`, signedOut: "已退出登录",
+    signedIn: (h) => `已登录：${h}`, signedOut: "已退出登录", mainChat: "主要聊天",
+    chats: "聊天", newChat: "新聊天", noChats: "还没有聊天。新建一个，它会在网页和应用里同时出现。", rename: "重命名", renameAsk: "聊天名称", attach: "发送文档", placeholderChat: "给 Muse 发消息…", chatInApps: "应用与网页共用", chatAlone: "仅网页", chatNote: "回复会出现在你写的那一边：MAX、Telegram 或这里。",
     identifier: "中国大陆手机号或邮箱", smsRegion: "短信验证码只能发到中国大陆手机号。其他地区请用邮箱登录。", code: "验证码", password: "密码", sendCode: "发送验证码", signIn: "登录", another: "换一个账号",
     byCode: "验证码登录", byPassword: "密码登录", forgot: "忘了密码？用验证码登录", show: "显示", hide: "隐藏",
     codeSent: (m) => `验证码已发送，${m} 分钟内有效。`, relay: "服务器", fine: "登录后，这个页面能看到你账号下所有在线的设备，并让它们各自的 Muse 去做事。网页本身不操作任何设备。",
@@ -92,7 +95,8 @@
       bad_request: "请求有误，请刷新页面再试。", too_large: "内容太大，服务器不接收。", no_session: "这个登录已经不存在了。", device_online: "这台设备现在在线，先在它上面退出登录。", sync_off: "这个账号关闭了对话同步。", invite_code: "暂时生成不了邀请码，请稍后再试。", not_found: "没有这个东西。" },
     email: "邮箱", hubPaused: "设备互联已暂停",
   } : (ru ? RU : {    tagline: "Every device you own, a Muse of yours.",
-    signedIn: (h) => `Signed in as ${h}`, signedOut: "Signed out",
+    signedIn: (h) => `Signed in as ${h}`, signedOut: "Signed out", mainChat: "Main chat",
+    chats: "Chats", newChat: "New chat", noChats: "No chats yet. Start one and it appears here and in the app.", rename: "Rename", renameAsk: "Chat name", attach: "Send a document", placeholderChat: "Write to Muse…", chatInApps: "here and in the app", chatAlone: "only here", chatNote: "The answer goes back where you wrote: MAX, Telegram or here.",
     identifier: "Mainland China phone number or e-mail", smsRegion: "Text-message codes reach mainland-China numbers only. Use an e-mail address instead.", code: "Verification code", password: "Password", sendCode: "Send code", signIn: "Sign in", another: "Use another account",
     byCode: "With a code", byPassword: "With a password", forgot: "Forgot it? Sign in with a code", show: "Show", hide: "Hide",
     codeSent: (m) => `A six-digit code is on its way; it is good for ${m} ${m === 1 ? "minute" : "minutes"}.`, relay: "Server", fine: "Once signed in, this page shows every device of your account that is online and lets each device's Muse do things. The page itself operates nothing.",
@@ -130,6 +134,55 @@
 
   // ── state ───────────────────────────────────────────────────────
   const LS = window.localStorage;
+
+  // ── кнопка аккаунта в веб-клиенте (внизу слева): настройки и выход ──
+  function nmMountAccount() {
+    if (!key || document.getElementById("nm-acct")) return;
+    const st = document.createElement("style");
+    st.textContent =
+      "#nm-acct{position:fixed;bottom:16px;left:16px;z-index:9000;font:600 14px/1 -apple-system,Segoe UI,Roboto,sans-serif}" +
+      "#nm-acct .b{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#111;border:1px solid rgba(0,0,0,.14);" +
+      "border-radius:999px;padding:9px 14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.12)}" +
+      "#nm-acct .a{width:22px;height:22px;border-radius:50%;background:#7dd3fc;display:grid;place-items:center;font-size:12px}" +
+      "#nm-acct .m{position:absolute;bottom:calc(100% + 8px);left:0;min-width:215px;background:#fff;" +
+      "border:1px solid rgba(0,0,0,.1);border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.16);padding:6px;display:none}" +
+      "#nm-acct .m.on{display:block}#nm-acct .m button{display:block;width:100%;text-align:left;background:none;border:0;" +
+      "padding:10px 12px;border-radius:10px;font:500 14px/1.2 inherit;color:#111;cursor:pointer}" +
+      "#nm-acct .m button:hover{background:#f3f4f6}#nm-acct .m button.out{color:#b91c1c}" +
+      "#nm-acct .m small{display:block;color:#6b7280;font-weight:400;font-size:12px;margin-top:3px}";
+    document.head.appendChild(st);
+    const box = document.createElement("div");
+    box.id = "nm-acct";
+    box.innerHTML =
+      '<button class="b" type="button"><span class="a">' + String(hint || "?").slice(0, 1).toUpperCase() +
+      '</span><span>' + L("Аккаунт", "Account", "账号") + '</span><span style="opacity:.6">▾</span></button>' +
+      '<div class="m"><button class="cfg">' + L("Настройки", "Settings", "设置") +
+      '<small>' + L("профиль, расход, входы", "profile, spend, sign-ins", "资料、花费、登录") + '</small></button>' +
+      '<button class="wb">' + L("Веб-Лика", "Web Lika", "网页版") + '<small>' + L("чаты и устройства", "chats and devices", "聊天与设备") + '</small></button>' +
+      '<button class="out">' + L("Выйти", "Sign out", "退出") + '</button></div>';
+    document.body.appendChild(box);
+    const menu = box.querySelector(".m");
+    box.querySelector(".b").addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("on"); });
+    document.addEventListener("click", () => menu.classList.remove("on"));
+    box.querySelector(".cfg").addEventListener("click", () => { menu.classList.remove("on"); try { openAccount(); } catch (e) {} });
+    box.querySelector(".wb").addEventListener("click", () => { location.href = location.pathname; });
+    box.querySelector(".out").addEventListener("click", () => { menu.classList.remove("on"); signOut(true); });
+  }
+
+
+
+  // Переписки кэшируются в localStorage; при входе другим аккаунтом старый кэш
+  // надо убрать, иначе человек видит чужие (свои прежние) чаты в новом аккаунте.
+  function nmDropChatCache() {
+    const kill = [];
+    for (let i = 0; i < LS.length; i++) {
+      const k = LS.key(i);
+      if (k && /^nm\.(conv\.|chat\.|thread$|selected$|msgs)/.test(k)) kill.push(k);
+    }
+    kill.forEach((k) => LS.removeItem(k));
+  }
+
+
   const base = location.origin;
   // the relay's figures the forms print (/v1/config, public, a minute's cache): how long a
   // code is good for and the shortest password it takes; these are the defaults an older
@@ -142,6 +195,13 @@
   }).catch(() => { /* the defaults stand */ });
   const params = new URLSearchParams(location.search);
   let key = LS.getItem("nm.key") || "";
+  // после входа вернуть человека туда, откуда пришёл (витрина, профиль)
+  const nmNextJump = new URLSearchParams(location.search).get("next");
+  // вход через Яндекс/Google/GitHub/Telegram: ключ приходит во фрагменте адреса
+  { const m = /(?:^|[#&])sso=([^&]+)/.exec(location.hash || "");
+    if (m) { nmDropChatCache(); key = decodeURIComponent(m[1]); LS.setItem("nm.key", key);
+             history.replaceState(null, "", location.pathname + location.search);
+             if (nmNextJump && !nmNextJump.includes(location.hostname + "/app")) location.replace(nmNextJump); } }
   let hint = LS.getItem("nm.hint") || "";
   let ws = null, wsState = "off", hubPaused = false, backoff = 1000, devices = [], selected = params.get("device") || LS.getItem("nm.selected") || "";
   const pending = new Map(); // call id → {onEvent, resolve, reject}
@@ -184,6 +244,7 @@
     person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>'),
     key: svg('<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M15 5l3 3M18 4l2 2"/>'),
     chat: svg('<path d="M4 5.5h16v10H9l-5 4z"/>'),
+    attach: svg('<path d="M8.5 12.5l5.5-5.5a3.5 3.5 0 0 1 5 5L11 20a5 5 0 0 1-7-7l7.5-7.5"/>'),
     image: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>'),
     video: svg('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'),
     realtime: svg('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>'),
@@ -229,9 +290,53 @@
   const errText = (e) => { const t = T.errors[e.code]; return (typeof t === "function" ? t(e) : t) || e.message || e.code || String(e); };
   const deviceName = () => `${L("Web console", "网页", "Веб-консоль")} · ${navigator.platform || "browser"}`;
 
+  // ── вход через чужие аккаунты (oauth.py) ──────────────────────────
+  let oauthList = null;
+  function loadOauth() {
+    if (oauthList) return;
+    oauthList = [];
+    fetch(base + "/v1/auth/oauth/providers").then((r) => r.json())
+      .then((j) => { oauthList = j.providers || []; if (!key) renderSignIn(); })
+      .catch(() => {});
+  }
+  window.nmTelegramAuth = async (user) => {
+    try {
+      const r = await api("POST", "/v1/auth/oauth/telegram", user);
+      if (!r.api_key) throw new Error("no_key");
+      key = r.api_key; hint = (r.account && r.account.hint) || "Telegram";
+      LS.setItem("nm.key", key); LS.setItem("nm.hint", hint);
+      location.reload();
+    } catch (e) { alert(e.message || "Telegram"); }
+  };
+  const nmYandexLogo = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path fill="#FC3F1D" d="M13.32 6.02h-1.1c-1.55 0-2.34.73-2.34 1.91 0 1.33.57 1.96 1.72 3.13l1.17 1.2-3.57 5.22H6.65l3.2-4.6c-1.34-1.4-2.42-2.46-2.42-4.9 0-2.4 1.6-4 4.7-4h3.98v13.5h-2.79V6.02z"/>' +
+    '<path fill="#FC3F1D" d="M16.11 12.75V6.02h-2.79v6.73h2.79z" opacity="0"/>' +
+    '</svg>';
+  function ssoBlock() {
+    if (!oauthList || !oauthList.length) return null;
+    const widget = oauthList.find((p) => p.kind === "widget");
+    const buttons = oauthList.filter((p) => p.kind !== "widget").map((p) => {
+      const nx = new URLSearchParams(location.search).get("next");
+      const go = () => { location.href = base + `/v1/auth/oauth/${p.name}/start` + (nx ? "?next=" + encodeURIComponent(nx) : ""); };
+      if (p.name === "yandex") {
+        return h("button", { class: "btn yandex", type: "button", onclick: go,
+                             style: "display:inline-flex;align-items:center;gap:10px;justify-content:center;background:#fff;color:#000;border:1px solid #d9d9d9;border-radius:10px;font-weight:600" },
+          h("span", { html: nmYandexLogo }), L("Войти через Яндекс", "Sign in with Yandex", "用 Yandex 登录"));
+      }
+      return h("button", { class: "btn ghost", type: "button", onclick: go }, p.title);
+    });
+    const kids = [h("div", { class: "fine", style: "margin:14px 0 6px;text-align:center" }, L("Или войти через", "Or sign in with", "或用以下方式登录")),
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;justify-content:center" }, ...buttons)];
+    if (widget) kids.push(h("div", { style: "display:flex;justify-content:center;margin-top:8px" },
+      h("script", { async: "", src: "https://telegram.org/js/telegram-widget.js?22", "data-telegram-login": widget.bot, "data-size": "medium", "data-onauth": "nmTelegramAuth(user)", "data-request-access": "write" })));
+    return h("div", {}, ...kids);
+  }
+
   // ── sign in view ─────────────────────────────────────────────────
   { const inv = new URLSearchParams(location.search).get("invite"); if (inv) LS.setItem("nm.invite", inv); }
   function renderSignIn() {
+    { const b = document.getElementById("nm-acct"); if (b) b.remove(); }
+    loadOauth();
     let identifier = LS.getItem("nm.identifier") || "", mode = LS.getItem("nm.mode") || "code", sent = false, busy = false, msg = "", bad = false, showPw = false;
     const draw = () => {
       const byPw = mode === "password";
@@ -255,6 +360,7 @@
         !byPw && sent ? h("button", { class: "btn ghost", onclick: () => { sent = false; msg = ""; draw(); } }, T.another) : null,
         byPw ? h("button", { class: "btn ghost", onclick: () => { mode = "code"; LS.setItem("nm.mode", mode); msg = ""; draw(); } }, T.forgot) : null,
         h("div", { class: "hint" + (bad ? " bad" : msg ? " ok" : "") }, msg),
+        ssoBlock(),
         h("p", { class: "fine" }, T.fine, showRelayLine ? h("span", {}, h("br"), h("b", {}, `${T.relay}: `), base) : null),
       )));
       const focus = document.getElementById(byPw ? (identifier ? "pw" : "ident") : sent ? "code" : "ident");
@@ -269,9 +375,13 @@
       busy = false; draw();
     }
     function adopt(r) {
+      const same = LS.getItem("nm.acct") === String((r.account && r.account.id) || "");
+      if (!same) nmDropChatCache();
+      LS.setItem("nm.acct", String((r.account && r.account.id) || ""));
       key = r.api_key; hint = (r.account && r.account.hint) || identifier;
       LS.setItem("nm.key", key); LS.setItem("nm.hint", hint);
-      renderMain(); connect();
+      renderMain(); connect(); nmMountAccount();
+      toast(T.signedIn(hint));   // a sign-in should look like one, not like a page that changed by itself
     }
     async function verify() {
       const code = (document.getElementById("code") || {}).value || "";
@@ -307,8 +417,8 @@
     };
     ws.onmessage = (ev) => {
       let f; try { f = JSON.parse(ev.data); } catch (_) { return; }
-      if (f.type === "welcome") { wsState = "on"; hubPaused = false; backoff = 1000; devices = f.devices || []; drawAll(); }
-      else if (f.type === "devices") { devices = f.devices || []; drawSide(); drawHead(); }
+      if (f.type === "welcome") { wsState = "on"; hubPaused = false; backoff = 1000; devices = f.devices || []; drawAll(); refreshChats(); }
+      else if (f.type === "devices") { devices = f.devices || []; drawSide(); if (threadSel) drawChatShell(); else drawHead(); refreshChats(); }
       else if (f.type === "sync") pullHistory();
       else if (f.type === "error" && !f.id) {
         if (f.code === "bad_key") { signOut(true); }
@@ -338,6 +448,152 @@
       ws.send(JSON.stringify({ type: "call", id, to, action, args: args || {} }));
     });
   }
+
+  // ── the account's chats: Telegram, MAX and this browser ──────────────────────
+  // A chat is one conversation of the account's Lika, kept by the machine that serves the chat
+  // apps (`chat.list` and friends over the hub, docs/hub.md). The browser is only a window onto
+  // it: what is written here shows up in MAX or Telegram, and the other way round, because both
+  // sides read the same conversation.
+  let chatHost = "", threads = [], threadSel = params.get("chat") || LS.getItem("nm.thread") || "";
+  let threadEvents = [], threadError = "", chatsLoading = false;
+
+  const selectedThread = () => threads.find((c) => c.id === threadSel) || (threadSel ? { id: threadSel, title: threadSel, kind: "side" } : null);
+  const threadLabel = (c) => (c.kind === "main" ? T.mainChat : (c.title || T.newChat));
+
+  async function findChatHost() {
+    const known = chatHost ? dev(chatHost) : null;
+    if (chatHost) {
+      // A transient presence snapshot must not replace the account's chat host.
+      return !!(known && known.online);
+    }
+    for (const d of devices) {
+      if (!d.online || d.kind === "web") continue;
+      try {
+        const info = await call(d.id, "info", {});
+        if (((info && info.actions) || []).includes("chat.list")) { chatHost = d.id; return true; }
+      } catch (_) { /* not the one that keeps the chats */ }
+    }
+    return false;
+  }
+
+  async function loadChats() {
+    if (!(await findChatHost())) return;
+    try {
+      const host = chatHost;
+      const r = await call(host, "chat.list", {});
+      if (host !== chatHost || !Array.isArray(r?.chats)) return;
+      threads = r.chats;
+    } catch (_) { /* the list we have stands */ }
+    drawSide();
+    if (threadSel && !selected) await openThread(threadSel);
+  }
+
+  async function refreshChats() {
+    if (chatsLoading) return;
+    chatsLoading = true;
+    try { await loadChats(); } catch (_) { /* keep */ } finally { chatsLoading = false; }
+  }
+
+  async function openThread(id) {
+    threadSel = id; selected = ""; threadEvents = []; threadError = "";
+    LS.setItem("nm.thread", id); LS.removeItem("nm.selected");
+    history.replaceState(null, "", "?chat=" + encodeURIComponent(id));
+    drawSide(); drawChatShell();
+    if (window.matchMedia("(max-width: 760px)").matches) { els.side.classList.add("hidden"); }
+    await reloadThread();
+  }
+
+  async function reloadThread() {
+    if (!threadSel || !chatHost) return;
+    try {
+      const r = await call(chatHost, "chat.events", { chat: threadSel, limit: 200 });
+      if (r && r.chat) threads = threads.map((c) => (c.id === threadSel ? Object.assign({}, c, r.chat) : c));
+      threadEvents = (r && r.events) || [];
+      threadError = "";
+    } catch (e) { threadError = errText(e); }
+    drawSide(); drawThreadHead(); drawThreadChat();
+  }
+
+  async function sendThread(text) {
+    const value = (text || "").trim();
+    if (!value || !threadSel || !chatHost) return;
+    threadEvents = threadEvents.concat([{ id: "local", type: "user", text: value, ts: new Date().toISOString() }]);
+    drawThreadChat();
+    try { await call(chatHost, "chat.send", { chat: threadSel, text: value }); }
+    catch (e) { threadError = errText(e); }
+    await reloadThread();
+    // the answer comes back as an event of the same conversation, not as a reply to this call
+    setTimeout(() => { reloadThread(); }, 2000);
+    setTimeout(() => { reloadThread(); }, 6000);
+  }
+
+  async function newThread() {
+    if (!chatHost) return;
+    try {
+      const r = await call(chatHost, "chat.new", {});
+      await loadChats();
+      if (r && r.chat) await openThread(r.chat.id);
+    } catch (e) { threadError = errText(e); drawThreadChat(); }
+  }
+
+  async function renameThread() {
+    const t = selectedThread(); if (!t || !chatHost) return;
+    const name = prompt(T.renameAsk, threadLabel(t));
+    if (!name || !name.trim()) return;
+    try { await call(chatHost, "chat.rename", { chat: t.id, title: name.trim() }); } catch (e) { threadError = errText(e); }
+    await loadChats(); drawThreadHead(); drawThreadChat();
+  }
+
+  function attachToThread(file) {
+    if (!file || !threadSel || !chatHost) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const data = String(reader.result || "").split(",").pop() || "";
+      try { await call(chatHost, "chat.upload", { chat: threadSel, name: file.name, data }); }
+      catch (e) { threadError = errText(e); }
+      await reloadThread();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function drawThreadHead() {
+    const t = selectedThread(); if (!els.head || !t) return;
+    els.head.replaceChildren(
+      h("button", { class: "round back", onclick: () => { els.side.classList.remove("hidden"); }, html: ICON.back }),
+      h("span", { class: "tile", html: ICON.chat }),
+      h("div", {}, h("div", { class: "name" }, threadLabel(t)), h("div", { class: "sub" }, t.kind === "channel" ? T.chatInApps : T.chatAlone)),
+      h("span", { class: "spacer" }),
+      h("button", { class: "btn quiet sm", onclick: renameThread }, T.rename),
+    );
+  }
+
+  function drawThreadChat() {
+    const t = selectedThread(); if (!els.messages || !t) return;
+    // a tool-only step has no words: it is not a bubble, only a step in the timeline
+    const nodes = threadEvents.filter((e) => (e.text || "").trim()).map((e) => (e.type === "user"
+      ? h("div", { class: "msg me" }, h("div", { class: "bubble" }, e.text))
+      : h("div", { class: "msg them" }, h("div", { class: "from" }, threadLabel(t)), h("div", { class: "bubble", html: md(e.text || "") }))));
+    if (threadError) nodes.push(h("div", { class: "msg them" }, h("div", { class: "bubble" }, threadError)));
+    if (t.busy) nodes.push(h("div", { class: "steps" }, h("div", { class: "thinking" }, h("i"), T.busy(threadLabel(t)))));
+    els.messages.replaceChildren(...nodes);
+    els.messages.scrollTop = els.messages.scrollHeight;
+  }
+
+  function drawThreadComposer() {
+    const t = selectedThread(); if (!els.composer || !t) return;
+    const ta = h("textarea", { rows: "1", placeholder: T.placeholderChat, onkeydown: (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); go(); } }, oninput: (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(160, e.target.scrollHeight) + "px"; } });
+    const go = () => { const v = ta.value.trim(); if (!v) return; ta.value = ""; ta.style.height = "auto"; sendThread(v); };
+    const picker = h("input", { type: "file", style: "display:none", onchange: (e) => { const f = e.target.files && e.target.files[0]; if (f) attachToThread(f); e.target.value = ""; } });
+    els.composer.replaceChildren(
+      h("div", { class: "box" }, ta,
+        h("button", { class: "attach", title: T.attach, onclick: () => picker.click(), html: ICON.attach }),
+        h("button", { onclick: go, html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>' })),
+      picker,
+      h("div", { class: "note" }, T.chatNote),
+    );
+    ta.focus();
+  }
+
   function signOut(expired) {
     if (!expired && key) api("POST", "/v1/auth/sign-out", {}, key).catch(() => {});
     key = ""; hint = ""; LS.removeItem("nm.key"); LS.removeItem("nm.hint");
@@ -477,16 +733,24 @@
   function drawStatus() { const s = els.status; if (s) { s.className = "status " + (wsState === "on" ? "on" : wsState === "off" ? "off" : ""); s.title = wsState === "on" ? T.connected : wsState === "off" ? (hubPaused ? T.hubPaused : T.disconnected) : T.connecting; } }
   const glyph = (kind) => ICON[kind] || ICON.computer;
   function pickDevice(id) {
+    threadSel = ""; threadEvents = []; LS.removeItem("nm.thread");
     selected = id; LS.setItem("nm.selected", id); history.replaceState(null, "", "?device=" + encodeURIComponent(id));
     drawSide(); drawChatShell(); loadHistory();
     if (window.matchMedia("(max-width: 760px)").matches) { els.side.classList.add("hidden"); }
   }
   function drawSide() {
     if (!els.side) return;
-    const others = devices.filter((d) => d.kind !== "web");
+    const others = devices.filter((d) => d.kind !== "web" && d.kind !== "phone");
     els.status = h("span", { class: "status" });
     els.side.replaceChildren(
       h("div", { class: "top" }, h("img", { src: "mark.svg", alt: "" }), h("b", {}, "NanoLika"), els.status),
+      h("div", { class: "label" }, h("span", {}, T.chats), h("button", { class: "mini", title: T.newChat, "aria-label": T.newChat, onclick: newThread }, "+")),
+      h("div", { class: "devices" }, h("div", { class: "card" },
+        threads.length ? threads.map((c) => h("button", { class: "row tap" + (c.id === threadSel ? " active" : ""), onclick: () => openThread(c.id) },
+          h("span", { class: "tile" + (c.kind === "channel" ? "" : " grey"), html: ICON.chat }),
+          h("div", { class: "txt" }, h("div", { class: "t" }, threadLabel(c)), h("div", { class: "s" }, c.kind === "channel" ? T.chatInApps : T.chatAlone)),
+          h("span", { class: "dot" + (c.busy ? " on" : "") }),
+        )) : h("div", { class: "empty" }, T.noChats))),
       h("div", { class: "label" }, T.devices),
       h("div", { class: "devices" }, h("div", { class: "card" },
         others.length ? others.map((d) => h("button", { class: "row tap" + (d.id === selected ? " active" : ""), onclick: () => pickDevice(d.id) },
@@ -504,8 +768,9 @@
   }
   function drawChatShell() {
     if (!els.chat) return;
+    const t = selectedThread();
     const d = dev(selected);
-    if (!d) {
+    if (!t && !d) {
       els.chat.replaceChildren(h("div", { class: "empty-chat" }, h("img", { src: "mark.svg", alt: "" }), h("p", {}, h("b", {}, T.pick), T.pickSub)));
       return;
     }
@@ -513,7 +778,8 @@
     els.messages = h("div", { class: "messages" });
     els.composer = h("div", { class: "composer" });
     els.chat.replaceChildren(els.head, els.messages, els.composer);
-    drawHead(); drawChat(); drawComposer();
+    if (t) { drawThreadHead(); drawThreadChat(); drawThreadComposer(); }
+    else { drawHead(); drawChat(); drawComposer(); }
   }
   function drawHead() {
     const d = dev(selected); if (!els.head || !d) return;
@@ -591,6 +857,7 @@
 
   let me = null, meErr = "", usageTab = "today";
   async function openAccount() {
+    if (params.get("compact") !== "1") { location.href = "/web/account/?source=console"; return; }
     const body = h("div", { class: "sheet" });
     openSheet(body);
     drawAccount(body);
@@ -683,6 +950,7 @@
         has ? h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.deleteSync, T.deleteSyncConfirm, T.deleteSync, true)) { try { await api("DELETE", "/v1/sync/changes", null, key); sync = { on: true, loaded: false, live: false, seq: 0, msgs: [] }; drawChat(); alert(T.syncDeleted); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } } }, h("span", { class: "tile bad", html: ICON.out }), h("div", { class: "txt" }, h("div", { class: "t" }, T.deleteSync))) : null,
         h("p", { class: "fine", style: "padding:0 16px 12px" }, T.syncWhy)));
     }
+    kids.push(h("div", { class: "card" }, h("a", { class: "row tap", href: "/app/usage/?lang=" + encodeURIComponent(ru ? "ru" : zh ? "zh" : "en") }, ru ? "Детализация по моделям и обращениям →" : zh ? "按模型及调用查看明细 →" : "Usage by model and request →")));
     // usage by kind / by model
     const rows = usageTab === "today" ? (u.today && u.today.by_kind) || [] : (u.total && u.total.by_kind) || [];
     const models = (u.total && u.total.by_model) || [];
@@ -765,5 +1033,11 @@
   addEventListener("storage", (e) => { if (!e.key || e.key === "nm.key" || e.key === "nm.hint") followStoredSession(); });
   addEventListener("focus", followStoredSession);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) followStoredSession(); });
-  if (key) { renderMain(); connect(); } else renderSignIn();
+  { const q = new URLSearchParams(location.search);
+  if (q.get("signout") === "1") { LS.removeItem("nm.key"); LS.removeItem("nm.hint"); key = "";
+    location.replace(base + "/v1/auth/logout?next=" + encodeURIComponent(q.get("next") || "https://nanolika.ru/")); }
+  else if (q.get("signin") === "1") { renderSignIn(); }   // кнопка «Вход» всегда показывает форму
+  else if (key) { renderMain(); connect(); nmMountAccount();
+    if (/^#account/.test(location.hash)) setTimeout(() => { try { openAccount(); } catch (e) {} }, 60); }
+  else renderSignIn(); }
 })();

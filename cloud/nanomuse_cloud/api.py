@@ -100,6 +100,7 @@ import hmac
 import json
 import logging
 import math
+import os
 import secrets
 import time
 import uuid
@@ -125,6 +126,9 @@ from .geo import Geo, collect_ips, group_places
 from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
+from .provider_order import provider_order
+from .provider_prices import install_provider_prices
+from .oauth import install_oauth
 from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
 from .stats import Stats, api_group
 from .sync import DEFAULT_PAGE, SyncStore
@@ -295,6 +299,18 @@ def relay_error_body(status: int, raw: bytes) -> dict:
 PROVIDER_HOST_SUFFIXES = (".aliyuncs.com", ".alicdn.com")
 
 
+def _same_site(host: str, base_host: str) -> bool:
+    """Whether a file host sits under the provider's own name: api.polza.ai and s3.polza.ai
+    are one site, evil-polza.ai is not. The last two labels decide, so a provider's own CDN
+    is allowed without listing every subdomain by hand."""
+
+    def tail(name: str) -> str:
+        parts = [part for part in name.split(".") if part]
+        return ".".join(parts[-2:]) if len(parts) >= 2 else name
+
+    return bool(host) and bool(base_host) and tail(host) == tail(base_host)
+
+
 def _provider_url_ok(url: object, own_hosts: tuple[str, ...] = ()) -> bool:
     """Only URLs on the provider's own hosts are fetched (the relay must not become an open proxy):
     the configured API hosts themselves, or https on Alibaba Cloud's storage domains."""
@@ -348,6 +364,43 @@ def create_app(
             except Exception:
                 log.exception("settle_video_tasks")
 
+    def _chat_chain(settings: Settings, spec: ModelSpec, url: str, headers: dict) -> list[tuple[str, dict, str]]:
+        """Where to ask for this model, cheapest first.
+
+        The first place is the one the menu named, so a relay whose price table is silent
+        behaves exactly as before. The rest come from the providers table: every company
+        that sells this same model, ordered by today's price. Each entry is
+        `(url, headers, provider name)`, with "" for the relay's own upstream.
+        """
+        known = [""] + list(settings.providers)
+        order = provider_order(spec.upstream, known)
+        chain: list[tuple[str, dict, str]] = []
+        own = (url, headers, "")
+        if spec.provider:
+            for name in order:
+                if name == spec.provider:
+                    chain.append((url, headers, name))
+                    break
+        else:
+            chain.append(own)
+        for name in order:
+            if name == spec.provider or name == "":
+                continue
+            provider_spec = settings.providers.get(name)
+            if provider_spec is None:
+                continue
+            chain.append(
+                (
+                    provider_spec.base.rstrip("/") + "/v1/chat/completions",
+                    {"Authorization": f"Bearer {provider_spec.key()}", "Content-Type": "application/json"},
+                    name,
+                )
+            )
+        # свою полку не подменяем: если модель идёт в наш апстрим, он остаётся последним
+        if spec.provider and "" in settings.providers:
+            chain.append(own)
+        return chain or [own]
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         geo.ensure()
@@ -365,6 +418,8 @@ def create_app(
             await collector.stop()
             await http.aclose()
 
+
+
     app = FastAPI(title="NanoLika Cloud", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.cloud = cloud
     app.state.settings = settings
@@ -379,10 +434,46 @@ def create_app(
         out["places"] = geo.places(collect_ips(out)) if geo.ready else {}
         return out
 
+    # What each paid plan carries, in the units a person understands: one ordinary turn,
+    # one picture, one clip. Derived from the operator's cost per unit at 40 % of the
+    # price, so the numbers move with the price list rather than with a guess.
+    PLAN_UNITS = {
+        "lika": {"messages": 11800, "pictures": 31, "clips": 5},
+        "plus": {"messages": 29800, "pictures": 79, "clips": 13},
+        "lika-plus": {"messages": 29800, "pictures": 79, "clips": 13},
+        "team": {"messages": 78000, "pictures": 208, "clips": 34},
+    }
+
+    def _plans_for_the_door() -> list[dict]:
+        """The plans as the exhausted account should see them: price, what it carries,
+        and where to buy. 0.29: the refusal used to name only an own key and OpenRouter,
+        which is fine for a developer and useless for a customer."""
+        from .payments import PLANS
+
+        out = []
+        for plan_id, plan in PLANS.items():
+            units = dict(PLAN_UNITS.get(plan_id, {}))
+            out.append(
+                {
+                    "id": plan_id,
+                    "name": plan["name"],
+                    "rub": plan["amount"] / 100,
+                    "discount": plan.get("discount", 0),
+                    **units,
+                    "buy": f"/v1/payments/orders?plan={plan_id}",
+                    "checkout": "/payments/checkout",
+                }
+            )
+        return out
+
     @app.exception_handler(CloudError)
     async def _cloud_error(request: Request, e: CloudError) -> JSONResponse:
         request.state.error_code = e.code  # the middleware counts it under that name
-        return error_response(e.status, e.code, e.message, e.extra)
+        extra = e.extra
+        if e.code == "allowance_exhausted":
+            # the door, at the moment it closes: what is on offer, in rubles and in turns
+            extra = {**(extra or {}), "plans": _plans_for_the_door()}
+        return error_response(e.status, e.code, e.message, extra)
 
     @app.exception_handler(ControlError)
     async def _control_error(request: Request, e: ControlError) -> JSONResponse:
@@ -446,11 +537,9 @@ def create_app(
             token = authorization[7:].strip()
         return cloud.authenticate(token)
 
-    from .payments import install as install_payments
-
     # платежи устанавливаются ниже, после admin_dep: у них есть админ-раздел
-
     from .bot_gateway import install as install_bot_gateway
+    from .payments import install as install_payments
 
     install_bot_gateway(app, cloud, caller_dep)
 
@@ -504,6 +593,14 @@ def create_app(
         invite = str(body.get("invite", ""))[:32]
         link = str(body.get("link", ""))[:16]
         key, caller, created = await asyncio.to_thread(cloud.verify_code, ident, code, device, invite, link)
+        if created and ident.channel == "email":
+            welcome = getattr(cloud.sender, "send_first_login", None)
+            if callable(welcome):
+                try:
+                    await asyncio.to_thread(welcome, ident)
+                except Exception as exc:
+                    # Welcome mail is helpful, but must never undo a successful sign-in.
+                    log.warning("first-login welcome mail failed: %s", type(exc).__name__)
         me = cloud.me(caller, client_place(request))
         return {"api_key": key, "created": created, **me}
 
@@ -592,6 +689,49 @@ def create_app(
         rides along in /v1/me for a signed-in client."""
         return JSONResponse(cloud.nudges(), headers={"Cache-Control": "public, max-age=3600"})
 
+    def _shelf_choice() -> tuple[set[str], bool]:
+        """The models the operator ticked in the menu admin, by upstream name.
+
+        The admin saves `menu-selection.json` beside the database, keyed by the price
+        table's model name (the upstream id); the public catalogue keeps that name out of
+        sight, so the relay's own model list is what maps an `id` back to it. An empty
+        answer means the operator never chose, and then every model the relay has is the
+        menu — the behaviour from before the cabinet existed, not an empty shelf."""
+        try:
+            from .menu_admin import _load_selection
+
+            rows = (_load_selection(settings).get("models") or {})
+        except Exception:
+            return set(), False
+        on = {name for name, row in rows.items() if isinstance(row, dict) and row.get("on")}
+        return on, bool(rows)
+
+    @app.get("/v1/menu")
+    async def menu() -> dict:
+        """0.28: the menu without a key, so a page (and the apps) can print what each model
+        does and what an account pays, from the relay's one declaration. The provider's
+        price stays out of it.
+
+        0.29: the cabinet shows what the operator put on the shelf in the menu admin, not
+        everything the relay happens to have configured."""
+        catalogue = cloud.catalogue_public()
+        keep, chosen = _shelf_choice()
+        if chosen:
+            upstream_of = {m.id: (m.upstream or m.id) for m in settings.models}
+            kept = [
+                model
+                for model in catalogue.get("models") or []
+                if upstream_of.get(model.get("id"), model.get("id")) in keep or model.get("id") in keep
+            ]
+            # A shelf that matches nothing is a spelling mismatch between the admin's
+            # names and this relay's models, not an order to close the shop: the full
+            # catalogue answers until the operator's choice actually lands.
+            if kept:
+                catalogue["models"] = kept
+                if "count" in catalogue:
+                    catalogue["count"] = len(kept)
+        return catalogue
+
     @app.get("/v1/me")
     async def me(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
         return cloud.me(caller, client_place(request))
@@ -600,6 +740,20 @@ def create_app(
     async def me_invite(caller: Caller = Depends(caller_dep)) -> dict:
         """The account's invite code and link, who came with it, the credit earned."""
         return cloud.invite_view(caller)
+
+    @app.get("/v1/me/models")
+    async def me_models(caller: Caller = Depends(caller_dep)) -> dict:
+        """0.28: the menu with what each model does and costs, and the account's shelf —
+        the ids it keeps in sight per kind and its default of each. Read by the app's model
+        page and by the messengers' `модель` menu alike."""
+        return cloud.catalogue(caller)
+
+    @app.put("/v1/me/models")
+    async def me_put_models(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        """0.28: tick models on the shelf, or pick the default of a kind. Kinds the body does
+        not name keep what they had; chat keeps at least one model (400 `no_chat_model`);
+        an id that is not on the menu or is of another kind is 400 `bad_model`."""
+        return {"shelf": cloud.put_shelf(caller, await _json(request))}
 
     @app.get("/v1/estimate")
     async def estimate(
@@ -757,6 +911,10 @@ def create_app(
             )
         return caller
 
+    from .chat_catalog import install as install_chat_catalog
+
+    install_chat_catalog(app, sync_store, sync_dep)
+
     @app.get("/v1/sync/state")
     async def sync_state(caller: Caller = Depends(caller_dep)) -> dict:
         out = sync_store.state(caller.account_id)
@@ -885,10 +1043,93 @@ def create_app(
 
     # -- chat -----------------------------------------------------------------------------
 
+    def _daily_free(caller: Caller) -> None:
+        """The day's free slice: once per UTC day, a small grant so the door never closes.
+
+        0.27: the trial grant is a lifetime one, which means a person who tried the agent
+        on Monday finds a closed door on Tuesday and never comes back. This drops a day's
+        worth of ordinary messages onto the balance at the first turn of each day, from a
+        cheap provider, so free use is a habit rather than a one-off."""
+        grant = float(os.environ.get("DAILY_FREE_CNY", "0") or 0)
+        if grant <= 0:
+            return
+        try:
+            day = int(time.time())
+            day -= day % 86400
+            if cloud.db.daily_rows("free_daily", since=day, key=caller.account_id):
+                return
+            cloud.db.daily_add("free_daily", caller.account_id)
+            cloud.admin_credit(caller.account_id, grant, "daily free slice", actor="relay")
+            log.info("daily free slice %.4f for %s", grant, caller.account_id[:8])
+        except Exception:
+            log.exception("daily free slice failed for %s", caller.account_id[:8])
+
+    def _premium_ids() -> set[str]:
+        """Models too dear to run on a small balance, by the operator's cost per million.
+
+        0.29: a five-ruble welcome cannot pay for a flagship on the first screen. The
+        expensive ones stay visible but locked until the account holds at least the
+        cheapest plan, so the answer to "why can I not pick it" is a plan, not an error."""
+        try:
+            cap = float(os.environ.get("PREMIUM_CNY", "0") or 0)
+        except ValueError:
+            cap = 0.0
+        if cap <= 0:
+            return set()
+        return {m.id for m in settings.models if float(getattr(m, "price_in", 0) or 0) > cap}
+
+    def _gate_premium(caller: Caller, spec: Any) -> None:
+        """Refuse a locked model on a small balance, with the plans in the answer."""
+        premium = _premium_ids()
+        if not premium or spec.id not in premium:
+            return
+        try:
+            floor = float(os.environ.get("PLAN_FLOOR_CNY", "0") or 0)
+        except ValueError:
+            floor = 0.0
+        if floor <= 0:
+            return
+        try:
+            account = cloud.allowance(caller)
+        except Exception:
+            return
+        if not account.get("limited"):
+            return
+        left_cny = (account.get("left_uy") or 0) / 1e6
+        if left_cny >= floor:
+            return
+        raise CloudError(
+            402,
+            "plan_required",
+            "Эта модель входит в тариф. На бесплатном счету она недоступна — возьмите тариф, и она откроется.",
+            extra={"plans": _plans_for_the_door(), "left": round(left_cny, 2), "floor": floor},
+        )
+
+    def _start_free(caller: Caller) -> None:
+        """Five rubles once, for whoever arrives — the launch present.
+
+        0.29: the lifetime grant was tiny and the daily slice is a ruble; a person needs
+        enough at the first sitting to decide whether the agent is worth it. Once per
+        account, not once a day, so it cannot be farmed by waiting."""
+        grant = float(os.environ.get("START_FREE_CNY", "0") or 0)
+        if grant <= 0:
+            return
+        try:
+            if cloud.db.daily_rows("start_free", since=0, key=caller.account_id):
+                return
+            cloud.db.daily_add("start_free", caller.account_id)
+            cloud.admin_credit(caller.account_id, grant, "start free slice", actor="relay")
+            log.info("start free slice %.4f for %s", grant, caller.account_id[:8])
+        except Exception:
+            log.exception("start free slice failed for %s", caller.account_id[:8])
+
     @app.post("/v1/chat/completions")
     async def chat(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
         body = await _json(request)
+        _start_free(caller)
+        _daily_free(caller)
         spec = cloud.model_for(str(body.get("model", "")), "chat", caller)
+        _gate_premium(caller, spec)
         # a relay without a key answers before anything is held: a hold taken here and never
         # settled would count against the account's in-flight limit until it timed out
         headers = upstream_headers()
@@ -907,6 +1148,17 @@ def create_app(
         # provider's abuse tooling can tell accounts apart without knowing them.
         body["user"] = caller.account_id[:32]
         url = settings.upstream_base.rstrip("/") + "/chat/completions"
+        # PROVIDER_CHAT_ROUTE: a model with a provider of its own is asked there, with that
+        # provider's key; everything after this line (streaming, usage, samples) is the same
+        provider, provider_base, provider_key = settings.route(spec)
+        if provider:
+            url = provider_base.rstrip("/") + "/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {provider_key}", "Content-Type": "application/json"}
+        # CHEAPEST_ROUTE: the same model is often sold by more than one company, and the
+        # providers table knows who is cheaper today. The chain puts that one first; the
+        # model's own provider stays the fallback, so a refusal or an outage costs a retry
+        # rather than a turn.
+        chain = _chat_chain(settings, spec, url, headers)
         fallback_prompt_tokens = math.ceil(prompt_chars(body.get("messages") or []) / 3)
         # For an account that opted in, the turn is kept once it is answered (service.keep_sample)
         # with the platform and language hints from the headers and, since 0.10, the address
@@ -925,11 +1177,30 @@ def create_app(
 
         if not stream:
             try:
-                try:
-                    r = await http.post(url, headers=headers, content=dumps(body).encode())
-                except httpx.HTTPError as e:
-                    log.warning("upstream error: %s", e)
-                    raise CloudError(502, "upstream", "The model provider did not answer") from e
+                r = None
+                last_error: Exception | None = None
+                attempts = list(chain)
+                for index, (attempt_url, attempt_headers, attempt_provider) in enumerate(attempts):
+                    try:
+                        r = await http.post(attempt_url, headers=attempt_headers, content=dumps(body).encode())
+                    except httpx.HTTPError as e:
+                        log.warning("upstream error via %s: %s", attempt_provider or "own", e)
+                        last_error = e
+                        r = None
+                        continue
+                    # a 5xx or a 429 speaks about the company, not the request: while another
+                    # company sells this same model, it is asked before the turn is lost
+                    if (r.status_code >= 500 or r.status_code == 429) and index + 1 < len(attempts):
+                        log.warning("provider %s answered %s, asking the next one", attempt_provider or "own", r.status_code)
+                        r = None
+                        continue
+                    break
+                # кто ответил: без этой строки «кто дешевле» проверить нечем
+                log.info("chat %s answered by %s in %s", spec.id, attempt_provider or "own", f"{r.elapsed.total_seconds():.2f}s")
+                if r is None:
+                    if last_error is not None:
+                        raise CloudError(502, "upstream", "The model provider did not answer") from last_error
+                    raise CloudError(502, "upstream", "No provider of this model is answering right now")
                 if r.status_code >= 400:
                     cloud.note(
                         caller.account_id,
@@ -946,6 +1217,7 @@ def create_app(
                 if usage is None:
                     usage = Usage(fallback_prompt_tokens, estimate_tokens(text))
                 charged = cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
+                record_metadata(cloud, caller.account_id, request_id, capture_metadata(r.headers, obj))
             finally:
                 cloud.settle(caller, request_id)
             if sample_meta is not None:
@@ -957,6 +1229,7 @@ def create_app(
 
         async def gen() -> AsyncIterator[bytes]:
             usage: Usage | None = None
+            accounting_meta: dict = {}
             text_len = 0
             text_cjk = 0
             # the assistant's words: the estimate when the provider sends no usage, and the
@@ -967,6 +1240,7 @@ def create_app(
             failed = False
             try:
                 async with http.stream("POST", url, headers=headers, content=dumps(body).encode()) as r:
+                    accounting_meta.update(capture_metadata(r.headers))
                     if r.status_code >= 400:
                         raw = await r.aread()
                         cloud.note(
@@ -989,6 +1263,7 @@ def create_app(
                                 except ValueError:
                                     obj = None
                                 if isinstance(obj, dict):
+                                    accounting_meta.update(capture_metadata({}, obj))
                                     u = usage_from_json(obj)
                                     if u is not None:
                                         usage = u
@@ -1029,6 +1304,7 @@ def create_app(
                         if usage is None:
                             usage = Usage(fallback_prompt_tokens, text_cjk + math.ceil((text_len - text_cjk) / 3.5))
                         cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
+                        record_metadata(cloud, caller.account_id, request_id, accounting_meta)
                         if sample_meta is not None:
                             cloud.keep_sample(caller, spec.id, sample_messages, "".join(reply), usage.prompt, usage.completion, sample_meta)
                 finally:
@@ -1102,6 +1378,69 @@ def create_app(
             raise CloudError(502, "upstream", "Could not fetch the picture")
         return img.content
 
+    # Polza is the relay's ruble provider for media its own upstream does not serve: its
+    # images endpoint is OpenAI-shaped but answers with a task id, the task carries the
+    # picture's URL, and the relay fetches the bytes itself (nothing is measured before the
+    # picture exists). Paths are this provider's own, hence one adapter per provider.
+    POLZA_MEDIA = "/api/v1/media"
+    POLZA_IMAGE_PAUSE = 2.0
+    POLZA_IMAGE_WAIT_S = 180.0
+
+    async def _polza_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
+        """One picture from Polza, waited out: submit, poll the task, fetch the file."""
+        if not base or not key:
+            raise CloudError(500, "misconfigured", "The model names a provider the relay cannot reach")
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        payload = dumps({"model": model, "prompt": prompt, "size": size.replace("*", "x"), "n": 1})
+        try:
+            r = await http.post(f"{base}/v1/images/generations", headers=headers, content=payload)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "The image provider did not answer") from e
+        if r.status_code >= 400:
+            log.warning("polza image HTTP %s: %s", r.status_code, r.text[:300])
+            if r.status_code == 400 and content_check_refusal(r.content):
+                raise CloudError(400, "content_rejected", "The image provider's content check declined this prompt")
+            raise CloudError(502, "upstream", f"The image provider refused ({r.status_code})")
+        try:
+            task = r.json().get("requestId") or r.json().get("id")
+        except ValueError as e:
+            raise CloudError(502, "upstream", "The image provider sent no task") from e
+        if not task:
+            raise CloudError(502, "upstream", "The image provider sent no task")
+        deadline = time.monotonic() + POLZA_IMAGE_WAIT_S
+        while True:
+            await asyncio.sleep(POLZA_IMAGE_PAUSE)
+            try:
+                r = await http.get(f"{base}{POLZA_MEDIA}/{task}", headers=headers)
+                task_json = r.json()
+            except (httpx.HTTPError, ValueError) as e:
+                raise CloudError(502, "upstream", "The image provider stopped answering") from e
+            status = str(task_json.get("status", "")).lower()
+            if status in ("failed", "error"):
+                raise CloudError(502, "upstream", "The image provider could not draw this picture")
+            if status in ("completed", "succeeded"):
+                url = ((task_json.get("data") or [{}])[0] or {}).get("url")
+                break
+            if time.monotonic() > deadline:
+                raise CloudError(504, "upstream", "The image provider is taking too long; try again")
+        if not url:
+            raise CloudError(502, "upstream", "The image provider sent no picture")
+        # the picture lies on the provider's own file host (s3.polza.ai) beside its API host:
+        # same site, one name under the other, so the last two labels decide
+        base_host = (urlsplit(base).hostname or "").lower()
+        file_host = (urlsplit(url).hostname or "").lower()
+        own_hosts = tuple((urlsplit(u).hostname or "").lower() for u in (settings.upstream_base,))
+        if not (_same_site(file_host, base_host) or _provider_url_ok(url, own_hosts)):
+            log.warning("polza image URL off the provider's hosts: %s", str(url)[:120])
+            raise CloudError(502, "upstream", "The image provider sent a picture from somewhere unexpected")
+        try:
+            img = await http.get(url)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "Could not fetch the picture") from e
+        if img.status_code >= 400:
+            raise CloudError(502, "upstream", "Could not fetch the picture")
+        return img.content
+
     def _size_param(size: str | None) -> str:
         s = (size or "1024x1024").lower().replace("x", "*")
         return s if "*" in s else "1024*1024"
@@ -1128,7 +1467,11 @@ def create_app(
             caller, minimum=spec.per_image, cost_uy=spec.image_cost_uy(size), request_id=request_id, place=client_place(request)
         )
         try:
-            png = await _dashscope_image(spec.upstream, [{"text": prompt}], params)
+            provider, base, key = settings.route(spec)
+            if provider:
+                png = await _polza_image(base, key, spec.upstream, prompt, size)
+            else:
+                png = await _dashscope_image(spec.upstream, [{"text": prompt}], params)
             charged = cloud.charge_image(caller, spec, 1, request_id, size=size)
         finally:
             cloud.settle(caller, request_id)
@@ -1182,6 +1525,168 @@ def create_app(
             headers={"x-nanomuse-charged": str(charged)},
         )
 
+    # -- звук: озвучка текста и распознавание записи -------------------------------------------
+    # Кабинет и будущие клиенты говорят на языке OpenAI: POST /v1/audio/speech превращает
+    # текст в голос, POST /v1/audio/transcriptions превращает запись в текст. Провайдер со
+    # своим ключом (Polza) получает те же пути; счёт — за тысячу знаков и за минуту записи.
+
+    SPEECH_TYPES = {
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "opus": "audio/ogg",
+        "aac": "audio/aac",
+        "flac": "audio/flac",
+        "pcm": "audio/wave",
+    }
+
+    def _audio_model(model_id: str, audio_kind: str, caller: Caller) -> ModelSpec:
+        """The audio model asked for, and one that really does this (`speech` says words,
+        `transcribe` hears them)."""
+        spec = cloud.model_for(model_id, "audio", caller)
+        if spec.audio_kind != audio_kind:
+            raise CloudError(400, "bad_request", f"{spec.id} is not a model that can {audio_kind}")
+        return spec
+
+    async def _polza_speech(base: str, key: str, spec: ModelSpec, text: str, voice: str, fmt: str) -> tuple[bytes, str, float]:
+        """Голос у провайдера: он отвечает либо звуком как есть, либо письмом
+        `{"audio": <base64>, "contentType": "audio/wav", "duration": 3.32}` — разбираем оба."""
+        payload = {"model": spec.upstream, "input": text, "response_format": fmt, "voice": voice}
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        try:
+            r = await http.post(f"{base}/v1/audio/speech", headers=headers, content=dumps(payload))
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "The speech provider did not answer") from e
+        if r.status_code >= 400:
+            log.warning("polza speech HTTP %s: %s", r.status_code, r.text[:300])
+            raise CloudError(502, "upstream", f"The speech provider refused ({r.status_code})")
+        if not r.content:
+            raise CloudError(502, "upstream", "The speech provider sent no sound")
+        media = r.headers.get("content-type", "").split(";")[0].strip().lower()
+        if media in ("application/json", "text/json"):
+            try:
+                letter = r.json()
+                sound = base64.b64decode(str(letter["audio"]))
+            except (ValueError, KeyError, TypeError) as e:
+                raise CloudError(502, "upstream", "The speech provider sent no sound") from e
+            if not sound:
+                raise CloudError(502, "upstream", "The speech provider sent no sound")
+            try:
+                seconds = float(letter.get("duration") or 0.0)
+            except (TypeError, ValueError):
+                seconds = 0.0
+            return sound, str(letter.get("contentType") or "audio/wav"), seconds
+        return r.content, SPEECH_TYPES.get(fmt, media or "audio/mpeg"), 0.0
+
+    RECORDING_TYPES = {
+        "mp3": "audio/mpeg",
+        "mpeg": "audio/mpeg",
+        "wav": "audio/wav",
+        "ogg": "audio/ogg",
+        "opus": "audio/ogg",
+        "flac": "audio/flac",
+        "m4a": "audio/mp4",
+        "mp4": "audio/mp4",
+        "webm": "audio/webm",
+    }
+
+    def _recording_type(filename: str, given: str | None) -> str:
+        """Провайдер узнаёт запись по типу содержимого: берём присланный, иначе по расширению."""
+        known = set(RECORDING_TYPES.values())
+        if given and given.split(";")[0].strip().lower() in known:
+            return given.split(";")[0].strip().lower()
+        suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        return RECORDING_TYPES.get(suffix, "audio/webm")
+
+    async def _polza_transcribe(
+        base: str, key: str, spec: ModelSpec, filename: str, data: bytes, language: str | None, given_type: str | None
+    ) -> dict:
+        form = {"model": spec.upstream}
+        if language:
+            form["language"] = language
+        files = {"file": (filename or "recording.webm", data, _recording_type(filename, given_type))}
+        try:
+            r = await http.post(f"{base}/v1/audio/transcriptions", headers={"Authorization": f"Bearer {key}"}, data=form, files=files)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "The transcription provider did not answer") from e
+        if r.status_code >= 400:
+            log.warning("polza transcription HTTP %s: %s", r.status_code, r.text[:300])
+            raise CloudError(502, "upstream", f"The transcription provider refused ({r.status_code})")
+        try:
+            said = r.json()
+        except ValueError as e:
+            raise CloudError(502, "upstream", "The transcription provider sent no words") from e
+        if not isinstance(said, dict) or "text" not in said:
+            raise CloudError(502, "upstream", "The transcription provider sent no words")
+        return said
+
+    @app.post("/v1/audio/speech")
+    async def audio_speech(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
+        body = await _json(request)
+        spec = _audio_model(str(body.get("model", "")), "speech", caller)
+        text = str(body.get("input") or "").strip()
+        if not text:
+            raise CloudError(400, "bad_request", "input is required")
+        fmt = str(body.get("response_format") or "mp3").strip().lower()
+        if fmt not in SPEECH_TYPES:
+            raise CloudError(400, "bad_request", f"response_format is one of {', '.join(SPEECH_TYPES)}")
+        voice = str(body.get("voice") or spec.voice or "").strip()
+        if not voice:
+            raise CloudError(400, "bad_request", f"voice is required: {spec.id} has no voice of its own by default")
+        provider, base, key = settings.route(spec)
+        request_id = uuid.uuid4().hex[:16]
+        cloud.check_budget(
+            caller,
+            minimum=spec.per_speech,
+            cost_uy=round(len(text) / 1000 * spec.price_speech * 1_000_000),
+            request_id=request_id,
+            place=client_place(request),
+        )
+        try:
+            if not provider:
+                raise CloudError(501, "unsupported", "This voice lives only with the provider of its own")
+            sound, sound_type, sound_seconds = await _polza_speech(base, key, spec, text, voice, fmt)
+            charged = cloud.charge_speech(caller, spec, len(text), request_id)
+        finally:
+            cloud.settle(caller, request_id)
+        headers = {"x-nanomuse-charged": str(charged), "x-nanomuse-characters": str(len(text))}
+        if sound_seconds:
+            headers["x-nanomuse-seconds"] = f"{sound_seconds:.2f}"
+        return Response(content=sound, media_type=sound_type, headers=headers)
+
+    @app.post("/v1/audio/transcriptions")
+    async def audio_transcriptions(
+        request: Request,
+        file: UploadFile = File(...),
+        model: str = Form(""),
+        language: str | None = Form(None),
+        caller: Caller = Depends(caller_dep),
+    ) -> Response:
+        spec = _audio_model(model, "transcribe", caller)
+        data = await file.read()
+        if not data:
+            raise CloudError(400, "bad_request", "the recording is empty")
+        provider, base, key = settings.route(spec)
+        request_id = uuid.uuid4().hex[:16]
+        cloud.check_budget(
+            caller, minimum=spec.per_minute, cost_uy=spec.price_minute * 1_000_000, request_id=request_id, place=client_place(request)
+        )
+        try:
+            if not provider:
+                raise CloudError(501, "unsupported", "This transcription model lives only with the provider of its own")
+            said = await _polza_transcribe(base, key, spec, file.filename or "", data, language, file.content_type)
+            try:
+                seconds = float(said.get("duration") or 0.0)
+            except (TypeError, ValueError):
+                seconds = 0.0
+            # без длительности от провайдера считаем одну минуту — меньше записи не бывает
+            charged = cloud.charge_transcribe(caller, spec, seconds or 60.0, request_id)
+        finally:
+            cloud.settle(caller, request_id)
+        return JSONResponse(
+            content={**said, "nanomuse": {"charged": charged}},
+            headers={"x-nanomuse-charged": str(charged)},
+        )
+
     # -- video: the provider's asynchronous API, relayed under its own paths ------------------------
     #
     # The app's VideoGen submits a task, polls it, downloads the clip from the
@@ -1228,10 +1733,117 @@ def create_app(
             return "1080P" if short >= 1080 else "720P" if short >= 720 else "480P"
         return None
 
+    # -- видео у своего провайдера (Polza) ---------------------------------------------------------
+    # Polza отдаёт задачу в своём виде (`id`, `status`, `data[].url`). Приложение говорит на
+    # языке DashScope (`output.task_status`, `output.video_url`), поэтому релей переводит одно
+    # в другое и остаётся для клиента тем же самым релеем.
+    PROVIDER_TASK = {
+        "pending": "PENDING",
+        "queued": "PENDING",
+        "processing": "RUNNING",
+        "running": "RUNNING",
+        "completed": "SUCCEEDED",
+        "succeeded": "SUCCEEDED",
+        "failed": "FAILED",
+        "error": "FAILED",
+        "canceled": "CANCELED",
+        "cancelled": "CANCELED",
+    }
+
+    def _provider_clip_input(body: dict, spec: ModelSpec) -> dict:
+        """Что просят у провайдера: слова, длину и разрешение из запроса приложения."""
+        incoming = body.get("input") if isinstance(body.get("input"), dict) else {}
+        seconds = _clip_seconds(body, spec)
+        payload = {
+            "prompt": str(incoming.get("prompt") or "").strip(),
+            "duration": str(int(seconds)) if seconds else "4",
+        }
+        resolution = _clip_resolution(body)
+        payload["resolution"] = (resolution or "480P").lower()
+        return payload
+
+    async def _provider_video_submit(base: str, key: str, spec: ModelSpec, body: dict, caller, request, probe: bool):
+        """Поставить клип у провайдера и ответить так, будто это DashScope."""
+        if probe:
+            # проба (пустой запрос) не должна стоить денег: 400 значит «такая модель есть»
+            return JSONResponse(status_code=400, content={"code": "InvalidParameter", "message": "input is required"})
+        if not base or not key:
+            raise CloudError(500, "misconfigured", "The model names a provider the relay cannot reach")
+        clip_cost = spec.video_cost_uy(_clip_seconds(body, spec), _clip_resolution(body))
+        request_id = uuid.uuid4().hex[:16]
+        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=clip_cost, request_id=request_id, place=client_place(request))
+        try:
+            payload = dumps({"model": spec.upstream, "input": _provider_clip_input(body, spec)})
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            try:
+                r = await http.post(f"{base}/api/v1/media", headers=headers, content=payload)
+            except httpx.HTTPError as e:
+                raise CloudError(502, "upstream", "The video provider did not answer") from e
+            if r.status_code >= 400:
+                log.warning("polza video HTTP %s: %s", r.status_code, r.text[:300])
+                raise CloudError(502, "upstream", f"The video provider refused ({r.status_code})")
+            try:
+                task_json = r.json()
+            except ValueError as e:
+                raise CloudError(502, "upstream", "The video provider sent no task") from e
+            task_id = str(task_json.get("id") or task_json.get("requestId") or "")
+            if not task_id:
+                raise CloudError(502, "upstream", "The video provider sent no task")
+            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False)
+            log.info("polza video task %s for %s: %s", task_id[:14], caller.account_id[:8], spec.id)
+        finally:
+            cloud.settle(caller, request_id)
+        return JSONResponse(content={"output": {"task_id": task_id, "task_status": "PENDING"}})
+
+    async def _provider_video_poll(base: str, key: str, task) -> Response:
+        """Спросить провайдера о клипе, списать его один раз и ответить по-дашскоповски."""
+        task_id = str(task["task_id"])
+        try:
+            r = await http.get(f"{base}/api/v1/media/{task_id}", headers={"Authorization": f"Bearer {key}"})
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "The video provider did not answer") from e
+        if r.status_code >= 400:
+            raise CloudError(502, "upstream", f"The video provider refused ({r.status_code})")
+        try:
+            task_json = r.json()
+        except ValueError as e:
+            raise CloudError(502, "upstream", "The video provider sent no task") from e
+        status = PROVIDER_TASK.get(str(task_json.get("status", "")).lower(), "RUNNING")
+        output = {"task_id": task_id, "task_status": status}
+        if status == "SUCCEEDED":
+            url = ""
+            files = task_json.get("data") or []
+            if isinstance(files, dict):  # видео приходит объектом, картинки списком
+                files = [files]
+            for item in files:
+                if isinstance(item, dict) and item.get("url"):
+                    url = str(item["url"])
+                    break
+            if url:
+                output["video_url"] = url
+            else:
+                output = {"task_id": task_id, "task_status": "FAILED", "code": "NoFile", "message": "The provider sent no file"}
+        elif status == "FAILED":
+            reason = task_json.get("error") or task_json.get("message") or "the provider could not make this clip"
+            output["message"] = str(reason)[:300]
+        charged = cloud.settle_video_task(task, output["task_status"])
+        if charged is not None:
+            log.info(
+                "polza video task %s done for %s: %s, charged %d",
+                task_id[:14],
+                str(task["account_id"])[:8],
+                output["task_status"],
+                charged,
+            )
+        return JSONResponse(content={"output": output})
+
     @app.post("/api/v1" + VIDEO_PATH)
     async def video_synthesis(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
         body = await _json(request)
         spec = cloud.model_for(str(body.get("model", "")), "video", caller)
+        provider, provider_base, provider_key = settings.route(spec)
+        if provider:
+            return await _provider_video_submit(provider_base, provider_key, spec, body, caller, request, not body.get("input"))
         # A probe (no input) costs nothing upstream and is not priced here either.
         probe = not body.get("input")
         clip_cost = 0 if probe else spec.video_cost_uy(_clip_seconds(body, spec), _clip_resolution(body))
@@ -1269,6 +1881,10 @@ def create_app(
         task = cloud.db.video_task(task_id)
         if task is None or task["account_id"] != caller.account_id:
             raise CloudError(404, "no_task", "No such task")
+        spec = cloud.s.model(str(task["model"])) if task["model"] else None
+        provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
+        if provider:
+            return await _provider_video_poll(provider_base, provider_key, task)
         try:
             r = await http.get(settings.dashscope_base.rstrip("/") + f"/tasks/{task_id}", headers=upstream_headers())
         except httpx.HTTPError as e:
@@ -1297,6 +1913,19 @@ def create_app(
         done = 0
         for task in cloud.db.video_tasks_to_settle(limit):
             task_id = str(task["task_id"])
+        for task in cloud.db.video_tasks_to_settle(limit):
+            task_id = str(task["task_id"])
+            spec = cloud.s.model(str(task["model"])) if task["model"] else None
+            provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
+            if provider:
+                try:
+                    await _provider_video_poll(provider_base, provider_key, task)
+                except CloudError as error:
+                    log.warning("video task %s: the provider did not answer the relay's check: %s", task_id[:12], error)
+                    continue
+                cloud.db.note_video_check(task_id)
+                done += 1
+                continue
             try:
                 r = await http.get(settings.dashscope_base.rstrip("/") + f"/tasks/{task_id}", headers=upstream_headers())
             except httpx.HTTPError as e:
@@ -1405,6 +2034,23 @@ def create_app(
 
     install_avatar_releases(app, settings, admin_dep)
     install_payments(app, cloud, caller_dep, admin_dep=admin_dep)
+
+    from .model_accounting import capture_metadata, record_metadata
+    from .model_accounting import install as install_model_accounting
+
+    install_model_accounting(app, cloud, caller_dep, admin_dep)
+    install_oauth(app, cloud, settings)
+    install_provider_prices(app, admin_dep)
+
+    from .autopay import install as install_autopay
+    from .usage_chart import install as install_usage_chart
+
+    install_usage_chart(app, cloud, caller_dep)
+
+    from .menu_admin import install as install_menu_admin
+
+    install_menu_admin(app, settings, admin_dep)
+    install_autopay(app, cloud, caller_dep)
 
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])
     async def admin_accounts() -> dict:
@@ -1970,7 +2616,9 @@ def create_app(
             response.headers["Cache-Control"] = "no-cache"
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            )
         return response
 
     return app

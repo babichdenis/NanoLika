@@ -30,13 +30,14 @@
   })();
   document.documentElement.lang = { zh: "zh-CN", en: "en", ru: "ru-RU" }[LANG] || "en"; // the markup says zh-CN; the page follows the browser
   const localeTag = { zh: "zh-CN", ru: "ru-RU" }[LANG]; // for toLocaleString; undefined keeps the browser's English dates
+  const L3 = (ru, en, zh) => LANG === "ru" ? ru : LANG === "zh" ? zh : en;
   const fmt = (n) => Number(n || 0).toLocaleString();
   const dataText = (o, k) => (LANG === "zh" ? o[`${k}_zh`] : o[k]) || o[k]; // server rows carry a field and its _zh twin; every other language reads the base field
   const T_ZH = {
     title: "nanoLika Cloud 后台", tokenLabel: "管理口令", tokenHint: "中继 .env 里 CLOUD_ADMIN_TOKEN 的值；只留在这个标签页里。",
     enter: "进入", wrong: "口令不对。", offline: "连不上服务器。", refresh: "刷新", lock: "锁定", loading: "加载中…",
     today: "今天", week: "最近 7 天", period: (d) => `最近 ${d} 天`,
-    kSamples: "保存的对话", kSamplesSub: (n) => `${n} 个账号开启了「帮助改进」`, exportSamples: "导出 JSONL", exportFailed: (why) => `导出没有成功：${why}。可以再试一次；如果一直这样，看服务器上 docker logs nanomuse-relay。`, exportCut: "下载中途断开", exportEmpty: "还没有可导出的对话。", contributes: "帮助改进", samples: "保存的对话（最近）", samplesNote: "只有开启了「帮助改进 nanoLika 的 AI 模型」的账号才会保存这些内容：用户写的、模型回答的和它调用的工具，不含系统提示、工具返回的内容和图片；导出的文件不带账号 id。", user: "用户", assistant: "回答", more: "查看更多", noSamples: "还没有",
+    kSamples: "保存的对话", kSamplesSub: (n) => `${n} 个账号开启了「帮助改进」`, exportSamples: "导出 JSONL", exportFailed: (why) => `导出没有成功：${why}。可以再试一次；如果一直这样，看服务器上 docker logs cloud-relay-1。`, exportCut: "下载中途断开", exportEmpty: "还没有可导出的对话。", contributes: "帮助改进", samples: "保存的对话（最近）", samplesNote: "只有开启了「帮助改进 nanoLika 的 AI 模型」的账号才会保存这些内容：用户写的、模型回答的和它调用的工具，不含系统提示、工具返回的内容和图片；导出的文件不带账号 id。", user: "用户", assistant: "回答", more: "查看更多", noSamples: "还没有",
     kAccounts: "账号", kAccountsSub: (c) => `${c.with_password || 0} 个设了密码 · ${c.unlimited || 0} 个成员 · ${c.disabled || 0} 个已停用`,
     kActive: "活跃账号", kActiveSub: (n) => `${n} 个新注册`, kSpent: "花费", kSpentSub: (r, t) => `${fmt(r)} 次 · ${fmt(t)} tokens`,
     kOnline: "在线设备", kOnlineSub: (k, s) => `记住了 ${k} 台 · ${s} 个有效登录`, kSignals: "今天的信号",
@@ -68,7 +69,7 @@
     shown: (n, total) => `已显示 ${fmt(n)} / 共 ${fmt(total)} 条`, allShown: (total) => `共 ${fmt(total)} 条，已全部显示`, loadMore: "加载更多", feedLoaded: (n) => `已加载 ${fmt(n)} 条`,
     samplesAll: "保存的对话", exportThis: "导出这个账号的 JSONL", expand: "展开完整对话", collapse: "收起", roles: { system: "系统", user: "用户", assistant: "回答", tool: "工具返回" }, toolCall: "调用工具", omitted: "（未保存）", lengthNote: (n) => `${fmt(n)} 条消息`,
     byAccount: "按用户", bSearch: "搜索账号 / 模型…", bHint: "账号", bTurns: "对话", bTokens: "tokens 输入 / 输出", bFirst: "最早", bLast: "最近", bModels: "模型", bSwitch: "开关", bOn: "开", bOff: "关", noByAccount: "还没有账号保存过对话。",
-    demo: (d) => `在线体验（demo.nanomuse.dev）· 最近 ${d} 天`, demoOff: "还没接上：gateway 设 SHOWCASE_ADMIN_TOKEN，relay 设 WEB_ADMIN_URL（…/api/demo/admin）和 WEB_ADMIN_TOKEN。", demoVisitors: "访客", demoVisits: "体验次数", demoActive: "正在体验", demoNoSignin: "未要求登录", demoCreated: "在这里注册的",
+    demo: (d) => `在线体验（demo.nanolika.ru）· 最近 ${d} 天`, demoOff: "还没接上：gateway 设 SHOWCASE_ADMIN_TOKEN，relay 设 WEB_ADMIN_URL（…/api/demo/admin）和 WEB_ADMIN_TOKEN。", demoVisitors: "访客", demoVisits: "体验次数", demoActive: "正在体验", demoNoSignin: "未要求登录", demoCreated: "在这里注册的",
     dvHint: "访客", dvSearch: "搜索访客…", dvSignins: "登录", dvSessions: "体验", dvFirst: "首次", dvLast: "最近", dvClient: "客户端 / IP", dvNone: "还没有人体验过。", dtWhen: "开始", dtLength: "时长", dtUsed: "用量", dtWhy: "结束原因", dtRunning: "进行中", dtByok: "自带 key", dtAnon: "未登录",
     usedLine: (v) => [`${fmt(v.requests)} 次`, `${fmt(v.tokens)} tokens`, v.pictures ? `${fmt(v.pictures)} 张图` : "", v.clips ? `${fmt(v.clips)} 段视频` : ""].filter(Boolean).join(" · "), dur: (s) => (s < 60 ? `${Math.round(s)} 秒` : s < 3600 ? `${Math.round(s / 60)} 分钟` : `${(s / 3600).toFixed(1)} 小时`),
     demoOfAccount: "在线体验记录", demoAccountLine: (v) => `登录 ${fmt(v.signins)} 次 · 体验 ${fmt(v.sessions)} 次 · 首次 ${when(v.first_seen)} · 最近 ${when(v.last_seen)}${v.created ? " · 账号在体验页注册" : ""}`, demoNoneHere: "这个账号没有在线体验过。",
@@ -98,7 +99,7 @@
       p.per_image ? `每张 ${p.per_image}${p.per_image_2k ? `（2k ${p.per_image_2k}）` : ""}` : null, p.per_second ? `每秒 ${p.per_second}` : null].filter(Boolean).join("；"),
     foot: "手机号 / 邮箱只在打开某个账号时用管理口令解出来看；数据库里存的是加密后的值。来访地址和客户端信息随每次登录、请求和动态一起记录，删账号时一并删除。对话文字只有在账号开启了「帮助改进 nanoLika 的 AI 模型」时才保存，并且只存用户写的、模型回答的和它调用的工具（见「数据控制」）。请不要把这个页面截图发出去。金额按模型服务商的北京地区标价估算。",
     // trends and the site
-    trends: (d) => `账号趋势 · 最近 ${d} 天`, site: (d) => `官网访问与下载 · 最近 ${d} 天`, siteOff: "还没接上访问统计：服务器上装 nanomuse-traffic（demo/showcase/mirror/traffic.py），relay 设 TRAFFIC_DB 指向它的数据库。",
+    trends: (d) => `账号趋势 · 最近 ${d} 天`, site: (d) => `官网访问与下载 · 最近 ${d} 天`, siteOff: "还没接上访问统计：服务器上装 nanolika-traffic（demo/showcase/mirror/traffic.py），relay 设 TRAFFIC_DB 指向它的数据库。",
     siteUpdated: (t) => `更新于 ${t}`, siteNote: "来自 Caddy 的访问日志（保留 7 天）：按天计数，访客用当天的随机盐对地址和浏览器做哈希，不存 IP。",
     sPages: "页面浏览", sVisitors: "访客", sBots: "爬虫 / 监控", sMirror: "镜像下载", sGithub: "GitHub 下载", sStars: "Stars", sPeriod: "本期", sDelta: (n) => (n > 0 ? `+${fmt(n)} 本期` : n < 0 ? `${fmt(n)} 本期` : "本期无变化"),
     sFiles: "下载的文件", sMirrorCol: "镜像", sGithubCol: "GitHub 累计", sRefs: "来源站点", sTop: "页面", sNone: "还没有数据", sSince: (d) => `自 ${d}`,
@@ -108,14 +109,14 @@
     data: (d) => `数据控制 · 最近 ${d} 天`, dOn: "开启「帮助改进」的账号", dOnSub: (on, total) => `共 ${fmt(total)} 个账号 · ${fmt(on)} 开启 · ${fmt(Math.max(0, total - on))} 关闭`, dOff: "主动关闭过的账号", dOffSub: "曾经把开关关掉的人数", dTurns: "保存的对话", dTurnsSub: (all, acc) => `累计 ${fmt(all)} 轮 · 来自 ${fmt(acc)} 个账号`, dTokens: "保存对话的 tokens", dTokensSub: (i, o) => `输入 ${fmt(i)} · 输出 ${fmt(o)}`, dDefault: () => "新账号默认关闭，需要用户单独开启", dKeeps: () => "保存：用户写的、模型回答的、它选择调用的工具，以及模型、token 数、客户端和语言。不保存：系统提示（记忆、SOUL、指令）、工具返回的内容、图片 / 音频 / 视频、用户的身份。",
     syTitle: "对话同步", syOn: "开启同步的账号", syOnSub: (off) => `${fmt(off)} 个账号关闭了`, syWith: "有同步数据的账号", syConvs: "对话", syMsgs: "消息", syMsgsSub: (limit) => `每个账号最多 ${fmt(limit)} 条`, syBytes: "存储的文字", syNote: "0.19：账号各设备之间同步的对话文字。只有用户和助手的文字、附件的名字和大小；没有文件和图片。这里只有合计数，看不到任何内容；关闭开关或删除时，中继立刻删除。",
     mTurns: "保存的对话", mTurnAccounts: "有对话保存的账号", mOn: "开启", mDefaultOn: "默认开启（新账号）", mOff: "关闭", mDeleted: "删除", dModels: "按模型", dApps: "按客户端", dRecent: "最近保存的对话（点开账号看全部）", dPlatforms: { android: "Android", windows: "Windows 上的 runtime", macos: "macOS 上的 runtime", linux: "Linux 上的 runtime", runtime: "runtime", browser: "浏览器", other: "其他" },
-    webTitle: "网页版（nanomuse.cn/web）", webLine: (w) => (w ? `${fmt(w.accounts)} 个账号有自己的 Muse（上限 ${fmt(w.max_accounts)}）· ${fmt(w.running)} 个在运行（上限 ${fmt(w.max_running)}）` : "未接入：relay 设 WEB_INFO_URL 指向 gateway 的 /api/web/info。"), webOff: "网页版未开启",
+    webTitle: "网页版（cloud.nanolika.ru）", webLine: (w) => (w ? `${fmt(w.accounts)} 个账号有自己的 Muse（上限 ${fmt(w.max_accounts)}）· ${fmt(w.running)} 个在运行（上限 ${fmt(w.max_running)}）` : "未接入：relay 设 WEB_INFO_URL 指向 gateway 的 /api/web/info。"), webOff: "网页版未开启",
     // 0.11: where people are, and the models under the key
     places: (d) => `地区 · 最近 ${d} 天`, placesNote: "按来访地址推断（ip2region 离线库，国内到城市、国外到国家 / 州），不请求任何第三方；只是网络出口所在地，用手机流量或代理时会偏。", placesOff: "地理库还没就绪：relay 启动后会自动下载 ip2region_v4.xdb（约 11 MB）到数据目录；CLOUD_GEOIP=0 可关闭。", placesFetching: "正在下载地理库…", placesError: (e) => `地理库下载失败：${e}`,
     pCountry: "国家 / 地区", pProvince: "省 / 州", pAccounts: "账号", pNew: "新注册", pSignins: "登录", pRequests: "请求", pDemo: "体验访客", pUnknown: "未知", pLocal: "本地网络", pNone: "还没有来访记录。", pAccountsNote: "账号按最近一次来访地址计",
     catalog: "模型目录", catalogNote: "key 下能用的模型（菜单之外）：relay 向每个模型各问一句话、再给一张品红色小图，确认它能回答、能不能看图；答案保存 7 天。客户端拿到的「能看图」就是这里的结果。", catalogOff: "模型目录未开启（CLOUD_CATALOG=0）。", catalogNames: "按名字推断，未逐个验证（CLOUD_CATALOG_PROBE=0）。", catalogProbing: "正在验证…", catalogPending: (n) => `${fmt(n)} 个待验证`, catalogFetched: (t) => `列表更新于 ${t}`, catalogError: (e) => `读取列表失败：${e}`,
     cModel: "模型", cKind: "类型", cSees: "看图", cVerified: "已验证", cYes: "是", cNo: "否", cUnusable: "服务商拒绝的模型（不出现在客户端）", cNoUnusable: "没有被拒绝的模型。", cCount: (n, v) => `${fmt(n)} 个对话模型 · ${fmt(v)} 个能看图`,
     // 0.14: the page in pages
-    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
+    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", providers: "供应商", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
     // 0.22: the Controls page, the Stats page, the GitHub series
     ctl: {
       title: "控制", note: "每个开关立刻生效、重启后保持；谁在何时改了什么记在下面的日志里。关闭前会先说明确切后果。",
@@ -180,7 +181,7 @@
     aSearch: "搜索提示 / 内容…", aCount: (n) => `${fmt(n)} 条`,
     dPerDay: "每天的体验次数", dReasons: "结束原因", dReason: { idle: "闲置超时", "time is up": "到时", "ended by the visitor": "访客自己结束", "gateway stopping": "网关重启", "failed to start": "没启动起来" }, dPlaces: "访客地区", dAll: "全部", dRunning: "进行中", dSigned: "已登录", dAnon: "未登录", dByokOnly: "自带 key",
     cSearch: "搜索模型…", cOnlyVision: "只看能看图的",
-    hOk: "一切正常", hProblems: "需要看一下", hInFlight: "在飞的请求", hInFlightSub: (a, l) => `${fmt(a)} 个账号 · ${l > 0 ? `每账号最多 ${l}` : "不限"}`, hHub: "设备通道", hOnline: "在线连接", hAccountsOnline: "在线账号", hPending: "等回复的调用", hDropped: "丢掉的帧", hFlood: "因刷屏断开", hLastHour: "最近一小时", hRequests: "请求", hUpstreamErrors: "上游错误", hContentRejected: "内容审核未放行", hRefused: "超额被拒", hSignIns: "登录", hFailures: "登录失败", hDb: "数据库", hWritable: "可写", hNotWritable: "不可写", hUpstream: "上游 key", hHave: "已配置", hMissing: "没有", hServerTime: "服务器时间", hAuto: "每 30 秒自动刷新", hNote: "同一份数据，服务器上的自检定时器每 10 分钟也读一次（journalctl -t nanomuse-selfcheck）；问题持续时按配置的 ALERT_URL 通知。",
+    hOk: "一切正常", hProblems: "需要看一下", hInFlight: "在飞的请求", hInFlightSub: (a, l) => `${fmt(a)} 个账号 · ${l > 0 ? `每账号最多 ${l}` : "不限"}`, hHub: "设备通道", hOnline: "在线连接", hAccountsOnline: "在线账号", hPending: "等回复的调用", hDropped: "丢掉的帧", hFlood: "因刷屏断开", hLastHour: "最近一小时", hRequests: "请求", hUpstreamErrors: "上游错误", hContentRejected: "内容审核未放行", hRefused: "超额被拒", hSignIns: "登录", hFailures: "登录失败", hDb: "数据库", hWritable: "可写", hNotWritable: "不可写", hUpstream: "上游 key", hHave: "已配置", hMissing: "没有", hServerTime: "服务器时间", hAuto: "每 30 秒自动刷新", hNote: "同一份数据，服务器上的自检定时器每 10 分钟也读一次（journalctl -t nanolika-selfcheck）；问题持续时按配置的 ALERT_URL 通知。",
     cut: "已截断", poolTotal: "总额", nSignIns: (n) => "个登录", agoNow: "刚刚", agoMin: (n) => `${n} 分钟前`, agoHour: (n) => `${n} 小时前`, agoDay: (n) => `${n} 天前`,
   };
 
@@ -189,9 +190,9 @@
     title: "nanoLika Cloud admin", tokenLabel: "Admin token", tokenHint: "The value of CLOUD_ADMIN_TOKEN in the relay's .env; it stays in this tab only.",
     enter: "Open", wrong: "That token is not right.", offline: "Cannot reach the server.", refresh: "Refresh", lock: "Lock", loading: "Loading…",
     today: "Today", week: "Last 7 days", period: (d) => `Last ${d} days`,
-    kSamples: "Kept turns", kSamplesSub: (n) => `${n} accounts with “help improve” on`, exportSamples: "Export JSONL", exportFailed: (why) => `The export did not go through: ${why}. Try once more; if it keeps happening, see docker logs nanomuse-relay on the server.`, exportCut: "the download broke off", exportEmpty: "Nothing to export yet.", contributes: "helps improve", samples: "Kept conversations (recent)", samplesNote: "Kept only for accounts with “Help improve nanoLika's AI models” on: what the person wrote, what the model answered and the tools it called; not the system prompt, tool results or pictures; the export carries no account ids.", user: "user", assistant: "reply", more: "Show more", noSamples: "None yet",
+    kSamples: "Kept turns", kSamplesSub: (n) => `${n} accounts with “help improve” on`, exportSamples: "Export JSONL", exportFailed: (why) => `The export did not go through: ${why}. Try once more; if it keeps happening, see docker logs cloud-relay-1 on the server.`, exportCut: "the download broke off", exportEmpty: "Nothing to export yet.", contributes: "helps improve", samples: "Kept conversations (recent)", samplesNote: "Kept only for accounts with “Help improve nanoLika's AI models” on: what the person wrote, what the model answered and the tools it called; not the system prompt, tool results or pictures; the export carries no account ids.", user: "user", assistant: "reply", more: "Show more", noSamples: "None yet",
     kAccounts: "Accounts", kAccountsSub: (c) => `${c.with_password || 0} with a password · ${c.unlimited || 0} members · ${c.disabled || 0} disabled`,
-    kActive: "Active accounts", kActiveSub: (n) => `${n} new`, kSpent: "Spent", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
+    kActive: "All-account activity", kActiveSub: (n) => `${n} new`, kSpent: "Metered cost", kSpentSub: (r, t) => `${fmt(r)} requests · ${fmt(t)} tokens`,
     kOnline: "Devices online", kOnlineSub: (k, s) => `${k} remembered · ${s} live sign-ins`, kSignals: "Signals today",
     kSignalsSub: (s) => `${s.sign_ins} sign-ins · ${s.sign_in_failures} failed · ${s.budget_refusals} over budget · ${s.upstream_errors} upstream errors · ${s.content_rejected} content checks · ${s.calls} calls`,
     payGivePlan: "Grant the plan", payPlanIssued: "plan granted",
@@ -201,7 +202,7 @@
     paySellPrompt: (who) => `Which plan for ${who}`,
     payOrders: "Orders", paySum: "Amount", payRefunded: "Refunded", payAll: "All statuses",
     payNote: "by creation time", payReadOnly: "read only; refunds go through the bank callback",
-    byKind: "By kind", byModel: "By model", byDay: (d) => `Spend by day · last ${d} days`, top: (d) => `Top spenders · last ${d} days`, events: "Activity", accounts: "All accounts", config: "Configuration",
+    byKind: "By kind", byModel: "By model", byDay: (d) => `Spend by day · last ${d} days`, top: (d) => `Highest metered costs · last ${d} days`, events: "Activity", accounts: "All accounts", config: "Configuration",
     kinds: { chat: "Chat", image: "Pictures", video: "Video", realtime: "Calls", grant: "Tokens granted", credit: "Credit" },
     lanes: { chat: "chat", gui: "hands" }, laneDefault: (l) => `${l} default`, laneTitle: (l) => `offered in the ${l} picker`, laneDefaultTitle: (l) => `the ${l} picker's default`,
     thWho: "Account", thJoined: "Joined", thSpent: "Spent all / today", thTokens: "Tokens all / today", thReqs: "Requests", thActive: "Last active", thDevices: "Devices",
@@ -220,7 +221,7 @@
     shown: (n, total) => `${fmt(n)} of ${fmt(total)} shown`, allShown: (total) => `all ${fmt(total)} shown`, loadMore: "Load more", feedLoaded: (n) => `${fmt(n)} loaded`,
     samplesAll: "Kept conversations", exportThis: "Export this account's JSONL", expand: "Show the whole conversation", collapse: "Collapse", roles: { system: "system", user: "user", assistant: "reply", tool: "tool result" }, toolCall: "tool call", omitted: "(not kept)", lengthNote: (n) => `${fmt(n)} messages`,
     byAccount: "By account", bSearch: "Search account / model…", bHint: "Account", bTurns: "Turns", bTokens: "Tokens in / out", bFirst: "First", bLast: "Last", bModels: "Models", bSwitch: "Switch", bOn: "on", bOff: "off", noByAccount: "No account has kept turns yet.",
-    demo: (d) => `The phone in the browser (demo.nanomuse.dev) · last ${d} days`, demoOff: "Not connected: set SHOWCASE_ADMIN_TOKEN on the gateway and WEB_ADMIN_URL (…/api/demo/admin) with WEB_ADMIN_TOKEN on the relay.", demoVisitors: "Visitors", demoVisits: "Demos", demoActive: "Running now", demoNoSignin: "no sign-in asked", demoCreated: "signed up here",
+    demo: (d) => `The phone in the browser (demo.nanolika.ru) · last ${d} days`, demoOff: "Not connected: set SHOWCASE_ADMIN_TOKEN on the gateway and WEB_ADMIN_URL (…/api/demo/admin) with WEB_ADMIN_TOKEN on the relay.", demoVisitors: "Visitors", demoVisits: "Demos", demoActive: "Running now", demoNoSignin: "no sign-in asked", demoCreated: "signed up here",
     dvHint: "Visitor", dvSearch: "Search visitors…", dvSignins: "Sign-ins", dvSessions: "Demos", dvFirst: "First", dvLast: "Last", dvClient: "Client / IP", dvNone: "Nobody has tried it yet.", dtWhen: "Started", dtLength: "Length", dtUsed: "Used", dtWhy: "Ended because", dtRunning: "running", dtByok: "own key", dtAnon: "not signed in",
     usedLine: (v) => [`${fmt(v.requests)} req`, `${fmt(v.tokens)} tokens`, v.pictures ? `${fmt(v.pictures)} pictures` : "", v.clips ? `${fmt(v.clips)} clips` : ""].filter(Boolean).join(" · "), dur: (s) => (s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`),
     demoOfAccount: "The phone in the browser", demoAccountLine: (v) => `${fmt(v.signins)} sign-ins · ${fmt(v.sessions)} demos · first ${when(v.first_seen)} · last ${when(v.last_seen)}${v.created ? " · the account was created on the demo page" : ""}`, demoNoneHere: "This account has not tried the demo.",
@@ -246,7 +247,7 @@
     priceLine: (p) => [p.per_m_input || p.per_m_output ? `${p.per_m_input} in / ${p.per_m_output} out per M tokens` : null,
       p.per_image ? `${p.per_image} a picture${p.per_image_2k ? ` (${p.per_image_2k} at 2k)` : ""}` : null, p.per_second ? `${p.per_second} a second` : null].filter(Boolean).join("; "),
     foot: "A phone number or address is decrypted only when you open that account, with the admin token; the database holds ciphertext. Network addresses and the client are recorded with every sign-in, request and event, and go when the account is deleted. The text of a chat is kept only while the account has “Help improve nanoLika's AI models” on, and only what the person wrote, what the model answered and the tools it called (see Data controls). Do not share screenshots of this page. Money is estimated at the provider's Beijing list prices.",
-    trends: (d) => `Accounts · last ${d} days`, site: (d) => `The site: visits and downloads · last ${d} days`, siteOff: "No traffic figures yet: install nanomuse-traffic on the server (demo/showcase/mirror/traffic.py) and point the relay's TRAFFIC_DB at its database.",
+    trends: (d) => `Accounts · last ${d} days`, site: (d) => `The site: visits and downloads · last ${d} days`, siteOff: "No traffic figures yet: install nanolika-traffic on the server (demo/showcase/mirror/traffic.py) and point the relay's TRAFFIC_DB at its database.",
     siteUpdated: (t) => `updated ${t}`, siteNote: "From Caddy's access log (kept seven days): counted by day; a visitor is a hash of address and browser under a salt made for that day. No addresses are stored.",
     sPages: "Page views", sVisitors: "Visitors", sBots: "Crawlers / monitors", sMirror: "Mirror downloads", sGithub: "GitHub downloads", sStars: "Stars", sPeriod: "this period", sDelta: (n) => (n > 0 ? `+${fmt(n)} this period` : n < 0 ? `${fmt(n)} this period` : "no change this period"),
     sFiles: "Files downloaded", sMirrorCol: "mirror", sGithubCol: "GitHub, all time", sRefs: "Referring sites", sTop: "Pages", sNone: "Nothing yet", sSince: (d) => `since ${d}`,
@@ -260,7 +261,7 @@
     pCountry: "Country / region", pProvince: "Province / state", pAccounts: "Accounts", pNew: "New", pSignins: "Sign-ins", pRequests: "Requests", pDemo: "Demo visitors", pUnknown: "unknown", pLocal: "local network", pNone: "No visits recorded yet.", pAccountsNote: "accounts by their latest address",
     catalog: "Model catalog", catalogNote: "The models under the key beyond the menu: the relay asks each one a one-word question and then shows it a small magenta picture, to learn whether it answers and whether it sees; the answers stand for seven days. The “sees pictures” the apps show is what is here.", catalogOff: "The catalog is off (CLOUD_CATALOG=0).", catalogNames: "Guessed from names, not checked one by one (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Checking…", catalogPending: (n) => `${fmt(n)} to check`, catalogFetched: (t) => `list read ${t}`, catalogError: (e) => `The list could not be read: ${e}`,
     cModel: "Model", cKind: "Kind", cSees: "Sees pictures", cVerified: "Checked", cYes: "yes", cNo: "no", cUnusable: "Models the provider refuses (not offered to the apps)", cNoUnusable: "None refused.", cCount: (n, v) => `${fmt(n)} chat models · ${fmt(v)} see pictures`,
-    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", activity: "Activity", demo: "Demo", data: "Data", site: "Site", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
+    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", providers: "Providers", activity: "Activity", demo: "Demo", data: "Data", site: "Site", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
     ctl: {
       title: "Controls", note: "Each switch applies at once and survives a restart; who changed what, and when, is in the log below. A switch says exactly what turning it off does before it flips.",
       names: { free_allowance: "Free allowance", signups: "Sign-ups", cloud_service: "Cloud service", sync: "Conversation sync", hub: "Device hub" },
@@ -324,7 +325,7 @@
     aSearch: "Search hint / detail…", aCount: (n) => `${fmt(n)} events`,
     dPerDay: "Demos a day", dReasons: "Ended because", dReason: { idle: "idle", "time is up": "time was up", "ended by the visitor": "visitor ended it", "gateway stopping": "gateway restarted", "failed to start": "failed to start" }, dPlaces: "Visitors by place", dAll: "All", dRunning: "Running", dSigned: "Signed in", dAnon: "Not signed in", dByokOnly: "Own key",
     cSearch: "Search models…", cOnlyVision: "Only ones that see pictures",
-    hOk: "All well", hProblems: "Needs a look", hInFlight: "Requests under way", hInFlightSub: (a, l) => `${fmt(a)} accounts · ${l > 0 ? `${l} per account at most` : "no limit"}`, hHub: "Device hub", hOnline: "Connections", hAccountsOnline: "Accounts online", hPending: "Calls awaiting a reply", hDropped: "Frames dropped", hFlood: "Closed for flooding", hLastHour: "Last hour", hRequests: "Requests", hUpstreamErrors: "Upstream errors", hContentRejected: "Content check declined", hRefused: "Refused: over budget", hSignIns: "Sign-ins", hFailures: "Failed sign-ins", hDb: "Database", hWritable: "writable", hNotWritable: "not writable", hUpstream: "Upstream key", hHave: "set", hMissing: "missing", hServerTime: "Server time", hAuto: "refreshes every 30 s", hNote: "The self-check timer on the server reads the same figures every ten minutes (journalctl -t nanomuse-selfcheck); a problem that stays goes to ALERT_URL when one is set.",
+    hOk: "All well", hProblems: "Needs a look", hInFlight: "Requests under way", hInFlightSub: (a, l) => `${fmt(a)} accounts · ${l > 0 ? `${l} per account at most` : "no limit"}`, hHub: "Device hub", hOnline: "Connections", hAccountsOnline: "Accounts online", hPending: "Calls awaiting a reply", hDropped: "Frames dropped", hFlood: "Closed for flooding", hLastHour: "Last hour", hRequests: "Requests", hUpstreamErrors: "Upstream errors", hContentRejected: "Content check declined", hRefused: "Refused: over budget", hSignIns: "Sign-ins", hFailures: "Failed sign-ins", hDb: "Database", hWritable: "writable", hNotWritable: "not writable", hUpstream: "Upstream key", hHave: "set", hMissing: "missing", hServerTime: "Server time", hAuto: "refreshes every 30 s", hNote: "The self-check timer on the server reads the same figures every ten minutes (journalctl -t nanolika-selfcheck); a problem that stays goes to ALERT_URL when one is set.",
     cut: "cut", poolTotal: "total", nSignIns: (n) => "sign-ins", agoNow: "just now", agoMin: (n) => `${n} min ago`, agoHour: (n) => `${n} h ago`, agoDay: (n) => `${n} d ago`,
   };
 
@@ -341,9 +342,9 @@
     title: "nanoLika Cloud — админка", tokenLabel: "Админ-токен", tokenHint: "Значение CLOUD_ADMIN_TOKEN из .env релея; остаётся только в этой вкладке.",
     enter: "Открыть", wrong: "Токен неверный.", offline: "офлайн", refresh: "Обновить", lock: "Заблокировать", loading: "Загрузка…",
     today: "Сегодня", week: "За 7 дней", period: (d) => `За ${d} дн.`,
-    kSamples: "Сохранённые реплики", kSamplesSub: (n) => `${n} аккаунтов с включённой «Помогать улучшать модели»`, exportSamples: "Экспорт JSONL", exportFailed: (why) => `Экспорт не прошёл: ${why}. Попробуйте ещё раз; если повторится, смотрите docker logs nanomuse-relay на сервере.`, exportCut: "загрузка оборвалась", exportEmpty: "Пока нечего экспортировать.", contributes: "участвует в улучшении", samples: "Сохранённые диалоги (последние)", samplesNote: "Хранится только для аккаунтов с включённым «Помогать улучшать модели»: что написал человек, что ответила модель и какие инструменты вызвала; без системного промпта, результатов инструментов и картинок; в экспорте нет id аккаунтов.", user: "пользователь", assistant: "ответ", more: "Показать ещё", noSamples: "Пока нет",
+    kSamples: "Сохранённые реплики", kSamplesSub: (n) => `${n} аккаунтов с включённой «Помогать улучшать модели»`, exportSamples: "Экспорт JSONL", exportFailed: (why) => `Экспорт не прошёл: ${why}. Попробуйте ещё раз; если повторится, смотрите docker logs cloud-relay-1 на сервере.`, exportCut: "загрузка оборвалась", exportEmpty: "Пока нечего экспортировать.", contributes: "участвует в улучшении", samples: "Сохранённые диалоги (последние)", samplesNote: "Хранится только для аккаунтов с включённым «Помогать улучшать модели»: что написал человек, что ответила модель и какие инструменты вызвала; без системного промпта, результатов инструментов и картинок; в экспорте нет id аккаунтов.", user: "пользователь", assistant: "ответ", more: "Показать ещё", noSamples: "Пока нет",
     kAccounts: "Аккаунты", kAccountsSub: (c) => `${c.with_password || 0} с паролем · ${c.unlimited || 0} участников · ${c.disabled || 0} отключено`,
-    kActive: "Активные аккаунты", kActiveSub: (n) => `${n} новых`, kSpent: "Потрачено", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
+    kActive: "Активность всех аккаунтов", kActiveSub: (n) => `${n} новых`, kSpent: "Расход по учёту", kSpentSub: (r, t) => `${fmt(r)} запросов · ${fmt(t)} токенов`,
     kOnline: "Устройств онлайн", kOnlineSub: (k, s) => `${k} запомненных · ${s} живых входов`, kSignals: "События за сегодня",
     kSignalsSub: (s) => `${s.sign_ins} входов · ${s.sign_in_failures} неудачных · ${s.budget_refusals} сверх лимита · ${s.upstream_errors} ошибок провайдера · ${s.content_rejected} отклонено проверкой контента · ${s.calls} звонков`,
     payGivePlan: "Выдать тариф", payPlanIssued: "тариф выдан",
@@ -353,7 +354,7 @@
     paySellPrompt: (who) => `Какой тариф выдать ${who}`,
     payOrders: "Заказы", paySum: "Сумма", payRefunded: "Возвращено", payAll: "Все статусы",
     payNote: "по времени создания", payReadOnly: "только чтение; возврат идёт через банк",
-    byKind: "По типу", byModel: "По модели", byDay: (d) => `Расход по дням · за ${d} дн.`, top: (d) => `Крупнейшие плательщики · за ${d} дн.`, events: "Активность", accounts: "Все аккаунты", config: "Конфигурация",
+    byKind: "По типу", byModel: "По модели", byDay: (d) => `Расход по дням · за ${d} дн.`, top: (d) => `Наибольший расход · за ${d} дн.`, events: "Активность", accounts: "Все аккаунты", config: "Конфигурация",
     kinds: { chat: "Чат", image: "Картинки", video: "Видео", realtime: "Звонки", grant: "Начисление токенов", credit: "Кредит" },
     lanes: { chat: "чат", gui: "руки" }, laneDefault: (l) => `${l} по умолчанию`, laneTitle: (l) => `предлагается в выборе «${l}»`, laneDefaultTitle: (l) => `выбор «${l}» по умолчанию`,
     thWho: "Аккаунт", thJoined: "Создан", thSpent: "Потрачено всего / за сегодня", thTokens: "Токены всего / за сегодня", thReqs: "Запросы", thActive: "Последняя активность", thDevices: "Устройства",
@@ -372,7 +373,7 @@
     shown: (n, total) => `показано ${fmt(n)} из ${fmt(total)}`, allShown: (total) => `все ${fmt(total)} показаны`, loadMore: "Загрузить ещё", feedLoaded: (n) => `${fmt(n)} загружено`,
     samplesAll: "Сохранённые диалоги", exportThis: "Экспортировать JSONL этого аккаунта", expand: "Развернуть весь диалог", collapse: "Свернуть", roles: { system: "system", user: "user", assistant: "ответ", tool: "результат инструмента" }, toolCall: "вызов инструмента", omitted: "(не сохранено)", lengthNote: (n) => `${fmt(n)} сообщений`,
     byAccount: "По аккаунтам", bSearch: "Поиск: аккаунт / модель…", bHint: "Аккаунт", bTurns: "Реплики", bTokens: "Токены вх. / исх.", bFirst: "Первый", bLast: "Последний", bModels: "Модели", bSwitch: "Переключали", bOn: "вкл", bOff: "выкл", noByAccount: "Ни один аккаунт ещё не сохранял реплики.",
-    demo: (d) => `Телефон в браузере (demo.nanomuse.dev) · за ${d} дн.`, demoOff: "Не подключено: задайте SHOWCASE_ADMIN_TOKEN на шлюзе, а WEB_ADMIN_URL (…/api/demo/admin) с WEB_ADMIN_TOKEN — на релее.", demoVisitors: "Посетители", demoVisits: "Демо", demoActive: "Идут сейчас", demoNoSignin: "без входа", demoCreated: "зарегистрировался здесь",
+    demo: (d) => `Телефон в браузере (demo.nanolika.ru) · за ${d} дн.`, demoOff: "Не подключено: задайте SHOWCASE_ADMIN_TOKEN на шлюзе, а WEB_ADMIN_URL (…/api/demo/admin) с WEB_ADMIN_TOKEN — на релее.", demoVisitors: "Посетители", demoVisits: "Демо", demoActive: "Идут сейчас", demoNoSignin: "без входа", demoCreated: "зарегистрировался здесь",
     dvHint: "Посетитель", dvSearch: "Поиск посетителей…", dvSignins: "Входы", dvSessions: "Демо", dvFirst: "Первый", dvLast: "Последний", dvClient: "Клиент / IP", dvNone: "Никто ещё не пробовал.", dtWhen: "Начало", dtLength: "Длина", dtUsed: "Израсходовано", dtWhy: "Чем закончилось", dtRunning: "идёт", dtByok: "свой ключ", dtAnon: "без входа",
     usedLine: (v) => [`${fmt(v.requests)} зап.`, `${fmt(v.tokens)} токенов`, v.pictures ? `${fmt(v.pictures)} карт.` : "", v.clips ? `${fmt(v.clips)} клипов` : ""].filter(Boolean).join(" · "), dur: (s) => (s < 60 ? `${Math.round(s)} с` : s < 3600 ? `${Math.round(s / 60)} мин` : `${(s / 3600).toFixed(1)} ч`),
     demoOfAccount: "Телефон в браузере", demoAccountLine: (v) => `${fmt(v.signins)} входов · ${fmt(v.sessions)} демо · первый ${when(v.first_seen)} · последний ${when(v.last_seen)}${v.created ? " · аккаунт создан на демо-странице" : ""}`, demoNoneHere: "Этот аккаунт не пробовал демо.",
@@ -398,7 +399,7 @@
     priceLine: (p) => [p.per_m_input || p.per_m_output ? `${p.per_m_input} вх. / ${p.per_m_output} исх. за 1 млн токенов` : null,
       p.per_image ? `${p.per_image} за картинку${p.per_image_2k ? ` (${p.per_image_2k} при 2k)` : ""}` : null, p.per_second ? `${p.per_second} за секунду` : null].filter(Boolean).join("; "),
     foot: "Телефон или адрес расшифровывается только когда вы открываете этот аккаунт, с админ-токеном; в базе лежит шифротекст. Сетевые адреса и клиент записываются при каждом входе, запросе и событии и уходят вместе с аккаунтом при удалении. Текст чата хранится только пока у аккаунта включено «Help improve nanoLika's AI models», и лишь то, что написал человек, что ответила модель и какие инструменты вызвала (см. «Данные»). Не делитесь скриншотами этой страницы. Деньги считаются по пекинским прейскурантам провайдера.",
-    trends: (d) => `Аккаунты · за ${d} дн.`, site: (d) => `Сайт: визиты и загрузки · за ${d} дн.`, siteOff: "Цифр по трафику ещё нет: поставьте на сервер nanomuse-traffic (demo/showcase/mirror/traffic.py) и направьте TRAFFIC_DB релея на его базу.",
+    trends: (d) => `Аккаунты · за ${d} дн.`, site: (d) => `Сайт: визиты и загрузки · за ${d} дн.`, siteOff: "Цифр по трафику ещё нет: поставьте на сервер nanolika-traffic (demo/showcase/mirror/traffic.py) и направьте TRAFFIC_DB релея на его базу.",
     siteUpdated: (t) => `обновлено ${t}`, siteNote: "Из журнала доступа Caddy (хранится семь дней): подсчёт по дням; посетитель — хэш адреса и браузера под солью, своей на каждый день. Адреса не хранятся.",
     sPages: "Просмотры страниц", sVisitors: "Посетители", sBots: "Краулеры / мониторы", sMirror: "Загрузки с зеркала", sGithub: "Загрузки с GitHub", sStars: "Звёзды", sPeriod: "за период", sDelta: (n) => (n > 0 ? `+${fmt(n)} за период` : n < 0 ? `${fmt(n)} за период` : "без изменений за период"),
     sFiles: "Скачанные файлы", sMirrorCol: "зеркало", sGithubCol: "GitHub, всё время", sRefs: "Сайты-источники", sTop: "Страницы", sNone: "Пока ничего", sSince: (d) => `с ${d}`,
@@ -412,7 +413,7 @@
     pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
     catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
     cModel: "Модель", cKind: "Тип", cSees: "Видит картинки", cVerified: "Проверена", cYes: "да", cNo: "нет", cUnusable: "Модели, от которых отказывается провайдер (приложениям не предлагаются)", cNoUnusable: "Таких нет.", cCount: (n, v) => `${fmt(n)} чат-моделей · ${fmt(v)} видят картинки`,
-    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
+    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", providers: "Поставщики", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
     ctl: {
       title: "Управление", note: "Каждый переключатель действует сразу и переживает перезапуск; кто, что и когда менял — в журнале ниже. Перед переключением переключатель точно описывает, что отключит.",
       names: { free_allowance: "Бесплатный баланс", signups: "Регистрации", cloud_service: "Облачный сервис", sync: "Синхронизация диалогов", hub: "Хаб устройств" },
@@ -472,11 +473,11 @@
     thRegion: "Регион", moreRows: (n) => `Показать ещё ${fmt(n)}`, exportCsv: "Экспорт CSV", csvNote: "Текущая выборка, как её показывает таблица, включая телефоны и адреса; файл держите при себе.",
     byDayLabel: "по дням", byWeekLabel: "по неделям",
     pMetric: "Количество", pTopCountries: "Страны / регионы", pTopProvinces: "Провинции / штаты", pRowHint: "Нажмите на строку, чтобы под «Людьми» увидеть аккаунты только этого региона.",
-    kindAll: "Все типы", mShare: "Куда уходят деньги", mTop: "Крупнейшие аккаунты", mPrices: "Цены",
+    kindAll: "Все типы", mShare: "Куда уходят деньги", mTop: "Аккаунты по расходу", mPrices: "Цены",
     aSearch: "Поиск: подсказка / детали…", aCount: (n) => `${fmt(n)} событий`,
     dPerDay: "Демо за день", dReasons: "Чем закончилось", dReason: { idle: "простой", "time is up": "время вышло", "ended by the visitor": "закончил посетитель", "gateway stopping": "шлюз перезапускался", "failed to start": "не удалось запустить" }, dPlaces: "Посетители по местам", dAll: "Все", dRunning: "Идут", dSigned: "Вошли", dAnon: "Без входа", dByokOnly: "Со своим ключом",
     cSearch: "Поиск моделей…", cOnlyVision: "Только те, что видят картинки",
-    hOk: "Всё в порядке", hProblems: "Требует внимания", hInFlight: "Запросов в работе", hInFlightSub: (a, l) => `${fmt(a)} аккаунтов · ${l > 0 ? `не больше ${l} на аккаунт` : "без лимита"}`, hHub: "Хаб устройств", hOnline: "Соединений", hAccountsOnline: "Аккаунтов онлайн", hPending: "Звонков ждёт ответа", hDropped: "Потеряно кадров", hFlood: "Закрыт из-за флуда", hLastHour: "Последний час", hRequests: "Запросы", hUpstreamErrors: "Ошибки провайдера", hContentRejected: "Отклонено проверкой контента", hRefused: "Отказы: сверх лимита", hSignIns: "Входы", hFailures: "Неудачные входы", hDb: "База данных", hWritable: "доступна на запись", hNotWritable: "не доступна на запись", hUpstream: "Ключ провайдера", hHave: "задан", hMissing: "не задан", hServerTime: "Время на сервере", hAuto: "обновляется каждые 30 с", hNote: "Таймер самопроверки на сервере читает те же цифры каждые десять минут (journalctl -t nanomuse-selfcheck); застаревшая проблема уходит на ALERT_URL, если он задан.",
+    hOk: "Всё в порядке", hProblems: "Требует внимания", hInFlight: "Запросов в работе", hInFlightSub: (a, l) => `${fmt(a)} аккаунтов · ${l > 0 ? `не больше ${l} на аккаунт` : "без лимита"}`, hHub: "Хаб устройств", hOnline: "Соединений", hAccountsOnline: "Аккаунтов онлайн", hPending: "Звонков ждёт ответа", hDropped: "Потеряно кадров", hFlood: "Закрыт из-за флуда", hLastHour: "Последний час", hRequests: "Запросы", hUpstreamErrors: "Ошибки провайдера", hContentRejected: "Отклонено проверкой контента", hRefused: "Отказы: сверх лимита", hSignIns: "Входы", hFailures: "Неудачные входы", hDb: "База данных", hWritable: "доступна на запись", hNotWritable: "не доступна на запись", hUpstream: "Ключ провайдера", hHave: "задан", hMissing: "не задан", hServerTime: "Время на сервере", hAuto: "обновляется каждые 30 с", hNote: "Таймер самопроверки на сервере читает те же цифры каждые десять минут (journalctl -t nanolika-selfcheck); застаревшая проблема уходит на ALERT_URL, если он задан.",
     cut: "обрезано", poolTotal: "всего", nSignIns: (n) => (n % 10 === 1 && n % 100 !== 11 ? "вход" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "входа" : "входов"), agoNow: "только что", agoMin: (n) => `${n} мин назад`, agoHour: (n) => `${n} ч назад`, agoDay: (n) => `${n} дн назад`,
   };
 
@@ -517,11 +518,13 @@
     download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   };
   const NAV_ICON = {
+    payments: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/>'),
     overview: svg('<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'),
     people: ICON.person,
     invites: svg('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17.5 4v6M14.5 7h6"/>'),
     places: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>'),
     money: svg('<circle cx="12" cy="12" r="9"/><path d="M9 8.5l3 4 3-4M12 12.5V17M9.5 14.5h5"/>'),
+    providers: svg('<path d="M4 6h6v12H4zM14 6h6v7h-6z"/><path d="M7 10h0M17 9h0"/>'),
     activity: svg('<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>'),
     demo: ICON.phone,
     data: svg('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>'),
@@ -539,7 +542,7 @@
     "control.switch": ["warn", ICON.warn], "control.rule": ["warn", ICON.warn],
   };
   const FILTERS = [["", "all"], ["sign_in.code,sign_in.password,sign_in.session,sign_in.failed,account.created", "signIns"], ["budget.refused", "refusals"], ["upstream.error", "errors"], ["content.rejected", "contentChecks"], ["call.ended", "calls"], ["password.set,password.changed,password.cleared", "passwords"]];
-  const VIEWS = ["overview", "people", "invites", "places", "money", "activity", "demo", "data", "site", "models", "health", "stats", "controls", "settings", "payments"];
+  const VIEWS = ["overview", "people", "invites", "places", "money", "providers", "activity", "demo", "data", "site", "models", "health", "stats", "controls", "settings", "payments"];
   const PAGE = 50;
 
   // ── state ──────────────────────────────────────────────────────
@@ -626,11 +629,14 @@
     stats: (d) => `/v1/admin/stats?days=${d}`,
     github: (d) => `/v1/admin/github?days=${d}`,
     config: () => "/v1/config",
-    payments: (d) => `/v1/admin/payments?days=${d}`,
+    payments: (d) => `/v1/admin/payments?days=${d}&mode=${encodeURIComponent(params.get("pmode") || "all")}&status=${encodeURIComponent(params.get("st") || "")}&q=${encodeURIComponent(params.get("pq") || "")}`,
+    readiness: () => "/v1/admin/payments/readiness",
+    siteCounter: () => "/v1/admin/site-counter",
+    providers: () => "/v1/admin/provider-prices",
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers"]);
   const CACHE = new Map();
-  const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}`;
+  const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}${key === "payments" ? ":" + SOURCES.payments(days) : ""}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
       `{_error}` when the relay would not give it. */
   function need(key) {
@@ -647,33 +653,23 @@
   // ── the site's visit counter ───────────────────────────────────
   // nanolika.ru counts the visits itself (counter.php there, bots and link previews
   // filtered); the admin only shows the totals, so the cloud keeps no visitor data.
-  const SITE_COUNTER = "https://nanolika.ru/counter.php?stats=1";
-  let siteVisits = null, siteBusy = false, siteError = "";
-  function needSiteVisits() {
-    if (siteVisits || siteBusy) return siteVisits;
-    siteBusy = true;
-    fetch(SITE_COUNTER, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((v) => { siteVisits = v || {}; })
-      .catch((e) => { siteError = String((e && e.message) || e); })
-      .then(() => { siteBusy = false; draw(); });
-    return siteVisits;
-  }
   function siteVisitsPanel() {
-    const L3 = (ru, en, zh) => (LANG === "zh" ? zh : LANG === "ru" ? ru : en);
-    const v = needSiteVisits();
-    const title = `${T.nav.site} · ${L3("заходы", "visits", "访问")}`;
-    if (!v || !v.ok) {
-      return panel(title, h("div", { class: "empty" }, siteError ? L3(`счётчик недоступен: ${siteError}`, `counter unavailable: ${siteError}`, `计数器不可用：${siteError}`) : T.loading));
-    }
+    const v = need("siteCounter");
+    const title = L3("Посещения сайта", "Website visits", "网站访问");
+    if (!v) return loadingPanel(title);
+    if (v._error || !v.available) return panel(title, h("div", { class: "pad" },
+      h("p", { class: "fine" }, L3("Счётчик сейчас недоступен. Это не число регистраций.", "Counter unavailable. Visits are not registrations.", "计数器不可用。访问不等于注册。")),
+      h("button", { class: "btn quiet sm", onclick: () => { forget("siteCounter"); draw(); } }, T.refresh)));
     const last7 = (v.days || []).slice(-7).reduce((n, d) => n + (d.views || 0), 0);
-    const pages = (v.pages || []).slice(0, 5);
-    return panel([title, h("span", { class: "fine" }, ` · ${L3("считаем с", "since", "自")} ${v.since || "—"}`)],
+    return panel([title, h("span", { class: "fine" }, ` · ${v.since || ""}`)],
       h("div", { class: "kpis", style: "padding:12px 16px 4px" },
-        kpi(L3("всего заходов", "total visits", "总访问"), fmt(v.total || 0), L3("без роботов и превью ссылок", "bots and link previews filtered", "已过滤机器人与链接预览")),
-        kpi(T.today, fmt(v.today || 0), L3(`новых сегодня: ${fmt(v.uniq_today || 0)}`, `new today: ${fmt(v.uniq_today || 0)}`, `今日新访客：${fmt(v.uniq_today || 0)}`)),
-        kpi(T.week, fmt(last7), L3("за последние 7 дней", "the last 7 days", "最近 7 天"))),
-      pages.length ? h("div", { class: "kv", style: "padding:0 16px 14px" }, ...pages.flatMap((pg) => [h("b", {}, pg.name), h("span", {}, fmt(pg.hits))])) : null);
+        kpi(L3("Всего просмотров", "Total page views", "总浏览量"), fmt(v.total)),
+        kpi(T.today, fmt(v.today), L3(`Новых посетителей: ${fmt(v.uniq_today)}`, `New visitors: ${fmt(v.uniq_today)}`, `新访客：${fmt(v.uniq_today)}`)),
+        kpi(T.week, fmt(last7))),
+      h("div", { class: "pad fine" }, L3("Просмотры страниц, посетители и аккаунты считаются отдельно. Свои заходы тоже могут входить в эти числа.", "Page views, visitors and accounts are separate. Your own visits can be included.", "浏览量、访客和账号分别统计。自己的访问也可能计入。")),
+      h("div", { class: "grid2 pad" },
+        h("div", { class: "kv" }, ...(v.pages || []).slice(0, 10).flatMap(r => [h("b", {}, r.name), h("span", {}, fmt(r.hits))])),
+        h("div", { class: "kv" }, ...(v.refs || []).slice(0, 10).flatMap(r => [h("b", {}, r.name), h("span", {}, fmt(r.hits))]))));
   }
 
   async function load() {
@@ -830,7 +826,7 @@
   const failedPanel = (title, key, e) => panel(title, h("div", { class: "empty" }, T.loadFailed(e), " ", h("button", { class: "btn quiet sm", onclick: () => { forget(key); draw(); } }, T.retry)));
   const seeAll = (v, p) => h("a", { class: "fine more-link", href: hashFor(v, p) }, `${T.seeAll} →`);
 
-  /** The site: what nanomuse-traffic counted from the access log, next to GitHub's own numbers. */
+  /** The site: what nanolika-traffic counted from the access log, next to GitHub's own numbers. */
   function sitePanel(tr) {
     if (!tr.available) return panel(T.site(days), h("div", { class: "empty" }, T.siteOff));
     const rows = tr.days || [], gh = tr.github || {}, ghDays = gh.days || [];
@@ -1006,12 +1002,6 @@
     try { await api("POST", "/v1/admin/grant", { account_id: a.id, tokens: n }); } catch (e) { alert(e.message); }
     await Promise.all([load(), detail ? openAccount(a.id) : null]);
   }
-  async function doGrantPlan(o) {
-    if (!confirm(T.payGivePlanPrompt(o.plan, o.hint || o.account_id.slice(0, 8)))) return;
-    try { await api("POST", `/v1/admin/payments/${o.order_id}/plan`, {}); } catch (e) { alert(e.message); }
-    forget("payments");
-    await load();
-  }
   async function doPlan(a) {
     let menu = (CACHE.get(cacheKey("config")) || {}).value;
     if (!menu) { try { menu = await load("config"); } catch (e) { alert(e.message); return; } }
@@ -1115,7 +1105,7 @@
     let blob;
     try { blob = await r.blob(); } catch (_) { alert(T.exportFailed(T.exportCut)); return; }
     if (!blob.size) { alert(T.exportEmpty); return; }
-    download(blob, `nanomuse-samples-${accountId ? accountId.slice(0, 8) + "-" : ""}${new Date().toISOString().slice(0, 10)}.jsonl`);
+    download(blob, `nanolika-samples-${accountId ? accountId.slice(0, 8) + "-" : ""}${new Date().toISOString().slice(0, 10)}.jsonl`);
   }
 
   function ensureDrawer() {
@@ -1416,7 +1406,13 @@
     return chart([up, title].filter(Boolean), fmt(groups.size), hranks(items));
   }
   function peopleView() {
-    const list = (accounts && accounts.accounts) || [];
+    const scope = params.get("scope") || "customers";
+    const allPeople = (accounts && accounts.accounts) || [];
+    const list = allPeople.filter(a => scope === "all" || (scope === "tests" ? !!a.is_test : !a.is_test));
+    const scopeBar = h("div", { class: "toolbar" }, chips([
+      ["customers", L3("Клиентские", "Customers", "客户")],
+      ["tests", L3("Проверочные", "Test accounts", "测试账号")],
+      ["all", L3("Все записи", "All records", "所有记录")]], scope, v => setParams({ scope: v })));
     const f = peopleFilters();
     const ts = terms(f.q), q = ts.length > 0;
     const base = list.filter((a) => (!q || matches(haystack(a), ts))
@@ -1481,6 +1477,7 @@
               h("span", { class: "pill" }, a.channel === "phone" ? T.phone : T.email),
               a.member ? h("span", { class: "pill ok" }, a.listed ? T.listed : T.member) : null,
               a.review ? h("span", { class: "pill", title: T.reviewNote }, T.review) : null,
+              a.is_test ? h("span", { class: "pill warn" }, L3("Проверочный", "Test", "测试")) : null,
               a.has_password ? h("span", { class: "pill violet" }, T.password) : null,
               a.disabled ? h("span", { class: "pill bad" }, T.disabled) : null,
               a.locked ? h("span", { class: "pill warn" }, T.locked) : null,
@@ -1499,12 +1496,12 @@
         th(T.thWho), th(T.thJoined, "joined", "hide-sm"), th(T.thRegion, "region", "hide-sm"), th(T.thSpent, "spent", "num"), th(T.thTokens, "tokens", "num hide-sm"),
         th(T.thReqs, "requests", "num hide-sm"), th(T.thActive, "active", "hide-sm"), th(T.thClient, null, "hide-sm"), th(T.thDevices))),
       h("tbody", {}, ...rows)) : h("div", { class: "empty" }, list.length ? T.none : T.noAccounts);
-    return [h("div", { class: "panel" }, h("h2", {}, T.nav.people, h("span", { class: "pill" }, fmt(shown.length)), h("span", { class: "sp" }), h("span", { class: "fine" }, T.cClickNote)), searchRow, toolbar, charts),
+    return [h("div", { class: "panel" }, h("h2", {}, T.nav.people, h("span", { class: "pill" }, fmt(shown.length)), h("span", { class: "sp" }), h("span", { class: "fine" }, T.cClickNote)), scopeBar, searchRow, toolbar, charts),
       h("div", { class: "panel" }, table, shown.length > page.length ? h("div", { class: "more" }, h("button", { class: "btn quiet sm", onclick: () => setPeople({ n: f.n + PAGE }) }, T.moreRows(Math.min(PAGE, shown.length - page.length))), h("span", { class: "fine" }, T.shown(page.length, shown.length))) : null)];
   }
   /** The selection as a file: the identifiers as the table shows them (0.22), the masked hint beside each, and the figures. */
   function exportCsv(rows) {
-    const cols = [["identifier", (a) => a.identifier || ""], ["hint", (a) => a.hint], ["id", (a) => a.id], ["channel", (a) => a.channel], ["joined", (a) => iso(a.created_at)], ["region", (a) => placeText(placeOfAccount(a))],
+    const cols = [["is_test", a => a.is_test ? 1 : 0], ["identifier", (a) => a.identifier || ""], ["hint", (a) => a.hint], ["id", (a) => a.id], ["channel", (a) => a.channel], ["joined", (a) => iso(a.created_at)], ["region", (a) => placeText(placeOfAccount(a))],
       ["spent_cny", (a) => moneyN(a.spent_cny)], ["spent_today_cny", (a) => moneyN(a.spent_today_cny)], ["left_cny", (a) => (a.left_cny === null || a.left_cny === undefined ? "" : moneyN(a.left_cny))],
       ["tokens", (a) => a.used || 0], ["requests", (a) => a.requests || 0], ["last_active", (a) => iso(a.last_active_at)], ["member", (a) => (a.member ? 1 : 0)], ["disabled", (a) => (a.disabled ? 1 : 0)],
       ["password", (a) => (a.has_password ? 1 : 0)], ["client", (a) => a.last_platform || ""], ["version", (a) => a.last_version || ""], ["devices", (a) => (a.devices || []).length],
@@ -1512,7 +1509,7 @@
       ["invited_by", (a) => (a.invited_by ? identOf(a.invited_by, "") || a.invited_by : "")], ["invites", (a) => a.invites || 0]];
     const esc = (v) => { const s = v === null || v === undefined ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const text = [cols.map((c) => c[0]).join(","), ...rows.map((a) => cols.map((c) => esc(c[1](a))).join(","))].join("\n");
-    download(new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" }), `nanomuse-accounts-${new Date().toISOString().slice(0, 10)}.csv`);
+    download(new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8" }), `nanolika-accounts-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   // ── invites: who brought whom, the inviters that brought most first ──
@@ -1651,12 +1648,13 @@
       controlsStrip(),
       healthStrip,
       h("div", { class: "kpis" },
-        kpi(T.kAccounts, fmt(c.total), T.kAccountsSub(c)),
+        kpi(L3("Клиентские аккаунты", "Customer accounts", "客户账号"), fmt(c.customers ?? c.total), L3(`Проверочных отдельно: ${fmt(c.test_accounts)} · всего записей: ${fmt(c.total)}`, `Test accounts: ${fmt(c.test_accounts)} · total records: ${fmt(c.total)}`, `测试账号：${fmt(c.test_accounts)} · 总记录：${fmt(c.total)}`)),
         kpi(`${T.kActive} · ${T.today}`, fmt(today.active_accounts), T.kActiveSub(today.new_accounts || 0), `/ ${fmt(period.active_accounts)} ${T.period(days)}`),
         spendKpi(T.today, today), spendKpi(T.week, week), spendKpi(T.period(days), period),
         kpi(T.kOnline, fmt(ov.online_devices), T.kOnlineSub(c.devices || 0, c.live_keys || 0)),
         kpi(T.kSignals, fmt((sig.sign_ins || 0) + (sig.calls || 0)), T.kSignalsSub({ sign_ins: 0, sign_in_failures: 0, budget_refusals: 0, upstream_errors: 0, content_rejected: 0, calls: 0, ...sig })),
         samplesKpi),
+      h("p", { class: "pad fine" }, L3("Статистика запросов и география включают проверочные аккаунты. Расход рассчитан по настроенным ставкам; это не банковские платежи и не выручка.", "Request statistics and geography include test accounts. Costs use configured rates; they are not bank payments or revenue.", "请求统计和地域包括测试账号。费用按配置价格估算，不是银行收款或收入。")),
       siteVisitsPanel(),
       h("div", { class: "panel" }, h("h2", {}, T.byDay(Math.min(days, 90)), h("span", { class: "sp" }), seeAll("money")), usage ? (usage._error ? h("div", { class: "empty" }, T.loadFailed(usage._error)) : dayBars(usage.days, Math.min(days, 90), s.day_offset_h, rate)) : h("div", { class: "empty" }, T.loading)),
       h("div", { class: "grid2" },
@@ -1679,6 +1677,7 @@
     const models = (period.by_model || []).filter((r) => !kind || (kinds[r.model] || r.kind || "chat") === kind);
     const top = (ov.top_accounts || []).map((t) => ({ name: t.identifier || t.hint, value: Number(t.cost_cny || 0), title: `${T.reqs(t.requests)} · ${T.tokens(t.charged)}`, onclick: () => openAccount(t.account_id) }));
     return [
+      h("div", { class: "panel pad" }, h("a", { href: "/app/usage/?admin=1&lang=" + encodeURIComponent(LANG) }, L3("Детализация моделей и состояние New API →", "Model statements and New API status →", "模型明细及 New API 状态 →"))),
       h("div", { class: "kpis" }, spendKpi(T.today, today), spendKpi(T.week, week), spendKpi(T.period(days), period)),
       h("div", { class: "panel" }, h("h2", {}, T.byDay(Math.min(days, 90))), usage ? (usage._error ? h("div", { class: "empty" }, T.loadFailed(usage._error)) : dayBars(usage.days, Math.min(days, 90), s.day_offset_h, rate)) : h("div", { class: "empty" }, T.loading)),
       h("div", { class: "grid2" },
@@ -1692,33 +1691,89 @@
           ...Object.entries(s.prices || {}).flatMap(([id, p]) => [h("b", {}, ...modelPills(id, s)), h("span", {}, h("code", {}, id), " ", T.priceLine(p))])))),
     ];
   }
-  /** Заказы кассы: оператор видит суммы, статусы и возвраты. Только чтение. */
+  let selectedPayment = "", payBusy = false, payMessage = "";
+  const paymentDetails = new Map();
+  const rubles = k => new Intl.NumberFormat(localeTag, { style: "currency", currency: "RUB", maximumFractionDigits: 2 }).format(Number(k || 0) / 100);
+  const paymentStatus = status => ({
+    CONFIRMED: L3("Оплачено", "Paid", "已支付"), REFUNDED: L3("Возвращён полностью", "Fully refunded", "已全额退款"),
+    PARTIAL_REFUNDED: L3("Частичный возврат", "Partially refunded", "部分退款"),
+    REJECTED: L3("Отклонён", "Declined", "已拒绝"), AUTH_FAIL: L3("Ошибка оплаты", "Payment failed", "支付失败"),
+    CANCELED: L3("Отменён", "Cancelled", "已取消"), REVERSED: L3("Отменён банком", "Reversed", "已撤销"),
+    NEW: L3("Ожидает оплаты", "Awaiting payment", "等待支付"), CREATING: L3("Создание требует проверки", "Creation needs checking", "需要检查创建"),
+    AUTHORIZED: L3("Авторизован, ещё не зачислен", "Authorized, not captured", "已授权，未扣款"),
+    DEADLINE_EXPIRED: L3("Срок истёк", "Expired", "已过期")
+  }[status] || status);
+  function selectPayment(id) {
+    selectedPayment = id;
+    if (!paymentDetails.has(id)) {
+      paymentDetails.set(id, null);
+      api("GET", `/v1/admin/payments/${encodeURIComponent(id)}`).then(r => paymentDetails.set(id, r), e => paymentDetails.set(id, { _error: e.message })).then(draw);
+    }
+    draw();
+  }
+  async function reconcilePayment(id) {
+    if (payBusy) return;
+    payBusy = true; payMessage = ""; draw();
+    try {
+      await api("POST", `/v1/admin/payments/${encodeURIComponent(id)}/reconcile`, {});
+      forget("payments"); paymentDetails.delete(id);
+      payMessage = L3("Статус сверен с банком", "Status reconciled with bank", "已与银行核对状态");
+      selectPayment(id);
+    } catch (e) { payMessage = e.message; }
+    finally { payBusy = false; draw(); }
+  }
+  async function morePayments(pay) {
+    if (payBusy) return;
+    payBusy = true; payMessage = ""; draw();
+    try {
+      const next = await api("GET", SOURCES.payments(days) + `&before=${pay.next_before}&before_id=${encodeURIComponent(pay.next_before_id)}`);
+      CACHE.set(cacheKey("payments"), { value: { ...pay, orders: [...pay.orders, ...next.orders], next_before: next.next_before, next_before_id: next.next_before_id } });
+    } catch (e) { payMessage = e.message; }
+    finally { payBusy = false; draw(); }
+  }
   function paymentsView() {
-    const pay = need("payments");
+    const pay = need("payments"), ready = need("readiness");
     if (pay && pay._error) return [failedPanel(T.nav.payments, "payments", pay._error)];
     if (!pay) return [loadingPanel(T.nav.payments)];
-    const rub = (k) => `₽${(Number(k || 0) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}`;
-    const sum = pay.summary || {}, by = sum.by_status || {};
-    const status = params.get("st") || "";
-    const orders = (pay.orders || []).filter((o) => !status || o.status === status);
-    return [
+    const sum = pay.summary || {}, live = sum.live || {}, demo = sum.demo || {};
+    const detail = selectedPayment ? paymentDetails.get(selectedPayment) : null;
+    const checks = (ready && ready.checks) || [];
+    const payPanel = panel(L3("Готовность к первой оплате", "First payment readiness", "首次支付准备"),
+      h("div", { class: "pad" },
+        h("p", {}, h("span", { class: "pill warn" }, L3("Реальная оплата выключена", "Live payments disabled", "正式支付已关闭"))),
+        h("p", {}, L3("Сайт → вход в аккаунт → форма Т-Банка → подтверждение сервера → баланс и тариф → чек и письмо. Возврат из банка сам по себе ничего не зачисляет.", "Website → sign-in → T-Bank → server confirmation → balance and plan → receipt and email. Returning from the bank never credits an account.", "网站、登录、银行、服务器确认、余额和套餐、收据与邮件。银行返回页面不会自行入账。")),
+        ready && ready._error ? h("p", { class: "fine" }, ready._error) : checks.length ? h("ul", { class: "readiness-checks" }, ...checks.map(c => h("li", {}, h("span", { class: "pill " + (c.ok ? "ok" : "warn") }, c.ok ? "✓" : "○"), " ", (!c.ok && c.id === "retail_pricing" ? L3("Розничные ставки ещё не включены", "Retail prices are not enabled", "零售价尚未启用") : !c.ok && c.id === "paid_entitlements" ? L3("Оплаченные права связи ещё не включены", "Paid cross-device access is not enabled", "付费设备互联权限尚未启用") : LANG === "ru" ? c.label : c.label_en)))) : h("p", {}, T.loading),
+        h("p", { class: "fine" }, L3("Тестовые платежи не дают рабочие деньги или тариф. Автоматических повторных списаний нет.", "Test payments never grant real balance or plans. No automatic recurring charges.", "测试支付不发放真实余额或套餐。没有自动续扣。")),
+        ready && ready.billing_models ? h("details", {}, h("summary", {}, L3("Настроенные ставки и тарифы", "Configured prices and plans", "已配置的价格和套餐")), h("div", { class: "kv" }, ...Object.values(ready.plans || {}).flatMap(p => [h("b", {}, p.name), h("span", {}, rubles(p.price_rub * 100) + ` · ${p.discount_pct}% · ${p.days} ` + L3("дней", "days", "天"))]), ...ready.billing_models.flatMap(m => [h("code", {}, m.id), h("span", {}, m.sell_in_rub || m.sell_out_rub ? `${m.sell_in_rub} / ${m.sell_cached_in_rub} / ${m.sell_out_rub} RUB` : L3("Розничная ставка не настроена", "Retail price not configured", "未配置零售价"))])), h("p", { class: "fine" }, L3("Ставки входа, кеша и ответа указаны за миллион токенов. Наличие цены в списке не подтверждает боевое зачисление.", "Input, cached input and output prices are per million tokens. Listed prices do not confirm live settlement.", "输入、缓存输入和输出价格按百万令牌计算。列出的价格不代表正式入账已启用。"))) : null));
+    const detailPanel = !selectedPayment ? null : panel(L3("Детали заказа", "Order details", "订单详情"), !detail ? h("div", { class: "pad" }, T.loading) : detail._error ? h("div", { class: "pad" }, detail._error) : h("div", { class: "pad" },
+      h("div", { class: "kv" },
+        h("b", {}, "Order ID"), h("code", {}, selectedPayment),
+        h("b", {}, "Payment ID"), h("code", {}, detail.order.payment_id || "—"),
+        h("b", {}, L3("Режим", "Mode", "模式")), h("span", {}, detail.order.mode),
+        h("b", {}, L3("Согласие с офертой", "Accepted terms", "条款版本")), h("span", {}, detail.order.terms_version),
+        h("b", {}, L3("Сверка журнала", "Ledger check", "账本核对")), h("span", { class: "pill " + (detail.ledger_matches ? "ok" : "bad") }, detail.ledger_matches ? L3("Сходится", "Matches", "一致") : L3("Расхождение", "Mismatch", "不一致")),
+        h("b", {}, L3("Чек", "Receipt", "收据")), h("span", {}, detail.receipt_status === "not_applicable_demo" ? L3("Не формируется в DEMO", "Not issued for DEMO", "测试不出具收据") : L3("Не подключён", "Not connected", "未连接"))),
+      h("p", { class: "fine" }, L3("Последняя сверка: ", "Last reconciliation: ", "上次核对：") + (detail.order.checked_at ? when(detail.order.checked_at) : "—")),
+      ...detail.events.map(e => h("div", { class: "row payment-event" }, h("span", { class: "txt" }, paymentStatus(e.status), h("span", { class: "sub" }, when(e.ts))), h("code", {}, rubles(e.amount_delta)))),
+      detail.order.payment_id ? h("button", { class: "btn quiet sm", disabled: payBusy ? "" : null, onclick: () => reconcilePayment(selectedPayment) }, L3("Сверить с банком", "Reconcile with bank", "与银行核对")) : null));
+    return [payPanel,
       h("div", { class: "kpis" },
-        kpi(T.payOrders, fmt(sum.orders || 0), T.period(pay.days || days)),
-        kpi(T.paySum, rub(sum.amount), T.payNote),
-        kpi(T.payRefunded, rub(sum.refunded), T.payNote)),
-      h("div", { class: "panel" },
-        h("h2", {}, T.nav.payments, h("span", { class: "pill" }, fmt(orders.length)), h("span", { class: "sp" }),
-          h("span", { class: "fine" }, T.payReadOnly)),
-        chips([["", T.payAll], ...Object.keys(by).map((k) => [k, `${k} · ${fmt(by[k].count)}`])], status, (v) => setParams({ st: v })),
-        h("div", { class: "list" }, orders.length ? orders.map((o) => h("div", { class: "row" + (o.account_id ? " tap" : ""), onclick: o.account_id ? () => openAccount(o.account_id) : null },
-          h("div", { class: "txt" },
-            h("div", { class: "t" }, o.plan || "—", " ", h("span", { class: "pill" }, o.status)),
-            h("div", { class: "s" }, `${o.hint || o.account_id.slice(0, 8)} · ${when(o.created_at)}`)),
-          h("code", {}, rub(o.amount_kopecks) + (o.refunded_amount_kopecks ? ` − ${rub(o.refunded_amount_kopecks)}` : "")),
-          o.plan_granted_at ? h("span", { class: "pill ok" }, T.payPlanIssued)
-            : o.credited ? h("button", { class: "btn quiet sm", onclick: (e) => { e.stopPropagation(); doGrantPlan(o); } }, T.payGivePlan) : null))
-          : h("div", { class: "empty" }, T.none))),
-    ];
+        kpi(L3("Реально оплачено", "Live captured", "实际收款"), rubles(live.captured), L3("Подтверждённые списания", "Confirmed captures", "已确认扣款")),
+        kpi(L3("Реально возвращено", "Live refunds", "实际退款"), rubles(live.refunded)),
+        kpi(L3("После возвратов", "Net captured", "退款后净额"), rubles(live.net), L3("До комиссии банка и расходов", "Before bank fees and expenses", "扣除手续费和费用之前")),
+        kpi(L3("DEMO отдельно", "DEMO separately", "单独测试"), rubles(demo.net), `${fmt(demo.orders)} ${L3("тестовых заказов", "test orders", "测试订单")}`)),
+      h("div", { class: "panel" }, h("h2", {}, T.nav.payments, h("span", { class: "pill" }, fmt(sum.orders)), h("span", { class: "sp" }), h("span", { class: "fine" }, T.period(days))),
+        h("div", { class: "toolbar" }, chips([["all", L3("Все", "All", "全部")], ["live", L3("Реальные", "Live", "正式")], ["demo", "DEMO"]], params.get("pmode") || "all", v => setParams({ pmode: v })),
+          h("input", { type: "search", "data-focus": "payment-search", placeholder: L3("Номер заказа или аккаунт", "Order or account", "订单或账号"), value: params.get("pq") || "", oninput: e => setParams({ pq: e.target.value }) })),
+        chips([["", T.payAll], ...["CONFIRMED", "REFUNDED", "PARTIAL_REFUNDED", "REJECTED", "NEW", "CREATING", "AUTHORIZED"].map(st => [st, paymentStatus(st)])], params.get("st") || "", v => setParams({ st: v })),
+        h("div", { class: "list" }, ...(pay.orders || []).map(o => h("button", { type: "button", class: "row payment-order", onclick: () => selectPayment(o.order_id) },
+          h("span", { class: "txt" }, h("span", { class: "t" }, (o.plan_name && o.plan_name !== o.plan ? o.plan_name : (ready && ready.plans && ready.plans[o.plan] || {}).name) || o.plan || L3("Пополнение", "Top-up", "充值"), " ", h("span", { class: "pill " + (o.test_mode ? "warn" : "ok") }, o.mode.toUpperCase())),
+            h("span", { class: "sub" }, `${o.hint || o.account_id.slice(0, 8)} · ${when(o.created_at)} · ${o.order_id.slice(0, 8)}`)),
+          h("span", {}, paymentStatus(o.status), h("span", { class: "sub" }, o.credited ? L3("Зачислено в DEMO", "Credited to DEMO", "已记入测试余额") : L3("Без зачисления", "Not credited", "未入账"))),
+          h("code", {}, rubles(o.amount_kopecks), o.refunded_amount_kopecks ? h("span", { class: "sub" }, L3("Возврат: ", "Refund: ", "退款：") + rubles(o.refunded_amount_kopecks)) : null))),
+          !(pay.orders || []).length ? h("div", { class: "empty" }, T.none) : null),
+        pay.next_before ? h("div", { class: "more" }, h("button", { class: "btn quiet sm", disabled: payBusy ? "" : null, onclick: () => morePayments(pay) }, T.loadMore)) : null),
+      payMessage ? h("p", { role: "status", class: "pad" }, payMessage) : null, detailPanel];
   }
   function activityView() {
     const sr = need("series");
@@ -1790,7 +1845,75 @@
       h("div", { class: "fine", style: "padding:0 16px 12px" }, T.syNote));
   }
   function dataView() { const dv = need("data"); return [!dv ? loadingPanel(T.data(days)) : dv._error ? failedPanel(T.data(days), "data", dv._error) : dataPanel(dv), syncPanel()]; }
-  function siteView() { const tr = need("traffic"); return [githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
+  function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
+  /** Цены поставщиков: одна таблица, у кого на каждую модель дешевле. */
+  function providersView() {
+    const title = L3("Цены поставщиков", "Provider prices", "供应商价格");
+    const pv = need("providers");
+    if (!pv) return loadingPanel(title);
+    if (pv._error) return failedPanel(title, "providers", pv._error);
+    const q = (params.get("pq") || "").toLowerCase();
+    const all = pv.models || [];
+    const rows = all.filter((m) => !q || (m.key || "").includes(q) ||
+      (m.name || "").toLowerCase().includes(q) || (m.cheapest || "").includes(q))
+      // сначала то, что продают несколько поставщиков: там и есть выбор
+      .sort((a, b) => ((b.offers || []).length - (a.offers || []).length) ||
+        String(a.key).localeCompare(String(b.key)));
+    const provs = pv.providers || [];
+    const cur = (n) => (n == null ? "" : fmt(Math.round(n * 100) / 100));
+    const refresh = async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      b.textContent = L3("Собираю…", "Collecting…", "采集中…");
+      try { await api("POST", "/v1/admin/provider-prices/refresh", {}); } catch (err) { alert(err.message); }
+      const was = pv.generated_at;
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        forget("providers");
+        let v = null;
+        try { v = await api("GET", "/v1/admin/provider-prices"); } catch (_) { v = null; }
+        if (v && v.generated_at && v.generated_at !== was) break;
+      }
+      forget("providers");
+      draw();
+    };
+    return panel([title, h("span", { class: "fine" },
+        ` · ${L3("собрано", "collected", "采集于")} ${(pv.generated_at || "—").slice(0, 16).replace("T", " ")} UTC`)],
+      h("div", { class: "kpis", style: "padding:12px 16px 4px" },
+        kpi(L3("Моделей в сравнении", "Models compared", "对比模型"), fmt(all.length)),
+        kpi(L3("Поставщиков", "Providers", "供应商"), `${fmt(provs.filter((x) => x.ok).length)}/${fmt(provs.length)}`),
+        kpi(L3("Курс доллара", "Dollar rate", "美元汇率"), fmt(pv.usd_rub),
+            pv.rate_source === "cbr" ? L3("ЦБ РФ", "Central Bank", "央行") : "")),
+      h("div", { class: "fine", style: "padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
+        h("span", { class: "search" }, h("input", { type: "search", "data-focus": "providers-q",
+          placeholder: L3("Модель или поставщик…", "Model or provider…", "模型或供应商…"),
+          value: params.get("pq") || "", oninput: (e) => setParams({ pq: e.target.value }) })),
+        h("button", { class: "btn quiet sm", onclick: refresh }, L3("Обновить данные", "Refresh", "刷新")),
+        ...provs.flatMap((x) => [h("b", { title: x.note || "" }, x.name), x.ok ? "✓ " : "× "])),
+      rows.length ? h("div", { class: "ledger sticky", style: "max-height:620px;overflow:auto" }, h("table", {},
+        h("thead", {}, h("tr", {},
+          h("th", {}, L3("Модель", "Model", "模型")),
+          h("th", {}, L3("Единица", "Unit", "单位")),
+          h("th", { class: "num" }, L3("Дешевле, ₽", "Cheapest, ₽", "最低价 ₽")),
+          h("th", {}, L3("У кого", "Where", "供应商")),
+          h("th", { class: "num hide-sm" }, L3("Разброс, ₽", "Spread, ₽", "差价 ₽")),
+          h("th", { class: "hide-sm" }, L3("Все предложения", "All offers", "全部报价")))),
+        h("tbody", {}, ...rows.slice(0, 500).map((m) => h("tr", {},
+          h("td", {}, m.name || m.key),
+          h("td", { class: "fine" }, m.unit || ""),
+          h("td", { class: "num" }, cur(m.cheapest_rub)),
+          h("td", {}, h("b", {}, m.cheapest || "")),
+          h("td", { class: "num hide-sm" }, m.spread ? cur(m.spread) : ""),
+          h("td", { class: "hide-sm fine" },
+            (m.offers || []).map((o) => `${o.provider} ${cur(o.rub)}`).join(" · ")))))))
+      : h("div", { class: "empty" }, L3("Ничего не нашлось.", "Nothing found.", "没有找到。")),
+      h("div", { class: "pad fine" },
+        L3("Доллары пересчитаны по курсу ЦБ. Цены за 1M токенов и за штуку генерации не сравниваются между собой — единица указана в третьем столбце. Новый поставщик добавляется функцией в provider_prices.py.",
+           "Dollars are converted at the Central Bank rate. Per-1M-token and per-generation prices are not comparable —\
+ the unit is in its own column. A new provider is a function in provider_prices.py.",
+           "美元按央行汇率换算。按 1M token 与按次的价格不可直接比较，单位在第 3 列。新增供应商只需在 provider_prices.py 里加函数。")));
+  }
+
   function modelsView() { const cv = need("catalog"); return !cv ? loadingPanel(T.catalog) : cv._error ? failedPanel(T.catalog, "catalog", cv._error) : catalogPanel(cv); }
   function healthView() {
     const hv = need("health");
@@ -2073,7 +2196,7 @@
   async function statCsv(id) {
     const r = await fetch(`/v1/admin/stats/${id}.csv?days=${days}`, { headers: { "X-Admin-Token": token } }).catch(() => null);
     if (!r || !r.ok) { alert(T.loadFailed(r ? r.statusText : T.offline)); return; }
-    download(new Blob(["\ufeff" + await r.text()], { type: "text/csv;charset=utf-8" }), `nanomuse-${id}-${new Date().toISOString().slice(0, 10)}.csv`);
+    download(new Blob(["\ufeff" + await r.text()], { type: "text/csv;charset=utf-8" }), `nanolika-${id}-${new Date().toISOString().slice(0, 10)}.csv`);
   }
   function statPanel(m) {
     const title = dataText(m, "title"), how = dataText(m, "how");
@@ -2145,13 +2268,13 @@
         h("div", {}, h("h3", {}, T.gh.releases), rankRows((latest.releases || []).map((r) => ({ name: r.tag, hits: r.downloads }))))),
       h("div", { class: "fine", style: "padding:0 16px 12px" }, T.gh.note));
   }
-  const RENDER = { overview: overviewView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
+  const RENDER = { overview: overviewView, providers: providersView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
 
   // ── the shell: bar, nav, one view ──────────────────────────────
   function drawMain() {
     const c = ov.accounts || {};
     const hv = CACHE.get(cacheKey("health")), problems = hv && hv.value && !hv.value._error ? (hv.value.problems || []).length : 0;
-    const badge = { people: fmt(c.total || 0), health: problems ? String(problems) : "" };
+    const badge = { people: fmt(c.customers ?? c.total ?? 0), health: problems ? String(problems) : "" };
     const nav = h("nav", { class: "side" }, ...VIEWS.map((v) => h("a", { class: (v === view ? "on" : "") + (v === "health" && problems ? " alert" : ""), href: `#${v}`, onclick: (e) => { if (v === view) { e.preventDefault(); params = new URLSearchParams(); history.replaceState(null, "", `#${v}`); draw(); } } },
       h("span", { class: "ic", html: NAV_ICON[v] }), T.nav[v], badge[v] ? h("span", { class: "badge" }, badge[v]) : null)));
     const body = [].concat(RENDER[view]()).filter(Boolean);
