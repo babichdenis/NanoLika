@@ -11,3 +11,8 @@ html,body{height:auto;min-height:100%}html{scroll-padding-top:24px}body{margin:0
 /* подсказка не должна быть заперта в рамке графика: ширина считается от окна, а не от
    контейнера, и всплывающий слой может выйти за его пределы */
 .usage-chart{position:relative;overflow:visible}.usage-tooltip{position:absolute;z-index:20;width:min(360px,calc(100vw - 24px));max-width:none;padding:16px;background:var(--surface,#fffdf8);border:1px solid var(--hairline);border-radius:16px;box-shadow:0 12px 36px rgba(45,52,42,.12);pointer-events:none;font-size:13px}.usage-tooltip[hidden]{display:none}.usage-tooltip-title{display:flex;justify-content:space-between;gap:16px;margin-bottom:10px}.usage-tooltip-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:6px}.usage-tooltip-row>span:nth-child(2){overflow-wrap:anywhere}.usage-tooltip-row strong{white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* Signing out is a regular sage action in the site palette. */
+#logout{background:#e4e8d8;color:#40563b;border:1px solid #a8b39b;border-radius:9px;padding:11px 18px;min-height:44px;box-shadow:1px 2px 0 #52694e18}
+#logout:hover{background:#d8dfc8}
+#logout:focus-visible{outline:3px solid #72836a;outline-offset:3px}

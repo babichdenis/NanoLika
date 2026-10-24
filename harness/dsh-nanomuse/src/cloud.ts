@@ -4021,7 +4021,7 @@ function sameModels(a: RelayModel[], b: RelayModel[]): boolean {
   const key = (models: RelayModel[]) =>
     models
       .filter((m) => m.kind === 'chat')
-      .map((m) => `${m.id}:${m.name}:${m.inputModalities.join(',')}`)
+      .map((m) => `${m.id}:${m.name}:${m.inputModalities.join(',')}:${m.contextLength ?? 0}:${m.maxOutput ?? 0}`)
       .sort()
       .join('|')
   return key(a) === key(b)

@@ -253,3 +253,62 @@ html[data-theme="dark"] .banner { color: #ffd48a; }
   .chat .head .back { display: grid; }
   .chat.hidden { display: none; }
 }
+
+/* Site palette, with gently rounded paper and controls. */
+.signin .card{border-radius:14px;box-shadow:3px 5px 0 #e5ddcb66,0 18px 55px #55503b10}
+.signin .in{border-radius:9px;overflow:hidden}
+.signin .seg{border-radius:10px}
+.signin .seg button{border-radius:7px}
+.signin .btn,.signin .btn.ghost,.signin .btn.yandex,.signin .btn.oauth-provider{border-radius:9px}
+
+/* Entry actions share the marketing site's pencil-and-paper button treatment. */
+.signin .btn,.signin .btn.ghost,.signin .btn.yandex,.signin .btn.oauth-provider{position:relative;isolation:isolate;overflow:visible;background:transparent;border:0;border-radius:0;min-height:54px;padding:13px 20px;font:600 24px/1.15 LikaHand,'Segoe Print',cursive;color:#fbf6e9;box-shadow:none}
+.signin .btn::before{content:'';position:absolute;inset:0;z-index:-1;background-color:#536a4c;background-image:repeating-linear-gradient(165deg,transparent 0 3px,#e8edd812 3px 4px);border-radius:6% 4% 5% 3%/14% 17% 10% 13%;transform:rotate(-.8deg);box-shadow:1px 2px 2px #70806833;pointer-events:none}
+.signin .btn::after{content:'';position:absolute;inset:3px -2px -3px 3px;z-index:-2;border:1px solid #52694e55;border-radius:5%;transform:rotate(.5deg);pointer-events:none}
+.signin .btn:hover{background:transparent}.signin .btn:hover::before{background-color:#40583b}
+.signin .btn.ghost,.signin .btn.yandex,.signin .btn.oauth-provider{color:#40563b}
+.signin .btn.ghost::before,.signin .btn.yandex::before,.signin .btn.oauth-provider::before{background-color:#e4e8d8}
+.signin .btn.ghost:hover::before,.signin .btn.yandex:hover::before,.signin .btn.oauth-provider:hover::before{background-color:#d8dfc8}
+.signin .btn:disabled{cursor:default}.signin .btn:disabled::before{background-color:#788470}
+.signin .seg{background:transparent;border-bottom:1px solid #bfc7b077;padding:0 0 6px;gap:12px;border-radius:0}
+.signin .seg button{position:relative;background:transparent;font:600 23px/1.2 LikaHand,'Segoe Print',cursive;border-radius:0;box-shadow:none}
+.signin .seg button.on{background:transparent;box-shadow:none;color:#40563b}
+.signin .seg button.on::after{content:'';position:absolute;bottom:2px;left:16%;right:16%;height:2px;background:#72836a99;border-radius:50%;transform:rotate(-1deg)}
+.signin .oauth-google{font:bold 21px/1 Arial,sans-serif}
+
+.auth-intro{display:flex;align-items:center;gap:8px}.auth-intro img{width:96px;height:128px;object-fit:contain;mask-image:none}@media(max-width:500px){.auth-intro img{width:84px;height:112px}}
+
+/* Lika leans over the page; her face stays legible without a separate hero. */
+.signin{padding-top:64px}
+.signin .card{overflow:visible}
+.auth-home{display:flex;justify-content:flex-end;margin-left:auto;width:max-content}
+.auth-intro{position:relative;min-height:124px;margin:10px -8px 14px;display:flex;align-items:center;gap:0}
+.auth-intro img{position:absolute;left:-82px;top:-44px;width:270px;height:180px;object-fit:contain;mask-image:none;pointer-events:none;z-index:1}
+.auth-intro>div{position:relative;z-index:2;margin-left:130px}
+.signin h1{font-size:39px}
+@media(max-width:500px){.signin{padding-top:34px}.auth-intro{min-height:118px;margin-top:6px}.auth-intro img{left:-43px;top:-21px;width:220px;height:147px}.auth-intro>div{margin-left:122px}.signin h1{font-size:35px}.auth-brand{font-size:25px}}
+@media(max-width:350px){.auth-intro img{left:-37px;top:-10px;width:190px;height:127px}.auth-intro>div{margin-left:102px}.signin h1{font-size:31px}.auth-brand{font-size:23px}}
+.auth-intro>div{margin-left:148px}
+@media(max-width:500px){.auth-intro img{top:-27px}.auth-intro>div{margin-left:140px;padding-top:8px}.signin h1{font-size:32px}}
+@media(max-width:350px){.auth-intro>div{margin-left:110px;padding-top:8px}.signin h1{font-size:29px}}
+
+.auth-intro img{top:-60px}@media(max-width:500px){.auth-intro img{top:-43px}}@media(max-width:350px){.auth-intro img{top:-26px}}
+
+/* One composition: a portrait behind the top edge of a paper sign-in sheet. */
+.signin{padding:28px 20px 40px;background:#f7f1e6;isolation:isolate}
+.signin .card{position:relative;isolation:isolate;width:min(464px,100%);padding:0 34px 30px;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}
+.signin .card::before{content:'';position:absolute;inset:146px 0 0;z-index:-1;border:1px solid #d1cbb9;border-radius:14px;background:#fbf6ec;box-shadow:3px 5px 0 #e5ddcb66,0 18px 55px #55503b10;transform:none;pointer-events:none}
+.auth-home{position:relative;display:flex;width:max-content;margin:0 0 0 auto;min-height:32px;justify-content:flex-end;z-index:3}
+.auth-intro{position:relative;display:block;min-height:0;margin:0 0 16px;padding-top:128px;text-align:center}
+.auth-intro img{position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:246px;height:164px;object-fit:contain;mask-image:none;pointer-events:none;z-index:1}
+.auth-intro>div{position:relative;z-index:2;margin:0;padding:0}
+.auth-brand{font:600 25px/1.15 LikaHand,Georgia,serif;color:#647b55;margin:0 0 3px}
+.signin h1{margin:0;font:600 43px/1.08 LikaHand,Georgia,serif;color:#34412f;letter-spacing:0}
+.signin p.sub{text-align:center;font-size:14px;line-height:1.65;margin:0 0 20px;color:#59634f}
+.signin .seg{margin-bottom:20px}
+@media(max-width:500px){.signin{padding:16px 14px 30px;align-items:start}.signin .card{padding:0 24px 25px}.signin .card::before{top:135px}.auth-intro{padding-top:116px;margin:0 0 14px}.auth-intro img{left:50%;top:-26px;width:228px;height:152px}.auth-intro>div{margin:0;padding:0}.auth-brand{font-size:24px}.signin h1{font-size:40px}.signin p.sub{font-size:14px;margin-bottom:18px}}
+@media(max-width:350px){.signin .card{padding-inline:19px}.auth-intro img{left:50%;top:-26px;width:228px;height:152px}.auth-intro>div{margin:0;padding:0}.signin h1{font-size:36px}}
+
+/* Focus belongs to the complete field, not the input clipped inside it. */
+.signin .in input:focus,.signin .in input:focus-visible{outline:none;box-shadow:none}
+.signin .in:focus-within{border-color:#72836a;background:#fffdf8;box-shadow:0 0 0 3px #72836a26;overflow:visible}

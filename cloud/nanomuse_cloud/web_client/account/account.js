@@ -49,10 +49,13 @@ async function load(){
 $('refresh').onclick=load;
 $('password-form').onsubmit=async e=>{e.preventDefault();const password=$('new-password').value,status=$('password-status'),button=e.currentTarget.querySelector('button');status.textContent='';if(password.length<minPassword){status.textContent=`${T.short}: ${minPassword} ${T.characters}`;return;}if(password!==$('repeat-password').value){status.textContent=T.mismatch;return;}button.disabled=true;try{await api('/v1/auth/password',{method:'POST',body:JSON.stringify({password,current:me.account.has_password?$('current-password').value:undefined})});e.target.reset();await load();status.textContent=T.saved;}catch(_){status.textContent=T.passwordError;}finally{button.disabled=false;}};
 $('language').onchange=()=>{try{localStorage.setItem('nl.web.language',$('language').value);}catch{}location.reload();};
-$('logout').onclick=async()=>{const b=$('logout');b.disabled=true;try{await api('/v1/auth/sign-out',{method:'POST',body:'{}'});}catch{}try{localStorage.removeItem(sessionKey);}catch{}location.replace(fromConsole?'/app/':'../');};
+$('logout').onclick=async()=>{const b=$('logout');b.disabled=true;try{await api('/v1/auth/sign-out',{method:'POST',body:'{}'});}catch{}try{localStorage.removeItem(sessionKey);}catch{}location.replace('/v1/auth/logout?next='+encodeURIComponent(location.origin+'/app/?signin=1&next='+encodeURIComponent(location.origin+'/web/')));};
 $('clear-data').onclick=async()=>{if(!confirm(T.clearConfirm))return;const b=$('clear-data');b.disabled=true;$('status').textContent=T.deleting;try{await clearOwner(session.owner);location.href=fromConsole?'/app/':'../';}catch(_){$('status').textContent=T.error;b.disabled=false;}};
 const autopay=installAutopay({lang,request:api});
 const usageChart=installUsageChart({lang,request:api});
 const paymentDialog=installPaymentDialog({lang,request:api,getSession:()=>session,fromConsole});
 addEventListener('storage',e=>{if(e.key===sessionKey||!e.key){paymentDialog.close();$('private-content').hidden=true;$('identity').textContent='';location.reload();}});
 load();
+
+let installOffer=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installOffer=e;});
+$('install-app').onclick=async()=>{if(installOffer){await installOffer.prompt();await installOffer.userChoice;installOffer=null;}else{$('install-note').textContent=lang==='en'?'Use your browser menu to install the app or add it to your home screen.':'В меню браузера выберите «Установить приложение» или «На экран Домой».';}};

@@ -735,7 +735,14 @@ def create_app(
 
     @app.get("/v1/me")
     async def me(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
-        return cloud.me(caller, client_place(request))
+        result = cloud.me(caller, client_place(request))
+        # Only the authenticated owner receives their own stored email.
+        account = cloud.db.account(caller.account_id)
+        email = ""
+        if account is not None and account["channel"] == "email" and account["identifier_enc"]:
+            email = cloud.crypto.decrypt(caller.account_id, account["identifier_enc"]) or ""
+        result["account"]["email"] = email
+        return result
 
     @app.get("/v1/me/invite")
     async def me_invite(caller: Caller = Depends(caller_dep)) -> dict:
