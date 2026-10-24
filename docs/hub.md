@@ -75,20 +75,6 @@ Two kinds of request travel over the hub:
   {approval_id, preview, risk, reason, device, timeout, grant_key}` and, once decided on
   either side, `approval_result {approval_id, status}`, `text {text, interim}`
   for what the Muse says along the way, `image` and `file` for things it made,
-<<<<<<< ours
-  `error`. The `result` frame carries the final answer.
-
-- **The account's memory.** `memory.add {content, category?}`,
-  `memory.search {query, limit?}` and `memory.forget {id | query}`: the facts
-  about the person, kept in one place by the runtime on the always-on computer
-  and read or written from every other device, so a fact said to the bot is
-  known in a chat on the computer and the other way round. A device finds the
-  keeper by `info` naming `memory.add`; a caller with no keeper online is
-  refused rather than writing a copy only one machine can see. These three are
-  reads and writes of shared facts, not operations of the computer, so they
-  work with `remote_control` off; a computer with `[memory] enabled = false`
-  answers `not_available`.
-=======
   `error`. The `result` frame carries the final answer. A caller draws a `text` in place of the
   text since the last `tool`, so a target may send the growing text of one message more than
   once and the caller shows it as it grows; a target that sends each message once is shown the same.
@@ -97,7 +83,6 @@ Two kinds of request travel over the hub:
   the desktop the tool and its whole main argument; a sender without it is remembered
   by the first 60 characters of `preview`, as before, which two different steps can share.
 
->>>>>>> theirs
 - **Coding agents.** `coding.agents`, `coding.sessions`, `coding.session`,
   `coding.send`, `coding.stop`, `coding.runs`: the Cursor / Codex / Claude Code
   sessions on a computer, read from disk and steered through the agents' own
