@@ -15,7 +15,10 @@ from fastapi import Depends, Query, Response
 KINDS = "('chat','image','video','realtime')"
 
 
-def capture_metadata(headers: Any, obj: Any = None) -> dict:
+def capture_metadata(
+    headers: Any, obj: Any = None, *, provider: str = "",
+    usd_rub: float = 0, usd_fee_pct: float = 0,
+) -> dict:
     meta = {}
     gateway_id = headers.get("x-oneapi-request-id", "")
     if isinstance(gateway_id, str) and gateway_id and len(gateway_id) <= 160:
@@ -26,6 +29,24 @@ def capture_metadata(headers: Any, obj: Any = None) -> dict:
             meta["upstream_model"] = model[:160]
         usage = obj.get("usage")
         amount = usage.get("cost_rub") if isinstance(usage, dict) else None
+        if amount is None and provider in {"polza", "routerai", "aitunnel"} and isinstance(usage, dict):
+            amount = usage.get("cost")  # These suppliers publish usage.cost in RUB.
+        inference_provider = obj.get("provider")
+        if isinstance(inference_provider, str) and inference_provider:
+            meta["inference_provider"] = inference_provider[:160]
+        if amount is None and provider == "openrouter" and isinstance(usage, dict):
+            raw_usd = usage.get("cost")
+            if not isinstance(raw_usd, bool):
+                try:
+                    usd = float(raw_usd)
+                    if math.isfinite(usd) and 0 <= usd <= 10_000 and usd_rub > 0:
+                        meta["provider_cost_usd"] = usd
+                        meta["provider_fx_rub_per_usd"] = usd_rub
+                        meta["provider_funding_fee_pct"] = usd_fee_pct
+                        meta["provider_cost_basis"] = "reported_usd_converted"
+                        amount = usd * usd_rub * (1 + usd_fee_pct / 100)
+                except (ValueError, TypeError, OverflowError):
+                    pass
         if not isinstance(amount, bool) and isinstance(amount, (int, float, str)):
             try:
                 value = float(amount)
@@ -151,7 +172,8 @@ def statement(
         row["gateway_request_id"] = gateway_id[:160] if isinstance(gateway_id, str) else None
         if row["gateway_request_id"]:
             gateway_ids.append(row["gateway_request_id"])
-        row["provider"] = None
+        supplier = meta.get("provider")
+        row["provider"] = supplier[:80] if isinstance(supplier, str) else None
         row["request_id"] = str(row["request_id"] or "")[:160]
     matches = gateway_matches(gateway_ids)
     for row in records:

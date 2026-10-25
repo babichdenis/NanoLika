@@ -177,7 +177,9 @@ async def test_cached_prompt_tokens_cost_their_cached_rate():
     # 1 000 fresh at ¥2/M + 9 000 cached at ¥0.2/M + 100 out at ¥8/M
     whole = 1_000 * 2 + 9_000 * 0.2 + 100 * 8
     me = (await client.get("/v1/me", headers=auth)).json()
-    assert me["recent"][0]["cost_cny"] == round(whole / M, 4) and me["recent"][0]["detail"] == {"cached_tokens": 9_000}
+    assert me["recent"][0]["cost_cny"] == round(whole / M, 4)
+    assert me["recent"][0]["detail"]["cached_tokens"] == 9_000
+    assert me["recent"][0]["detail"]["model_accounting"]["provider"] == "configured_upstream"
     assert me["recent"][0]["prompt_tokens"] == 10_000 and me["recent"][0]["completion_tokens"] == 100
     assert me["spend"]["total"] == round(whole / M, 4)
     # the same turn with the cache ignored would have cost four and a half times as much
@@ -186,7 +188,9 @@ async def test_cached_prompt_tokens_cost_their_cached_rate():
     r = await client.post("/v1/chat/completions", headers=auth, json={"model": "deepseek-v4.1-flash", "messages": messages, "stream": True})
     assert r.status_code == 200 and "[DONE]" in r.text
     me = (await client.get("/v1/me", headers=auth)).json()
-    assert me["recent"][0]["cost_cny"] == round(whole / M, 4) and me["recent"][0]["detail"] == {"cached_tokens": 9_000}
+    assert me["recent"][0]["cost_cny"] == round(whole / M, 4)
+    assert me["recent"][0]["detail"]["cached_tokens"] == 9_000
+    assert me["recent"][0]["detail"]["model_accounting"]["provider"] == "configured_upstream"
     assert me["spend"]["total"] == round(2 * whole / M, 4)
     # the Qwen model's rate is 20 %
     r = await client.post("/v1/chat/completions", headers=auth, json={"model": "qwen3.8-27b", "messages": messages})

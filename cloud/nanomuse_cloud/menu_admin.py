@@ -89,7 +89,7 @@ def _load_selection(settings: Any) -> dict:
     return data
 
 
-def install(app: Any, settings: Any, admin_dep: Any) -> None:
+def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None) -> None:
     """Включает прилавок в релей: чтение рынка и сохранение выбора."""
 
     @app.get("/v1/admin/menu", dependencies=[Depends(admin_dep)])
@@ -102,6 +102,9 @@ def install(app: Any, settings: Any, admin_dep: Any) -> None:
         for row in market:
             found = verdict(row["name"], kind_of(row["unit"]), row["cheapest_rub"])
             saved = chosen.get(row["name"]) or {}
+            spec = next((m for m in settings.models if row["name"] in {m.id, m.upstream, m.name}), None)
+            if spec is not None and cloud is not None:
+                saved = dict(saved, on=cloud.model_visible(spec))
             if not found.keep:
                 reasons[found.reason] = reasons.get(found.reason, 0) + 1
             models.append(
@@ -140,7 +143,14 @@ def install(app: Any, settings: Any, admin_dep: Any) -> None:
         path = _selection_path(settings)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"saved_at": int(time.time()), "models": models}
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+        temp.replace(path)
+        if cloud is not None:
+            for name, value in models.items():
+                spec = next((m for m in settings.models if name in {m.id, m.upstream, m.name}), None)
+                if spec is not None:
+                    cloud.set_model_visibility(spec.id, bool(value["on"]) and bool(spec.available))
         return {"saved": len(models), "on": sum(1 for m in models.values() if m["on"]), "path": str(path)}
 
 

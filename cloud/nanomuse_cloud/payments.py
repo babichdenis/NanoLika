@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .fiscal import FiscalConfig
 
 PLANS = {
-    "lika": {"name": "Лика", "amount": 59000, "discount": 20, "connect": False},
+    "lika": {"name": "Лика", "amount": 59000, "discount": 10, "connect": False},
     "plus": {"name": "Лика+", "amount": 149000, "discount": 20, "connect": True},
     "team": {"name": "Лика Команда", "amount": 390000, "discount": 30, "connect": True},
 }

@@ -12,9 +12,9 @@
 
     GET /v1/admin/prices  — всё выше одним ответом
 
-Ничего не пишет: страница для решения, а не для продажи. Прайс продажи живёт в
-конфигурации релея (`sell_in`/`sell_out` у модели), и меняется она конфигом, а не
-этой страницей.
+Галочки сохраняют видимость моделей в базе. Закупочные котировки и балансы
+обновляются через provider_routing. Прайс продажи остаётся в конфигурации релея;
+обновление закупки не меняет обещанные клиенту ставки.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 PROVIDERS_DIR = Path(__file__).resolve().parent / "console" / "providers"
 
@@ -262,7 +262,7 @@ def _retail() -> dict:
     }
 
 
-def install(app: Any, settings: Any, admin_dep: Any) -> None:
+def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, router: Any = None) -> None:
     """Включает страницу цен в релей."""
 
     @app.get("/v1/admin/prices", dependencies=[Depends(admin_dep)])
@@ -270,10 +270,57 @@ def install(app: Any, settings: Any, admin_dep: Any) -> None:
         prices = _read("prices.json")
         rate = _rate(settings, prices)
         models = _models(settings, float(rate["cny_rub"] or 0))
+        if router is not None:
+            for row, spec in zip(models, settings.models, strict=True):
+                if cloud is not None:
+                    row["listed"] = cloud.model_visible(spec)
+                if spec.kind != "chat":
+                    continue
+                body = {"model": spec.upstream, "messages": [{"role": "user", "content": "a" * 3000}], "max_tokens": 512}
+                routes = router.routes(spec, body, "", {})
+                offers = []
+                for route in routes:
+                    if route.offer is not None:
+                        offer = route.offer
+                        offers.append({"provider": route.provider, "model": offer.model,
+                                       "input_rub": offer.input_rub, "output_rub": offer.output_rub,
+                                       "cached_rub": offer.cached_rub, "updated": offer.updated,
+                                       "endpoint": offer.endpoint,
+                                       "estimated_rub": offer.estimate(1000, 512)})
+                row["routing"] = {"offers": offers, "selected": offers[0]["provider"] if offers else None,
+                                  "basis": "1000 input + 512 output, no cache, no tools"}
+                if offers:
+                    selected = offers[0]
+                    row["cost"]["rub_in"] = selected["input_rub"]
+                    row["cost"]["rub_out"] = selected["output_rub"]
+                    row["ratio"] = {
+                        "in": row["sell"]["rub_in"] / selected["input_rub"] if selected["input_rub"] else None,
+                        "out": row["sell"]["rub_out"] / selected["output_rub"] if selected["output_rub"] else None,
+                    }
+        actuals = {}
+        if cloud is not None:
+            with cloud.db._lock:
+                entries = cloud.db._conn.execute(
+                    "SELECT model,ts,prompt_tokens,completion_tokens,extra FROM ledger "
+                    "WHERE kind='chat' AND ts>=? ORDER BY id DESC LIMIT 3000", (int(time.time()) - 7 * 86400,)
+                ).fetchall()
+            for entry in entries:
+                try:
+                    meta = json.loads(entry["extra"] or "{}").get("model_accounting", {})
+                except (ValueError, AttributeError):
+                    continue
+                if not meta.get("provider") or entry["model"] in actuals:
+                    continue
+                actuals[entry["model"]] = {"provider": meta["provider"], "at": entry["ts"],
+                    "cost_rub": meta.get("provider_cost_rub"), "basis": meta.get("provider_cost_basis"),
+                    "input_tokens": entry["prompt_tokens"], "output_tokens": entry["completion_tokens"]}
+        for row in models:
+            row["last_request"] = actuals.get(row["id"])
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]
         return {
+            "routing": router.status() if router is not None else None,
             "rate": rate,
             "generated_at": _mtime("prices.json"),
             "count": {
@@ -288,3 +335,18 @@ def install(app: Any, settings: Any, admin_dep: Any) -> None:
             "retail": _retail(),
             "drafts": drafts,
         }
+
+    @app.put("/v1/admin/prices/models/{model_id}/visibility", dependencies=[Depends(admin_dep)])
+    async def model_visibility(model_id: str, body: dict) -> dict:
+        if cloud is None:
+            raise HTTPException(503, "Model visibility storage is unavailable")
+        spec = settings.model(model_id)
+        if spec is None:
+            raise HTTPException(404, "Unknown model")
+        if not isinstance(body.get("visible"), bool):
+            raise HTTPException(422, "visible must be a boolean")
+        if body["visible"] and not spec.available:
+            raise HTTPException(409, "This model is unavailable")
+        cloud.set_model_visibility(spec.id, body["visible"])
+        cloud.note("", "model.visibility", f"{spec.id}: {body['visible']}")
+        return {"id": spec.id, "visible": cloud.model_visible(spec)}

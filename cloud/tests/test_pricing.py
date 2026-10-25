@@ -72,7 +72,7 @@ def test_a_running_tariff_takes_its_share_off_the_money():
     cloud.plan_buy(caller.account_id, "lika")
     cloud.charge_chat(caller, model, MILLION, 0, "r2")
     with_plan = lines(cloud, caller.account_id)[-1][1]
-    assert with_plan == pytest.approx(plain * 0.8, rel=0.001)
+    assert with_plan == pytest.approx(plain * 0.9, rel=0.001)
     cloud.plan_buy(caller.account_id, "team")
     cloud.charge_chat(caller, model, MILLION, 0, "r3")
     with_team = lines(cloud, caller.account_id)[-1][1]

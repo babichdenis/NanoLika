@@ -46,7 +46,7 @@ def test_the_menu_is_the_operators_three_tariffs(monkeypatch=None):
     _client, cloud, _sender = stack()
     menu = {row["id"]: row for row in cloud.plan_menu()}
     assert list(menu) == ["lika", "lika-plus", "team"]
-    assert menu["lika"]["price_rub"] == 590 and menu["lika"]["discount_pct"] == 20
+    assert menu["lika"]["price_rub"] == 590 and menu["lika"]["discount_pct"] == 10
     assert menu["lika"]["connect"] is False
     assert menu["lika-plus"]["price_rub"] == 1490 and menu["lika-plus"]["connect"] is True
     assert menu["team"]["price_rub"] == 3900 and menu["team"]["discount_pct"] == 30
@@ -87,7 +87,7 @@ def test_the_discount_is_what_the_tariff_says():
     cloud.plan_buy(lika, "lika")
     cloud.plan_buy(team, "team")
     assert cloud.discount(1000, plain) == 1000
-    assert cloud.discount(1000, lika) == 800
+    assert cloud.discount(1000, lika) == 900
     assert cloud.discount(1000, team) == 700
     # a spend smaller than a hundred is still a spend
     assert cloud.discount(3, lika) == 3

@@ -2041,7 +2041,7 @@ class Cloud:
         kind, the modalities and the lanes all come from the relay's one declaration."""
         models = []
         for spec in self.s.models:
-            if not spec.listed:
+            if not self.model_visible(spec):
                 continue
             models.append(
                 {
@@ -2072,7 +2072,7 @@ class Cloud:
         shelf = self.shelf(caller.account_id)
         models = []
         for spec in self.s.models:
-            if not spec.listed:
+            if not self.model_visible(spec):
                 continue
             models.append(
                 {
@@ -2303,7 +2303,7 @@ class Cloud:
                 "bonus_available": False,
                 "bonus_at": caller.contribute_bonus_at,
             },
-            "models": [m.to_public() for m in self.s.public_models],
+            "models": [m.to_public() for m in self.visible_models()],
             "base_url": self.s.public_base,
             "recent": [self._ledger_row(r) for r in self.db.recent_ledger(caller.account_id)],
             # 0.18: when the app may ask for a star (the same object as GET /v1/nudges), so a
@@ -2394,11 +2394,35 @@ class Cloud:
         more = ", or any model of the provider's by its id" if self.any_model(caller) else ""
         raise CloudError(404, "model_not_offered", f"NanoLika Cloud does not offer {model_id!r}; choose one of: {offered}{more}")
 
+    def model_visible(self, spec: ModelSpec) -> bool:
+        saved = self.db.settings_get("model_visibility")
+        choices = saved[0] if saved and isinstance(saved[0], dict) else {}
+        return bool(choices.get(spec.id, spec.listed)) and bool(spec.available)
+
+    def visible_models(self) -> list[ModelSpec]:
+        return [m for m in self.s.public_models if self.model_visible(m)]
+
+    def set_model_visibility(self, model_id: str, visible: bool) -> None:
+        with self.db.tx() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='model_visibility'").fetchone()
+            try:
+                choices = json.loads(row[0]) if row else {}
+            except (ValueError, TypeError):
+                choices = {}
+            if not isinstance(choices, dict):
+                choices = {}
+            choices[model_id] = visible
+            conn.execute(
+                "INSERT INTO settings(key,value,updated_at) VALUES ('model_visibility',?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+                (json.dumps(choices), self.clock()),
+            )
+
     def models_for(self, caller: Caller) -> dict:
         """The menu, and whether this account may name a model beyond it."""
         return {
             "object": "list",
-            "data": [m.to_public() for m in self.s.public_models],
+            "data": [m.to_public() for m in self.visible_models()],
             "nanomuse": {"any_model": self.any_model(caller)},
         }
 
@@ -2486,6 +2510,8 @@ class Cloud:
         request_id: str,
         cached_tokens: int = 0,
         at: int | None = None,
+        provider_cost_rub: float | None = None,
+        routing_meta: dict[str, Any] | None = None,
     ) -> int:
         """One chat turn in the ledger: the tokens as the provider counted them, the money at
         the model's price in force when the reply came in (`at`, now by default) — the
@@ -2497,7 +2523,14 @@ class Cloud:
         # the account pays: the operator's sale rate, less the running tariff's share
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
         sale = self.discount(self.s.chat_charge_uy(model, prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
+        if (
+            provider_cost_rub is not None and not isinstance(provider_cost_rub, bool)
+            and math.isfinite(provider_cost_rub) and 0 <= provider_cost_rub <= 1_000_000
+        ):
+            cost = self.s.rub_to_uy(provider_cost_rub)
         detail: dict[str, Any] = {}
+        if routing_meta:
+            detail["model_accounting"] = routing_meta
         if cached_tokens > 0:
             detail["cached_tokens"] = min(max(0, cached_tokens), max(0, prompt_tokens))
         if model.idle_at(at):
