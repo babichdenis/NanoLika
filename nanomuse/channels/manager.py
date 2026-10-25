@@ -22,29 +22,31 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
 from nanomuse.background import keep_task
-from nanomuse.channels.approval_copy import approval_details, readable_approval
+from nanomuse.channels.approval_copy import readable_approval, approval_details
 from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 from nanomuse.channels.desktop_request import computer_request, select_computer
-from nanomuse.channels.dingtalk import DingTalkChannel
-from nanomuse.channels.feishu import FeishuChannel
-from nanomuse.channels.max import MaxChannel
-from nanomuse.channels.menu import ChatMenu
-from nanomuse.channels.store import ChannelSettingsStore, PairingStore
 from nanomuse.channels.sync_delivery import SyncDeliveryReceipts
-from nanomuse.channels.telegram import TelegramChannel
-from nanomuse.channels.wecom import WeComChannel
 from nanomuse.channels.welcome import send_welcome_art
 from nanomuse.hub.client import HubError
-from nanomuse.logger import logger
 from nanomuse.schema import Message
+from nanomuse.channels.dingtalk import DingTalkChannel
+from nanomuse.channels.feishu import FeishuChannel
+from nanomuse.channels.store import ChannelSettingsStore, PairingStore
+from nanomuse.channels.max import MaxChannel
+from nanomuse.channels.menu import ChatMenu
+from nanomuse.channels.chat_picker import ChatPicker
+from nanomuse.channels.telegram import TelegramChannel
+from nanomuse.channels.wecom import WeComChannel
+from nanomuse.logger import logger
+from nanomuse.channels.telegram_topics import physical_chat
 from nanomuse.server.events import MAIN_THREAD, new_id
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
+
+REMOTE_TASK_S = 600
 
 CHANNEL_TYPES: tuple[type[Channel], ...] = (
     FeishuChannel,
@@ -68,60 +70,29 @@ ALLOW_WORDS = frozenset(
         "ok",
         "approve",
         "go ahead",
-        # Russian, as a person types it in a chat
-        "да",
-        "ок",
-        "окей",
-        "можно",
-        "разрешаю",
-        "разреши",
-        "разрешить",
-        "давай",
     }
 )
 DENY_WORDS = frozenset(
-    {
-        "拒绝",
-        "不行",
-        "不要",
-        "不",
-        "拒绝。",
-        "deny",
-        "no",
-        "n",
-        "reject",
-        "stop",
-        # Russian
-        "нет",
-        "нельзя",
-        "запрещаю",
-        "запрети",
-        "откажи",
-        "не надо",
-        "стоп",
-    }
+    {"拒绝", "不行", "不要", "不", "拒绝。", "deny", "no", "n", "reject", "stop"}
 )
 
 # how often a growing reply is pushed to the chat (edits are rate-limited everywhere)
 EDIT_INTERVAL_S = 1.0
 THREAD_PREFIX = "channel-"
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
-# How long a chat waits for `hub.primary` to finish a turn before the hub gives up (the
-# device's own task timeout is the same ten minutes).
-REMOTE_TASK_S = 600
 
 _TOOL_LABELS = {
-    "web_search": ("Searching the web", "正在搜索", "Ищу в интернете"),
-    "web_fetch": ("Reading a web page", "正在读网页", "Читаю страницу"),
-    "files": ("Working with files", "正在处理文件", "Работаю с файлами"),
-    "shell": ("Running a command", "正在运行命令", "Выполняю команду"),
-    "python_execute": ("Running Python", "正在运行 Python", "Запускаю Python"),
-    "read_emails": ("Reading email", "正在读邮件", "Читаю почту"),
-    "send_email": ("Sending email", "正在发邮件", "Отправляю письмо"),
-    "browser": ("Browsing", "正在浏览网页", "Открываю страницу"),
-    "goals": ("Updating goals", "正在更新目标", "Обновляю цели"),
-    "remember": ("Saving a memory", "正在记下来", "Запоминаю"),
-    "recall": ("Recalling", "正在回忆", "Вспоминаю"),
+    "web_search": ("Searching the web", "正在搜索"),
+    "web_fetch": ("Reading a web page", "正在读网页"),
+    "files": ("Working with files", "正在处理文件"),
+    "shell": ("Running a command", "正在运行命令"),
+    "python_execute": ("Running Python", "正在运行 Python"),
+    "read_emails": ("Reading email", "正在读邮件"),
+    "send_email": ("Sending email", "正在发邮件"),
+    "browser": ("Browsing", "正在浏览网页"),
+    "goals": ("Updating goals", "正在更新目标"),
+    "remember": ("Saving a memory", "正在记下来"),
+    "recall": ("Recalling", "正在回忆"),
 }
 
 
@@ -147,11 +118,6 @@ class _Live:
     flushing: asyncio.Task[None] | None = None
 
 
-# How long a chat's own Cloud key is kept in memory before the bot door is asked again: a
-# chat writing twice does not need two sign-ins, and the relay issues a key per chat anyway.
-CLOUD_KEY_TTL_S = 600.0
-
-
 class ChannelManager(ChannelBus):
     def __init__(self, svc: MuseService):
         self.svc = svc
@@ -165,6 +131,7 @@ class ChannelManager(ChannelBus):
         self._pump: asyncio.Task[None] | None = None
         # thread id -> (channel, chat_id)
         self.routes: dict[str, tuple[str, str]] = {}
+        self.picker = ChatPicker(self)
         self.sync_receipts = SyncDeliveryReceipts(
             svc.settings.data_dir / "channels" / "sync-delivery.json"
         )
@@ -188,8 +155,6 @@ class ChannelManager(ChannelBus):
             return
         self.started = True
         self._loop = asyncio.get_running_loop()
-        # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
-        self._cloud_keys: dict[tuple[str, str], tuple[str, str, float]] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
         for name in self.types:
@@ -325,7 +290,7 @@ class ChannelManager(ChannelBus):
 
     @property
     def muse_name(self) -> str:
-        return self.svc.profile.name or "NanoLika"
+        return self.svc.profile.name or "nanoMuse"
 
     # ------------------------------------------------------------------ inbound
     def _allowed(self, msg: InboundMessage) -> bool:
@@ -342,14 +307,12 @@ class ChannelManager(ChannelBus):
         if not self._allowed(msg):
             cfg = self.store.config(msg.channel)
             if (
-                cfg.first_chat_claims
-                and not msg.is_group
-                and not self.pairing.approved(msg.channel)
+                getattr(cfg, "first_chat_claims", False)
+                and (not msg.is_group)
+                and (not self.pairing.approved(msg.channel))
             ):
-                # nobody owns this bot yet: the person who wrote first is the one who made it,
-                # which is how a bot can be used from a chat alone (docs/channels.md)
                 self.pairing.add(
-                    msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=msg.chat_id
+                    msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
                 )
                 self.publish()
                 logger.info(
@@ -363,28 +326,30 @@ class ChannelManager(ChannelBus):
                 )
                 return
             code = self.pairing.request(
-                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=msg.chat_id
+                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
             )
             self.publish()
             await self._send(msg.channel, msg.chat_id, self.pairing_text(code))
             return
         cfg = self.store.config(msg.channel)
-        if msg.is_group and cfg.group_policy == "mention" and not msg.mentioned:
+        if msg.is_group and cfg.group_policy == "mention" and (not msg.mentioned):
             return
         if not msg.is_group:
             self.pairing.touch(
-                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=msg.chat_id
+                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
             )
+        if await self.picker.topics.inbound(msg):
+            return
         if await self.menu.inbound(msg):
             return
+        origin_thread = self._thread_for(msg)
         text = msg.text.strip()
         if text.lower().split("@")[0].split()[0:1] == ["/start"]:
-            # a person pressing Start, or the button Telegram shows first: greet, do not run
             await self._greet(msg.channel, msg.chat_id)
             introduction = channel_text(self.lang, "welcome")
             if msg.channel == "max":
                 introduction += "\n\n" + channel_text(self.lang, "limits")
-            self._record_channel_reply(msg, introduction)
+            self._record_channel_reply(msg, introduction, thread_id=origin_thread)
             return
         command = text.split()[0].lower().split("@")[0] if text else ""
         if command in ("/help", "/status"):
@@ -397,7 +362,7 @@ class ChannelManager(ChannelBus):
                 msg.chat_id,
                 channel_text(self.svc.settings.agent.language or "en", key),
             )
-            self._record_channel_reply(msg, channel_text(self.lang, key))
+            self._record_channel_reply(msg, channel_text(self.lang, key), thread_id=origin_thread)
             return
         if not msg.is_group and text.casefold().strip(" .!。！👋🌿") in {
             "привет",
@@ -410,7 +375,7 @@ class ChannelManager(ChannelBus):
         }:
             answer = channel_text(self.lang, "hello")
             await self._send(msg.channel, msg.chat_id, answer)
-            self._record_channel_reply(msg, answer)
+            self._record_channel_reply(msg, answer, thread_id=origin_thread)
             return
         requested = computer_request(text) if not msg.is_group else None
         if requested is not None:
@@ -426,247 +391,94 @@ class ChannelManager(ChannelBus):
                     msg.channel, msg.chat_id, channel_text(self.lang, "computer_unavailable")
                 )
                 return
-            thread_id = self._thread_for(msg)
+            thread_id = origin_thread
+            await self._echo_selected_user(thread_id, msg, requested)
             await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "computer_started"))
-            self._spawn(self._serve_from_device(thread_id, msg, requested, device, fallback=False))
+            self._spawn(
+                self._serve_from_device(
+                    thread_id,
+                    msg,
+                    requested,
+                    device,
+                    fallback=False,
+                    shared_cid=self.svc.sync.cid_of(thread_id)
+                    if self.picker.selected(msg.channel, msg.chat_id) == thread_id
+                    else "",
+                )
+            )
             return
         word = text.lower().strip(" .!。！")
-        # a word for an approval this chat was asked about
+        selected = self.picker.selected(msg.channel, msg.chat_id)
+        if selected and self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "Use the buttons on the permission request so the decision goes to the right chat.",
+                    "请使用权限请求下方的按钮，以免将决定发送到另一对话。",
+                    "Нажмите кнопку под запросом разрешения, чтобы решение относилось к нужному чату.",
+                ),
+            )
+            return
         if self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
             approval_id = self._asks[key][-1]
             await self._decide(msg.channel, msg.chat_id, approval_id, word in ALLOW_WORDS)
             return
-        # the answer to a question delivered here from another conversation
         delivered = self._questions.get(key)
-        if delivered and text and self.svc.ui.has_pending_question(delivered):
+        if (
+            delivered
+            and (not selected or selected == delivered)
+            and text
+            and self.svc.ui.has_pending_question(delivered)
+        ):
             self._questions.pop(key, None)
             self.svc.ui.answer_question(delivered, text)
             await self._send(
                 msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала.")
             )
             return
-        self._questions.pop(key, None)
+        if not delivered or not selected or selected == delivered:
+            self._questions.pop(key, None)
         paths: list[str] = []
         for item in msg.files:
             try:
                 paths.append(self.svc.save_upload(item.name, item.data).path)
             except ValueError as exc:
                 await self._send(msg.channel, msg.chat_id, _short(exc))
-        if not text and not paths:
-            # someone opened the chat (WeCom's enter_chat), a sticker: nothing to pass on
+        if not text and (not paths):
             return
         if msg.is_group and msg.sender_name and text:
             text = f"{msg.sender_name}: {text}"
-        thread_id = self._thread_for(msg)
-        # `hub.primary`: while that device (the person's own computer, usually) is online,
-        # the chats are served by it — the words go over the hub as a `task` and its answer
-        # comes back into the chat; offline it falls back to the Muse on this machine
-        device = self.svc.hub.primary() if text and not paths else None
+        thread_id = origin_thread
+        await self._echo_selected_user(thread_id, msg, text)
+        self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
+        device = getattr(self.svc.hub, "primary", lambda: None)() if text and (not paths) else None
         if device is not None:
-            self._spawn(self._serve_from_device(thread_id, msg, text, device))
-            return
-        key, model = await self._cloud_key_for(msg.channel, msg)
-        if key == "!":
+            self._spawn(
+                self._serve_from_device(
+                    thread_id,
+                    msg,
+                    text,
+                    device,
+                    shared_cid=self.svc.sync.cid_of(thread_id)
+                    if self.picker.selected(msg.channel, msg.chat_id) == thread_id
+                    else "",
+                )
+            )
             return
         try:
-            self.svc.send(
-                thread_id,
-                text,
-                files=paths or None,
-                once_key=key,
-                once_model=model,
-                language=self.menu.language(msg),
-            )
+            self.svc.send(thread_id, text, files=paths or None, language=self.menu.language(msg))
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
 
-    async def _cloud_key_for(self, channel: str, msg: InboundMessage) -> tuple[str, str]:
-        """The Cloud key and model this chat spends with, if the channel is set up for it.
-
-        A chat that has no app yet is an account of its own in the relay: the bot door
-        (`POST /v1/bot/signin`, the shared secret in `cloud_bot_token`) answers with that
-        account's key and the model its menu recommends, and this one turn is charged to
-        the person instead of to this machine. Settings: `cloud_per_chat = true`,
-        `cloud_url` (the relay) and `cloud_bot_token`. An empty pair means the chat runs on
-        the configured model, as every chat did before.
-
-        The key is kept for a few minutes in memory: a chat writing twice does not need two
-        sign-ins, and a key that lapses is replaced by the next message."""
-        settings = self.store.resolved(self.store.config(channel))
-        if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
-            return "", ""
-        url = str(settings.get("cloud_url") or "").strip().rstrip("/")
-        token = str(settings.get("cloud_bot_token") or "").strip()
-        if not url or not token:
-            logger.warning(
-                "channel {}: cloud_per_chat is on but cloud_url or cloud_bot_token is empty",
-                channel,
-            )
-            return "", ""
-        cache_key = (channel, msg.sender_id)
-        held = self._cloud_keys.get(cache_key)
-        if held is not None and held[2] > time.time():
-            return held[0], held[1]
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                answer = await client.post(
-                    f"{url}/v1/bot/signin",
-                    json={"telegram_id": msg.sender_id, "device": f"{channel}:{msg.chat_id}"},
-                    headers={"X-Bot-Token": token},
-                )
-        except httpx.HTTPError as exc:
-            logger.warning("channel {}: the bot door is unreachable: {}", channel, exc)
-            return "", ""
-        if answer.status_code != 200:
-            body = {}
-            with contextlib.suppress(ValueError):
-                body = answer.json()
-            error = body.get("error") if isinstance(body.get("error"), dict) else {}
-            code = str(error.get("code") or "")
-            text = str(error.get("message") or "")
-            logger.warning(
-                "channel {}: the bot door refused ({}): {}",
-                channel,
-                answer.status_code,
-                code or text,
-            )
-            await self._send(
-                channel,
-                msg.chat_id,
-                self.say(
-                    "This chat cannot be used just yet: the server did not open an account for it. Try again later.",
-                    "这个聊天暂时还不能用：服务器没有为它开账户。请稍后再试。",
-                    "Этот чат пока нельзя использовать: сервер не открыл для него аккаунт. Попробуй позже.",
-                ),
-            )
-            return "!", ""
-        data = answer.json()
-        key = str(data.get("api_key") or "")
-        models = data.get("models") or []
-        model = ""
-        if isinstance(models, list) and models and isinstance(models[0], dict):
-            model = str(models[0].get("id") or "")
-        self._cloud_keys[cache_key] = (key, model, time.time() + CLOUD_KEY_TTL_S)
-        return key, model
-
-    async def _serve_from_device(
-        self,
-        thread: str,
-        msg: InboundMessage,
-        text: str,
-        device: dict[str, Any],
-        *,
-        fallback: bool = True,
-    ) -> None:
-        """A chat's turn handed to the device the settings name as the one that serves the
-        chats (`hub.primary`): the words go over the hub as a `task`, the device's progress
-        shows as the live status, its answer closes the bubble. A device that cannot take it
-        (offline, busy, refused) steps aside and the Muse on this machine answers here.
-
-        The device's own approvals are not decided from the chat: the card names itself and
-        the task lapses on the device's side, and nothing here is ever allowed silently.
-        """
-        await self._set_typing(thread, True)
-        try:
-            hub = self.svc.hub
-            name = str(device.get("name") or device.get("id") or "")
-            live = self._live_for(thread)
-            if live is not None:
-                live.status = self.say(f"on {name}", f"在 {name} 上", f"работает {name}")
-                self._schedule_flush(thread)
-
-            async def on_event(body: dict[str, Any]) -> None:
-                stage = body.get("stage")
-                lv = self._live_for(thread)
-                if lv is None:
-                    return
-                if stage == "text" and body.get("text"):
-                    lv.text = str(body.get("text") or "")
-                    self._schedule_flush(thread)
-                elif stage == "tool":
-                    lv.status = f"{str(body.get('name') or 'tool')}: {str(body.get('summary') or '')}".strip(
-                        ": "
-                    )
-                    self._schedule_flush(thread)
-                elif stage == "approval":
-                    preview = str(body.get("preview") or body.get("reason") or "")[:120]
-                    lv.status = self.say(
-                        f"{name} asks permission: {preview}",
-                        f"{name} 请求许可: {preview}",
-                        f"{name} спрашивает разрешение: {preview}",
-                    )
-                    self._schedule_flush(thread)
-
-            mode = self.menu.preferences.mode(thread)
-            if mode:
-                try:
-                    applied = await hub.call(
-                        str(device.get("id") or ""),
-                        "channel_permissions",
-                        {"conversation": thread, "channel": msg.channel, "mode": mode},
-                        timeout=12,
-                    )
-                    if applied.get("mode") != mode:
-                        raise ValueError("permission mode was not applied")
-                except Exception:
-                    from nanomuse.channels.menu import COPY
-
-                    await self._finish(thread, COPY[self.menu.language(msg)]["remote_old"])
-                    return
-            try:
-                answer = await hub.call(
-                    str(device.get("id") or ""),
-                    "task",
-                    {
-                        "text": text,
-                        "from": hub.device_name,
-                        "conversation": thread,
-                        "channel": msg.channel,
-                        "language": self.menu.language(msg),
-                    },
-                    timeout=REMOTE_TASK_S,
-                    on_event=on_event,
-                )
-            except HubError as exc:
-                if not fallback:
-                    await self._finish(thread, channel_text(self.lang, "computer_failed"))
-                    return
-                # offline after all, busy, refused: the Muse on this machine answers instead
-                self._live.pop(thread, None)
-                route = self.routes.get(thread)
-                if route is not None:
-                    await self._send(
-                        route[0],
-                        route[1],
-                        self.say(
-                            f"{name}: {exc.message}. Answering here.",
-                            f"{name}: {exc.message}. 由我回答。",
-                            f"{name}: {exc.message}. Отвечаю сама.",
-                        ),
-                    )
-                try:
-                    self.svc.send(thread, text, language=self.menu.language(msg))
-                except (ValueError, PermissionError) as error:
-                    await self._send(msg.channel, msg.chat_id, _short(error))
-                return
-            final = str(answer.get("text") or "").strip()
-            if final and not fallback:
-                self._record_channel_reply(msg, final)
-            await self._finish(
-                thread,
-                final
-                or self.say(
-                    "(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"
-                ),
-            )
-        finally:
-            await self._set_typing(thread, False)
-
     def _thread_for(self, msg: InboundMessage) -> str:
-        if self.svc.settings.channels.shared_thread:
-            # one memory for every chat app: the chat writes into the account's main
-            # conversation, so what was said through the bot, on the phone and on the
-            # computer is one history; the answer still comes from the Muse here
+        selected = self.picker.selected(msg.channel, msg.chat_id)
+        thread = self.svc.threads.get(selected)
+        if thread is not None and self.svc.sync._mine(thread):
+            if selected not in self.picker.pins:
+                self.routes[selected] = (msg.channel, msg.chat_id)
+            return selected
+        if getattr(getattr(self.svc.settings, "channels", None), "shared_thread", False):
             thread_id = MAIN_THREAD
             self.routes[thread_id] = (msg.channel, msg.chat_id)
             if thread_id not in self.svc.threads:
@@ -763,17 +575,9 @@ class ChannelManager(ChannelBus):
             )
             return
         if ok:
-            text = (
-                self.say("Allowed.", "已允许。", "Разрешила.")
-                if approved
-                else self.say("Denied.", "已拒绝。", "Запретила.")
-            )
+            text = self.say("Allowed.", "已允许。") if approved else self.say("Denied.", "已拒绝。")
         else:
-            text = self.say(
-                "That request is no longer waiting.",
-                "这个请求已经不在等待了。",
-                "Эта просьба уже не ждёт ответа.",
-            )
+            text = self.say("That request is no longer waiting.", "这个请求已经不在等待了。")
         await self._send(channel, chat_id, text)
 
     def pairing_text(self, code: str) -> str:
@@ -839,18 +643,11 @@ class ChannelManager(ChannelBus):
         except Exception as exc:  # noqa: BLE001
             logger.debug("channel {}: live update failed: {}", live.channel, exc)
 
-    async def _send_to_thread(self, thread: str, text: str) -> None:
-        """A message to the chat a thread belongs to, when the route is still there."""
-        route = self.routes.get(thread)
-        if route is None:
-            return
-        await self._send(route[0], route[1], text)
-
     async def _finish(self, thread: str, text: str, *, files: list[str] | None = None) -> None:
         """The reply (one assistant bubble) is complete: the live message gets its final
         text, or a message is sent where nothing was streamed yet."""
         live = self._live.pop(thread, None)
-        route = self.routes.get(thread)
+        route = (live.channel, live.chat_id) if live is not None else self.routes.get(thread)
         if route is None:
             return
         channel = self.channels.get(route[0])
@@ -862,16 +659,29 @@ class ChannelManager(ChannelBus):
             if live.flushing is not None and not live.flushing.done():
                 with contextlib.suppress(Exception):
                     await live.flushing
+        if thread in self.picker.remote_threads:
+            for endpoint in (
+                set(self.picker.targets(thread)) | self.picker.pins.get(thread, set()) | {route}
+            ):
+                self.picker.expect(thread, endpoint, "assistant", text)
+        display_text = self.picker.reply_text(thread, route, text)
         try:
             if live is not None and live.shown and channel.supports_edit:
-                await channel.stream(live.chat_id, live.stream_id, text or live.shown, done=True)
+                await channel.stream(
+                    live.chat_id, live.stream_id, display_text or live.shown, done=True
+                )
                 if files:
                     await channel.send(route[1], "", files=files)
             elif text.strip() or files:
-                await channel.send(route[1], text, files=files)
+                await channel.send(route[1], display_text, files=files)
         except Exception as exc:  # noqa: BLE001
             logger.warning("channel {}: reply to {} failed: {}", route[0], route[1], exc)
             self._set(route[0], "error", _short(exc))
+        primary = (live.channel, live.chat_id) if live is not None else route
+        targets = set(self.picker.targets(thread)) | self.picker.pins.pop(thread, set())
+        for other in targets - {primary}:
+            if text.strip():
+                await self._send(other[0], other[1], self.picker.reply_text(thread, other, text))
 
     async def _set_typing(self, thread: str, on: bool) -> None:
         route = self.routes.get(thread)
@@ -923,6 +733,14 @@ class ChannelManager(ChannelBus):
                 else:
                     await self._set_typing(thread, status.get("state") == "working")
             return
+        if kind == "sync":
+            await self.picker.topics.discover()
+            return
+        if kind == "thread":
+            thread = str((msg.get("thread") or {}).get("id") or "")
+            if thread:
+                await self.picker.topics.rename(thread)
+            return
         if kind == "event":
             await self._route_event(msg.get("event") or {})
             return
@@ -939,7 +757,7 @@ class ChannelManager(ChannelBus):
             return
 
     async def _route_event(self, event: dict[str, Any]) -> None:
-        if event.get("channel_static") and not event.get("synced"):
+        if event.get("channel_static") and (not event.get("synced")):
             return
         kind = event.get("type")
         thread = str(event.get("thread") or "")
@@ -957,10 +775,7 @@ class ChannelManager(ChannelBus):
                 about = str(event.get("about") or "")
                 await self.deliver(f"{about}\n\n{text}" if about else text, exclude_thread=thread)
             return
-        if kind == "notice" and ours and event.get("level") == "error":
-            # a turn that ended in a refusal: the relay's own words when it is the relay's
-            # (an exhausted allowance says what is left and where the ways on are), so a chat
-            # hears why instead of seeing nothing happen
+        if kind == "notice" and ours and (event.get("level") == "error"):
             text = str(event.get("text") or "").strip()
             if event.get("code") == "allowance_exhausted":
                 text = self.say(
@@ -971,7 +786,7 @@ class ChannelManager(ChannelBus):
             if text:
                 await self._send_to_thread(thread, text)
             return
-        if kind == "tool" and ours and event.get("status") == "running":
+        if kind == "tool" and ours and (event.get("status") == "running"):
             await self._set_typing(thread, True)
             live = self._live_for(thread)
             if live is not None:
@@ -1010,7 +825,7 @@ class ChannelManager(ChannelBus):
                         ),
                     )
             return
-        if kind == "notice" and ours and event.get("level") == "warn":
+        if kind == "notice" and ours and (event.get("level") == "warn"):
             await self._finish(thread, str(event.get("text") or ""))
             return
         if kind == "artifact" and ours and event.get("path"):
@@ -1036,15 +851,9 @@ class ChannelManager(ChannelBus):
         if title:
             return title
         tool = str(event.get("tool") or "")
-        en, zh, ru = _TOOL_LABELS.get(
-            tool, (f"Using {tool}", f"正在使用 {tool}", f"Работаю: {tool}")
-        )
+        en, zh = _TOOL_LABELS.get(tool, (f"Using {tool}", f"正在使用 {tool}"))
         lang = self.lang
-        if lang == "zh":
-            return zh
-        if lang == "ru":
-            return ru
-        return en
+        return zh if lang == "zh" else en
 
     def approval_text(self, event: dict[str, Any]) -> str:
         if self.lang == "ru":
@@ -1055,8 +864,6 @@ class ChannelManager(ChannelBus):
         return self.say(
             f"{self.muse_name} needs your OK: {summary}{why}\nReply allow / deny.",
             f"{self.muse_name} 需要你确认：{summary}{why}\n回复「允许」或「拒绝」。",
-            f"{self.muse_name} просит разрешение: {summary}{why}\n"
-            f"Ответь «разрешаю» или «нет», или нажми кнопку.",
         )
 
     async def _ask(
@@ -1083,101 +890,6 @@ class ChannelManager(ChannelBus):
             logger.warning("channel {}: could not send approval: {}", channel, type(exc).__name__)
             self._set(channel, "error", _short(exc))
 
-    def _record_channel_reply(self, msg: InboundMessage, answer: str) -> None:
-        """Keep deterministic replies in the same synced chat, without running a model."""
-        if msg.channel not in {"telegram", "max"}:
-            return
-        tid = self._thread_for(msg)
-        self.svc.ui.emit(
-            {
-                "type": "user",
-                "thread": tid,
-                "text": msg.text,
-                "channel_static": True,
-            }
-        )
-        event = self.svc.ui.emit(
-            {
-                "type": "assistant",
-                "thread": tid,
-                "text": answer,
-                "final": True,
-                "channel_static": True,
-            }
-        )
-        thread = self.svc.threads[tid]
-        if not thread.busy:
-            thread.agent.messages.extend([Message.user(msg.text), Message.assistant(answer)])
-            thread.agent._save_session()
-        thread.updated_at = event["ts"]
-        self.svc._save_index()
-        self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
-        self.svc.sync.thread_changed(thread)
-
-    async def _deliver_synced_channel(self, event: dict[str, Any]) -> None:
-        """A linked conversation goes only to its paired chat, never a broadcast."""
-        if self.svc.settings.channels.shared_thread:
-            return
-        role = str(event.get("type") or "")
-        thread = str(event.get("thread") or "")
-        mid = str(event.get("mid") or "")
-        source = str(event.get("via_device") or "")
-        if role not in {"user", "assistant"} or not mid or not source:
-            return
-        if source == self.svc.hub.device_id or event.get("quiet"):
-            return
-        if not self.sync_receipts.eligible(str(event.get("ts") or "")):
-            return
-        target = None
-        for channel in ("telegram", "max"):
-            if channel not in self.channels or not self.store.config(channel).enabled:
-                continue
-            for sender, entry in self.pairing.approved(channel).items():
-                chat = str(entry.get("chat_id") or sender)
-                if thread_id_for(channel, chat) == thread:
-                    if target is not None:
-                        return
-                    target = (channel, chat)
-        if target is None:
-            return
-        channel, chat = target
-        key = self.sync_receipts.key(channel, chat, mid, role)
-        if self.sync_receipts.delivered(key):
-            return
-        body = str(event.get("text") or "").strip()
-        if not body:
-            return
-        if role == "user":
-            body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
-        # Use the transport directly: _send catches errors, which would falsely mark delivery.
-        for attempt in range(3):
-            paired = any(
-                str(entry.get("chat_id") or sender) == chat
-                for sender, entry in self.pairing.approved(channel).items()
-            )
-            if not paired or channel not in self.channels or not self.store.config(channel).enabled:
-                return
-            try:
-                await self.channels[channel].send(chat, body)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                if attempt < 2:
-                    await asyncio.sleep(attempt + 1)
-                    continue
-                self._set(
-                    channel,
-                    "error",
-                    self.say(
-                        "Could not deliver a synced message.",
-                        "同步消息发送失败。",
-                        "Не удалось доставить сообщение из приложения.",
-                    ),
-                )
-                return
-            self.sync_receipts.mark(key)
-            return
-
     def _targets(self, exclude_thread: str = "") -> list[tuple[str, str]]:
         skip = self.routes.get(exclude_thread)
         return [
@@ -1191,26 +903,6 @@ class ChannelManager(ChannelBus):
         n = 0
         for channel, chat_id in self._targets(exclude_thread):
             await self._send(channel, chat_id, text)
-            n += 1
-        return n
-
-    async def echo(self, device: str, text: str, *, exclude_thread: str = "") -> int:
-        """A line the person wrote on another device of the account, put into every chat
-        marked "deliver here" as *their* words rather than as an answer: a channel that can
-        mark it that way does (Telegram: a dot in NanoLika's colour and a quote block), the
-        rest get it with the device named in front. It never rings (see
-        :meth:`TelegramChannel.echo`); returns how many chats got it."""
-        n = 0
-        for channel, chat_id in self._targets(exclude_thread):
-            mark = getattr(self.channels.get(channel), "echo", None)
-            if mark is not None:
-                try:
-                    await mark(chat_id, device, text)
-                    n += 1
-                    continue
-                except Exception as exc:  # noqa: BLE001 — a vendor refusal; the plain line follows
-                    logger.warning("channel {}: echo to {} failed: {}", channel, chat_id, exc)
-            await self._send(channel, chat_id, f"{device}: {text}")
             n += 1
         return n
 
@@ -1309,7 +1001,6 @@ class ChannelManager(ChannelBus):
         if entry is None:
             return None
         self.publish()
-        # Register the channel conversation immediately; no model turn or desktop task.
         paired_message = InboundMessage(
             channel=entry["channel"],
             chat_id=str(entry.get("chat_id") or entry["sender_id"]),
@@ -1320,57 +1011,6 @@ class ChannelManager(ChannelBus):
         self.svc.sync.thread_changed(self.svc.threads[thread_id])
         await self._greet(entry["channel"], str(entry.get("chat_id") or entry["sender_id"]))
         return entry
-
-    def welcome_links(self, channel: str) -> list[tuple[str, str]]:
-        """Where a chat can go next, as ``(label, url)``, from the channel's own settings.
-
-        ``site_url`` is the public page, ``invite_url`` the link a person shares (the app
-        appends the code), and ``webapp_url`` the app itself when the runtime is reachable
-        over HTTPS. Nothing is offered that was not set.
-        """
-        cfg = self.store.config(channel)
-        out: list[tuple[str, str]] = []
-        site = str(cfg.settings.get("site_url") or "").strip()
-        invite = str(cfg.settings.get("invite_url") or "").strip()
-        webapp = str(cfg.settings.get("webapp_url") or "").strip()
-        if site:
-            out.append((self.say("Website", "网站", "Сайт"), site))
-        if invite:
-            out.append((self.say("Invite a friend", "邀请朋友", "Пригласить друга"), invite))
-        if webapp:
-            out.append((self.say("Open the app", "打开应用", "Открыть приложение"), webapp))
-        return out
-
-    async def _greet(self, channel: str, chat_id: str) -> None:
-        """The greeting, then the links the channel was configured with."""
-        greeting = channel_text(self.lang, "welcome")
-        if channel == "max":
-            greeting += "\n\n" + channel_text(self.lang, "limits")
-        ch = self.channels.get(channel)
-        if ch is not None:
-            try:
-                await send_welcome_art(ch, chat_id)
-            except Exception:
-                logger.warning("channel {}: welcome artwork unavailable; sending text", channel)
-        await self._send(channel, chat_id, greeting)
-        buttons = self.welcome_links(channel)
-        if not buttons:
-            return
-        ch = self.channels.get(channel)
-        if ch is None:
-            return
-        try:
-            await ch.links(
-                chat_id,
-                buttons,
-                self.say("Where to go next:", "还能去哪儿：", "Куда ещё можно:"),
-            )
-        except Exception as exc:  # noqa: BLE001 — the greeting already went out
-            logger.warning("channel {}: could not send links: {}", channel, exc)
-
-    def greeting(self) -> str:
-        """An introduction without model calls or claims about connected services."""
-        return channel_text(self.lang, "welcome")
 
     async def deny(self, code: str) -> dict[str, Any] | None:
         info = self.pairing.deny(code)
@@ -1411,7 +1051,6 @@ class ChannelManager(ChannelBus):
             self.say(
                 f"Test message from {self.muse_name}: this chat is connected.",
                 f"来自 {self.muse_name} 的测试消息：这个聊天已经连上了。",
-                f"Проверка от {self.muse_name}: этот чат подключён.",
             ),
         )
         return {"ok": True, "detail": f"Sent to {chat_id}."}
@@ -1458,6 +1097,335 @@ class ChannelManager(ChannelBus):
             self.publish()
             return {"status": "failed", "error": "expired"}
         return result
+
+    async def _echo_selected_user(self, thread: str, msg: InboundMessage, text: str) -> None:
+        if not text:
+            return
+        self.picker.title_first_request(thread, text)
+        label = self.types[msg.channel].label
+        for endpoint in self.picker.targets(thread):
+            if endpoint != (msg.channel, msg.chat_id):
+                await self._send(
+                    endpoint[0],
+                    endpoint[1],
+                    label + " · " + self.say("You", "你", "Вы") + "\n" + text,
+                )
+
+    async def _serve_from_device(
+        self,
+        thread: str,
+        msg: InboundMessage,
+        text: str,
+        device: dict[str, Any],
+        *,
+        fallback: bool = True,
+        shared_cid: str = "",
+    ) -> None:
+        """A chat's turn handed to the device the settings name as the one that serves the
+        chats (`hub.primary`): the words go over the hub as a `task`, the device's progress
+        shows as the live status, its answer closes the bubble. A device that cannot take it
+        (offline, busy, refused) steps aside and the Muse on this machine answers here.
+
+        The device's own approvals are not decided from the chat: the card names itself and
+        the task lapses on the device's side, and nothing here is ever allowed silently.
+        """
+        if shared_cid and thread in self.picker.remote_threads:
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "This chat is already working. Please send the next request after its reply.",
+                    "此对话仍在处理中，请收到回复后再发送下一条请求。",
+                    "В этом чате ещё идёт работа. Отправьте следующую просьбу после ответа.",
+                ),
+            )
+            return
+        if shared_cid and "shared_chat" not in (device.get("actions") or []):
+            if fallback:
+                self.svc.send(thread, text, language=self.menu.language(msg))
+            else:
+                await self._finish(
+                    thread,
+                    self.say(
+                        "Update the computer app to run tasks in this shared chat.",
+                        "请更新电脑应用，以便在此共享对话中执行任务。",
+                        "Для работы на компьютере в выбранном общем чате нужно обновить приложение. Задачу в другой чат не переношу.",
+                    ),
+                )
+            return
+        self.picker.remote_threads.add(thread)
+        await self._set_typing(thread, True)
+        try:
+            hub = self.svc.hub
+            name = str(device.get("name") or device.get("id") or "")
+            live = self._live_for(thread)
+            if live is not None:
+                live.status = self.say(f"on {name}", f"在 {name} 上", f"работает {name}")
+                self._schedule_flush(thread)
+
+            async def on_event(body: dict[str, Any]) -> None:
+                stage = body.get("stage")
+                lv = self._live_for(thread)
+                if lv is None:
+                    return
+                if stage == "text" and body.get("text"):
+                    lv.text = str(body.get("text") or "")
+                    self._schedule_flush(thread)
+                elif stage == "tool":
+                    lv.status = f"{str(body.get('name') or 'tool')}: {str(body.get('summary') or '')}".strip(
+                        ": "
+                    )
+                    self._schedule_flush(thread)
+                elif stage == "approval":
+                    preview = str(body.get("preview") or body.get("reason") or "")[:120]
+                    lv.status = self.say(
+                        f"{name} asks permission: {preview}",
+                        f"{name} 请求许可: {preview}",
+                        f"{name} спрашивает разрешение: {preview}",
+                    )
+                    self._schedule_flush(thread)
+
+            mode = self.menu.preferences.mode(thread)
+            if mode:
+                try:
+                    applied = await hub.call(
+                        str(device.get("id") or ""),
+                        "channel_permissions",
+                        {
+                            "conversation": thread,
+                            "sync_cid": shared_cid,
+                            "channel": msg.channel,
+                            "mode": mode,
+                        },
+                        timeout=12,
+                    )
+                    if applied.get("mode") != mode:
+                        raise ValueError("permission mode was not applied")
+                except Exception:
+                    from nanomuse.channels.menu import COPY
+
+                    await self._finish(thread, COPY[self.menu.language(msg)]["remote_old"])
+                    return
+            try:
+                if shared_cid:
+                    for endpoint in set(self.picker.targets(thread)) | {(msg.channel, msg.chat_id)}:
+                        self.picker.expect(thread, endpoint, "user", text)
+                answer = await hub.call(
+                    str(device.get("id") or ""),
+                    "task",
+                    {
+                        "text": text,
+                        "from": hub.device_name,
+                        "conversation": thread,
+                        "sync_cid": shared_cid,
+                        "channel": msg.channel,
+                        "language": self.menu.language(msg),
+                    },
+                    timeout=REMOTE_TASK_S,
+                    on_event=on_event,
+                )
+            except HubError as exc:
+                if shared_cid:
+                    await self._finish(
+                        thread,
+                        self.say(
+                            "The computer has not completed this request. I will not start it again automatically; check this chat before retrying.",
+                            "电脑尚未完成此请求。为避免重复执行，不会自动重试，请先查看此对话。",
+                            "Компьютер пока не завершил запрос. Повторно задачу не запускаю, чтобы не выполнить её дважды. Проверьте этот чат перед повтором.",
+                        ),
+                    )
+                    return
+                if not fallback:
+                    await self._finish(thread, channel_text(self.lang, "computer_failed"))
+                    return
+                self._live.pop(thread, None)
+                route = self.routes.get(thread)
+                if route is not None:
+                    await self._send(
+                        route[0],
+                        route[1],
+                        self.say(
+                            f"{name}: {exc.message}. Answering here.",
+                            f"{name}: {exc.message}. 由我回答。",
+                            f"{name}: {exc.message}. Отвечаю сама.",
+                        ),
+                    )
+                try:
+                    self.svc.send(thread, text, language=self.menu.language(msg))
+                except (ValueError, PermissionError) as error:
+                    await self._send(msg.channel, msg.chat_id, _short(error))
+                return
+            final = str(answer.get("text") or "").strip()
+            if final and (not fallback):
+                self._record_channel_reply(msg, final, thread_id=thread)
+            await self._finish(
+                thread,
+                final
+                or self.say(
+                    "(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"
+                ),
+            )
+        finally:
+            self.picker.remote_threads.discard(thread)
+            for pending in self.picker.deferred.pop(thread, {}).values():
+                await self._deliver_synced_channel(pending)
+            await self._set_typing(thread, False)
+
+    def _record_channel_reply(
+        self, msg: InboundMessage, answer: str, *, thread_id: str = ""
+    ) -> None:
+        """Keep deterministic replies in the same synced chat, without running a model."""
+        if msg.channel not in {"telegram", "max"}:
+            return
+        tid = thread_id or self._thread_for(msg)
+        self.svc.ui.emit({"type": "user", "thread": tid, "text": msg.text, "channel_static": True})
+        event = self.svc.ui.emit(
+            {
+                "type": "assistant",
+                "thread": tid,
+                "text": answer,
+                "final": True,
+                "channel_static": True,
+            }
+        )
+        thread = self.svc.threads[tid]
+        if not thread.busy:
+            thread.agent.messages.extend([Message.user(msg.text), Message.assistant(answer)])
+            thread.agent._save_session()
+        thread.updated_at = event["ts"]
+        self.svc._save_index()
+        self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
+        self.svc.sync.thread_changed(thread)
+
+    async def _deliver_synced_channel(self, event: dict[str, Any]) -> None:
+        role = str(event.get("type") or "")
+        thread = str(event.get("thread") or "")
+        mid = str(event.get("mid") or "")
+        source = str(event.get("via_device") or "")
+        if role not in {"user", "assistant"} or not mid or not source:
+            return
+        if source == self.svc.hub.device_id or event.get("quiet"):
+            return
+        if not self.sync_receipts.eligible(str(event.get("ts") or "")):
+            return
+        if role == "assistant" and thread in self.picker.remote_threads:
+            pending = self.picker.deferred.setdefault(thread, {})
+            if len(pending) < 100:
+                pending[mid] = dict(event)
+            return
+        await self.picker.topics.ensure_for_event(event)
+        targets = set(self.picker.targets(thread))
+        # Existing fixed chats remain paired until their owner explicitly chooses another.
+        for channel in ("telegram", "max"):
+            if channel not in self.channels or not self.store.config(channel).enabled:
+                continue
+            for sender, entry in self.pairing.approved(channel).items():
+                chat = str(entry.get("chat_id") or sender)
+                if (
+                    not self.picker.selected(channel, chat)
+                    and thread_id_for(channel, chat) == thread
+                ):
+                    targets.add(self.picker.topics.redirect(thread, channel, chat))
+        body = str(event.get("text") or "").strip()
+        if not body:
+            return
+        if role == "user":
+            body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
+        for channel, chat in targets:
+            if self.picker.topics.defer(thread, (channel, chat), event):
+                continue
+            key = self.sync_receipts.key(channel, chat, mid, role)
+            if self.picker.consume(
+                thread, (channel, chat), role, str(event.get("text") or "").strip()
+            ):
+                self.sync_receipts.mark(key)
+                continue
+            if self.sync_receipts.delivered(key):
+                continue
+            for attempt in range(3):
+                # Re-check after a retry: the person may have switched away.
+                current = self.picker.selected(channel, chat)
+                if current and current != thread:
+                    break
+                paired = any(
+                    str(e.get("chat_id") or sender) == physical_chat(channel, chat)
+                    for sender, e in self.pairing.approved(channel).items()
+                )
+                if (
+                    not paired
+                    or channel not in self.channels
+                    or not self.store.config(channel).enabled
+                ):
+                    break
+                try:
+                    await self.channels[channel].send(chat, body)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    if attempt < 2:
+                        await asyncio.sleep(attempt + 1)
+                        continue
+                    self._set(
+                        channel,
+                        "error",
+                        self.say(
+                            "Could not deliver a synced message.",
+                            "同步消息发送失败。",
+                            "Не удалось доставить сообщение из приложения.",
+                        ),
+                    )
+                else:
+                    self.sync_receipts.mark(key)
+                break
+
+    def welcome_links(self, channel: str) -> list[tuple[str, str]]:
+        """Where a chat can go next, as ``(label, url)``, from the channel's own settings.
+
+        ``site_url`` is the public page, ``invite_url`` the link a person shares (the app
+        appends the code), and ``webapp_url`` the app itself when the runtime is reachable
+        over HTTPS. Nothing is offered that was not set.
+        """
+        cfg = self.store.config(channel)
+        out: list[tuple[str, str]] = []
+        site = str(cfg.settings.get("site_url") or "").strip()
+        invite = str(cfg.settings.get("invite_url") or "").strip()
+        webapp = str(cfg.settings.get("webapp_url") or "").strip()
+        if site:
+            out.append((self.say("Website", "网站", "Сайт"), site))
+        if invite:
+            out.append((self.say("Invite a friend", "邀请朋友", "Пригласить друга"), invite))
+        if webapp:
+            out.append((self.say("Open the app", "打开应用", "Открыть приложение"), webapp))
+        return out
+
+    async def _greet(self, channel: str, chat_id: str) -> None:
+        """The greeting, then the links the channel was configured with."""
+        greeting = channel_text(self.lang, "welcome")
+        if channel == "max":
+            greeting += "\n\n" + channel_text(self.lang, "limits")
+        ch = self.channels.get(channel)
+        if ch is not None:
+            try:
+                await send_welcome_art(ch, chat_id)
+            except Exception:
+                logger.warning("channel {}: welcome artwork unavailable; sending text", channel)
+        await self._send(channel, chat_id, greeting)
+        buttons = self.welcome_links(channel)
+        if not buttons:
+            return
+        ch = self.channels.get(channel)
+        if ch is None:
+            return
+        try:
+            await ch.links(
+                chat_id, buttons, self.say("Where to go next:", "还能去哪儿：", "Куда ещё можно:")
+            )
+        except Exception as exc:
+            logger.warning("channel {}: could not send links: {}", channel, exc)
+
+    def greeting(self) -> str:
+        """An introduction without model calls or claims about connected services."""
+        return channel_text(self.lang, "welcome")
 
 
 def _short(exc: BaseException) -> str:
