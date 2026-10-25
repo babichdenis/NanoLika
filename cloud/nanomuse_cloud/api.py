@@ -5,8 +5,8 @@
     POST /v1/auth/code        {identifier}                      → 204 (400 phone_region: a number the SMS sender cannot reach; a disabled account gets the same 204 and no code is sent; 429 domain_limited: a new address of a domain at its day's sign-up limit)
     POST /v1/auth/verify      {identifier, code, device, invite?} → {api_key, base_url, account, tokens, models}
     POST /v1/auth/login       {identifier, password, device}    → the same, for accounts that set a password
-    POST /v1/bot/signin       X-Bot-Token {telegram_id, device?, invite?} → the same, for a chat with no app yet (0.26: the Telegram door)
-    POST /v1/bot/link-code    X-Bot-Token {telegram_id, device?}  → {code, expires_at, expires_in_s}: the code a chat hands the app, which sends it back as `link` with its own sign-in (POST /v1/auth/verify) so both are one account
+    POST /v1/bot/signin       X-Bot-Token {channel?, chat_id, device?, invite?} → the same, for a chat with no app yet (0.26: the bot door; channel is telegram when absent, and the account is the pair messenger + id)
+    POST /v1/bot/link-code    X-Bot-Token {channel?, chat_id, device?}  → {code, expires_at, expires_in_s}: the code a chat hands the app, which sends it back as `link` with its own sign-in (POST /v1/auth/verify) so both are one account
     POST /v1/auth/password    {password, current?}              → 204 (set / change; "" + current removes)
     GET  /v1/me                                                 → account, tokens, spend (¥ spent / pool / left), invite, contribute, usage by kind, models, recent, nudges
     GET  /v1/nudges                                             → when the apps may ask for a star (0.18; public, cached an hour; the operator's policy over the defaults)
@@ -119,6 +119,7 @@ from starlette.requests import ClientDisconnect
 from . import __version__
 from . import client as client_info
 from . import search as web_search
+from .browser_auth import browser_marker
 from .catalog import Catalog
 from .config import ModelSpec, Settings
 from .controls import ControlError
@@ -127,7 +128,6 @@ from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
-from .browser_auth import browser_marker
 from .provider_order import provider_order
 from .provider_prices import install_provider_prices
 from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
@@ -625,28 +625,43 @@ def create_app(
         """The bot's own proof: one shared secret, and nothing a person could hold."""
         token = cloud.s.bot_signin_token
         if not token:
-            raise CloudError(503, "bot_off", "The Telegram door is shut on this relay")
+            raise CloudError(503, "bot_off", "The bot door is shut on this relay")
         if not hmac.compare_digest(request.headers.get("x-bot-token", ""), token):
             raise CloudError(401, "bad_bot_token", "That is not this relay's bot token")
 
+    def bot_chat(body: dict) -> tuple[str, str]:
+        """The messenger and the chat's id, from a bot's body.
+
+        `channel` says which messenger wrote (`telegram` or `max`) and a body without it is a
+        Telegram one, which is what a bot built before MAX existed sends. `chat_id` is the
+        neutral name (channel_links.py reads it too); `telegram_id` stays for those older
+        bots, so a MAX bot never has to call its id by another messenger's name."""
+        channel = str(body.get("channel") or "")[:16]
+        chat = str(body.get("chat_id") or body.get("telegram_id") or "")
+        return channel, chat
+
     @app.post("/v1/bot/signin")
     async def bot_signin(request: Request) -> dict:
-        """The bot's door: a Telegram chat becomes an account, or finds the one it made.
+        """The bot's door: a chat becomes an account, or finds the one it made.
 
         The bot proves itself with the shared secret in `X-Bot-Token`, not with a person's
-        code: Telegram tells it the numeric id with every message, and that is the proof the
-        chat belongs to that person, so an account can be made from a chat with nothing
+        code: the messenger tells it the numeric id with every message, and that is the proof
+        the chat belongs to that person, so an account can be made from a chat with nothing
         installed. The answer has the shape of a sign-in, so the bot keeps one key per chat
         and spends with it, which is what makes the allowance, the refusal and the top-up in
-        a chat the same ones the apps get."""
+        a chat the same ones the apps get.
+
+        The account is the pair (messenger, id): Telegram and MAX number their users apart, so
+        `telegram:123` and `max:123` are two accounts, never one."""
         bot_caller(request)
         body = await _json(request)
         device = str(body.get("device", ""))[:80]
         invite = str(body.get("invite", ""))[:32]
+        channel, chat = bot_chat(body)
         try:
-            key, caller, created = await asyncio.to_thread(cloud.sign_in_bot, str(body.get("telegram_id", "")), device, invite)
+            key, caller, created = await asyncio.to_thread(cloud.sign_in_bot, chat, device, invite, channel)
         except BadIdentifier as e:
-            raise CloudError(400, "bad_identifier", "A Telegram account is its numeric id") from e
+            raise CloudError(400, "bad_identifier", "A chat is its numeric id") from e
         me = cloud.me(caller, client_place(request))
         return {"api_key": key, "created": created, **me}
 
@@ -656,14 +671,16 @@ def create_app(
 
         The chat is the way in for someone with nothing installed; when the app arrives
         later, this code is what makes it the same account rather than a second one with a
-        second allowance. The app sends it as `link` beside its own sign-in code."""
+        second allowance. The app sends it as `link` beside its own sign-in code, and the code
+        is made for this chat's own account, in the space of the messenger it came from."""
         bot_caller(request)
         body = await _json(request)
         device = str(body.get("device", ""))[:80]
+        channel, chat = bot_chat(body)
         try:
-            code, expires_at = await asyncio.to_thread(cloud.telegram_link_code, str(body.get("telegram_id", "")), device)
+            code, expires_at = await asyncio.to_thread(cloud.chat_link_code, chat, device, channel)
         except BadIdentifier as e:
-            raise CloudError(400, "bad_identifier", "A Telegram account is its numeric id") from e
+            raise CloudError(400, "bad_identifier", "A chat is its numeric id") from e
         return {"code": code, "expires_at": expires_at, "expires_in_s": cloud.s.link_code_ttl_s}
 
     @app.post("/v1/auth/password", status_code=204)

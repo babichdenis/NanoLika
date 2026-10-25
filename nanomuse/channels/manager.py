@@ -22,31 +22,37 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from nanomuse.background import keep_task
-from nanomuse.channels.approval_copy import readable_approval, approval_details
+from nanomuse.channels.approval_copy import approval_details, readable_approval
 from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
+from nanomuse.channels.chat_picker import ChatPicker
 from nanomuse.channels.desktop_request import computer_request, select_computer
-from nanomuse.channels.sync_delivery import SyncDeliveryReceipts
-from nanomuse.channels.welcome import send_welcome_art
-from nanomuse.hub.client import HubError
-from nanomuse.schema import Message
 from nanomuse.channels.dingtalk import DingTalkChannel
 from nanomuse.channels.feishu import FeishuChannel
-from nanomuse.channels.store import ChannelSettingsStore, PairingStore
 from nanomuse.channels.max import MaxChannel
 from nanomuse.channels.menu import ChatMenu
-from nanomuse.channels.chat_picker import ChatPicker
+from nanomuse.channels.store import ChannelSettingsStore, PairingStore
+from nanomuse.channels.sync_delivery import SyncDeliveryReceipts
 from nanomuse.channels.telegram import TelegramChannel
-from nanomuse.channels.wecom import WeComChannel
-from nanomuse.logger import logger
 from nanomuse.channels.telegram_topics import physical_chat
+from nanomuse.channels.wecom import WeComChannel
+from nanomuse.channels.welcome import send_welcome_art
+from nanomuse.hub.client import HubError
+from nanomuse.logger import logger
+from nanomuse.schema import Message
 from nanomuse.server.events import MAIN_THREAD, new_id
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
 
 REMOTE_TASK_S = 600
+
+# How long a chat's own Cloud key is kept in memory before the bot door is asked again: a
+# chat writing twice does not need two sign-ins, and the relay issues a key per chat anyway.
+CLOUD_KEY_TTL_S = 600.0
 
 CHANNEL_TYPES: tuple[type[Channel], ...] = (
     FeishuChannel,
@@ -70,10 +76,38 @@ ALLOW_WORDS = frozenset(
         "ok",
         "approve",
         "go ahead",
+        # Russian, as a person types it in a chat
+        "да",
+        "ок",
+        "окей",
+        "можно",
+        "разрешаю",
+        "разреши",
+        "разрешить",
+        "давай",
     }
 )
 DENY_WORDS = frozenset(
-    {"拒绝", "不行", "不要", "不", "拒绝。", "deny", "no", "n", "reject", "stop"}
+    {
+        "拒绝",
+        "不行",
+        "不要",
+        "不",
+        "拒绝。",
+        "deny",
+        "no",
+        "n",
+        "reject",
+        "stop",
+        # Russian
+        "нет",
+        "нельзя",
+        "запрещаю",
+        "запрети",
+        "откажи",
+        "не надо",
+        "стоп",
+    }
 )
 
 # how often a growing reply is pushed to the chat (edits are rate-limited everywhere)
@@ -82,17 +116,17 @@ THREAD_PREFIX = "channel-"
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 _TOOL_LABELS = {
-    "web_search": ("Searching the web", "正在搜索"),
-    "web_fetch": ("Reading a web page", "正在读网页"),
-    "files": ("Working with files", "正在处理文件"),
-    "shell": ("Running a command", "正在运行命令"),
-    "python_execute": ("Running Python", "正在运行 Python"),
-    "read_emails": ("Reading email", "正在读邮件"),
-    "send_email": ("Sending email", "正在发邮件"),
-    "browser": ("Browsing", "正在浏览网页"),
-    "goals": ("Updating goals", "正在更新目标"),
-    "remember": ("Saving a memory", "正在记下来"),
-    "recall": ("Recalling", "正在回忆"),
+    "web_search": ("Searching the web", "正在搜索", "Ищу в интернете"),
+    "web_fetch": ("Reading a web page", "正在读网页", "Читаю страницу"),
+    "files": ("Working with files", "正在处理文件", "Работаю с файлами"),
+    "shell": ("Running a command", "正在运行命令", "Выполняю команду"),
+    "python_execute": ("Running Python", "正在运行 Python", "Запускаю Python"),
+    "read_emails": ("Reading email", "正在读邮件", "Читаю почту"),
+    "send_email": ("Sending email", "正在发邮件", "Отправляю письмо"),
+    "browser": ("Browsing", "正在浏览网页", "Открываю страницу"),
+    "goals": ("Updating goals", "正在更新目标", "Обновляю цели"),
+    "remember": ("Saving a memory", "正在记下来", "Запоминаю"),
+    "recall": ("Recalling", "正在回忆", "Вспоминаю"),
 }
 
 
@@ -155,6 +189,8 @@ class ChannelManager(ChannelBus):
             return
         self.started = True
         self._loop = asyncio.get_running_loop()
+        # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
+        self._cloud_keys: dict[tuple[str, str], tuple[str, str, float]] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
         for name in self.types:
@@ -312,7 +348,10 @@ class ChannelManager(ChannelBus):
                 and (not self.pairing.approved(msg.channel))
             ):
                 self.pairing.add(
-                    msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
+                    msg.channel,
+                    msg.sender_id,
+                    sender_name=msg.sender_name,
+                    chat_id=physical_chat(msg.channel, msg.chat_id),
                 )
                 self.publish()
                 logger.info(
@@ -326,7 +365,10 @@ class ChannelManager(ChannelBus):
                 )
                 return
             code = self.pairing.request(
-                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
+                msg.channel,
+                msg.sender_id,
+                sender_name=msg.sender_name,
+                chat_id=physical_chat(msg.channel, msg.chat_id),
             )
             self.publish()
             await self._send(msg.channel, msg.chat_id, self.pairing_text(code))
@@ -336,7 +378,10 @@ class ChannelManager(ChannelBus):
             return
         if not msg.is_group:
             self.pairing.touch(
-                msg.channel, msg.sender_id, sender_name=msg.sender_name, chat_id=physical_chat(msg.channel, msg.chat_id)
+                msg.channel,
+                msg.sender_id,
+                sender_name=msg.sender_name,
+                chat_id=physical_chat(msg.channel, msg.chat_id),
             )
         if await self.picker.topics.inbound(msg):
             return
@@ -466,8 +511,20 @@ class ChannelManager(ChannelBus):
                 )
             )
             return
+        # an account of its own in the relay when the chat is on Cloud, and `"!"` when that
+        # account cannot be reached: then this turn is refused, never paid for by this machine
+        cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
+        if cloud_key == "!":
+            return
         try:
-            self.svc.send(thread_id, text, files=paths or None, language=self.menu.language(msg))
+            self.svc.send(
+                thread_id,
+                text,
+                files=paths or None,
+                once_key=cloud_key,
+                once_model=cloud_model,
+                language=self.menu.language(msg),
+            )
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
 
@@ -575,9 +632,17 @@ class ChannelManager(ChannelBus):
             )
             return
         if ok:
-            text = self.say("Allowed.", "已允许。") if approved else self.say("Denied.", "已拒绝。")
+            text = (
+                self.say("Allowed.", "已允许。", "Разрешила.")
+                if approved
+                else self.say("Denied.", "已拒绝。", "Запретила.")
+            )
         else:
-            text = self.say("That request is no longer waiting.", "这个请求已经不在等待了。")
+            text = self.say(
+                "That request is no longer waiting.",
+                "这个请求已经不在等待了。",
+                "Эта просьба уже не ждёт ответа.",
+            )
         await self._send(channel, chat_id, text)
 
     def pairing_text(self, code: str) -> str:
@@ -642,6 +707,13 @@ class ChannelManager(ChannelBus):
             live.shown = content
         except Exception as exc:  # noqa: BLE001
             logger.debug("channel {}: live update failed: {}", live.channel, exc)
+
+    async def _send_to_thread(self, thread: str, text: str) -> None:
+        """A message to the chat a thread belongs to, when the route is still there."""
+        route = self.routes.get(thread)
+        if route is None:
+            return
+        await self._send(route[0], route[1], text)
 
     async def _finish(self, thread: str, text: str, *, files: list[str] | None = None) -> None:
         """The reply (one assistant bubble) is complete: the live message gets its final
@@ -851,8 +923,12 @@ class ChannelManager(ChannelBus):
         if title:
             return title
         tool = str(event.get("tool") or "")
-        en, zh = _TOOL_LABELS.get(tool, (f"Using {tool}", f"正在使用 {tool}"))
+        en, zh, ru = _TOOL_LABELS.get(
+            tool, (f"Using {tool}", f"正在使用 {tool}", f"Работаю: {tool}")
+        )
         lang = self.lang
+        if lang == "ru":
+            return ru
         return zh if lang == "zh" else en
 
     def approval_text(self, event: dict[str, Any]) -> str:
@@ -1110,6 +1186,118 @@ class ChannelManager(ChannelBus):
                     endpoint[1],
                     label + " · " + self.say("You", "你", "Вы") + "\n" + text,
                 )
+
+    async def _cloud_key_for(self, channel: str, msg: InboundMessage) -> tuple[str, str]:
+        """The Cloud key and model this chat spends with, if the chat is on Cloud.
+
+        A chat that has no app yet is an account of its own in the relay: the bot door
+        (`POST /v1/bot/signin`, the shared secret in `cloud_bot_token`) answers with that
+        account's key and the model its menu recommends, and this one turn is charged to
+        the person instead of to this machine. Settings: `cloud_per_chat = true`,
+        `cloud_url` (the relay) and `cloud_bot_token`.
+
+        The key is kept for a few minutes in memory: a chat writing twice does not need two
+        sign-ins, and a key that lapses is replaced by the next message.
+
+        `("", "")` has one meaning: this chat is not on Cloud, so it runs on the model this
+        machine is configured with, which is the mode the person chose. A Cloud chat whose
+        own account cannot be reached gets `"!"` and the caller stops: the key of this
+        machine never pays for a turn that was meant for the relay, and the chat is told
+        why instead of seeing nothing happen."""
+        settings = self.store.resolved(self.store.config(channel))
+        if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
+            return "", ""
+        url = str(settings.get("cloud_url") or "").strip().rstrip("/")
+        token = str(settings.get("cloud_bot_token") or "").strip()
+        if not url or not token:
+            logger.warning(
+                "channel {}: cloud_per_chat is on but cloud_url or cloud_bot_token is empty",
+                channel,
+            )
+            await self._send(
+                channel,
+                msg.chat_id,
+                self.say(
+                    "This chat is set up for Cloud, but the server address or the bot token"
+                    " is missing. Ask the owner to finish the setup.",
+                    "这个聊天已设置为云端，但缺少服务器地址或机器人令牌。请让所有者完成设置。",
+                    "Этот чат настроен на облако, но не задан адрес сервера или токен бота."
+                    " Попроси владельца закончить настройку.",
+                ),
+            )
+            return "!", ""
+        cache_key = (channel, msg.sender_id)
+        held = self._cloud_keys.get(cache_key)
+        if held is not None and held[2] > time.time():
+            return held[0], held[1]
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                answer = await client.post(
+                    f"{url}/v1/bot/signin",
+                    json={
+                        "telegram_id": msg.sender_id,
+                        "device": f"{channel}:{physical_chat(channel, msg.chat_id)}",
+                    },
+                    headers={"X-Bot-Token": token},
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("channel {}: the bot door is unreachable: {}", channel, exc)
+            await self._send(
+                channel,
+                msg.chat_id,
+                self.say(
+                    "The server is not answering, so this chat cannot run right now. Try"
+                    " again in a minute.",
+                    "服务器暂时没有回应，这个聊天现在无法运行。请稍后再试。",
+                    "Сервер не отвечает, поэтому этот чат сейчас не может работать. Попробуй"
+                    " через минуту.",
+                ),
+            )
+            return "!", ""
+        body: dict[str, Any] = {}
+        with contextlib.suppress(ValueError):
+            parsed = answer.json()
+            if isinstance(parsed, dict):
+                body = parsed
+        if answer.status_code != 200:
+            error = body.get("error") if isinstance(body.get("error"), dict) else {}
+            code = str(error.get("code") or "")
+            text = str(error.get("message") or "")
+            logger.warning(
+                "channel {}: the bot door refused ({}): {}",
+                channel,
+                answer.status_code,
+                code or text,
+            )
+            await self._cloud_no_account(channel, msg.chat_id)
+            return "!", ""
+        key = str(body.get("api_key") or "")
+        models = body.get("models") or []
+        model = ""
+        if isinstance(models, list) and models and isinstance(models[0], dict):
+            model = str(models[0].get("id") or "")
+        if not key:
+            # a door that opens nothing is a refusal too: an empty key would otherwise send
+            # this turn with the key of this machine
+            logger.warning("channel {}: the bot door answered without a key", channel)
+            await self._cloud_no_account(channel, msg.chat_id)
+            return "!", ""
+        self._cloud_keys[cache_key] = (key, model, time.time() + CLOUD_KEY_TTL_S)
+        return key, model
+
+    async def _cloud_no_account(self, channel: str, chat_id: str) -> None:
+        """Say that the relay has no account for this chat: nothing runs for it."""
+        await self._send(
+            channel,
+            chat_id,
+            self.say(
+                "This chat cannot be used just yet: the server did not open an account for"
+                " it. Try again later.",
+                "这个聊天暂时还不能用：服务器没有为它开账户。请稍后再试。",
+                "Этот чат пока нельзя использовать: сервер не открыл для него аккаунт."
+                " Попробуй позже.",
+            ),
+        )
 
     async def _serve_from_device(
         self,
