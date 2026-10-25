@@ -1848,6 +1848,10 @@
   function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
   /** Цены поставщиков: одна таблица, у кого на каждую модель дешевле. */
   function providersView() {
+    window.location.replace("/app/prices/");
+    return loadingPanel(T.nav.providers);
+  }
+  function legacyProvidersSnapshotView() {
     const title = L3("Цены поставщиков", "Provider prices", "供应商价格");
     const pv = need("providers");
     if (!pv) return loadingPanel(title);

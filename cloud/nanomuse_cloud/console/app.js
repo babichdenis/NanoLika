@@ -198,13 +198,23 @@
   }).catch(() => { /* the defaults stand */ });
   const params = new URLSearchParams(location.search);
   let key = LS.getItem("nm.key") || "";
-  // после входа вернуть человека туда, откуда пришёл (витрина, профиль)
   const nmNextJump = new URLSearchParams(location.search).get("next");
-  // вход через Яндекс/Google/GitHub/Telegram: ключ приходит во фрагменте адреса
-  { const m = /(?:^|[#&])sso=([^&]+)/.exec(location.hash || "");
-    if (m) { nmDropChatCache(); key = decodeURIComponent(m[1]); LS.setItem("nm.key", key);
-             history.replaceState(null, "", location.pathname + location.search);
-             if (nmNextJump && !nmNextJump.includes(location.hostname + "/app")) location.replace(nmNextJump); } }
+  let nmSsoKey = "";
+  { const match = /(?:^|[#&])sso=([^&]+)/.exec(location.hash || "");
+    if (match) { try { nmSsoKey = decodeURIComponent(match[1]); } catch (_) {} history.replaceState(null, "", location.pathname + location.search); } }
+  function safeReturn(raw) {
+    try { const u = new URL(raw); if (u.protocol === "https:" && ["nanolika.ru", "cloud.nanolika.ru"].includes(u.hostname) && !u.username && !u.password && !u.port) return u.href; } catch (_) {}
+    return base + "/web/";
+  }
+  function saveBrowserSession(r) {
+    if (!r.api_key || !r.account?.id) throw new Error("Sign-in was not confirmed");
+    const owner = String(r.account.id), name = r.account.hint || "";
+    if (LS.getItem("nm.acct") !== owner) nmDropChatCache();
+    LS.setItem("nm.acct", owner); LS.setItem("nm.key", r.api_key); LS.setItem("nm.hint", name);
+    LS.setItem("nl.web.session.v1", JSON.stringify({key:r.api_key,owner,hint:name}));
+    key = r.api_key;
+  }
+  function finishBrowserSignIn(r) { saveBrowserSession(r); location.replace(safeReturn(nmNextJump)); }
   let hint = LS.getItem("nm.hint") || "";
   let ws = null, wsState = "off", hubPaused = false, backoff = 1000, devices = [], selected = params.get("device") || LS.getItem("nm.selected") || "";
   const pending = new Map(); // call id → {onEvent, resolve, reject}
@@ -299,39 +309,28 @@
     if (oauthList) return;
     oauthList = [];
     fetch(base + "/v1/auth/oauth/providers").then((r) => r.json())
-      .then((j) => { oauthList = j.providers || []; if (!key) renderSignIn(); })
+      .then((j) => { oauthList = j.providers || []; const seat = document.getElementById("signin-sso"); if (seat) { const block = ssoBlock(); seat.replaceChildren(); if (block) seat.append(block); } })
       .catch(() => {});
   }
-  window.nmTelegramAuth = async (user) => {
-    try {
-      const r = await api("POST", "/v1/auth/oauth/telegram", user);
-      if (!r.api_key) throw new Error("no_key");
-      key = r.api_key; hint = (r.account && r.account.hint) || "Telegram";
-      LS.setItem("nm.key", key); LS.setItem("nm.hint", hint);
-      location.reload();
-    } catch (e) { alert(e.message || "Telegram"); }
-  };
   const nmYandexLogo = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">' +
     '<path fill="#FC3F1D" d="M13.32 6.02h-1.1c-1.55 0-2.34.73-2.34 1.91 0 1.33.57 1.96 1.72 3.13l1.17 1.2-3.57 5.22H6.65l3.2-4.6c-1.34-1.4-2.42-2.46-2.42-4.9 0-2.4 1.6-4 4.7-4h3.98v13.5h-2.79V6.02z"/>' +
     '<path fill="#FC3F1D" d="M16.11 12.75V6.02h-2.79v6.73h2.79z" opacity="0"/>' +
     '</svg>';
   function ssoBlock() {
     if (!oauthList || !oauthList.length) return null;
-    const widget = oauthList.find((p) => p.kind === "widget");
-    const buttons = oauthList.filter((p) => p.kind !== "widget").map((p) => {
+    
+    const buttons = oauthList.filter((p) => ["yandex", "google"].includes(p.name)).map((p) => {
       const nx = new URLSearchParams(location.search).get("next");
       const go = () => { location.href = base + `/v1/auth/oauth/${p.name}/start` + (nx ? "?next=" + encodeURIComponent(nx) : ""); };
       if (p.name === "yandex") {
         return h("button", { class: "btn yandex", type: "button", onclick: go,
-                             style: "display:inline-flex;align-items:center;gap:10px;justify-content:center;background:#fff;color:#000;border:1px solid #d9d9d9;border-radius:10px;font-weight:600" },
+                             style: "display:inline-flex;align-items:center;gap:10px;justify-content:center" },
           h("span", { html: nmYandexLogo }), L("Sign in with Yandex", "用 Yandex 登录", "Войти через Яндекс"));
       }
-      return h("button", { class: "btn ghost", type: "button", onclick: go }, p.title);
+      return h("button", { class: "btn oauth-provider", type: "button", onclick: go }, h("span", { class: "oauth-google", "aria-hidden": "true" }, "G"), L("Sign in with Google", "用 Google 登录", "Войти через Google"));
     });
     const kids = [h("div", { class: "fine", style: "margin:14px 0 6px;text-align:center" }, L("Or sign in with", "或用以下方式登录", "Или войти через")),
       h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;justify-content:center" }, ...buttons)];
-    if (widget) kids.push(h("div", { style: "display:flex;justify-content:center;margin-top:8px" },
-      h("script", { async: "", src: "https://telegram.org/js/telegram-widget.js?22", "data-telegram-login": widget.bot, "data-size": "medium", "data-onauth": "nmTelegramAuth(user)", "data-request-access": "write" })));
     return h("div", {}, ...kids);
   }
 
@@ -340,51 +339,47 @@
   function renderSignIn() {
     { const b = document.getElementById("nm-acct"); if (b) b.remove(); }
     loadOauth();
-    let identifier = LS.getItem("nm.identifier") || "", mode = LS.getItem("nm.mode") || "code", sent = false, busy = false, msg = "", bad = false, showPw = false;
+    let identifier = LS.getItem("nm.identifier") || "", mode = LS.getItem("nm.mode") || "code", sent = false, busy = false, msg = params.has("auth_error") ? L("Sign-in through this service could not be completed. Select its button to try again.", "登录未完成，请重试或使用邮件验证码。", "Не удалось завершить вход через выбранный сервис. Нажмите его кнопку, чтобы повторить попытку.") : "", bad = params.has("auth_error"), showPw = false;
     const draw = () => {
       const byPw = mode === "password";
       app.replaceChildren(h("div", { class: "signin" }, h("div", { class: "card rise" },
-        h("div", { class: "auth-intro" }, h("img", { src: "/web/assets/auth-lika-peek.webp", alt: "", width: "96", height: "128" }), h("div", {}, h("p", { class: "auth-brand" }, "nanoLika"), h("h1", {}, L("Welcome to Lika", "Welcome to Lika", "Рада вас видеть")))),
-        h("p", { class: "sub" }, T.tagline),
+        h("a", { class: "auth-home", href: "https://nanolika.ru/" }, L("← Back to the site", "← 返回网站", "← На сайт")),
+        h("div", { class: "auth-intro" }, h("img", { src: "/web/assets/auth-lika-peek.webp", alt: "", width: "96", height: "128" }),
+          h("div", {}, h("p", { class: "auth-brand" }, "nanoLika"), h("h1", {}, L("Welcome to Lika", "欢迎使用 Lika", "Рада вас видеть")))),
+        h("p", { class: "sub" }, L("Enter your email. We will send a sign-in code. New here? Your account is created after confirmation.", "输入邮箱获取登录验证码。首次使用时，确认后将创建账户。", "Введите почту, и я пришлю код. Если вы здесь впервые, после подтверждения появится ваш аккаунт.")),
         h("div", { class: "seg" },
           h("button", { class: byPw ? "" : "on", onclick: () => { mode = "code"; LS.setItem("nm.mode", mode); msg = ""; draw(); } }, T.byCode),
           h("button", { class: byPw ? "on" : "", onclick: () => { mode = "password"; LS.setItem("nm.mode", mode); sent = false; msg = ""; draw(); } }, T.byPassword)),
-        h("div", { class: "field" }, h("label", {}, T.identifier),
-          h("div", { class: "in" }, h("input", { id: "ident", type: "text", autocomplete: "username", inputmode: /^\s*[+\d]/.test(identifier) ? "tel" : "email", value: identifier, disabled: sent ? "" : null, oninput: (e) => { identifier = e.target.value; e.target.inputMode = /^\s*[+\d]/.test(identifier) ? "tel" : "email"; }, onkeydown: (e) => { if (e.key === "Enter") go(); } })),
+        h("div", { class: "field" }, h("label", { for: "ident" }, L("Email address", "电子邮箱", "Электронная почта")),
+          h("div", { class: "in" }, h("input", { id: "ident", type: "email", autocomplete: "email", inputmode: "email", value: identifier, disabled: (sent || busy) ? "" : null, oninput: (e) => { identifier = e.target.value; }, onkeydown: (e) => { if (e.key === "Enter") go(); } })),
           // said up front, not only after a code never came: SMS reaches mainland numbers only (0.20)
-          !byPw && !sent && T.smsRegion ? h("p", { class: "fine", style: "margin:6px 0 0" }, T.smsRegion) : null),
-        byPw ? h("div", { class: "field" }, h("label", {}, T.password),
+          null),
+        byPw ? h("div", { class: "field" }, h("label", { for: "pw" }, T.password),
           h("div", { class: "in" }, h("input", { id: "pw", type: showPw ? "text" : "password", autocomplete: "current-password", onkeydown: (e) => { if (e.key === "Enter") go(); } }),
             h("button", { type: "button", onclick: () => { showPw = !showPw; const i = document.getElementById("pw"); if (i) i.type = showPw ? "text" : "password"; } }, showPw ? T.hide : T.show))) : null,
-        !byPw && sent ? h("div", { class: "field" }, h("label", {}, T.code),
+        !byPw && sent ? h("div", { class: "field" }, h("label", { for: "code" }, T.code),
           h("div", { class: "in" }, h("input", { id: "code", type: "text", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6", onkeydown: (e) => { if (e.key === "Enter") go(); } }))) : null,
         h("button", { class: "btn", disabled: busy ? "" : null, onclick: go }, byPw || sent ? T.signIn : T.sendCode),
         !byPw && sent ? h("button", { class: "btn ghost", onclick: () => { sent = false; msg = ""; draw(); } }, T.another) : null,
         byPw ? h("button", { class: "btn ghost", onclick: () => { mode = "code"; LS.setItem("nm.mode", mode); msg = ""; draw(); } }, T.forgot) : null,
-        h("div", { class: "hint" + (bad ? " bad" : msg ? " ok" : "") }, msg),
-        ssoBlock(),
-        h("p", { class: "fine" }, T.fine, showRelayLine ? h("span", {}, h("br"), h("b", {}, `${T.relay}: `), base) : null),
+        h("div", { class: "hint" + (bad ? " bad" : msg ? " ok" : ""), role: bad ? "alert" : "status" }, msg),
+        h("div", {id:"signin-sso"}, ssoBlock()),
+        h("p", { class: "auth-legal" }, L("By continuing, you accept the ", "继续即表示接受", "Продолжая, вы принимаете "), h("a", { href:"https://nanolika.ru/offer.html", target:"_blank", rel:"noopener" }, L("offer", "服务条款", "оферту")), L(" and acknowledge the ", "并了解", " и знакомитесь с "), h("a", { href:"https://nanolika.ru/privacy.html", target:"_blank", rel:"noopener" }, L("privacy policy", "隐私政策", "обработкой данных")), "."),
+        h("p", { class: "fine auth-note" }, L("Your email is also used for receipts and important account messages.", "邮箱也用于收据和重要账户通知。", "На эту же почту придут чеки и важные письма об аккаунте."), showRelayLine ? h("span", {}, h("br"), h("b", {}, `${T.relay}: `), base) : null),
       )));
       const focus = document.getElementById(byPw ? (identifier ? "pw" : "ident") : sent ? "code" : "ident");
       if (focus) focus.focus();
     };
-    const go = () => { if (mode === "password") login(); else if (sent) verify(); else send(); };
+    const go = () => { if (busy) return; if (mode === "password") login(); else if (sent) verify(); else send(); };
     async function send() {
       identifier = identifier.trim(); if (!identifier) return;
+      const field = document.getElementById("ident"); if (field && !field.reportValidity()) return;
       busy = true; msg = ""; bad = false; draw();
       try { await api("POST", "/v1/auth/code", { identifier }); LS.setItem("nm.identifier", identifier); sent = true; msg = T.codeSent(codeMinutes()); }
       catch (e) { msg = errText(e); bad = true; }
       busy = false; draw();
     }
-    function adopt(r) {
-      const same = LS.getItem("nm.acct") === String((r.account && r.account.id) || "");
-      if (!same) nmDropChatCache();
-      LS.setItem("nm.acct", String((r.account && r.account.id) || ""));
-      key = r.api_key; hint = (r.account && r.account.hint) || identifier;
-      LS.setItem("nm.key", key); LS.setItem("nm.hint", hint);
-      renderMain(); connect(); nmMountAccount();
-      toast(T.signedIn(hint));   // a sign-in should look like one, not like a page that changed by itself
-    }
+    function adopt(r) { finishBrowserSignIn(r); }
     async function verify() {
       const code = (document.getElementById("code") || {}).value || "";
       if (code.replace(/\D/g, "").length !== 6) return;
@@ -579,6 +574,17 @@
     if (t.busy) nodes.push(h("div", { class: "steps" }, h("div", { class: "thinking" }, h("i"), T.busy(threadLabel(t)))));
     els.messages.replaceChildren(...nodes);
     els.messages.scrollTop = els.messages.scrollHeight;
+    // a `preview:` line from Lika opens the pane (a URL, or `preview:html:` inline markup)
+    const last = threadEvents[threadEvents.length - 1];
+    if (last && last.type === "them") {
+      const txt = (last.text || "").trim();
+      if (txt !== previewFor) {
+        previewFor = txt;
+        const url = txt.match(/^preview:\s*(https?:\/\/\S+)/i);
+        if (url) showPreview({ kind: "url", url: url[1] });
+        else if (/^preview:html:/i.test(txt)) showPreview({ kind: "html", html: txt.replace(/^preview:html:/i, "").trim() });
+      }
+    }
   }
 
   function drawThreadComposer() {
@@ -598,6 +604,7 @@
 
   function signOut(expired) {
     if (!expired && key) api("POST", "/v1/auth/sign-out", {}, key).catch(() => {});
+    LS.removeItem("nl.web.session.v1");
     key = ""; hint = ""; LS.removeItem("nm.key"); LS.removeItem("nm.hint");
     if (ws) { try { ws.onclose = null; ws.close(); } catch (_) { /* ignore */ } ws = null; }
     closeSheet();
@@ -715,6 +722,8 @@
 
   // ── main view ────────────────────────────────────────────────────
   let els = {};
+  let clickBound = false;
+  let previewFor = "";
   // A short line at the bottom that goes away by itself: after a sign-in the person should see
   // that it worked instead of guessing from a page that happens to look different.
   function toast(text) {
@@ -728,8 +737,41 @@
     els = {};
     els.side = h("aside", { class: "side" });
     els.chat = h("section", { class: "chat" });
-    app.replaceChildren(h("div", { class: "main" }, els.side, els.chat));
+    els.panel = h("section", { class: "panel", hidden: true });
+    els.phead = h("div", { class: "phead" });
+    els.pbody = h("div", { class: "pbody" }, h("div", { class: "pempty" }, L("Nothing to preview yet", "暂无预览", "Пока нечего показывать")));
+    els.panel.replaceChildren(els.phead, els.pbody);
+    els.main = h("div", { class: "main" }, els.side, els.chat, els.panel);
+    app.replaceChildren(els.main);
+    if (!clickBound) {
+      clickBound = true;
+      document.addEventListener("click", (e) => {
+        const a = e.target && e.target.closest ? e.target.closest(".bubble a[href^='http']") : null;
+        if (!a) return;
+        e.preventDefault();
+        showPreview({ kind: "url", url: a.getAttribute("href") });
+      });
+    }
     drawAll();
+  }
+  // ── the preview panel (a browser/artifact pane, opened by a link or `preview:` line)
+  function showPreview(p) {
+    if (!els.panel || !els.pbody) return;
+    els.panel.hidden = false;
+    els.main.classList.add("has-panel");
+    const title = p.title || p.url || p.kind;
+    els.phead.replaceChildren(
+      h("span", { class: "t" }, title),
+      p.url ? h("button", { class: "round open", title: L("Open in a new tab", "新标签页打开", "Открыть во вкладке"), onclick: () => window.open(p.url, "_blank"), html: ICON.more }) : null,
+      h("button", { class: "round", title: L("Close", "关闭", "Закрыть"), onclick: hidePreview, html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' }),
+    );
+    if (p.kind === "html") els.pbody.replaceChildren(h("iframe", { srcdoc: p.html, sandbox: "allow-scripts allow-same-origin", title }));
+    else if (p.kind === "image") els.pbody.replaceChildren(h("img", { src: p.src, alt: title }));
+    else if (p.kind === "pdf") els.pbody.replaceChildren(h("embed", { src: p.url, type: "application/pdf", title }));
+    else els.pbody.replaceChildren(h("iframe", { src: p.url, title }));
+  }
+  function hidePreview() {
+    if (els.panel) { els.panel.hidden = true; els.main.classList.remove("has-panel"); }
   }
   function drawAll() { drawSide(); drawChatShell(); }
   function drawStatus() { const s = els.status; if (s) { s.className = "status " + (wsState === "on" ? "on" : wsState === "off" ? "off" : ""); s.title = wsState === "on" ? T.connected : wsState === "off" ? (hubPaused ? T.hubPaused : T.disconnected) : T.connecting; } }
@@ -1044,10 +1086,17 @@
   addEventListener("focus", followStoredSession);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) followStoredSession(); });
   { const q = new URLSearchParams(location.search);
-  if (q.get("signout") === "1") { LS.removeItem("nm.key"); LS.removeItem("nm.hint"); key = "";
-    location.replace(base + "/v1/auth/logout?next=" + encodeURIComponent(q.get("next") || "https://nanolika.ru/")); }
-  else if (q.get("signin") === "1") { renderSignIn(); }   // кнопка «Вход» всегда показывает форму
+  if (q.get("signout") === "1") {
+    const token = key; LS.removeItem("nm.key"); LS.removeItem("nm.hint"); LS.removeItem("nl.web.session.v1"); key = "";
+    const leave = () => location.replace(base + "/v1/auth/logout?next=" + encodeURIComponent(safeReturn(q.get("next") || "https://nanolika.ru/")));
+    if (token) api("POST", "/v1/auth/sign-out", {}, token).catch(() => {}).finally(leave); else leave();
+  } else if (nmSsoKey) {
+    app.replaceChildren(h("p", {class:"auth-loading",role:"status"}, L("Finishing sign-in…", "正在完成登录…", "Завершаю вход…")));
+    api("GET", "/v1/me", null, nmSsoKey).then((me) => finishBrowserSignIn({...me, api_key:nmSsoKey})).catch(() => { key = ""; renderSignIn(); });
+  } else if (q.get("signin") === "1") renderSignIn();
   else if (key) { renderMain(); connect(); nmMountAccount();
     if (/^#account/.test(location.hash)) setTimeout(() => { try { openAccount(); } catch (e) {} }, 60); }
   else renderSignIn(); }
 })();
+
+window.addEventListener('storage',event=>{if(event.key==='nm.key'&&!event.newValue)location.replace('/app/?signin=1&next='+encodeURIComponent(location.origin+'/web/'));});
