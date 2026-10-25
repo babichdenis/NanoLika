@@ -1005,6 +1005,34 @@ function ensureDockTile(): void {
   app.dock?.show();
 }
 
+/**
+ * Keeps the Dock tile there.
+ *
+ * Something puts NanoLika back to a UIElement while it runs (2026-10-25): the tile
+ * disappears minutes after a launch that started as a regular app, and no call in this
+ * process asks for it. Rather than guess, a small watch asks the Dock whether the tile is
+ * visible and puts the app back when it is not — with a line in the log, so the next
+ * occurrence leaves a trace of how often it happens.
+ */
+let dockWatch: NodeJS.Timeout | null = null;
+function watchDockTile(): void {
+  if (process.platform !== "darwin" || dockWatch) return;
+  dockWatch = setInterval(() => {
+    try {
+      if (app.dock?.isVisible() === false) {
+        ensureDockTile();
+        log("dock: the tile disappeared and was put back");
+      }
+    } catch {
+      /* the dock is not there for this run */
+    }
+  }, 3000);
+  app.once("before-quit", () => {
+    if (dockWatch) clearInterval(dockWatch);
+    dockWatch = null;
+  });
+}
+
 function showWindow(): BrowserWindow | null {
   if (!mainWindow && hostUrl) {
     mainWindow = createWindow();
@@ -1896,13 +1924,11 @@ async function requestScreenRecording(openPane = true): Promise<void> {
     watchScreenGrant();
     return;
   }
-  if (!macPermissions.askScreen()) {
-    try {
-      await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } });
-    } catch {
-      /* no sources without the permission — that attempt was the point */
-    }
-  }
+  // NanoLika: the app itself never asks for Screen Recording and never probes `desktopCapturer`.
+  // Screenshots come from the helper alone, so the helper's grant is the only one that matters;
+  // a second request in the app's name used to put the *app* on the pane with a grant no
+  // screenshot could honour, and the person was asked again on every rebuild.
+  log("permissions: the helper is the only one that takes screenshots; the app did not ask for Screen Recording");
   if (openPane) void shell.openExternal(PERMISSION_PANES.screen);
   watchScreenGrant();
 }
@@ -1951,7 +1977,9 @@ async function ensureMacPermissionsAtLaunch(): Promise<void> {
   if (prefs.permissionsPaneFor === app.getVersion()) return;
   prefs = { ...prefs, permissionsPaneFor: app.getVersion() };
   writePrefs();
-  if (screen !== "granted") void requestScreenRecording(true);
+  // Screen Recording is the helper's to hold: at launch the app does not ask for it (the ask
+  // in the app's name put the wrong row on the pane). Only Accessibility, which the app's own
+  // window can hold, is asked for here, and only through the helper when it is in use.
   if (accessibility !== "granted") requestAccessibility(false);
 }
 
@@ -2353,6 +2381,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     buildMenu();
     prefs = readPrefs();
     applyPrefs();
+    watchDockTile();
     exitGuard = new ProtectedExit({ work: workSource, dialog: exitDialog, finish: () => app.quit(), log });
     log(`NanoLika Desktop ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
     if (operatorCheckFlag) {
