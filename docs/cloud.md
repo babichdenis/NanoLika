@@ -620,6 +620,17 @@ running `connect` tariff keeps every device on its own, and the socket is closed
 with `4004 connect_limited` ([hub.md](hub.md)). `0`, the default, keeps a relay
 that does not sell the key yet working as before: everyone connects.
 
+What each model costs the operator and what it sells for is one page,
+`/app/prices/` (`GET /v1/admin/prices`), linked from the console's *Models*
+view: every model in the menu with its purchase price in yuan and in rubles, the
+sale rate in force, the multiple between the two, an offered price at a chosen
+markup, and, beside it, the retail prices of the services the market was read
+from and the price drafts kept in `docs/`. The ruble column is calculated at the
+relay's `RUB_PER_USD`; while that is `0` the page says so and shows a reference
+figure from the snapshot's CBR dollar rate rather than a working rate. The page
+writes nothing: a sale rate lives in the configuration (`sell_in`,
+`sell_cached_in`, `sell_out` on a model), and the page exists to choose one.
+
 
 ## T-Bank DEMO checkout
 

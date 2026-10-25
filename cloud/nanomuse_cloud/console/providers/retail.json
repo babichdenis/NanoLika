@@ -1,0 +1,349 @@
+{
+ "collected_at": "2026-10-24 13:28 UTC",
+ "note": "Цены розничных площадок в рублях. Собрано с витрин. Обновлять при новых заходах.",
+ "services": {
+  "study24.ai": {
+   "model": "подписка + кредиты",
+   "plans": {
+    "Lite": "199 ₽/нед · 400 кредитов",
+    "Start+": "549 ₽/мес · 1250",
+    "Pro": "999 ₽/мес · 2100",
+    "Ultima": "1999 ₽/мес · 4300"
+   },
+   "ops": [
+    {
+     "name": "Генератор изображений",
+     "credits": 52,
+     "rub": 26.0,
+     "uses": 170863
+    },
+    {
+     "name": "Seedance 2.5 Lite",
+     "credits": 50,
+     "rub": 25.0,
+     "uses": 10991
+    },
+    {
+     "name": "GPT Image 2.5",
+     "credits": 52,
+     "rub": 26.0,
+     "uses": 18433
+    },
+    {
+     "name": "Nano Banana Pro",
+     "credits": 55,
+     "rub": 27.5,
+     "uses": 93688
+    },
+    {
+     "name": "Seedream 5.0 Pro",
+     "credits": 35,
+     "rub": 17.5,
+     "uses": 8445
+    },
+    {
+     "name": "Midjourney",
+     "credits": 55,
+     "rub": 27.5,
+     "uses": 69571
+    },
+    {
+     "name": "GPT Image 2",
+     "credits": 51,
+     "rub": 25.5,
+     "uses": 19221
+    },
+    {
+     "name": "Nano Banana 2.1",
+     "credits": 55,
+     "rub": 27.5,
+     "uses": 5588
+    }
+   ],
+   "priced": 50,
+   "sample": [
+    {
+     "name": "Генератор изображений",
+     "credits": 52,
+     "rub": 26.0,
+     "uses": 170863
+    },
+    {
+     "name": "Seedance 2.5 Lite",
+     "credits": 50,
+     "rub": 25.0,
+     "uses": 10991
+    },
+    {
+     "name": "GPT Image 2.5",
+     "credits": 52,
+     "rub": 26.0,
+     "uses": 18433
+    }
+   ],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "chadgpt.ru": {
+   "model": "подписка + искры",
+   "plans": {
+    "Мини": {
+     "rub": 290,
+     "sparks": 120000,
+     "rub_per_1000": 2.41,
+     "models": "53 из 82"
+    },
+    "Опти": {
+     "rub": 590,
+     "sparks": 300000,
+     "rub_per_1000": 1.96,
+     "models": "78 из 82",
+     "discount": "-19%"
+    },
+    "Плюс": {
+     "rub": 1690,
+     "sparks": 900000,
+     "rub_per_1000": 1.87,
+     "models": "все",
+     "discount": "-23%"
+    },
+    "Бизнес": {
+     "rub": "от 5000",
+     "rub_per_1000": "1.6–2.0",
+     "note": "искры не сгорают"
+    }
+   },
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "gptunnel.ru": {
+   "model": "цена за 1000 токенов",
+   "plans": {},
+   "ops": [],
+   "priced": 141,
+   "sample": [
+    {
+     "name": "Kimi K3.1 Pro",
+     "ctx_rub_1k": "0,6 ₽",
+     "gen_rub_1k": "3 ₽"
+    },
+    {
+     "name": "−50%",
+     "ctx_rub_1k": "0,225 ₽",
+     "gen_rub_1k": "0,65 ₽"
+    },
+    {
+     "name": "Cohere Command R+",
+     "ctx_rub_1k": "1,5 ₽",
+     "gen_rub_1k": "6 ₽"
+    }
+   ],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "bothub.chat": {
+   "model": "pay-as-you-go, цены за 1M токенов",
+   "plans": {},
+   "ops": [],
+   "priced": 367,
+   "sample": [
+    {
+     "name": "Gemini 4 Argon",
+     "text": "Gemini 4 Argon New -28% Gemini Текст Контекст 1 048 576 Макс. вывод 943 718 Ввод (за 1M токенов) 156,46 ₽ Вывод (за 1M токенов) 782,28 ₽ Картинка-промпт (1K) < 0.01 ₽"
+    },
+    {
+     "name": "GPT 6.1 Sol",
+     "text": "GPT 6.1 Sol New -60% ChatGPT Текст Контекст 1 050 000 Макс. вывод 128 000 Ввод (за 1M токенов) 86,92 ₽ Вывод (за 1M токенов) 434,6 ₽"
+    },
+    {
+     "name": "Claude Sonnet 5.5",
+     "text": "Claude Sonnet 5.5 New -33% Claude Текст Контекст 1 000 000 Макс. вывод 128 000 Ввод (за 1M токенов) 145,59 ₽ Вывод (за 1M токенов) 727,96 ₽"
+    }
+   ],
+   "note": "",
+   "billing": "",
+   "measured": [
+    {
+     "name": "deepseek-v4.1-flash",
+     "in_rub_1m": 1.69,
+     "out_rub_1m": 80.54,
+     "source": "usage.cost живого запроса"
+    }
+   ]
+  },
+  "aitunnel.ru": {
+   "model": "цена за 1M токенов, ввод/вывод",
+   "plans": {},
+   "ops": [],
+   "priced": 201,
+   "sample": [
+    {
+     "name": "KIMI K3.1 PRO",
+     "in": 40.0,
+     "out": 2000.0
+    },
+    {
+     "name": "DEEPSEEK V4.1 FLASH 1017",
+     "in": 0.6,
+     "out": 120.0
+    },
+    {
+     "name": "MUSE SPARK OPEN",
+     "in": 30.0,
+     "out": 850.0
+    }
+   ],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "neuroapi.host": {
+   "model": "тарифы на ключ, цены за 1M токенов",
+   "plans": {
+    "Пилот": "1 285,70 ₽ за 1M",
+    "Смарт": "1 542,84 ₽ за 1M",
+    "note": "разница между тарифами ровно 20%"
+   },
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "proxyapi.ru": {
+   "model": "цена за 1M токенов, с НДС",
+   "plans": {},
+   "ops": [],
+   "priced": 437,
+   "sample": [
+    {
+     "name": "moonshotai/kimi-k3.1-pro",
+     "in_rub_1m": 273.68,
+     "out_rub_1m": 1368.42
+    },
+    {
+     "name": "nace-ai/drex-max",
+     "in_rub_1m": 8.11,
+     "out_rub_1m": null
+    },
+    {
+     "name": "mistralai/voxtral-mini-tts-3-0",
+     "in_rub_1m": 1789.47,
+     "out_rub_1m": null
+    }
+   ],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "aymo.ai": {
+   "model": "подписка: сообщения + кредиты",
+   "plans": {
+    "Free": {
+     "usd_month": 0,
+     "messages": 500,
+     "credits": 50
+    },
+    "Starter": {
+     "usd_month": 8,
+     "usd_year": 4,
+     "messages": 3000,
+     "credits": 1000
+    },
+    "Pro": {
+     "usd_month": 20,
+     "usd_year": 12,
+     "messages": 12000,
+     "credits": 3000
+    },
+    "Ultra": {
+     "usd_month": 39,
+     "usd_year": 25,
+     "messages": 30000,
+     "credits": 7000
+    }
+   },
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "GPT, Claude, Gemini, DeepSeek, Grok, Kimi, GLM, Seedream, Nano Banana, GPT Image, FLUX",
+   "billing": "",
+   "measured": []
+  },
+  "rugpt.io": {
+   "model": "подписка: общий баланс на все инструменты, лимит в запросах",
+   "plans": {},
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "Цены на карточках не отдаются ни в текст, ни в HTML без входа — нужен скриншот из кабинета или авторизованный доступ.",
+   "billing": "помесячно или единоразово",
+   "measured": []
+  },
+  "mashagpt.ru": {
+   "model": "подписка: единицы энергии на все нейросети, бесплатный ярус",
+   "plans": {
+    "Free": {
+     "rub_month": 0,
+     "energy": null,
+     "note": "5 генераций в сутки суммарно на чат, картинки, музыку; бесплатных картинок 5 до первой оплаты"
+    },
+    "Base": {
+     "rub_month": 990,
+     "energy": "20 млн",
+     "text_pages": "1 300–7 900",
+     "images": 500,
+     "video": 27,
+     "songs": 66
+    },
+    "Ultra": {
+     "rub_month": 1990,
+     "energy": "50 млн",
+     "text_pages": "3 200–20 000",
+     "images": 1250,
+     "video": 69,
+     "songs": 166,
+     "discount": "-33%"
+    },
+    "Pro": {
+     "rub_month": 19990,
+     "energy": "700 млн",
+     "discount": "-52%"
+    }
+   },
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "ChatGPT Plus = 2 000 ₽/мес, у нас Base = 990 ₽",
+   "billing": "энергия восстанавливается каждый расчётный период до максимума",
+   "measured": []
+  },
+  "epicai.ru": {
+   "model": "бесплатные модели с общим суточным лимитом + платные по токенам",
+   "plans": {},
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "",
+   "billing": "",
+   "measured": []
+  },
+  "openrouter.ai": {
+   "model": "провайдер-агрегатор, цены в $ за 1M токенов, пересчитаны по 80,54",
+   "plans": {},
+   "ops": [],
+   "priced": 0,
+   "sample": [],
+   "note": "дешевле нашей закупки по смешанной цене (3:1) в 263 моделях из 361 сопоставленной",
+   "billing": "",
+   "measured": []
+  }
+ }
+}

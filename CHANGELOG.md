@@ -10,6 +10,9 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+- Added a prices page to the operator console: purchase cost and sale rate for every model in the menu with the multiple between them, an offered price at a chosen markup, the connected providers, the retail prices read from the market and the price drafts from `docs/`. The page writes nothing.
+- 运维控制台新增价格页面：列出菜单中每个模型的采购价与售价及倍数，可按倍数试算报价，并显示已接入的供应商、市场零售价和 `docs/` 中的价格草稿。该页面不写入任何数据。
+
 - Added operator default-avatar preview, validated immutable media sets, explicit publication and rollback. Added Cloud browser, runtime web and desktop source readers while preserving personal faces and clips. Older native clients still need an update; no installer was built.
 - 新增默认形象预览、经过验证的不可变媒体套装、明确发布和回退。Cloud 浏览器、运行时网页及桌面源码加入读取支持，保留个人形象和视频。旧原生客户端仍需更新，未构建安装包。
 

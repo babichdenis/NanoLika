@@ -1,0 +1,90 @@
+{
+  "note": "Предварительные выводы из документов по ценам. Окончательного решения нет: два черновика расходятся, и оба собраны 24.10.2026. Здесь они лежат рядом с закупкой, чтобы решение принималось по цифрам, а не по памяти. Обновлять вместе с docs.",
+  "sources": [
+    "~/Dev/nanoLika/docs/market-retail-2026-10-24.md",
+    "~/Dev/nanoLika/docs/models-and-prices-2026-10.md",
+    "~/Dev/nanoLika/docs/models-final-2026-10.md"
+  ],
+  "market": {
+    "retail_rub_per_1m": [280, 3000],
+    "our_purchase_rub_per_1m": [8.58, 21.14],
+    "note": "Рынок розницы держит 280–3000 ₽ за миллион токенов; наша закупка 8,58–21,14 ₽ за смешанный миллион. Официальный прайс DeepSeek (21,14 ₽) — нижняя граница рынка, а не середина."
+  },
+  "drafts": [
+    {
+      "id": "rates-2026-10-22",
+      "date": "2026-10-22",
+      "status": "действует в конфиге",
+      "title": "Ставки текста, утверждённые 22.10",
+      "note": "Стоят в конфиге релея сейчас. models-final называет их выше рынка в 7–30 раз и предлагает заменить.",
+      "rows": [
+        { "what": "вход, 1M токенов", "cost": "₽12–17", "price": "₽260", "ratio": "×15–20" },
+        { "what": "кэш-вход, 1M", "cost": "—", "price": "₽6", "ratio": "—" },
+        { "what": "выход, 1M токенов", "cost": "₽48–69", "price": "₽1040", "ratio": "×15–21" }
+      ]
+    },
+    {
+      "id": "proposal-a-2026-10-24",
+      "date": "2026-10-24",
+      "status": "черновик",
+      "title": "Черновик A: текст дорого, медиа по кратности",
+      "note": "models-and-prices-2026-10.md: текст остаётся 260/1040, медиа дешевле по кратности, потому что картинка за ₽150 не покупается.",
+      "rows": [
+        { "what": "текст, 1M входных", "cost": "₽12–17", "price": "₽260", "ratio": "×15–20" },
+        { "what": "текст, 1M выходных", "cost": "₽48–69", "price": "₽1040", "ratio": "×15–21" },
+        { "what": "картинка 1024×1024", "cost": "₽7,85", "price": "₽39", "ratio": "×5" },
+        { "what": "клип 4 с 480p", "cost": "₽10,26", "price": "₽99", "ratio": "×9,6" },
+        { "what": "клип 4 с 720p", "cost": "₽22–27", "price": "₽149", "ratio": "×5,5–6,8" },
+        { "what": "озвучка, 1000 знаков", "cost": "₽1,10", "price": "₽4", "ratio": "×3,6" },
+        { "what": "распознавание, минута", "cost": "не измерено", "price": "₽6", "ratio": "—" }
+      ]
+    },
+    {
+      "id": "proposal-b-2026-10-24",
+      "date": "2026-10-24",
+      "status": "черновик, поздний",
+      "title": "Черновик B: 12 позиций, кратность 2–3×",
+      "note": "models-final-2026-10.md: цены берутся из живых ответов Polza, а не из прайса. Кратность 2–3× по всем позициям, текст дешевеет с 260/1040 до 35/140.",
+      "rows": [
+        { "what": "DeepSeek V4.1 Flash: вход, 1M", "cost": "₽12", "price": "₽35", "ratio": "×3" },
+        { "what": "DeepSeek V4.1 Flash: выход, 1M", "cost": "₽48", "price": "₽140", "ratio": "×3" },
+        { "what": "DeepSeek V4.1 Flash: кэш-вход, 1M", "cost": "—", "price": "₽8", "ratio": "—" },
+        { "what": "DeepSeek V4 Pro: вход, 1M", "cost": "₽91–260", "price": "₽300", "ratio": "×1,2–3" },
+        { "what": "DeepSeek V4 Pro: выход, 1M", "cost": "₽371–815", "price": "₽900", "ratio": "×1,1–2,4" },
+        { "what": "картинка Gemini 3.1 Flash Lite Image", "cost": "₽2,90", "price": "₽6", "ratio": "×2,1" },
+        { "what": "картинка Gemini 3.1 Flash Image", "cost": "₽7,85", "price": "₽16", "ratio": "×2" },
+        { "what": "клип 4 с: Seedance 2 Mini", "cost": "₽10,26", "price": "₽22", "ratio": "×2,1" },
+        { "what": "клип 4 с: WAN 3.0", "cost": "₽24,31", "price": "₽50", "ratio": "×2" },
+        { "what": "клип 4 с: Seedance 2.5 (по желанию)", "cost": "₽75,60", "price": "₽160", "ratio": "×2,1" },
+        { "what": "озвучка Gemini TTS, 1000 знаков", "cost": "₽1,09", "price": "₽2,50", "ratio": "×2,3" },
+        { "what": "озвучка MiniMax Speech 2.8 HD, 1000 знаков", "cost": "₽11,40", "price": "₽25", "ratio": "×2,2" },
+        { "what": "распознавание Whisper Large v3 Turbo, минута", "cost": "₽0,02", "price": "₽1", "ratio": "округление" },
+        { "what": "распознавание Whisper 1, минута", "cost": "₽0,70", "price": "₽2", "ratio": "×2,9" }
+      ]
+    }
+  ],
+  "deepseek_flash_sellers": [
+    { "seller": "bothub.chat", "in": 1.69, "out": 80.54, "cached_in": null, "source": "факт по usage.cost" },
+    { "seller": "polza (v4.1-flash)", "in": 5.72, "out": 17.16, "cached_in": null, "source": "витрина" },
+    { "seller": "routerai (v4.1-flash)", "in": 6.18, "out": 24.74, "cached_in": null, "source": "витрина" },
+    { "seller": "polza (1017)", "in": 11.56, "out": 17.16, "cached_in": null, "source": "витрина" },
+    { "seller": "routerai (1017)", "in": 11.63, "out": 17.28, "cached_in": 0.16, "source": "витрина" },
+    { "seller": "официальный deepseek, off-peak", "in": 12.08, "out": 48.32, "cached_in": 0.24, "source": "прайс" },
+    { "seller": "официальный deepseek, пик", "in": 24.16, "out": 96.65, "cached_in": 0.48, "source": "прайс" },
+    { "seller": "proxyapi (1017)", "in": 21.05, "out": null, "cached_in": 20.0, "source": "витрина" }
+  ],
+  "deepseek_flash_mixed": [
+    { "seller": "polza v4.1-flash", "rub_per_1m": 8.58 },
+    { "seller": "routerai v4.1-flash", "rub_per_1m": 10.82 },
+    { "seller": "polza 1017", "rub_per_1m": 12.96 },
+    { "seller": "official off-peak", "rub_per_1m": 21.14 },
+    { "seller": "bothub", "rub_per_1m": 21.4 },
+    { "seller": "official peak", "rub_per_1m": 42.28 }
+  ],
+  "open_questions": [
+    "Какая кратность считается нормой: 2–3× (черновик B), 5× (решение вслух) или 15–20× (ставки 22.10)?",
+    "Считаем розницу от закупки в юанях по курсу или от рублёвой цены поставщика (Polza отдаёт usage.cost_rub)?",
+    "Что делать с медиа: цена за штуку или пересчёт в токены, как сейчас устроен учёт?",
+    "Куда девать 12 старых deepseek-моделей: скрыть из меню (listed: false) или оставить в продаже?"
+  ]
+}

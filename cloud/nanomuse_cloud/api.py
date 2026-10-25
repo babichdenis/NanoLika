@@ -2101,6 +2101,10 @@ def create_app(
     from .menu_admin import install as install_menu_admin
 
     install_menu_admin(app, settings, admin_dep)
+
+    from .prices_admin import install as install_prices_admin
+
+    install_prices_admin(app, settings, admin_dep)
     install_autopay(app, cloud, caller_dep)
 
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])

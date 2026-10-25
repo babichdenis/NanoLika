@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nanoLika Cloud — цены и розница</title>
+    <link rel="stylesheet" href="prices.css" />
+    <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
+  </head>
+  <body>
+    <header>
+      <a class="back" href="/app/">← в консоль</a>
+      <h1>Цены, поставщики и розница</h1>
+      <p class="intro">
+        Закупка по каждой модели, наша цена и рынок рядом. Розница ещё не решена: внизу черновики
+        из документов, чтобы решать по цифрам. Страница ничего не продаёт и ничего не сохраняет.
+      </p>
+      <p class="rate" id="rate"></p>
+      <p class="counts" id="counts"></p>
+    </header>
+
+    <div class="bar">
+      <label class="field">
+        наценка
+        <input id="k" type="number" min="0.5" max="50" step="0.5" value="5" />
+        <span class="meta">× от закупки</span>
+      </label>
+      <input id="q" type="search" placeholder="Модель, id, поставщик" autocomplete="off" />
+      <div class="chips" id="chips"></div>
+      <label class="switch"><input id="only-sell" type="checkbox" /> только с ценой продажи</label>
+    </div>
+
+    <p class="note" id="note"></p>
+
+    <main>
+      <section>
+        <h2>Наше меню и цена <span class="meta" id="chat-count"></span></h2>
+        <p class="lead">
+          «Закупка» это ставка поставщика в юанях за миллион токенов, пересчитанная в рубли.
+          «Сейчас» это действующая продажная ставка релея. «При наценке» это закупка, умноженная
+          на число сверху.
+        </p>
+        <div class="table-wrap">
+          <table id="models">
+            <thead>
+              <tr>
+                <th>Модель</th>
+                <th>Полка</th>
+                <th class="num">Закупка, ₽ / 1M</th>
+                <th class="num">Сейчас, ₽ / 1M</th>
+                <th class="num">Кратность</th>
+                <th class="num">При наценке, ₽</th>
+                <th class="num">Маржа, ₽</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Картинки, видео, голос <span class="meta" id="media-count"></span></h2>
+        <p class="lead">
+          Эти модели продаются не помиллионно: цена за штуку, за секунду или за знак. Закупка в
+          рублях, продажа токенами, как её считает релей.
+        </p>
+        <div class="table-wrap">
+          <table id="media">
+            <thead>
+              <tr>
+                <th>Модель</th>
+                <th>Вид</th>
+                <th class="num">Закупка, ₽</th>
+                <th>Продажа</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Поставщики</h2>
+        <p class="lead" id="providers-when"></p>
+        <div class="table-wrap">
+          <table id="providers">
+            <thead>
+              <tr>
+                <th>Поставщик</th>
+                <th>Подключён</th>
+                <th class="num">Предложений</th>
+                <th class="num">Вход от, ₽ / 1M</th>
+                <th class="num">Медиана входа</th>
+                <th>Заметка</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Розница рынка <span class="meta" id="retail-when"></span></h2>
+        <p class="lead" id="retail-note"></p>
+        <div class="cards" id="retail"></div>
+      </section>
+
+      <section>
+        <h2>Черновики и предварительные выводы</h2>
+        <p class="lead" id="drafts-note"></p>
+        <p class="market" id="market"></p>
+        <div class="drafts" id="drafts"></div>
+        <div class="table-wrap">
+          <h3>DeepSeek V4.1 Flash: кто за сколько отдаёт, ₽ за 1M</h3>
+          <table id="sellers">
+            <thead>
+              <tr>
+                <th>Продавец</th>
+                <th class="num">Вход</th>
+                <th class="num">Выход</th>
+                <th class="num">Кэш-вход</th>
+                <th>Источник</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <h3>Смешанный миллион (3 части входа на 1 часть выхода)</h3>
+          <table id="mixed">
+            <thead>
+              <tr>
+                <th>Продавец</th>
+                <th class="num">₽ за 1M смешанных</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <ul class="questions" id="questions"></ul>
+      </section>
+    </main>
+
+    <footer id="footer"></footer>
+    <script type="module" src="prices.js"></script>
+  </body>
+</html>
