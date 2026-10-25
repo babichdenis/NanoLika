@@ -24,6 +24,13 @@
 		max_size 20MB
 	}
 
+	# The operator's prices page and the numbers behind it do not live on the public
+	# domain: both answer "not found" from outside, so the page cannot be reached even
+	# by someone holding a path. It is read through a tunnel to the relay, which listens
+	# on this host only (`ssh -L 8790:127.0.0.1:8790 …`, then /app/prices/).
+	@operator_only path /app/prices /app/prices/* /v1/admin/prices
+	respond @operator_only 404
+
 	reverse_proxy relay:8787 {
 		# Chat streams (SSE) and the hub's WebSocket must not be buffered.
 		flush_interval -1

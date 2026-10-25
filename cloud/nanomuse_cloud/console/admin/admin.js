@@ -1914,18 +1914,13 @@
            "美元按央行汇率换算。按 1M token 与按次的价格不可直接比较，单位在第 3 列。新增供应商只需在 provider_prices.py 里加函数。")));
   }
 
-  // «Модели» это каталог под ключом; закупка, наша розница и рынок живут на своей странице,
-  // и ссылка на неё стоит здесь, а не спрятана в меню (0.30)
-  function pricesLink() {
-    return h("p", { class: "pad" },
-      h("a", { class: "more-link", href: "/app/prices/?lang=" + encodeURIComponent(LANG) },
-        L3("Цены, поставщики и розница: закупка, наша ставка и рынок →", "Prices, providers and retail: purchase cost, our rate and the market →", "价格、供应商与零售：采购价、我们的售价与市场 →")));
-  }
+  // «Модели» это каталог под ключом. Страницы цен здесь нет нарочно: её адрес отвечает
+  // «не найдено» в публичном домене, и читают её через туннель к релею (0.30)
   function modelsView() {
     const cv = need("catalog");
     if (!cv) return loadingPanel(T.catalog);
     if (cv._error) return failedPanel(T.catalog, "catalog", cv._error);
-    return h("div", {}, pricesLink(), catalogPanel(cv));
+    return catalogPanel(cv);
   }
   function healthView() {
     const hv = need("health");

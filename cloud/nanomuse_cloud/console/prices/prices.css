@@ -116,3 +116,26 @@ tr.no-cost td.cost { color: var(--warn); }
 .questions { margin: 16px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--ink); max-width: 96ch; }
 .questions li { margin-bottom: 5px; }
 footer { padding: 22px 32px; color: var(--ink-soft); font-size: 12.5px; }
+
+.gate-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 4px 32px 12px; }
+.gate-form input {
+  flex: 0 1 320px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+}
+.gate-form button {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+#gate h2 { margin: 28px 32px 4px; }
+#gate .lead { margin: 0 32px 10px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--ink-soft); }

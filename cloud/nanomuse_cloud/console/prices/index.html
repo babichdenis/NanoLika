@@ -19,7 +19,23 @@
       <p class="counts" id="counts"></p>
     </header>
 
-    <div class="bar">
+    <section id="gate" hidden>
+      <h2>Нужен админский токен</h2>
+      <p class="lead">
+        Этой страницы нет в публичном домене: снаружи её адрес отвечает «не найдено». Открой её
+        через туннель к релею и вставь токен оператора. Токен останется в этой вкладке, как в
+        остальной консоли.
+      </p>
+      <form id="gate-form" class="gate-form">
+        <input id="gate-token" type="password" placeholder="админский токен" autocomplete="off" />
+        <button id="gate-go" type="submit">Открыть</button>
+      </form>
+      <p class="lead mono" id="gate-hint">
+        ssh -L 8790:127.0.0.1:8790 root@сервер, потом http://127.0.0.1:8790/app/prices/
+      </p>
+    </section>
+
+    <div class="bar" id="bar" hidden>
       <label class="field">
         наценка
         <input id="k" type="number" min="0.5" max="50" step="0.5" value="5" />
@@ -32,7 +48,7 @@
 
     <p class="note" id="note"></p>
 
-    <main>
+    <main id="content" hidden>
       <section>
         <h2>Наше меню и цена <span class="meta" id="chat-count"></span></h2>
         <p class="lead">

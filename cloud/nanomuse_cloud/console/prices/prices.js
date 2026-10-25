@@ -1,7 +1,9 @@
 // Цены: наше меню с закупкой и розницей, поставщики, рынок и черновики.
-// Токен берётся там же, где держит его остальная админка (sessionStorage nm.admin).
+// Страницы нет в публичном домене (Caddy отвечает на её адрес «не найдено»), поэтому
+// её открывают через туннель к релею и вставляют админский токен здесь же. Токен
+// хранится там, где его держит остальная консоль (sessionStorage nm.admin).
 const SS = window.sessionStorage;
-const TOKEN = SS.getItem("nm.admin") || SS.getItem("nm.admin.token") || "";
+let TOKEN = SS.getItem("nm.admin") || SS.getItem("nm.admin.token") || "";
 
 const state = { data: null, k: 5, q: "", lane: "", onlySell: false };
 
@@ -39,9 +41,17 @@ function stamp(value) {
 
 async function api(path) {
   const r = await fetch(path, { headers: { "X-Admin-Token": TOKEN } });
-  if (r.status === 401) throw new Error("нужен админский токен: откройте /app/admin/ и войдите");
+  if (r.status === 401) throw new Error("токен не подошёл: проверьте его и попробуйте снова");
   if (!r.ok) throw new Error(`ответ ${r.status}`);
   return r.json();
+}
+
+/** Пока токена нет, страница спрашивает его и больше ничего не показывает. */
+function showGate() {
+  document.getElementById("gate").hidden = false;
+  document.getElementById("bar").hidden = true;
+  document.getElementById("content").hidden = true;
+  document.getElementById("gate-token").focus();
 }
 
 function drawRate() {
@@ -331,8 +341,16 @@ function draw() {
 
 async function load() {
   const note = document.getElementById("note");
+  const gate = document.getElementById("gate");
+  if (!TOKEN) {
+    showGate();
+    return;
+  }
   try {
     state.data = await api("/v1/admin/prices");
+    gate.hidden = true;
+    document.getElementById("bar").hidden = false;
+    document.getElementById("content").hidden = false;
     drawRate();
     draw();
     drawMedia();
@@ -343,6 +361,7 @@ async function load() {
     note.textContent = "";
   } catch (e) {
     note.textContent = String(e.message || e);
+    if (!state.data) showGate();
   }
 }
 
@@ -358,5 +377,16 @@ document.getElementById("q").oninput = (e) => {
 document.getElementById("only-sell").onchange = (e) => {
   state.onlySell = e.target.checked;
   if (state.data) draw();
+};
+document.getElementById("gate-form").onsubmit = (event) => {
+  event.preventDefault();
+  const field = document.getElementById("gate-token");
+  const value = field.value.trim();
+  if (!value) return;
+  TOKEN = value;
+  SS.setItem("nm.admin", value);
+  field.value = "";
+  document.getElementById("note").textContent = "";
+  load();
 };
 load();
