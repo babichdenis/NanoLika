@@ -163,6 +163,34 @@ class MuseAgent:
             return ""
         return prompts.STORE_SECTION.format(base=getattr(tool, "base_url", ""), missing=missing)
 
+    def connectors_section(self) -> str:
+        """What this build already has, before the model builds it again.
+
+        The case this exists for: "watch my mail" once sent a model off to write an IMAP
+        client and install an MCP server, while the app had the mail connector and mail
+        triggers all along — the tools were there, the *statement* that they were was not.
+        The lines are built from the settings and the tool list, so a switched-on connector
+        is described as on and a switched-off one says where its switch is."""
+        s = self.settings
+        mail = s.connectors.email
+
+        def tool(name: str) -> bool:
+            return self.tools.get(name) is not None
+
+        lines: list[str] = []
+        if mail.enabled and mail.imap_host and tool("read_emails"):
+            lines.append(prompts.MAIL_ON_SECTION)
+        elif tool("triggers"):
+            lines.append(prompts.MAIL_OFF_SECTION)
+        calendar = s.connectors.calendar
+        if calendar.enabled and tool("calendar"):
+            lines.append(prompts.CALENDAR_ON_SECTION)
+        elif tool("triggers"):
+            lines.append(prompts.CALENDAR_OFF_SECTION)
+        if not lines:
+            return ""
+        return prompts.CONNECTORS_SECTION.format(lines="\n".join(lines))
+
     def skills_section(self) -> str:
         """The index of skills — names and descriptions; the tool has the instructions."""
         lib = self.skills
@@ -380,6 +408,7 @@ class MuseAgent:
             + self.computer_section()
             + self.devices_section()
             + self.skills_section()
+            + self.connectors_section()
             + self.store_section(),
             extra=extra,
         )
