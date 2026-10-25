@@ -15,24 +15,33 @@ set one, takes your password) and then asks which model answers: the account's
 own (the Cloud) or a key of your own. Codes by SMS reach mainland China numbers
 only (号码认证服务 sends nowhere else); a Hong Kong, Taiwan or overseas number is
 told so at once (`phone_region`) and signs in with an e-mail address instead.
-A chat is the third way in, for someone with nothing installed: the Telegram bot
+A chat is the third way in, for someone with nothing installed: the bot
 signs a person in on the first message it gets, and `POST /v1/bot/signin` answers
 with a key of that account, so what a chat spends is the account's allowance and
 the refusal at the end of it arrives in the chat the way it does in an app. The
-door is the bot's shared secret (`BOT_SIGNIN_TOKEN`), the identifier is the
-numeric Telegram id, and the switch for newcomers alone is `BOT_SIGNUP_OPEN`
+door is the bot's shared secret (`BOT_SIGNIN_TOKEN`), and the account is the pair
+the chat is: the messenger in `channel` (`telegram` or `max`) and the numeric id
+that messenger gave the bot, sent as `chat_id` (`telegram_id` is still read, for a bot
+built before MAX was there). The two messengers count their users apart,
+so the same number on Telegram and on MAX is two people, with two allowances and
+two keys, and never one account with two ways in. A body without `channel` is a
+Telegram chat: that is what an older bot sends, and it lands in the account such
+a bot made before. The switch for newcomers alone is `BOT_SIGNUP_OPEN`
 ([cloud/README.md](../cloud/README.md)).
 The app joins that account later with a code from the chat: the bot asks the
 relay for one (`POST /v1/bot/link-code`, eight characters, fifteen minutes), the
 person types it in the app beside the code from their mailbox, and the address
 becomes a second way into the same account, so the allowance, the devices and the
-chats are one set. `/v1/me` lists the other ways in under `account.linked`. An
+chats are one set. The code names the account that chat is, in the messenger it
+wrote from, so a MAX chat's code never opens the Telegram account of the same
+number. `/v1/me` lists the other ways in under `account.linked`. An
 address that already has an account of its own is refused (`409 link_taken`)
 rather than taken over, and a wrong, spent or lapsed code is `link_wrong`.
 The other direction starts in the app: an account that is already signed in asks
 for six characters (`POST /v1/link/code`, its own key, ten minutes, one use, and a
 new code retires the one before it), the person sends them to the bot, and the bot
-types them back with its shared secret (`POST /v1/bot/link`). The chat then belongs
+types them back with its shared secret (`POST /v1/bot/link`, with its `channel` and
+`chat_id`). The chat then belongs
 to that account, and `GET /v1/link/channels` lists the chats the account holds, each
 with the messenger, the handle the bot sent (`@name`, empty when the chat has none)
 and when it was linked. The bot asks `GET /v1/bot/link` before it reads anything as a

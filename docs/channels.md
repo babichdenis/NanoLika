@@ -178,11 +178,13 @@ A bot anyone may write to needs every chat to spend its own money, not the machi
 Set `cloud_per_chat = true` beside `cloud_url` (the relay) and `cloud_bot_token` (its
 `BOT_SIGNIN_TOKEN`, a secret: put `{{vault:NAME}}` there, never the value) in the
 channel's settings, and each message asks the relay's bot door for that chat's account
-(`POST /v1/bot/signin`, see [cloud.md](cloud.md)): the turn runs under that account's
-key and is charged to it, and the chat hears about the end of its allowance in words
-instead of nothing happening. The key is kept in memory for ten minutes, so a chat
-writing twice does not sign in twice. Without these settings the chat runs on the
-configured model, as every chat did before.
+(`POST /v1/bot/signin` with `channel` and `chat_id`, see [cloud.md](cloud.md)): the turn
+runs under that account's key and is charged to it, and the chat hears about the end of
+its allowance in words instead of nothing happening. The account a chat makes is the
+messenger and the id together, so a MAX chat and a Telegram chat that happen to carry the
+same number are two accounts, each with its own allowance. The key is kept in memory for
+ten minutes, so a chat writing twice does not sign in twice. Without these settings the
+chat runs on the configured model, as every chat did before.
 
 A public bot should also have `first_chat_claims` off and an empty `allow_from`: the
 door is the relay's, and it is the relay that opens an account, gives the trial

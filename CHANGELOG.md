@@ -10,6 +10,9 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+- **A MAX chat is no longer signed in as the Telegram account of the same number.** The relay keyed every chat on its numeric id in one space, so the same digits on Telegram and on MAX could be one account with one allowance. `POST /v1/bot/signin` and `POST /v1/bot/link-code` now take a `channel` (`telegram` or `max`) beside `chat_id`, the account a chat makes is that pair, and both bots send their own name, so `telegram:123456` and `max:123456` are two accounts with two allowances and two keys. A body without `channel` is a Telegram chat, so a bot built before this and the accounts it made keep working, and a chat linked before the change still finds its account: the messenger its person saw is written in its row and read from there, not guessed from the number. `docs/cloud.md`, `docs/channels.md` and `cloud/README.md` say how the door works.
+- **MAX 聊天不再登录成同一数字的 Telegram 账号。** 中继原先把每个聊天都按一个空间里的数字 id 作为账号键，所以 Telegram 与 MAX 上相同的数字可能是同一个账号、同一份额度。`POST /v1/bot/signin` 与 `POST /v1/bot/link-code` 现在在 `chat_id` 之外接受 `channel`（`telegram` 或 `max`），聊天建立的账号就是这一对，两个机器人各自发送自己的名称，因此 `telegram:123456` 与 `max:123456` 是两个账号、两份额度和两把密钥。没有 `channel` 的请求仍按 Telegram 聊天处理，此前的机器人及其建立的账号继续可用；此前绑定的聊天也仍能找到自己的账号：用户当时看到的信使记录在它的条目里，从条目读取，而不是按数字猜测。`docs/cloud.md`、`docs/channels.md` 与 `cloud/README.md` 说明了这扇门的工作方式。
+
 - Added a six-character code that joins a Telegram or MAX chat to the account a person already signed in to: the app asks for it (`POST /v1/link/code`, ten minutes, one use, a new code retires the old one), the chat types it and the bot hands it back to the relay (`POST /v1/bot/link`), and `GET /v1/link/channels` lists the chats the account holds.
 - 新增六位短码绑定：在 App 中生成（`POST /v1/link/code`，十分钟有效、仅可使用一次，新码会使旧码失效），在 Telegram 或 MAX 聊天中发送、由机器人交给中继（`POST /v1/bot/link`），`GET /v1/link/channels` 列出账号已绑定的聊天。
 
