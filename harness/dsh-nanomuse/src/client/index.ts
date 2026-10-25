@@ -681,6 +681,8 @@ export function apply(ctx: ClientContext): void {
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'nanomuse.studio' }, AvatarStudio))
 
-  // The trajectory of a hands run, as a card in the chat (0.1.40; the picture-in-picture Live stage is gone).
-  ctx.effect(() => renderTrajectory(t, stop), 'nanomuse: trajectory')
+  // The trajectory card (screenshots of a hands run placed into the chat) is off: the owner
+  // asked for the pictures to stop appearing in the conversation. The module and the host's
+  // `/trajectory` view stay, so turning it back on is this one line.
+  void renderTrajectory
 }
