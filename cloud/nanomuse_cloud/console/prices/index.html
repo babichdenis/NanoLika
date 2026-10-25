@@ -3,100 +3,102 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>nanoLika Cloud — цены и розница</title>
-    <link rel="stylesheet" href="prices.css" />
+    <title>nanoLika Cloud: цены, поставщики и розница</title>
+    <link rel="stylesheet" href="prices.css?v=20261025-providers-1" />
     <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
-  </head>
+  <link rel="stylesheet" href="/web/brand-foundations.css?v=20261025-account"></head>
   <body>
     <header>
-      <a class="back" href="/app/">← в консоль</a>
+      <a class="back" href="/app/admin/#overview">← в админку</a>
       <h1>Цены, поставщики и розница</h1>
       <p class="intro">
-        Закупка по каждой модели, наша цена и рынок рядом. Розница ещё не решена: внизу черновики
-        из документов, чтобы решать по цифрам. Страница ничего не продаёт и ничего не сохраняет.
+        Закупка по каждой модели и наша цена рядом. Ставки текста обновляются из API поставщиков;
+        для медиа пока показана существующая конфигурация. Галочки сохраняют видимость моделей
+        для клиентов; продажные цены автоматически не меняются.
       </p>
       <p class="rate" id="rate"></p>
       <p class="counts" id="counts"></p>
     </header>
 
-    <section id="gate" hidden>
-      <h2>Нужен админский токен</h2>
+    <section id="gate">
+      <h2>Вход для администратора</h2>
       <p class="lead">
-        Этой страницы нет в публичном домене: снаружи её адрес отвечает «не найдено». Открой её
-        через туннель к релею и вставь токен оператора. Токен останется в этой вкладке, как в
-        остальной консоли.
+        Для закупочных цен, балансов и управления моделями нужен пароль администратора.
+        Он сохраняется только в этой вкладке, как в остальной админке.
       </p>
+      <noscript><p class="lead">Для входа включите JavaScript в настройках браузера.</p></noscript>
       <form id="gate-form" class="gate-form">
-        <input id="gate-token" type="password" placeholder="админский токен" autocomplete="off" />
+        <input id="gate-token" name="admin-password" type="password" inputmode="text" size="32" placeholder="Полный пароль администратора" autocomplete="current-password" autocapitalize="none" spellcheck="false" aria-label="Пароль администратора, не код из письма" />
         <button id="gate-go" type="submit">Открыть</button>
       </form>
       <p class="lead mono" id="gate-hint">
-        ssh -L 8790:127.0.0.1:8790 root@сервер, потом http://127.0.0.1:8790/app/prices/
+        Введите полный пароль администратора. Это не шестизначный код из письма; вход в пользовательский аккаунт здесь не нужен.
       </p>
     </section>
 
     <div class="bar" id="bar" hidden>
-      <label class="field">
-        наценка
-        <input id="k" type="number" min="0.5" max="50" step="0.5" value="5" />
-        <span class="meta">× от закупки</span>
-      </label>
-      <input id="q" type="search" placeholder="Модель, id, поставщик" autocomplete="off" />
-      <div class="chips" id="chips"></div>
-      <label class="switch"><input id="only-sell" type="checkbox" /> только с ценой продажи</label>
+      <div class="bar-row">
+        <input id="q" type="search" placeholder="Название или id модели" autocomplete="off" />
+        <div class="chips" id="groups" role="group" aria-label="Группы моделей"></div>
+        <label class="field">
+          наценка
+          <input id="k" type="number" min="0.5" max="50" step="0.5" value="5" />
+          <span class="meta">× от закупки</span>
+        </label>
+        <button id="refresh-routing" class="chip" type="button">Обновить цены и балансы</button>
+      </div>
+      <div class="bar-row">
+        <details class="multi" id="vendor-box">
+          <summary class="chip" id="vendor-sum">Вендор: все</summary>
+          <div class="menu" id="vendor-menu"></div>
+        </details>
+        <details class="multi" id="prov-box">
+          <summary class="chip" id="prov-sum">Есть у поставщика: любой</summary>
+          <div class="menu" id="prov-menu"></div>
+        </details>
+        <div class="chips" id="status" role="group" aria-label="Видимость для клиента"></div>
+        <label class="field">вход от <input id="price-min" type="number" min="0" step="0.01" placeholder="₽" /></label>
+        <label class="field">до <input id="price-max" type="number" min="0" step="0.01" placeholder="₽" /></label>
+        <label class="field">сортировка
+          <select id="sort"></select>
+        </label>
+        <button id="sort-dir" class="chip" type="button" aria-label="Направление сортировки" title="Направление сортировки">↑</button>
+        <label class="switch"><input id="only-sell" type="checkbox" /> только с ценой продажи</label>
+        <button id="reset" class="chip quiet" type="button">Сбросить фильтры</button>
+        <span class="meta found" id="found"></span>
+      </div>
     </div>
 
     <p class="note" id="note"></p>
 
     <main id="content" hidden>
       <section>
+        <h2>Балансы поставщиков</h2>
+        <p class="lead" id="routing-status"></p>
+        <p class="lead">Долларовые суммы отдельно от рублёвых. Ошибка проверки не означает нулевой баланс. У ProxyAPI оба подключения используют один счёт, их не нужно складывать.</p>
+        <div class="table-wrap"><table><thead><tr><th>Поставщик</th><th>Доступный остаток</th><th>Оценка в рублях</th><th>Проверено</th><th>Состояние</th></tr></thead><tbody id="balances-body"></tbody></table></div>
+      </section>
+      <section>
         <h2>Наше меню и цена <span class="meta" id="chat-count"></span></h2>
         <p class="lead">
-          «Закупка» это ставка поставщика в юанях за миллион токенов, пересчитанная в рубли.
-          «Сейчас» это действующая продажная ставка релея. «При наценке» это закупка, умноженная
-          на число сверху.
+          Закупка берётся из свежего API, если есть котировка. В столбце поставщика цена входа и под ней
+          цена выхода, в рублях за миллион токенов. Галочка скрывает модель из выбора клиентов, но не
+          запрещает продолжать существующую беседу. Ставки продажи правятся только для расчёта:
+          кратность и маржа пересчитываются на месте, в конфигурацию релея ничего не пишется.
         </p>
-        <div class="table-wrap">
+        <div class="table-wrap tall">
           <table id="models">
-            <thead>
-              <tr>
-                <th>Модель</th>
-                <th>Полка</th>
-                <th class="num">Закупка, ₽ / 1M</th>
-                <th class="num">Сейчас, ₽ / 1M</th>
-                <th class="num">Кратность</th>
-                <th class="num">При наценке, ₽</th>
-                <th class="num">Маржа, ₽</th>
-              </tr>
-            </thead>
+            <thead></thead>
             <tbody></tbody>
           </table>
         </div>
+        <p class="lead hint" id="routing-note"></p>
       </section>
 
+      <details>
+        <summary>Справочные материалы и старые черновики, не участвуют в маршрутизации</summary>
       <section>
-        <h2>Картинки, видео, голос <span class="meta" id="media-count"></span></h2>
-        <p class="lead">
-          Эти модели продаются не помиллионно: цена за штуку, за секунду или за знак. Закупка в
-          рублях, продажа токенами, как её считает релей.
-        </p>
-        <div class="table-wrap">
-          <table id="media">
-            <thead>
-              <tr>
-                <th>Модель</th>
-                <th>Вид</th>
-                <th class="num">Закупка, ₽</th>
-                <th>Продажа</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section>
-        <h2>Поставщики</h2>
+        <h2>Справочные снимки рынка</h2>
         <p class="lead" id="providers-when"></p>
         <div class="table-wrap">
           <table id="providers">
@@ -155,9 +157,10 @@
         </div>
         <ul class="questions" id="questions"></ul>
       </section>
+      </details>
     </main>
 
     <footer id="footer"></footer>
-    <script type="module" src="prices.js"></script>
+    <script type="module" src="prices.js?v=20261025-providers-1"></script>
   </body>
 </html>

@@ -4,7 +4,7 @@
   --ink-soft: #6b6862;
   --line: #e4e0d8;
   --accent: #2f6b4f;
-  --warn: #a5522c;
+  --warn: #9b7936;
   --chip: #f1eee7;
 }
 * { box-sizing: border-box; }
@@ -139,3 +139,152 @@ footer { padding: 22px 32px; color: var(--ink-soft); font-size: 12.5px; }
 #gate h2 { margin: 28px 32px 4px; }
 #gate .lead { margin: 0 32px 10px; }
 .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--ink-soft); }
+
+/* Administrative entry */
+[hidden] { display: none !important; }
+#gate-token { min-width: 0; width: min(100%, 360px); box-sizing: border-box; font-size: 16px; }
+@media (max-width: 480px) { .gate-form { margin-left: 20px; margin-right: 20px; } #gate-token { flex: 1 1 100%; } }
+
+/* Панель фильтров: две строки, чтобы таблица получала всю ширину */
+.bar { flex-direction: column; align-items: stretch; gap: 8px; }
+.bar-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.bar-row #q { flex: 1 1 210px; }
+.bar .multi { position: relative; }
+.bar .multi > summary { list-style: none; user-select: none; }
+.bar .multi > summary::-webkit-details-marker { display: none; }
+.bar .multi[open] > summary { border-color: var(--accent); color: var(--accent); }
+.bar .menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 232px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px -18px rgba(29, 28, 26, 0.45);
+}
+.multi-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 7px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.multi-row:hover { background: var(--chip); }
+.multi-row .cnt { margin-left: auto; color: var(--ink-soft); font-weight: 600; font-variant-numeric: tabular-nums; }
+.multi-row input { margin: 0; }
+.menu .empty { padding: 6px 8px; }
+.bar select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+#sort-dir { min-width: 34px; font-variant-numeric: tabular-nums; }
+#sort-dir:disabled { opacity: 0.4; cursor: default; }
+.chip.quiet { color: var(--ink-soft); }
+.chip.quiet:hover { border-color: var(--ink-soft); color: var(--ink); }
+.found { margin-left: auto; white-space: nowrap; }
+
+/* Плотная таблица меню */
+.table-wrap.tall { max-height: 70vh; }
+#models { font-size: 13px; }
+#models th, #models td { padding: 7px 10px; }
+#models th { vertical-align: bottom; white-space: nowrap; }
+#models thead th { top: 0; }
+.pick { width: 96px; }
+.pick label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; color: var(--ink-soft); cursor: pointer; }
+.pick input { margin: 0; }
+#models td.name { min-width: 190px; }
+#models td.name code { display: inline-block; }
+.vendor-label { font-weight: 600; }
+.group-tag { display: block; }
+.ctx { white-space: nowrap; }
+.sort-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.sort-btn:hover { color: var(--ink); }
+th.sorted .sort-btn { color: var(--accent); }
+th.num .sort-btn { display: block; width: 100%; text-align: right; }
+th.sorted { background: var(--chip); }
+
+/* Столбцы поставщиков */
+#models th.prov, #models td.prov-cell { border-left: 1px solid var(--line); }
+#models td.prov-cell { position: relative; min-width: 84px; padding-left: 8px; }
+.prov-cell .in { color: var(--ink); font-weight: 600; }
+.prov-cell .out { color: var(--ink-soft); font-size: 12px; }
+.prov-cell .now, .p-name .now {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  vertical-align: middle;
+  text-transform: lowercase;
+}
+#models th.prov .p-name {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 100%;
+  text-align: right;
+}
+#models th.prov .p-name .now { order: -1; margin: 0 4px 0 0; }
+#models th.prov.sorted { background: #eaf0e7; }
+#models th.prov .p-stat { font-size: 11px; font-weight: 400; color: var(--ink-soft); white-space: normal; }
+#models th.prov .p-unit { font-size: 10.5px; font-weight: 400; color: var(--ink-soft); }
+#models td.prov-cell.chosen { background: #eef3ec; box-shadow: inset 2px 0 0 var(--accent); }
+#models th.prov.chosen { background: #e7eee4; color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+#models th.prov.chosen .p-stat, #models th.prov.chosen .p-unit { color: var(--accent); }
+#models tr:hover td.prov-cell.chosen { background: #e6eee3; }
+
+/* Липкие первые столбцы: видно, что за модель, при прокрутке вправо */
+#models th.sticky-1, #models td.sticky-1 { position: sticky; left: 0; background: #fff; z-index: 2; }
+#models th.sticky-2, #models td.sticky-2 { position: sticky; left: 96px; background: #fff; z-index: 2; box-shadow: 1px 0 0 var(--line); }
+#models thead th.sticky-1, #models thead th.sticky-2 { z-index: 4; }
+#models tr:hover td.sticky-1, #models tr:hover td.sticky-2 { background: #fcfbf8; }
+
+/* Правка цены продажи */
+.sell-line { display: inline-flex; gap: 3px; align-items: center; }
+.sell-input {
+  width: 72px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.sell-input:hover { border-color: var(--line); background: #fff; }
+.sell-input:focus { outline: none; border-color: var(--accent); background: #fff; }
+.sell-line .sep { color: var(--ink-soft); }
+td.last { min-width: 150px; }
+.hint { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--chip); max-width: 120ch; }
+.hint .meta { color: var(--ink-soft); }
+tr.no-cost td.cost { color: var(--warn); }
