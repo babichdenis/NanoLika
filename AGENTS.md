@@ -2,6 +2,17 @@
 
 nanoMuse is an open-source personal agent for every device a person owns: a phone app (Android and iOS, built on OpenMinis), a desktop app (a DeepSeek Harness plugin in an Electron shell), a Python runtime for the hands, a web console, and the relay that signs people in and lets their devices talk. Everything is GPL-3.0-or-later; read [CONTRIBUTING.md](CONTRIBUTING.md) first and [docs/architecture.md](docs/architecture.md) before touching the runtime.
 
+## What the runtime can already do
+
+[CAPABILITIES.md](CAPABILITIES.md) is the inventory of every tool the build carries — mail,
+calendar, contacts, files, the office bridge, the screen, other devices, the store — generated
+from the live tool registry (`python3 scripts/capabilities_md.py`). Read it before writing a
+client for something the runtime already does, and before telling the user a capability is
+missing: that mistake has been made, with mail, and it cost a long detour.
+
+The same inventory is in the agent's system prompt (`nanomuse/capabilities.py`), so the model
+in the app sees it too; the file is for the agents that read the repository.
+
 ## Repository layout
 
 ```

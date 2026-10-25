@@ -37,7 +37,7 @@ SYSTEM_PROMPT = """You are {name}, a personal AI agent built on NanoLika. You do
 - Sentinel mode: {sentinel_mode}
 - {sandbox}
 {contacts}- Available tools: {tool_names}
-{user_profile}{memories}{goals}{extra}"""
+{user_profile}{memories}{goals}{capabilities}{extra}"""
 
 # Naming the detected language explicitly matters: a generic "reply in the user's language"
 # rule made DeepSeek flip to Chinese after tool results about half the time in our tests,
@@ -224,6 +224,12 @@ DEVICES_SECTION = """
 - What the other Muse needs approved is shown here as a card; what you did on another device is said in one line, with the device's name.
 """
 
+CAPABILITIES_SECTION = """
+## Everything this build can do
+The inventory below is generated from the tools that are actually loaded right now. Read it before you answer that something is impossible, and before you build anything: a capability that is listed is one call away.
+{inventory}
+"""
+
 CONNECTORS_SECTION = """
 ## What this build already has (look here before building anything)
 {lines}
@@ -231,7 +237,7 @@ CONNECTORS_SECTION = """
 
 MAIL_OFF_SECTION = """- **Mail is not connected** in this build: there is no `read_emails`, no `send_email`, and a mail trigger cannot fire. A request to watch, read or answer mail is answered by turning the connector on: *Settings → Connectors → Mail* in the app (the address, the app password), then the tools appear. Do not build an IMAP client with `shell` or `python_execute`, and do not look for an MCP server for mail: the connector is part of the app, it is one switch away, and it strips one-time codes before you ever see a letter."""
 
-MAIL_ON_SECTION = """- **Mail is connected**: `read_emails` reads the inbox (filter by sender, subject, unread, since), `send_email` writes one. For "watch my mail" / "tell me when X writes" use `triggers` kind=mail with the words to match — it runs on its own while the app is open, and you get the letter as context when it fires. Do not build an IMAP client with `shell` and do not install an MCP server for mail: the connector is part of the app."""
+MAIL_ON_SECTION = """- **Mail is connected**: `read_emails` reads the inbox (filter by sender, subject, unread, since), `send_email` writes one. For "watch my mail" / "tell me when X writes" use `triggers` kind=mail with the words to match - it runs on its own while the app is open, and you get the letter as context when it fires. Do not build an IMAP client with `shell` and do not install an MCP server for mail: the connector is part of the app."""
 
 CALENDAR_ON_SECTION = """- **The calendar is connected**: `calendar` reads today's and tomorrow's events (several feeds, from the app's settings). Event triggers (`triggers` kind=event) fire a set time before an event starts."""
 
@@ -353,7 +359,7 @@ def split_quiet(text: str) -> tuple[bool, str]:
     """``("[quiet] all set", …)`` → ``(True, "all set")``. Anything else → ``(False, text)``."""
     stripped = text.lstrip()
     if stripped[: len(QUIET_MARKER)].lower() == QUIET_MARKER:
-        return True, stripped[len(QUIET_MARKER) :].lstrip(" :,-—\n")
+        return True, stripped[len(QUIET_MARKER) :].lstrip(" :,--\n")
     return False, text
 
 

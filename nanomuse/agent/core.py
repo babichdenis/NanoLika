@@ -191,6 +191,20 @@ class MuseAgent:
             return ""
         return prompts.CONNECTORS_SECTION.format(lines="\n".join(lines))
 
+    def capabilities_section(self) -> str:
+        """The whole inventory: what this build can do, group by group, one line each.
+
+        Built from the live tool registry (:mod:`nanomuse.capabilities`), so it cannot drift
+        from the code. It is what stops the "I cannot do mail" answer to a request the
+        connector already serves."""
+        from nanomuse import capabilities
+
+        if getattr(self, "_capabilities", None) is None:
+            self._capabilities = capabilities.inventory(self.tools, self.settings)
+        return prompts.CAPABILITIES_SECTION.format(
+            inventory=capabilities.render_prompt(self._capabilities)
+        )
+
     def skills_section(self) -> str:
         """The index of skills — names and descriptions; the tool has the instructions."""
         lib = self.skills
@@ -409,7 +423,9 @@ class MuseAgent:
             + self.devices_section()
             + self.skills_section()
             + self.connectors_section()
+            + self.capabilities_section()
             + self.store_section(),
+            capabilities=self.capabilities_section(),
             extra=extra,
         )
 
