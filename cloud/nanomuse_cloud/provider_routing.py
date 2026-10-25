@@ -308,6 +308,7 @@ class ProviderRouter:
     async def refresh_balances(self, http: httpx.AsyncClient) -> None:
         async def one(name: str, provider: Any) -> None:
             paths = {
+                "deepseek": "/user/balance",
                 "polza": "/v1/balance",
                 "routerai": "/v1/credits",
                 "openrouter": "/v1/credits",
@@ -317,7 +318,8 @@ class ProviderRouter:
             }
             if name not in paths or not provider.key():
                 return
-            currency = "USD" if name == "openrouter" else "RUB"
+            # DeepSeek и OpenRouter считают в долларах, остальные продавцы — в рублях
+            currency = "USD" if name in ("openrouter", "deepseek") else "RUB"
             entry = {"amount": None, "currency": currency, "checked": time.time(), "error": None}
             base = provider.base.rstrip("/")
             if name == "proxyapi-openai":
@@ -327,7 +329,23 @@ class ProviderRouter:
                 response = await http.get(base + paths[name], headers={"Authorization": "Bearer " + key}, timeout=15)
                 response.raise_for_status()
                 data = response.json()
-                if name == "openrouter":
+                if name == "deepseek":
+                    # {"is_available": false, "balance_infos": [{"currency": "USD", "total_balance": "-0.00"}, …]}
+                    infos = data.get("balance_infos") or []
+                    for info in infos:
+                        if str(info.get("currency")).upper() == "USD":
+                            amount = number(info.get("total_balance"))
+                            break
+                    entry["available"] = bool(data.get("is_available"))
+                    entry["cny"] = next(
+                        (
+                            number(i.get("total_balance"))
+                            for i in infos
+                            if str(i.get("currency")).upper() == "CNY"
+                        ),
+                        None,
+                    )
+                elif name == "openrouter":
                     data = data.get("data", {})
                     total, used = number(data.get("total_credits")), number(data.get("total_usage"))
                     amount = total - used if total is not None and used is not None else None

@@ -24,6 +24,7 @@ const state = {
   worldIn: null,        // $ за 1M входа, не больше
   ctxMin: 0,            // контекст, не меньше
   iqMin: null,          // качество (индекс), не меньше
+  showEmpty: true,      // показывать всё; пустые строки уходят в конец списка
   mode: "",             // режим: chat, embedding, image_generation …
   q: "",
   group: "all",
@@ -57,7 +58,7 @@ const PROVIDER_NAMES = {
   routerai: "RouterAI",
   bothub: "Bothub",
   neuroapi: "NeuroAPI",
-  own: "свой апстрим",
+  own: "DeepSeek официальный",
   deepseek: "DeepSeek",
   openai: "OpenAI",
   byteplus: "BytePlus",
@@ -188,6 +189,19 @@ function worldInOf(m) {
   return typeof value === "number" ? value : null;
 }
 
+/** Цена за единицу у медиа (секунда видео, картинка): в $ за токены её не выразить. */
+function unitPriceOf(m) {
+  const info = infoOf(m);
+  return info && info.unit_usd ? info.unit_usd : null;
+}
+
+/** Есть ли у модели хоть что-то, кроме названия. */
+function hasData(m) {
+  const info = infoOf(m);
+  if (!info) return false;
+  return Boolean(info.has_data);
+}
+
 function worldOutOf(m) {
   const info = infoOf(m);
   if (!info) return null;
@@ -305,6 +319,8 @@ function baseRows() {
       if (state.priceMin !== null && price < state.priceMin) return false;
       if (state.priceMax !== null && price > state.priceMax) return false;
     }
+    // пустые строки не прячем, а уводим вниз: показываем всё, что есть
+    if (!state.showEmpty && !hasData(m)) return false;
     if (state.hereOnly === "yes" && !infoOf(m)) return false;
     if (state.hereOnly === "no" && infoOf(m)) return false;
     if (state.band) {
@@ -370,10 +386,15 @@ function sortValue(m, key) {
   }
 }
 
+/** Строки, у которых есть хоть одна цифра, идут первыми: пустое - это хвост таблицы. */
+function dataLast(rows) {
+  return rows.slice().sort((a, b) => Number(hasData(b)) - Number(hasData(a)));
+}
+
 function sortRows(rows) {
-  if (!state.sort) return rows.slice();
+  if (!state.sort) return dataLast(rows);
   const sign = state.dir === "desc" ? -1 : 1;
-  return rows.slice().sort((a, b) => {
+  return dataLast(rows).sort((a, b) => {
     const left = sortValue(a, state.sort);
     const right = sortValue(b, state.sort);
     const leftEmpty = left === null || left === undefined || left === "";
@@ -971,7 +992,8 @@ function buildRow(m, providers) {
 
   tr.append(h("td", m.context ? money(m.context, 0) : "—", "num ctx"));
   tr.append(h("td", m.max_output ? money(m.max_output, 0) : "—", "num ctx"));
-  tr.append(worldCell(worldInOf(m)));
+  const media = unitPriceOf(m);
+  tr.append(media ? h("td", `${money(media.usd, 4)} / ${media.unit}`, "num world unit") : worldCell(worldInOf(m)));
   tr.append(worldCell(worldOutOf(m)));
   const iq = qualityOf(m);
   tr.append(h("td", iq === null ? "—" : String(Math.round(iq)), iq === null ? "num iq dim" : "num iq"));
@@ -1045,7 +1067,10 @@ function drawBalances() {
   for (const [name, balance] of Object.entries(routing.balances || {})) {
     const row = h("tr");
     const status = balance.error ? (name.startsWith("proxyapi") && balance.error === "HTTP 403" ? "Включите «Запрос баланса» в правах ключа" : `Не удалось проверить: ${balance.error}`) : (balance.amount <= 0 ? "Недостаточно средств" : "Доступен");
-    row.append(h("td", providerLabel(name), "name"), h("td", balance.amount === null ? "—" : `${money(balance.amount, 4)} ${balance.currency}`),
+    const note = balance.lim !== undefined && balance.usage !== undefined
+      ? ` (лимит ${money(balance.lim, 2)}, израсходовано ${money(balance.usage, 2)})`
+      : "";
+    row.append(h("td", providerLabel(name), "name"), h("td", balance.amount === null ? "—" : `${money(balance.amount, 4)} ${balance.currency}${note}`),
       h("td", balance.currency === "USD" ? `≈ ${money(balance.rub_estimate, 2)} ₽` : "—"),
       h("td", stamp(balance.checked * 1000)), h("td", status));
     body.append(row);
@@ -1249,6 +1274,11 @@ function wireCatalogFilters() {
   bind("ctx-min", (v) => { state.ctxMin = Number(v) || 0; });
   bind("world-in", (v) => { state.worldIn = v === "" ? null : Number(v); });
   bind("iq-min", (v) => { state.iqMin = v === "" ? null : Number(v); });
+  const showEmpty = document.getElementById("show-empty");
+  if (showEmpty) {
+    showEmpty.checked = state.showEmpty;
+    showEmpty.onchange = (e) => { state.showEmpty = e.target.checked; draw(); };
+  }
 }
 
 async function load() {
@@ -1326,6 +1356,9 @@ document.getElementById("reset").onclick = () => {
   state.ctxMin = 0;
   state.iqMin = null;
   state.mode = "";
+  state.showEmpty = false;
+  const showEmpty = document.getElementById("show-empty");
+  if (showEmpty) showEmpty.checked = false;
   for (const el of document.querySelectorAll("#caps-filter .cap-chip")) el.classList.remove("on");
   for (const [id, value] of [["mode-filter", ""], ["here-filter", ""], ["band-filter", ""],
     ["ctx-min", ""], ["world-in", ""], ["iq-min", ""]]) {

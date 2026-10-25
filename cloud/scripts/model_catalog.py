@@ -42,6 +42,10 @@ LITELLM_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 )
 AA_URL = "https://artificialanalysis.ai/leaderboards/models"
+#: models.dev — каталог от команды opencode: 232 провайдера, ~9000 моделей, у каждой тип
+#: (chat/image/video/speech/embedding), модальности, контекст, цены и open_weights. Это
+#: главный источник для «что это вообще за модель», LiteLLM — для цены за токен.
+MODELSDEV_URL = "https://models.dev/api.json"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
 TIMEOUT = 60
 
@@ -119,6 +123,48 @@ def litellm_rows() -> dict[str, dict[str, Any]]:
     return {k: v for k, v in data.items() if isinstance(v, dict) and v.get("litellm_provider")}
 
 
+def models_dev() -> dict[str, dict[str, Any]]:
+    """models.dev: одна запись на модель, собранная со всех провайдеров каталога.
+
+    Ключ — нормализованное имя, поэтому `bytedance/seedance-2.5` из vercel и
+    `doubao-seedance-2-5-260628` из volcengine сходятся в одну строку."""
+    raw = json.loads(fetch(MODELSDEV_URL).decode("utf-8"))
+    out: dict[str, dict[str, Any]] = {}
+    for provider, data in (raw or {}).items():
+        for model_id, model in (data.get("models") or {}).items():
+            if not isinstance(model, dict):
+                continue
+            card = {
+                "id": model_id,
+                "name": model.get("name") or model_id,
+                "provider": provider,
+                "type": model.get("type"),
+                "description": model.get("description"),
+                "family": model.get("family"),
+                "modalities": model.get("modalities") or {},
+                "reasoning": bool(model.get("reasoning")),
+                "tools": bool(model.get("tool_call")),
+                "structured": bool(model.get("structured_output")),
+                "attachment": bool(model.get("attachment")),
+                "open_weights": bool(model.get("open_weights")),
+                "knowledge": model.get("knowledge"),
+                "released": model.get("release_date"),
+                "updated": model.get("last_updated"),
+                "limit": model.get("limit") or {},
+                "cost": model.get("cost") or {},
+            }
+            keys = [k for k in slug_variants(model_id) + slug_variants(card["name"])
+                    if any(ch.isalpha() for ch in k)]
+            for key in keys:
+                existing = out.get(key)
+                # запись с ценой и контекстом полезнее пустой
+                if existing is None or (
+                    not existing["cost"] and card["cost"]
+                ) or (not existing["limit"].get("context") and card["limit"].get("context")):
+                    out[key] = card
+    return out
+
+
 def artificial_analysis() -> list[dict[str, Any]]:
     """Модели с artificialanalysis.ai: они лежат в самой странице, в потоке Next.js."""
     page = fetch(AA_URL).decode("utf-8", errors="replace")
@@ -143,6 +189,40 @@ def artificial_analysis() -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- matching
+def slug_variants(name: str) -> list[str]:
+    """Все разумные ключи для одного имени: с префиксом продавца, без него и с вариациями.
+
+    LiteLLM зовёт видеофраншизу по-своему (`fal_ai/bytedance/seedance-2.5/text-to-video`,
+    `volcengine/doubao-seedance-2-5-260628`), а продавец — `seedance/2.5`. Без этого
+    «seedance» оставался бы без цены и без режима, хотя всё это у LiteLLM есть."""
+    text = (name or "").strip().lower()
+    out: list[str] = []
+
+    def push(value: str) -> None:
+        key = slug(value)
+        if key and key not in out:
+            out.append(key)
+
+    push(text)
+    # без продавца: fal_ai/bytedance/seedance-2.5/... → seedance-2.5
+    parts = [p for p in text.replace(":", "/").split("/") if p]
+    for i in range(len(parts)):
+        push("/".join(parts[i:]))
+        push(parts[i])
+    # «doubao-seedance-2-5-260628» → «seedance-2-5», «seedance 2.5» → «seedance-2.5»
+    joined = "-".join(parts[-2:]) if len(parts) >= 2 else text
+    push(joined)
+    push(re.sub(r"-\d{6,}$", "", joined))          # даты вида 260628
+    push(re.sub(r"\b(\d)-(\d)\b", r"\1.\2", joined))  # seedance-2-5 → seedance-2.5
+    # «wan/2.5» → «wan-2-5»: продавцы пишут семейство и версию через слэш. Только когда
+    # частей ровно две - иначе склейка плодит десятки ложных ключей и дублей в каталоге.
+    if len(parts) == 2:
+        squashed = parts[0] + "-" + parts[1].replace(".", "-")
+        push(squashed)
+        push(squashed.replace("-", ""))
+    return out
+
+
 def slug(name: str) -> str:
     """Имя модели без поставщика, суффиксов и скобок: ``openai/gpt-5 (Xhigh)`` → ``gpt-5``.
 
@@ -189,6 +269,45 @@ def capabilities(row: dict[str, Any]) -> dict[str, bool]:
     }
 
 
+def _has_price(row: dict[str, Any]) -> bool:
+    """Есть ли у строки LiteLLM хоть какая-то цена: за токены, секунду, картинку."""
+    for field in (
+        "input_cost_per_token",
+        "output_cost_per_token",
+        "output_cost_per_second",
+        "output_cost_per_image",
+        "input_cost_per_image",
+        "output_cost_per_character",
+    ):
+        value = row.get(field)
+        if isinstance(value, (int, float)) and value > 0:
+            return True
+    return False
+
+
+def _unit_price(row: dict[str, Any], mode: str) -> dict[str, Any] | None:
+    """Цена за единицу у медиа: секунда видео, картинка, символ озвучки.
+
+    В LiteLLM это разные поля, и у видео их несколько по разрешениям (480p/720p/1080p):
+    берём то, что есть, и называем единицу, иначе в таблице остаётся прочерк."""
+    for field, unit in (
+        ("output_cost_per_second_720p", "сек 720p"),
+        ("output_cost_per_second_1080p", "сек 1080p"),
+        ("output_cost_per_second_480p", "сек 480p"),
+        ("output_cost_per_second", "сек"),
+        ("output_cost_per_image", "картинка"),
+        ("input_cost_per_image", "картинка"),
+        ("output_cost_per_character", "1K символов"),
+        ("input_cost_per_audio_per_second", "сек звука"),
+        ("output_cost_per_audio_token", "токен звука"),
+    ):
+        value = row.get(field)
+        if isinstance(value, (int, float)) and value > 0:
+            amount = float(value) * 1000 if field == "output_cost_per_character" else float(value)
+            return {"usd": round(amount, 6), "unit": unit, "mode": mode}
+    return None
+
+
 def per_million(value: Any) -> float | None:
     """Цена за токен из LiteLLM ($/token) → $ за 1M токенов."""
     if not isinstance(value, (int, float)) or value <= 0:
@@ -210,6 +329,8 @@ def litellm_card(key: str, row: dict[str, Any]) -> dict[str, Any]:
         "world_out_usd": per_million(row.get("output_cost_per_token")),
         "cache_read_usd": per_million(row.get("cache_read_input_token_cost")),
         "cache_write_usd": per_million(row.get("cache_creation_input_token_cost")),
+        # у видео и картинок цена не за токены: секунда генерации, картинка, символ
+        "unit_usd": _unit_price(row, mode),
         "image_usd": row.get("input_cost_per_image") or row.get("output_cost_per_image"),
         "audio_usd": row.get("input_cost_per_audio_per_second"),
         "caps": capabilities(row),
@@ -251,6 +372,72 @@ def merge_aa(card: dict[str, Any], model: dict[str, Any]) -> None:
         card["context"] = model["contextWindowTokens"]
 
 
+DEV_MODES = {
+    "chat": "chat",
+    "image": "image_generation",
+    "video": "video_generation",
+    "speech": "audio_speech",
+    "transcription": "audio_transcription",
+    "embedding": "embedding",
+    "reranking": "rerank",
+    "realtime": "realtime",
+}
+
+
+def merge_dev(card: dict[str, Any], match: dict[str, Any]) -> None:
+    """Дописать/уточнить карточку из models.dev.
+
+    Источник не спорит с LiteLLM о цене за токен (там она точнее), но именно он знает,
+    что модель вообще за тип, какие у неё модальности, контекст и открытые веса."""
+    kind = DEV_MODES.get(str(match.get("type") or ""), None)
+    if kind and card.get("mode") in (None, "chat"):
+        card["mode"] = kind
+    caps = card.setdefault("caps", {})
+    mods = match.get("modalities") or {}
+    inputs = [str(m) for m in (mods.get("input") or [])]
+    outputs = [str(m) for m in (mods.get("output") or [])]
+    caps["text"] = "text" in inputs or "text" in outputs or caps.get("text", False)
+    caps["image"] = caps.get("image") or "image" in inputs
+    caps["audio_in"] = caps.get("audio_in") or "audio" in inputs
+    caps["audio_out"] = caps.get("audio_out") or "audio" in outputs
+    caps["video"] = caps.get("video") or "video" in inputs or "video" in outputs
+    caps["pdf"] = caps.get("pdf") or "pdf" in inputs
+    caps["reasoning"] = bool(match.get("reasoning")) or caps.get("reasoning", False)
+    caps["tools"] = bool(match.get("tools")) or caps.get("tools", False)
+    caps["structured"] = bool(match.get("structured")) or caps.get("structured", False)
+    caps["open_weights"] = bool(match.get("open_weights")) or caps.get("open_weights", False)
+    limits = match.get("limit") or {}
+    if not card.get("context") and isinstance(limits.get("context"), (int, float)):
+        card["context"] = int(limits["context"])
+    if not card.get("max_output") and isinstance(limits.get("output"), (int, float)):
+        card["max_output"] = int(limits["output"])
+    # у медиа models.dev цену за токен не даёт: тип `video`/`image` уже полезен сам по себе
+    if kind in ("video_generation", "image_generation", "audio_speech") and not card.get("unit_usd"):
+        costs = match.get("cost") or {}
+        for field, unit in (("input", "единица"), ("output", "единица")):
+            value = costs.get(field)
+            if isinstance(value, (int, float)) and value > 0:
+                card["unit_usd"] = {"usd": float(value), "unit": unit, "mode": kind, "source": "models.dev"}
+                break
+    cost = match.get("cost") or {}
+    # цены models.dev — за 1M токенов, как и наши мировые
+    if not card.get("world_in_usd") and isinstance(cost.get("input"), (int, float)):
+        card["world_in_usd"] = round(float(cost["input"]), 4)
+    if not card.get("world_out_usd") and isinstance(cost.get("output"), (int, float)):
+        card["world_out_usd"] = round(float(cost["output"]), 4)
+    if not card.get("cache_read_usd") and isinstance(cost.get("cache_read"), (int, float)):
+        card["cache_read_usd"] = round(float(cost["cache_read"]), 4)
+    card["dev"] = {
+        "type": match.get("type"),
+        "provider": match.get("provider"),
+        "open_weights": bool(match.get("open_weights")),
+        "released": match.get("released"),
+        "updated": match.get("updated"),
+        "knowledge": match.get("knowledge"),
+        "description": (match.get("description") or "")[:240] or None,
+    }
+
+
 def _round(value: Any, digits: int = 2) -> float | None:
     if isinstance(value, (int, float)):
         return round(float(value), digits)
@@ -261,21 +448,54 @@ def _round(value: Any, digits: int = 2) -> float | None:
 def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     litellm = litellm_rows()
     aa = artificial_analysis()
-    aa_by_slug = {slug(m.get("slug") or m.get("name") or ""): m for m in aa}
-    aa_by_name = {slug(m.get("name") or ""): m for m in aa}
+    aa_by_slug: dict[str, dict[str, Any]] = {}
+    for model in aa:
+        for key in slug_variants(model.get("slug") or model.get("name") or ""):
+            aa_by_slug.setdefault(key, model)
+    aa_by_name = aa_by_slug
+
+    lit_by_slug: dict[str, tuple[str, dict[str, Any]]] = {}
+    for key, row in litellm.items():
+        for variant in slug_variants(key):
+            # у одного ключа бывает несколько строк: первая с ценой важнее
+            current = lit_by_slug.get(variant)
+            if current is None or (not _has_price(current[1]) and _has_price(row)):
+                lit_by_slug[variant] = (key, row)
+
+    dev = models_dev()
 
     models: dict[str, dict[str, Any]] = {}
-    # 1. всё, что знает LiteLLM: мировая цена и возможности
+    # 1. всё, что знает LiteLLM: мировая цена и возможности. Ключ — самое короткое имя,
+    #    чтобы `seedance-2.5` и `fal_ai/bytedance/seedance-2.5/text-to-video` были одной строкой
     for key, row in litellm.items():
-        key_slug = slug(key)
-        if not key_slug:
+        variants = slug_variants(key)
+        if not variants:
+            continue
+        # самое короткое имя, но не обрубок: ключ должен содержать буквы, а не только версию
+        usable = [v for v in variants if any(ch.isalpha() for ch in v)] or variants
+        key_slug = min(usable, key=len)
+        existing = models.get(key_slug)
+        if existing is not None and (_has_price(existing) or not _has_price(row)):
             continue
         card = litellm_card(key, row)
         card["id"] = key_slug
-        match = aa_by_slug.get(key_slug) or aa_by_name.get(key_slug)
+        match = aa_by_slug.get(key_slug)
         if match:
             merge_aa(card, match)
         models[key_slug] = card
+
+    # 1c. models.dev: тип модели, модальности, контекст, цены, open_weights. Заполняет то,
+    #     чего в LiteLLM нет вовсе (видео, озвучка, распознавание) и не затирает то, что есть
+    for key, card in list(models.items()):
+        match = dev.get(key)
+        if match:
+            merge_dev(card, match)
+    for key, match in dev.items():
+        if key in models:
+            continue
+        card = _empty_card(key, match["name"], mode="chat")
+        merge_dev(card, match)
+        models[key] = card
 
     # 1b. модели с оценкой качества, которых LiteLLM не знает: они тоже нужны в таблице,
     #     иначе «на рынке есть, у нас нет» не видно для половины рынка
@@ -291,10 +511,17 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     ours: dict[str, dict[str, Any]] = {}
     if snapshot:
         for entry in snapshot.get("models") or []:
-            our_slug = slug(entry.get("name") or entry.get("key") or "")
+            our_name = entry.get("name") or entry.get("key") or ""
+            our_slug = slug(our_name)
             if not our_slug:
                 continue
-            card = models.get(our_slug)
+            # `wan/2.5` в LiteLLM зовётся `dashscope/wan2.5-t2v`: пробуем все варианты
+            card = None
+            for variant in slug_variants(our_name):
+                card = models.get(variant)
+                if card is not None:
+                    our_slug = variant
+                    break
             if card is None:
                 card = _empty_card(
                     our_slug, entry.get("name") or our_slug, mode=_mode_of(entry.get("unit"))
@@ -318,6 +545,15 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     for card in rows:
         card.setdefault("ours", {})
         card["available_here"] = bool(card["ours"])
+        # есть ли что показать, кроме названия: хоть одна цена мира, качество или медиа-цена
+        card["has_data"] = bool(
+            card.get("world_in_usd")
+            or card.get("world_out_usd")
+            or card.get("unit_usd")
+            or card.get("aa")
+            or card.get("dev")
+            or card.get("context")
+        )
         card["cheapest_rub"] = _cheapest(card["ours"])
         card["band"] = _band(card)
     rows.sort(key=lambda c: (not c["available_here"], -(c.get("aa", {}).get("intelligence") or 0)))
@@ -326,6 +562,7 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         "sources": {
             "litellm": LITELLM_URL,
             "artificialanalysis": AA_URL,
+            "modelsdev": MODELSDEV_URL,
             "ours": "console/providers/prices.json",
         },
         "counts": {
@@ -357,6 +594,7 @@ def _empty_card(model_id: str, name: str, *, mode: str) -> dict[str, Any]:
         "world_out_usd": None,
         "cache_read_usd": None,
         "cache_write_usd": None,
+        "unit_usd": None,
         "image_usd": None,
         "audio_usd": None,
         "caps": {
