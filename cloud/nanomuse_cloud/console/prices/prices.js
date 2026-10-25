@@ -24,6 +24,7 @@ const state = {
   worldIn: null,        // $ за 1M входа, не больше
   ctxMin: 0,            // контекст, не меньше
   iqMin: null,          // качество (индекс), не меньше
+  freeOnly: false,      // только бесплатные у наших поставщиков
   showEmpty: true,      // показывать всё; пустые строки уходят в конец списка
   mode: "",             // режим: chat, embedding, image_generation …
   q: "",
@@ -320,6 +321,7 @@ function baseRows() {
       if (state.priceMax !== null && price > state.priceMax) return false;
     }
     // пустые строки не прячем, а уводим вниз: показываем всё, что есть
+    if (state.freeOnly && !(infoOf(m) || {}).free) return false;
     if (!state.showEmpty && !hasData(m)) return false;
     if (state.hereOnly === "yes" && !infoOf(m)) return false;
     if (state.hereOnly === "no" && infoOf(m)) return false;
@@ -895,6 +897,7 @@ function drawHead(providers, rows) {
   top.append(h("th", group, "pick sticky-1"));
   const nameTh = sortableTh("Модель", "name", "name sticky-2");
   top.append(nameTh);
+  top.append(h("th", "Название для выбора", "clean-name"));
   top.append(sortableTh("Вендор", "vendor", "vendor"));
   top.append(sortableTh("Контекст", "context", "num ctx"));
   top.append(sortableTh("Макс. выход", "max_output", "num ctx"));
@@ -982,6 +985,7 @@ function buildRow(m, providers) {
   const name = modelCell(m);
   name.classList.add("sticky-2");
   tr.append(name);
+  tr.append(cleanNameCell(m));
 
   const vendor = vendorOf(m);
   const vendorCell = h("td", undefined, "vendor");
@@ -1011,6 +1015,16 @@ function buildRow(m, providers) {
 }
 
 /** Доллар за миллион токенов: мельче копейки округляем до четырёх знаков. */
+/** Чистое имя: то, под которым модель показывается человеку при выборе. */
+function cleanNameCell(m) {
+  const info = infoOf(m);
+  const text = (info && info.clean_name) || m.name || m.id || "";
+  const td = h("td", undefined, "clean-name");
+  td.append(h("span", text));
+  if (info && info.free) td.append(h("span", "free", "free-badge"));
+  return td;
+}
+
 function worldCell(value) {
   if (value === null || value === undefined) return h("td", "—", "num world dim");
   const text = value >= 1 ? money(value, 2) : String(value.toFixed(value < 0.01 ? 4 : 3));
@@ -1274,6 +1288,11 @@ function wireCatalogFilters() {
   bind("ctx-min", (v) => { state.ctxMin = Number(v) || 0; });
   bind("world-in", (v) => { state.worldIn = v === "" ? null : Number(v); });
   bind("iq-min", (v) => { state.iqMin = v === "" ? null : Number(v); });
+  const freeOnly = document.getElementById("free-only");
+  if (freeOnly) {
+    freeOnly.checked = state.freeOnly;
+    freeOnly.onchange = (e) => { state.freeOnly = e.target.checked; draw(); };
+  }
   const showEmpty = document.getElementById("show-empty");
   if (showEmpty) {
     showEmpty.checked = state.showEmpty;
@@ -1357,6 +1376,11 @@ document.getElementById("reset").onclick = () => {
   state.iqMin = null;
   state.mode = "";
   state.showEmpty = false;
+  const freeOnly = document.getElementById("free-only");
+  if (freeOnly) {
+    freeOnly.checked = state.freeOnly;
+    freeOnly.onchange = (e) => { state.freeOnly = e.target.checked; draw(); };
+  }
   const showEmpty = document.getElementById("show-empty");
   if (showEmpty) showEmpty.checked = false;
   for (const el of document.querySelectorAll("#caps-filter .cap-chip")) el.classList.remove("on");

@@ -308,3 +308,18 @@ td.caps .cap {
 td.caps .dim { color: #55606e; }
 .caps-filter { gap: 4px; flex-basis: 100%; }
 .cap-chip.on { border-color: #7cc4ff; color: #e6e9ee; background: rgba(124, 196, 255, .18); }
+
+/* Чистое имя модели: то, что человек видит в выпадающем списке при выборе. */
+td.clean-name { white-space: nowrap; }
+td.clean-name span:first-child { font-weight: 600; }
+.free-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(110, 231, 168, .18);
+  color: #6ee7a8;
+  font-size: 10.5px;
+  font-weight: 600;
+  vertical-align: middle;
+}

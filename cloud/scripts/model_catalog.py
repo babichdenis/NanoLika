@@ -269,6 +269,80 @@ def capabilities(row: dict[str, Any]) -> dict[str, bool]:
     }
 
 
+#: Слова, которые в имени модели — шум для выпадающего списка: провайдер и «preview».
+#: Как писать бренды в списке моделей, чтобы они не превращались в «Gpt» и «Glm».
+BRANDS = {
+    "gpt": "GPT", "glm": "GLM", "oss": "OSS", "v": "V", "ai": "AI", "api": "API",
+    "claude": "Claude", "gemini": "Gemini", "grok": "Grok", "kimi": "Kimi", "qwen": "Qwen",
+    "deepseek": "DeepSeek", "llama": "Llama", "mistral": "Mistral", "gemma": "Gemma",
+    "whisper": "Whisper", "llm": "LLM", "moe": "MoE", "pro": "Pro", "mini": "Mini",
+    "max": "Max", "flash": "Flash", "lite": "Lite", "turbo": "Turbo", "ultra": "Ultra",
+    "plus": "Plus", "reasoning": "Reasoning", "chat": "Chat", "coder": "Coder",
+    "instruct": "Instruct", "nano": "Nano", "vision": "Vision", "omni": "Omni",
+}
+
+NAME_NOISE = re.compile(
+    r"\b(preview|latest|latest-\d+|stable|exp|experimental|beta|rc\d*|online|"
+    r"none|default|v\d+-\d+|\d{6,})\b",
+    re.I,
+)
+
+
+def clean_name(raw: str, vendor: str = "") -> str:
+    """Имя модели для выбора: без провайдера, дат и служебных слов.
+
+    Продавец зовёт модель `openai/gpt-6-astra`, API — `gpt-6-astra`, а человеку нужно
+    «GPT-6 Astra». Собираем самое читаемое из известных вариантов: берём имя из каталога
+    (models.dev даёт человеческое), убираем префикс продавца, годы, `preview` и прочее.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    text = text.split(":")[0]                     # bedrock-артефакты
+    parts = [p for p in text.split("/") if p]
+    if parts:
+        text = parts[-1]                          # без продавца
+    text = re.sub(r"[_]+", " ", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    # дефисы между словами — в пробелы, но версии (4.7, v4.1) не трогаем
+    text = re.sub(r"(?<=[A-Za-z])-(?=[A-Za-z])", " ", text)
+    text = NAME_NOISE.sub(" ", text)
+    text = re.sub(r"\s{2,}", " ", text).strip(" -_.")
+    if not text:
+        text = str(raw)
+    # дефис между буквами — разделитель слов: gpt-6-astra → gpt 6 astra
+    text = re.sub(r"(?<=[A-Za-z0-9])-(?=[A-Za-z0-9])", " ", text)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    words = []
+    for word in text.split(" "):
+        low = word.lower()
+        if low in BRANDS:
+            words.append(BRANDS[low])
+        elif re.fullmatch(r"[a-z]{1,4}", word) and "v" not in low:
+            # короткие аббревиатуры в начале имени: gpt, glm, kimi, oss
+            words.append(word.upper())
+        elif word.islower() and len(word) > 2:
+            words.append(word[0].upper() + word[1:])
+        else:
+            words.append(word)
+    return " ".join(words)
+
+
+def is_free(card: dict[str, Any]) -> bool:
+    """Бесплатна ли модель **у нас** — то есть у нашего поставщика она стоит ноль.
+
+    Рынок сюда не идёт: «бесплатно у какого-то стороннего хостинга» не значит, что клиент
+    получит её даром. Считаем только по нашим предложениям (`ours`), где цена в рублях
+    равна нулю. Сейчас такие бывают только у OpenRouter; если его каталог не собрался
+    (он иногда отвечает 403), бесплатных в меню и не будет — это видно по снимку цен.
+    """
+    for offer in (card.get("ours") or {}).values():
+        rub = offer.get("rub")
+        if isinstance(rub, (int, float)) and rub == 0:
+            return True
+    return False
+
+
 def _has_price(row: dict[str, Any]) -> bool:
     """Есть ли у строки LiteLLM хоть какая-то цена: за токены, секунду, картинку."""
     for field in (
@@ -433,6 +507,8 @@ def merge_dev(card: dict[str, Any], match: dict[str, Any]) -> None:
         card["cache_read_usd"] = round(float(cost["cache_read"]), 4)
     card["dev"] = {
         "type": match.get("type"),
+        "name": match.get("name"),
+        "cost": dict(match.get("cost") or {}),
         "provider": match.get("provider"),
         "open_weights": bool(match.get("open_weights")),
         "released": match.get("released"),
@@ -592,11 +668,22 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
                     }
             if prices:
                 card["ours"] = prices
+                # имя, под которым модель продаём мы: оно и есть «чистое» для выбора
+                card["ours_name"] = our_name.split("/")[-1] if "/" in our_name else our_name
                 ours[our_slug] = card
 
     rows = list(models.values())
     for card in rows:
         finalize_caps(card)
+        # имя для выбора: человеческое из models.dev/Artificial Analysis, иначе из id
+        human = (
+            (card.get("dev") or {}).get("name")
+            or (card.get("aa") or {}).get("name")
+            or card.get("ours_name")
+            or ""
+        )
+        card["clean_name"] = clean_name(human or card.get("name") or card["id"])
+        card["free"] = is_free(card)
         card.setdefault("ours", {})
         card["available_here"] = bool(card["ours"])
         # есть ли что показать, кроме названия: хоть одна цена мира, качество или медиа-цена
