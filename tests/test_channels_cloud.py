@@ -186,6 +186,39 @@ def test_a_closed_door_is_said_in_the_chat_and_nothing_runs(chan, monkeypatch):
     assert "did not open an account" in fake.sent[-1][1]
 
 
+def test_an_unreachable_relay_is_said_in_the_chat_and_nothing_runs(chan, monkeypatch):
+    """A relay that does not answer must not hand the turn to this machine's key."""
+    _service, manager, fake = chan
+    real = httpx.AsyncClient
+
+    def no_route(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to the relay")
+
+    def client(*_args: Any, **_kwargs: Any) -> httpx.AsyncClient:
+        return real(transport=httpx.MockTransport(no_route))
+
+    monkeypatch.setattr(manager_module.httpx, "AsyncClient", client)
+    assert run(manager, manager._cloud_key_for("quiet", message())) == ("!", "")
+    assert fake.sent, "the chat has to hear why"
+    assert "not answering" in fake.sent[-1][1]
+
+
+def test_a_cloud_chat_without_its_settings_is_refused_not_paid_for(chan):
+    """`cloud_per_chat` on with no relay address is a broken setup, not a free fallback."""
+    _service, manager, fake = chan
+    data = dict(manager.store._file.load())
+    entry = dict(data.get("quiet") or {})
+    settings = dict(entry.get("settings") or {})
+    settings.pop("cloud_url", None)
+    settings.pop("cloud_bot_token", None)
+    entry["settings"] = settings
+    data["quiet"] = entry
+    manager.store._file.save(data)
+    assert run(manager, manager._cloud_key_for("quiet", message())) == ("!", "")
+    assert fake.sent, "the chat has to hear why"
+    assert "missing" in fake.sent[-1][1]
+
+
 def test_an_exhausted_allowance_is_said_in_the_chat(chan):
     _service, manager, fake = chan
     thread = thread_id_for("quiet", "700100200")

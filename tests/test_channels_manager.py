@@ -616,7 +616,7 @@ def test_explicit_computer_command_uses_dedicated_handoff(chan, monkeypatch):
     device = {"id": "fixture-pc", "online": True, "kind": "computer", "actions": ["task"]}
     monkeypatch.setattr(service.hub, "others", lambda: [device])
 
-    async def handoff(thread, msg, text, target, *, fallback=True):
+    async def handoff(thread, msg, text, target, *, fallback=True, shared_cid=""):
         received.append((thread, text, target, fallback))
 
     monkeypatch.setattr(manager, "_serve_from_device", handoff)

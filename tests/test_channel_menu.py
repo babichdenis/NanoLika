@@ -16,6 +16,15 @@ def manager(tmp_path):
         app=SimpleNamespace(sentinel=SimpleNamespace()),
         settings=SimpleNamespace(channels=SimpleNamespace(shared_thread=False)),
         hub=SimpleNamespace(primary=lambda: None),
+        # the menu binds a ticket to the account and asks it which threads are the person's:
+        # a conversation this fake does not know is not the account's, so the chats list
+        # stays empty and a ticket still names the account it was made for
+        sync=SimpleNamespace(
+            account_id="acct-under-test",
+            _mine=lambda thread: False,
+            owner_of=lambda thread: "",
+            cid_of=lambda thread: "",
+        ),
     )
     channel = SimpleNamespace(_call=AsyncMock())
     m = SimpleNamespace(
@@ -56,7 +65,8 @@ async def test_menu_has_all_controls_and_private_callback(channel, tmp_path):
     assert await menu.inbound(message)
     assert len(menu.tickets) == 0  # navigation survives restarts; changes use tickets
     args = m.channels[channel]._call.call_args
-    assert "https://nanolika.ru/pricing.html" in str(args)
+    # the home menu leads to the account console; the price list lives on the pay page
+    assert "https://cloud.nanolika.ru/web/account/?source=messenger" in str(args)
     token = "nav:permissions"
     before = m.channels[channel]._call.call_count
     await menu.callback(channel, "other", "owner", {"menu": token})
@@ -201,13 +211,9 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
             call.args[1]["commands"] if vendor == "telegram" else call.kwargs["json"]["commands"]
         )
         field = "command" if vendor == "telegram" else "name"
-        assert {row[field] for row in commands} >= {
-            "menu",
-            "permissions",
-            "balance",
-            "pay",
-            "language",
-        }
+        # the vendor command list is the three doors into the menu; permissions, balance,
+        # pay and language are inline buttons inside it, so they are not registered here
+        assert {row[field] for row in commands} == {"menu", "new", "chats"}
 
 
 @pytest.mark.asyncio
