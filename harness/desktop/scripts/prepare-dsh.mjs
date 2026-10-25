@@ -155,6 +155,26 @@ if (!existsSync(runtimeDir)) {
   writeFileSync(join(runtimeDir, "README.txt"), "No runtime for the hands was built into this copy of NanoLika Desktop; `nanomuse` on PATH or NANOMUSE_PY serves them.\n");
 }
 
+// ---------------------------------------------------------------- LibreOffice
+// The harness carries LibreOffice's own build (157 MB per platform) for `dsh-office-to-pdf`
+// and the office skills. On Windows the machine's own Microsoft Office does that work —
+// Word and Excel write PDFs themselves and are the only place VBA can be recorded — so the
+// bundled LibreOffice is dropped there. `NANOLIKA_BUNDLE_LIBREOFFICE=1` keeps it anyway;
+// `=0` drops it on macOS and Linux too (then conversion needs a system LibreOffice or
+// Office, see docs/office.md).
+const libreofficeChoice = process.env.NANOLIKA_BUNDLE_LIBREOFFICE;
+const keepLibreOffice = libreofficeChoice === "1" || (libreofficeChoice !== "0" && process.platform !== "win32");
+if (!keepLibreOffice) {
+  const deepseekDir = join(out, "node_modules", "@deepseek-ai");
+  if (existsSync(deepseekDir)) {
+    for (const entry of readdirSync(deepseekDir)) {
+      if (!entry.startsWith("libreoffice-kit-")) continue;
+      rmSync(join(deepseekDir, entry), { recursive: true, force: true });
+      console.log(`dropped @deepseek-ai/${entry} (LibreOffice's own build is not shipped)`);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- the record
 const installed = JSON.parse(readFileSync(join(out, "node_modules", "@deepseek-ai", "dsh", "package.json"), "utf8"));
 const bundled = JSON.parse(readFileSync(join(out, "node_modules", "dsh-nanomuse", "package.json"), "utf8"));

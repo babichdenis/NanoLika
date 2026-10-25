@@ -50,6 +50,13 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.45"]
+# Word/Excel/PowerPoint: OOXML — это zip с XML, поэтому документы создаются и правятся
+# без LibreOffice и без установленного Office (~5 МБ вместо 157 МБ на LibreOffice)
+office = [
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=0.6.23",
+]
 # this computer's screen and hands (docs/every-device.md); xdotool works without them on X11
 hands = [
     "mss>=9",
@@ -66,7 +73,7 @@ feishu = ["lark-oapi>=1.5,<2"]
 dingtalk = ["dingtalk-stream>=0.24,<1"]
 wecom = ["wecom-aibot-sdk-python>=0.1.7,<0.2"]
 channels = ["nanomuse[feishu,dingtalk,wecom]"]
-all = ["nanomuse[browser,hands,dev,channels]"]
+all = ["nanomuse[browser,hands,dev,channels,office]"]
 
 [project.scripts]
 nanolika-bots = "nanomuse.bot_projects:main"

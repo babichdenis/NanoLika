@@ -23,6 +23,13 @@ hidden += collect_submodules("uvicorn")
 hidden += collect_submodules("websockets")
 hidden += collect_submodules("anyio")
 hidden += ["pydantic.deprecated.decorator", "tzdata", "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont"]
+# Word/Excel/PowerPoint без LibreOffice: библиотеки берут шаблоны из своих пакетов,
+# поэтому collect_data_files обязателен (default.docx / default.pptx)
+for _pkg in ("docx", "openpyxl", "pptx"):
+    try:
+        hidden += collect_submodules(_pkg)
+    except Exception:
+        pass
 
 datas = [
     (
@@ -36,6 +43,11 @@ datas = [
     (os.path.join(ROOT, "config", "config.example.toml"), "nanomuse"),
 ]
 binaries = []
+for _pkg in ("docx", "openpyxl", "pptx"):
+    try:
+        datas += collect_data_files(_pkg)
+    except Exception:
+        pass
 
 # packages that read their own data at run time
 # bs4 reads the parser out of a separate package (soupsieve), and `web_fetch` imports it inside
