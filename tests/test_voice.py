@@ -18,6 +18,10 @@ DASH = "—"  # the Chinese "——" is two of them
 ALLOWED = {
     ("nanomuse/computer/screen.py", r'r"\s+[-—–]\s+([^-—–]+)$"'),
     ("nanomuse/prompts.py", '" :,-—\\n"'),
+    # the separator and the edge characters a title is trimmed with: a dash there is data,
+    # what a model may have written before the date it puts into a name
+    ("nanomuse/channels/telegram_topics.py", r'r"(?:[·•|,;:—–\-(\[]\s*)"'),
+    ("nanomuse/channels/telegram_topics.py", r'" \t·•|,;:—–-()[]"'),
 }
 
 

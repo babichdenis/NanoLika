@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from nanomuse.channels.base import InboundMessage
+from nanomuse.channels.link_code import as_code
 from nanomuse.channels.store import _Watched
 from nanomuse.logger import logger
 
@@ -62,6 +63,94 @@ COPY = {
 }
 
 
+# A conversation title may carry the day the model wrote it on ("Feed · воскресенье, 25
+# октября 2026 г."); a topic does not. The tail is cut off, so the same conversation of every
+# day lands in one topic instead of a new one for each run.
+_WEEKDAY = (
+    r"(?:понедельник\w*|вторник\w*|сред\w*|четверг\w*|пятниц\w*|суббот\w*|воскресень\w*"
+    r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+)
+_MONTH = (
+    r"(?:январ\w*|феврал\w*|март\w*|апрел\w*|ма[йя]|июн\w*|июл\w*|август\w*|сентябр\w*"
+    r"|октябр\w*|ноябр\w*|декабр\w*|january|february|march|april|may|june|july|august"
+    r"|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
+)
+_DAY = (
+    r"(?:\d{1,2}\s+" + _MONTH + r"\s*(?:\d{4}\s*)?(?:г(?:\w*|\.)?)?"  # 25 октября 2026 г.
+    r"|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?"  # 25.10.2026
+    r"|\d{4}-\d{2}-\d{2})"  # 2026-10-25
+)
+# a separator that is not a plain space: a title never loses its last words to a date, only
+# the tail that a separator marks
+_SEP = r"(?:[·•|,;:—–\-(\[]\s*)"
+_DATE_TAIL = re.compile(rf"{_SEP}(?:{_WEEKDAY}\s*,?\s*)?{_DAY}\s*[)\]]?\s*$", re.IGNORECASE)
+_WEEKDAY_TAIL = re.compile(rf"{_SEP}{_WEEKDAY}\s*[)\]]?\s*$", re.IGNORECASE)
+_EDGES = " \t·•|,;:—–-()[]"
+_SENTENCE_END = re.compile(r"[.!?。！？…\n]")
+
+# a line the app writes by itself, or a command the person sends: neither is a conversation
+SERVICE_LINES = {
+    "новый чат",
+    "новая беседа",
+    "new chat",
+    "新对话",
+    "открой этот чат на компьютере",
+    "open this chat on the computer",
+}
+
+
+def normalize_name(name: str) -> str:
+    """A conversation title as a topic name: the date and the weekday off the end, one space
+    between words, and exactly ``Feed`` for anything a daily digest is called."""
+    text = " ".join(str(name or "").split())
+    for _ in range(3):
+        cut = _WEEKDAY_TAIL.sub("", _DATE_TAIL.sub("", text))
+        if cut == text:
+            break
+        text = cut
+    text = text.strip(_EDGES)
+    if text.casefold().startswith("feed"):
+        return "Feed"
+    return text[:100]
+
+
+def service_text(text: str) -> bool:
+    """A line that carries no conversation of its own: a command, the six characters of a
+    link code, or a service phrase the app writes itself. Nothing is created for it."""
+    line = " ".join(str(text or "").split())
+    if not line:
+        return True
+    if line.startswith("/"):
+        return True
+    if as_code(line):
+        return True
+    return line.casefold().rstrip(".!。！") in SERVICE_LINES
+
+
+def first_phrase(text: str, limit: int = 60) -> str:
+    """The first sentence of a message on one line: what names a conversation opened from a
+    Telegram topic the person made."""
+    flat = " ".join(str(text or "").split())
+    end = _SENTENCE_END.search(flat)
+    if end is not None and end.start() >= 2:
+        flat = flat[: end.start()].strip()
+    return flat[:limit].strip()
+
+
+def started_by_person(thread: Any) -> bool:
+    """Whether the person opened this conversation: it holds a message they wrote.
+
+    The bot starts conversations of its own (a scheduled check-in, a background result), and
+    those get no Telegram topic: nobody asked for a place to continue them."""
+    events = getattr(getattr(thread, "timeline", None), "events", None) or []
+    return any(
+        isinstance(event, dict)
+        and str(event.get("type") or "") == "user"
+        and str(event.get("text") or "").strip()
+        for event in events
+    )
+
+
 class TelegramTopics:
     def __init__(self, picker: Any):
         self.p = picker
@@ -100,7 +189,7 @@ class TelegramTopics:
         since = self._auto_since()
         result = set()
         for thread in self.m.svc.threads.values():
-            if not sync._mine(thread):
+            if not sync._mine(thread) or not started_by_person(thread):
                 continue
             try:
                 created = datetime.fromisoformat(
@@ -141,6 +230,12 @@ class TelegramTopics:
         account = sync.account_id
         thread = self.m.svc.threads.get(str(event.get("thread") or ""))
         if not account or thread is None or not sync._mine(thread):
+            return
+        if not started_by_person(thread):
+            # a conversation the bot began on its own gets no topic
+            return
+        if service_text(normalize_name(thread.title)):
+            # "/model" or a link code is not a name to open a topic with
             return
         try:
             created = datetime.fromisoformat(
@@ -186,6 +281,41 @@ class TelegramTopics:
     def copy(self, msg: Any) -> dict[str, str]:
         return COPY.get(self.m.menu.language(msg), COPY["ru"])
 
+    def topic_name(self, title: str, new: str = "") -> str:
+        """The name a Telegram topic carries: the conversation title without the date it may
+        be rewritten with every day, and a plain "new chat" for a title that is not one."""
+        name = normalize_name(title)
+        if name and not service_text(name):
+            return name
+        return (new or COPY["ru"]["new"])[:100]
+
+    def _thread_title(self, msg: Any) -> str:
+        """A conversation opened from a Telegram topic is named after the first phrase of
+        the message that opened it, without a date; the topic's own name stands in when the
+        message says too little, and a plain "new chat" when neither does."""
+        return (
+            normalize_name(first_phrase(msg.text))
+            or normalize_name(msg.chat_name)
+            or self.copy(msg)["new"]
+        )
+
+    def _follow(self, msg: Any) -> None:
+        """A command joins the conversation this chat already continues, or the main one: it
+        never opens a conversation of its own, and never a topic."""
+        if self.p.selected(msg.channel, msg.chat_id):
+            return
+        chosen = self.p.selected(msg.channel, split_chat(msg.chat_id)[0])
+        if not chosen:
+            # imported here: the server package pulls in the whole app, and the channels are
+            # imported by it
+            from nanomuse.server.events import MAIN_THREAD
+
+            main = self.m.svc.threads.get(MAIN_THREAD)
+            if main is not None and self.m.svc.sync._mine(main):
+                chosen = MAIN_THREAD
+        if chosen:
+            self.p.bind(msg, chosen)
+
     def _key(self, account: str, chat: str, topic: int) -> str:
         return hashlib.sha256(f"{account}\n{chat}\n{topic}".encode()).hexdigest()
 
@@ -220,6 +350,8 @@ class TelegramTopics:
         rows = dict(self.file.load())
         key = self._key(account, chat, topic)
         old = rows.get(key, {})
+        # the name is kept normalized, so the same name finds the same topic tomorrow
+        name = normalize_name(str(extra.pop("name", "") or old.get("name") or ""))
         rows[key] = {
             **old,
             "account": account,
@@ -227,7 +359,7 @@ class TelegramTopics:
             "topic": topic,
             "owner": msg.sender_id,
             "thread": thread.id,
-            "name": old.get("name", thread.title),
+            "name": name or self.topic_name(thread.title),
             "cid": self.m.svc.sync.cid_of(thread.id),
             **extra,
         }
@@ -285,12 +417,16 @@ class TelegramTopics:
                 await self.m.menu.send(msg, self.copy(msg)["failed"], [])
                 return True
             if thread is None:
-                title = (
-                    msg.chat_name.strip()[:100]
-                    or " ".join(msg.text.split())[:60]
-                    or self.copy(msg)["new"]
-                )
-                thread = self.m.svc.create_thread(title)
+                if not msg.text.strip() and not msg.files:
+                    # the vendor's own event (a topic created or renamed): there is no
+                    # conversation to continue, and none is opened
+                    return True
+                if service_text(msg.text):
+                    # a command or a link code is answered in the conversation this chat
+                    # already continues: it opens neither a conversation nor a topic
+                    self._follow(msg)
+                    return False
+                thread = self.m.svc.create_thread(self._thread_title(msg))
                 self._put(msg, topic, thread, seeded=True)
                 self.m.svc.sync.thread_changed(thread)
                 await self.m.svc.sync.push()
@@ -304,7 +440,7 @@ class TelegramTopics:
             if not msg.text.strip() and not msg.files:
                 if msg.chat_name and msg.chat_name != thread.title:
                     self.m.svc.rename_thread(thread.id, msg.chat_name[:100])
-                    self._put(msg, topic, thread, name=thread.title)
+                    self._put(msg, topic, thread)
                 await self.m.channels["telegram"].send(
                     msg.chat_id, self.copy(msg)["continued"].format(title=thread.title)
                 )
@@ -317,12 +453,13 @@ class TelegramTopics:
             thread = self.m.svc.threads.get(thread_id)
             if thread is None or not self.m.svc.sync._mine(thread):
                 return
+            name = self.topic_name(thread.title)
             for key, row in list(self.file.load().items()):
                 if (
                     not isinstance(row, dict)
                     or not self._valid(row)
                     or row.get("thread") != thread_id
-                    or row.get("name") == thread.title
+                    or row.get("name") == name
                 ):
                     continue
                 try:
@@ -331,7 +468,7 @@ class TelegramTopics:
                         {
                             "chat_id": row["chat"],
                             "message_thread_id": row["topic"],
-                            "name": (" ".join(thread.title.split()) or COPY["ru"]["new"])[:100],
+                            "name": name,
                         },
                     )
                 except Exception as exc:
@@ -340,7 +477,7 @@ class TelegramTopics:
                 if account != self.m.svc.sync.account_id:
                     return
                 rows = dict(self.file.load())
-                rows[key] = {**row, "name": thread.title}
+                rows[key] = {**row, "name": name}
                 self.file.save(rows)
 
     def defer(self, thread: str, endpoint: tuple[str, str], event: dict) -> bool:
@@ -377,13 +514,15 @@ class TelegramTopics:
 
         c = self.copy(msg)
         chat = split_chat(msg.chat_id)[0]
+        name = self.topic_name(thread.title, c["new"])
         channel = self.m.channels["telegram"]
         async with self._lock:
             current()
+            rows = list(self.file.load().values())
             existing = next(
                 (
                     r
-                    for r in self.file.load().values()
+                    for r in rows
                     if isinstance(r, dict)
                     and self._valid(r)
                     and r.get("chat") == chat
@@ -394,6 +533,20 @@ class TelegramTopics:
                 ),
                 None,
             )
+            if existing is None:
+                # a topic that already carries this name is the same topic: "Feed" is one
+                # place, whatever day the model wrote into the title
+                existing = next(
+                    (
+                        r
+                        for r in rows
+                        if isinstance(r, dict)
+                        and self._valid(r)
+                        and r.get("chat") == chat
+                        and normalize_name(str(r.get("name") or "")) == name
+                    ),
+                    None,
+                )
             if existing:
                 topic = int(existing["topic"])
                 try:
@@ -412,7 +565,7 @@ class TelegramTopics:
                     "createForumTopic",
                     {
                         "chat_id": chat,
-                        "name": (" ".join(thread.title.split()) or c["new"])[:100],
+                        "name": name,
                         "icon_color": (0xFFD67E, 0x8EEE98, 0xFB6F5F)[
                             int(hashlib.sha256(thread.id.encode()).hexdigest()[:2], 16) % 3
                         ],
@@ -427,17 +580,19 @@ class TelegramTopics:
             self._put(msg, topic, thread)
             history = list(thread.timeline.events)
             async with self._holding(destination, account):
-                if existing.get("name") != thread.title:
+                if existing.get("name") != name:
+                    # an older topic carries the date of the day it was made: it is renamed
+                    # to the name this conversation has today
                     await channel._call(
                         "editForumTopic",
                         {
                             "chat_id": chat,
                             "message_thread_id": topic,
-                            "name": (" ".join(thread.title.split()) or c["new"])[:100],
+                            "name": name,
                         },
                     )
                     current()
-                    self._put(msg, topic, thread, name=thread.title)
+                    self._put(msg, topic, thread, name=name)
                 # Seed a small, clearly labelled history once, oldest first. Never replay tools/files.
                 if not existing.get("seeded"):
                     seeded = list(existing.get("seeded_mids") or [])
@@ -483,7 +638,7 @@ class TelegramTopics:
                         self.m.sync_receipts.mark(
                             self.m.sync_receipts.key("telegram", destination, mid, role)
                         )
-                await channel.send(destination, c["continued"].format(title=thread.title))
+                await channel.send(destination, c["continued"].format(title=name))
         current()
         self.p.bind(replace(msg, chat_id=destination), thread.id, fresh=fresh)
         # A bot cannot force the Telegram client's active view to change.
