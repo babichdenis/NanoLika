@@ -9,9 +9,22 @@ const SS = {
 };
 let TOKEN = SS.getItem("nm.admin") || SS.getItem("nm.admin.token") || "";
 
+/** Каталог рынка (catalog.json): мировые цены, возможности, качество. Может не загрузиться. */
+const catalog = {
+  bySlug: new Map(),
+  ready: false,
+};
+
 const state = {
   data: null,
   k: 5,
+  caps: new Set(),      // возможности из каталога: image, audio_in, reasoning, open_weights …
+  band: "",             // класс мировой цены
+  hereOnly: "",         // "", "yes" (есть у нас), "no" (только на рынке)
+  worldIn: null,        // $ за 1M входа, не больше
+  ctxMin: 0,            // контекст, не меньше
+  iqMin: null,          // качество (индекс), не меньше
+  mode: "",             // режим: chat, embedding, image_generation …
   q: "",
   group: "all",
   vendors: new Set(),
@@ -132,6 +145,56 @@ const NOT_A_VENDOR = new Set([
   "nano", "lite", "fast", "plus", "pro", "max", "mini", "small", "large", "omni", "flash",
 ]);
 
+/** Ключ, по которому модель меню ищет себя в каталоге. */
+function slugOf(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .split(":")[0]
+    .split("/")
+    .pop()
+    .replace(/[-_\s]*(preview|latest|stable|exp|experimental|beta|rc\d*)$/, "")
+    .replace(/-(20\d\d)(\d\d)?(\d\d)?$/, "")
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** Данные каталога для модели меню: по id, имени или «цене как». */
+function infoOf(m) {
+  if (!catalog.ready) return null;
+  for (const key of [m.id, m.name, m.priced_as]) {
+    const hit = catalog.bySlug.get(slugOf(key));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Оценка качества 0–100; null, когда Artificial Analysis модель не мерил. */
+function qualityOf(m) {
+  const info = infoOf(m);
+  const value = info && info.aa ? info.aa.intelligence : null;
+  return typeof value === "number" ? value : null;
+}
+
+function capsOf(m) {
+  const info = infoOf(m);
+  return (info && info.caps) || {};
+}
+
+function worldInOf(m) {
+  const info = infoOf(m);
+  if (!info) return null;
+  const value = info.world_in_usd ?? (info.aa ? info.aa.price_in_usd : null);
+  return typeof value === "number" ? value : null;
+}
+
+function worldOutOf(m) {
+  const info = infoOf(m);
+  if (!info) return null;
+  const value = info.world_out_usd ?? (info.aa ? info.aa.price_out_usd : null);
+  return typeof value === "number" ? value : null;
+}
+
 function vendorOf(m) {
   const hay = `${m.id || ""} ${m.name || ""} ${m.priced_as || ""}`.toLowerCase();
   for (const [id, label, rule] of VENDOR_RULES) {
@@ -242,8 +305,36 @@ function baseRows() {
       if (state.priceMin !== null && price < state.priceMin) return false;
       if (state.priceMax !== null && price > state.priceMax) return false;
     }
+    if (state.hereOnly === "yes" && !infoOf(m)) return false;
+    if (state.hereOnly === "no" && infoOf(m)) return false;
+    if (state.band) {
+      const band = infoOf(m) ? infoOf(m).band : null;
+      if (state.band === "none" ? Boolean(band) : band !== state.band) return false;
+    }
+    if (state.mode) {
+      const info = infoOf(m);
+      if (!info || info.mode !== state.mode) return false;
+    }
+    if (state.caps.size) {
+      const caps = capsOf(m);
+      for (const cap of state.caps) if (!caps[cap]) return false;
+    }
+    if (state.ctxMin) {
+      const ctx = (infoOf(m) || {}).context || m.context || 0;
+      if (ctx < state.ctxMin) return false;
+    }
+    if (state.worldIn !== null) {
+      const price = worldInOf(m);
+      if (price === null || price > state.worldIn) return false;
+    }
+    if (state.iqMin !== null) {
+      const iq = qualityOf(m);
+      if (iq === null || iq < state.iqMin) return false;
+    }
     if (!q) return true;
-    return String(m.name || "").toLowerCase().includes(q) || String(m.id || "").toLowerCase().includes(q);
+    const info = infoOf(m);
+    const hay = `${m.name || ""} ${m.id || ""} ${info && info.aa ? info.aa.creator || "" : ""}`.toLowerCase();
+    return q.split(/\s+/).every((word) => !word || hay.includes(word));
   });
 }
 
@@ -268,6 +359,9 @@ function sortValue(m, key) {
     case "sell_out": return m.sell ? m.sell.rub_out : null;
     case "ratio_in": return m.ratio ? m.ratio.in : null;
     case "ratio_out": return m.ratio ? m.ratio.out : null;
+    case "iq": return qualityOf(m);
+    case "world_in": return worldInOf(m);
+    case "world_out": return worldOutOf(m);
     case "estimate": {
       const offer = cheapestOffer(m);
       return offer ? estimate(offer) : null;
@@ -783,6 +877,10 @@ function drawHead(providers, rows) {
   top.append(sortableTh("Вендор", "vendor", "vendor"));
   top.append(sortableTh("Контекст", "context", "num ctx"));
   top.append(sortableTh("Макс. выход", "max_output", "num ctx"));
+  top.append(sortableTh("$ вход", "world_in", "num world"));
+  top.append(sortableTh("$ выход", "world_out", "num world"));
+  top.append(sortableTh("Качество", "iq", "num iq"));
+  top.append(h("th", "Умеет", "caps"));
 
   const stats = providerStats(rows, providers);
   for (const name of providers) {
@@ -873,6 +971,11 @@ function buildRow(m, providers) {
 
   tr.append(h("td", m.context ? money(m.context, 0) : "—", "num ctx"));
   tr.append(h("td", m.max_output ? money(m.max_output, 0) : "—", "num ctx"));
+  tr.append(worldCell(worldInOf(m)));
+  tr.append(worldCell(worldOutOf(m)));
+  const iq = qualityOf(m);
+  tr.append(h("td", iq === null ? "—" : String(Math.round(iq)), iq === null ? "num iq dim" : "num iq"));
+  tr.append(capsCell(capsOf(m)));
 
   for (const provider of providers) tr.append(providerCell(m, provider));
 
@@ -883,6 +986,30 @@ function buildRow(m, providers) {
   tr.append(marginCell(m));
   tr.append(lastRequestCell(m));
   return tr;
+}
+
+/** Доллар за миллион токенов: мельче копейки округляем до четырёх знаков. */
+function worldCell(value) {
+  if (value === null || value === undefined) return h("td", "—", "num world dim");
+  const text = value >= 1 ? money(value, 2) : String(value.toFixed(value < 0.01 ? 4 : 3));
+  return h("td", text, "num world");
+}
+
+const CAP_SHORT = {
+  text: "текст", code: "код", tools: "инстр.", image: "карт.", audio_in: "звук→",
+  audio_out: "звук←", video: "видео", pdf: "PDF", reasoning: "разм.",
+  open_weights: "откр.", caching: "кэш", structured: "схема", computer_use: "комп.",
+  web_search: "поиск",
+};
+
+function capsCell(caps) {
+  const td = h("td", undefined, "caps");
+  for (const [key, label] of Object.entries(CAP_SHORT)) {
+    if (!caps[key]) continue;
+    td.append(h("span", label, "cap"));
+  }
+  if (!td.childNodes.length) td.append(h("span", "—", "dim"));
+  return td;
 }
 
 function drawRoutingNote() {
@@ -1065,6 +1192,63 @@ function syncControls() {
   document.getElementById("k").value = String(state.k);
   document.getElementById("only-sell").checked = state.onlySell;
   document.getElementById("sort").value = state.sort;
+  for (const [id, value] of [["mode-filter", state.mode], ["here-filter", state.hereOnly],
+    ["band-filter", state.band], ["ctx-min", state.ctxMin || ""],
+    ["world-in", state.worldIn === null ? "" : state.worldIn],
+    ["iq-min", state.iqMin === null ? "" : state.iqMin]]) {
+    const el = document.getElementById(id);
+    if (el) el.value = String(value);
+  }
+}
+
+/** Каталог рынка: если его нет, страница работает как раньше, без лишних колонок. */
+async function loadCatalog() {
+  try {
+    const response = await fetch("catalog.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    catalog.bySlug = new Map((data.models || []).map((model) => [model.id, model]));
+    catalog.ready = true;
+    catalog.counts = data.counts || {};
+    catalog.generated = data.generated_at || "";
+  } catch (error) {
+    catalog.ready = false;
+    const note = document.getElementById("note");
+    if (note && !note.textContent) {
+      note.textContent = `Каталог рынка не загрузился (${error.message}): колонки мировых цен и качества скрыты.`;
+    }
+  }
+}
+
+/** Новые фильтры каталога: чипы возможностей и пять полей. */
+function wireCatalogFilters() {
+  const chips = document.getElementById("caps-filter");
+  if (chips) {
+    chips.replaceChildren();
+    for (const [key, label] of Object.entries(CAP_SHORT)) {
+      const button = h("button", label, "chip cap-chip");
+      button.type = "button";
+      button.dataset.cap = key;
+      if (state.caps.has(key)) button.classList.add("on");
+      button.onclick = () => {
+        if (state.caps.has(key)) state.caps.delete(key);
+        else state.caps.add(key);
+        button.classList.toggle("on");
+        draw();
+      };
+      chips.append(button);
+    }
+  }
+  const bind = (id, apply) => {
+    const el = document.getElementById(id);
+    if (el) el.onchange = (e) => { apply(e.target.value); draw(); };
+  };
+  bind("mode-filter", (v) => { state.mode = v; });
+  bind("here-filter", (v) => { state.hereOnly = v; });
+  bind("band-filter", (v) => { state.band = v; });
+  bind("ctx-min", (v) => { state.ctxMin = Number(v) || 0; });
+  bind("world-in", (v) => { state.worldIn = v === "" ? null : Number(v); });
+  bind("iq-min", (v) => { state.iqMin = v === "" ? null : Number(v); });
 }
 
 async function load() {
@@ -1076,9 +1260,11 @@ async function load() {
   }
   try {
     state.data = await api("/v1/admin/prices");
+    await loadCatalog();
     gate.hidden = true;
     document.getElementById("bar").hidden = false;
     document.getElementById("content").hidden = false;
+    wireCatalogFilters();
     drawRate();
     drawCounts();
     syncControls();
@@ -1133,6 +1319,19 @@ document.getElementById("reset").onclick = () => {
   state.sort = "";
   state.dir = "asc";
   state.onlySell = false;
+  state.caps.clear();
+  state.band = "";
+  state.hereOnly = "";
+  state.worldIn = null;
+  state.ctxMin = 0;
+  state.iqMin = null;
+  state.mode = "";
+  for (const el of document.querySelectorAll("#caps-filter .cap-chip")) el.classList.remove("on");
+  for (const [id, value] of [["mode-filter", ""], ["here-filter", ""], ["band-filter", ""],
+    ["ctx-min", ""], ["world-in", ""], ["iq-min", ""]]) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  }
   syncControls();
   if (state.data) draw();
 };

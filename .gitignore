@@ -86,3 +86,7 @@ cloud/store/capsules/*/*/Quartz/
 cloud/store/capsules/*/*/CoreML/
 cloud/store/capsules/*/*/objc/
 cloud/store/capsules/*/*/Foundation/
+
+# the model encyclopedia is built, not committed: 2 MB of market data rebuilt by
+# cloud/scripts/model_catalog.py on a timer (docs/store.md)
+cloud/nanomuse_cloud/console/prices/catalog.json

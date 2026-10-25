@@ -64,6 +64,43 @@
         </label>
         <button id="sort-dir" class="chip" type="button" aria-label="Направление сортировки" title="Направление сортировки">↑</button>
         <label class="switch"><input id="only-sell" type="checkbox" /> только с ценой продажи</label>
+        <label class="field">режим
+          <select id="mode-filter">
+            <option value="">любой</option>
+            <option value="chat">текст</option>
+            <option value="responses">responses</option>
+            <option value="image_generation">картинки</option>
+            <option value="image_edit">правка картинок</option>
+            <option value="video_generation">видео</option>
+            <option value="audio_speech">озвучка</option>
+            <option value="audio_transcription">распознавание</option>
+            <option value="embedding">эмбеддинги</option>
+            <option value="rerank">реранк</option>
+            <option value="ocr">OCR</option>
+          </select>
+        </label>
+        <label class="field">на рынке
+          <select id="here-filter">
+            <option value="">все</option>
+            <option value="yes">есть у нас</option>
+            <option value="no">только на рынке</option>
+          </select>
+        </label>
+        <label class="field">цена мира
+          <select id="band-filter">
+            <option value="">любая</option>
+            <option value="cheap">дешёвая (&lt; $0.2)</option>
+            <option value="budget">бюджетная (&lt; $1)</option>
+            <option value="standard">обычная (&lt; $5)</option>
+            <option value="premium">дорогая (&lt; $15)</option>
+            <option value="expensive">очень дорогая</option>
+            <option value="none">цены нет</option>
+          </select>
+        </label>
+        <label class="field">контекст от <input id="ctx-min" type="number" min="0" step="1000" placeholder="128000" /></label>
+        <label class="field">$ вход до <input id="world-in" type="number" min="0" step="0.1" placeholder="$" /></label>
+        <label class="field">качество от <input id="iq-min" type="number" min="0" max="100" step="1" placeholder="40" /></label>
+        <div class="chips caps-filter" id="caps-filter" role="group" aria-label="Возможности"></div>
         <button id="reset" class="chip quiet" type="button">Сбросить фильтры</button>
         <span class="meta found" id="found"></span>
       </div>
@@ -93,6 +130,14 @@
           </table>
         </div>
         <p class="lead hint" id="routing-note"></p>
+        <p class="lead hint" id="catalog-note">
+          Колонки <b>$ вход</b>, <b>$ выход</b>, <b>Качество</b> и <b>Умеет</b> приходят из каталога рынка:
+          <a href="https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json" target="_blank" rel="noreferrer">LiteLLM</a>
+          (цены и возможности, 4300 моделей) и
+          <a href="https://artificialanalysis.ai/leaderboards/models" target="_blank" rel="noreferrer">Artificial Analysis</a>
+          (индекс качества, open-weights). Собирает <code>cloud/scripts/model_catalog.py</code>, обновляется таймером
+          <code>nanolika-model-catalog.timer</code> раз в сутки.
+        </p>
       </section>
 
       <details>

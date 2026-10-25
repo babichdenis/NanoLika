@@ -5,7 +5,7 @@
   --ink: #241f1a;
   --muted: #6d635a;
   --line: #ded3c4;
-  --accent: #b4552b;
+  --accent: #a5813a;
   --good: #2f6b45;
 }
 
@@ -115,7 +115,7 @@ h1 {
 }
 
 .chip-on .chip-count {
-  background: #f7e5da;
+  background: #f3ecde;
   color: var(--accent);
 }
 

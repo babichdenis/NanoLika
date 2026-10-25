@@ -24,14 +24,34 @@
 		max_size 20MB
 	}
 
-	# The sign-in shell is public; administrative JSON stays password-protected.
-	@prices_alias path /app/prices /app/admin/prices /app/admin/prices/
-	redir @prices_alias https://{host}/app/prices/ 308
-	@operator_path path /app/prices/* /v1/admin/prices
-	handle @operator_path {
-		reverse_proxy relay:8787 {
-			header_up X-Forwarded-For {remote_host}
+	# The operator's numbers are not on a named path: a neutral address, a password, and
+	# this box serving the page itself. Nothing here depends on another server.
+	@ops_page path /cfp64ns5jgh4er8uxhis3t5t /cfp64ns5jgh4er8uxhis3t5t/*
+	handle_path /cfp64ns5jgh4er8uxhis3t5t/* {
+		basic_auth {
+			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
 		}
+		rewrite * /app/prices{uri}
+		reverse_proxy relay:8787
+	}
+	handle /cfp64ns5jgh4er8uxhis3t5t {
+		basic_auth {
+			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
+		}
+		redir * /cfp64ns5jgh4er8uxhis3t5t/ 308
+	}
+	@ops_numbers path /v1/admin/prices
+	handle @ops_numbers {
+		basic_auth {
+			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
+		}
+		reverse_proxy relay:8787
+	}
+
+	# The old named pages answer "not found": nothing says where the numbers live now.
+	@named_pages path /app/prices /app/prices/* /app/admin/prices /app/admin/prices/* /app/menu-admin /app/menu-admin/* /v1/admin/menu
+	handle @named_pages {
+		respond 404
 	}
 
 	# The desktop's installers and update feeds: scripts/publish-updates.mjs writes
