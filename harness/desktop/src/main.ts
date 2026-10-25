@@ -2,16 +2,17 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, powerSaveBlocker, screen, shell, systemPreferences, Tray } from "electron";
 import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { GLOW_HIDE_MS, GLOW_SETTLE_MS, type Leak, LeakLog, leakIsEvidence, leakIsReal, pointerAction, REARM_DELAYS_MS, staleInstance } from "./glow";
 import { inviteFromArgv, inviteFromUrl, INVITE_SCHEME } from "./invite-link";
-import { defaultHelperPath, HELPER_NAME, MacHelper } from "./mac-helper";
+import { defaultHelperPath, HELPER_NAME, installedHelperPath, MacHelper } from "./mac-helper";
 import * as macPermissions from "./mac-permissions";
 import { Operator, SCREEN_PERMISSION_TEXT, type Marker } from "./operator";
 import { startOperatorServer, type OperatorServer } from "./operator-server";
+import { DSH_BIN, resolveDshRoot, type DshPlace } from "./payload";
 import { EXTERNAL_URL, navigationVerdict, sameOrigin } from "./navigation";
 import { relink } from "./profile-link";
 import { maskProxyUrl, proxyEnv, validProxyUrl } from "./proxy";
@@ -26,9 +27,10 @@ import { windowsNetworkCost } from "./windows-network-cost";
  *
  * The window shows the harness's own web app, served by a dsh Host this shell starts as a
  * child process: the Electron binary in Node mode (`ELECTRON_RUN_AS_NODE`, as the harness's
- * own desktop does), running the `dsh` that ships under `resources/dsh` with the NanoLika
- * bundle (`harness/dsh-nanomuse`) installed next to it. The profile the Host boots lives
- * under `~/.nanomuse/desktop` and names the bundle; nothing is installed at first run and
+ * own desktop does), running the `dsh` the app carries (`resources/dsh`, copied once into
+ * `<userData>/payload/dsh` so a new core never needs a new .app — src/payload.ts) with the
+ * NanoLika bundle (`harness/dsh-nanomuse`) installed next to it. The profile the Host boots
+ * lives under `~/.nanomuse/desktop` and names the bundle; nothing is installed at first run and
  * no Node or pnpm is needed on the machine. When the runtime for the hands is bundled
  * (`resources/runtime`, the PyInstaller build the other desktop app carries too), the
  * preset's `nanomuse mcp` points at it, so the hands work out of the box.
@@ -115,6 +117,30 @@ if (process.platform === "darwin") {
   app.commandLine.appendSwitch("disable-features", "ThumbnailCapturerMac:capture_mode/sc_screenshot_manager,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma");
 }
 
+/**
+ * The app's data folder, under the product's own name.
+ *
+ * Electron names it after `package.json`'s `name`, which is still `nanomuse-desktop` from the
+ * days the app was nanoMuse. The folder is renamed once, so the account, the chats, the
+ * profile and the helper's copy carry on instead of a fresh start; the old folder stays only
+ * while something still holds it open.
+ */
+function migrateUserDataFolder(): void {
+  const root = app.getPath("appData");
+  const target = join(root, "nanolika-desktop");
+  const legacy = join(root, "nanomuse-desktop");
+  if (!existsSync(target) && existsSync(legacy)) {
+    try {
+      renameSync(legacy, target);
+    } catch {
+      /* held open: keep the old folder this run, try again at the next launch */
+    }
+  }
+  if (!existsSync(target) && existsSync(legacy)) return;
+  app.setPath("userData", target);
+}
+migrateUserDataFolder();
+
 const logs: string[] = [];
 let hostStderr = "";
 let child: ChildProcess | null = null;
@@ -184,15 +210,46 @@ function log(line: string): void {
   }
 }
 
+/**
+ * Where the dsh core is read from: `<userData>/payload/dsh`, a copy of the bundle's dsh made on
+ * the first run and replaced only when the bundle carries a newer core (src/payload.ts). The
+ * core is most of the app's size and most of what an update changes, so keeping it here makes a
+ * new core a folder to replace instead of a .app to rebuild, re-asar and re-sign. When the copy
+ * cannot be made the app runs from the bundle, as it always did, and says so in the log.
+ *
+ * Resolved once and kept: every later call is a return. The first call after an install may
+ * spend a minute or so copying ~460 MB, and only then (payload.ts says what it does when that
+ * copy cannot be made).
+ */
+let dshPlace: DshPlace | undefined;
+function dshRoot(): string {
+  if (!dshPlace) {
+    dshPlace = resolveDshRoot({
+      payloadDir: join(app.getPath("userData"), "payload", "dsh"),
+      bundleDir: join(resourcesDir(), "dsh"),
+      log,
+    });
+    log(`dsh: ${dshPlace.dir} (${dshPlace.from})`);
+  }
+  return dshPlace.dir;
+}
+
 type Shipped = { dsh?: string; bundle?: string; platform?: string; arch?: string; sharp?: "native" | "wasm" };
 
-/** What scripts/prepare-dsh.mjs wrote next to the staged dsh: the versions for About. */
+/**
+ * What scripts/prepare-dsh.mjs wrote next to the staged dsh: the versions for About. The
+ * payload's record comes first when there is one: that is the core this window actually runs.
+ */
 function shipped(): Shipped {
-  try {
-    return JSON.parse(readFileSync(join(resourcesDir(), "dsh", "dsh.json"), "utf8")) as Shipped;
-  } catch {
-    return {};
+  const records = [join(app.getPath("userData"), "payload", "dsh", "dsh.json"), join(resourcesDir(), "dsh", "dsh.json")];
+  for (const file of records) {
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as Shipped;
+    } catch {
+      /* no record there: the next one, or none at all */
+    }
   }
+  return {};
 }
 
 /** The bundled runtime's executable (`nanomuse mcp` serves the hands), when it was built in. */
@@ -347,14 +404,64 @@ function loginShellPath(): string | undefined {
 }
 
 /** Start the Host and resolve with the web app's URL (its one-time token included). */
+/**
+ * The plugin, kept outside the app bundle: it is most of what changes, and a file inside the
+ * bundle would make every change a new build (and, before the helper moved out, a lost
+ * Screen Recording grant). The profile links it from the person's home — `linkedProfileRoots`
+ * in dsh reads symlinks under `profile/node_modules`, so the harness loads the copy, not the
+ * one shipped in the bundle.
+ *
+ * The copy is made on the first run. A newer plugin in the bundle replaces it, which is how an
+ * app update carries plugin changes; a same-version bundle leaves the working copy alone, so a
+ * local edit is never overwritten by a restart.
+ */
+function ensurePluginOutsideBundle(dshDir: string): void {
+  const bundled = join(dshDir, "node_modules", "dsh-nanomuse");
+  const target = join(harnessHome(), "plugins", "dsh-nanomuse");
+  const modules = join(harnessHome(), "profiles", "nanolika", "node_modules");
+  const link = join(modules, "dsh-nanomuse");
+  const versionOf = (dir: string): string => {
+    try {
+      return String(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version ?? "");
+    } catch {
+      return "";
+    }
+  };
+  try {
+    const bundledVersion = versionOf(bundled);
+    const targetVersion = versionOf(target);
+    if (!targetVersion || (bundledVersion && bundledVersion !== targetVersion)) {
+      if (!existsSync(bundled)) return;
+      mkdirSync(dirname(target), { recursive: true });
+      cpSync(bundled, target, { recursive: true, force: true, dereference: true });
+      log(`plugin: copied ${bundledVersion || "?"} to ${target}`);
+    }
+    mkdirSync(modules, { recursive: true });
+    let current = "";
+    try {
+      current = realpathSync(link);
+    } catch {
+      current = "";
+    }
+    if (current !== realpathSync(target)) {
+      rmSync(link, { force: true });
+      symlinkSync(target, link);
+      log(`plugin: linked ${link} → ${target}`);
+    }
+  } catch (error) {
+    log(`plugin: keeping the copy in the bundle (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+
 function startHost(): Promise<string> {
-  const dshDir = join(resourcesDir(), "dsh");
-  const bin = join(dshDir, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
+  const dshDir = dshRoot();
+  const bin = join(dshDir, ...DSH_BIN);
   if (!existsSync(bin)) {
     return Promise.reject(new Error(`the harness is not bundled: ${bin} is missing (run scripts/prepare-dsh.mjs)`));
   }
   const home = harnessHome();
   mkdirSync(home, { recursive: true });
+  ensurePluginOutsideBundle(dshDir);
   ensureProfile(dshDir);
   return new Promise<string>((resolve, reject) => {
     Promise.all([hostPort(home), ensureOperator()])
@@ -785,7 +892,13 @@ function helper(): MacHelper | null {
   if (process.platform !== "darwin") return null;
   if (!macHelper) {
     macHelper = new MacHelper({
-      appPath: defaultHelperPath(process.execPath, app.isPackaged, join(__dirname, ".."), process.env),
+      // the helper lives outside the bundle, so rebuilding NanoLika never changes it (and never
+      // invalidates the grants it holds); a packaged build copies it out on the first run
+      appPath: installedHelperPath({
+        userData: app.getPath("userData"),
+        bundled: defaultHelperPath(process.execPath, app.isPackaged, join(__dirname, ".."), process.env),
+        log,
+      }),
       dataDir: join(app.getPath("userData"), "computer-use"),
       log,
     });
@@ -878,12 +991,27 @@ function writePrefs(next: Prefs = prefs, strict = false): void {
 }
 
 /** Bring the window up (make one if it was closed) and focus it. */
+/**
+ * The Dock tile and the application menu of a regular app.
+ *
+ * `app.dock.show()` alone did not hold once LaunchServices had NanoLika down as a UIElement
+ * (2026-10-25): the app kept running with no tile and no Quit. The activation policy is what
+ * decides, and it is re-asserted whenever the app comes forward — a policy changed under the
+ * app at any point in its life is put back.
+ */
+function ensureDockTile(): void {
+  if (process.platform !== "darwin") return;
+  app.setActivationPolicy("regular");
+  app.dock?.show();
+}
+
 function showWindow(): BrowserWindow | null {
   if (!mainWindow && hostUrl) {
     mainWindow = createWindow();
     void loadHost(mainWindow, hostUrl);
   }
   if (!mainWindow) return null;
+  ensureDockTile();
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -2213,7 +2341,13 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     // then records it as a UIElement: no Dock tile, no application menu, and no Quit anywhere —
     // the app is running while looking like it is not there at all (2026-10-23). Bring it back
     // to a regular app first: the Dock, the menu bar with Quit and ⌘Q all follow from this.
-    if (process.platform === "darwin" && app.dock) app.dock.show();
+    if (process.platform === "darwin") {
+      // `app.dock.show()` alone did not bring the tile back once LaunchServices had the app
+      // down as a UIElement (2026-10-25): the activation policy is what makes it a regular
+      // app again, with a Dock tile and an application menu that has Quit.
+      app.setActivationPolicy("regular");
+      app.dock?.show();
+    }
     registerBridge();
     registerOverlays();
     buildMenu();
@@ -2259,6 +2393,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
   });
   app.on("activate", () => {
     // the Dock icon on macOS: the window again when it was closed
+    ensureDockTile();
     showWindow();
   });
   app.on("window-all-closed", () => {
