@@ -393,6 +393,10 @@ class SyncStore:
         with self.db.tx() as c:
             if not self._enabled(c, account_id):
                 raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            # An account the operator marked unlimited answers no cap: counting its chats
+            # against a plan limit would refuse the very conversations it paid for.
+            row = c.execute("SELECT unlimited FROM accounts WHERE id=?", (account_id,)).fetchone()
+            unlimited = bool(row[0]) if row is not None else False
             self._sweep(c, t)
             for conv in conversations:
                 if not isinstance(conv, dict):
@@ -414,7 +418,12 @@ class SyncStore:
                 deleted = bool(conv.get("deleted"))
                 row = c.execute("SELECT * FROM sync_conversations WHERE account_id=? AND cid=?", (account_id, cid)).fetchone()
                 if row is None:
-                    if kind == "side" and not deleted and self._live_conversations(c, account_id) >= LIMITS["conversations"]:
+                    if (
+                        kind == "side"
+                        and not deleted
+                        and not unlimited
+                        and self._live_conversations(c, account_id) >= LIMITS["conversations"]
+                    ):
                         # messages are trimmed past their cap; conversations had none and grew
                         # without end (two hundred empty ones per request). The device keeps
                         # its copy; it learns from the refusal as it does from `main_exists`.

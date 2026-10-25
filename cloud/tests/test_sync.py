@@ -785,3 +785,30 @@ async def test_a_revoked_or_reset_key_is_bad_key_not_account_deleted():
         c.execute("UPDATE deleted_keys SET deleted_at=?", (dbmod.now() - dbmod.DELETED_KEYS_TTL_S - 1,))
     r = await client.get("/v1/me", headers=auth(second["api_key"]))
     assert r.json()["error"]["code"] == "bad_key"
+
+
+async def test_an_unlimited_account_has_no_conversation_cap():
+    """A plan without a ceiling must not be stopped by a plan limit: the operator's
+    `unlimited` flag lifts the side-conversation cap, while an ordinary account keeps it."""
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    store = app.state.sync
+    account_id = cloud.authenticate(key).account_id
+    import nanomuse_cloud.sync as sync_mod
+
+    saved = dict(LIMITS)
+    try:
+        sync_mod.LIMITS["conversations"] = 1
+        first = uid()
+        assert store.push(account_id, "a", [conv(first)], [])["accepted"] == 1
+        second = uid()
+        refused = store.push(account_id, "a", [conv(second)], [])
+        assert refused["rejected"] == [{"cid": second, "reason": "conversation_limit"}]
+
+        with cloud.db.tx() as c:
+            c.execute("UPDATE accounts SET unlimited=1 WHERE id=?", (account_id,))
+        assert store.push(account_id, "a", [conv(second)], [])["accepted"] == 1
+        third = uid()
+        assert store.push(account_id, "a", [conv(third)], [])["accepted"] == 1
+    finally:
+        sync_mod.LIMITS.update(saved)
