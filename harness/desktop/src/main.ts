@@ -1211,7 +1211,18 @@ function registerBridge(): void {
     if (!(kind in PERMISSION_PANES)) return "denied" satisfies PermissionState;
     if (kind === "accessibility") requestAccessibility();
     else if (kind === "microphone") await systemPreferences.askForMediaAccess("microphone").catch(() => false);
-    else await requestScreenRecording();
+    else {
+      // NanoLika: the helper must be on the Screen Recording pane's list before a person can
+      // switch it on, and on a fresh machine it is not there at all. The system adds a program
+      // to that list when it *asks*, so the helper asks through its own bundle — three times,
+      // because tccd sometimes drops the first request of a background app — and only then the
+      // pane opens. Without this the pane shows every other app and not ours.
+      await helperReady();
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await macHelper?.request("screen", false).catch(() => undefined);
+      }
+      await requestScreenRecording();
+    }
     return permissionState(kind);
   });
   // macOS applies Screen Recording only to freshly started processes: after granting it, the

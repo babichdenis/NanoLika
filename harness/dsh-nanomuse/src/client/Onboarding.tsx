@@ -105,6 +105,18 @@ function link(url: string, label: string): ReactNode {
   return h('a', { href: url, onClick: (e: Event) => { e.preventDefault(); openLink(url) } }, label)
 }
 
+/**
+ * Sign in through Yandex or Google, the way the site does it: the system browser opens the
+ * relay's door (a person is already signed in there), and the relay hands the key back to this
+ * app by the `nanolika://` scheme. The browser is the only place a third-party cookie and a
+ * two-factor prompt work, so an embedded window would not do.
+ */
+function openOauth(provider: 'google' | 'yandex'): void {
+  const base = 'https://cloud.nanolika.ru'
+  const back = 'nanolika://oauth'
+  openLink(`${base}/v1/auth/oauth/${provider}/start?next=${encodeURIComponent(back)}`)
+}
+
 export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
   return function NanomuseOnboarding(props: OnboardingOwnerProps): ReactNode {
     const { complete, openSection, explicit = false, hasSessions = false } = props
@@ -326,13 +338,19 @@ export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
           h('button', { type: 'button', className: 'nm-ob-link', onClick: () => { setError(undefined); setPassword(''); setSignIn('identifier') } }, t('obChangeIdentifier'))))
     } else if (stage === 'welcome') {
       // the app's mark, as on the phone (the face comes with the conversation, on the Meet page);
-      // two doors: the account, or a key of one's own (the models page; the sign-in can come later)
+      // the doors: the account (by code, or through Yandex and Google as on the site), a key of
+      // one's own, or straight on without an account at all
       body = h(Page, {
         hero: h(BrandMark, { size: 104, className: 'nm-fr-hero-mark' }),
         title: t('frWelcomeTitle'),
         sub: t('frTagline'),
         primary: { label: t('frSignIn'), onClick: () => { setError(undefined); setSignIn('identifier') } },
         secondary: { label: t('frWelcomeOwnKey'), onClick: () => { setModelsSkipped(false); choose('own') } },
+        sso: [
+          { label: t('frSignInGoogle'), onClick: () => openOauth('google') },
+          { label: t('frSignInYandex'), onClick: () => openOauth('yandex') },
+        ],
+        skipFine: { label: t('frSignInSkip'), onClick: () => { setModelsSkipped(false); choose('own') } },
         fine: config.allowance_cny ? `${t('frWelcomeFine')} ${t('obFreeAmount', { allowance: cash(config.allowance_cny, config) })}` : t('frWelcomeFine'),
         learnMore: PRIVACY_URL,
         t,
@@ -409,13 +427,15 @@ function Dots({ count, index }: { count: number; index: number }): ReactNode {
  * One page as the phone lays it out: a hero, a title, a line under it, the content, the
  * primary pill, a plain-text secondary, fine print, and "Learn more" when there is a page.
  */
-function Page({ hero, title, sub, children, primary, secondary, fine, learnMore, t }: {
+function Page({ hero, title, sub, children, primary, secondary, sso, skipFine, fine, learnMore, t }: {
   hero?: ReactNode
   title: string
   sub: string
   children?: ReactNode
   primary?: { label: string; onClick(): void; disabled?: boolean } | undefined
   secondary?: { label: string; onClick(): void } | undefined
+  sso?: Array<{ label: string; onClick(): void }>
+  skipFine?: { label: string; onClick(): void } | undefined
   fine?: string | undefined
   learnMore?: string | undefined
   t: Translate
@@ -427,6 +447,10 @@ function Page({ hero, title, sub, children, primary, secondary, fine, learnMore,
     children ?? null,
     primary ? h(Pill, { onClick: primary.onClick, disabled: primary.disabled, className: 'nm-ob-wide nm-fr-primary' }, primary.label) : null,
     secondary ? h('button', { type: 'button', className: 'nm-ob-skip', onClick: secondary.onClick }, secondary.label) : null,
+    sso && sso.length
+      ? h('div', { className: 'nm-fr-sso' }, ...sso.map((one) => h('button', { key: one.label, type: 'button', className: 'nm-fr-sso-btn', onClick: one.onClick }, one.label)))
+      : null,
+    skipFine ? h('button', { type: 'button', className: 'nm-ob-fine nm-fr-skip-fine', onClick: skipFine.onClick }, skipFine.label) : null,
     fine ? h('p', { className: 'nm-ob-fine' }, fine, learnMore ? h(Fragment, null, ' ', link(learnMore, t('frLearnMore'))) : null) : null)
 }
 
