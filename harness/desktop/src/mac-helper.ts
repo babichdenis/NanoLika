@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -204,8 +204,65 @@ export function defaultHelperPath(execPath: string, packaged: boolean, projectDi
   return join(projectDir, "mac", "computer-use", "build", `${HELPER_NAME}.app`);
 }
 
-/** The glow's words for an action the helper carries out (the operator's own wording, operator.ts). */
-export function describeAction(action: { action: string; dy?: number; text?: string; keys?: string[]; seconds?: number }): string {
+/** One bundle's version from its Info.plist ("" when it cannot be read). */
+function bundleVersion(appPath: string): string {
+  try {
+    const out = spawnSync("/usr/libexec/PlistBuddy", ["-c", "Print :CFBundleShortVersionString", join(appPath, "Contents", "Info.plist")], { encoding: "utf8" });
+    return (out.stdout || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The helper the shell runs, kept **outside** the app bundle.
+ *
+ * macOS attributes a Screen Recording request to the app whose bundle contains the binary: a
+ * helper inside `NanoLika.app/Contents/Helpers` therefore takes the app's identity, and the grant
+ * is tied to the app's CDHash. Every rebuild (an ad-hoc signature, a replaced app.asar) changes
+ * that hash and invalidates the grant, while the pane still shows the switch on. A helper of its
+ * own, in the person's data folder, is its own app to TCC: its grant is tied to its own hash, and
+ * updating NanoLika leaves it untouched.
+ *
+ * The copy is made once. Only a helper whose bundled version is newer replaces it, and that is
+ * the one case where macOS asks for the two permissions again.
+ */
+export function installedHelperPath(options: {
+  userData: string;
+  bundled: string;
+  log?: (level: string, message: string) => void;
+  copy?: (from: string, to: string) => void;
+}): string {
+  const target = join(options.userData, "Computer Use", `${HELPER_NAME}.app`);
+  const note = options.log ?? (() => undefined);
+  const copy = options.copy ?? ((from: string, to: string) => cpSync(from, to, { recursive: true, force: true, dereference: true }));
+  try {
+    if (existsSync(target)) {
+      const installed = bundleVersion(target);
+      const bundled = bundleVersion(options.bundled);
+      if (bundled && installed && bundled !== installed) {
+        note("info", `computer use: replacing the installed helper ${installed} with ${bundled} (its permissions are asked once more)`);
+        rmSync(target, { recursive: true, force: true });
+      } else {
+        return target;
+      }
+    }
+    if (!existsSync(options.bundled)) {
+      note("warn", `computer use: no helper at ${options.bundled}`);
+      return options.bundled;
+    }
+    mkdirSync(join(options.userData, "Computer Use"), { recursive: true });
+    copy(options.bundled, target);
+    clearQuarantine(target);
+    note("info", `computer use: helper installed at ${target}`);
+    return target;
+  } catch (error) {
+    note("warn", `computer use: the helper could not be installed (${error instanceof Error ? error.message : String(error)}); using the copy inside the app`);
+    return options.bundled;
+  }
+}
+
+/** The glow's words for an action the helper carries out (the operator's own wording, operator.ts). */export function describeAction(action: { action: string; dy?: number; text?: string; keys?: string[]; seconds?: number }): string {
   switch (action.action) {
     case "move":
     case "hover":
