@@ -77,11 +77,17 @@ class QuietChannel(Channel):
 class Door:
     """The relay's bot door, answering what the test says."""
 
-    def __init__(self, status: int = 200, body: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        status: int = 200,
+        body: dict[str, Any] | None = None,
+        answer: Any = None,
+    ) -> None:
         self.status = status
+        self.answer = answer
         self.body = (
             body
-            if body is not None
+            if body is not None or answer is not None
             else {"api_key": "key-from-the-door", "models": [{"id": "deepseek-flash"}]}
         )
         self.calls: list[dict[str, Any]] = []
@@ -95,14 +101,33 @@ class Door:
         return build
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
         self.calls.append(
             {
                 "url": str(request.url),
-                "body": json.loads(request.content or b"{}"),
+                "body": body,
                 "token": request.headers.get("X-Bot-Token", ""),
             }
         )
-        return httpx.Response(self.status, json=self.body)
+        payload = self.answer(body) if self.answer is not None else self.body
+        return httpx.Response(self.status, json=payload)
+
+
+def enable_cloud(manager: ChannelManager, channel: str) -> None:
+    """Write the Cloud settings a person puts in config.toml for one channel."""
+    data = dict(manager.store._file.load())
+    entry = dict(data.get(channel) or {})
+    settings = dict(entry.get("settings") or {})
+    settings.update(
+        {
+            "cloud_per_chat": "true",
+            "cloud_url": "https://cloud.test",
+            "cloud_bot_token": "bot-secret",
+        }
+    )
+    entry["settings"] = settings
+    data[channel] = entry
+    manager.store._file.save(data)
 
 
 @pytest.fixture()
@@ -117,19 +142,7 @@ def chan(settings: Settings) -> Iterator[tuple[MuseService, ChannelManager, Quie
     # the settings go in whole: `update` keeps the channel's declared fields only, and the
     # Cloud ones are free-form settings a person writes in config.toml
     manager.store.update(QuietChannel, enabled=True, values={"token": "t0k"})
-    data = dict(manager.store._file.load())
-    entry = dict(data.get("quiet") or {})
-    settings_in = dict(entry.get("settings") or {})
-    settings_in.update(
-        {
-            "cloud_per_chat": "true",
-            "cloud_url": "https://cloud.test",
-            "cloud_bot_token": "bot-secret",
-        }
-    )
-    entry["settings"] = settings_in
-    data["quiet"] = entry
-    manager.store._file.save(data)
+    enable_cloud(manager, "quiet")
     QuietChannel.instances.clear()
     with TestClient(app):
         wait_for(lambda: manager.status["quiet"].state == "connected")
@@ -137,10 +150,13 @@ def chan(settings: Settings) -> Iterator[tuple[MuseService, ChannelManager, Quie
 
 
 def message(
-    text: str = "привет", sender: str = "700100200", chat: str = "700100200"
+    text: str = "привет",
+    sender: str = "700100200",
+    chat: str = "700100200",
+    channel: str = "quiet",
 ) -> InboundMessage:
     return InboundMessage(
-        channel="quiet", chat_id=chat, sender_id=sender, sender_name="Ann", text=text
+        channel=channel, chat_id=chat, sender_id=sender, sender_name="Ann", text=text
     )
 
 
@@ -165,7 +181,9 @@ def test_the_door_opens_an_account_for_the_chat_and_the_key_is_kept(chan, monkey
     assert (key, model) == ("key-from-the-door", "deepseek-flash")
     assert door.calls[0]["url"] == "https://cloud.test/v1/bot/signin"
     assert door.calls[0]["token"] == "bot-secret"
-    assert door.calls[0]["body"]["telegram_id"] == "700100200"
+    assert door.calls[0]["body"]["channel"] == "quiet"
+    assert door.calls[0]["body"]["chat_id"] == "700100200"
+    assert "telegram_id" not in door.calls[0]["body"]
     # a second message inside the ten minutes does not sign in again
     again = run(manager, manager._cloud_key_for("quiet", message("ещё")))
     assert again == (key, model) and len(door.calls) == 1
@@ -173,6 +191,38 @@ def test_the_door_opens_an_account_for_the_chat_and_the_key_is_kept(chan, monkey
     manager._cloud_keys[("quiet", "700100200")] = (key, model, time.time() - 1)
     run(manager, manager._cloud_key_for("quiet", message("третье")))
     assert len(door.calls) == 2
+
+
+def test_the_same_number_on_two_messengers_is_two_accounts(chan, monkeypatch):
+    """MAX chat 123 and Telegram chat 123 are two accounts, so the door is told which wrote."""
+    _service, manager, _fake = chan
+    enable_cloud(manager, "telegram")
+    enable_cloud(manager, "max")
+
+    def account(body: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "api_key": f"key-{body['channel']}-{body['chat_id']}",
+            "models": [{"id": "deepseek-flash"}],
+        }
+
+    door = Door(answer=account)
+    real = httpx.AsyncClient
+    monkeypatch.setattr(manager_module.httpx, "AsyncClient", door.client(real))
+
+    on_max, _ = run(manager, manager._cloud_key_for("max", message(sender="123", channel="max")))
+    on_telegram, _ = run(
+        manager, manager._cloud_key_for("telegram", message(sender="123", channel="telegram"))
+    )
+
+    assert on_max == "key-max-123"
+    assert on_telegram == "key-telegram-123"
+    assert on_max != on_telegram
+    # a MAX chat never calls its id by another messenger's name
+    assert [call["body"]["channel"] for call in door.calls] == ["max", "telegram"]
+    assert [call["body"]["chat_id"] for call in door.calls] == ["123", "123"]
+    assert all("telegram_id" not in call["body"] for call in door.calls)
+    # the ten-minute cache keeps the two apart as well
+    assert set(manager._cloud_keys) == {("max", "123"), ("telegram", "123")}
 
 
 def test_a_closed_door_is_said_in_the_chat_and_nothing_runs(chan, monkeypatch):

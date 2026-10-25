@@ -1235,7 +1235,10 @@ class ChannelManager(ChannelBus):
                 answer = await client.post(
                     f"{url}/v1/bot/signin",
                     json={
-                        "telegram_id": msg.sender_id,
+                        # the account is the pair (messenger, id): the same number on Telegram
+                        # and on MAX is two accounts, so the messenger is named, never guessed
+                        "channel": channel,
+                        "chat_id": msg.sender_id,
                         "device": f"{channel}:{physical_chat(channel, msg.chat_id)}",
                     },
                     headers={"X-Bot-Token": token},
