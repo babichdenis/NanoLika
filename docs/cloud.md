@@ -49,6 +49,17 @@ code, so only a message that is nothing but the six characters, in a chat that h
 account yet, is one: every command and every other message goes to the Muse as
 before. A chat that already belongs to an account is refused (`409 link_taken`)
 instead of merged, and a refusal does not spend the code.
+### First visit in the browser
+
+The browser works before another app is connected. Connection is optional and lives in Account, Devices and channels. The chat has no permanent
+Telegram, MAX or desktop action bar. Opening the account's connection guide does not create
+or publish a conversation, and never calls a model.
+Telegram and MAX guides show the bot link, a one-use code requested explicitly by the user,
+and a check button. The code uses the existing ten-minute `/v1/link/code` contract.
+The desktop guide links to the download page and asks the user to sign in with the same
+email and keep the app open. Multiple online desktops are shown as explicit choices.
+These guides do not call a model or transfer identities between accounts.
+
 Signing out brings that screen back
 (self-hosters: `[cloud] required = false` or `NANOMUSE_CLOUD_REQUIRED=0` on the
 runtime). The screen is a door, not a wall: *Use your own API key instead* steps

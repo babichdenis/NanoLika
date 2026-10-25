@@ -1,3 +1,4 @@
+import {ChannelOnboarding,isChannelLinked} from '../channel-onboarding.js';
 import {installAutopay} from './autopay.js';
 import {installUsageChart} from './usage-chart.js?v=20261025-account';
 import {installPaymentDialog} from './payments.js';
@@ -21,7 +22,7 @@ async function api(path,options={}){const r=await fetch(path,{...options,cache:'
 function row(title,subtitle){const n=h('div',undefined,'account-row'),text=h('div');text.append(h('strong',title),h('p',subtitle||''));n.append(text);return n;}
 function empty(node,message=T.empty){node.replaceChildren(h('p',message,'pad'));}
 function renderMe(){
- const a=me.account||{},s=me.spend||{};$('identity').textContent=a.email||a.hint||session.hint||'nanoLika';
+ const a=me.account||{},s=me.spend||{};session.email=a.email||session.email;session.hint=a.hint||session.hint;$('identity').textContent=a.email||a.hint||session.hint||'nanoLika';
  $('balance').textContent=s.unlimited?T.unlimited:Number.isFinite(s.left_rub)?money(s.left_rub):'—';$('balance-note').textContent=s.unlimited?T.unlimitedNote:T.balanceNote;
  if(!Object.hasOwn(me,'plan')){$('plan-name').textContent='—';$('plan-detail').textContent=T.planUnknown;}
  else{const p=me.plan;$('plan-name').textContent=p?.active?(p.name||p.plan||p.id||'nanoLika'):T.noPlan;$('plan-detail').textContent=p?.active?[p.ends_at?`${T.until}: ${date(p.ends_at)}`:'',p.discount_pct!==undefined?`${T.discount}: ${p.discount_pct}%`:''].filter(Boolean).join(' · '):'';}
@@ -51,6 +52,9 @@ $('password-form').onsubmit=async e=>{e.preventDefault();const password=$('new-p
 $('language').onchange=()=>{try{localStorage.setItem('nl.web.language',$('language').value);}catch{}location.reload();};
 $('logout').onclick=async()=>{const b=$('logout');b.disabled=true;try{await api('/v1/auth/sign-out',{method:'POST',body:'{}'});}catch{}try{localStorage.removeItem(sessionKey);localStorage.removeItem('nm.key');localStorage.removeItem('nm.hint');localStorage.removeItem('nm.acct');localStorage.removeItem('nl.web.session.v1');}catch{}location.replace('/v1/auth/logout?next='+encodeURIComponent(location.origin+'/app/?signin=1&next='+encodeURIComponent(location.origin+'/web/')));};
 $('clear-data').onclick=async()=>{if(!confirm(T.clearConfirm))return;const b=$('clear-data');b.disabled=true;$('status').textContent=T.deleting;try{await clearOwner(session.owner);location.href=fromConsole?'/app/':'../';}catch(_){$('status').textContent=T.error;b.disabled=false;}};
+const connectionGuide=new ChannelOnboarding({session:()=>session,language:()=>lang,api:(path,body)=>api(path,body?{method:'POST',body:JSON.stringify(body)}:{}),retry:()=>load()});
+$('connection-intro').textContent=lang==='ru'?'Ликой можно пользоваться только в браузере. Подключайте другие приложения, если хотите продолжать беседы в них.':'You can use Lika entirely in your browser. Connect other apps only if you want to continue conversations there.';
+for(const [channel,label] of [['telegram','Telegram'],['max','MAX'],['desktop',lang==='ru'?'Компьютер':'Computer']]){const button=h('button',label);button.type='button';button.onclick=async()=>{button.disabled=true;try{const rows=channel==='desktop'?[]:await api('/v1/link/channels');connectionGuide.show(channel,{linked:isChannelLinked(rows,channel)});}catch{$('status').textContent=T.error;}finally{button.disabled=false;}};$('connection-options').append(button);}
 const autopay=installAutopay({lang,request:api});
 const usageChart=installUsageChart({lang,request:api});
 const paymentDialog=installPaymentDialog({lang,request:api,getSession:()=>session,fromConsole});
