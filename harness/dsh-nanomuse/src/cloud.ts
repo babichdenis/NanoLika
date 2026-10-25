@@ -3651,6 +3651,10 @@ export default class NanomuseCloud extends Service {
         return send(res, 200, await this.setContribute(body.on !== false))
       }
       if (req.method === 'POST' && route === '/data/delete-samples') return send(res, 200, await this.deleteSamples())
+      // The phone link (Settings → From your phone, `src/client/PhoneLink.tsx`): a one-time code a
+      // messenger's bot takes, and the messengers already on the account. Both pass through.
+      if (req.method === 'POST' && route === '/link/code') return send(res, 200, await this.withToken((token) => this.relay.linkCode(token)))
+      if (req.method === 'GET' && route === '/link/channels') return send(res, 200, { channels: await this.withToken((token) => this.relay.linkChannels(token)) })
       // Conversations synced between the account's devices (C7, C8): the switch, the delete, the main chat, the rows from elsewhere.
       if (req.method === 'POST' && route === '/conversation/visible') {
         const body = await json(req)

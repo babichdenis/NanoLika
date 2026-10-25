@@ -47,7 +47,7 @@ import { MuseHeader, type UseSessionStatus } from './MuseHeader.tsx'
 import { CONNECTORS_SECTION, makeConnectorsSection } from './Connectors.tsx'
 import { DICTATION_SECTION, FILES_SECTION, makeDictationSection, makeFilesSection, makePermissionsSection, PERMISSIONS_SECTION } from './Pages.tsx'
 import { makeTurnError } from './RefusalCard.tsx'
-import { CHANNELS_SECTION, COMPUTER_SECTION, createShellStore, DATA_SECTION, HARNESS_SECTION, HELP_SECTION, LEGAL_SECTION, makeGeneralSection, makeHarnessSection, MuseSettings, STORAGE_SECTION, WALLET_SECTION, type MuseSettingsProps, type OnboardingStep, type SectionRow } from './MuseSettings.tsx'
+import { CHANNELS_SECTION, COMPUTER_SECTION, createShellStore, DATA_SECTION, HARNESS_SECTION, HELP_SECTION, LEGAL_SECTION, makeGeneralSection, makeHarnessSection, MuseSettings, PHONE_SECTION, STORAGE_SECTION, WALLET_SECTION, type MuseSettingsProps, type OnboardingStep, type SectionRow } from './MuseSettings.tsx'
 import { MuseSidebar, type MuseSidebarProps, type PanelMeta } from './MuseSidebar.tsx'
 import { makeOnboarding, type OnboardingOwnerProps } from './Onboarding.tsx'
 import { DEVICES_PANEL, FEED_PANEL, GOALS_PANEL, IDEAS_PANEL, ISSUES_URL, LIBRARY_PANEL } from './panels.ts'
@@ -56,6 +56,7 @@ import { makeProfileDrawer } from './ProfileDrawer.tsx'
 import { nav as roomsNav, roomsCall } from './rooms.ts'
 import { SearchModal } from './SearchModal.tsx'
 import { makeChannelsSection, makeComputerSection, makeHelpSection, makeLegalSection, makeStorageSection, makeWalletSection } from './Sections.tsx'
+import { makePhoneLinkSection } from './PhoneLink.tsx'
 import { makeMediaSection } from './MediaSection.tsx'
 import { makeModelsSection, MODELS_SECTION } from './ModelsSection.tsx'
 import { ensureStyles, setAccent, setMuseMode } from './styles.ts'
@@ -649,6 +650,10 @@ export function apply(ctx: ClientContext): void {
   const ChannelsSection = makeChannelsSection(t, (id) => shell.openSection(id), DEVICES_PANEL)
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: CHANNELS_SECTION, order: 28, label: () => t('navChannels'), locale: 'nanomuse' }, ChannelsSection))
+  // Settings → From your phone: a one-time code that ties Telegram or MAX to the account.
+  const PhoneSection = makePhoneLinkSection(t)
+  slots.inject('settings.section', () =>
+    slots.register({ name: 'settings.section', id: PHONE_SECTION, order: 28.5, label: () => t('navPhone'), locale: 'nanomuse' }, PhoneSection))
   const HarnessSection = makeHarnessSection(t)
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: HARNESS_SECTION, order: 60, label: () => t('navHarness'), locale: 'nanomuse' }, HarnessSection))

@@ -1076,6 +1076,14 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-path { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; opacity: 0.8; margin-top: 2px; word-break: break-all; }
 .nm-fine { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
 
+/* ---- Settings → From your phone: the one-time code a messenger's bot takes ---- */
+.nm-pl-code { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.nm-pl-code span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 30px; font-weight: 600; letter-spacing: 0.14em; line-height: 1.2; color: var(--dsw-alias-label-primary); }
+.nm-pl-code-old span { opacity: 0.4; letter-spacing: 0.06em; }
+.nm-pl-copy { border: 0; background: none; padding: 4px 8px; border-radius: 8px; font: inherit; font-size: 12.5px; color: var(--nm-accent); cursor: pointer; }
+.nm-pl-copy:hover { background: var(--nm-hover); }
+.nm-pl-copy:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: 1px; }
+
 /* ---- the avatar studio ---- */
 .nm-st-label { font-size: 12.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 12px 0 6px; }
 .nm-st-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

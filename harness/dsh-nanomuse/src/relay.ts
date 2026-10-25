@@ -148,6 +148,26 @@ export interface Invite {
   earnedCny: number
 }
 
+/** A one-time code that ties a messenger (Telegram, MAX) to the account (`POST /v1/link/code`). */
+export interface LinkCode {
+  /** The characters the person sends the bot. */
+  code: string
+  /** When it stops working, epoch milliseconds (0 when the relay did not say). */
+  expiresAt: number
+}
+
+/** A messenger already on the account (`GET /v1/link/channels`). */
+export interface LinkChannel {
+  /** `telegram` or `max`. */
+  channel: string
+  /** The name there, `@denis`. */
+  identifier: string
+  /** What the messenger calls itself, as the relay sends it (`Telegram`). */
+  label: string
+  /** When the link was made, epoch milliseconds (0 when the relay did not say). */
+  linkedAt: number
+}
+
 /** What the desktop may write to the account's profile: the name and the simple looks. */
 export interface ProfileWrite {
   name: string
@@ -216,6 +236,17 @@ async function fail(res: Response): Promise<never> {
     // not JSON — the status line is the message
   }
   throw new RelayError(res.status, code, message)
+}
+
+/** A relay timestamp in epoch milliseconds: the wire may send seconds, milliseconds or an ISO string. */
+function milliseconds(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value < 1e12 ? value * 1000 : value
+  if (typeof value === 'string' && value) {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+    return milliseconds(Number(value))
+  }
+  return 0
 }
 
 function toDataControls(ct: unknown): DataControls | undefined {
@@ -481,6 +512,38 @@ export class Relay {
     const res = await this.fetchImpl(`${this.origin}/v1/me/events?limit=${Math.max(1, Math.min(200, Math.floor(limit)))}`, { headers: this.auth(apiKey), signal: signal ?? null })
     if (!res.ok) await fail(res)
     return (await res.json()) as Record<string, unknown>
+  }
+
+  /**
+   * A one-time code for tying a messenger to the account (`POST /v1/link/code`): the person
+   * sends it to the bot, and the phone on the other end becomes this account's.
+   */
+  async linkCode(apiKey: string, signal?: AbortSignal): Promise<LinkCode> {
+    const res = await this.fetchImpl(`${this.origin}/v1/link/code`, { method: 'POST', headers: this.auth(apiKey), signal: signal ?? null })
+    if (!res.ok) await fail(res)
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    return { code: String(body.code ?? ''), expiresAt: milliseconds(body.expires_at) }
+  }
+
+  /** The messengers already on the account (`GET /v1/link/channels`). */
+  async linkChannels(apiKey: string, signal?: AbortSignal): Promise<LinkChannel[]> {
+    const res = await this.fetchImpl(`${this.origin}/v1/link/channels`, { headers: this.auth(apiKey), signal: signal ?? null })
+    if (!res.ok) await fail(res)
+    const body = (await res.json().catch(() => [])) as unknown
+    // the relay answers with the list itself; a `{channels: [...]}` wrapper is taken too
+    const list = Array.isArray(body) ? body : Array.isArray((body as { channels?: unknown } | null)?.channels) ? (body as { channels: unknown[] }).channels : []
+    const out: LinkChannel[] = []
+    for (const raw of list) {
+      if (!raw || typeof raw !== 'object') continue
+      const row = raw as Record<string, unknown>
+      out.push({
+        channel: String(row.channel ?? ''),
+        identifier: String(row.identifier ?? ''),
+        label: String(row.label ?? ''),
+        linkedAt: milliseconds(row.linked_at),
+      })
+    }
+    return out
   }
 
   /** Set or change the password (`POST /v1/auth/password`); `current` when one exists; an empty password with `current` removes it. */

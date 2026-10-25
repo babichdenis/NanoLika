@@ -27,6 +27,24 @@ export interface Model {
   inputModalities?: string[]
 }
 
+/** A one-time code that ties a messenger to the account (`POST nanomuse/cloud/link/code`, the relay's `POST /v1/link/code`). */
+export interface LinkCode {
+  code: string
+  /** Epoch milliseconds; 0 when the relay did not say. */
+  expiresAt: number
+}
+
+/** A messenger already on the account (`GET nanomuse/cloud/link/channels`, the relay's `GET /v1/link/channels`). */
+export interface LinkChannel {
+  /** `telegram` or `max`. */
+  channel: string
+  /** The name there, `@denis`. */
+  identifier: string
+  label: string
+  /** Epoch milliseconds; 0 when the relay did not say. */
+  linkedAt: number
+}
+
 export interface CloudStatus {
   signedIn: boolean
   ready: boolean

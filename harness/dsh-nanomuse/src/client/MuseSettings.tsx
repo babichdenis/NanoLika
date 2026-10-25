@@ -19,7 +19,7 @@ import { call, type CloudStatus, type Translate, failureText } from './api.ts'
 import { Avatar } from './Avatar.tsx'
 import { openLink } from './bridge.ts'
 import { settingsBus } from './bus.ts'
-import { IconArchive, IconChevronLeft, IconChevronRight, IconClose, IconCpu, IconDatabase, IconDevices, IconFolder, IconHand, IconHelp, IconImage, IconKey, IconLink, IconLogOut, IconMessage, IconMic, IconPuzzle, IconScale, IconSettings, IconShield, IconSliders, IconSparkle, IconUser, IconVideo, IconWallet } from './icons.tsx'
+import { IconArchive, IconChevronLeft, IconChevronRight, IconClose, IconCpu, IconDatabase, IconDevices, IconFolder, IconHand, IconHelp, IconImage, IconKey, IconLink, IconLogOut, IconMessage, IconMic, IconPhone, IconPuzzle, IconScale, IconSettings, IconShield, IconSliders, IconSparkle, IconUser, IconVideo, IconWallet } from './icons.tsx'
 import { openShortcutsReference } from './keys.ts'
 import { useLive } from './live.ts'
 import type { RenderSlot } from './MuseSidebar.tsx'
@@ -34,12 +34,14 @@ export const LEGAL_SECTION = 'nanomuse-legal'
 export const WALLET_SECTION = 'nanomuse-wallet'
 export const STORAGE_SECTION = 'nanomuse-storage'
 export const CHANNELS_SECTION = 'nanomuse-channels'
+/** Settings → From your phone: the code that ties Telegram or MAX to the account (`src/client/PhoneLink.tsx`). */
+export const PHONE_SECTION = 'nanomuse-phone'
 export const HARNESS_SECTION = 'nanomuse-harness'
 /** Desk-B's Media page (image and video models), as registered in `index.ts`. */
 const MEDIA_SECTION = 'nanomuse-media'
 /** Settings → Models (0.1.41): the four slots, right after General. */
 const MODELS_SECTION = 'nanomuse-models'
-const PRIMARY: readonly string[] = ['general', MODELS_SECTION, 'nanomuse-connectors', COMPUTER_SECTION, MEDIA_SECTION, 'nanomuse-files', 'nanomuse-dictation', WALLET_SECTION, STORAGE_SECTION, 'nanomuse-permissions', CHANNELS_SECTION, 'nanomuse-devices', DATA_SECTION, HELP_SECTION, LEGAL_SECTION]
+const PRIMARY: readonly string[] = ['general', MODELS_SECTION, 'nanomuse-connectors', COMPUTER_SECTION, MEDIA_SECTION, 'nanomuse-files', 'nanomuse-dictation', WALLET_SECTION, STORAGE_SECTION, 'nanomuse-permissions', CHANNELS_SECTION, PHONE_SECTION, 'nanomuse-devices', DATA_SECTION, HELP_SECTION, LEGAL_SECTION]
 
 export interface SectionRow {
   id: string
@@ -85,6 +87,7 @@ function navIcon(id: string): ReactNode {
     case WALLET_SECTION: return h(IconWallet, { size: 16 })
     case STORAGE_SECTION: return h(IconKey, { size: 16 })
     case CHANNELS_SECTION: return h(IconMessage, { size: 16 })
+    case PHONE_SECTION: return h(IconPhone, { size: 16 })
     case HARNESS_SECTION: return h(IconSliders, { size: 16 })
     case HELP_SECTION: return h(IconHelp, { size: 16 })
     case LEGAL_SECTION: return h(IconScale, { size: 16 })
