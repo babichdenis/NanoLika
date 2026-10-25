@@ -164,7 +164,9 @@ if [ -f "$here/harness/desktop/resources/dmg-background.png" ]; then
 fi
 rm -f "$out/$name.dmg"
 # сначала записываемый образ, чтобы выставить вид окна, потом сжимаем в UDZO
-rw="$stage/rw.dmg"
+# образ пишется вне $stage: он же srcfolder, и «скопировать папку внутрь неё же»
+# превращается в растущий без конца образ
+rw="$work/rw.dmg"
 hdiutil create -volname "$app_name $version" -srcfolder "$stage" -ov -fs APFS -format UDRW -quiet "$rw"
 mount_dir="$(mktemp -d)"
 if hdiutil attach -quiet -noautoopen -mountpoint "$mount_dir" "$rw"; then
