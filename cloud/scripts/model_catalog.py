@@ -334,6 +334,10 @@ def litellm_card(key: str, row: dict[str, Any]) -> dict[str, Any]:
         "image_usd": row.get("input_cost_per_image") or row.get("output_cost_per_image"),
         "audio_usd": row.get("input_cost_per_audio_per_second"),
         "caps": capabilities(row),
+        "modalities": {
+            "in": [str(m) for m in (row.get("supported_modalities") or [])],
+            "out": [str(m) for m in (row.get("supported_output_modalities") or [])],
+        },
         "deprecated": bool(row.get("deprecation_date")),
     }
 
@@ -396,11 +400,11 @@ def merge_dev(card: dict[str, Any], match: dict[str, Any]) -> None:
     mods = match.get("modalities") or {}
     inputs = [str(m) for m in (mods.get("input") or [])]
     outputs = [str(m) for m in (mods.get("output") or [])]
-    caps["text"] = "text" in inputs or "text" in outputs or caps.get("text", False)
-    caps["image"] = caps.get("image") or "image" in inputs
-    caps["audio_in"] = caps.get("audio_in") or "audio" in inputs
-    caps["audio_out"] = caps.get("audio_out") or "audio" in outputs
-    caps["video"] = caps.get("video") or "video" in inputs or "video" in outputs
+    # модальности копим, а «умеет» считаем один раз в конце: иначе «текст» на входе
+    # (промпт к видео) превращается в умение «текст», а «код» прилипает от слияния
+    card.setdefault("modalities", {"in": [], "out": []})
+    card["modalities"]["in"] = sorted({*card["modalities"].get("in", []), *inputs})
+    card["modalities"]["out"] = sorted({*card["modalities"].get("out", []), *outputs})
     caps["pdf"] = caps.get("pdf") or "pdf" in inputs
     caps["reasoning"] = bool(match.get("reasoning")) or caps.get("reasoning", False)
     caps["tools"] = bool(match.get("tools")) or caps.get("tools", False)
@@ -436,6 +440,55 @@ def merge_dev(card: dict[str, Any], match: dict[str, Any]) -> None:
         "knowledge": match.get("knowledge"),
         "description": (match.get("description") or "")[:240] or None,
     }
+
+
+#: Что модель умеет по своему роду занятий: «текст» у видео — это только промпт, а не
+#: способность читать документы, поэтому режим решает больше, чем модальности.
+GENERATIVE = {"video_generation", "image_generation", "audio_speech"}
+PASSIVE = {"embedding", "rerank", "audio_transcription"}
+
+
+def finalize_caps(card: dict[str, Any]) -> None:
+    """Свести «умеет» из режима и модальностей — один раз, после всех слияний.
+
+    Правила простые и проверяемые:
+    * генератор (видео, картинки, озвучка) не «умеет текст» и не «умеет код»: текст у него
+      только на вход как описание, а код он не пишет;
+    * распознавание (audio_transcription) принимает звук и отдаёт текст — это текст, но не код;
+    * эмбеддинги и реранк не чат: ни инструментов, ни кода;
+    * «код» — это инструменты/чат, который пишет код, а не любая текстовая модель.
+    """
+    mode = str(card.get("mode") or "chat")
+    caps = card.setdefault("caps", {})
+    mods = card.get("modalities") or {}
+    inputs = set(mods.get("in") or [])
+    outputs = set(mods.get("out") or [])
+    if mode in GENERATIVE:
+        caps["text"] = False
+        caps["code"] = False
+        caps["tools"] = False
+        caps["structured"] = False
+    elif mode in PASSIVE:
+        caps["text"] = mode == "audio_transcription"
+        caps["code"] = False
+        caps["tools"] = False
+        caps["structured"] = False
+    else:
+        # чат и responses: текст есть по определению; код — если есть инструменты или это
+        # разговорная модель (видео и картинки сюда не попадают, они выше)
+        caps["text"] = True
+        caps["code"] = bool(caps.get("tools")) or mode in ("chat", "responses")
+    # модальности: «картинки» — это вход или выход картинок, а не «модель про картинки»
+    if "image" in inputs:
+        caps["image"] = True
+    if "audio" in inputs:
+        caps["audio_in"] = True
+    if "audio" in outputs:
+        caps["audio_out"] = True
+    if "video" in inputs or "video" in outputs:
+        caps["video"] = True
+    if "pdf" in inputs:
+        caps["pdf"] = True
 
 
 def _round(value: Any, digits: int = 2) -> float | None:
@@ -543,6 +596,7 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
 
     rows = list(models.values())
     for card in rows:
+        finalize_caps(card)
         card.setdefault("ours", {})
         card["available_here"] = bool(card["ours"])
         # есть ли что показать, кроме названия: хоть одна цена мира, качество или медиа-цена
