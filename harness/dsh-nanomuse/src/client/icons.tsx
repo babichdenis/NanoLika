@@ -46,6 +46,9 @@ export const IconCheck = (p: IconProps) => icon([h('path', { key: 1, d: 'm5 12.5
 export const IconClose = (p: IconProps) => icon([h('path', { key: 1, d: 'M6 6l12 12M18 6 6 18' })], p)
 export const IconMic = (p: IconProps) => icon([h('rect', { key: 1, x: 9, y: 3.5, width: 6, height: 11, rx: 3 }), h('path', { key: 2, d: 'M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5M9 20.5h6' })], p)
 export const IconFolder = (p: IconProps) => icon([h('path', { key: 1, d: 'M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z' })], p)
+/** The cloud on a chat (`MuseChats.tsx`): the same outline, struck through for a chat only this computer has. */
+export const IconCloud = (p: IconProps) => icon([h('path', { key: 1, d: 'M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15z' })], p)
+export const IconCloudOff = (p: IconProps) => icon([h('path', { key: 1, d: 'M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15z' }), h('path', { key: 2, d: 'M3.5 3.5l17 17' })], p)
 export const IconHand = (p: IconProps) => icon([h('path', { key: 1, d: 'M8 12.5V6.2a1.4 1.4 0 0 1 2.8 0V11M10.8 10.5V4.9a1.4 1.4 0 0 1 2.8 0V11M13.6 10.8V6.2a1.4 1.4 0 0 1 2.8 0v6.3' }), h('path', { key: 2, d: 'M16.4 12.5a1.4 1.4 0 0 1 2.8 0v2.2c0 3.7-2.6 6.3-6.3 6.3-2.9 0-4.5-1.3-5.6-3.2L4.6 14a1.4 1.4 0 0 1 2.3-1.6L8 13.9' })], p)
 export const IconUser = (p: IconProps) => icon([h('circle', { key: 1, cx: 12, cy: 8.5, r: 3.5 }), h('path', { key: 2, d: 'M5 20a7 7 0 0 1 14 0' })], p)
 export const IconSliders = (p: IconProps) => icon([h('path', { key: 1, d: 'M5 7h9M18 7h1M5 12h3M12 12h7M5 17h11M20 17h-1' }), h('circle', { key: 2, cx: 16, cy: 7, r: 2 }), h('circle', { key: 3, cx: 10, cy: 12, r: 2 }), h('circle', { key: 4, cx: 18, cy: 17, r: 2 })], p)

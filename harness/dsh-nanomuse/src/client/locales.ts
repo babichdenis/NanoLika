@@ -299,6 +299,13 @@ export const en = {
   chRunning: 'Working',
   chWaiting: 'Needs you',
   chMore: 'More',
+  // the cloud on a chat: the row's mark, and why a chat's switch cannot be used here (0.29)
+  chCloudOn: 'In the cloud, on all your devices.',
+  chCloudOff: 'Only on this computer.',
+  chCloudMain: 'The main chat is always in the cloud.',
+  chCloudRemote: 'This chat came from the cloud, from another device or a messenger. To take it off, delete the whole conversation in the cloud.',
+  chCloudNoSync: 'This computer is not syncing conversations. Sign in to NanoLika Cloud, or turn conversation sync on in Data controls.',
+  chCloudFailed: 'The cloud did not change. Try again in a moment.',
   // the profile drawer
   pfChangeLook: 'Change the look',
   pfEditName: 'Edit the name',
@@ -1806,6 +1813,13 @@ export const zh: typeof en = {
   chRunning: '进行中',
   chWaiting: '等你回复',
   chMore: '更多',
+  // the cloud on a chat: the row's mark, and why a chat's switch cannot be used here (0.29)
+  chCloudOn: '已在云端，所有设备都能看到。',
+  chCloudOff: '只在这台电脑上。',
+  chCloudMain: '主要聊天始终在云端。',
+  chCloudRemote: '这段对话来自云端，可能写在别的设备或即时通讯里。要去掉它，只能在云端把整段对话删除。',
+  chCloudNoSync: '这台电脑没有在同步对话。请登录 NanoLika Cloud，或在「数据控制」里打开对话同步。',
+  chCloudFailed: '云端没有变化，请稍后再试。',
   // the profile drawer
   pfChangeLook: '更换内置形象',
   pfEditName: '编辑名称',
@@ -3306,6 +3320,13 @@ export const ru: typeof en = {
   chRunning: 'Работает',
   chWaiting: 'Нужен ваш ответ',
   chMore: 'Ещё',
+  // the cloud on a chat: the row's mark, and why a chat's switch cannot be used here (0.29)
+  chCloudOn: 'В облаке, на всех ваших устройствах.',
+  chCloudOff: 'Только на этом компьютере.',
+  chCloudMain: 'Главный чат всегда в облаке.',
+  chCloudRemote: 'Этот чат пришёл из облака, с другого устройства или из мессенджера. Чтобы убрать его, удалите всю беседу в облаке.',
+  chCloudNoSync: 'Этот компьютер не синхронизирует беседы. Войдите в NanoLika Cloud или включите синхронизацию бесед в разделе «Данные и обучение».',
+  chCloudFailed: 'В облаке ничего не изменилось. Повторите через минуту.',
   pfChangeLook: 'Сменить образ',
   pfEditName: 'Изменить имя',
   pfAvatarStudio: 'Мастерская образов…',

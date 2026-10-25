@@ -229,7 +229,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-row { position: relative; display: flex; align-items: center; border-radius: 9px; min-height: 34px; }
 .nm-chat-row:hover { background: var(--nm-hover); }
 .nm-chat-row.nm-selected { background: var(--nm-selected); }
-.nm-chat-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 10px; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; border-radius: 9px; }
+.nm-chat-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 30px 0 10px; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; border-radius: 9px; }
 .nm-chat-open:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: -2px; }
 .nm-chat-row.nm-main .nm-chat-title { font-weight: 500; }
 .nm-chat-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -237,10 +237,14 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nm-accent); flex: none; }
 .nm-chat-dot.nm-live { animation: nm-pulse 2.4s ease-in-out infinite alternate; }
 .nm-chat-mark { flex: none; font-size: 12px; color: var(--dsw-alias-state-warn-primary, #d98c1f); }
+/* The cloud on a chat (0.29): a synced chat keeps a grey cloud; a chat only this computer has shows
+   its struck one under the pointer, so the row's dot and unread count keep the resting glance. */
+.nm-chat-cloud { flex: none; display: inline-flex; align-items: center; color: var(--dsw-alias-label-secondary); opacity: 0.45; }
+.nm-chat-cloud[data-nm-local] { opacity: 0; }
+.nm-chat-row:hover .nm-chat-cloud, .nm-chat-row.nm-selected .nm-chat-cloud, .nm-chat-open:focus-visible .nm-chat-cloud { opacity: 0.6; }
 .nm-chat-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: 0; padding: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: 0; }
 .nm-chat-row:hover .nm-chat-more, .nm-chat-more:focus-visible, .nm-chat-more[aria-expanded="true"] { opacity: 1; }
 .nm-chat-more:hover { background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); }
-.nm-chat-row:hover .nm-chat-title { padding-right: 22px; }
 .nm-chat-edit { flex: 1; min-width: 0; height: 30px; margin: 2px 4px; padding: 0 8px; border: 1px solid var(--nm-blue); border-radius: 7px; background: var(--nm-field); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; outline: none; }
 /* a turn of the conversation written on another device of the account (C8): the person's bubble on the
    right like the harness's own, the Muse's on the left, "From Pixel 8" under either (RemoteBubbles.ts) */
@@ -1184,6 +1188,10 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 /* ---- menus we draw ---------------------------------------------------- */
 .nm-menu { position: fixed; z-index: 80; min-width: 200px; padding: 6px; border-radius: 12px; background: var(--dsw-alias-bg-layer-3, var(--nm-base)); color: var(--dsw-alias-label-primary); box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 0 0 1px var(--nm-divider); display: flex; flex-direction: column; gap: 1px; }
 .nm-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; text-align: left; padding: 8px 10px; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
+/* An item the person cannot pick here (a cloud only the host can change): greyed, and the reason
+   rides in its tooltip. It stays hoverable, which a natively disabled button may not. */
+.nm-menu-item.nm-menu-item-off { color: var(--dsw-alias-label-tertiary); cursor: default; }
+.nm-menu-item.nm-menu-item-off:hover, .nm-menu-item.nm-menu-item-off:focus-visible { background: transparent; }
 /* the right-click menu on a Workspace in the harness's own sidebar (WorkspaceRowMenu.tsx) */
 .nm-ws-menu { width: 260px; }
 .nm-ws-ask { padding: 4px 10px 8px; font-size: 12.5px; line-height: 1.45; color: var(--dsw-alias-label-tertiary); }
