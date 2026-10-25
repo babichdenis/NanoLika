@@ -1921,7 +1921,9 @@ function createWindow(): BrowserWindow {
     // right corner (the overlay); the page leaves them room. Linux keeps its system bar —
     // every desktop draws it differently and the overlay is not available there.
     ...(process.platform === "win32" ? { titleBarStyle: "hidden" as const, titleBarOverlay: overlayColors() } : {}),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, preload: join(__dirname, "preload.js") },
+    // webviewTag: the built-in browser tabs live in the right sidebar and render each page in
+    // a <webview>; without it the tab opens but stays blank (Electron defaults it to false).
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, webviewTag: true, preload: join(__dirname, "preload.js") },
   });
   win.once("ready-to-show", () => win.show());
   win.on("enter-full-screen", () => win.webContents.send("nanomuse:fullscreen", true));
