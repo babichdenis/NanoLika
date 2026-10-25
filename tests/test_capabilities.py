@@ -90,7 +90,7 @@ def test_the_markdown_is_a_readable_file():
     )
     text = capabilities.render_markdown(data)
     assert text.startswith("# Что умеет")
-    assert "## Mail — почта" in text
+    assert "## Mail - почта" in text
     assert "`read_emails`" in text
     assert "## Правила" in text
 
