@@ -116,8 +116,18 @@ socket; proactive messages (delivery) are markdown.
 3. If `api.telegram.org` is out of reach from the computer, set **Proxy**
    (`socks5://…` or `http://…`).
 
-Replies are sent and then edited in place while they stream (Telegram's 4096-character
-limit splits long ones). Approvals are two inline buttons.
+Replies are sent and then edited in place while they stream. The model writes Markdown and
+the bot converts it to Telegram's HTML (bold, italic, code, code blocks, headings, lists,
+links), so an answer reads as it was written. A long answer arrives as a few messages, at
+most six, cut between paragraphs, lines and words so no tag is torn open; a message Telegram
+refuses to parse goes out again as the same words without markup. Approvals are two inline
+buttons.
+
+In a chat with topics, a conversation gets one topic, named after it without the date the
+model may write into a title: `Feed · воскресенье, 25 октября 2026 г.` and `Feed` are the
+one topic `Feed`, and an older one is renamed to it. A command, a link code or a service
+line opens neither a conversation nor a topic; it is answered where the chat already
+continues.
 
 ## Pairing: who may talk to the bot
 

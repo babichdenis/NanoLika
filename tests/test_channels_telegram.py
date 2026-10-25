@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from nanomuse.channels.base import InboundMessage
-from nanomuse.channels.telegram import TelegramChannel, TelegramError, _chunks
+from nanomuse.channels.telegram import TelegramChannel, TelegramError
 
 
 class Bus:
@@ -38,6 +38,7 @@ class FakeTelegram:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.next_message_id = 100
         self.fail_token = False
+        self.refuse_html = False
 
     def push(self, update: dict[str, Any]) -> None:
         self.updates.append(update)
@@ -65,6 +66,15 @@ class FakeTelegram:
             if not due:
                 await asyncio.sleep(0.02)
             return httpx.Response(200, json={"ok": True, "result": due})
+        if method in ("sendMessage", "editMessageText") and body.get("parse_mode") == "HTML":
+            if self.refuse_html:
+                return httpx.Response(
+                    400,
+                    json={
+                        "ok": False,
+                        "description": "Bad Request: can't parse entities: unexpected end tag",
+                    },
+                )
         if method in ("sendMessage", "editMessageText"):
             if method == "editMessageText" and body.get("text") == "same":
                 return httpx.Response(
@@ -99,16 +109,6 @@ async def until(pred, timeout: float = 3.0):  # noqa: ANN001
             return
         await asyncio.sleep(0.02)
     raise AssertionError("condition not met in time")
-
-
-def test_chunks_cut_at_lines():
-    assert _chunks("") == []
-    text = "\n".join(f"line {i}" for i in range(2000))
-    parts = _chunks(text)
-    assert all(len(p) <= 4000 for p in parts) and "".join(parts).replace("\n", "") == text.replace(
-        "\n", ""
-    )
-    assert _chunks("x" * 9000) == ["x" * 4000, "x" * 4000, "x" * 1000]
 
 
 async def test_polling_brings_messages_in(tg: FakeTelegram):
@@ -193,7 +193,7 @@ async def test_replies_stream_by_editing_and_buttons_decide(tg: FakeTelegram):
     ch = channel(tg)
     await ch.start(bus)
     assert await ch.send("1001", "hi") == "101"
-    assert tg.of("sendMessage")[-1] == {"chat_id": "1001", "text": "hi"}
+    assert tg.of("sendMessage")[-1] == {"chat_id": "1001", "text": "hi", "parse_mode": "HTML"}
     await ch.stream("1001", "s1", "Working", done=False)
     await ch.stream("1001", "s1", "Working on it", done=False)
     await ch.stream("1001", "s1", "Working on it. Done.", done=True)
@@ -232,6 +232,17 @@ async def test_replies_stream_by_editing_and_buttons_decide(tg: FakeTelegram):
     await ch.typing("1001", False)
     # files go out as photo or document (multipart)
     await ch.stop()
+
+
+async def test_a_refused_html_still_delivers_the_words(tg: FakeTelegram):
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    tg.refuse_html = True
+    assert await ch.send("1001", "**готово** и <тег>") == "101"
+    sent = tg.of("sendMessage")
+    assert sent[-1]["text"] == "**готово** и <тег>"
+    assert "parse_mode" not in sent[-1]
 
 
 async def test_files_out_and_verify(tg: FakeTelegram, tmp_path):  # noqa: ANN001

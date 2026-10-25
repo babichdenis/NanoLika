@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from nanomuse.channels import telegram_format
 from nanomuse.channels.approval_choices import choices
 from nanomuse.channels.base import (
     Channel,
@@ -382,10 +383,49 @@ class TelegramChannel(Channel):
             return None
 
     # ------------------------------------------------------------------ outbound
+    def _lang(self) -> str:
+        return str(getattr(self.bus, "lang", "") or "")
+
+    async def _say(self, chat_id: str, part: telegram_format.Part) -> Any:
+        """One message of a reply, as HTML; a refused parse sends the same words bare."""
+        try:
+            return await self._call(
+                "sendMessage",
+                {"chat_id": chat_id, "text": part.html, "parse_mode": "HTML"},
+            )
+        except TelegramError as exc:
+            if "parse entities" not in str(exc).lower():
+                raise
+            logger.warning("telegram: HTML refused, sending the words without it")
+            text = part.text or telegram_format.plain(part.html)
+            return await self._call("sendMessage", {"chat_id": chat_id, "text": text})
+
+    async def _edit(self, chat_id: str, message_id: int, part: telegram_format.Part) -> None:
+        try:
+            await self._call(
+                "editMessageText",
+                {
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": part.html,
+                    "parse_mode": "HTML",
+                },
+            )
+        except TelegramError as exc:
+            if "parse entities" not in str(exc).lower():
+                raise
+            logger.warning("telegram: HTML refused, sending the words without it")
+            text = part.text or telegram_format.plain(part.html)
+            await self._call(
+                "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": text}
+            )
+
     async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+        """A reply from the model: Markdown becomes HTML, and a long answer becomes a few
+        messages cut where no tag is left open (telegram_format)."""
         message_id = ""
-        for chunk in _chunks(text):
-            result = await self._call("sendMessage", {"chat_id": chat_id, "text": chunk})
+        for part in telegram_format.parts(text, lang=self._lang()):
+            result = await self._say(chat_id, part)
             message_id = str(result.get("message_id") or "")
         for item in files or []:
             path = Path(item)
@@ -442,25 +482,25 @@ class TelegramChannel(Channel):
             raise TelegramError(str(data.get("description") or f"HTTP {response.status_code}"))
 
     async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
-        shown = text if len(text) <= TEXT_LIMIT else text[: TEXT_LIMIT - 1] + "…"
+        """The reply as it is written: the first message is edited in place, and whatever
+        did not fit is sent once the answer is complete."""
+        parts = telegram_format.parts(text, lang=self._lang())
+        wait = telegram_format.Part(html="…", text="…")
+        shown = parts[0] if parts else wait
         message_id = self._stream_messages.get(stream_id)
         if message_id is None:
-            result = await self._call("sendMessage", {"chat_id": chat_id, "text": shown or "…"})
+            result = await self._say(chat_id, shown)
             self._stream_messages[stream_id] = int(result.get("message_id") or 0)
         else:
             try:
-                await self._call(
-                    "editMessageText",
-                    {"chat_id": chat_id, "message_id": message_id, "text": shown or "…"},
-                )
+                await self._edit(chat_id, message_id, shown)
             except TelegramError as exc:
                 if "not modified" not in str(exc):
                     raise
         if done:
             self._stream_messages.pop(stream_id, None)
-            if len(text) > TEXT_LIMIT:
-                for chunk in _chunks(text[TEXT_LIMIT - 1 :]):
-                    await self._call("sendMessage", {"chat_id": chat_id, "text": chunk})
+            for part in parts[1:]:
+                await self._say(chat_id, part)
 
     async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         await self.ask_scoped(chat_id, approval_id, text, lang, ["once"])
@@ -561,22 +601,6 @@ def _html(text: str) -> str:
     """What the Bot API's HTML parse mode lets through: everything else is escaped, so a
     person's own words never break a message (``<`` in code, a stray ``&``)."""
     return escape(text, quote=False)
-
-
-def _chunks(text: str, limit: int = TEXT_LIMIT) -> list[str]:
-    text = text.strip()
-    if not text:
-        return []
-    out: list[str] = []
-    while len(text) > limit:
-        cut = text.rfind("\n", 0, limit)
-        if cut < limit // 2:
-            cut = limit
-        out.append(text[:cut])
-        text = text[cut:].lstrip("\n")
-    if text:
-        out.append(text)
-    return out
 
 
 __all__ = ["TelegramChannel", "TelegramError"]
