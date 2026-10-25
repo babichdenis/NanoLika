@@ -48,6 +48,7 @@ from nanomuse.tools import (
     SendEmail,
     Shell,
     Skills,
+    Store,
     Terminate,
     ToolCollection,
     Triggers,
@@ -356,6 +357,16 @@ class NanoMuseApp:
             tools.add(*self.computer_tools())
         if s.browser.enabled:
             tools.add(self.browser_tool())
+        # the store: what this build does not carry, from cloud.nanolika.ru/store (docs/store.md).
+        # A capsule puts its own folder on sys.path, so what it provides is importable at once.
+        if s.store.enabled:
+            self.store = Store(
+                base_url=s.store.base_url,
+                addons_dir=s.data_dir / "addons",
+                install_skill=self.skills.save_text if s.skills.enabled else None,
+            )
+            self.store.enable_all()
+            tools.add(self.store)
         return tools
 
     def browser_tool(self) -> Browser:

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "updated": "2026-10-25T14:37:05Z",
+  "base": "https://cloud.nanolika.ru/store",
+  "packages": [
+    {
+      "section": "skills",
+      "name": "scan-to-text",
+      "description": "Read text from a photo, a screenshot or a scanned PDF when there is no text layer. Use when the user sends a picture of a document, a receipt, a contract page or a scan and asks what is in it, or when a PDF comes back with \"no text layer\".",
+      "url": "https://cloud.nanolika.ru/store/skills/scan-to-text/SKILL.md",
+      "bytes": 1895,
+      "install": "skill"
+    },
+    {
+      "section": "mcp",
+      "name": "wordstat",
+      "description": "Частотность запросов Яндекса: сколько раз ищут слово или фразу, по регионам и месяцам",
+      "url": "https://cloud.nanolika.ru/store/mcp/wordstat.json",
+      "bytes": 356,
+      "server": {
+        "name": "wordstat",
+        "url": "https://db8makmem7uqab0r5ou1.ibiatp37.mcpgw.serverless.yandexcloud.net/sse",
+        "risk": "safe",
+        "egress": true,
+        "reads_private_data": false
+      },
+      "install": "mcp"
+    },
+    {
+      "section": "capsules",
+      "name": "ocr-vision",
+      "version": "1.0.0",
+      "description": "Текст с картинки или скана через системный Vision (macOS): слова с рамками, без установки моделей и без pip",
+      "provides": [
+        "reading text from screenshots, photos and scanned documents"
+      ],
+      "modules": [
+        "Vision",
+        "Quartz",
+        "ocr_vision"
+      ],
+      "files": [
+        {
+          "platform": "darwin-x64",
+          "url": "https://cloud.nanolika.ru/store/capsules/ocr-vision/1.0.0/darwin-x64.zip",
+          "bytes": 3032291,
+          "sha256": "8110ab6143c2f1b326659dd14cc57fe38160f673ed82ba9bdf0b4870669f61a9"
+        }
+      ],
+      "bytes": 3032291,
+      "install": "addon"
+    }
+  ],
+  "problems": []
+}

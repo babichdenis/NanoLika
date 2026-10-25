@@ -77,3 +77,12 @@ uv.lock
 # nanoMuse Cloud relay runtime data
 cloud/data/
 cloud/nanomuse_cloud/console/providers/prices.json
+
+# the store's capsules are built, not committed: vendored wheels (12 MB of .so) and their
+# zips are made by cloud/scripts/store_build_capsule.py (docs/store.md)
+cloud/store/capsules/*/*/*.zip
+cloud/store/capsules/*/*/Vision/
+cloud/store/capsules/*/*/Quartz/
+cloud/store/capsules/*/*/CoreML/
+cloud/store/capsules/*/*/objc/
+cloud/store/capsules/*/*/Foundation/

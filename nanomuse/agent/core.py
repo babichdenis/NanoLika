@@ -147,6 +147,22 @@ class MuseAgent:
             return note
         return "Commands (shell, python_execute) run in the workspace with a scrubbed environment."
 
+    def store_section(self) -> str:
+        """The store, when its tool is there: where it is and what this build is missing.
+
+        «Missing» is decided by the capsules' own module lists, not by a hand-kept table: a
+        capsule whose modules are all importable is not offered, and one that is installed
+        stops being mentioned."""
+        tool = self.tools.get("store")
+        if tool is None:
+            return ""
+        try:
+            missing = tool.missing_lines()
+        except Exception as exc:  # noqa: BLE001 — the prompt must never fail on this
+            logger.debug("store section skipped: {}", exc)
+            return ""
+        return prompts.STORE_SECTION.format(base=getattr(tool, "base_url", ""), missing=missing)
+
     def skills_section(self) -> str:
         """The index of skills — names and descriptions; the tool has the instructions."""
         lib = self.skills
@@ -363,7 +379,8 @@ class MuseAgent:
             + self.phone_section()
             + self.computer_section()
             + self.devices_section()
-            + self.skills_section(),
+            + self.skills_section()
+            + self.store_section(),
             extra=extra,
         )
 

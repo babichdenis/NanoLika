@@ -1,0 +1,8 @@
+{
+  "name": "wordstat",
+  "description": "Частотность запросов Яндекса: сколько раз ищут слово или фразу, по регионам и месяцам",
+  "url": "https://db8makmem7uqab0r5ou1.ibiatp37.mcpgw.serverless.yandexcloud.net/sse",
+  "risk": "safe",
+  "egress": true,
+  "reads_private_data": false
+}

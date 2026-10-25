@@ -1,0 +1,37 @@
+{
+  "name": "ocr-vision",
+  "version": "1.0.0",
+  "description": "Текст с картинки или скана через системный Vision (macOS): слова с рамками, без установки моделей и без pip",
+  "provides": [
+    "reading text from screenshots, photos and scanned documents"
+  ],
+  "modules": [
+    "Vision",
+    "Quartz",
+    "ocr_vision"
+  ],
+  "platforms": [
+    "darwin-x64",
+    "darwin-arm64"
+  ],
+  "entry": "ocr_vision",
+  "license": "pyobjc: MIT",
+  "vendored": [
+    {
+      "name": "pyobjc-framework-Vision",
+      "version": "12.2.2"
+    },
+    {
+      "name": "pyobjc-framework-Quartz",
+      "version": "12.2.2"
+    },
+    {
+      "name": "pyobjc-framework-CoreML",
+      "version": "12.2.2"
+    },
+    {
+      "name": "pyobjc-core",
+      "version": "12.2.2"
+    }
+  ]
+}

@@ -540,6 +540,19 @@ class MCPSettings(BaseModel):
     servers: list[MCPServerSettings] = Field(default_factory=list)
 
 
+class StoreSettings(BaseModel):
+    """The NanoLika store: capabilities that are not in this build (docs/store.md).
+
+    The installer carries what everyone needs; OCR, PDF tooling and rare skills are fetched
+    from the store when a job needs them, with their sha256 checked. The model is told where
+    it is and that pip does not exist here.
+    """
+
+    enabled: bool = True
+    # empty → the relay's own store (`cloud.base_url`), else the public one
+    base_url: str = "https://cloud.nanolika.ru/store"
+
+
 class HandsSettings(BaseModel):
     """Hands on *this* computer's screen — the GUI operator with the machine it runs on
     under it (``computer_screen``, ``computer_act``, ``computer_task``). Off by default;
@@ -682,6 +695,7 @@ class Settings(BaseModel):
     hub: HubSettings = Field(default_factory=HubSettings)
     channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
+    store: StoreSettings = Field(default_factory=StoreSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     # Where the settings came from (informational).
     source: str | None = None
@@ -1046,6 +1060,11 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
                         except ValueError:
                             continue
                     setattr(target, key, value if value or key != "base_url" else None)
+    if store := data.get("store"):
+        if "enabled" in store:
+            settings.store.enabled = bool(store["enabled"])
+        if store.get("base_url"):
+            settings.store.base_url = str(store["base_url"]).strip().rstrip("/")
     if hands := data.get("hands"):
         if "enabled" in hands:
             settings.hands.enabled = bool(hands["enabled"])

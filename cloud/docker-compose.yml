@@ -29,6 +29,10 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # the desktop's installers and update feeds (scripts/publish-updates.mjs writes them)
+      - ./dl:/srv/dl:ro
+      # the store: skills, code capsules, MCP descriptions (docs/store.md)
+      - ./store:/srv/store:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

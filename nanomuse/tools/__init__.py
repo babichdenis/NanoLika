@@ -11,6 +11,7 @@ from nanomuse.tools.office import OfficeConvert, OfficeVba
 from nanomuse.tools.reminder_tools import Reminders
 from nanomuse.tools.shell import PythonExecute, Shell
 from nanomuse.tools.skills_tool import Skills
+from nanomuse.tools.store import Store
 from nanomuse.tools.terminate import AskUser, Terminate
 from nanomuse.tools.trigger_tools import Triggers
 from nanomuse.tools.web import WebFetch, WebSearch
@@ -38,6 +39,7 @@ __all__ = [
     "SendEmail",
     "Shell",
     "Skills",
+    "Store",
     "Terminate",
     "ToolCollection",
     "WebFetch",

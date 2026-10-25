@@ -237,6 +237,13 @@ COMPUTER_SECTION = """
 - The user sees every step in a Hands card with a Stop button (throwing the mouse into a screen corner stops it too); when they stop it, stop and ask what to do.
 """
 
+STORE_SECTION = """
+## The store: what this build does not carry
+The installer holds what every job needs; the rest lives on the NanoLika store at {base} and is installed when a job needs it. `store` is the way there: `list` shows what is available and what this build is missing, `addon` installs a code capsule (it downloads it, checks its sha256 and makes it importable at once), `skill` installs a skill, `mcp` adds an MCP server.
+- **Before working around a missing capability, look in the store.** A scan or a photo with no text layer, a PDF that must turn into something else, a document format the plain libraries do not know: that is the store's business, not a "cannot".
+- **There is no pip here.** This runtime is frozen and its package manager does not exist: `pip install` in a shell or a script fails. The store is the only way to add code, and it does not need a restart.
+{missing}"""
+
 SKILLS_SECTION = """
 ## Skills
 Ways of doing a job that are written down. When a request matches one, call `skills` action=use with its name first and follow the instructions; the user can also start one with /name.

@@ -24,22 +24,54 @@
 		max_size 20MB
 	}
 
-	# The operator's prices page and the numbers behind it do not live on the public
-	# domain: both answer "not found" from outside, so the page cannot be reached even
-	# by someone holding a path. It is read through a tunnel to the relay, which listens
-	# on this host only (`ssh -L 8790:127.0.0.1:8790 …`, then /app/prices/).
-	@operator_only path /app/prices /app/prices/* /v1/admin/prices
-	respond @operator_only 404
+	# The sign-in shell is public; administrative JSON stays password-protected.
+	@prices_alias path /app/prices /app/admin/prices /app/admin/prices/
+	redir @prices_alias https://{host}/app/prices/ 308
+	@operator_path path /app/prices/* /v1/admin/prices
+	handle @operator_path {
+		reverse_proxy relay:8787 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
 
-	reverse_proxy relay:8787 {
-		# Chat streams (SSE) and the hub's WebSocket must not be buffered.
-		flush_interval -1
-		# the relay keys its per-address limits on this; the visitor's own header is replaced
-		header_up X-Forwarded-For {remote_host}
-		# 10 minutes idle: a hub socket pings every 25 s, a long chat answer streams
-		transport http {
-			read_timeout 10m
-			write_timeout 10m
+	# The desktop's installers and update feeds: scripts/publish-updates.mjs writes
+	# ./dl/win (latest.yml + the NSIS .exe electron-updater reads) and ./dl/mac
+	# (latest.json + the dmg/zip update-lika.py reads). It is a plain file server.
+	handle_path /dl/* {
+		root * /srv/dl
+		header {
+			# an installer never changes under its name, and one is 100–400 MB
+			Cache-Control "public, max-age=31536000, immutable"
+			-Server
+		}
+		file_server
+	}
+
+	# The store: skills, code capsules and MCP descriptions the app fetches when a job needs
+	# them instead of carrying them in the installer (docs/store.md). Its catalogue,
+	# index.json, is short-lived: a package installed today should be visible in a minute.
+	handle_path /store/* {
+		root * /srv/store
+		header {
+			-Server
+		}
+		# handle_path strips /store, so this matcher sees the bare path
+		@catalogue path /index.json
+		header @catalogue Cache-Control "public, max-age=60"
+		file_server
+	}
+
+	handle {
+		reverse_proxy relay:8787 {
+			# Chat streams (SSE) and the hub's WebSocket must not be buffered.
+			flush_interval -1
+			# the relay keys its per-address limits on this; the visitor's own header is replaced
+			header_up X-Forwarded-For {remote_host}
+			# 10 minutes idle: a hub socket pings every 25 s, a long chat answer streams
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
 		}
 	}
 }
