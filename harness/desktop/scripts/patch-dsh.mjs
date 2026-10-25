@@ -67,6 +67,28 @@ if (existsSync(clientPath)) {
   }
 }
 
+// 3b. The right Sidebar's Browser tab is gated on the profile being named `desktop` in the
+//     web-app bundle; our profile is `nanolika`, so the bundle switched it off and the tab
+//     never appeared. The row is enabled here, in the bundle, so a fresh install and a rebuilt
+//     dsh carry it — the profile patch on top of it is then a duplicate, not the only copy.
+//     Telemetry and product analytics share that gate and stay off: they are not ours to send.
+const webApp = join(root, "node_modules", "@deepseek-ai", "dsh-web-app", "cordis.patch.yml");
+if (existsSync(webApp)) {
+  const text = readFileSync(webApp, "utf8");
+  const gated = /(- id: ui-sidebar-browser\n\s+name: '@deepseek-ai\/dsh-client-ui-sidebar-browser'\n\s+disabled: )!!js "[^"]*profileContext[^"]*"/;
+  if (gated.test(text)) {
+    writeFileSync(
+      webApp,
+      text.replace(
+        gated,
+        // no trailing comment: a `#` after the value breaks the YAML mapping
+        "$1false",
+      ),
+    );
+    console.log("patch-dsh: right-sidebar browser enabled");
+  }
+}
+
 // 4. The boot splash of the web client prints the wordmark "HARNESS" while plugins load; our
 //    product's name goes there instead ("NanoLika"). The asset is minified, so the search is
 //    the stable shape around the literal, not its variable names.
