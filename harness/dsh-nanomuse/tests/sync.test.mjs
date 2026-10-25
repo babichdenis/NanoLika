@@ -4,7 +4,10 @@
 // account's one main conversation (adopted, merged in time order, our echo never twice), the
 // other devices' chats as sessions here from the moment they are pulled, tombstones, the
 // switch and the refusals. Contract C9: the side-chat switch (scope), the first pull's tail,
-// the working presence both ways, and the host doing no work while nothing changes.
+// the working presence both ways, and the host doing no work while nothing changes. Contract C11:
+// whose cloud a chat is, the main chat always in it, a chat from the cloud only deletable from the
+// account, a chat made here local until the person puts a cloud on it, and the reason a switch was
+// refused reaching the browser half.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SyncEngine, SyncRelay, MAX_POST_MESSAGES, TAIL, emptyState, migrate, RemoteStore, meanwhileNote } from '../lib/sync.js'
@@ -979,4 +982,191 @@ test('preparing a closed chat for work does not mark it read, and windows keep i
   await e.pull()
   assert.deepEqual(relay.bodies, ['chat-two'])
   e.stop()
+})
+
+// ---- C11: whose cloud a chat is --------------------------------------------------------------
+
+/** An engine that stops itself when the test ends, so a failed assertion here leaves no timer behind. */
+function engineOf(t, relay, sessions, extra) {
+  const made = engine(relay, sessions, extra)
+  t.after(() => made.engine.stop())
+  return made
+}
+
+test('C11: the main chat is in the cloud and cannot be taken out, and the answer says why', async (t) => {
+  const relay = fakeRelay()
+  relay.add('c-main', 'main', 'Main chat')
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main here', [{ id: 'u1', role: 'user', text: 'main question', at: 1738000000000 }], 1738000000000)
+  sessions.add('s-side', 'Side here', [{ id: 'u2', role: 'user', text: 'side question', at: 1738000001000 }], 1738000001000)
+  const { engine: e, saved } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.setMain('s-main')
+  await e.accountChanged('acct-1')
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'main question'))
+  assert.equal(e.state.cids['s-main'], 'c-main')
+  // the switch on the main chat is refused, whichever way it is asked, and nothing is deleted
+  for (const on of [false, true]) {
+    const out = await e.setSynced('s-main', on)
+    assert.equal(out.ok, false)
+    assert.equal(out.reason, 'main')
+    // the whole view still comes with the answer, so a client that expects one keeps working
+    assert.equal(out.mainSession, 's-main')
+  }
+  assert.ok(relay.convs.has('c-main') && relay.convs.get('c-main').deleted === false)
+  assert.ok(!relay.calls.some((c) => c.startsWith('DELETE /v1/sync/conversations/')))
+  assert.equal(e.state.clouds['s-main'], undefined)
+  assert.equal(saved().cids['s-main'], 'c-main')
+  // and the main chat goes on syncing: the refusal changed nothing
+  sessions.lines.get('s-main').push({ id: 'a1', role: 'assistant', text: 'the answer', at: 1738000001000 })
+  e.turnEnded('s-main')
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'the answer'))
+  // deleting the account's own conversation is refused as well
+  const gone = await e.deleteConversation('s-main')
+  assert.equal(gone.ok, false)
+  assert.equal(gone.reason, 'main')
+  assert.equal(relay.convs.get('c-main').deleted, false)
+  // a chat nothing knows about is named as such
+  assert.equal((await e.setSynced('', true)).reason, 'unknown-session')
+  // signed out nothing may move, and a side chat says so too
+  e.signedOut()
+  assert.equal((await e.setSynced('s-side', true)).reason, 'not-synced-account')
+  assert.equal((await e.deleteConversation('s-side')).reason, 'not-synced-account')
+  assert.equal(e.state.clouds['s-side'], undefined)
+})
+
+test('C11: a chat that came from the cloud cannot be made local, only deleted from the account', async (t) => {
+  const relay = lazyRelay()
+  relay.add('tg-1', 'side', 'From Telegram', 'telegram-bot', 'Telegram')
+  relay.say('tg-1', 'user', 'a word from the messenger', 'telegram-bot', 'Telegram')
+  const sessions = fakeSessions()
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.accountChanged('acct-1')
+  await until(() => Object.keys(e.state.cids).length === 1)
+  const sid = Object.keys(e.state.cids)[0]
+  // it is a chat here, in the cloud, and not one the person put there: `synced` names only their own
+  assert.equal(e.state.cids[sid], 'tg-1')
+  assert.equal(e.state.clouds[sid], 'sync')
+  assert.ok(e.view().sessions.includes(sid))
+  assert.deepEqual(e.view().synced, [])
+  // the switch is refused both ways; the account's copy and the mapping stay
+  for (const on of [false, true]) {
+    const out = await e.setSynced(sid, on)
+    assert.equal(out.ok, false)
+    assert.equal(out.reason, 'synced-from-cloud')
+  }
+  assert.equal(relay.convs.get('tg-1').deleted, false)
+  assert.equal(e.state.cids[sid], 'tg-1')
+  assert.ok(!relay.calls.some((c) => c.startsWith('DELETE /v1/sync/conversations/')))
+  // deleting it from the account whole: the conversation is tombstoned everywhere, the copy here stays
+  const gone = await e.deleteConversation(sid)
+  assert.equal(gone.ok, true)
+  assert.equal(relay.convs.get('tg-1').deleted, true)
+  assert.equal(e.state.cids[sid], undefined)
+  assert.equal(e.state.clouds[sid], 'local')
+  assert.ok(sessions.rows.has(sid), 'the chat stays on this computer')
+  assert.ok(!e.view().sessions.includes(sid))
+  // a turn here no longer reaches the account
+  sessions.lines.set(sid, [{ id: 'u7', role: 'user', text: 'said after leaving the account', at: 1738000300000 }])
+  sessions.rows.get(sid).blank = false
+  e.messageSent(sid)
+  await tick(40)
+  assert.ok(![...relay.msgs.values()].some((m) => m.text === 'said after leaving the account'))
+})
+
+test('C11: a chat made here is local, and its cloud goes on and off again', async (t) => {
+  const relay = fakeRelay()
+  relay.add('c-main', 'main', 'Main chat')
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main here', [{ id: 'u1', role: 'user', text: 'main question', at: 1738000000000 }], 1738000000000)
+  sessions.add('s-side', 'Side here', [{ id: 'u2', role: 'user', text: 'side question', at: 1738000001000 }], 1738000001000)
+  const { engine: e, saved } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.setMain('s-main')
+  await e.accountChanged('acct-1')
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'main question'))
+  // local by default: nothing of the side chat is on the account, and its turns stay here
+  assert.ok(!relay.pushes.some((p) => p.messages.some((m) => m.text === 'side question')))
+  assert.deepEqual(e.view().synced, [])
+  assert.equal(e.state.clouds['s-side'], undefined)
+  assert.ok(!e.view().sessions.includes('s-side'))
+  // the cloud goes on: the chat goes up, and the view says whose cloud it is
+  const on = await e.setSynced('s-side', true)
+  assert.equal(on.ok, true)
+  assert.deepEqual(on.synced, ['s-side'])
+  assert.equal(e.state.clouds['s-side'], 'device')
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'side question'))
+  const cid = e.state.cids['s-side']
+  assert.ok(cid && relay.convs.has(cid))
+  assert.ok(e.view().sessions.includes('s-side'))
+  // the cloud goes off: the account's copy is deleted, the chat here stays and reads as local
+  const off = await e.setSynced('s-side', false)
+  assert.equal(off.ok, true)
+  assert.deepEqual(off.synced, [])
+  assert.ok(relay.calls.includes(`DELETE /v1/sync/conversations/${cid}`))
+  assert.equal(relay.convs.get(cid).deleted, true)
+  assert.equal(e.state.cids['s-side'], undefined)
+  assert.equal(e.state.clouds['s-side'], 'local')
+  assert.equal(saved().clouds['s-side'], 'local')
+  assert.ok(sessions.rows.has('s-side'))
+  // and the older device-wide switch does not put it back up
+  await e.setSideChats(true)
+  sessions.lines.get('s-side').push({ id: 'a2', role: 'assistant', text: 'side answer', at: 1738000002000 })
+  e.turnEnded('s-side')
+  await tick(50)
+  assert.ok(![...relay.msgs.values()].some((m) => m.text === 'side answer'))
+  assert.equal(e.state.cids['s-side'], undefined)
+  // on again after all of that: the chat goes back up under a conversation of its own
+  assert.equal((await e.setSynced('s-side', true)).ok, true)
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'side answer'))
+  assert.notEqual(e.state.cids['s-side'], cid)
+})
+
+test('C11: a chat made in a messenger is in the cloud from the moment it arrives, with no switch touched', async (t) => {
+  const relay = lazyRelay()
+  relay.add('tg-2', 'side', 'From Telegram', 'telegram-bot', 'Telegram')
+  relay.say('tg-2', 'user', 'a word from the messenger', 'telegram-bot', 'Telegram', 1738000100)
+  const sessions = fakeSessions()
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.accountChanged('acct-1')
+  await until(() => Object.keys(e.state.cids).length === 1)
+  const sid = Object.keys(e.state.cids)[0]
+  assert.equal(e.state.clouds[sid], 'sync')
+  assert.equal(sessions.rows.get(sid).title, 'From Telegram')
+  // a turn typed here goes up under the same conversation at once: nobody pressed anything
+  sessions.lines.set(sid, [{ id: 'u8', role: 'user', text: 'and one from the desk', at: 1738000200000 }])
+  sessions.rows.get(sid).blank = false
+  e.messageSent(sid)
+  await until(() => [...relay.msgs.values()].some((m) => m.text === 'and one from the desk'))
+  assert.equal([...relay.msgs.values()].find((m) => m.text === 'and one from the desk').cid, 'tg-2')
+})
+
+test('C11: a chat created here stays local with the messenger chat beside it, and the host passes the reason on', async (t) => {
+  // on the older relay, without the shared catalogue, the cloud marker is what keeps a chat from
+  // the messenger in the account while the chat made here stays out of it
+  const relay = fakeRelay()
+  relay.add('their-side', 'side', 'From the phone', 'phone-1', 'Pixel 8')
+  relay.say('their-side', 'user', 'said on the phone', 'phone-1', 'Pixel 8')
+  const sessions = fakeSessions()
+  sessions.add('s-mine', 'Mine', [{ id: 'u1', role: 'user', text: 'mine', at: 1738000000000 }], 1738000000000)
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: true })
+  await e.accountChanged('acct-1')
+  await e.pull()
+  const theirs = Object.keys(e.state.cids).find((id) => e.state.cids[id] === 'their-side')
+  assert.ok(theirs, 'the phone’s chat is a chat here')
+  assert.equal(e.state.clouds[theirs], 'sync')
+  await e.setSideChats(false)
+  // the chat made here is local again; the one from the phone is still in the account
+  sessions.lines.get('s-mine').push({ id: 'a1', role: 'assistant', text: 'mine answered', at: 1738000001000 })
+  e.turnEnded('s-mine')
+  await tick(40)
+  assert.ok(![...relay.msgs.values()].some((m) => m.text === 'mine answered'))
+  assert.equal(e.state.clouds[theirs], 'sync')
+  assert.equal((await e.setSynced(theirs, false)).reason, 'synced-from-cloud')
+
+  // the host hands the answer to the browser half: `{ok: false, reason}` comes from the engine, and
+  // the route sends it as it is instead of a plain view that looks like success
+  const host = readFileSync(new URL('../src/cloud.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(host, /route === '\/sync\/synced'[\s\S]{0,900}send\(res, 200, await sync\.setSynced\(String\(body\.sessionId \?\? ''\), body\.on === true\)\)/)
+  assert.match(host, /route === '\/sync\/delete-conversation'[\s\S]{0,600}send\(res, 200, await sync\.deleteConversation\(String\(body\.sessionId \?\? ''\)\)\)/)
+  const engineText = readFileSync(new URL('../src/sync.ts', import.meta.url), 'utf8')
+  assert.match(engineText, /export type CloudRefusal = 'main' \| 'synced-from-cloud' \| 'not-synced-account' \| 'unknown-session'/)
 })
