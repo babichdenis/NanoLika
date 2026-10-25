@@ -118,6 +118,25 @@ export type NanomuseHarnessBridge = typeof bridge;
 
 contextBridge.exposeInMainWorld("nanomuseHarness", bridge);
 
+// The harness's own desktop carrier. Its built-in browser (right sidebar) looks for
+// `globalThis.dshDesktop` with `protocolVersion === 1` and uses `.browser` to run each page in
+// a <webview>; without it the provider falls back to an iframe, and sites that forbid framing
+// stay blank. The lease names the guest back to the main process.
+contextBridge.exposeInMainWorld("dshDesktop", {
+  protocolVersion: 1,
+  browser: {
+    acquire: (workspace: string) => ipcRenderer.invoke("nanomuse:browser:acquire", workspace),
+    release: (lease: string) => ipcRenderer.invoke("nanomuse:browser:release", lease),
+    onOpenRequested: (lease: string, listener: (url: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: { lease: string; url: string }) => {
+        if (payload.lease === lease) listener(payload.url);
+      };
+      ipcRenderer.on("nanomuse:browser:open-requested", handler);
+      return () => ipcRenderer.off("nanomuse:browser:open-requested", handler);
+    },
+  },
+});
+
 // The window has no title bar on macOS (the traffic lights sit over the rail, as in
 // Muse's window), so the page marks the platform on the document and the NanoLika
 // bundle adds the clearance and the drag regions; full screen drops the clearance.

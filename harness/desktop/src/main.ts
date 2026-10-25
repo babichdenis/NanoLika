@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, powerSaveBlocker, screen, shell, systemPreferences, Tray } from "electron";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -123,6 +123,11 @@ let hostUrl: string | null = null;
 let quitting = false;
 let sessionEnding = false;
 let restarts = 0;
+// The built-in browser (right sidebar) runs each page in a <webview>: the harness asks the
+// shell for a partition, then hands the webview back. This pairs a lease with the attached
+// guest so `release` can destroy it, and carries its `window.open` requests back to the page.
+const browserGuests = new Map<string, Electron.WebContents>();
+let pendingBrowserLease: string | null = null;
 /** The proxy the running Host was started with ("" for none): the Network row offers a restart while it differs from the setting. */
 let hostProxy = "";
 
@@ -1076,6 +1081,19 @@ function registerBridge(): void {
   ipcMain.handle("nanomuse:open-external", (_e, url: string) => {
     if (typeof url === "string" && EXTERNAL_URL.test(url)) void shell.openExternal(url);
   });
+  // The built-in browser asks the shell for a guest (partition + lease) before it attaches a
+  // <webview>. The partition is one persisted session per workspace, so logins and cookies
+  // survive; the lease is how a later release finds the right guest to destroy.
+  ipcMain.handle("nanomuse:browser:acquire", (_e, workspace: string) => {
+    const lease = randomBytes(12).toString("hex");
+    const partition = `persist:nmbr-${createHash("sha1").update(String(workspace ?? "")).digest("hex").slice(0, 24)}`;
+    return { lease, partition };
+  });
+  ipcMain.handle("nanomuse:browser:release", (_e, lease: string) => {
+    const guest = browserGuests.get(lease);
+    browserGuests.delete(lease);
+    guest?.close();
+  });
   ipcMain.handle("nanomuse:keep-awake", (_e, on: boolean) => {
     // "Keep awake" must keep the whole machine up, not just its screen: the agent lives on
     // this computer, so a sleeping host is an unreachable agent. The display may still dim.
@@ -1933,6 +1951,29 @@ function createWindow(): BrowserWindow {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (EXTERNAL_URL.test(url)) void shell.openExternal(url);
     return { action: "deny" };
+  });
+  // The built-in browser's pages are guest webviews. The tag's `name` is its lease, so the
+  // will/did-attach pair lets us record the guest and keep its process sandboxed without our
+  // own preload; a page asking for a new window reports back to the harness, which opens it.
+  win.webContents.on("will-attach-webview", (_event, webPreferences, params) => {
+    pendingBrowserLease = typeof params.name === "string" ? params.name : null;
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+  });
+  win.webContents.on("did-attach-webview", (_event, guest) => {
+    const lease = pendingBrowserLease;
+    pendingBrowserLease = null;
+    if (!lease) return;
+    browserGuests.set(lease, guest);
+    guest.once("destroyed", () => {
+      if (browserGuests.get(lease) === guest) browserGuests.delete(lease);
+    });
+    guest.setWindowOpenHandler(({ url }) => {
+      win.webContents.send("nanomuse:browser:open-requested", { lease, url });
+      return { action: "deny" };
+    });
   });
   win.webContents.on("will-navigate", (e, url) => {
     // the Host's origin (compared as parsed URLs, not a prefix) and our own pages from disk
