@@ -13,7 +13,7 @@ import { useLive } from './live.ts'
 /** The Telegram bot the code is sent to. */
 const TELEGRAM_BOT = 'https://t.me/nanolika_bot'
 /** The MAX bot. The address is a guess until the bot is published: fix this one line. */
-const MAX_BOT = 'https://max.ru/nanolika_bot'
+const MAX_BOT = 'https://max.ru/id420517592685_bot'
 
 /** `25.10`: the day and the month a messenger was linked, in the person's own numbers. */
 function dayMonth(at: number): string {
