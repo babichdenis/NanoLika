@@ -18,8 +18,8 @@
     "prepare-node": "node scripts/prepare-node.mjs",
     "start": "tsc -p tsconfig.json && electron .",
     "smoke": "node scripts/smoke.mjs",
-    "dist": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --publish never",
-    "dist:dir": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --dir",
+    "dist": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/prepare-dsh.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "node scripts/patch-file-type.mjs && node scripts/prepare-plugin.mjs && tsc -p tsconfig.json && node scripts/prepare-node.mjs && node scripts/prepare-dsh.mjs && node scripts/patch-dsh.mjs && electron-builder --config electron-builder.yml --dir",
     "check:update-feed": "node scripts/update-feed-check.mjs"
   },
   "devDependencies": {
