@@ -10,6 +10,9 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+- **One rule for a conversation's cloud on the desktop.** The main chat is the account's own conversation and always stays in the cloud, with no switch able to take it out. A chat that came from another device or from Telegram or MAX cannot be made local: it can only be deleted from the cloud whole, confirmed first, and the copy on this computer stays as a local chat. A chat made here stays local until the person puts a cloud on it and can take it off again. The host now answers with the reason a switch was refused (`main`, `synced-from-cloud`, `not-synced-account`) instead of pretending it worked, and a chat started in a messenger reaches the cloud by itself, with no switch pressed. `docs/cloud.md` says how it works.
+- **桌面端的对话云端状态只有一条规则。** 主聊天是账号自己的对话，始终在云端，任何开关都无法将其移出。从其他设备或 Telegram、MAX 传来的对话不能改为本地对话：只能先确认再从云端整体删除，本机副本保留为本地对话。在本机创建的对话默认留在本机，可以放上云端，也可以再次移出。开关被拒绝时，主机不再假装成功，而是返回原因（`main`、`synced-from-cloud`、`not-synced-account`）；在信使中开始的对话无需任何开关即可进入云端。`docs/cloud.md` 说明了这一行为。
+
 - **A cloud on every conversation in the browser client.** Each row of the chat list now says whether nanoLika Cloud keeps that conversation or the copy lives only in this browser, and the row's cloud action takes a conversation of this browser off the cloud, keeping this copy, or puts it back under a new conversation id. A conversation that came from another device or a messenger cannot be made local: its action deletes it from the cloud for good, after the same confirmation as a plain delete, and a refused request is reported in the notice line. `docs/web-client.md` says how it works.
 - **浏览器客户端为每条对话标明云端状态。** 对话列表的每一行都说明该对话由 nanoLika Cloud 保存，还是只保存在本机；行内的云端操作可以把本机创建的对话移出云端并保留本机副本，也可以用新的对话 id 放回云端。从其他设备或信使传来的对话不能改为本地对话，对其只能从云端彻底删除，确认方式与普通删除相同；请求被拒绝时在通知栏提示。`docs/web-client.md` 说明了这一行为。
 

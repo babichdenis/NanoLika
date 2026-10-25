@@ -42,6 +42,18 @@
  * for A (the relay's rows, the kept turns, presence), keeping A's mapping so switching back
  * works. Signed out, everything local is shown and nothing moves.
  *
+ * **Whose cloud** (C11). A chat is in the cloud exactly when it has a conversation in the account,
+ * and the three cases differ in who may change that. The main chat *is* the account's own
+ * conversation: always in the cloud, never taken out (`setSynced` answers `main`). A chat that came
+ * by sync, whether from another device, from a messenger or from an account that already held it,
+ * lives in the cloud: it cannot be made local (`synced-from-cloud`), only deleted from the account
+ * whole (`deleteConversation`, which the browser half confirms first), the copy here staying on as a
+ * local chat. A chat created here is local until the person puts a cloud on it, and can be taken out
+ * again; taking it out deletes its conversation on the relay, since the messengers and the browser
+ * see only what the relay holds, and leaves the copy here. `clouds` says which of the three a
+ * session is, `applyConversation` marks what arrives, and `local` sticks against the older
+ * device-wide "Also sync side chats" switch.
+ *
  * Never a key in a log, never a file: attachments travel as names and sizes.
  */
 import { randomUUID } from 'node:crypto'
@@ -462,6 +474,23 @@ export interface KnownConversation {
   updatedAt: number
 }
 
+/**
+ * Where a chat's cloud stands (C11). `device`: the person turned the cloud on here. `sync`: the chat
+ * arrived by sync, so it lives in the account and may only be deleted from it. `local`: the person
+ * took the cloud off here, and the older "Also sync side chats" switch does not put it back. A
+ * session with no entry is local.
+ */
+export type CloudMark = 'device' | 'sync' | 'local'
+
+/** Why a cloud switch or a delete was refused (C11), the browser half's sentence to the person. */
+export type CloudRefusal = 'main' | 'synced-from-cloud' | 'not-synced-account' | 'unknown-session'
+
+/** The answer to a cloud switch or to deleting a chat from the account (C11): the whole view, and whether it was done. */
+export interface SyncedOutcome extends SyncView {
+  ok: boolean
+  reason?: CloudRefusal
+}
+
 export interface SyncState {
   messageCursors?: Record<string, number>
   /** The last signed-in account (`/v1/me` → `account.id`, opaque); kept through a sign-out so a change is known (C10). */
@@ -472,8 +501,8 @@ export interface SyncState {
   mainSession: string
   /** "Also sync side chats" (C9), per device, off by default: off → only the main conversation goes up and comes down. */
   sideChats: boolean
-  /** 0.29: side sessions the person put a cloud on, synced one by one (the main chat is always synced; this is the per-chat switch). */
-  synced: Record<string, boolean>
+  /** The cloud on each chat (C11), where it stands per session; absent = local. */
+  clouds: Record<string, CloudMark>
   /** dsh session id → conversation id. */
   cids: Record<string, string>
   /** dsh session id → the account it was first pushed to or pulled from (C10); absent = never synced. */
@@ -495,7 +524,7 @@ export interface SyncState {
 }
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, enabled: true, mainSession: '', sideChats: false, synced: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
+  return { accountId: '', cursor: 0, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
 }
 
 /**
@@ -504,10 +533,23 @@ export function emptyState(): SyncState {
  * pushed stay, so nothing goes up twice, and our own rows coming back are known by device.
  * A 0.1.38 state (no `owners`) gives every mapped session to the account it was synced with
  * (C10): a mapping exists only because the session was pushed to or pulled from that account.
+ * A 0.29 state kept the per-chat switch as `synced` (session id → on): a chat whose cloud the
+ * person turned on there is `device`, and a chat with a conversation but no switch is `sync`,
+ * since a conversation in the account is a chat in the cloud (C11).
  */
 export function migrate(state: SyncState | undefined): SyncState {
   if (!state) return emptyState()
-  const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, synced: { ...(state.synced ?? {}) }, owners: { ...(state.owners ?? {}) } }
+  const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, clouds: { ...(state.clouds ?? {}) }, owners: { ...(state.owners ?? {}) } }
+  // 0.29's `synced` map under this state's own key, dropped once it has been read
+  const legacy = (next as unknown as { synced?: Record<string, boolean> }).synced
+  if (legacy && typeof legacy === 'object') {
+    for (const [sessionId, on] of Object.entries(legacy)) if (on === true && next.clouds[sessionId] === undefined) next.clouds[sessionId] = 'device'
+    delete (next as unknown as { synced?: unknown }).synced
+  }
+  for (const [sessionId, cid] of Object.entries(next.cids)) {
+    if (sessionId === next.mainSession || next.clouds[sessionId] !== undefined) continue
+    if (next.conversations[cid]) next.clouds[sessionId] = 'sync'
+  }
   if ('mirrors' in next || !state.conversations) {
     delete next.mirrors
     next.cursor = 0
@@ -560,8 +602,11 @@ export interface SyncView {
   enabled: boolean
   /** "Also sync side chats" (C9), this device's setting. */
   sideChats: boolean
-  /** 0.29: side sessions the person synced individually (a cloud on the chat); main is always synced. */
-  synced: Record<string, boolean>
+  /**
+   * 0.29: the sessions whose cloud the person turned on here (C11). A chat that came from the cloud
+   * is not in this list but in `sessions`; the main chat is in the cloud whether it is listed or not.
+   */
+  synced: string[]
   available: boolean
   paused: boolean
   cursor: number
@@ -652,7 +697,10 @@ export class SyncEngine {
 
 
   constructor(private readonly options: SyncEngineOptions) {
-    this.state = migrate(options.load())
+    const loaded = options.load()
+    this.state = migrate(loaded)
+    // a state from before the per-chat cloud (C11): what is in the account already keeps its cloud
+    if (loaded && !('clouds' in loaded)) this.reconcileClouds()
     for (const [cid, seq] of Object.entries(this.state.messageCursors ?? {})) if (Number.isSafeInteger(seq) && seq >= 0) this.messageCursors.set(cid, seq)
   }
 
@@ -671,7 +719,7 @@ export class SyncEngine {
       catalogue: this.catalogSupported === true,
       unread: Object.fromEntries([...this.unread].map(([cid, count]) => [this.sessionOf(cid) ?? cid, count])),
       sideChats: this.state.sideChats,
-      synced: { ...this.state.synced },
+      synced: Object.entries(this.state.clouds).filter(([, mark]) => mark === 'device').map(([sid]) => sid),
       available: !this.paused && Boolean(this.state.accountId),
       paused: this.paused,
       cursor: this.state.cursor,
@@ -795,6 +843,9 @@ export class SyncEngine {
     if (!this.owns(sessionId)) return current
     if (current && this.holdsMain(current)) return current
     this.state.mainSession = sessionId
+    // the chat that was the main one keeps its conversation, so it stays in the cloud as a side
+    // chat from here on, never silently dropped out of it (C11)
+    if (current && current !== sessionId) this.noteCloud(current, '')
     const mainCid = this.mainCid()
     if (mainCid && !this.state.cids[sessionId]) {
       this.state.cids[sessionId] = mainCid
@@ -872,43 +923,84 @@ export class SyncEngine {
   }
 
   /**
-   * 0.29: put a cloud on one side chat (or take it off). On → the chat goes up after a
-   * fresh pull of the account's side turns and keeps syncing; off → it stops going up and
-   * coming down, what was synced stays where it is. The main chat ignores this: it is
-   * always synced.
+   * 0.29/0.30: put a cloud on one chat, or take it off (C11). On: the chat goes up after a fresh
+   * pull of the account's side turns and keeps syncing. Off: its conversation leaves the account
+   * (the relay deletes it, so the messengers and the browser stop showing the chat), what was said
+   * here stays as a local chat. Two chats answer `{ok: false, reason}` instead of pretending: the
+   * main chat, which is the account's own conversation and always in the cloud, and one that came
+   * by sync, which may only be deleted from the account whole (`deleteConversation`). A person
+   * signed out, or with the sync switched off, gets `not-synced-account`.
    */
-  async setSynced(sessionId: string, on: boolean): Promise<SyncView> {
-    const next = { ...this.state.synced }
-    if (on) next[sessionId] = true
-    else delete next[sessionId]
-    this.state.synced = next
-
-    if (!on) {
-      // Снятие облачка: беседа уходит с сервера — и потому из Телеграма, MAX и веба,
-      // которые видят только серверное. Локальная копия остаётся здесь и с этого
-      // момента только читается. Главный чат облачко не теряет.
-      const cid = this.state.cids[sessionId]
-      if (cid && sessionId !== this.state.mainSession) {
-        try {
-          const token = await this.options.token()
-          if (token) await this.options.relay.deleteConversation(token, cid, this.options.deviceId())
-        } catch {
-          // сервер мог быть недоступен — локально облачко всё равно снимаем
-        }
-        delete this.state.cids[sessionId]
-        delete this.state.owners[sessionId]
-        delete this.state.titles[sessionId]
-        delete this.state.conversations[cid]
-        for (const mid of Object.keys(this.state.pulled)) {
-          if (this.state.pulled[mid] === sessionId) delete this.state.pulled[mid]
-        }
-      }
-    }
-
+  async setSynced(sessionId: string, on: boolean): Promise<SyncedOutcome> {
+    const refusal = this.cloudRefusal(sessionId)
+    if (refusal) return { ...this.view(), ok: false, reason: refusal }
+    if (on) this.state.clouds[sessionId] = 'device'
+    else await this.cloudOff(sessionId)
     await this.save()
     if (on) void this.pullTail().then(() => this.pushAllSoon())
     this.changed()
-    return this.view()
+    return { ...this.view(), ok: true }
+  }
+
+  /**
+   * Take a chat out of the account for good (C11): a conversation that came by sync cannot be made
+   * local, only deleted from it. The relay's copy is tombstoned, so the chat is gone from the other
+   * devices and from the messengers, and the copy here stays as a local chat. The main chat cannot
+   * go (the account keeps its one main conversation), and a chat that is local already has nothing
+   * to delete and answers `ok`.
+   */
+  async deleteConversation(sessionId: string): Promise<SyncedOutcome> {
+    if (!sessionId) return { ...this.view(), ok: false, reason: 'unknown-session' }
+    if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return { ...this.view(), ok: false, reason: 'main' }
+    if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return { ...this.view(), ok: false, reason: 'not-synced-account' }
+    await this.cloudOff(sessionId)
+    await this.save()
+    this.changed()
+    return { ...this.view(), ok: true }
+  }
+
+  /**
+   * Why this chat's cloud is not the person's to change here (C11), or nothing when it is. Both the
+   * switch and the delete ask this: the main chat first, then whether anything may sync at all on
+   * this computer, then the chat that came from the cloud.
+   */
+  private cloudRefusal(sessionId: string): CloudRefusal | undefined {
+    if (!sessionId) return 'unknown-session'
+    if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return 'main'
+    if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return 'not-synced-account'
+    if (this.state.clouds[sessionId] === 'sync') return 'synced-from-cloud'
+    const cid = this.state.cids[sessionId]
+    const known = cid ? this.state.conversations[cid] : undefined
+    // a conversation whose mark was never written (a state from before C11): the account holds the
+    // chat and another device or a messenger made it, so it may not be made local silently
+    if (known && known.device && known.device !== this.options.deviceId()) return 'synced-from-cloud'
+    return undefined
+  }
+
+  /**
+   * The cloud comes off a chat (C11): its conversation is deleted in the account, since the other
+   * devices and the messengers see only what the relay holds, and the mark reads `local` so that a
+   * later turn here does not put it back up. The chat itself stays, with everything said in it.
+   */
+  private async cloudOff(sessionId: string): Promise<void> {
+    const cid = this.state.cids[sessionId]
+    if (cid && sessionId !== this.state.mainSession) {
+      try {
+        const token = await this.options.token()
+        if (token) await this.options.relay.deleteConversation(token, cid, this.options.deviceId())
+      } catch {
+        // the account could not be reached: the chat is local here all the same
+      }
+      delete this.state.cids[sessionId]
+      delete this.state.owners[sessionId]
+      delete this.state.titles[sessionId]
+      delete this.state.conversations[cid]
+      for (const mid of Object.keys(this.state.pulled)) {
+        if (this.state.pulled[mid] === sessionId) delete this.state.pulled[mid]
+      }
+    }
+    this.state.clouds[sessionId] = 'local'
+    this.dirty.delete(sessionId)
   }
 
   async relayStatus(): Promise<SyncRelayState | null> {
@@ -976,7 +1068,7 @@ export class SyncEngine {
     if (cid) void this.options.relay.working(token, this.options.deviceId(), cid, working).catch(() => undefined)
   }
 
-  /** "Delete synced conversations": the relay's store emptied; what it knew is forgotten here, the sessions stay. */
+  /** "Delete synced conversations": the relay's store emptied; what it knew is forgotten here, the sessions stay, and every chat that was in the cloud reads as local (C11). */
   async deleteRemote(): Promise<SyncView> {
     const token = await this.options.token()
     if (token) {
@@ -986,6 +1078,7 @@ export class SyncEngine {
     this.state.conversations = {}
     this.state.mids = {}
     this.state.titles = {}
+    this.state.clouds = {}
     await this.save()
     this.changed()
     return this.view()
@@ -1008,12 +1101,21 @@ export class SyncEngine {
     return Object.values(this.state.pulled).includes(sessionId)
   }
 
-  /** Whether a session's turns go up: another device's task (its answers already travel as the task's result, so only the person's own words go up from it), not another account's (C10), and a side chat only when the switch is on (C9). */
+  /**
+   * Whether a session's turns go up (C11): the main chat always; another device's task too (its
+   * answers already travel as the task's result, so only the person's own words go up from it); a
+   * chat whose cloud the person turned on here, or one that came from the cloud; and with the older
+   * device-wide "Also sync side chats" switch on, every chat of this device except the one whose
+   * cloud the person took off. Another account's chat never (C10).
+   */
   private syncs(sessionId: string): boolean {
-    const task = this.options.isTaskSession?.(sessionId) === true
     if (!this.owns(sessionId)) return false
-    if (task) return true
-    return this.catalogSupported === true || this.state.sideChats || this.state.synced[sessionId] === true || sessionId === this.state.mainSession
+    if (this.options.isTaskSession?.(sessionId) === true) return true
+    if (sessionId === this.state.mainSession) return true
+    const mark = this.state.clouds[sessionId]
+    if (mark === 'device' || mark === 'sync') return true
+    if (mark === 'local') return false
+    return this.state.sideChats
   }
 
   /** A turn ended in a session here: the model's final text goes up after the debounce. A task session's answer does not: the device that asked already has it as the call's result. */
@@ -1299,7 +1401,7 @@ export class SyncEngine {
     let applied = 0
     // what the other devices added to conversations living in sessions here: context for the model, per session
     const notes = new Map<string, RemoteLine[]>()
-    const scope = this.state.sideChats || Object.keys(this.state.synced).some((id) => this.state.synced[id] === true && id !== this.state.mainSession) ? 'all' : 'main'
+    const scope = this.state.sideChats || Object.entries(this.state.clouds).some(([sid, mark]) => mark !== 'local' && sid !== this.state.mainSession) ? 'all' : 'main'
     for (let page = 0; page < 50; page++) {
       // the first pull after sign-in asks for the newest 300 of the scope (C9): the chat shows before the history
       const since = tail ? 0 : this.state.cursor
@@ -1338,6 +1440,8 @@ export class SyncEngine {
         // the harness has no delete: the session stops syncing under that id, and the chats column archives it
         delete this.state.cids[sessionId]
         delete this.state.titles[sessionId]
+        // the chat is gone from the account, so what stays here is a local chat (C11)
+        delete this.state.clouds[sessionId]
         if (sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
       }
       return
@@ -1380,12 +1484,44 @@ export class SyncEngine {
         this.state.titles[sessionId] = title
         if (c.kind === 'main') this.state.mainSession = sessionId
       }
+      this.noteCloud(sessionId, c.device)
       return
     }
     if (c.title && known && known.title !== c.title && this.state.titles[sessionId] !== c.title) {
       // renamed elsewhere: renamed here, and not pushed back
       this.state.titles[sessionId] = c.title
       await this.options.sessions.rename(sessionId, c.title).catch(() => undefined)
+    }
+    this.noteCloud(sessionId, c.device)
+  }
+
+  /**
+   * A conversation that arrives is a chat in the cloud here too (C11), whether another device, a
+   * messenger or the account itself made it: its turns go up from now on without the person doing
+   * anything, and it cannot be turned local, only deleted from the account. Two exceptions: the main
+   * chat, in the cloud whatever this says, and a conversation this device pushed itself, which came
+   * up because the person turned the cloud on or used the older "Also sync side chats" switch.
+   */
+  private noteCloud(sessionId: string, from: string): void {
+    if (!sessionId || sessionId === this.state.mainSession) return
+    const mark = this.state.clouds[sessionId]
+    if (mark === 'device' || mark === 'sync') return
+    if (from && from === this.options.deviceId()) return
+    this.state.clouds[sessionId] = 'sync'
+  }
+
+  /**
+   * A state from before C11 (no `clouds`) marks the chats that are already in the account by who made
+   * their conversation: another device's, a messenger's or the account's own reads `sync`, and this
+   * device's own pushed one is the person's own cloud, `device`. Nothing that was in the cloud stops
+   * being in it because of this change.
+   */
+  private reconcileClouds(): void {
+    for (const [sessionId, cid] of Object.entries(this.state.cids)) {
+      if (sessionId === this.state.mainSession || this.state.clouds[sessionId] !== undefined) continue
+      const known = this.state.conversations[cid]
+      if (!known) continue
+      this.state.clouds[sessionId] = known.device && known.device !== this.options.deviceId() ? 'sync' : 'device'
     }
   }
 

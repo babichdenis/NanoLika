@@ -241,6 +241,30 @@ device is answering, the others show *kwai is working…* under the last message
 a `working` note that goes through the relay's memory and the hub, is never
 stored, and dies after ten minutes if the device never says it is done.
 
+**Whose cloud** (desktop 0.30). A chat is in the cloud exactly when the account
+holds a conversation for it, and three cases differ in who may change that. The
+main chat *is* the account's one main conversation: always in the cloud, and no
+switch takes it out (the desktop answers `main`). A chat that came by sync, from
+another device, from a Telegram or MAX messenger, or from an account that already
+held it, lives in the cloud and cannot be made local (`synced-from-cloud`): the
+only way out is deleting it from the account whole (`DELETE
+/v1/sync/conversations/{cid}`, confirmed in the interface), which tombstones the
+conversation for every device and every messenger and leaves this device's copy
+behind as a local chat. A chat made on this device is local until the person puts
+a cloud on it, and taking that cloud off deletes its conversation on the relay,
+since the messengers and the browser see only what the relay holds, and keeps the
+copy here. Where the relay serves the chat catalogue (`GET /v1/sync/catalog`),
+every conversation of the account is a chat on the device from the moment it is
+listed, with its cloud already on, so a chat started in a messenger is here and
+continues with no switch pressed; on a relay without the catalogue the older
+device-wide *Also sync side chats* switch still decides for chats that have no
+cloud of their own. Signed out, or with the sync switch off, nothing may be put in
+the cloud or taken out (`not-synced-account`), and a session the device does not
+know is `unknown-session`. The desktop's own routes, all under
+`nanomuse/cloud/`, carry the answer to the interface: `POST /sync/synced
+{sessionId, on}` and `POST /sync/delete-conversation {sessionId}` both return the
+sync view with `ok`, and with `reason` when the request was refused.
+
 The relay keeps at most 20 000 messages per account (the oldest conversations'
 messages go first, their titles stay), 2 000 live side conversations (relay
 0.23: a new one past that is refused with `conversation_limit` and stays on

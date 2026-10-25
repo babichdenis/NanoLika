@@ -3691,9 +3691,19 @@ export default class NanomuseCloud extends Service {
           return send(res, 200, { sessionId: await sync.setMain(String(body.sessionId ?? '')) })
         }
         if (req.method === 'POST' && route === '/sync/synced') {
-          // 0.29: the cloud on one chat — sync this session alone (the main chat is always synced)
+          // 0.29/0.30: the cloud on one chat (C11). The answer is the whole view plus `ok`, and when
+          // the switch is not the person's to use here, `reason` (`main`, `synced-from-cloud`,
+          // `not-synced-account`, `unknown-session`) — the browser half says it instead of a toggle
+          // that does nothing.
           const body = await json(req)
           return send(res, 200, await sync.setSynced(String(body.sessionId ?? ''), body.on === true))
+        }
+        if (req.method === 'POST' && route === '/sync/delete-conversation') {
+          // C11: a chat that came from the cloud cannot be made local, only deleted from the account
+          // whole. The relay tombstones its conversation (it leaves the other devices and the
+          // messengers), the chat here stays as a local one. The browser half asks first.
+          const body = await json(req)
+          return send(res, 200, await sync.deleteConversation(String(body.sessionId ?? '')))
         }
         if (req.method === 'GET' && route === '/sync/remote') {
           const sessionId = url.searchParams.get('session') ?? ''
