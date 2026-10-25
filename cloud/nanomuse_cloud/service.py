@@ -1214,12 +1214,23 @@ class Cloud:
                 "This chat already has an account of its own; two accounts are not merged here",
             )
         written = (code or "").strip().upper()
+        # Дверь считает попытки этого чата до того, как спросить про код: шесть символов
+        # ничего не стоят, если ответ бесплатный. После предела чат слышит `link_limited`
+        # на что угодно, чтобы верный код и неверный выглядели одинаково.
+        ident_hash = ident.hash(self.s.hmac_key)
+        if not self.db.admit_link_attempt(ident_hash, self.link_attack_window_s(), self.s.link_max_attempts):
+            raise CloudError(
+                429,
+                "link_limited",
+                "Too many codes tried from this chat; wait a few minutes and make a new code in the app",
+            )
         row = self.db.spend_link_code(_code_hash(self.s.hmac_key, written)) if written else None
         if row is None:
             raise CloudError(400, "link_wrong", "That code is wrong, already used, or has lapsed; make a new one in the app")
         account = self.db.account(str(row["account_id"]))
         if account is None or account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
+        self.db.clear_link_attempts(ident_hash)
         shown = _channel_identifier(identifier)
         if not self.db.add_alias(
             ident.hash(self.s.hmac_key), str(account["id"]), ident.channel, ident.hint, surface=surface, identifier=shown
@@ -1401,6 +1412,11 @@ class Cloud:
             "open_from_rub": min((row["price_rub"] for row in self.plan_menu() if row["connect"]), default=0.0),
         }
 
+    def link_attack_window_s(self) -> int:
+        """Сколько считаются попытки одного чата или адреса: жизнь самого долгого кода,
+        чтобы окно не пережило код, который оно защищает."""
+        return max(CHANNEL_CODE_TTL_S, int(self.s.link_code_ttl_s))
+
     def connect_allowed(self, account_id: str) -> bool:
         return bool(self.connect_state(account_id)["allowed"])
 
@@ -1420,12 +1436,20 @@ class Cloud:
                 "link_taken",
                 "That address already has an account of its own; a chat's code links a new one",
             )
+        ident_hash = ident.hash(self.s.hmac_key)
+        if not self.db.admit_link_attempt(ident_hash, self.link_attack_window_s(), self.s.link_max_attempts):
+            raise CloudError(
+                429,
+                "link_limited",
+                "Too many link codes tried from this address; wait a few minutes and ask the chat for a new one",
+            )
         row = self.db.spend_link_code(_code_hash(self.s.hmac_key, code))
         if row is None:
             raise CloudError(400, "link_wrong", "That link code is wrong, already used, or has lapsed; ask the chat for a new one")
         account = self.db.account(str(row["account_id"]))
         if account is None or account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
+        self.db.clear_link_attempts(ident_hash)
         if not self.db.add_alias(ident.hash(self.s.hmac_key), str(account["id"]), ident.channel, ident.hint):
             raise CloudError(409, "link_taken", "That address already has an account of its own")
         key, caller = self._issue_key(str(account["id"]), device, via="link")

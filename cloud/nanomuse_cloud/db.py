@@ -335,6 +335,14 @@ CREATE TABLE IF NOT EXISTS link_codes (
     expires_at    INTEGER NOT NULL,
     used_at       INTEGER
 );
+-- Попытки ввести код привязки: у чата или у адреса есть окно, и после предела дверь
+-- отказывает всем подряд, верный код или нет. Хранится хеш того, кто пробовал, — не текст
+-- догадки и не то, что она открыла.
+CREATE TABLE IF NOT EXISTS link_attempts (
+    ident_hash    TEXT NOT NULL,
+    ts            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS link_attempts_ident_ts ON link_attempts(ident_hash, ts);
 """
 
 # How long a deleted account's key hashes are remembered. Long enough for every device of the
@@ -1001,6 +1009,28 @@ class Database:
                 "INSERT INTO link_codes (code_hash, account_id, created_at, expires_at) VALUES (?,?,?,?)",
                 (code_hash, account_id, ts, ts + ttl_s),
             )
+
+    def admit_link_attempt(self, ident_hash: str, window_s: int, max_attempts: int) -> bool:
+        """Считать эту попытку и сказать, разрешена ли она.
+
+        Провалы окна считаются и новая попытка вставляется в одной транзакции, поэтому
+        две догадки, пришедшие на последнее свободное место, не проходят обе. Предел 0
+        или меньше выключает счёт, как и остальные лимиты здесь."""
+        ts = now()
+        since = ts - max(0, int(window_s))
+        with self.tx() as c:
+            c.execute("DELETE FROM link_attempts WHERE ts < ?", (since,))
+            if max_attempts > 0:
+                counted = c.execute("SELECT COUNT(*) FROM link_attempts WHERE ident_hash=? AND ts>=?", (ident_hash, since)).fetchone()
+                if int(counted[0]) >= max_attempts:
+                    return False
+            c.execute("INSERT INTO link_attempts(ident_hash, ts) VALUES (?,?)", (ident_hash, ts))
+        return True
+
+    def clear_link_attempts(self, ident_hash: str) -> None:
+        """Код подошёл: окно чата начинается заново, старые описки ему не в счёт."""
+        with self.tx() as c:
+            c.execute("DELETE FROM link_attempts WHERE ident_hash=?", (ident_hash,))
 
     def spend_link_code(self, code_hash: str) -> sqlite3.Row | None:
         """The account a link code was made for, once. A second use, or one past its

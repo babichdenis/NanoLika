@@ -782,6 +782,10 @@ class Settings:
     # makes it (`POST /v1/bot/link-code`), the app types it beside its own sign-in code, and
     # both then are one account. 0 = linking switched off.
     link_code_ttl_s: int = field(default_factory=lambda: _int("LINK_CODE_TTL_S", 900))
+    # Сколько кодов привязки один чат (или один адрес на двери приложения) может попробовать
+    # за жизнь кода: шесть символов без похожих букв — это немного, если ответ бесплатный,
+    # а бот, передающий чужие догадки, не должен быть оракулом «какой код подошёл». 0 = выкл.
+    link_max_attempts: int = field(default_factory=lambda: _int("LINK_MAX_ATTEMPTS", 10))
     # What the relay's own connection between a person's devices costs: the devices meet
     # through the hub only when what they have topped up in all, at any time, adds up to this
     # many rubles (parts count). Below it every device works on its own, with its own chats,

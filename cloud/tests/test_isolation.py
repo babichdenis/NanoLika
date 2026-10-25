@@ -432,13 +432,6 @@ async def test_a_sign_in_code_takes_a_few_wrong_tries_and_no_more():
     await client.aclose()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "ждёт счётчик попыток на коде привязки: POST /v1/bot/link сейчас принимает неверный код сколько угодно раз "
-        "(60 подряд в проверке) и после них отдаёт рабочий код: подбор шести знаков ничем не ограничен"
-    ),
-    strict=False,
-)
 async def test_a_link_code_takes_a_few_wrong_tries_and_no_more(monkeypatch):
     """The six characters a chat types are counted per chat: past the count the door answers
     `429 link_limited` to everything, a right code included, so a bot relaying a stranger's
@@ -479,13 +472,6 @@ async def test_a_link_code_takes_a_few_wrong_tries_and_no_more(monkeypatch):
     await client.aclose()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "то же на втором входе: /v1/auth/verify с link= расходует коды привязки без счёта попыток, "
-        "так что свой ящик даёт бесплатные догадки"
-    ),
-    strict=False,
-)
 async def test_the_apps_door_counts_its_link_tries_too():
     """The other end of the same six characters: an address typing link codes beside its own
     sign-in code is counted as well, so a mailbox one owns is not a free oracle."""
