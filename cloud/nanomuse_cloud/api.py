@@ -128,8 +128,8 @@ from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
-from .provider_order import provider_order
 from .provider_prices import install_provider_prices
+from .provider_routing import ProviderRouter, identity, request_chat
 from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
 from .stats import Stats, api_group
 from .sync import DEFAULT_PAGE, SyncStore
@@ -365,66 +365,33 @@ def create_app(
             except Exception:
                 log.exception("settle_video_tasks")
 
-    def _chat_chain(settings: Settings, spec: ModelSpec, url: str, headers: dict) -> list[tuple[str, dict, str]]:
-        """Where to ask for this model, cheapest first.
-
-        The first place is the one the menu named, so a relay whose price table is silent
-        behaves exactly as before. The rest come from the providers table: every company
-        that sells this same model, ordered by today's price. Each entry is
-        `(url, headers, provider name)`, with "" for the relay's own upstream.
-        """
-        known = [""] + list(settings.providers)
-        order = provider_order(spec.upstream, known)
-        chain: list[tuple[str, dict, str]] = []
-        own = (url, headers, "")
-        if spec.provider:
-            for name in order:
-                if name == spec.provider:
-                    chain.append((url, headers, name))
-                    break
-        else:
-            chain.append(own)
-        for name in order:
-            if name == spec.provider or name == "":
-                continue
-            provider_spec = settings.providers.get(name)
-            if provider_spec is None:
-                continue
-            chain.append(
-                (
-                    provider_spec.base.rstrip("/") + "/v1/chat/completions",
-                    {"Authorization": f"Bearer {provider_spec.key()}", "Content-Type": "application/json"},
-                    name,
-                )
-            )
-        # свою полку не подменяем: если модель идёт в наш апстрим, он остаётся последним
-        if spec.provider and "" in settings.providers:
-            chain.append(own)
-        return chain or [own]
+    router = ProviderRouter(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         geo.ensure()
         if settings.github_collect:
             collector.start()
+        await router.refresh(http)
+        routing_task = asyncio.create_task(router.run(http), name="provider-prices")
         rules_task = asyncio.create_task(_rules_loop(), name="control-rules")
         video_task = asyncio.create_task(_video_loop(), name="video-settle")
         try:
             yield
         finally:
+            routing_task.cancel()
             rules_task.cancel()
             video_task.cancel()
             # waited for, so neither cancellation lands after the database is closed
-            await asyncio.gather(rules_task, video_task, return_exceptions=True)
+            await asyncio.gather(routing_task, rules_task, video_task, return_exceptions=True)
             await collector.stop()
             await http.aclose()
-
-
 
     app = FastAPI(title="NanoLika Cloud", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.cloud = cloud
     app.state.settings = settings
     app.state.http = http
+    app.state.provider_router = router
     app.state.geo = geo
     app.state.collector = collector
 
@@ -718,7 +685,7 @@ def create_app(
         try:
             from .menu_admin import _load_selection
 
-            rows = (_load_selection(settings).get("models") or {})
+            rows = _load_selection(settings).get("models") or {}
         except Exception:
             return set(), False
         on = {name for name, row in rows.items() if isinstance(row, dict) and row.get("on")}
@@ -749,6 +716,22 @@ def create_app(
                 if "count" in catalogue:
                     catalogue["count"] = len(kept)
         return catalogue
+
+    @app.get("/v1/auth/site-bridge", include_in_schema=False)
+    async def site_account_bridge() -> Response:
+        # This tiny bridge alone may be embedded by our public site. App pages remain unframeable.
+        from fastapi.responses import HTMLResponse
+
+        return HTMLResponse(
+            '<!doctype html><html><head><meta charset="utf-8"><title>nanoLika account</title></head>'
+            '<body><script src="/web/site-account-bridge.js?v=20261025-account"></script></body></html>',
+            headers={
+                "Cache-Control": "no-store",
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; script-src 'self'; connect-src 'self'; frame-ancestors https://nanolika.ru https://www.nanolika.ru https://cloud.nanolika.ru; base-uri 'none'; form-action 'none'",
+            },
+        )
 
     @app.get("/v1/me")
     async def me(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
@@ -1038,9 +1021,7 @@ def create_app(
         }
 
     @app.patch("/v1/sync/conversations/{cid}", dependencies=[Depends(sync_dep)])
-    async def sync_rename_conversation(
-        cid: str, request: Request, caller: Caller = Depends(caller_dep)
-    ) -> dict:
+    async def sync_rename_conversation(cid: str, request: Request, caller: Caller = Depends(caller_dep)) -> dict:
         """Rename one conversation. The title travels as a conversation push, which every
         device already applies, so no new sync frame is invented for it."""
         body = await _json(request)
@@ -1078,9 +1059,14 @@ def create_app(
             return out
         entries = await catalog.get(app.state.http, settings.upstream_base, settings.upstream_key)
         menu = {m["id"] for m in out["data"]}
+        hidden = {
+            identity(name)
+            for spec in settings.models if not cloud.model_visible(spec)
+            for name in (spec.id, spec.upstream)
+        }
         added = 0
         for e in entries:
-            if e.id in menu:
+            if e.id in menu or identity(e.id) in hidden:
                 continue
             spec = settings.unlisted_model(e.id, e.kind)
             if spec is None:
@@ -1226,7 +1212,7 @@ def create_app(
         # providers table knows who is cheaper today. The chain puts that one first; the
         # model's own provider stays the fallback, so a refusal or an outage costs a retry
         # rather than a turn.
-        chain = _chat_chain(settings, spec, url, headers)
+        chain = router.routes(spec, body, url, headers)
         fallback_prompt_tokens = math.ceil(prompt_chars(body.get("messages") or []) / 3)
         # For an account that opted in, the turn is kept once it is answered (service.keep_sample)
         # with the platform and language hints from the headers and, since 0.10, the address
@@ -1245,30 +1231,11 @@ def create_app(
 
         if not stream:
             try:
-                r = None
-                last_error: Exception | None = None
-                attempts = list(chain)
-                for index, (attempt_url, attempt_headers, attempt_provider) in enumerate(attempts):
-                    try:
-                        r = await http.post(attempt_url, headers=attempt_headers, content=dumps(body).encode())
-                    except httpx.HTTPError as e:
-                        log.warning("upstream error via %s: %s", attempt_provider or "own", e)
-                        last_error = e
-                        r = None
-                        continue
-                    # a 5xx or a 429 speaks about the company, not the request: while another
-                    # company sells this same model, it is asked before the turn is lost
-                    if (r.status_code >= 500 or r.status_code == 429) and index + 1 < len(attempts):
-                        log.warning("provider %s answered %s, asking the next one", attempt_provider or "own", r.status_code)
-                        r = None
-                        continue
-                    break
-                # кто ответил: без этой строки «кто дешевле» проверить нечем
-                log.info("chat %s answered by %s in %s", spec.id, attempt_provider or "own", f"{r.elapsed.total_seconds():.2f}s")
-                if r is None:
-                    if last_error is not None:
-                        raise CloudError(502, "upstream", "The model provider did not answer") from last_error
-                    raise CloudError(502, "upstream", "No provider of this model is answering right now")
+                try:
+                    r, selected = await request_chat(http, chain, stream=False)
+                except httpx.HTTPError as e:
+                    raise CloudError(502, "upstream", "The model provider did not answer") from e
+                log.info("chat %s answered by %s", spec.id, selected.provider or "configured")
                 if r.status_code >= 400:
                     cloud.note(
                         caller.account_id,
@@ -1280,12 +1247,21 @@ def create_app(
                     obj = r.json()
                 except ValueError as e:
                     raise CloudError(502, "upstream", "The model provider sent an unreadable reply") from e
+                if not isinstance(obj, dict) or obj.get("error") or not obj.get("choices"):
+                    raise CloudError(502, "upstream", "The model provider sent no answer")
                 usage = usage_from_json(obj)
                 text = _reply_text(obj)
                 if usage is None:
                     usage = Usage(fallback_prompt_tokens, estimate_tokens(text))
-                charged = cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
-                record_metadata(cloud, caller.account_id, request_id, capture_metadata(r.headers, obj))
+                meta = capture_metadata(r.headers, obj, provider=selected.provider,
+                                        usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
+                meta = router.accounting(selected, meta, usage.prompt, usage.completion, usage.cached)
+                charged = cloud.charge_chat(
+                    caller, spec, usage.prompt, usage.completion, request_id,
+                    cached_tokens=usage.cached, provider_cost_rub=meta.get("provider_cost_rub"),
+                    routing_meta=meta,
+                )
+                record_metadata(cloud, caller.account_id, request_id, meta)
             finally:
                 cloud.settle(caller, request_id)
             if sample_meta is not None:
@@ -1306,59 +1282,66 @@ def create_app(
             # A request the provider refused, or dropped before a single token, costs the
             # account nothing; a stream that broke off midway is charged for what arrived.
             failed = False
+            r = None
+            selected = None
             try:
-                async with http.stream("POST", url, headers=headers, content=dumps(body).encode()) as r:
-                    accounting_meta.update(capture_metadata(r.headers))
-                    if r.status_code >= 400:
-                        raw = await r.aread()
-                        cloud.note(
-                            caller.account_id,
-                            upstream_event_kind(r.status_code, raw),
-                            upstream_detail("chat", r.status_code, spec.id, raw),
-                        )
-                        failed = True
-                        err = relay_error_body(r.status_code, raw)
-                        cloud.db.daily_add("error", str(err["error"]["code"]))  # the 200 has left; count it here
-                        yield f"data: {dumps(err)}\n\n".encode()
-                        yield b"data: [DONE]\n\n"
-                        return
-                    async for line in r.aiter_lines():
-                        if line.startswith("data:"):
-                            payload = line[5:].strip()
-                            if payload and payload != "[DONE]":
-                                try:
-                                    obj = json.loads(payload)
-                                except ValueError:
-                                    obj = None
-                                if isinstance(obj, dict):
-                                    accounting_meta.update(capture_metadata({}, obj))
-                                    u = usage_from_json(obj)
-                                    if u is not None:
-                                        usage = u
-                                    for ch in obj.get("choices") or []:
-                                        d = ch.get("delta") if isinstance(ch, dict) else None
-                                        if isinstance(d, dict):
-                                            # Count generated tool arguments and reasoning too, while keeping
-                                            # the training sample limited to the visible assistant's words.
-                                            for field in ("content", "reasoning_content", "tool_calls", "function_call"):
-                                                part = d.get(field)
-                                                if isinstance(part, str):
-                                                    metered = part
-                                                elif isinstance(part, (dict, list)) and part:
-                                                    metered = dumps(part)
-                                                else:
-                                                    continue
-                                                text_len += len(metered)
-                                                text_cjk += sum(1 for char in metered if "\u4e00" <= char <= "\u9fff")
-                                            if isinstance(d.get("content"), str):
-                                                reply.append(d["content"])
-                                    obj["model"] = spec.id
-                                    payload = dumps(obj)
-                            yield f"data: {payload}\n\n".encode()
-                        elif line == "":
-                            continue
-                        else:
-                            yield (line + "\n").encode()
+                r, selected = await request_chat(http, chain, stream=True)
+                accounting_meta.update(capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee))
+                if r.status_code >= 400:
+                    raw = await r.aread()
+                    cloud.note(
+                        caller.account_id,
+                        upstream_event_kind(r.status_code, raw),
+                        upstream_detail("chat", r.status_code, spec.id, raw),
+                    )
+                    failed = True
+                    err = relay_error_body(r.status_code, raw)
+                    cloud.db.daily_add("error", str(err["error"]["code"]))  # the 200 has left; count it here
+                    yield f"data: {dumps(err)}\n\n".encode()
+                    yield b"data: [DONE]\n\n"
+                    return
+                async for line in r.aiter_lines():
+                    if line.startswith("data:"):
+                        payload = line[5:].strip()
+                        if payload and payload != "[DONE]":
+                            try:
+                                obj = json.loads(payload)
+                            except ValueError:
+                                obj = None
+                            if isinstance(obj, dict):
+                                if obj.get("error"):
+                                    failed = usage is None and text_len == 0
+                                    yield f"data: {dumps(obj)}\n\n".encode()
+                                    yield b"data: [DONE]\n\n"
+                                    return
+                                accounting_meta.update(capture_metadata({}, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee))
+                                u = usage_from_json(obj)
+                                if u is not None:
+                                    usage = u
+                                for ch in obj.get("choices") or []:
+                                    d = ch.get("delta") if isinstance(ch, dict) else None
+                                    if isinstance(d, dict):
+                                        # Count generated tool arguments and reasoning too, while keeping
+                                        # the training sample limited to the visible assistant's words.
+                                        for field in ("content", "reasoning_content", "tool_calls", "function_call"):
+                                            part = d.get(field)
+                                            if isinstance(part, str):
+                                                metered = part
+                                            elif isinstance(part, (dict, list)) and part:
+                                                metered = dumps(part)
+                                            else:
+                                                continue
+                                            text_len += len(metered)
+                                            text_cjk += sum(1 for char in metered if "\u4e00" <= char <= "\u9fff")
+                                        if isinstance(d.get("content"), str):
+                                            reply.append(d["content"])
+                                obj["model"] = spec.id
+                                payload = dumps(obj)
+                        yield f"data: {payload}\n\n".encode()
+                    elif line == "":
+                        continue
+                    else:
+                        yield (line + "\n").encode()
             except httpx.HTTPError as e:
                 log.warning("upstream stream error: %s %s", type(e).__name__, e)
                 cloud.note(caller.account_id, "upstream.error", f"chat stream broke {spec.id}: {type(e).__name__}")
@@ -1371,12 +1354,21 @@ def create_app(
                     if not failed and (usage is not None or text_len > 0):
                         if usage is None:
                             usage = Usage(fallback_prompt_tokens, text_cjk + math.ceil((text_len - text_cjk) / 3.5))
-                        cloud.charge_chat(caller, spec, usage.prompt, usage.completion, request_id, cached_tokens=usage.cached)
+                        accounting_meta = router.accounting(selected, accounting_meta, usage.prompt, usage.completion, usage.cached)
+                        cloud.charge_chat(
+                            caller, spec, usage.prompt, usage.completion, request_id,
+                            cached_tokens=usage.cached, provider_cost_rub=accounting_meta.get("provider_cost_rub"),
+                            routing_meta=accounting_meta,
+                        )
                         record_metadata(cloud, caller.account_id, request_id, accounting_meta)
                         if sample_meta is not None:
                             cloud.keep_sample(caller, spec.id, sample_messages, "".join(reply), usage.prompt, usage.completion, sample_meta)
                 finally:
-                    cloud.settle(caller, request_id)
+                    try:
+                        if r is not None:
+                            await r.aclose()
+                    finally:
+                        cloud.settle(caller, request_id)
 
         return StreamingResponse(
             gen(),
@@ -2122,11 +2114,11 @@ def create_app(
 
     from .menu_admin import install as install_menu_admin
 
-    install_menu_admin(app, settings, admin_dep)
+    install_menu_admin(app, settings, admin_dep, cloud=cloud)
 
     from .prices_admin import install as install_prices_admin
 
-    install_prices_admin(app, settings, admin_dep)
+    install_prices_admin(app, settings, admin_dep, cloud=cloud, router=router)
     install_autopay(app, cloud, caller_dep)
 
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])
@@ -2550,6 +2542,15 @@ def create_app(
         """Stars, forks, watchers and release downloads per UTC day with what each day added,
         the latest figures per platform and per asset, and how the collector's last run went."""
         return collector.series(max(1, min(days, 365)))
+
+    @app.get("/v1/admin/provider-routing", dependencies=[Depends(admin_dep)])
+    async def provider_routing_status() -> dict:
+        return router.status(include_offers=True)
+
+    @app.post("/v1/admin/provider-routing/refresh", dependencies=[Depends(admin_dep)])
+    async def provider_routing_refresh() -> dict:
+        await router.refresh(http)
+        return router.status()
 
     @app.post("/v1/admin/github/refresh", dependencies=[Depends(admin_dep)])
     async def admin_github_refresh() -> dict:

@@ -526,7 +526,7 @@ DEFAULT_SIGNUP_DOMAIN_BLOCK: tuple[str, ...] = (
 # The tariffs offered when PLANS is not set: the operator's own menu (2026-10). A plain top-up
 # is not a tariff: it costs nothing extra, takes nothing off a spend and opens no connection.
 DEFAULT_PLANS = (
-    '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 20, "connect": false},'
+    '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 10, "connect": false},'
     ' {"id": "lika-plus", "name": "Лика+", "price_rub": 1490, "discount_pct": 20, "connect": true},'
     ' {"id": "team", "name": "Лика Команда", "price_rub": 3900, "discount_pct": 30, "connect": true}]'
 )
@@ -656,6 +656,9 @@ class Settings:
     # IMAGE_RETRIES times with growing pauses before telling the app the provider is busy.
     image_concurrency: int = field(default_factory=lambda: _int("IMAGE_CONCURRENCY", 2))
     image_retries: int = field(default_factory=lambda: _int("IMAGE_RETRIES", 4))
+    # Сколько соседних моделей пробовать, когда все поставщики выбранной отказали.
+    # 0 выключает замену: человек получает ошибку вместо ответа другой моделью.
+    max_model_substitutes: int = field(default_factory=lambda: _int("MAX_MODEL_SUBSTITUTES", 2))
     # JSON object merged into every chat request for fields the app did not set.
     # Qwen 3.x models think by default and a one-line answer can cost a
     # thousand reasoning tokens, so the shipped default turns that off; the app
