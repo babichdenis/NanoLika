@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .live_billing import LiveBilling
-from .service import Caller, Cloud, CloudError
+from .service import Caller, Cloud, CloudError, log
 
 if TYPE_CHECKING:
     from .fiscal import FiscalConfig
@@ -159,6 +159,30 @@ class Payments:
             for key, row in PLANS.items()
         }
 
+    def tier_for_balance(self, balance_kopecks: int) -> dict | None:
+        """Какой тариф человек заработал накопленной суммой: самый дорогой из доступных."""
+        affordable = [row for row in self.plans().values() if int(round(float(row["price_rub"]) * 100)) <= balance_kopecks]
+        return max(affordable, key=lambda r: float(r["price_rub"])) if affordable else None
+
+    def _sync_tier(self, account_id: str, *, rub_amount: float = 0.0, actor: str = "payment") -> dict | None:
+        """Привести тариф к тому, что оплачено сейчас: вверх после платежа, вниз после возврата.
+
+        Возвращено после порта 0.30 (247da27f): он заменил кассу версией без правила
+        «оплата сама даёт тариф», и подписка перестала выдаваться вовсе.
+        """
+        with self.db.tx() as c:
+            wallet = c.execute("SELECT balance FROM tbank_demo_wallets WHERE account_id=?", (account_id,)).fetchone()
+        balance = int(wallet["balance"]) if wallet is not None else 0
+        tier = self.tier_for_balance(balance)
+        current = self.cloud.plan_state(account_id)
+        if tier is None:
+            if current is not None:
+                self.cloud.payment_revoke(account_id, actor=actor)
+            return None
+        if current is not None and current["id"] == tier["id"]:
+            return None
+        return self.cloud.payment_grant(account_id, tier, rub_amount, actor=actor, credit=rub_amount > 0)
+
     def orders_page(
         self, *, days: int = 30, status: str = "", q: str = "", limit: int = 100, before: int = 0, before_id: str = "", mode: str = "all"
     ) -> dict:
@@ -246,9 +270,30 @@ class Payments:
         }
 
     def grant_plan(self, order_id: str, actor: str = "console") -> dict:
-        # A DEMO credit must never create real spendable money or a real subscription.
-        self.order(order_id)
-        raise CloudError(409, "payment_demo_isolated", "Тестовый платёж не выдаёт рабочий тариф")
+        """Выдать тариф по оплаченному заказу — то, что оператор раньше делал вручную.
+
+        Деньги заказа уже лежат в демо-кошельке, поэтому продажа идёт тем же путём, что и
+        ручная (`plan_buy`): цена уходит в пул, условия тарифа — в подписку. Повторная
+        выдача по тому же заказу отклоняется: отметка `plan_granted_at` ставится атомарно
+        вместе с проверкой, иначе двойной клик в браузере выдал бы два тарифа.
+
+        Возвращено после порта 0.30 (247da27f), который оставил здесь безусловный отказ и
+        тем самым убрал у оператора кнопку выдачи тарифа.
+        """
+        row = self.order(order_id)
+        if not row["credited"]:
+            raise CloudError(409, "payment_not_paid", "Заказ ещё не оплачен")
+        if row["plan_granted_at"]:
+            raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
+        state = self.cloud.plan_buy(row["account_id"], row["plan"], actor=actor, note=f"заказ {order_id[:8]}")
+        with self.db.tx() as c:
+            cur = c.execute(
+                "UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by=? WHERE id=? AND plan_granted_at=0",
+                (int(time.time()), actor, order_id),
+            )
+            if cur.rowcount != 1:
+                raise CloudError(409, "payment_already_granted", "Тариф по этому заказу уже выдан")
+        return {"order_id": order_id, "plan": state.get("plan"), "granted_by": actor}
 
     def order(self, order_id: str, account_id: str | None = None) -> dict:
         with self.db.tx() as c:
@@ -404,6 +449,7 @@ class Payments:
             or (status == "PARTIAL_REFUNDED" and not 0 < data["Amount"] < validated["amount"])
         ):
             raise CloudError(409, "payment_refund_state", "Банк не подтвердил сумму возврата")
+        account_for_refund = ""
         with self.db.tx() as c:
             row = c.execute("SELECT * FROM tbank_orders WHERE id=?", (order_id,)).fetchone()
             # Full refunds are final. Late CONFIRMED, pending states, and duplicate events
@@ -442,9 +488,33 @@ class Payments:
                         )
                 elif not row["refunded"]:
                     c.execute("UPDATE tbank_orders SET status='CONFIRMED',payment_id=? WHERE id=?", (payment_id, order_id))
+                if refund:
+                    account_for_refund = row["account_id"]
                 self._rebuild_plan(c, row["account_id"])
             elif not row["credited"] and row["status"] not in {"REJECTED", "AUTH_FAIL", "DEADLINE_EXPIRED"}:
                 c.execute("UPDATE tbank_orders SET status=?,payment_id=? WHERE id=?", (status, payment_id, order_id))
+        settled = self.order(order_id)
+        # Оплата сама даёт права: уровень тарифа — по накопленной сумме, токены — по платежу.
+        # Сбой выдачи не отменяет платёж: он виден в списке заказов без отметки, и его можно
+        # повторить кнопкой.
+        if settled["credited"] and not settled["plan_granted_at"]:
+            try:
+                granted = self._sync_tier(settled["account_id"], rub_amount=settled["amount"] / 100)
+                if granted is not None:
+                    with self.db.tx() as c:
+                        c.execute(
+                            "UPDATE tbank_orders SET plan_granted_at=?, plan_granted_by='payment' WHERE id=?",
+                            (int(time.time()), order_id),
+                        )
+            except CloudError as exc:
+                log.warning("payment %s: tariff not granted (%s: %s)", order_id[:8], exc.code, exc.message)
+            except Exception:
+                log.exception("payment %s: tariff grant failed", order_id[:8])
+        if refund and account_for_refund:
+            try:
+                self._sync_tier(account_for_refund)
+            except CloudError as exc:
+                log.warning("refund %s: tariff not revised (%s: %s)", order_id[:8], exc.code, exc.message)
         return self.order(order_id)
 
     def view(self, row: dict) -> dict:
