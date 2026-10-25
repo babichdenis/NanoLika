@@ -157,6 +157,13 @@ export function introLines(lang: string): [string, string, string] {
       '开始之前，我该怎么称呼你？',
     ]
   }
+  if (lang.toLowerCase().startsWith('ru')) {
+    return [
+      'Привет, я Лика, твой помощник на этом компьютере. Давай сниму с тебя пару дел.',
+      'Коротко о том, как я работаю:\n\n- Работаю прямо на этом компьютере: запускаю команды, открываю сайты, заполняю формы.\n- Читаю и разбираю файлы и папки, которые ты покажешь; напоминания и дела по расписанию тоже на мне.\n- Перед важным шагом сначала спрашиваю тебя.\n- Всё происходит на этом компьютере, а сообщения уходят только той модели, которую ты настроил.',
+      'Прежде чем начать, как тебя зовут?',
+    ]
+  }
   return [
     "Hi, I'm NanoLika, the assistant that lives on your computer. Let me take a few things off your plate.",
     'A bit about how I work:\n\n- I work on this computer: I can run commands, open websites and fill in forms.\n- I can read and organise the files and folders you point me to, and take care of reminders and scheduled tasks.\n- Before any step that matters, I ask you first.\n- Everything runs on this computer; your messages go only to the model you configured.',
