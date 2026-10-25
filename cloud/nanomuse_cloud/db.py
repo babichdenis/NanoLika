@@ -999,6 +999,34 @@ class Database:
             cur = c.execute("DELETE FROM account_aliases WHERE id_hash=? AND account_id=?", (id_hash, account_id))
             return cur.rowcount > 0
 
+    def remove_aliases_for_surface(self, account_id: str, surface: str) -> int:
+        """Every row that ties a chat of one messenger to the account, gone; returns how many.
+
+        The account's own way in is not an alias: a chat that made the account is the account,
+        not a row beside it, so it is not touched here (and cannot be, the caller refuses it).
+
+        Deleting is stricter than reading on purpose. `_of_surface` reads an empty `surface` as
+        belonging to either messenger, which is right for a question and wrong for a delete: a
+        row written before 0.30 has no `surface`, and a MAX unlink would then take a Telegram
+        chat with it. So a written `surface` must match, and an empty one is cut only when the
+        row's own space is this messenger already (`channel=?`). Only chat rows qualify: an
+        address that joined the account has `channel='email'` and stays."""
+        with self.tx() as c:
+            cur = c.execute(
+                "DELETE FROM account_aliases WHERE account_id=?"
+                " AND (surface=? OR ((surface='' OR surface IS NULL) AND channel=?))"
+                " AND channel IN ('telegram','max')",
+                (account_id, surface, surface),
+            )
+            return int(cur.rowcount or 0)
+
+    def remove_alias_by_row(self, id_hash: str) -> bool:
+        """One row, named by its own hash: the bot unlinks the chat that asked, not a whole
+        messenger's worth of chats."""
+        with self.tx() as c:
+            cur = c.execute("DELETE FROM account_aliases WHERE id_hash=?", (id_hash,))
+            return cur.rowcount > 0
+
     def add_link_code(self, code_hash: str, account_id: str, ttl_s: int) -> None:
         ts = now()
         with self.tx() as c:
@@ -1189,11 +1217,19 @@ class Database:
             return created, True
 
     def delete_account(self, account_id: str) -> None:
-        """Everything about one person: keys, ledger, devices, pending codes, the row itself."""
+        """Everything about one person: keys, ledger, devices, pending codes, the row itself.
+
+        The rows that tie a chat to the account go too (`account_aliases`, `link_codes`): an
+        alias left behind names an account that no longer exists, so the bot would keep
+        answering a deleted person's chat and the six characters they still hold would name
+        nothing. A chat is its own row and keeps working; it simply belongs to nobody until
+        a code ties it again."""
         with self.tx() as c:
             row = c.execute("SELECT id_hash FROM accounts WHERE id=?", (account_id,)).fetchone()
             if row is None:
                 return
+            c.execute("DELETE FROM account_aliases WHERE account_id=?", (account_id,))
+            c.execute("DELETE FROM link_codes WHERE account_id=?", (account_id,))
             c.execute("DELETE FROM codes WHERE id_hash=?", (row["id_hash"],))
             c.execute("DELETE FROM samples WHERE account_id=?", (account_id,))
             c.execute("DELETE FROM events WHERE account_id=?", (account_id,))

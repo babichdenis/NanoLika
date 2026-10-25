@@ -169,7 +169,14 @@ class MaxChannel(Channel):
             key = f"start:{chat}:{sender}:{data.get('timestamp')}"
             if chat and sender and not self._duplicate(key):
                 self.bus.inbound(
-                    InboundMessage(channel=self.name, chat_id=chat, sender_id=sender, text="/start")
+                    InboundMessage(
+                        channel=self.name,
+                        chat_id=chat,
+                        sender_id=sender,
+                        text="/start " + str(data.get("payload") or "")
+                        if str(data.get("payload") or "").lower().startswith("nl_")
+                        else "/start",
+                    )
                 )
             return
         message = data.get("message") or {}
@@ -235,6 +242,11 @@ class MaxChannel(Channel):
                 channel=self.name, settings=self.settings, transport=self._transport
             )
         return self._chat_link
+
+    def chat_link(self) -> ChatLink:
+        """The same client, for the manager: `/unlink` is a command rather than a code, so it
+        runs in the manager and needs the relay's door that the code path keeps to itself."""
+        return self._link()
 
     def _link_first(self, msg: InboundMessage) -> bool:
         """A chat with no account yet may send the six characters the app showed.

@@ -11,10 +11,12 @@ app a code (`/v1/bot/link-code`, spent by `verify_code`'s `link`, `link_into` in
 service.py). Both write the same row, one account's alias, so there is one answer to "who
 is this chat" however the two were joined.
 
-    POST /v1/link/code     → {code, expires_at, expires_in_s}        the app asks
-    GET  /v1/link/channels → [{channel, identifier, label, linked_at}]
-    GET  /v1/bot/link      → {linked, channel, identifier, label, linked_at}   the bot asks
-    POST /v1/bot/link      → {linked, channel, identifier, label, linked_at}   the bot links
+    POST   /v1/link/code        → {code, expires_at, expires_in_s}        the app asks
+    GET    /v1/link/channels    → [{channel, identifier, label, linked_at}]
+    DELETE /v1/link/channels/{channel} → {unlinked, channel, before, left}  the way out
+    GET    /v1/bot/link         → {linked, channel, identifier, label, linked_at}   the bot asks
+    POST   /v1/bot/link         → {linked, channel, identifier, label, linked_at}   the bot links
+    POST   /v1/bot/unlink       → {unlinked, channel, reason}             the bot lets go
 """
 
 from __future__ import annotations
@@ -67,6 +69,21 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
         tied to it. An address that joined the account is in `/v1/me`'s `account.linked`."""
         return await asyncio.to_thread(cloud.channel_links, caller)
 
+    @router.delete("/v1/link/channels/{channel}")
+    async def unlink_channel(channel: str, caller: Caller = Depends(caller_auth)) -> dict:
+        """Cut this account's chats of one messenger loose: the way out of a link.
+
+        `channel` is `telegram` or `max`, and every chat a code tied to the account in that
+        messenger is let go at once, so one call undoes what several codes joined. The bot
+        there stops finding an account for those chats: the next message makes a fresh account
+        of its own, with its own allowance, as on the first day.
+
+        A chat that made the account is refused (`409 channel_is_the_account`): it is the
+        account, not a row beside it, and deleting the account is the app's own door.
+        Answers `{unlinked, channel, before, left}`; `unlinked: 0` is not an error, it says
+        nothing was tied."""
+        return await asyncio.to_thread(cloud.unlink_channel, caller, channel)
+
     @router.get("/v1/bot/link")
     async def bot_link_status(request: Request, channel: str = "telegram", chat_id: str = "", telegram_id: str = "") -> dict:
         """Whether this chat already belongs to an account (the bot asks before it reads a
@@ -96,6 +113,26 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
         who = str(body.get("identifier") or "")[:80]
         try:
             return await asyncio.to_thread(cloud.link_channel, channel, chat, code, who)
+        except BadIdentifier as e:
+            raise CloudError(400, "bad_identifier", "A chat is its numeric id") from e
+
+    @router.post("/v1/bot/unlink")
+    async def bot_unlink(request: Request) -> dict:
+        """The chat lets go of its account, asked for from inside the chat.
+
+        The bot's half of `DELETE /v1/link/channels/{channel}`, and the only way out for
+        somebody who has no app at all: a chat that made an account of its own is refused
+        (`channel_is_the_account`) there too, because that is a deletion, and the answer says
+        so in words the bot can pass on. `not_linked` is a plain answer, not a failure: the
+        chat was a stranger already."""
+        bot_caller(request)
+        body = await _body(request)
+        channel = str(body.get("channel") or "telegram")[:16]
+        chat = str(body.get("chat_id") or body.get("telegram_id") or "")
+        if not chat:
+            raise CloudError(400, "bad_request", "Say which chat: chat_id")
+        try:
+            return await asyncio.to_thread(cloud.unlink_chat, channel, chat)
         except BadIdentifier as e:
             raise CloudError(400, "bad_identifier", "A chat is its numeric id") from e
 

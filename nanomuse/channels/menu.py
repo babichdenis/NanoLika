@@ -24,6 +24,8 @@ COPY = {
         "new": "Новая беседа",
         "settings": "Настройки",
         "account": "Кабинет ↗",
+        "unlink": "Отвязать этот чат",
+        "unlink_hint": "Чат перестанет быть этим аккаунтом: своя касса, своя история. Аккаунт в приложении останется.",
         "chats": "Чаты",
         "expired": "Кнопка устарела. Открыла новое меню; выберите действие ещё раз.",
         "private_only": "Настройки и баланс доступны в личном чате с Ликой. Откройте его и отправьте /start.",
@@ -75,6 +77,8 @@ COPY = {
         "new": "New chat",
         "settings": "Settings",
         "account": "Account ↗",
+        "unlink": "Unlink this chat",
+        "unlink_hint": "The chat stops being this account: its own allowance, its own history. The account in the app stays.",
         "chats": "Chats",
         "expired": "This button expired. A new menu is open; choose the action again.",
         "private_only": "Open a private chat with Lika and send /start to use settings and balance.",
@@ -126,6 +130,8 @@ COPY = {
         "new": "新对话",
         "settings": "设置",
         "account": "账户 ↗",
+        "unlink": "解除此聊天的绑定",
+        "unlink_hint": "这个聊天将不再是该账号：自己的额度，自己的记录。App 里的账号保持不变。",
         "chats": "对话",
         "expired": "按钮已过期，已打开新菜单，请重新选择。",
         "private_only": "请在与 Lika 的私聊中发送 /start，然后使用设置和余额。",
@@ -378,7 +384,9 @@ class ChatMenu:
                 },
             )
 
-    async def show(self, msg: InboundMessage, page: str = "home", note: str = "", page_no: int = 1) -> None:
+    async def show(
+        self, msg: InboundMessage, page: str = "home", note: str = "", page_no: int = 1
+    ) -> None:
         c = COPY[self.language(msg)]
 
         def row(label: str, action: str) -> list:
@@ -404,8 +412,14 @@ class ChatMenu:
             text = c["full_note"]
             rows = [row("confirm", "mode-confirm:full-access")]
         elif page == "settings":
-            text = c["settings"]
-            rows = [row("permissions", "permissions"), row("language", "language")]
+            text = c["settings"] + "\n\n" + c["unlink_hint"]
+            rows = [
+                row("permissions", "permissions"),
+                row("language", "language"),
+                # the way out of a link sits with the settings, where somebody looking for it
+                # would look, and says what it costs before it does anything
+                row("unlink", "unlink"),
+            ]
         elif page == "models":
             # Кнопки вместо номеров: список листается, как выбор времени, и нажатие
             # сразу выбирает модель. Восемь на экран — столько читается с телефона.
@@ -435,7 +449,9 @@ class ChatMenu:
                     rows.append([(name[:58], self.ticket(msg, "model:" + str(model.get("id"))))])
                 nav: list = []
                 if page_no > 1:
-                    nav.append((c.get("previous", "←"), self.ticket(msg, f"model-page:{page_no - 1}")))
+                    nav.append(
+                        (c.get("previous", "←"), self.ticket(msg, f"model-page:{page_no - 1}"))
+                    )
                 if page_no < pages:
                     nav.append((c.get("more", "→"), self.ticket(msg, f"model-page:{page_no + 1}")))
                 if nav:
@@ -489,7 +505,19 @@ class ChatMenu:
         if msg.channel not in {"telegram", "max"}:
             return False
         if command not in pages:
-            if command in {"/start", "/help", "/status", "/computer"}:
+            if command in {
+                "/start",
+                "/help",
+                "/status",
+                "/computer",
+                "/unlink",
+                "/отвязать",
+                "/развязать",
+            }:
+                # `/unlink` is the manager's own command, not a menu page: it must reach the
+                # manager instead of being answered here as an unknown command. The two
+                # Russian spellings go with it, or the menu would refuse them and the typed
+                # word would never arrive.
                 return False
             if re.fullmatch(r"/[a-z][a-z0-9_]{0,31}", command) and self.private_owner(msg):
                 await self.show(msg, note=COPY[self.language(msg)]["unknown_command"])
@@ -529,7 +557,15 @@ class ChatMenu:
         token = str(value["menu"])
         if token.startswith("nav:"):
             action = token[4:]
-            if action in {"home", "settings", "permissions", "balance", "language", "chats", "models"}:
+            if action in {
+                "home",
+                "settings",
+                "permissions",
+                "balance",
+                "language",
+                "chats",
+                "models",
+            }:
                 await self.perform(probe, action)
             return True
         if token.startswith("c:"):
@@ -606,6 +642,13 @@ class ChatMenu:
             await self.show(msg, note=await self.chat_delete_prompt(msg))
         elif action == "chat-delete-confirm":
             await self.show(msg, note=await self.chat_delete(msg))
+        elif action == "unlink":
+            # the same command a person can type, so there is one way out and not two: the
+            # button asks, and pressing it again within the window confirms, exactly as the
+            # typed command does
+            unlink = getattr(self.m, "_unlink_chat", None)
+            if unlink is not None:
+                await unlink(msg)
         elif action == "inherit":
             self.preferences.put(thread, mode="", access_source="")
             if scope := self.access_scope(msg):
@@ -682,7 +725,9 @@ class ChatMenu:
         if not key or not base:
             raise RuntimeError(c["models_error"])
         async with httpx.AsyncClient(timeout=20) as client:
-            answer = await client.get(base + "/v1/me/models", headers={"Authorization": "Bearer " + key})
+            answer = await client.get(
+                base + "/v1/me/models", headers={"Authorization": "Bearer " + key}
+            )
             answer.raise_for_status()
             return answer.json()
 
@@ -812,7 +857,11 @@ class ChatMenu:
         title = str(title or "").strip()
         if not title:
             return c["rename_usage"]
-        return c["rename_done"] if await self._chat_write(msg, "PATCH", {"title": title[:120]}) else c["rename_failed"]
+        return (
+            c["rename_done"]
+            if await self._chat_write(msg, "PATCH", {"title": title[:120]})
+            else c["rename_failed"]
+        )
 
     async def chat_delete_prompt(self, msg: InboundMessage) -> str:
         c = COPY[self.language(msg)]
@@ -822,8 +871,9 @@ class ChatMenu:
 
     async def chat_delete(self, msg: InboundMessage) -> str:
         c = COPY[self.language(msg)]
-        return c["delete_done"] if await self._chat_write(msg, "DELETE", None) else c["delete_failed"]
-
+        return (
+            c["delete_done"] if await self._chat_write(msg, "DELETE", None) else c["delete_failed"]
+        )
 
     async def balance(self, msg: InboundMessage) -> str:
         c = COPY[self.language(msg)]

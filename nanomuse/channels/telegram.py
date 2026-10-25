@@ -304,6 +304,11 @@ class TelegramChannel(Channel):
             )
         return self._chat_link
 
+    def chat_link(self) -> ChatLink:
+        """The same client, for the manager: `/unlink` is a command rather than a code, so it
+        runs in the manager and needs the relay's door that the code path keeps to itself."""
+        return self._link()
+
     def _mentioned(self, message: dict[str, Any], text: str) -> bool:
         reply = message.get("reply_to_message")
         if isinstance(reply, dict) and (reply.get("from") or {}).get("id") == self._bot_id:

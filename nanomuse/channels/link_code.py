@@ -138,6 +138,41 @@ class ChatLink:
         )
         return channel_text(language, "link_offline")
 
+    async def release(self, chat_id: str, language: str = "") -> str:
+        """Let this chat go from its account and say how it went. Never raises.
+
+        The way out of a link, from inside the chat: a person with no app at all is exactly
+        who needs it, so it must end in words rather than an exception. The relay's own
+        refusals are named: a chat that made the account cannot be cut loose (that is a
+        deletion, and it belongs in the app), and a chat that was a stranger already is told
+        so plainly instead of being handed an error."""
+        base = self._base()
+        if not base:
+            return channel_text(language, "unlink_offline")
+        body = {"channel": self.channel, "chat_id": chat_id}
+        try:
+            async with self._client(base) as client:
+                answer = await client.post("/v1/bot/unlink", json=body)
+        except httpx.HTTPError as exc:
+            logger.warning("{}: the relay could not be told to unlink: {}", self.channel, exc)
+            return channel_text(language, "unlink_offline")
+        try:
+            data = answer.json()
+        except ValueError:
+            data = {}
+        if answer.status_code >= 400:
+            logger.warning("{}: the relay refused an unlink ({})", self.channel, answer.status_code)
+            return channel_text(language, "unlink_offline")
+        said: dict[str, Any] = data if isinstance(data, dict) else {}
+        reason = str(said.get("reason") or "")
+        if said.get("unlinked"):
+            return channel_text(language, "unlink_done")
+        if reason in ("channel_is_the_account",):
+            return channel_text(language, "unlink_is_account")
+        if reason == "account_gone":
+            return channel_text(language, "unlink_done")
+        return channel_text(language, "unlink_not_linked")
+
 
 async def answer_code(
     link: ChatLink, chat_id: str, text: str, identifier: str = "", language: str = ""

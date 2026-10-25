@@ -13,8 +13,10 @@ from typing import Any
 import httpx
 import pytest
 
+from nanomuse.channels.base import InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 from nanomuse.channels.link_code import ChatLink, answer_code, as_code
+from nanomuse.channels.manager import ChannelManager
 from nanomuse.channels.max import MaxChannel
 from nanomuse.channels.telegram import TelegramChannel
 
@@ -47,6 +49,10 @@ class FakeRelay:
     def __init__(self, status: dict[str, Any] | None = None, link: tuple[int, dict] | None = None):
         self.status = status if status is not None else {"linked": False, "channel": "telegram"}
         self.link = link if link is not None else (200, {"linked": True, "channel": "telegram"})
+        self.unlink: tuple[int, dict] = (
+            200,
+            {"unlinked": True, "channel": "telegram", "reason": ""},
+        )
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         # what each relay call said in its query string, beside the body it posted
         self.params: list[dict[str, Any]] = []
@@ -68,6 +74,9 @@ class FakeRelay:
                 return httpx.Response(200, json=self.status)
             if request.url.path == "/v1/bot/link" and request.method == "POST":
                 status, payload = self.link
+                return httpx.Response(status, json=payload)
+            if request.url.path == "/v1/bot/unlink" and request.method == "POST":
+                status, payload = self.unlink
                 return httpx.Response(status, json=payload)
             return httpx.Response(404, json={"error": {"code": "not_found"}})
         method = request.url.path.rsplit("/", 1)[-1]
@@ -370,3 +379,113 @@ async def test_a_code_is_asked_about_once_and_linked_once(text: str):
     await ch._handle_update(update(text))
     assert [m for m, _p, _b in relay.calls] == ["GET", "POST"]
     await ch.stop()
+
+
+# -- the way out: `/unlink` and ChatLink.release --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reply,expected_key",
+    [
+        ((200, {"unlinked": True, "channel": "telegram", "reason": ""}), "unlink_done"),
+        ((200, {"unlinked": True, "channel": "telegram", "reason": "account_gone"}), "unlink_done"),
+        (
+            (200, {"unlinked": False, "channel": "telegram", "reason": "channel_is_the_account"}),
+            "unlink_is_account",
+        ),
+        (
+            (200, {"unlinked": False, "channel": "telegram", "reason": "not_linked"}),
+            "unlink_not_linked",
+        ),
+        ((500, {"error": {"code": "boom"}}), "unlink_offline"),
+    ],
+)
+async def test_release_says_what_the_relay_said(reply, expected_key):
+    """Every relay answer becomes words a person can act on, and never an exception."""
+    relay = FakeRelay()
+    relay.unlink = reply
+    link = ChatLink(
+        "telegram",
+        {"cloud_url": "http://relay.test", "cloud_bot_token": "s"},
+        httpx.MockTransport(relay.handler),
+    )
+    answer = await link.release(str(CHAT), "ru")
+    assert answer == channel_text("ru", expected_key)
+    assert [p for m, p, _b in relay.calls if m == "POST"] == ["/v1/bot/unlink"]
+
+
+async def test_release_without_a_relay_says_so_instead_of_raising():
+    link = ChatLink("telegram", {}, httpx.MockTransport(FakeRelay().handler))
+    assert await link.release(str(CHAT), "ru") == channel_text("ru", "unlink_offline")
+
+
+async def test_unlink_asks_before_it_does_anything():
+    """A typed command that is easy to press twice must not unlink on the first word."""
+    relay = FakeRelay()
+    manager = FakeManager(relay)
+    msg = InboundMessage(channel="telegram", chat_id=str(CHAT), sender_id=str(CHAT), text="/unlink")
+
+    await manager._unlink_chat(msg)
+    # the question, and nothing sent to the relay
+    assert manager.sent == [channel_text("ru", "unlink_confirm")]
+    assert relay.calls == []
+
+    await manager._unlink_chat(msg)
+    # the confirmation, and the relay heard once
+    assert manager.sent[-1] == channel_text("ru", "unlink_done")
+    assert [p for m, p, _b in relay.calls if m == "POST"] == ["/v1/bot/unlink"]
+
+
+async def test_unlink_is_asked_again_after_the_window():
+    """A stale "yes" from ten minutes ago must not count as the confirmation."""
+    relay = FakeRelay()
+    manager = FakeManager(relay)
+    msg = InboundMessage(channel="telegram", chat_id=str(CHAT), sender_id=str(CHAT), text="/unlink")
+    await manager._unlink_chat(msg)
+    manager.age_the_question()
+    await manager._unlink_chat(msg)
+    assert manager.sent[-1] == channel_text("ru", "unlink_confirm")
+    assert relay.calls == []
+
+
+class FakeManager:
+    """As much of `ChannelManager` as `/unlink` touches: the channel, `_send`, the language,
+    and the pending-question book. The real class is exercised end to end elsewhere; what
+    matters here is the ask-then-act shape and that nothing reaches the relay before it."""
+
+    def __init__(self, relay: FakeRelay, channel_name: str = "telegram") -> None:
+        self.relay = relay
+        self.lang = "ru"
+        self.sent: list[str] = []
+        self._unlink_pending: dict[tuple[str, str], float] = {}
+        settings = {
+            "bot_token": "123:abc",
+            "cloud_url": "http://relay.test",
+            "cloud_bot_token": "bot-secret",
+        }
+        transport = httpx.MockTransport(relay.handler)
+        gateway = ChatLink(channel_name, settings, transport)
+
+        class Channel:
+            """A channel as the manager sees it: one public `chat_link()`, nothing else."""
+
+            name = channel_name
+
+            @staticmethod
+            def chat_link() -> ChatLink:
+                return gateway
+
+        self.channels = {channel_name: Channel()}
+
+    async def _send(self, channel: str, chat_id: str, text: str) -> None:
+        self.sent.append(text)
+
+    def age_the_question(self) -> None:
+        """Make the pending ask look older than the window, without waiting two minutes."""
+        from nanomuse.channels import manager as manager_module
+
+        for key in list(self._unlink_pending):
+            self._unlink_pending[key] -= manager_module.UNLINK_CONFIRM_SECONDS + 1
+
+    async def _unlink_chat(self, msg: InboundMessage) -> None:
+        await ChannelManager._unlink_chat(self, msg)  # type: ignore[arg-type]

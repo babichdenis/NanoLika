@@ -32,6 +32,7 @@ from nanomuse.channels.chat_picker import ChatPicker
 from nanomuse.channels.desktop_request import computer_request, select_computer
 from nanomuse.channels.dingtalk import DingTalkChannel
 from nanomuse.channels.feishu import FeishuChannel
+from nanomuse.channels.link_start import handle_start_link
 from nanomuse.channels.max import MaxChannel
 from nanomuse.channels.menu import ChatMenu
 from nanomuse.channels.store import ChannelSettingsStore, PairingStore
@@ -112,6 +113,8 @@ DENY_WORDS = frozenset(
 
 # how often a growing reply is pushed to the chat (edits are rate-limited everywhere)
 EDIT_INTERVAL_S = 1.0
+# how long a first `/unlink` waits for the second one that confirms it
+UNLINK_CONFIRM_SECONDS = 120.0
 THREAD_PREFIX = "channel-"
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -165,6 +168,10 @@ class ChannelManager(ChannelBus):
         self._pump: asyncio.Task[None] | None = None
         # thread id -> (channel, chat_id)
         self.routes: dict[str, tuple[str, str]] = {}
+        # (channel, chat_id) -> when `/unlink` was first asked in this chat: the second ask
+        # within the window is the confirmation. In memory on purpose: a restart forgets it,
+        # and a confirmation nobody re-asks for is worse than asking again.
+        self._unlink_pending: dict[tuple[str, str], float] = {}
         self.picker = ChatPicker(self)
         self.sync_receipts = SyncDeliveryReceipts(
             svc.settings.data_dir / "channels" / "sync-delivery.json"
@@ -339,6 +346,18 @@ class ChannelManager(ChannelBus):
         channel = self.channels.get(msg.channel)
         if channel is None:
             return
+
+        def linked_sender() -> None:
+            self.pairing.add(
+                msg.channel,
+                msg.sender_id,
+                sender_name=msg.sender_name,
+                chat_id=physical_chat(msg.channel, msg.chat_id),
+            )
+            self.publish()
+
+        if await handle_start_link(channel, msg, self.lang, linked_sender):
+            return
         key = f"{msg.channel}:{msg.chat_id}"
         if not self._allowed(msg):
             cfg = self.store.config(msg.channel)
@@ -397,6 +416,9 @@ class ChannelManager(ChannelBus):
             self._record_channel_reply(msg, introduction, thread_id=origin_thread)
             return
         command = text.split()[0].lower().split("@")[0] if text else ""
+        if command in ("/unlink", "/отвязать", "/развязать"):
+            await self._unlink_chat(msg)
+            return
         if command in ("/help", "/status"):
             key = "help"
             if command == "/status":
@@ -1588,6 +1610,34 @@ class ChannelManager(ChannelBus):
         if webapp:
             out.append((self.say("Open the app", "打开应用", "Открыть приложение"), webapp))
         return out
+
+    async def _unlink_chat(self, msg: InboundMessage) -> None:
+        """`/unlink`: this chat lets go of the account it was tied to.
+
+        Asked twice on purpose. Unlinking is not destructive (the account and its history stay
+        in the app) but it is not undoable either: the chat stops reaching that account, its
+        next message makes a fresh one with a fresh allowance, and tying it back needs a new
+        code from the app. A person typing this by accident should get a question, and a person
+        who has no app at all should still have a way out, which is why this lives in the chat
+        rather than in the app alone."""
+        ch = self.channels.get(msg.channel)
+        link = getattr(ch, "chat_link", None) if ch is not None else None
+        if link is None:
+            await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "unlink_offline"))
+            return
+        key = (msg.channel, msg.chat_id)
+        asked = self._unlink_pending.get(key)
+        if asked and time.monotonic() - asked < UNLINK_CONFIRM_SECONDS:
+            self._unlink_pending.pop(key, None)
+            try:
+                answer = await link().release(msg.sender_id or msg.chat_id, self.lang)
+            except Exception as exc:  # noqa: BLE001 — a command must never break the chat
+                logger.warning("channel {}: unlink failed: {}", msg.channel, type(exc).__name__)
+                answer = channel_text(self.lang, "unlink_offline")
+            await self._send(msg.channel, msg.chat_id, answer)
+            return
+        self._unlink_pending[key] = time.monotonic()
+        await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "unlink_confirm"))
 
     async def _greet(self, channel: str, chat_id: str) -> None:
         """The greeting, then the links the channel was configured with."""

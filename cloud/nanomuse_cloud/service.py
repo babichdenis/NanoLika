@@ -1121,6 +1121,71 @@ class Cloud:
             )
         return out
 
+    def unlink_channel(self, caller: Caller, surface: str) -> dict[str, Any]:
+        """Cut the account's chats of one messenger loose, so the bot there forgets them.
+
+        The other half of `link_channel`, and the way out of a link without deleting the whole
+        account: a phone sold, a chat that belongs to somebody else now, a person who wants the
+        bot to stop knowing them. Removing the row is what does it — the bot's sign-in door
+        looks a chat up through these rows, so a chat without one is a stranger again and its
+        first message makes a fresh account of its own.
+
+        A chat that *made* the account is not an alias, it is the account, and cutting that
+        loose would mean deleting the person's history outright, which is `delete_account` and
+        a person's own decision made in the app. It is refused here with the reason, rather
+        than silently emptying their account. A `force` switch does not exist on purpose.
+
+        Returns how many chats were cut and what is left, so the app can say something true."""
+        surface = self._surface(surface)
+        account = self.db.account(caller.account_id)
+        if account is None:
+            raise CloudError(404, "no_account", "This account is gone")
+        if str(account["channel"]) == surface:
+            raise CloudError(
+                409,
+                "channel_is_the_account",
+                "The account began in this chat, so this chat is the account. Delete the account from "
+                "the app if that is what you want; unlinking would take the whole account with it.",
+            )
+        before = self.channel_links(caller)
+        cut = self.db.remove_aliases_for_surface(caller.account_id, surface)
+        after = self.channel_links(caller)
+        if cut:
+            self.db.add_event(caller.account_id, "account.unlinked", f"{surface}:{cut}")
+        return {"unlinked": cut, "channel": surface, "before": before, "left": after}
+
+    def unlink_chat(self, channel: str, chat_id: str) -> dict[str, Any]:
+        """One chat lets go of the account it was tied to, asked for from inside the chat.
+
+        The bot's half: a person who no longer wants this messenger to be their account types
+        `/unlink` there, and the chat becomes a stranger to the account. The same refusal as
+        above when the chat is the account itself, because that is a deletion and not a
+        goodbye."""
+        surface = self._surface(channel)
+        ident = chat_identity(surface, chat_id)
+        row = self._chat_alias(surface, ident)
+        if row is None:
+            # no alias, but the chat may still *be* an account: a chat that wrote first makes
+            # its own account and has no row beside it. Saying `not_linked` there would tell a
+            # person with a working account that they have none.
+            own = self._account_for(self._chat_key(surface, chat_identity(surface, chat_id)))
+            if own is not None and str(own["channel"]) == surface:
+                return {"unlinked": False, "channel": surface, "reason": "channel_is_the_account"}
+            return {"unlinked": False, "channel": surface, "reason": "not_linked"}
+        account_id = str(row["account_id"])
+        account = self.db.account(account_id)
+        if account is None:
+            # the account is gone and its row outlived it (a database from before this was
+            # cleaned up): the row is litter, and dropping it is the whole answer
+            self.db.remove_alias_by_row(str(row["id_hash"]))
+            return {"unlinked": True, "channel": surface, "reason": "account_gone"}
+        if str(account["channel"]) == surface:
+            return {"unlinked": False, "channel": surface, "reason": "channel_is_the_account"}
+        removed = self.db.remove_alias_by_row(str(row["id_hash"]))
+        if removed:
+            self.db.add_event(account_id, "account.unlinked", f"{surface}:chat")
+        return {"unlinked": bool(removed), "channel": surface, "reason": "" if removed else "not_linked"}
+
     @staticmethod
     def _of_surface(row: sqlite3.Row, surface: str) -> bool:
         """Whether a chat's row is this messenger's.
@@ -2524,8 +2589,10 @@ class Cloud:
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
         sale = self.discount(self.s.chat_charge_uy(model, prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
         if (
-            provider_cost_rub is not None and not isinstance(provider_cost_rub, bool)
-            and math.isfinite(provider_cost_rub) and 0 <= provider_cost_rub <= 1_000_000
+            provider_cost_rub is not None
+            and not isinstance(provider_cost_rub, bool)
+            and math.isfinite(provider_cost_rub)
+            and 0 <= provider_cost_rub <= 1_000_000
         ):
             cost = self.s.rub_to_uy(provider_cost_rub)
         detail: dict[str, Any] = {}
