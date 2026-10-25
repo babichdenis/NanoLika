@@ -1,5 +1,7 @@
 # Changelog
 
+- Added ProxyAPI supplier quotes from its guarded public catalog, authenticated model intersection, and fallback for unsupported models. Secrets remain in server environment settings.
+
 - Russian Telegram/MAX permission cards explain the operation and task, with technical previews behind a non-approving Details button.
 
 - Telegram/MAX approval cards preserve explicitly selected conversation or persistent action permissions, bound to the pending card and chat.
@@ -9,6 +11,8 @@
 All notable changes to nanoMuse. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/). Unreleased changes are on `main`.
 
 ## [Unreleased]
+
+- Added automatic supplier selection for streamed and ordinary text requests, separate actual supplier accounting, live balance checks and persistent customer model visibility in the operator prices page. New basic packages use the approved 10% discount.
 
 - **One rule for a conversation's cloud on the desktop.** The main chat is the account's own conversation and always stays in the cloud, with no switch able to take it out. A chat that came from another device or from Telegram or MAX cannot be made local: it can only be deleted from the cloud whole, confirmed first, and the copy on this computer stays as a local chat. A chat made here stays local until the person puts a cloud on it and can take it off again. The host now answers with the reason a switch was refused (`main`, `synced-from-cloud`, `not-synced-account`) instead of pretending it worked, and a chat started in a messenger reaches the cloud by itself, with no switch pressed. `docs/cloud.md` says how it works.
 - **桌面端的对话云端状态只有一条规则。** 主聊天是账号自己的对话，始终在云端，任何开关都无法将其移出。从其他设备或 Telegram、MAX 传来的对话不能改为本地对话：只能先确认再从云端整体删除，本机副本保留为本地对话。在本机创建的对话默认留在本机，可以放上云端，也可以再次移出。开关被拒绝时，主机不再假装成功，而是返回原因（`main`、`synced-from-cloud`、`not-synced-account`）；在信使中开始的对话无需任何开关即可进入云端。`docs/cloud.md` 说明了这一行为。

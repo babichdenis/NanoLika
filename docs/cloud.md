@@ -723,3 +723,8 @@ inside Telegram are separate: Telegram's digital-goods rules also apply to Mini 
 
 
 For the separate DEMO checkout and its full/partial refund invariants, see [T-Bank refund accounting](payment-refunds.md). This does not enable production settlement.
+
+
+## Automatic supplier routing
+
+Text requests use live structured supplier quotes and record the actual supplier cost separately from the customer sale rate. The operator can refresh quotes and balances and save model visibility in the database. See [Automatic supplier routing](provider-routing.md) for configuration and limits.
