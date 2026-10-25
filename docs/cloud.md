@@ -54,8 +54,18 @@ instead of merged, and a refusal does not spend the code.
 The browser works before another app is connected. Connection is optional and lives in Account, Devices and channels. The chat has no permanent
 Telegram, MAX or desktop action bar. Opening the account's connection guide does not create
 or publish a conversation, and never calls a model.
-Telegram and MAX guides show the bot link, a one-use code requested explicitly by the user,
-and a check button. The code uses the existing ten-minute `/v1/link/code` contract.
+Telegram and MAX guides request an authenticated `POST /v1/link/start` only when opened.
+They show a locally generated QR code and a button containing the same bot deep link;
+there is no manual code entry. The link contains a channel-prefixed 120-bit random token,
+not an account API key. Its hash uses the existing ten-minute, single-use link-code store;
+refreshing a link retires the preceding one. The QR library is vendored with its MIT license,
+and no QR service receives the link. While the dialog is visible it checks the linked-channel
+list, then removes the spent QR automatically. Closing the dialog stops polling.
+Bot `/start nl_…` payloads are handled before menus, pairing or model turns. Only successful
+account linking admits that sender to the bot; device and tool permissions are unchanged.
+Invalid, expired, wrong-channel and group payloads never reach a model. Existing manual
+link endpoints remain compatible. Unlinking or moving an already linked messenger belongs
+to the separate account sign-out flow; this guide does not merge accounts.
 The desktop guide links to the download page and asks the user to sign in with the same
 email and keep the app open. Multiple online desktops are shown as explicit choices.
 These guides do not call a model or transfer identities between accounts.

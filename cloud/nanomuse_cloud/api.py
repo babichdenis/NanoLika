@@ -2100,6 +2100,10 @@ def create_app(
     # 0.30: a short code joins a chat to the account its person already signed in to
     install_channel_links(app, cloud, caller_dep, bot_caller)
 
+    from .channel_start import install as install_channel_start
+
+    install_channel_start(app, cloud, caller_dep)
+
     from .model_accounting import capture_metadata, record_metadata
     from .model_accounting import install as install_model_accounting
 

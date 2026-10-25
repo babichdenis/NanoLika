@@ -6,3 +6,5 @@
 .connection-options{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 22px}.connection-options button{min-height:44px;padding:10px 17px;border:1px solid #a1ac8f;border-radius:11px 15px 10px 13px;background:#edf0e5;color:#42563a;font:inherit;cursor:pointer}.connection-options button:focus-visible{outline:2px solid #6c805c;outline-offset:3px}
 
 .channel-guide [hidden]{display:none!important}
+
+.channel-guide-qr{display:grid;place-items:center;margin:20px auto;background:#fff;border-radius:16px;padding:8px;width:max-content;max-width:100%;box-shadow:0 3px 12px #48503612}.channel-guide-qr svg{display:block;width:min(232px,calc(100vw - 112px));height:auto}
