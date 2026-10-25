@@ -1601,11 +1601,16 @@ def test_code_mail_has_text_and_html_in_both_languages():
 
     msg = compose_code_mail("no-reply@mail.nanomuse.cn", "someone@example.com", "123456", 10)
     assert msg["From"] == "NanoLika <no-reply@mail.nanomuse.cn>" and msg["To"] == "someone@example.com"
-    assert "123456" in msg["Subject"]
+    # 0.30 (247da27f, from upstream): the code left the subject line and the copy was
+    # rewritten around the nanoLika brand, so a lock-screen preview or a mail list never
+    # shows a one-time code. The test used to demand the code in the subject.
+    assert msg["Subject"] == "nanoLika · ваш код для входа" and "123456" not in msg["Subject"]
     parts = {p.get_content_type(): p.get_content() for p in msg.iter_parts()}
     assert set(parts) == {"text/plain", "text/html"}
-    assert "Код для входа в NanoLika: 123456" in parts["text/plain"] and "Your NanoLika code is 123456" in parts["text/plain"]
-    assert "1 2 3 4 5 6" in parts["text/html"] and "10 мин" in parts["text/html"] and "10 minutes" in parts["text/html"]
+    assert "Вот ваш код для nanoLika: 123456" in parts["text/plain"] and "Your sign-in code is 123456" in parts["text/plain"]
+    # the letter spaces the digits out with &nbsp; so the code reads as one unbroken group
+    assert "1&nbsp;2&nbsp;3&nbsp;4&nbsp;5&nbsp;6" in parts["text/html"]
+    assert "10 мин" in parts["text/html"] and "10 minutes" in parts["text/html"]
     assert "<script" not in parts["text/html"]
 
 

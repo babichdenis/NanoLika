@@ -239,7 +239,10 @@ def test_a_code_goes_to_the_site_endpoint_signed_with_the_secret(monkeypatch):
 
     payload = json.loads(seen["body"])
     assert payload["to"] == "someone@example.com"
-    assert payload["subject"] == "NanoLika: код для входа 123456"
+    # 0.30 (247da27f, from upstream): the subject names the letter, never the code, so a
+    # lock-screen preview or a mail list cannot show a one-time code. The test used to
+    # expect "NanoLika: код для входа 123456"; the code itself is still in the text.
+    assert payload["subject"] == "nanoLika · ваш код для входа" and "123456" not in payload["subject"]
     assert "123456" in payload["text"] and "10 мин" in payload["text"]
     assert isinstance(payload["ts"], int)
     expected = hmac.new(b"shh", seen["body"], hashlib.sha256).hexdigest()

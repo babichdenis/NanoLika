@@ -185,7 +185,10 @@ async def test_usage_is_broken_down_by_kind_and_model():
 
     me = (await client.get("/v1/me", headers=headers)).json()
     usage = me["usage"]
-    assert usage["kinds"] == ["chat", "image", "video", "realtime"]
+    # 0.30 (247da27f, from upstream): speech is billed as its own kind, "audio" (see
+    # `cloud.service.USAGE_KINDS` and the /v1/audio/speech charge), between video and
+    # realtime. This list used to have four kinds.
+    assert usage["kinds"] == ["chat", "image", "video", "audio", "realtime"]
     by_kind = {row["kind"]: row for row in usage["today"]["by_kind"]}
     assert by_kind["chat"]["requests"] == 3 and by_kind["chat"]["prompt_tokens"] == 300 and by_kind["chat"]["completion_tokens"] == 150
     assert by_kind["image"]["requests"] == 1 and by_kind["image"]["cost_cny"] == 0.18

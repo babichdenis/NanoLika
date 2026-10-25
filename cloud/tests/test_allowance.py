@@ -206,17 +206,20 @@ async def test_idle_hours_are_charged_at_the_idle_price():
     r = await client.post("/v1/chat/completions", headers=auth, json={"model": "deepseek-v4.1-flash", "messages": messages})
     assert r.status_code == 200
     me = (await client.get("/v1/me", headers=auth)).json()
-    assert me["recent"][0]["cost_cny"] == round(day, 4) and "detail" not in me["recent"][0]
+    # 0.30 (247da27f) records the upstream model of every turn in the ledger line's `detail`
+    # (model_accounting.py), so a line carries one at any hour; `idle` is the flag that says
+    # the half price applied, and it is what this test is about.
+    assert me["recent"][0]["cost_cny"] == round(day, 4) and "idle" not in me["recent"][0].get("detail", {})
 
     cloud.clock = lambda: IDLE_HOUR
     r = await client.post("/v1/chat/completions", headers=auth, json={"model": "deepseek-v4.1-flash", "messages": messages})
     assert r.status_code == 200
     me = (await client.get("/v1/me", headers=auth)).json()
-    assert me["recent"][0]["cost_cny"] == round(day / 2, 4) and me["recent"][0]["detail"] == {"idle": True}
+    assert me["recent"][0]["cost_cny"] == round(day / 2, 4) and me["recent"][0]["detail"]["idle"] is True
     r = await client.post("/v1/chat/completions", headers=auth, json={"model": "qwen3.8-27b", "messages": messages})
     assert r.status_code == 200
     me = (await client.get("/v1/me", headers=auth)).json()
-    assert me["recent"][0]["cost_cny"] == round((100 * 3 + 50 * 12) / M, 4) and "detail" not in me["recent"][0]
+    assert me["recent"][0]["cost_cny"] == round((100 * 3 + 50 * 12) / M, 4) and "idle" not in me["recent"][0].get("detail", {})
     assert me["spend"]["total"] == round(day + day / 2 + (100 * 3 + 50 * 12) / M, 4)
     # the reservation while a chat runs is at the day price whatever the hour
     assert cloud.chat_reserve_uy(cloud.s.model("deepseek-v4.1-flash")) == 6000 * 2 + 1500 * 8
