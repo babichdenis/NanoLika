@@ -297,12 +297,20 @@ CREATE TABLE IF NOT EXISTS account_aliases (
     account_id    TEXT NOT NULL REFERENCES accounts(id),
     channel       TEXT NOT NULL,              -- phone | email | telegram
     hint          TEXT NOT NULL DEFAULT '',   -- what the account page shows for it
-    created_at    INTEGER NOT NULL
+    created_at    INTEGER NOT NULL,
+    -- 0.30: the row a chat makes when it types the account's own short code. `channel`
+    -- above stays the identity space the relay looks a chat up in (telegram, whichever
+    -- messenger wrote); `surface` is the messenger the person saw (telegram | max) and
+    -- `identifier` is what that messenger calls them (@username, '' when there is none).
+    -- Both are empty on a row that an address made.
+    surface       TEXT NOT NULL DEFAULT '',
+    identifier    TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS account_aliases_account ON account_aliases(account_id);
 -- The one-time code that ties a second identifier to an account: made by the chat (the
--- bot), typed in the app. Only the code's hash is kept, it is spent once, and it lapses on
--- its own (LINK_CODE_TTL_S).
+-- bot) and typed in the app, or made by the app and typed in the chat (0.30). Only the
+-- code's hash is kept, it is spent once, and it lapses on its own (LINK_CODE_TTL_S, and
+-- ten minutes for the app's own short code).
 -- 0.26: the tariff a person bought. The row keeps the terms it was sold at (price, what it
 -- takes off a spend, whether it opens the relay's connection between devices), so a later
 -- change of the menu does not rewrite what someone already paid for. One row per account:
@@ -515,6 +523,10 @@ class Database:
         # aggregates) and the sign-ups of the last day (the per-domain limit), without a scan
         self._conn.execute("CREATE INDEX IF NOT EXISTS accounts_invited_by ON accounts(invited_by) WHERE invited_by<>''")
         self._conn.execute("CREATE INDEX IF NOT EXISTS accounts_created_at ON accounts(created_at)")
+        # 0.30: the messenger a chat came from and what it calls its person there: what the
+        # app shows under the account's channels, empty for the addresses linked before it
+        add("account_aliases", "surface", "TEXT NOT NULL DEFAULT ''")
+        add("account_aliases", "identifier", "TEXT NOT NULL DEFAULT ''")
 
     # -- 0.15: settings the operator changes while the relay runs ------------------------------
 
@@ -941,14 +953,24 @@ class Database:
         with self._lock:
             return list(
                 self._conn.execute(
-                    "SELECT id_hash, channel, hint, created_at FROM account_aliases WHERE account_id=? ORDER BY created_at",
+                    "SELECT id_hash, channel, hint, created_at, surface, identifier FROM account_aliases"
+                    " WHERE account_id=? ORDER BY created_at",
                     (account_id,),
                 )
             )
 
-    def add_alias(self, id_hash: str, account_id: str, channel: str, hint: str = "") -> bool:
+    def alias_row(self, id_hash: str) -> sqlite3.Row | None:
+        """The alias a hash points at, without the account it names: the bot asks whether a
+        chat is tied to an account at all, and what that row calls it."""
+        with self._lock:
+            return self._conn.execute("SELECT * FROM account_aliases WHERE id_hash=?", (id_hash,)).fetchone()
+
+    def add_alias(self, id_hash: str, account_id: str, channel: str, hint: str = "", surface: str = "", identifier: str = "") -> bool:
         """Attach an identifier to an account. False when it already points somewhere: an
-        identifier that is an account of its own is never taken over silently."""
+        identifier that is an account of its own is never taken over silently.
+
+        ``surface`` and ``identifier`` (0.30) say which messenger the chat is and what it
+        calls its person there; an address leaves both empty."""
         with self.tx() as c:
             taken = c.execute(
                 "SELECT 1 FROM accounts WHERE id_hash=? UNION SELECT 1 FROM account_aliases WHERE id_hash=?",
@@ -957,8 +979,8 @@ class Database:
             if taken is not None:
                 return False
             c.execute(
-                "INSERT INTO account_aliases (id_hash, account_id, channel, hint, created_at) VALUES (?,?,?,?,?)",
-                (id_hash, account_id, channel, hint, now()),
+                "INSERT INTO account_aliases (id_hash, account_id, channel, hint, created_at, surface, identifier) VALUES (?,?,?,?,?,?,?)",
+                (id_hash, account_id, channel, hint, now(), surface, identifier),
             )
         return True
 

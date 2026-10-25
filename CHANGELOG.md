@@ -10,6 +10,9 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+- Added a six-character code that joins a Telegram or MAX chat to the account a person already signed in to: the app asks for it (`POST /v1/link/code`, ten minutes, one use, a new code retires the old one), the chat types it and the bot hands it back to the relay (`POST /v1/bot/link`), and `GET /v1/link/channels` lists the chats the account holds.
+- 新增六位短码绑定：在 App 中生成（`POST /v1/link/code`，十分钟有效、仅可使用一次，新码会使旧码失效），在 Telegram 或 MAX 聊天中发送、由机器人交给中继（`POST /v1/bot/link`），`GET /v1/link/channels` 列出账号已绑定的聊天。
+
 - Added a prices page to the operator console: purchase cost and sale rate for every model in the menu with the multiple between them, an offered price at a chosen markup, the connected providers, the retail prices read from the market and the price drafts from `docs/`. The page writes nothing.
 - 运维控制台新增价格页面：列出菜单中每个模型的采购价与售价及倍数，可按倍数试算报价，并显示已接入的供应商、市场零售价和 `docs/` 中的价格草稿。该页面不写入任何数据。
 

@@ -57,6 +57,19 @@ USAGE_KINDS = ("chat", "image", "video", "audio", "realtime")
 SHELF_KINDS = ("chat", "image", "video", "audio")
 SHELF_MAX_PER_KIND = 24
 
+# 0.30: the short code an account shows in the app and types into its chat. Six characters
+# from an alphabet without O/0 and I/1 — a code is copied off a screen or read out loud —
+# spent once, and ten minutes is long enough to switch from the app to the bot and short
+# enough that a screenshot of it dies. The chat is the one that proves itself: the code only
+# says which account it joins.
+CHANNEL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+CHANNEL_CODE_LENGTH = 6
+CHANNEL_CODE_TTL_S = 10 * 60
+# The messengers a chat can come from. A chat is looked up in the relay's one chat identity
+# space (`telegram`, whichever messenger writes) — that is how the bot's sign-in door has
+# always made an account — so these two are what the person sees, not how a chat is hashed.
+CHANNEL_SURFACES = ("telegram", "max")
+
 
 # Where the person is, as far as the relay can tell (0.17), for the "ways on" when the
 # allowance is out: Alibaba Cloud Bailian only signs up accounts from mainland China, so
@@ -299,6 +312,13 @@ def _code_hash(key: bytes, code: str) -> str:
     A code stored by an older relay does not verify, so one that was in the air when the relay
     updated has to be asked for again."""
     return hmac.new(key, code.encode(), hashlib.sha256).hexdigest()
+
+
+def _channel_identifier(raw: str) -> str:
+    """A handle as a messenger writes it ("@name"), cut down to what one can hold: the bot
+    types it, so nothing it says about a person may break a page or a database."""
+    text = re.sub(r"[^0-9A-Za-z_.@-]", "", str(raw or "").strip()).lstrip("@")[:62]
+    return f"@{text}" if text else ""
 
 
 class InFlight:
@@ -983,6 +1003,129 @@ class Cloud:
         self.db.add_link_code(_code_hash(self.s.hmac_key, code), str(account["id"]), self.s.link_code_ttl_s)
         self.db.add_event(str(account["id"]), "link.code", ident.channel)
         return code, now() + self.s.link_code_ttl_s
+
+    # -- the chat tied to an account (0.30) ----------------------------------------------
+
+    @staticmethod
+    def _surface(channel: str) -> str:
+        """The messenger a chat wrote from. Only the two bots are channels here."""
+        name = (channel or "").strip().lower()[:16]
+        if name not in CHANNEL_SURFACES:
+            raise CloudError(400, "bad_channel", "A channel is telegram or max")
+        return name
+
+    def channel_code(self, caller: Caller) -> tuple[str, int]:
+        """The six characters an account shows in the app and types into its chat.
+
+        The other direction of `telegram_link_code` and the one a person meets first: the
+        account already exists (they are signed in to the app), the chat does not, and the
+        code is what joins them. Asked for with the account's own key, one code at a time:
+        asking again retires the one before it, so a code someone read off the screen stops
+        working the moment a new one is made. Returns (code, expires_at)."""
+        account = self.db.account(caller.account_id)
+        if account is None:
+            raise CloudError(401, "bad_key", "Sign in again")
+        if account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        code = "".join(secrets.choice(CHANNEL_CODE_ALPHABET) for _ in range(CHANNEL_CODE_LENGTH))
+        self.db.add_link_code(_code_hash(self.s.hmac_key, code), str(account["id"]), CHANNEL_CODE_TTL_S)
+        self.db.add_event(str(account["id"]), "link.code", "app")
+        return code, now() + CHANNEL_CODE_TTL_S
+
+    def channel_links(self, caller: Caller) -> list[dict[str, Any]]:
+        """The chats this account has, as the account page lists them: the chat the account
+        was made from (or that a bot code joined to it), then every chat a code tied on."""
+        account = self.db.account(caller.account_id)
+        out: list[dict[str, Any]] = []
+        if account is not None and str(account["channel"]) in CHANNEL_SURFACES:
+            out.append(
+                {
+                    "channel": str(account["channel"]),
+                    "identifier": "",
+                    "label": str(account["hint"]),
+                    "linked_at": int(account["created_at"]),
+                }
+            )
+        for row in self.db.aliases_of(caller.account_id):
+            surface = str(row["surface"] or "")
+            if surface not in CHANNEL_SURFACES:
+                continue  # an address that joined the account: `account.linked`, not a chat
+            out.append(
+                {
+                    "channel": surface,
+                    "identifier": str(row["identifier"] or ""),
+                    "label": str(row["hint"] or ""),
+                    "linked_at": int(row["created_at"]),
+                }
+            )
+        return out
+
+    def chat_link(self, channel: str, chat_id: str) -> dict[str, Any]:
+        """Whether this chat already belongs to an account, and what to call it there.
+
+        The bot asks before it reads a message as a code: a chat that already belongs to an
+        account (it talked to the bot before) is told nothing about codes and its messages
+        stay ordinary messages."""
+        surface = self._surface(channel)
+        ident = telegram(chat_id)
+        row = self.db.alias_row(ident.hash(self.s.hmac_key))
+        if row is not None:
+            return {
+                "linked": True,
+                "channel": str(row["surface"] or surface),
+                "identifier": str(row["identifier"] or ""),
+                "label": str(row["hint"] or ""),
+                "linked_at": int(row["created_at"]),
+            }
+        account = self.db.account_by_hashes(ident.hashes(self.s.hmac_key))
+        if account is not None:
+            # a chat that made its own account through the bot's sign-in door
+            return {
+                "linked": True,
+                "channel": surface,
+                "identifier": "",
+                "label": str(account["hint"]),
+                "linked_at": int(account["created_at"]),
+                "own": True,
+            }
+        return {"linked": False, "channel": surface}
+
+    def link_channel(self, channel: str, chat_id: str, code: str, identifier: str = "") -> dict[str, Any]:
+        """The bot's half of the code: a chat that types it becomes that account's chat.
+
+        An account that already holds this chat is refused rather than merged: a chat is
+        one identity in the relay, its own account's or the account a code named, and two
+        accounts with two allowances are never quietly joined. The code is not spent by a
+        refusal, so the same six characters still work in the chat they were meant for."""
+        surface = self._surface(channel)
+        if not self.s.link_code_ttl_s:
+            raise CloudError(503, "link_off", "Linking a chat to an account is switched off on this relay")
+        ident = telegram(chat_id)
+        held = self._account_for(ident)
+        if held is not None:
+            raise CloudError(
+                409,
+                "link_taken",
+                "This chat already has an account of its own; two accounts are not merged here",
+            )
+        written = (code or "").strip().upper()
+        row = self.db.spend_link_code(_code_hash(self.s.hmac_key, written)) if written else None
+        if row is None:
+            raise CloudError(400, "link_wrong", "That code is wrong, already used, or has lapsed; make a new one in the app")
+        account = self.db.account(str(row["account_id"]))
+        if account is None or account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        shown = _channel_identifier(identifier)
+        if not self.db.add_alias(
+            ident.hash(self.s.hmac_key), str(account["id"]), ident.channel, ident.hint, surface=surface, identifier=shown
+        ):
+            raise CloudError(
+                409,
+                "link_taken",
+                "This chat already has an account of its own; two accounts are not merged here",
+            )
+        self.db.add_event(str(account["id"]), "account.linked", ident.channel)
+        return {"linked": True, "channel": surface, "identifier": shown, "label": ident.hint, "linked_at": now()}
 
     # -- tariffs (0.26) ---------------------------------------------------------------
 

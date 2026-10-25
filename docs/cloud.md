@@ -29,6 +29,17 @@ becomes a second way into the same account, so the allowance, the devices and th
 chats are one set. `/v1/me` lists the other ways in under `account.linked`. An
 address that already has an account of its own is refused (`409 link_taken`)
 rather than taken over, and a wrong, spent or lapsed code is `link_wrong`.
+The other direction starts in the app: an account that is already signed in asks
+for six characters (`POST /v1/link/code`, its own key, ten minutes, one use, and a
+new code retires the one before it), the person sends them to the bot, and the bot
+types them back with its shared secret (`POST /v1/bot/link`). The chat then belongs
+to that account, and `GET /v1/link/channels` lists the chats the account holds, each
+with the messenger, the handle the bot sent (`@name`, empty when the chat has none)
+and when it was linked. The bot asks `GET /v1/bot/link` before it reads anything as a
+code, so only a message that is nothing but the six characters, in a chat that has no
+account yet, is one: every command and every other message goes to the Muse as
+before. A chat that already belongs to an account is refused (`409 link_taken`)
+instead of merged, and a refusal does not spend the code.
 Signing out brings that screen back
 (self-hosters: `[cloud] required = false` or `NANOMUSE_CLOUD_REQUIRED=0` on the
 runtime). The screen is a door, not a wall: *Use your own API key instead* steps

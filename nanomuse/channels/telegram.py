@@ -31,6 +31,7 @@ from nanomuse.channels.base import (
     InboundMessage,
     json_object,
 )
+from nanomuse.channels.link_code import ChatLink, answer_code
 from nanomuse.channels.telegram_topics import split_chat, topic_chat
 from nanomuse.logger import logger
 
@@ -80,6 +81,8 @@ class TelegramChannel(Channel):
         self._bot_id = 0
         self._username = ""
         self._stream_messages: dict[str, int] = {}
+        # the relay's linking calls (link_code.py), made on the first code a chat sends
+        self._chat_link: ChatLink | None = None
 
         self._typing: dict[str, asyncio.Task[None]] = {}
         self._approval_cards: dict[tuple[str, str], tuple[str, str, list]] = {}
@@ -255,6 +258,21 @@ class TelegramChannel(Channel):
         name = " ".join(p for p in (sender.get("first_name"), sender.get("last_name")) if p) or str(
             sender.get("username") or ""
         )
+        if not is_group and not files and text and not text.startswith("/"):
+            # a chat that has no account yet may send the six characters the app showed
+            # (link_code.py); a chat that already belongs to one, or a word that only looks
+            # like a code, goes on to the Muse as an ordinary message
+            link = self._link()
+            answer = await answer_code(
+                link,
+                str(sender.get("id") or ""),
+                text,
+                "@" + str(sender["username"]) if sender.get("username") else "",
+                getattr(self.bus, "lang", "") or "",
+            )
+            if answer:
+                await self.send(chat_id, answer)
+                return
         self.bus.inbound(
             InboundMessage(
                 channel=self.name,
@@ -273,6 +291,13 @@ class TelegramChannel(Channel):
                 ),
             )
         )
+
+    def _link(self) -> ChatLink:
+        """The relay's two linking calls, with the settings the sign-in door already uses
+        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code."""
+        if self._chat_link is None:
+            self._chat_link = ChatLink(self.name, self.settings, self._transport)
+        return self._chat_link
 
     def _mentioned(self, message: dict[str, Any], text: str) -> bool:
         reply = message.get("reply_to_message")

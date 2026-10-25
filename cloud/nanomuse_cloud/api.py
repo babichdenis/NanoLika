@@ -2086,6 +2086,11 @@ def create_app(
     install_avatar_releases(app, settings, admin_dep)
     install_payments(app, cloud, caller_dep, admin_dep=admin_dep)
 
+    from .channel_links import install as install_channel_links
+
+    # 0.30: a short code joins a chat to the account its person already signed in to
+    install_channel_links(app, cloud, caller_dep, bot_caller)
+
     from .model_accounting import capture_metadata, record_metadata
     from .model_accounting import install as install_model_accounting
 

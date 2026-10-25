@@ -18,6 +18,8 @@ from fastapi import HTTPException, Request
 
 from nanomuse.channels.approval_choices import choices
 from nanomuse.channels.base import Channel, ChannelBus, Field, InboundMessage, json_object
+from nanomuse.channels.link_code import ChatLink, answer_code, as_code
+from nanomuse.logger import logger
 
 API = "https://platform-api2.max.ru"
 MAX_BODY_BYTES = 256 * 1024
@@ -50,6 +52,9 @@ class MaxChannel(Channel):
         self._streams: dict[str, str] = {}
         self._typing: dict[str, asyncio.Task[None]] = {}
         self._approval_cards: dict[tuple[str, str], tuple[str, str, list]] = {}
+        # the relay's linking calls (link_code.py), made on the first code a chat sends
+        self._chat_link: ChatLink | None = None
+        self._link_tasks: set[asyncio.Task[Any]] = set()
 
     def _make_http(self) -> httpx.AsyncClient:
         ctx = ssl.create_default_context()
@@ -134,6 +139,9 @@ class MaxChannel(Channel):
     async def stop(self) -> None:
         tasks = list(self._typing.values())
         self._typing.clear()
+        # a code still being handed to the relay would answer into a closed connection
+        tasks += list(self._link_tasks)
+        self._link_tasks.clear()
         for task in tasks:
             task.cancel()
         if tasks:
@@ -205,16 +213,58 @@ class MaxChannel(Channel):
         except Exception:
             pass
         if chat and sender and mid and text and not self._duplicate("message:" + mid):
-            self.bus.inbound(
-                InboundMessage(
-                    channel=self.name,
-                    chat_id=chat,
-                    sender_id=sender,
-                    sender_name=str(user.get("name") or ""),
-                    text=text,
-                    message_id=mid,
-                )
+            inbound = InboundMessage(
+                channel=self.name,
+                chat_id=chat,
+                sender_id=sender,
+                sender_name=str(user.get("name") or ""),
+                text=text,
+                message_id=mid,
             )
+            if self._link_first(inbound):
+                return
+            self.bus.inbound(inbound)
+
+    def _link(self) -> ChatLink:
+        """The relay's two linking calls, with the settings the sign-in door already uses
+        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code."""
+        if self._chat_link is None:
+            self._chat_link = ChatLink(self.name, self.settings, self._transport)
+        return self._chat_link
+
+    def _link_first(self, msg: InboundMessage) -> bool:
+        """A chat with no account yet may send the six characters the app showed.
+
+        True when the message was taken for that: the answer comes from the relay's call,
+        which is not quick enough to hold the webhook, so `_answer_code` runs on its own
+        and hands the message on when it turns out not to be a code after all."""
+        if not as_code(msg.text) or not self._link().configured():
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:  # no loop: the webhook path always has one, a test may not
+            return False
+        task = loop.create_task(self._answer_code(msg))
+        self._link_tasks.add(task)
+        task.add_done_callback(self._link_tasks.discard)
+        return True
+
+    async def _answer_code(self, msg: InboundMessage) -> None:
+        bus = self.bus
+        if bus is None:
+            return
+        try:
+            answer = await answer_code(
+                self._link(), msg.sender_id, msg.text, "", getattr(bus, "lang", "") or ""
+            )
+        except Exception as exc:  # noqa: BLE001 — a code must never break the chat
+            logger.warning("max: link code failed: {}", type(exc).__name__)
+            answer = ""
+        if not answer:
+            bus.inbound(msg)
+            return
+        with suppress(MaxError):
+            await self.send(msg.chat_id, answer)
 
     async def typing(self, chat_id: str, on: bool) -> None:
         current = self._typing.get(chat_id)

@@ -13,6 +13,10 @@ TEXT = {
         "computer_unavailable": "I cannot identify one available computer for this task. Open Lika there with the same account. If several computers are available, select one first. Ordinary chat does not require a computer.",
         "computer_started": "Passing this task to the computer. Important actions require permission.",
         "computer_failed": "The computer task could not be completed. I did not repeat it on the server. Check the app and whether any part ran before retrying.",
+        "link_linked": "The account is linked ✅\nThis chat now works on the same account as the app: one allowance, one set of devices.",
+        "link_wrong": "That code did not work: it has expired or was used already. Open the app, the account page, “Connect a chat”, and send the new one.",
+        "link_taken": "This chat already belongs to another account. Two accounts are not merged here, so write in the chat that goes with this account, or from another messenger account.",
+        "link_offline": "The account server did not answer, so the code was not used. Try sending it again in a moment.",
     },
     "zh": {
         "max_start": "你好，我是 Lika 🌿\n\n我可以帮你整理清单、起草邮件、解释难懂的内容或一起想办法。\n\n可以这样开始：\n“帮我列一份本周购物清单”\n“帮我礼貌地回复这封邮件”\n“解释一下这段说明”\n\n直接告诉我需要什么。聊天不需要安装电脑应用。\n\nMAX 目前支持文字消息，请用文字描述你的任务。",
@@ -26,6 +30,10 @@ TEXT = {
         "computer_unavailable": "目前无法确定唯一可用的电脑。请在目标电脑打开 Lika 并登录同一账号。有多台电脑时需先选择目标。普通聊天不需要电脑。",
         "computer_started": "正在将任务交给电脑。重要操作需要授权。",
         "computer_failed": "电脑任务未能完成，我没有在服务器上重复执行。重试前请检查应用，并确认是否已经执行了部分操作。",
+        "link_linked": "账号已绑定 ✅\n这个聊天现在和 App 使用同一个账号：同一份额度，同一套设备。",
+        "link_wrong": "这个码用不了：它已经过期或已经被用过。请在 App 的账号页重新生成「连接聊天」，再把新的发过来。",
+        "link_taken": "这个聊天已经属于另一个账号。两个账号不会合并，请用与该账号对应的聊天，或换一个聊天软件账号。",
+        "link_offline": "账号服务器没有回应，这个码还没有用掉。请稍后再发一次。",
     },
     "ru": {
         "max_start": "Привет, я Лика 🌿\n\nПомогу разобраться с повседневными делами: составить список, подготовить письмо, объяснить сложное простыми словами или придумать идею.\n\nМожно начать так:\n«Помоги составить список покупок на неделю»\n«Подготовь вежливый ответ на письмо»\n«Объясни этот пункт инструкции»\n\nНапиши свою первую просьбу. Для разговора приложение на компьютере не нужно.\n\nВ MAX пока доступны текстовые сообщения. Можно описать задачу словами.",
@@ -39,6 +47,10 @@ TEXT = {
         "computer_unavailable": "Не вижу одного доступного компьютера для этого поручения. Открой Лику на нужном компьютере с тем же аккаунтом. Если компьютеров несколько, сначала нужно выбрать, какому передавать задачу. В обычном чате я могу помогать и без компьютера.",
         "computer_started": "Передаю поручение компьютеру. Важные действия потребуют разрешения.",
         "computer_failed": "Не удалось завершить поручение на компьютере. Я не стала повторять его на сервере. Проверь приложение; перед повтором уточни, не выполнилась ли часть задачи.",
+        "link_linked": "Аккаунт привязан ✅\nТеперь этот чат работает с тем же аккаунтом, что и приложение: одна касса, одни и те же устройства.",
+        "link_wrong": "Код не подошёл: он устарел или уже использован. Открой приложение, раздел «Аккаунт», «Подключить чат», и пришли новый код.",
+        "link_taken": "Этот чат уже привязан к другому аккаунту. Два аккаунта не объединяются, поэтому пиши в тот чат, что относится к этому аккаунту, или с другого аккаунта мессенджера.",
+        "link_offline": "Сервер аккаунта не ответил, код пока не использован. Пришли его ещё раз через минуту.",
     },
 }
 
