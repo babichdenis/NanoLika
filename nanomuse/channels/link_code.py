@@ -42,7 +42,13 @@ def as_code(text: str) -> str:
 
 
 class ChatLink:
-    """One channel's way to the relay's two linking calls (``GET`` and ``POST /v1/bot/link``)."""
+    """One channel's way to the relay's two linking calls (``GET`` and ``POST /v1/bot/link``).
+
+    The messenger is this bot's own name (``telegram`` or ``max``) and goes with every call:
+    the relay keys a chat's account on the pair, because the two messengers number their
+    users in separate spaces and the same number there is two people. The id is sent as
+    ``chat_id``, never as ``telegram_id``: that name is the older bots' spelling, and a MAX
+    chat is not a Telegram one."""
 
     def __init__(
         self,
@@ -50,7 +56,7 @@ class ChatLink:
         settings: dict[str, Any],
         transport: httpx.AsyncBaseTransport | None = None,
     ):
-        self.channel = channel
+        self.channel = (channel or "").strip().lower() or "telegram"
         self._settings = settings
         self._transport = transport
 

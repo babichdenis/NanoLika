@@ -48,6 +48,8 @@ class FakeRelay:
         self.status = status if status is not None else {"linked": False, "channel": "telegram"}
         self.link = link if link is not None else (200, {"linked": True, "channel": "telegram"})
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        # what each relay call said in its query string, beside the body it posted
+        self.params: list[dict[str, Any]] = []
         self.sent: list[str] = []
         self.bot_api_down = False
         self.next_message_id = 500
@@ -61,6 +63,7 @@ class FakeRelay:
 
                 body = json.loads(request.content)
             self.calls.append((request.method, request.url.path, body))
+            self.params.append(dict(request.url.params))
             if request.url.path == "/v1/bot/link" and request.method == "GET":
                 return httpx.Response(200, json=self.status)
             if request.url.path == "/v1/bot/link" and request.method == "POST":
@@ -319,7 +322,43 @@ async def test_the_max_bot_answers_a_code_too():
     assert relay.sent == [channel_text("ru", "link_linked")]
     assert bus.inbound_msgs == []
     assert [m for m, _p, _b in relay.calls] == ["GET", "POST"]
+    # the messenger this bot is, and the id under the neutral name: the relay keys a chat's
+    # account on the pair, and a MAX chat is not a Telegram one
+    assert relay.params[0]["channel"] == "max"
+    assert relay.params[0]["chat_id"] == str(CHAT)
+    posted = [b for m, _p, b in relay.calls if m == "POST"][0]
+    assert posted["channel"] == "max"
+    assert posted["chat_id"] == str(CHAT)
+    assert "telegram_id" not in posted
     await ch._http.aclose()
+
+
+@pytest.mark.parametrize("surface", ["telegram", "max"])
+async def test_every_link_call_carries_the_messenger_it_wrote_from(surface: str):
+    """Both bots say which messenger they are on both calls, and neither calls its id a
+    Telegram one: the same digits on the two messengers are two people at the relay."""
+    relay = FakeRelay()
+    link = ChatLink(
+        surface,
+        {"cloud_url": "http://relay.test", "cloud_bot_token": "s"},
+        httpx.MockTransport(relay.handler),
+    )
+    await link.status(str(CHAT))
+    await link.redeem(str(CHAT), CODE, "@denis")
+    # the status asks in the query string, the link posts a body: the messenger is in both
+    assert relay.params == [{"channel": surface, "chat_id": str(CHAT)}, {}]
+    posted = [b for m, _p, b in relay.calls if m == "POST"][0]
+    assert posted == {
+        "channel": surface,
+        "chat_id": str(CHAT),
+        "code": CODE,
+        "identifier": "@denis",
+    }
+
+
+def test_a_channel_that_names_no_messenger_is_a_telegram_one():
+    assert ChatLink("", {}).channel == "telegram"
+    assert ChatLink("MAX", {}).channel == "max"
 
 
 @pytest.mark.parametrize("text", ["ABCDEF", "ZXY234"])

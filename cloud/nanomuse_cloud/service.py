@@ -65,10 +65,60 @@ SHELF_MAX_PER_KIND = 24
 CHANNEL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CHANNEL_CODE_LENGTH = 6
 CHANNEL_CODE_TTL_S = 10 * 60
-# The messengers a chat can come from. A chat is looked up in the relay's one chat identity
-# space (`telegram`, whichever messenger writes) — that is how the bot's sign-in door has
-# always made an account — so these two are what the person sees, not how a chat is hashed.
+# The messengers a chat can come from, and the identity space a chat is sorted into. Both
+# hand their bot a numeric id, and both count their users in a space of their own: the same
+# number on Telegram and on MAX is two people. The messenger is part of the account key
+# (`Identifier.hash` hashes `channel:value`), so `telegram:123` and `max:123` are two
+# accounts. They were one account while every chat was hashed as a Telegram one, whichever
+# bot wrote it.
 CHANNEL_SURFACES = ("telegram", "max")
+
+# The space a chat that names no messenger is looked up in. Every account the bot's door made
+# before MAX was told apart from Telegram is a Telegram one and stays reachable as such:
+# nothing is rewritten and the old rows keep the hash they were made with.
+DEFAULT_CHAT_SURFACE = "telegram"
+
+
+def chat_surface(channel: str) -> str:
+    """The messenger a chat writes from; Telegram when the bot named none (older bots).
+
+    Only the two bots are channels here, and anything else is refused rather than hashed
+    into a space nobody would look in again: a chat of an unknown messenger would be a new
+    account every time its bot changed, and never the same one twice."""
+    name = (channel or "").strip().lower()[:16]
+    if not name:
+        return DEFAULT_CHAT_SURFACE
+    if name not in CHANNEL_SURFACES:
+        raise CloudError(400, "bad_channel", "A channel is telegram or max")
+    return name
+
+
+class ChatIdentity(Identifier):
+    """A chat as an account key, and the label the account page shows for it.
+
+    `identifiers.Identifier` knows the three ways a person signs in (a phone, an address, a
+    Telegram account); a chat from either bot is the same kind of key, hashed by the same
+    rule (`channel:value`), so a Telegram chat hashes exactly as it always did. The hint says
+    which messenger the chat writes from: `tg ***5031` on a MAX account would be a lie about
+    where it came from.
+    """
+
+    @property
+    def hint(self) -> str:
+        if self.channel == DEFAULT_CHAT_SURFACE:
+            return f"tg ***{self.value[-4:]}"
+        return f"{self.channel} ***{self.value[-4:]}"
+
+
+def chat_identity(channel: str, chat_id: str) -> Identifier:
+    """The account key a chat's message makes: the messenger it came from, then its id.
+
+    Both bots are told a numeric id with every message, and neither id is an address or a
+    phone number of the other kind, so the id is checked by `telegram()` and then keyed on
+    the messenger that carried it. A call that names no messenger is a Telegram chat, which
+    is what a bot built before MAX existed sends, and the key it makes is the very key such
+    a bot made before, so no account loses the chat that made it."""
+    return ChatIdentity(chat_surface(channel), telegram(chat_id).value)
 
 
 # Where the person is, as far as the relay can tell (0.17), for the "ways on" when the
@@ -881,7 +931,7 @@ class Cloud:
         """Returns (api_key, caller, created). The key is shown once. `invite` is
         a friend's code; it counts only when this sign-in creates the account.
 
-        `link` is the one-time code a chat was given (`telegram_link_code`): with it the
+        `link` is the one-time code a chat was given (`chat_link_code`): with it the
         proven address joins that chat's account instead of opening one of its own, so the
         app and the chat are one account, one allowance and one set of devices."""
         if not self.allowed(ident):
@@ -959,40 +1009,54 @@ class Cloud:
             self.evaluate_thresholds(defer_mail=True)
         return key, caller, created
 
-    def sign_in_bot(self, telegram_id: str, device: str = "", invite: str = "") -> tuple[str, Caller, bool]:
-        """A Telegram chat that has just written to the bot, as an account of its own.
+    def sign_in_bot(
+        self, chat_id: str, device: str = "", invite: str = "", channel: str = DEFAULT_CHAT_SURFACE
+    ) -> tuple[str, Caller, bool]:
+        """A chat that has just written to the bot, as an account of its own.
 
         The first message makes the account: the same allowance every new account gets, a
         key of its own, a place in the console. The key is what the chat spends with, so a
-        long conversation in Telegram costs that account and not the relay's own pool, and
-        the refusal at the end of the allowance arrives the way it does in the apps. A
-        second message finds the same account, so there is no second bonus."""
+        long conversation in a messenger costs that account and not the relay's own pool, and
+        the refusal at the end of the allowance arrives the way it does in the apps. A second
+        message finds the same account, so there is no second bonus.
+
+        `channel` is the messenger that carried the message (`telegram` or `max`), and a call
+        that names none is a Telegram one, which is what a bot built before MAX existed
+        sends. The two messengers number their users apart, so the account a message makes is
+        the pair: `telegram:123` is not `max:123`, and one number on both messengers is two
+        people with two allowances, not one person with two ways in."""
         if not self.s.bot_signin_token:
             raise CloudError(
                 503,
                 "bot_off",
-                "The Telegram door is shut on this relay; leave BOT_SIGNIN_TOKEN empty only while it should be.",
+                "The bot door is shut on this relay; leave BOT_SIGNIN_TOKEN empty only while it should be.",
             )
-        ident = telegram(telegram_id)
+        surface = chat_surface(channel)
+        ident = self._chat_key(surface, chat_identity(surface, chat_id))
         if self._account_for(ident) is None and not self.s.bot_signup_open:
             raise CloudError(
                 403,
                 "signup_closed",
                 "New chats are closed on this relay for now; an account that already exists keeps working.",
             )
-        return self.sign_in(ident, device or "telegram", via="telegram", invite=invite, reached=True)
+        return self.sign_in(ident, device or surface, via=surface, invite=invite, reached=True)
 
-    def telegram_link_code(self, telegram_id: str, device: str = "") -> tuple[str, int]:
+    def chat_link_code(self, chat_id: str, device: str = "", channel: str = DEFAULT_CHAT_SURFACE) -> tuple[str, int]:
         """A one-time code for the account this chat is, to be typed in the app.
 
         The chat is the way in for someone with nothing installed; the app comes later, and
         this code is what makes it the same account rather than a second one. Asking again
-        retires the code from before. Returns (code, expires_at)."""
-        ident = telegram(telegram_id)
+        retires the code from before. Returns (code, expires_at).
+
+        The code is made for the account this chat is in its own messenger's space
+        (`sign_in_bot`), so a MAX chat's code names the MAX account and never the Telegram
+        one that happens to carry the same number."""
+        surface = chat_surface(channel)
+        ident = self._chat_key(surface, chat_identity(surface, chat_id))
         account = self._account_for(ident)
         if account is None:
             # the first ask makes the account, exactly as the first message would
-            _key, caller, _created = self.sign_in_bot(telegram_id, device)
+            _key, caller, _created = self.sign_in_bot(chat_id, device, channel=surface)
             account = self.db.account(caller.account_id)
         if account is None:
             raise CloudError(500, "no_account", "Could not find the account for this chat")
@@ -1009,15 +1073,12 @@ class Cloud:
     @staticmethod
     def _surface(channel: str) -> str:
         """The messenger a chat wrote from. Only the two bots are channels here."""
-        name = (channel or "").strip().lower()[:16]
-        if name not in CHANNEL_SURFACES:
-            raise CloudError(400, "bad_channel", "A channel is telegram or max")
-        return name
+        return chat_surface(channel)
 
     def channel_code(self, caller: Caller) -> tuple[str, int]:
         """The six characters an account shows in the app and types into its chat.
 
-        The other direction of `telegram_link_code` and the one a person meets first: the
+        The other direction of `chat_link_code` and the one a person meets first: the
         account already exists (they are signed in to the app), the chat does not, and the
         code is what joins them. Asked for with the account's own key, one code at a time:
         asking again retires the one before it, so a code someone read off the screen stops
@@ -1060,15 +1121,56 @@ class Cloud:
             )
         return out
 
+    @staticmethod
+    def _of_surface(row: sqlite3.Row, surface: str) -> bool:
+        """Whether a chat's row is this messenger's.
+
+        `account_aliases.surface` is the messenger the person actually saw. A row without one
+        is from before the column existed and belongs to either, and every row that a code
+        wrote since carries it."""
+        written = str(row["surface"] or "")
+        return not written or written == surface
+
+    def _chat_alias(self, surface: str, ident: Identifier) -> sqlite3.Row | None:
+        """The row that says this chat is one of an account's, in this chat's own space.
+
+        A chat linked before the messenger was part of the key (0.30) sits in the Telegram
+        space with the messenger the person saw written beside it, so that column decides
+        whether the row is this chat or a Telegram one carrying the same number: `max:123`
+        never inherits the Telegram account of 123, and a MAX chat linked before this change
+        is still found as linked."""
+        row = self.db.alias_row(ident.hash(self.s.hmac_key))
+        if row is not None:
+            return row if self._of_surface(row, surface) else None
+        if surface == DEFAULT_CHAT_SURFACE:
+            return None
+        legacy = self.db.alias_row(telegram(ident.value).hash(self.s.hmac_key))
+        return legacy if legacy is not None and self._of_surface(legacy, surface) else None
+
+    def _chat_key(self, surface: str, ident: Identifier) -> Identifier:
+        """The key this chat's account is actually filed under.
+
+        A chat linked before the messenger was part of the key is filed in the Telegram space,
+        and its row's `surface` is what proves it is this chat. Reading is all that happens:
+        the row keeps its hash, and the chat signs in to the account it already has instead of
+        being handed a second one by the first message after the change."""
+        if surface == DEFAULT_CHAT_SURFACE:
+            return ident
+        row = self._chat_alias(surface, ident)
+        if row is not None and str(row["id_hash"]) != ident.hash(self.s.hmac_key):
+            return ChatIdentity(DEFAULT_CHAT_SURFACE, ident.value)
+        return ident
+
     def chat_link(self, channel: str, chat_id: str) -> dict[str, Any]:
         """Whether this chat already belongs to an account, and what to call it there.
 
         The bot asks before it reads a message as a code: a chat that already belongs to an
         account (it talked to the bot before) is told nothing about codes and its messages
-        stay ordinary messages."""
+        stay ordinary messages. The chat is looked for in its own messenger's space, so a MAX
+        chat hears about MAX's account and never about a Telegram one with the same number."""
         surface = self._surface(channel)
-        ident = telegram(chat_id)
-        row = self.db.alias_row(ident.hash(self.s.hmac_key))
+        ident = chat_identity(surface, chat_id)
+        row = self._chat_alias(surface, ident)
         if row is not None:
             return {
                 "linked": True,
@@ -1096,13 +1198,16 @@ class Cloud:
         An account that already holds this chat is refused rather than merged: a chat is
         one identity in the relay, its own account's or the account a code named, and two
         accounts with two allowances are never quietly joined. The code is not spent by a
-        refusal, so the same six characters still work in the chat they were meant for."""
+        refusal, so the same six characters still work in the chat they were meant for.
+
+        The chat is written into its own messenger's space, so the row that ties a MAX chat to
+        an account is a MAX row: the same number on Telegram keeps its own."""
         surface = self._surface(channel)
         if not self.s.link_code_ttl_s:
             raise CloudError(503, "link_off", "Linking a chat to an account is switched off on this relay")
-        ident = telegram(chat_id)
-        held = self._account_for(ident)
-        if held is not None:
+        ident = chat_identity(surface, chat_id)
+        held = self._account_for(ident) is not None or self._chat_alias(surface, ident) is not None
+        if held:
             raise CloudError(
                 409,
                 "link_taken",

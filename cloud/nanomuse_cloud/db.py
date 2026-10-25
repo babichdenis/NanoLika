@@ -33,7 +33,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id            TEXT PRIMARY KEY,
     id_hash       TEXT NOT NULL UNIQUE,
-    channel       TEXT NOT NULL,          -- phone | email
+    channel       TEXT NOT NULL,          -- phone | email | telegram | max
     hint          TEXT NOT NULL,          -- 138****1234 / a***@example.com
     created_at    INTEGER NOT NULL,
     granted       INTEGER NOT NULL DEFAULT 0,
@@ -295,12 +295,14 @@ CREATE TABLE IF NOT EXISTS deleted_keys (
 CREATE TABLE IF NOT EXISTS account_aliases (
     id_hash       TEXT PRIMARY KEY,
     account_id    TEXT NOT NULL REFERENCES accounts(id),
-    channel       TEXT NOT NULL,              -- phone | email | telegram
+    channel       TEXT NOT NULL,              -- phone | email | telegram | max
     hint          TEXT NOT NULL DEFAULT '',   -- what the account page shows for it
     created_at    INTEGER NOT NULL,
     -- 0.30: the row a chat makes when it types the account's own short code. `channel`
-    -- above stays the identity space the relay looks a chat up in (telegram, whichever
-    -- messenger wrote); `surface` is the messenger the person saw (telegram | max) and
+    -- above is the identity space the row lives in: a chat's key is the messenger and the
+    -- id together, so `telegram:123` and `max:123` are two rows and two accounts. A row
+    -- written while every chat was hashed as a Telegram one is a Telegram-space row, and
+    -- `surface` is what says which messenger its person actually saw (telegram | max);
     -- `identifier` is what that messenger calls them (@username, '' when there is none).
     -- Both are empty on a row that an address made.
     surface       TEXT NOT NULL DEFAULT '',

@@ -294,9 +294,13 @@ class TelegramChannel(Channel):
 
     def _link(self) -> ChatLink:
         """The relay's two linking calls, with the settings the sign-in door already uses
-        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code."""
+        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code. The messenger
+        is this bot's own name: the relay keys a chat's account on it, so a Telegram id and
+        the same id on MAX stay two people."""
         if self._chat_link is None:
-            self._chat_link = ChatLink(self.name, self.settings, self._transport)
+            self._chat_link = ChatLink(
+                channel=self.name, settings=self.settings, transport=self._transport
+            )
         return self._chat_link
 
     def _mentioned(self, message: dict[str, Any], text: str) -> bool:

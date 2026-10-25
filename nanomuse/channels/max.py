@@ -227,9 +227,13 @@ class MaxChannel(Channel):
 
     def _link(self) -> ChatLink:
         """The relay's two linking calls, with the settings the sign-in door already uses
-        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code."""
+        (``cloud_url`` and ``cloud_bot_token``); made once, on the first code. The messenger
+        is this bot's own name, and it is what keeps a MAX id apart from the Telegram id with
+        the same digits: the relay keys a chat's account on the pair."""
         if self._chat_link is None:
-            self._chat_link = ChatLink(self.name, self.settings, self._transport)
+            self._chat_link = ChatLink(
+                channel=self.name, settings=self.settings, transport=self._transport
+            )
         return self._chat_link
 
     def _link_first(self, msg: InboundMessage) -> bool:
