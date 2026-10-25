@@ -13,6 +13,24 @@ missing: that mistake has been made, with mail, and it cost a long detour.
 The same inventory is in the agent's system prompt (`nanomuse/capabilities.py`), so the model
 in the app sees it too; the file is for the agents that read the repository.
 
+## Before you build anything
+
+[CAPABILITIES.md](CAPABILITIES.md) lists every tool the build carries; [docs/store.md](docs/store.md)
+is the store of what it does not (skills, code capsules, MCP descriptions). Read both before
+writing a client for something the runtime already does, and before telling the user a
+capability is missing.
+
+## The desktop shell's own traps
+
+- The profile is named `nanolika` (`PROFILE` in `harness/desktop/src/main.ts`). Bundles gate rows
+  on `profileContext.name !== 'desktop'`, so a row that "should be on" may be off: the right
+  Sidebar's Browser tab was, until `scripts/patch-dsh.mjs` stopped removing that gate.
+- Client plugins (the right Sidebar, documents, terminal) are loaded by `dsh-client-modules`;
+  their names are **not** in `dsh-web-frontend/dist/assets/*.js`. Searching there proves nothing.
+- `dsh/`, `runtime/` and `node/` under `harness/desktop` are staged by scripts, not committed.
+  A change to how they are staged belongs in `prepare-dsh.mjs`, `prepare-node.mjs` or
+  `patch-dsh.mjs`, never in the staged copy alone.
+
 ## Repository layout
 
 ```
@@ -78,7 +96,7 @@ cd website && npm ci && npm run docs:build       # also the dead-link check; `np
 - **Voice.** Plain, specific, human sentences; say what a thing does. No marketing words, no exclamation marks, no superlatives. No em or en dashes in new text: commas, colons and full stops instead (a dash stays where it is data: a number range in a table, code). Chinese copy is written as Chinese, not word for word from the English, follows the same rule, avoids 颠覆, 王炸, 保姆级, 一键 and 赋能, and uses the terms of the [glossary in CONTRIBUTING.md](CONTRIBUTING.md#translating-the-docs) (非营利, never 非盈利; `nanoMuse Cloud` is never translated). Never copy Meta's UI text verbatim; describe the same behaviour in our words.
 - **Facts come from the repository.** Every feature, number and provider count in a README, a page or a release note must be verifiable in the code or a catalogue; a shipped feature is never called a demo or coming soon; copy about the avatar does not say how many pictures or poses it has.
 - **The ten READMEs move together.** `README.md` and the nine under `docs/readme/` share one structure and change in the same commit; the badge row is two lines, the longer first; a *News* line is one short sentence with the date in inline code and at most one emoji, newest first, and only a milestone release gets one ([CONTRIBUTING.md](CONTRIBUTING.md#the-ten-readmes)).
-- **Docs accompany code.** A change that alters what a person sees or does updates the page under `docs/` in the same change, and adds a line under *Unreleased* in `CHANGELOG.md` (past tense, concrete, user-facing).
+- **The worklog carries what `git log` cannot.** Before finishing a task, append an entry to [docs/WORKLOG.md](docs/WORKLOG.md): what was asked, what was done, how it was checked on the live server, what remains, and the trap that cost time (a file mounted per-file from `overrides/`, a Caddy directive that sorts after `handle`, a column read by a different table). Newest first; never rewrite someone else's entry; an unfinished task records where it stopped and what is missing. The code says what changed, the worklog says why and what is still open, and the next session reads it before starting.
 - **No version bumps outside release commits.** `pyproject.toml`, `cloud/pyproject.toml`, the two `harness/*/package.json`, the Android `versionName`/`versionCode` and the iOS `MARKETING_VERSION` move together in the release commit only.
 - **Commits** follow Conventional Commits (`feat(android): …`, `fix(relay): …`), carry a DCO sign-off (`git commit -s`), and are merged by rebase or merge commit, never squash.
 - **No secrets, ever.** No keys, tokens, phone numbers, e-mail addresses or private hosts in code, docs, tests or fixtures; the one address allowed is the maintainer's contact in the READMEs' *Maintainers* table, there at his request. `config/config.toml` and `cloud/.env` are git-ignored; secrets reach the model as `{{vault:NAME}}` and nothing else.
