@@ -74,3 +74,9 @@ export function restoreOutcomes(raw: unknown): TurnOutcome[] {
     ...(['проверка сборки','запуск тестов','изменение файлов','чтение или поиск','работа с веб-страницей','команда на компьютере','вызов инструмента'].includes(o.lastOperation) ? {lastOperation:o.lastOperation} : {}),
   }))
 }
+
+/** Only a validated locale id enters the prompt, never arbitrary settings text. */
+export function recoveryRulesFor(preference: unknown): string {
+  const selected = typeof preference === 'string' && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(preference) ? preference : undefined
+  return `${RECOVERY_RULES}${selected ? ` The user selected interface language ${selected}. Use that language for ALL user-visible reasoning summaries, progress and action explanations, not only failures. A code snippet or an English tool result must not change this language.` : ''}`
+}

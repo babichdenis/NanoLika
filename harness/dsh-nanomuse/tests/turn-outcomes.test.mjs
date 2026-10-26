@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { TurnOutcomes, outcomeText, restoreOutcomes } from '../lib/turn-outcomes.js'
+import { TurnOutcomes, outcomeText, restoreOutcomes, recoveryRulesFor } from '../lib/turn-outcomes.js'
 function fixture() { const saved = [], stopped = []; const tracker = new TurnOutcomes(o => saved.push(o), id => stopped.push(id)); const send = (type, data = {}, id = 's') => tracker.onEvent(id, { type, data }); send('turn/start', { turn: 1 }); return { saved, stopped, tracker, send } }
 test('a complete answer needs no failure receipt', () => { const f = fixture(); f.send('assistant/message', { message: { content: [{type:'text',text:'Done'}] } }); f.send('turn/end',{reason:{kind:'completed'}}); assert.equal(f.saved.length,0) })
 test('a promise before tools is not a final result', () => { const f = fixture(); f.send('assistant/message',{message:{content:[{type:'text',text:'Doing it'}]}}); f.send('tool/call',{callId:'a',name:'bash',arguments:'secret'}); f.send('turn/end',{reason:{kind:'aborted'}}); assert.equal(f.saved[0].pending,true); assert.equal(f.saved[0].cause,'interrupted'); assert.ok(!JSON.stringify(f.saved).includes('secret')) })
@@ -15,3 +15,5 @@ test('a final explanation after tools prevents a false incomplete receipt',()=>{
 
 test('state restoration is bounded, validates records and removes arbitrary fields',()=>{const row={sessionId:'s',turn:1,at:1,cause:'budget',completed:1,failed:0,pending:false,secret:'must not persist',lastOperation:'secret'};const restored=restoreOutcomes([...Array(105).fill(row),{cause:'bad'}]);assert.equal(restored.length,100);assert.ok(!JSON.stringify(restored).includes('secret'));assert.deepEqual(restoreOutcomes(null),[])})
 test('replayed tool results cannot create repeated-failure cancellation',()=>{const f=fixture();f.send('tool/call',{callId:'a',name:'x',arguments:'same'});f.send('tool/result',{message:{toolCallId:'a',isError:true}});f.send('tool/result',{message:{toolCallId:'a',isError:true}});assert.equal(f.stopped.length,0);f.send('turn/end',{reason:{kind:'error'}});assert.equal(f.saved[0].failed,1)})
+
+test('all visible explanations follow the selected language, not just errors',()=>{assert.match(recoveryRulesFor('ru'),/selected interface language ru/);assert.match(recoveryRulesFor('en-GB'),/language en-GB/);assert.match(recoveryRulesFor('ru'),/ALL user-visible reasoning summaries/);assert.ok(!recoveryRulesFor('ru; secret instruction').includes('secret instruction'));assert.ok(!recoveryRulesFor(null).includes('selected interface language'))})

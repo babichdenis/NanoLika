@@ -1,5 +1,5 @@
 import { ConversationNavigation, type ConversationNavigationRequest } from './conversation-navigation.ts'
-import { RECOVERY_RULES, restoreOutcomes, TurnOutcomes, type TurnOutcome } from './turn-outcomes.ts'
+import { recoveryRulesFor, restoreOutcomes, TurnOutcomes, type TurnOutcome } from './turn-outcomes.ts'
 import { TurnBudget, type TurnView } from './turn-budget.ts'
 /**
  * NanoLika Cloud for the harness: `ctx.nanomuseCloud`.
@@ -1083,7 +1083,10 @@ export default class NanomuseCloud extends Service {
     const cloud = this
     this.ctx.inject(['llm'], (ctx) => {
       ctx.on('llm/stream', function (options, next) {
-        if (options.sessionId && !options.purpose) options.system = `${options.system ?? ''}\n\n${RECOVERY_RULES}`
+        if (options.sessionId && !options.purpose) {
+          const locale = cloud.ctx.settings.describe().find((row) => row.ns === 'locale')?.value as { preference?: unknown } | undefined
+          options.system = `${options.system ?? ''}\n\n${recoveryRulesFor(locale?.preference)}`
+        }
         if (options.provider !== PROVIDER_ID) return next()
         if (!cloud.cloudModels() && !(options.sessionId && cloud.cloudOnce.has(String(options.sessionId)))) {
           const own = options.purpose ? cloud.ownChatChoice() : undefined
