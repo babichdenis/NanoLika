@@ -16,6 +16,7 @@ const JUNK_RU = {
   "junk:moderation": "модерация",
   "junk:stale": "устаревшая версия",
   "junk:deprecated": "снята продавцом",
+  "junk:free": "free-маршрут; не включать в платный каталог",
   "junk:no-price": "нет цены",
   "junk:duplicate": "дубль",
   "junk:audio-tool": "служебная аудио",
@@ -92,15 +93,21 @@ function row(model) {
   left.append(h("div", model.name, "name"));
   const meta = h("div", undefined, "meta");
   meta.append(h("code", model.slug), h("span", " · " + model.unit));
+  if (model.new_model) meta.append(h("span", " · новая модель — проверьте до включения", "tag"));
+  if (model.price_changed) meta.append(h("span", " · цена изменилась", "tag"));
+  if (model.free) meta.append(h("span", " · free", "tag free"));
+  if (model.context_length) meta.append(h("span", ` · контекст ${Number(model.context_length).toLocaleString("ru-RU")}`));
+  if (model.max_output) meta.append(h("span", ` · ответ до ${Number(model.max_output).toLocaleString("ru-RU")}`));
   if (model.junk) meta.append(h("span", " · " + (JUNK_RU[model.junk] || model.junk), "tag"));
   left.append(meta);
   el.append(left);
 
   const prices = h("div", undefined, "prices");
-  prices.append(h("b", money(model.cheapest_rub) + " ₽"));
-  const pricedOffers = (model.offers || []).filter((o) => o.rub);
-  const inputs = pricedOffers.filter((o) => o.direction === "input");
-  const best = (inputs.length ? inputs : pricedOffers).sort((a, b) => a.rub - b.rub)[0];
+  prices.append(h("b", model.free ? "free" : money(model.cheapest_rub) + " ₽"));
+  const pricedOffers = (model.offers || []).filter((o) => o.rub !== null && o.rub !== undefined);
+  const eligibleOffers = pricedOffers.filter((o) => o.route_eligible !== false);
+  const inputs = eligibleOffers.filter((o) => o.direction === "input");
+  const best = (inputs.length ? inputs : eligibleOffers).sort((a, b) => a.rub - b.rub)[0];
   if (best) prices.append(h("div", "у " + best.provider, "meta"));
   el.append(prices);
 
@@ -132,10 +139,10 @@ function row(model) {
 
   const offers = h("div", undefined, "meta offers");
   offers.textContent = (model.offers || [])
-    .filter((o) => o.rub)
+    .filter((o) => o.rub !== null && o.rub !== undefined)
     .sort((a, b) => a.rub - b.rub)
     .slice(0, 3)
-    .map((o) => `${o.provider} ${o.direction === "input" ? "вход" : o.direction === "output" ? "выход" : ""} ${money(o.rub)}${o.unit && o.unit !== model.unit ? " за " + o.unit : ""}`)
+    .map((o) => `${o.provider} ${o.free ? "free" : `${o.direction === "input" ? "вход" : o.direction === "output" ? "выход" : ""} ${money(o.rub)} ₽`}${o.route_eligible === false ? ` · ${o.exclusion_reason || "исключено из маршрутизации"}` : ""}${o.unit && o.unit !== model.unit ? " за " + o.unit : ""}`)
     .join(" · ");
   el.append(offers);
   return el;

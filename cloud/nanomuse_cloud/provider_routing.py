@@ -18,21 +18,27 @@ import httpx
 
 log = logging.getLogger(__name__)
 FLASH_1017 = "deepseek/deepseek-v4.1-flash-1017"
+FLASH_FAMILY = "deepseek/deepseek-v4.1-flash"
 ALIASES = {
-    # DeepSeek's moving V4.1 Flash name and OpenRouter's dated snapshot are the
-    # same current model. Without this mapping the live quote table omitted the
-    # OpenRouter offer and made RouterAI look like the only route.
-    "deepseek-flash": FLASH_1017,
-    "deepseek-v4.1-flash": FLASH_1017,
-    "deepseek/deepseek-v4.1-flash": FLASH_1017,
-    "deepseek-v4.1-flash-1017": FLASH_1017,
-    FLASH_1017: FLASH_1017,
+    # Keep a clean family identity for comparisons, but never route the dated
+    # 1017 endpoint as the default Flash model. Its current quote is a costly
+    # endpoint variant, not the price of the generic DeepSeek Flash offer.
+    "deepseek-flash": FLASH_FAMILY,
+    "deepseek-v4.1-flash": FLASH_FAMILY,
+    "deepseek/deepseek-v4.1-flash": FLASH_FAMILY,
+    "deepseek-v4.1-flash-1017": FLASH_FAMILY,
+    FLASH_1017: FLASH_FAMILY,
 }
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
 
 
 def identity(model: str) -> str:
     return ALIASES.get(model.lower(), model)
+
+
+def blocked_price_variant(model: str) -> bool:
+    """Known expensive dated Flash endpoint; do not use as generic Flash."""
+    return model.lower().removeprefix("deepseek/") == "deepseek-v4.1-flash-1017"
 
 
 def number(value: Any) -> float | None:
@@ -129,6 +135,7 @@ class Offer:
     overrides: tuple[dict, ...] = ()
     canonical_model: str = ""
     request_rub: float = 0.0
+    output_modalities: tuple[str, ...] = ()
 
     def rates(self, at: float | None = None) -> tuple[float, float, float | None]:
         now = datetime.fromtimestamp(time.time() if at is None else at, UTC)
@@ -156,6 +163,8 @@ class Route:
     headers: dict[str, str]
     body: dict
     offer: Offer | None = None
+    routing_eligible: bool = True
+    exclusion_reason: str = ""
 
 
 class ProviderRouter:
@@ -183,6 +192,7 @@ class ProviderRouter:
                 for row in raw.get("offers", []):
                     row["parameters"] = tuple(row["parameters"])
                     row["modalities"] = tuple(row["modalities"])
+                    row["output_modalities"] = tuple(row.get("output_modalities", ()))
                     row["overrides"] = tuple(row.get("overrides", []))
                     offer = Offer(**row)
                     self.offers.setdefault(offer.provider, []).append(offer)
@@ -268,6 +278,7 @@ class ProviderRouter:
                     tuple(overrides),
                     identity(canonical),
                     request_rub,
+                    tuple(outputs),
                 )
             )
         return result
@@ -411,6 +422,7 @@ class ProviderRouter:
             "max_age_seconds": self.max_age,
             "errors": dict(self.errors),
             "max_fallback_multiple": self.max_fallback_multiple,
+            "max_fallback_multiple": self.max_fallback_multiple,
             "balances": dict(self.balances),
             "providers": {name: len(rows) for name, rows in self.offers.items()},
         }
@@ -433,6 +445,7 @@ class ProviderRouter:
         messages = json.dumps(body.get("messages", []))
         vision = '"image_url"' in messages or '"input_image"' in messages
         candidates = []
+        blocked_candidates = []
         now = time.time()
         wanted = identity(spec.upstream)
         if spec.provider:
@@ -453,6 +466,19 @@ class ProviderRouter:
                 continue
             for offer in offers:
                 if identity(offer.canonical_model or offer.model) != wanted or now - offer.updated > self.max_age:
+                    continue
+                if blocked_price_variant(offer.model):
+                    if include_all:
+                        fixed = replace(offer, overrides=())
+                        blocked_candidates.append(Route(
+                            name,
+                            provider.base.rstrip("/") + "/v1/chat/completions",
+                            {"Authorization": "Bearer " + provider.key(), "Content-Type": "application/json"},
+                            dict(clean_body, model=offer.model),
+                            fixed,
+                            False,
+                            "исключена дорогая версия 1017; не используется как обычный Flash",
+                        ))
                     continue
                 if not self.allow_quantized and any(q in offer.endpoint.lower() for q in ("fp4", "int4", "q4")):
                     continue
@@ -486,13 +512,29 @@ class ProviderRouter:
                 )
                 candidates.append((fixed.estimate(prompt, expected), name != spec.provider, route))
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
-        if candidates and not include_all:
+        eligible = []
+        annotated = []
+        if candidates:
             cap = candidates[0][0] * self.max_fallback_multiple
-            candidates = [item for item in candidates if item[0] <= cap]
-        routes = [item[2] for item in candidates]
+            for estimate, configured_first, route in candidates:
+                allowed = estimate <= cap
+                checked = replace(
+                    route,
+                    routing_eligible=allowed,
+                    exclusion_reason="" if allowed else "стоимость этого запроса выше допустимого резерва",
+                )
+                annotated.append((estimate, configured_first, checked))
+                if allowed:
+                    eligible.append((estimate, configured_first, checked))
+        routes = [item[2] for item in (annotated if include_all else eligible)]
+        if include_all:
+            routes.extend(blocked_candidates)
         # Only the explicitly configured route is allowed as an unpriced last resort.
         # Never send the model to arbitrary known providers or a different model version.
-        has_quote = any(identity(o.canonical_model or o.model) == wanted for offers in self.offers.values() for o in offers)
+        has_quote = any(
+            identity(o.canonical_model or o.model) == wanted and not blocked_price_variant(o.model)
+            for offers in self.offers.values() for o in offers
+        )
         balance = self.balances.get(configured.provider, {})
         blocked = (
             balance.get("error") is None
@@ -503,7 +545,7 @@ class ProviderRouter:
         if (
             (not has_quote or self.allow_unpriced)
             and not blocked
-            and not any(r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
+            and not any(r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
         ):
             routes.append(configured)
         return routes

@@ -346,6 +346,9 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
 
 /* ---- the Muse conversation: the harness's DOM, Muse's shapes ----------- */
 /* The composer card becomes one pill: + | the text | send. */
+/* The vendor conversation hides its composer while a session is settling. A new chat can remain
+   in that phase after a restored session, so never let the transition make the input disappear. */
+html[data-nm-muse] [data-composer-seat] { visibility: visible !important; opacity: 1 !important; }
 html[data-nm-muse] [data-composer-card] { display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: flex-end; gap: 2px 4px; padding: 5px 5px 5px 6px !important; border-radius: 26px !important; background: var(--nm-field) !important; box-shadow: 0 0 0 1px var(--nm-field-border), 0 6px 24px rgba(0,0,0,0.10) !important; }
 html[data-nm-muse] [data-composer-card] > [data-input-scroll] { flex: 1 1 120px; min-width: 0; order: 0; margin: 0 !important; }
 html[data-nm-muse] [data-composer-card] > [data-input-scroll] [contenteditable] { min-height: 34px !important; padding: 5px 6px 5px 8px !important; }
@@ -1492,6 +1495,8 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 .nm-mp-model { display:grid;grid-template-columns:minmax(0,1fr) 32px;border-bottom:1px solid var(--nm-divider);padding:5px 0; }
 .nm-mp-favourite { border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
 .nm-model-estimate { grid-column:1/-1;padding:5px 12px;font-size:12px; }
+.nm-mp-meta { display:flex;flex-wrap:wrap;gap:5px 10px;padding:0 12px 4px;font-size:11px;color:var(--dsw-alias-label-secondary); }
+.nm-model-free { display:inline-block;padding:2px 7px;border-radius:999px;background:color-mix(in srgb, #6fa66f 18%, transparent);color:var(--dsw-alias-label-primary);font-weight:600; }
 .nm-model-estimate summary { cursor:pointer;color:var(--dsw-alias-label-secondary); }
 .nm-model-estimate label { display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0; }
 .nm-model-estimate input,.nm-model-estimate select { max-width:170px;padding:6px;border-radius:7px;border:1px solid var(--nm-divider);background:var(--nm-field);color:inherit; }

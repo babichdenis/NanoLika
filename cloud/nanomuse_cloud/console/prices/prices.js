@@ -805,7 +805,7 @@ function providerCell(m, name) {
   }
   cell.append(h("div", figure(offer.input_rub), "in"), h("div", figure(offer.output_rub), "out"));
   const note = [];
-  if (offer.eligible === false) note.push("вне диапазона автопереключения");
+  if (offer.eligible === false) note.push(offer.exclusion_reason || "вне диапазона автопереключения");
   else if (offer.eligible === true) note.push("доступен для автопереключения");
   if (offer.cached_rub !== undefined && offer.cached_rub !== null) note.push(`кеш ${money(offer.cached_rub)}`);
   const est = estimate(offer);
@@ -1075,7 +1075,7 @@ function drawProviders() {
     tr.append(h("td", money(row.offers, 0), "num meta"));
     tr.append(h("td", row.min_in === undefined ? "—" : money(row.min_in), "num"));
     tr.append(h("td", row.median_in === undefined ? "—" : money(row.median_in), "num"));
-    tr.append(h("td", row.note, "meta"));
+    tr.append(h("td", `${row.note}${row.excluded_offers ? ` · исключено из сравнения: ${row.excluded_offers}` : ""}`, "meta"));
     body.append(tr);
   }
 }
@@ -1183,6 +1183,7 @@ function drawDrafts() {
 
 function draw() {
   writeHash();
+  drawCatalogAlert();
   drawGroups();
   drawVisibilityChips();
   drawVendors();
@@ -1191,6 +1192,21 @@ function draw() {
   drawTable();
   const summary = document.getElementById("vendor-sum");
   if (summary) summary.title = "Вендоры: отметьте одного или нескольких";
+}
+
+function drawCatalogAlert() {
+  const box = document.getElementById("catalog-alert");
+  if (!box) return;
+  const changes = state.data?.providers?.changes;
+  const added = changes?.new_models || [];
+  const changed = changes?.changed_models || [];
+  box.replaceChildren();
+  if (!added.length && !changed.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const parts = [];
+  if (added.length) parts.push(`Новые модели (${added.length}): ${added.slice(0, 8).join(", ")}${added.length > 8 ? " и ещё " + (added.length - 8) : ""}. Они пока не включены автоматически.`);
+  if (changed.length) parts.push(`Изменились цены (${changed.length}): ${changed.slice(0, 8).join(", ")}${changed.length > 8 ? " и ещё " + (changed.length - 8) : ""}.`);
+  box.textContent = parts.join(" ");
 }
 
 /** Поля фильтров должны показывать то, что написано в адресе страницы. */

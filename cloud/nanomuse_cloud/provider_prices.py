@@ -28,7 +28,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -420,7 +420,7 @@ def fetch_neuroapi() -> list[dict]:
 
 
 def fetch_openrouter() -> list[dict]:
-    """openrouter.ai — доллары за токен; пересчитываем в цену за 1M токенов."""
+    """OpenRouter USD quotes plus catalogue facts, including explicit free routes."""
     data = json.loads(get("https://openrouter.ai/api/v1/models", 60))
     units = {"prompt": "1M токенов (вход)", "completion": "1M токенов (выход)",
              "input_cache_read": "1M токенов (вход, кэш)",
@@ -434,10 +434,17 @@ def fetch_openrouter() -> list[dict]:
                 val = float(raw)
             except (TypeError, ValueError):
                 continue
-            if val <= 0:
+            if val < 0:
                 continue
+            # Keep zero-priced offers in the catalogue as explicitly free.
             offers.append(dict(model=row.get("id", "?"), unit=unit,
-                               price=round(val * 1_000_000, 4), currency="USD"))
+                               price=round(val * 1_000_000, 4), currency="USD",
+                               free=val == 0,
+                               context_length=row.get("context_length") or 0,
+                               max_output=(row.get("top_provider") or {}).get("max_completion_tokens") or 0,
+                               input_modalities=(row.get("architecture") or {}).get("input_modalities") or [],
+                               output_modalities=(row.get("architecture") or {}).get("output_modalities") or [],
+                               supported_parameters=row.get("supported_parameters") or []))
     return offers
 
 
@@ -455,14 +462,15 @@ FETCHERS = {
 # ── сборка ──────────────────────────────────────────────────────────────
 # одно и то же под разными именами у поставщиков
 ALIASES = {
-    # OpenRouter exposes both the floating current name and dated snapshot; they
-    # refer to the same V4.1 Flash release (1017) and belong in one comparison row.
-    "deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
-    "deepseek-flash": "deepseek-v4.1-flash-1017",
-    "deepseek-v4-flash": "deepseek-v4.1-flash-1017",
+    # Compare a dated endpoint with the clean family label. Routing still keeps
+    # the original provider model id and can block a specific expensive variant.
+    "deepseek-v4.1-flash-1017": "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash": "deepseek-v4.1-flash",
+    "deepseek-flash": "deepseek-v4.1-flash",
+    "deepseek-v4-flash": "deepseek-v4.1-flash",
     "deepseek-v4-pro": "deepseek-v4-pro-0813",
     "deepseek-reasoner": "deepseek-v4-pro-0813",
-    "deepseek-chat": "deepseek-v4.1-flash-1017",
+    "deepseek-chat": "deepseek-v4.1-flash",
 }
 
 
@@ -472,16 +480,36 @@ def model_key(provider: str, model: str) -> str:
     slug = re.sub(r"^[a-z0-9\-]+/", "", slug)          # фирменный префикс пути
     slug = re.sub(r"\s+", "-", slug)
     slug = slug.replace("deepseek/", "")
-    # синонимы — только для ОФИЦИАЛЬНОГО прайса DeepSeek (deepseek-chat → V4.1 Flash);
-    # у перепродавцов те же слова могут значить другую модель
-    if slug == "deepseek-v4.1-flash":
-        return ALIASES[slug]
+    if slug in {"deepseek-v4.1-flash", "deepseek-v4.1-flash-1017"}:
+        return "deepseek-v4.1-flash"
+    # Other aliases remain restricted to the official DeepSeek catalogue:
+    # reseller slugs with similar names can refer to different endpoints.
     return ALIASES.get(slug, slug) if provider == "deepseek" else slug
 
 
+def display_model_name(key: str, fallback: str) -> str:
+    if key == "deepseek-v4.1-flash":
+        return "DeepSeek V4.1 Flash"
+    return fallback
+
+
+def offer_exclusion(model: str) -> str:
+    slug = model.strip().lower().rsplit("/", 1)[-1]
+    if slug.endswith(":free"):
+        return "free-предложение поставщика, не использовать в платном автопереключении"
+    if slug == "deepseek-v4.1-flash-1017":
+        return "дорогая версия 1017, исключена из обычного DeepSeek Flash"
+    return ""
+
+
 def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, list[dict]]],
-          limit: int = 0) -> dict:
+          limit: int = 0, previous: dict | None = None) -> dict:
     models: dict[str, dict] = {}
+    previous = previous or {}
+    old_rows = previous.get("models") or []
+    old_keys = {str(row.get("key") or "") for row in old_rows}
+    old_first_seen = {str(row.get("key") or ""): row.get("first_seen_at") for row in old_rows}
+    old_new = {str(row.get("key") or ""): bool(row.get("new_model")) for row in old_rows}
     providers = []
     for name, (url, _fn) in active_fetchers().items():
         if name not in results:
@@ -494,29 +522,70 @@ def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, lis
             rub = off["price"] if off["currency"] == "RUB" else off["price"] * rate
             group = f"{key} · {off['unit']}"     # сравниваем только одинаковые единицы
             entry = models.setdefault(group, dict(
-                key=key, name=off["model"], unit=off["unit"], group=group, offers=[]))
-            if not entry["name"] or len(off["model"]) > len(entry["name"]):
+                key=key, name=display_model_name(key, off["model"]), unit=off["unit"], group=group, offers=[],
+                context_length=0, max_output=0, input_modalities=[], output_modalities=[],
+                supported_parameters=[], free=False))
+            if key != "deepseek-v4.1-flash" and (not entry["name"] or len(off["model"]) > len(entry["name"])):
                 entry["name"] = off["model"]
+            entry["context_length"] = max(entry["context_length"], int(off.get("context_length") or 0))
+            entry["max_output"] = max(entry["max_output"], int(off.get("max_output") or 0))
+            entry["input_modalities"] = sorted(set(entry["input_modalities"]) | set(off.get("input_modalities") or []))
+            entry["output_modalities"] = sorted(set(entry["output_modalities"]) | set(off.get("output_modalities") or []))
+            entry["supported_parameters"] = sorted(set(entry["supported_parameters"]) | set(off.get("supported_parameters") or []))
+            is_free = bool(off.get("free") or off["price"] == 0)
+            exclusion = offer_exclusion(str(off["model"]))
+            entry["free"] = entry["free"] or is_free
             entry["offers"].append(dict(provider=name, unit=off["unit"],
                                         rub=round(rub, 4),
-                                        price=off["price"], currency=off["currency"]))
+                                        price=off["price"], currency=off["currency"],
+                                        free=is_free, model=off["model"],
+                                        route_eligible=not exclusion,
+                                        exclusion_reason=exclusion))
     rows = []
     for entry in models.values():
         if not entry["offers"]:
             continue
-        cheapest = min(entry["offers"], key=lambda o: o["rub"] / 1 if o["rub"] else 9e9)
+        eligible_offers = [o for o in entry["offers"] if o["route_eligible"]]
+        cheapest = min(eligible_offers or entry["offers"], key=lambda o: float(o["rub"]) if o["rub"] is not None else float("inf"))
         spread = max(o["rub"] for o in entry["offers"]) - min(o["rub"] for o in entry["offers"])
+        first_seen = old_first_seen.get(entry["key"]) or datetime.now(UTC).isoformat(timespec="seconds")
+        try:
+            first_seen_dt = datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
+            if first_seen_dt.tzinfo is None:
+                first_seen_dt = first_seen_dt.replace(tzinfo=UTC)
+        except (AttributeError, TypeError, ValueError):
+            first_seen_dt = datetime.now(UTC)
+        recently_added = (datetime.now(UTC) - first_seen_dt).total_seconds() <= 14 * 86400
         rows.append(dict(key=entry["key"], name=entry["name"], unit=entry["unit"],
                          group=entry["group"],
+                         context_length=entry["context_length"], max_output=entry["max_output"],
+                         input_modalities=entry["input_modalities"], output_modalities=entry["output_modalities"],
+                         supported_parameters=entry["supported_parameters"], free=entry["free"],
+                         first_seen_at=first_seen,
+                         new_model=entry["key"] not in old_keys or (old_new.get(entry["key"], False) and recently_added),
                          offers=sorted(entry["offers"], key=lambda o: o["rub"]),
-                         cheapest=cheapest["provider"],
-                         cheapest_rub=cheapest["rub"], spread=round(spread, 4)))
+                         cheapest=cheapest["provider"] if eligible_offers else None,
+                         cheapest_rub=cheapest["rub"] if eligible_offers else None, spread=round(spread, 4)))
     rows.sort(key=lambda r: r["key"])
+    new_models = sorted({r["key"] for r in rows if r["new_model"]})
+    changed_keys = []
+    old_prices = {(r.get("key"), r.get("unit")): tuple(
+        (o.get("provider"), round(float(o.get("rub") or 0), 4)) for o in r.get("offers", [])) for r in old_rows}
+    for row in rows:
+        key = (row["key"], row["unit"])
+        current = tuple((o.get("provider"), round(float(o.get("rub") or 0), 4)) for o in row["offers"])
+        if key in old_prices and old_prices[key] != current:
+            changed_keys.append(row["key"])
+    for row in rows:
+        row["price_changed"] = row["key"] in changed_keys
     if limit:
         rows = rows[:limit]
-    return dict(generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    return dict(generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 usd_rub=rate, rate_source=rate_source,
-                providers=providers, models=rows)
+                providers=providers,
+                changes={"new_models": new_models, "changed_models": sorted(set(changed_keys)),
+                         "new_count": len(new_models), "changed_count": len(set(changed_keys))},
+                models=rows)
 
 
 # ── доступ из админки ───────────────────────────────────────────────────
@@ -536,6 +605,7 @@ def read_snapshot() -> dict:
 
 def refresh_now() -> dict:
     """Собрать заново и записать снимок (синхронно)."""
+    previous = read_snapshot()
     rate, rate_source = usd_rub()
     results = {}
     for name, (url, fn) in active_fetchers().items():
@@ -548,7 +618,7 @@ def refresh_now() -> dict:
         except Exception as e:  # noqa: BLE001
             ok, note, offers = False, f"{type(e).__name__}: {e}"[:160], []
         results[name] = (ok, note, offers)
-    payload = build(rate, rate_source, results)
+    payload = build(rate, rate_source, results, previous=previous)
     SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
     tmp = SNAPSHOT.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")

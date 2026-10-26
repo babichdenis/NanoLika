@@ -6,6 +6,10 @@ export interface CatalogueModel {
   kind: string
   context_length?: number
   max_output?: number
+  free?: boolean
+  in?: string[]
+  out?: string[]
+  supported_parameters?: string[]
   commerce?: {
     discount_pct: number
     effective_rub: Record<string, number>
@@ -30,7 +34,11 @@ export function ModelEstimate({ model, t }: { model: CatalogueModel; t: Translat
   return h('details', { className: 'nm-model-estimate', onToggle: (e: { currentTarget: HTMLDetailsElement }) => setOpen(e.currentTarget.open) },
     h('summary', null, t('mpEstimate')),
     open ? h('div', null,
+      model.free ? h('p', { className: 'nm-model-free' }, t('mpFreeModel')) : null,
       model.context_length ? h('p', null, `${t('mpContext')}: ${model.context_length.toLocaleString()}`) : null,
+      model.max_output ? h('p', null, `${t('mpMaxOutput')}: ${model.max_output.toLocaleString()}`) : null,
+      model.in?.length || model.out?.length ? h('p', null, `${t('mpInputs')}: ${model.in?.join(', ') || '—'} · ${t('mpOutputs')}: ${model.out?.join(', ') || '—'}`) : null,
+      model.supported_parameters?.length ? h('p', null, `${t('mpCapabilities')}: ${model.supported_parameters.join(', ')}`) : null,
       (model.commerce?.controls ?? []).map(c => h('label', { key: c.key }, c.label,
         c.type === 'select'
           ? h('select', { value: params[c.key], onChange: (e: { currentTarget: HTMLSelectElement }) => setParams(p => ({ ...p, [c.key]: e.currentTarget.value })) }, (c.options ?? []).map(v => h('option', { key: v, value: v }, v)))

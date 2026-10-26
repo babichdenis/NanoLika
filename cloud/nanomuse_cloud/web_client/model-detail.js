@@ -2,8 +2,12 @@
 export function modelDetails(row,{api}){
  const facts=row.nanomuse||row, commerce=facts.commerce||{}, box=document.createElement('div');box.className='model-details';
  const add=(tag,text)=>{const e=document.createElement(tag);e.textContent=text;box.append(e);return e;};
+ if(facts.free===true||row.id?.endsWith(':free'))add('p','Free-маршрут у поставщика; доступность и условия могут меняться.');
  const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:6}).format(n)+' ₽';
  if(facts.context_length)add('p',`Контекст: ${Number(facts.context_length).toLocaleString('ru-RU')} токенов${facts.max_output?' · Ответ до '+Number(facts.max_output).toLocaleString('ru-RU'):''}`);
+ const architecture=row.architecture||{},inputs=facts.input_modalities||facts.in||architecture.input_modalities||[],outputs=facts.output_modalities||facts.out||architecture.output_modalities||[];
+ if(inputs.length||outputs.length)add('p',`Ввод: ${inputs.join(', ')||'—'} · Ответ: ${outputs.join(', ')||'—'}`);
+ if((facts.supported_parameters||[]).length)add('p',`Возможности: ${(facts.supported_parameters||[]).join(', ')}`);
  const labels={input:'Вход / 1 млн токенов',cached_input:'Кешированный вход / 1 млн',output:'Ответ / 1 млн токенов',image:'Картинка',image_2k:'Картинка 2K',image_input:'Исходная картинка',second:'Секунда видео',speech:'1000 знаков',minute:'Минута записи'};
  const kind=facts.kind||'chat', unit=commerce.unit;
  const fields=kind==='chat'?['input','cached_input','output']:kind==='image'?['image','image_2k','image_input']:kind==='video'?['second']:unit==='speech'?['speech']:['minute'];

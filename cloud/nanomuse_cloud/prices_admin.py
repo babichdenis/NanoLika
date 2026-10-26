@@ -185,15 +185,21 @@ def _providers(settings: Any, prices: dict) -> dict:
         )
     # «от 0,12 ₽» и медиана входа: только по строкам «1M токенов (вход)»
     entry_prices: dict[str, list[float]] = {}
+    excluded_offers: dict[str, int] = {}
     for model in prices.get("models") or []:
         unit = str(model.get("unit") or model.get("group") or "")
         if "вход" in unit:
             for offer in model.get("offers") or []:
+                if offer.get("route_eligible") is False:
+                    provider_name = str(offer.get("provider") or "")
+                    excluded_offers[provider_name] = excluded_offers.get(provider_name, 0) + 1
+                    continue
                 value = offer.get("rub")
                 if value in (None, ""):
                     continue
                 entry_prices.setdefault(str(offer.get("provider")), []).append(float(value))
     for row in snapshot:
+        row["excluded_offers"] = excluded_offers.get(row["name"], 0)
         values = sorted(entry_prices.get(row["name"]) or [])
         if values:
             row["min_in"] = round(values[0], 2)
@@ -205,6 +211,7 @@ def _providers(settings: Any, prices: dict) -> dict:
         "at": prices.get("generated_at"),
         "usd_rub": prices.get("usd_rub"),
         "rate_source": prices.get("rate_source"),
+        "changes": prices.get("changes") or {"new_models": [], "changed_models": [], "new_count": 0, "changed_count": 0},
     }
 
 
@@ -280,8 +287,15 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     continue
                 body = {"model": spec.upstream, "messages": [{"role": "user", "content": "a" * 3000}], "max_tokens": 512}
                 routes = router.routes(spec, body, "", {})
-                eligible_providers = {route.provider for route in routes}
+                selected_route = routes[0] if routes else None
                 all_quotes = router.routes(spec, body, "", {}, include_all=True)
+                info_route = selected_route or next((candidate for candidate in all_quotes if candidate.offer and candidate.routing_eligible), None)
+                if info_route and info_route.offer:
+                    row["context"] = row["context"] or info_route.offer.context
+                    row["max_output"] = row["max_output"] or info_route.offer.output_limit
+                    row["input_modalities"] = list(info_route.offer.modalities)
+                    row["output_modalities"] = list(info_route.offer.output_modalities)
+                    row["supported_parameters"] = list(info_route.offer.parameters)
                 offers = []
                 for route in all_quotes:
                     if route.offer is not None:
@@ -291,17 +305,22 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                                        "cached_rub": offer.cached_rub, "updated": offer.updated,
                                        "endpoint": offer.endpoint,
                                        "estimated_rub": offer.estimate(1000, 512),
-                                       "eligible": route.provider in eligible_providers,
-                                       "selected": bool(routes and route.provider == routes[0].provider)})
+                                       "context_length": offer.context,
+                                       "max_output": offer.output_limit,
+                                       "input_modalities": list(offer.modalities),
+                                       "output_modalities": list(offer.output_modalities),
+                                       "supported_parameters": list(offer.parameters),
+                                       "eligible": route.routing_eligible and any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes),
+                                       "exclusion_reason": route.exclusion_reason or ("за пределами диапазона переключения" if route.routing_eligible and not any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes) else ""),
+                                       "selected": bool(selected_route and route.provider == selected_route.provider and route.body.get("model") == selected_route.body.get("model"))})
                 row["routing"] = {"offers": offers, "selected": routes[0].provider if routes else None,
                                   "basis": "1000 input + 512 output, no cache, no tools"}
-                if offers:
-                    selected = offers[0]
-                    row["cost"]["rub_in"] = selected["input_rub"]
-                    row["cost"]["rub_out"] = selected["output_rub"]
+                if selected_route and selected_route.offer:
+                    row["cost"]["rub_in"], row["cost"]["rub_out"] = selected_route.offer.rates()[:2]
+                    selected = selected_route.offer
                     row["ratio"] = {
-                        "in": row["sell"]["rub_in"] / selected["input_rub"] if selected["input_rub"] else None,
-                        "out": row["sell"]["rub_out"] / selected["output_rub"] if selected["output_rub"] else None,
+                        "in": row["sell"]["rub_in"] / selected.rates()[0] if selected.rates()[0] else None,
+                        "out": row["sell"]["rub_out"] / selected.rates()[1] if selected.rates()[1] else None,
                     }
         actuals = {}
         if cloud is not None:

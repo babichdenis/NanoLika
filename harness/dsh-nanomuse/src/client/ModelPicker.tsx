@@ -189,6 +189,10 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
                   const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === r.id) : undefined
                   return h('div', { key: `${group.key}:${r.id}`, className: 'nm-mp-model' },
                     row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id }),
+                    info && (info.free || info.context_length || info.max_output) ? h('div', { className: 'nm-mp-meta' },
+                      info.free ? h('span', { className: 'nm-model-free' }, t('mpFreeModel')) : null,
+                      info.context_length ? h('span', null, `${t('mpContext')} ${info.context_length.toLocaleString()}`) : null,
+                      info.max_output ? h('span', null, `${t('mpMaxOutput')} ${info.max_output.toLocaleString()}`) : null) : null,
                     info ? h('button', { type: 'button', className: 'nm-mp-favourite', 'aria-label': `${t('mpFavourites')}: ${r.name}`, 'aria-pressed': favourites.includes(r.id), onClick: () => star(r.id) }, favourites.includes(r.id) ? '★' : '☆') : null,
                     info ? h(ModelEstimate, { model: info, t }) : null)
                 }),

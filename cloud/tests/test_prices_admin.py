@@ -42,6 +42,7 @@ SNAPSHOT = {
             "offers": [
                 {"provider": "polza", "unit": "1M токенов (вход)", "rub": 5.72},
                 {"provider": "routerai", "unit": "1M токенов (вход)", "rub": 6.18},
+                {"provider": "polza", "unit": "1M токенов (вход)", "rub": 0.5, "route_eligible": False},
             ],
             "cheapest_rub": 5.72,
         }
@@ -168,6 +169,7 @@ async def test_providers_show_which_ones_are_connected(market):
     assert isinstance(providers["connected"], list)
     assert [row["name"] for row in providers["snapshot"]] == ["polza", "routerai"]
     assert providers["snapshot"][0]["min_in"] == 5.72
+    assert providers["snapshot"][0]["excluded_offers"] == 1
     for row in providers["snapshot"]:
         assert row["connected"] == (row["name"] in providers["connected"])
 

@@ -33,7 +33,7 @@ def setup_router(monkeypatch):
 def quote(name, inp, out, **kw):
     return Offer(
         name,
-        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4.1-flash",
         inp,
         out,
         0.1,
@@ -54,18 +54,18 @@ def routes(r, **payload):
 
 def test_total_request_cost_not_cheapest_input(monkeypatch):
     r = setup_router(monkeypatch)
-    r.offers = {"polza": [quote("polza", 1, 1000)], "openrouter": [quote("openrouter", 20, 30)]}
+    r.offers = {"polza": [quote("polza", 1, 1000)], "openrouter": [quote("openrouter", 3, 30)]}
     assert routes(r)[0].provider == "openrouter"
     # Long input and a very short output reverses the winner.
     assert routes(r, messages=[{"role": "user", "content": "a" * 30000}], max_tokens=1)[0].provider == "polza"
 
 
-def test_floating_flash_name_matches_openrouter_1017_snapshot(monkeypatch):
+def test_1017_flash_endpoint_is_excluded_from_generic_flash(monkeypatch):
     r = setup_router(monkeypatch)
     spec = ModelSpec("flash", "Flash", "deepseek-v4.1-flash", provider="routerai")
     r.offers = {
         "routerai": [replace(quote("routerai", 11, 17), model="deepseek-v4.1-flash")],
-        "openrouter": [quote("openrouter", 15, 60)],
+        "openrouter": [replace(quote("openrouter", 15, 60), model="deepseek/deepseek-v4.1-flash-1017")],
     }
     body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
 
@@ -76,6 +76,9 @@ def test_floating_flash_name_matches_openrouter_1017_snapshot(monkeypatch):
     assert candidates[0].provider == "routerai"
     all_quotes = r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
     assert {route.provider for route in all_quotes} == {"routerai", "openrouter"}
+    excluded = next(route for route in all_quotes if route.provider == "openrouter")
+    assert not excluded.routing_eligible
+    assert "1017" in excluded.exclusion_reason
 
 
 def test_flash_model_prices_merge_floating_and_dated_ids():
@@ -84,11 +87,27 @@ def test_flash_model_prices_merge_floating_and_dated_ids():
     assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == model_key(
         "openrouter", "deepseek/deepseek-v4.1-flash-1017"
     )
+    assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == "deepseek-v4.1-flash"
+
+
+def test_rate_outlier_is_excluded_even_if_one_side_is_cheap(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {
+        "polza": [quote("polza", 1, 2)],
+        "openrouter": [quote("openrouter", 1, 25)],
+    }
+    body = {"model": "deepseek-v4.1-flash", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+    routes = r.routes(ModelSpec("flash", "Flash", "deepseek-v4.1-flash"), body, "", {})
+    assert [route.provider for route in routes] == ["polza"]
+    all_quotes = r.routes(ModelSpec("flash", "Flash", "deepseek-v4.1-flash"), body, "", {}, include_all=True)
+    rejected = next(route for route in all_quotes if route.provider == "openrouter")
+    assert not rejected.routing_eligible
+    assert "стоимость этого запроса" in rejected.exclusion_reason
 
 
 def test_tool_schemas_are_counted_but_image_base64_is_not_text(monkeypatch):
     r = setup_router(monkeypatch)
-    r.offers = {"polza": [quote("polza", 1, 1000)], "openrouter": [quote("openrouter", 20, 30)]}
+    r.offers = {"polza": [quote("polza", 1, 1000)], "openrouter": [quote("openrouter", 3, 30)]}
     assert routes(r, max_tokens=16)[0].provider == "openrouter"
     tools = [{"type": "function", "function": {"name": "fixture", "description": "a" * 30000}}]
     assert routes(r, max_tokens=16, tools=tools)[0].provider == "polza"
@@ -122,14 +141,14 @@ def test_provider_ids_and_parameters_are_adapted(monkeypatch):
         "aitunnel": [
             replace(
                 quote("aitunnel", 1, 1),
-                model="deepseek-v4.1-flash-1017",
-                canonical_model="deepseek/deepseek-v4.1-flash-1017",
+                model="deepseek-v4.1-flash",
+                canonical_model="deepseek/deepseek-v4.1-flash",
                 parameters=("max_completion_tokens",),
             )
         ]
     }
     result = routes(r, max_tokens=10, provider={"order": ["expensive"]}, models=["other"])[0]
-    assert result.body["model"] == "deepseek-v4.1-flash-1017"
+    assert result.body["model"] == "deepseek-v4.1-flash"
     assert result.body["max_completion_tokens"] == 10
     assert "max_tokens" not in result.body and "provider" not in result.body and "models" not in result.body
 

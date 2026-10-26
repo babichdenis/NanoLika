@@ -1,4 +1,4 @@
-import {modelDetails} from './model-detail.js?v=20261026-catalogue';
+import {modelDetails} from './model-detail.js?v=20261027-model-info';
 /**
  * Панель выбора модели: провайдеры слева, карточки справа, фильтры по типу и поиск.
  *
@@ -34,7 +34,7 @@ function cardOf(row) {
     vendor: facts.vendor || '',
     provider: facts.provider || '',
     desc: facts.description || facts.desc || '',
-    free: facts.free === true,
+    free: facts.free === true || row.id?.endsWith(':free') === true,
     price: facts.commerce ? (kind==='chat'?((facts.commerce.effective_rub||{}).input||0)+((facts.commerce.effective_rub||{}).output||0)*.512:(facts.commerce.effective_rub||{})[kind==='image'?'image':kind==='video'?'second':facts.commerce.unit==='speech'?'speech':'minute']??null) : null,
     row,
     context: Number(facts.context_length) || 0,
@@ -75,10 +75,12 @@ export function kindCounts(cards) {
 }
 
 /** Отбор: тип, производитель, строка поиска. Пустой тип или вендор значит «все». */
-export function filterCards(cards, { kind = '', vendor = '', query = '' } = {}) {
+export function filterCards(cards, { kind = '', vendor = '', query = '', favourites = null } = {}) {
   const q = String(query || '').trim().toLowerCase();
   return cards.filter((card) => {
-    if (kind && card.kind !== kind) return false;
+    if (kind === '__fav') {
+      if (!favourites?.has(card.id)) return false;
+    } else if (kind && card.kind !== kind) return false;
     if (vendor && (card.vendor || 'другие') !== vendor) return false;
     if (!q) return true;
     return (
@@ -102,7 +104,7 @@ export function installModelSheet({onPick,api,session}){
  function paintCards(){const box=el('ms-cards');box.replaceChildren();let rows=filterCards(state.cards,{...state,favourites:state.favourites}).filter(c=>!state.context||c.context>=state.context);
  rows.sort((a,b)=>state.sort==='context'?b.context-a.context||a.name.localeCompare(b.name):state.sort==='price'&&state.kind&&state.kind!=='__fav'?(a.price??Infinity)-(b.price??Infinity):Number(b.recommended)-Number(a.recommended)||a.name.localeCompare(b.name));
  if(!rows.length){const empty=document.createElement('p');empty.textContent='Ничего не нашлось. Измените поиск или фильтры.';box.append(empty);}
- for(const card of rows){const article=document.createElement('article');article.className='model-card';article.dataset.id=card.id;const pick=document.createElement('button');pick.type='button';pick.className='model-card-pick';pick.setAttribute('aria-pressed',String(card.id===state.picked));const title=document.createElement('strong');title.textContent=card.name;const desc=document.createElement('span');desc.className='model-card-desc';desc.textContent=card.desc||`${KIND_LABELS[card.kind]?.label||card.kind}${card.context?' · '+card.context.toLocaleString('ru-RU')+' токенов':''}`;pick.append(title,desc);const rates=card.row.nanomuse?.commerce?.effective_rub||{},price=document.createElement('span');price.className='model-card-price';const rub=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:4}).format(n)+' ₽';price.textContent=card.kind==='chat'&&rates.input!=null?`${rub(rates.input)} вход · ${rub(rates.output)} ответ / 1 млн токенов`:rates.image!=null&&card.kind==='image'?rub(rates.image)+' / картинка':rates.second!=null&&card.kind==='video'?rub(rates.second)+' / секунда':'';pick.append(price);pick.onclick=()=>{if(card.kind!=='chat'){details.open=true;return;}state.picked=card.id;onPick?.(card.id);close();};
+ for(const card of rows){const article=document.createElement('article');article.className='model-card';article.dataset.id=card.id;const pick=document.createElement('button');pick.type='button';pick.className='model-card-pick';pick.setAttribute('aria-pressed',String(card.id===state.picked));const title=document.createElement('strong');title.textContent=card.name;if(card.free){const badge=document.createElement('span');badge.className='model-card-free';badge.textContent='free';title.append(' ',badge);}const desc=document.createElement('span');desc.className='model-card-desc';desc.textContent=card.desc||`${KIND_LABELS[card.kind]?.label||card.kind}${card.context?' · контекст '+card.context.toLocaleString('ru-RU'):''}`;pick.append(title,desc);const rates=card.row.nanomuse?.commerce?.effective_rub||{},price=document.createElement('span');price.className='model-card-price';const rub=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:4}).format(n)+' ₽';price.textContent=card.free?'Бесплатная модель':card.kind==='chat'&&rates.input!=null?`${rub(rates.input)} вход · ${rub(rates.output)} ответ / 1 млн токенов`:rates.image!=null&&card.kind==='image'?rub(rates.image)+' / картинка':rates.second!=null&&card.kind==='video'?rub(rates.second)+' / секунда':'';pick.append(price);pick.onclick=()=>{if(card.kind!=='chat'){details.open=true;return;}state.picked=card.id;onPick?.(card.id);close();};
  const star=document.createElement('button');star.type='button';star.className='model-card-star';star.textContent=state.favourites.has(card.id)?'★':'☆';star.setAttribute('aria-label','В избранное: '+card.name);star.setAttribute('aria-pressed',String(state.favourites.has(card.id)));star.onclick=()=>{state.favourites.has(card.id)?state.favourites.delete(card.id):state.favourites.add(card.id);persist();paintCards();};
  const details=document.createElement('details');details.className='model-card-details';const summary=document.createElement('summary');summary.textContent=card.kind==='chat'?'Цены и расчёт':'Параметры и расчёт';details.append(summary);let loaded=false;details.ontoggle=()=>{if(details.open&&!loaded){loaded=true;details.append(modelDetails(card.row,{api}));}};article.append(pick,star,details);box.append(article);}}
  function paint(){paintKinds();paintVendors();paintCards();}

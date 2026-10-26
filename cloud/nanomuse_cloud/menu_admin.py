@@ -57,18 +57,11 @@ def _market() -> list[dict]:
         name = str(model.get("name") or "")
         if not name:
             continue
-        # The unsuffixed DeepSeek id is the moving alias for the dated 1017
-        # snapshot. Older price snapshots have separate keys, so fold them here
-        # as well as in the live supplier collector.
         key = str(model.get("key") or name).strip().lower()
         key = key.rsplit("/", 1)[-1]
-        if key == "deepseek-v4.1-flash":
-            key = "deepseek-v4.1-flash-1017"
-        display_name = (
-            "deepseek/deepseek-v4.1-flash-1017"
-            if key == "deepseek-v4.1-flash-1017"
-            else name
-        )
+        if key == "deepseek-v4.1-flash-1017":
+            key = "deepseek-v4.1-flash"
+        display_name = "DeepSeek V4.1 Flash" if key == "deepseek-v4.1-flash" else name
         unit = str(model.get("unit") or model.get("group") or "")
         row = by_name.setdefault(key, {
             "key": key,
@@ -77,10 +70,29 @@ def _market() -> list[dict]:
             "unit": UNIT_NAMES.get(unit_key(unit), unit),
             "offers": [],
             "cheapest_rub": None,
+            "context_length": 0,
+            "max_output": 0,
+            "input_modalities": [],
+            "output_modalities": [],
+            "supported_parameters": [],
+            "free": False,
+            "new_model": bool(model.get("new_model")),
+            "price_changed": bool(model.get("price_changed")),
         })
+        row["context_length"] = max(row["context_length"], int(model.get("context_length") or 0))
+        row["max_output"] = max(row["max_output"], int(model.get("max_output") or 0))
+        row["input_modalities"] = sorted(set(row["input_modalities"]) | set(model.get("input_modalities") or []))
+        row["output_modalities"] = sorted(set(row["output_modalities"]) | set(model.get("output_modalities") or []))
+        row["supported_parameters"] = sorted(set(row["supported_parameters"]) | set(model.get("supported_parameters") or []))
+        row["free"] = row["free"] or bool(model.get("free"))
+        row["new_model"] = row["new_model"] or bool(model.get("new_model"))
+        row["price_changed"] = row["price_changed"] or bool(model.get("price_changed"))
         # цена сравнивается только внутри одной единицы: секунда против минуты не в счёт
         for offer in model.get("offers") or []:
             rub = offer.get("rub")
+            offer_model = str(offer.get("model") or model.get("name") or "").strip().lower()
+            excluded_by_id = offer_model.endswith(":free") or offer_model.rsplit("/", 1)[-1] == "deepseek-v4.1-flash-1017"
+            route_eligible = bool(offer.get("route_eligible", not excluded_by_id))
             offer_unit = str(offer.get("unit") or unit)
             low_unit = offer_unit.lower()
             direction = "input" if any(word in low_unit for word in ("вход", "input", "prompt")) else (
@@ -91,8 +103,17 @@ def _market() -> list[dict]:
                 "rub": float(rub) if rub not in (None, "") else None,
                 "unit": offer_unit,
                 "direction": direction,
+                "model": offer_model,
+                "free": bool(offer.get("free") or offer_model.endswith(":free")),
+                "route_eligible": route_eligible,
+                "exclusion_reason": offer.get("exclusion_reason") or (
+                    "free-предложение поставщика, не использовать в платном автопереключении"
+                    if offer_model.endswith(":free") else
+                    "дорогая версия 1017, исключена из обычного DeepSeek Flash"
+                    if not route_eligible and excluded_by_id else ""
+                ),
             })
-            if rub in (None, "") or unit_key(offer_unit) != unit_key(row["unit"]) or direction == "output":
+            if not route_eligible or rub in (None, "") or unit_key(offer_unit) != unit_key(row["unit"]) or direction == "output":
                 continue
             if row["cheapest_rub"] is None or float(rub) < row["cheapest_rub"]:
                 row["cheapest_rub"] = float(rub)
@@ -137,7 +158,9 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None) -> No
                     **row,
                     "shelves": saved.get("shelves") or found.shelves,
                     "junk": "" if found.keep else found.reason,
-                    "on": bool(saved["on"]) if "on" in saved else bool(found.keep),
+                    # A newly discovered model must be reviewed by an operator
+                    # before it enters the customer-facing menu.
+                    "on": bool(saved["on"]) if "on" in saved else bool(found.keep and not row["new_model"]),
                 }
             )
         return {

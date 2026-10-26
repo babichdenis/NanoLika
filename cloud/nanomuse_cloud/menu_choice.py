@@ -33,7 +33,7 @@ EMBED = ("embed", "embedding", "bge-", "e5-", "gte-", "nomic-embed", "jina-embed
 AUDIO_TOOL = ("whisper", "transcribe", "tts-", "-tts", "speech", "voice-clone", "parakeet", "seamless")
 IMAGE_TOOL = ("dall-e", "stable-diffusion", "sdxl", "flux-", "imagen", "ideogram", "recraft", "kolors", "midjourney")
 MODERATION = ("moderation", "guard", "nsfw", "classifier", "rerank", "ranker")
-DEPRECATED = ("deprecated", "legacy", ":free", "-preview-2023", "-0613", "-0314")
+DEPRECATED = ("deprecated", "legacy", "-preview-2023", "-0613", "-0314")
 STALE = (
     "gpt-3.5",
     "gpt-4-0613",
@@ -117,6 +117,8 @@ def verdict(name: str, kinds: tuple[str, ...], cheapest: float | None, deprecate
         return Verdict(name, False, "junk:moderation")
     if _has(low, STALE):
         return Verdict(name, False, "junk:stale")
+    if low.endswith(":free"):
+        return Verdict(name, False, "junk:free")
     if not found:
         if _has(low, AUDIO_TOOL):
             return Verdict(name, False, "junk:audio-tool")
