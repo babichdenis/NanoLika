@@ -236,6 +236,8 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-unread { min-width: 20px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--nm-accent); color: var(--nm-canvas, white); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
 .nm-chat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nm-accent); flex: none; }
 .nm-chat-dot.nm-live { animation: nm-pulse 2.4s ease-in-out infinite alternate; }
+/* the turn's step count against its budget, where the running dot otherwise sits */
+.nm-chat-steps { flex: none; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--nm-dim, #999); padding: 0 2px; }
 .nm-chat-mark { flex: none; font-size: 12px; color: var(--dsw-alias-state-warn-primary, #d98c1f); }
 /* The cloud on a chat (0.29): a synced chat keeps a grey cloud; a chat only this computer has shows
    its struck one under the pointer, so the row's dot and unread count keep the resting glance. */
