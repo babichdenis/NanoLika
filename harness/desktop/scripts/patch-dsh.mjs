@@ -67,6 +67,24 @@ if (existsSync(clientPath)) {
   }
 }
 
+// 3a. Голосовой ввод падал с «External buffers are not allowed»: Chromium отдаёт из
+//     Blob.arrayBuffer() буфер, помеченный внешним, а decodeAudioData такие не принимает.
+//     Копия через slice делает буфер обычным. Патчим собранный клиент dsh, потому что
+//     пакет ставится из npm и своей копии у нас нет.
+const voiceClient = join(root, "node_modules", "@deepseek-ai", "dsh-experimental-client-ui-voice-input", "lib", "client.js");
+if (existsSync(voiceClient)) {
+  const text = readFileSync(voiceClient, "utf8");
+  const from = "const decoded = await context.decodeAudioData(await blob.arrayBuffer());";
+  const to =
+    "const raw = await blob.arrayBuffer();\n" +
+    "\t\t\t\t\t// NanoLika: decodeAudioData не принимает внешние буферы из Blob.\n" +
+    "\t\t\t\t\tconst decoded = await context.decodeAudioData(raw.slice(0));";
+  if (text.includes(from)) {
+    writeFileSync(voiceClient, text.replace(from, to));
+    console.log("patch-dsh: голосовой ввод принимает буфер из Blob");
+  }
+}
+
 // 3b. The right Sidebar's Browser tab is gated on the profile being named `desktop` in the
 //     web-app bundle; our profile is `nanolika`, so the bundle switched it off and the tab
 //     never appeared. The row is enabled here, in the bundle, so a fresh install and a rebuilt
