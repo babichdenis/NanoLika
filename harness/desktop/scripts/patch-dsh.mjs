@@ -67,53 +67,136 @@ if (existsSync(clientPath)) {
   }
 }
 
-// 3a. Голосовой ввод падал с «External buffers are not allowed». Падает не декодирование,
-//     а само чтение записи: в Electron `Blob.arrayBuffer()` отдаёт ArrayBuffer на внешней
-//     памяти Blink, и Chromium отказывается работать с таким буфером. Поэтому копия через
-//     `slice(0)` не помогала — она делалась уже после отказа (прежний патч лечил не то
-//     место, и микрофон оставался сломанным). Здесь чтение идёт через `FileReader`, чей
-//     результат копируется в обычный ArrayBuffer: `decodeAudioData` получает свой буфер и
-//     отвечает текстом.
+// 3a. Голосовой ввод падал с «External buffers are not allowed». Виновата не отправка и не
+//     распознавание, а сама запись: MediaRecorder отдаёт Blob, а чтение Blob в Electron даёт
+//     ArrayBuffer на внешней памяти Blink, и Chromium отказывается его принимать. Копия через
+//     `slice(0)` не помогала — она делалась уже после отказа (прежний патч лечил не то место,
+//     микрофон не работал ни разу при зелёной сборке). FileReader тоже не помог: отказ остался.
 //
-//     Патч не привязан к тому, как пакет оборачивает вызов (`await blob.arrayBuffer()`
-//     стоит то прямо в `decodeAudioData`, то в отдельной строке под `stage("decode", …)`),
-//     и не зависит от имён переменных вокруг. Повторный проход ничего не делает: чтение
-//     уже идёт через `recordingBytes`.
+//     Поэтому Blob из записи убран совсем: звук берётся сэмплами `AudioContext` — это обычная
+//     память, `decodeAudioData` больше не нужен. Тот же способ, что в нашем `client/voice.ts`.
+//
+//     Как это видно: клиент подписывает шаги (`stage:decode:…`), а ошибка приходила без
+//     префикса — значит отказ был до `stage`, на чтении записи.
+//
+//     Идемпотентно: повторный проход узнаёт свои вставки и ничего не меняет. Если форма кода
+//     пакета изменится так, что замены не будет, сборка печатает предупреждение — молчать
+//     нельзя, иначе микрофон снова окажется сломанным в готовом установщике.
 const voiceClient = join(root, "node_modules", "@deepseek-ai", "dsh-experimental-client-ui-voice-input", "lib", "client.js");
 if (existsSync(voiceClient)) {
-  const text = readFileSync(voiceClient, "utf8");
-  const HELPER = "recordingBytes";
-  const bytesHelper = [
-    "",
-    "// NanoLika: Blob.arrayBuffer() в Electron даёт внешний буфер, который Chromium не принимает",
-    "// («External buffers are not allowed»). FileReader отдаёт обычный, копия его закрепляет.",
-    "async function recordingBytes(blob) {",
-    "\tconst read = await new Promise((resolve, reject) => {",
-    "\t\tconst reader = new FileReader();",
-    "\t\treader.onload = () => resolve(reader.result);",
-    "\t\treader.onerror = () => reject(reader.error ?? new Error('the recording could not be read'));",
-    "\t\treader.readAsArrayBuffer(blob);",
-    "\t});",
-    "\t// slice() отдаёт копию в обычной памяти — с ней decodeAudioData уже работает.",
-    "\treturn new Uint8Array(read).slice().buffer;",
-    "}",
-    "",
-  ].join("\n");
-  if (!text.includes(HELPER)) {
-    const reads = text.split("await blob.arrayBuffer()").length - 1;
-    if (reads > 0) {
-      writeFileSync(voiceClient, text.split("await blob.arrayBuffer()").join("await recordingBytes(blob)") + bytesHelper);
-      console.log(`patch-dsh: голосовой ввод читает запись без внешнего буфера (${reads})`);
-    } else {
-      // Ни починить, ни подтвердить: код пакета изменился, и фикса в нём нет. Молчать
-      // нельзя — так микрофон уже один раз остался сломанным при зелёной сборке.
-      console.error(
-        "patch-dsh: ВНИМАНИЕ — в голосовом вводе не нашла чтения записи из Blob.\n" +
-          "  Пакет @deepseek-ai/dsh-experimental-client-ui-voice-input изменился, микрофон\n" +
-          "  в этой сборке не проверен. Посмотрите " + voiceClient + " и поправьте патч.",
+  let voice = readFileSync(voiceClient, "utf8");
+  const missed = [];
+  const tab = "\t";
+
+  // (1) Начать собирать сэмплы рядом с уже созданным анализатором.
+  if (!voice.includes("this.pcm = [];")) {
+    const anchor = `${tab.repeat(5)}this.context.createMediaStreamSource(stream).connect(this.analyser);\n`;
+    if (voice.includes(anchor)) {
+      voice = voice.replace(
+        anchor,
+        anchor +
+          `${tab.repeat(5)}// NanoLika: пишем звук сами. MediaRecorder отдаёт Blob, а чтение Blob в Electron\n` +
+          `${tab.repeat(5)}// даёт внешний буфер, который Chromium не принимает («External buffers are not\n` +
+          `${tab.repeat(5)}// allowed»). Сэмплы AudioContext лежат в обычной памяти — их и берём.\n` +
+          `${tab.repeat(5)}this.pcm = [];\n` +
+          `${tab.repeat(5)}this.processor = this.context.createScriptProcessor(4096, 1, 1);\n` +
+          `${tab.repeat(5)}this.processor.onaudioprocess = (event) => {\n` +
+          `${tab.repeat(6)}if (this.lifetime.signal.aborted) return;\n` +
+          `${tab.repeat(6)}this.pcm.push(Float32Array.from(event.inputBuffer.getChannelData(0)));\n` +
+          `${tab.repeat(5)}};\n` +
+          `${tab.repeat(5)}this.context.createMediaStreamSource(stream).connect(this.processor);\n` +
+          `${tab.repeat(5)}this.processor.connect(this.context.destination);\n`,
       );
-    }
+    } else missed.push("начало записи (createMediaStreamSource → analyser)");
   }
+
+  // (2) Blob больше не нужен.
+  const blobLines =
+    `${tab.repeat(5)}const blob = new Blob(this.chunks, { type: recorder.mimeType });\n` +
+    `${tab.repeat(5)}if (blob.size === 0) throw new RecordingError("empty");\n`;
+  voice = voice.replace(blobLines, "");
+
+  // (3) Вместо чтения Blob и декодирования — AudioBuffer из сэмплов.
+  const builds =
+    `${tab.repeat(5)}// Декодировать нечего: сэмплы уже здесь. Форма буфера та же, что давал decode.\n` +
+    `${tab.repeat(5)}const parts = this.pcm ?? [];\n` +
+    `${tab.repeat(5)}let collected = 0;\n` +
+    `${tab.repeat(5)}for (const part of parts) collected += part.length;\n` +
+    `${tab.repeat(5)}if (collected === 0) throw new RecordingError("empty");\n` +
+    `${tab.repeat(5)}const merged = new Float32Array(collected);\n` +
+    `${tab.repeat(5)}let at = 0;\n` +
+    `${tab.repeat(5)}for (const part of parts) {\n` +
+    `${tab.repeat(6)}merged.set(part, at);\n` +
+    `${tab.repeat(6)}at += part.length;\n` +
+    `${tab.repeat(5)}}\n` +
+    `${tab.repeat(5)}const decoded = new AudioBuffer({ length: collected, numberOfChannels: 1, sampleRate: context.sampleRate });\n` +
+    `${tab.repeat(5)}decoded.copyToChannel(merged, 0);\n`;
+  if (!voice.includes("Декодировать нечего")) {
+    const at5 = tab.repeat(5);
+    const forms = [
+      // чистый пакет: чтение прямо в вызове
+      `${at5}const decoded = await context.decodeAudioData(await blob.arrayBuffer());\n`,
+      // пакет под своим stage("decode", …)
+      `${at5}const decoded = await stage("decode", () => context.decodeAudioData(await blob.arrayBuffer()));\n`,
+      `${at5}const decoded = await stage("decode", () => context.decodeAudioData((await blob.arrayBuffer()).slice(0)));\n`,
+      // уже читали запись отдельной строкой (наши прежние правки)
+      `${at5}const raw = await blob.arrayBuffer();\n` +
+        `${at5}const decoded = await stage("decode", () => context.decodeAudioData(raw.slice(0)));\n`,
+      `${at5}const raw = await recordingBytes(blob);\n` +
+        `${at5}const decoded = await stage("decode", () => context.decodeAudioData(raw.slice(0)));\n`,
+      `${at5}const raw = await blob.arrayBuffer();\n` +
+        `${at5}const decoded = await context.decodeAudioData(raw.slice(0));\n`,
+      `${at5}const raw = await recordingBytes(blob);\n` +
+        `${at5}const decoded = await context.decodeAudioData(raw.slice(0));\n`,
+    ];
+    const form = forms.find((candidate) => voice.includes(candidate));
+    if (form) voice = voice.replace(form, builds);
+    else missed.push("декодирование записи (decodeAudioData)");
+  }
+
+  // Прежняя правка держала чтение Blob через FileReader; теперь она не нужна и только путает.
+  if (voice.includes("async function recordingBytes(blob)")) {
+    voice = voice.replace(
+      /\n\/\/ NanoLika: Blob\.arrayBuffer\(\)[^\n]*\n\/\/[^\n]*\nasync function recordingBytes\(blob\) \{[\s\S]*?\n\}\n/,
+      "",
+    );
+    if (voice.includes("recordingBytes")) console.warn("patch-dsh: помощник recordingBytes остался в голосовом вводе");
+  }
+
+  // (3b) AudioContext может проснуться в состоянии suspended — тогда событий записи не будет
+  //      вовсе, и человек увидит «ничего не записалось». Будим явно.
+  if (!voice.includes("this.context.resume()")) {
+    const wake = `${tab.repeat(5)}this.processor.connect(this.context.destination);\n`;
+    if (voice.includes(wake)) voice = voice.replace(wake, wake + `${tab.repeat(5)}void this.context.resume().catch(() => undefined);\n`);
+    else missed.push("запуск AudioContext после подключения процессора");
+  }
+
+  // (4) Отпустить процессор вместе с потоком.
+  if (!voice.includes("this.processor.disconnect()")) {
+    const releaseAnchor = `${tab.repeat(4)}this.analyser = void 0;\n`;
+    if (voice.includes(releaseAnchor)) {
+      voice = voice.replace(
+        releaseAnchor,
+        releaseAnchor +
+          `${tab.repeat(4)}if (this.processor) {\n` +
+          `${tab.repeat(5)}try {\n` +
+          `${tab.repeat(6)}this.processor.disconnect();\n` +
+          `${tab.repeat(5)}} catch {}\n` +
+          `${tab.repeat(5)}this.processor = void 0;\n` +
+          `${tab.repeat(4)}}\n`,
+      );
+    } else missed.push("освобождение процессора (this.analyser = void 0)");
+  }
+
+  writeFileSync(voiceClient, voice);
+  if (missed.length === 0) console.log("patch-dsh: микрофон пишет звук сэмплами AudioContext, без Blob");
+  else
+    console.error(
+      "patch-dsh: ВНИМАНИЕ — голосовой ввод пропатчен не полностью, микрофон в этой сборке не проверен.\n" +
+        "  Не нашла: " + missed.join("; ") + "\n" +
+        "  Пакет @deepseek-ai/dsh-experimental-client-ui-voice-input изменился. Посмотрите\n" +
+        "  " + voiceClient + " и поправьте patch-dsh.mjs.",
+    );
 }
 
 // 3b. The right Sidebar's Browser tab is gated on the profile being named `desktop` in the
