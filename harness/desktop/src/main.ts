@@ -324,7 +324,10 @@ function ensureProfile(dshDir: string): string {
     );
   }
   const link = join(dir, "node_modules", BUNDLE);
-  const target = join(dshDir, "node_modules", BUNDLE);
+  // ensurePluginOutsideBundle prepared the working copy before this function.
+  // Do not undo its link by selecting the immutable payload again.
+  const working = join(harnessHome(), "plugins", BUNDLE);
+  const target = existsSync(join(working, "package.json")) ? working : join(dshDir, "node_modules", BUNDLE);
   if (relink(link, target)) log(`profile: ${BUNDLE} → ${target}`);
   const localeLink = join(dir, "node_modules", LOCALE_BUNDLE);
   mkdirSync(dirname(localeLink), { recursive: true });
@@ -436,6 +439,9 @@ function ensurePluginOutsideBundle(dshDir: string): void {
       cpSync(bundled, target, { recursive: true, force: true, dereference: true });
       log(`plugin: copied ${bundledVersion || "?"} to ${target}`);
     }
+    // External ESM imports still resolve against this installation's pinned runtime.
+    const dependencies = join(target, "node_modules");
+    if (!existsSync(dependencies)) symlinkSync(join(dshDir, "node_modules"), dependencies, "dir");
     mkdirSync(modules, { recursive: true });
     let current = "";
     try {
