@@ -1,4 +1,5 @@
 import { ConversationNavigation, type ConversationNavigationRequest } from './conversation-navigation.ts'
+import { TURN_STEPS, TurnBudget, type TurnView } from './turn-budget.ts'
 /**
  * NanoLika Cloud for the harness: `ctx.nanomuseCloud`.
  *
@@ -271,6 +272,8 @@ export interface LiveState {
   conversationNavigation?: ConversationNavigationRequest | null
   /** The last thing the agent asked to show in the side pane; null after a close. */
   preview?: PreviewShow | null
+  /** The turns running now, with their step count against the budget. */
+  turns?: TurnView[]
   cloud: { signedIn: boolean; hint: string }
   profile: Profile
   hub: HubState
@@ -628,6 +631,8 @@ export default class NanomuseCloud extends Service {
   private readonly conversationNavigation = new ConversationNavigation(() => this.state.account?.id ?? '', () => this.broadcast())
   /** What the agent put beside the conversation (`preview_show`, src/preview-tools.ts). */
   private previewShow: PreviewShow | null = null
+  /** The clocks of the open turns (src/turn-budget.ts). */
+  private turnBudget: TurnBudget | undefined
   private sessionCtx: Context | undefined
   private steps = 0
   private lastCallAt = 0
@@ -926,6 +931,37 @@ export default class NanomuseCloud extends Service {
           }),
         'nanomuse cloud: sync turns',
       )
+      // A turn's budget (src/turn-budget.ts): the harness has no step cap, so a turn that
+      // keeps calling tools goes on for an hour and says nothing. Forty steps or twenty
+      // minutes, then the turn ends and the person hears where it stopped.
+      ctx.effect(() => {
+        const budget = new TurnBudget({
+          stop: (sessionId) => {
+            try {
+              ctx.sessionController.cancel({ sessionId: sessionId as SessionId })
+            } catch (error: unknown) {
+              this.ctx.logger.warn('nanomuse: the long turn did not stop: %s', message(error))
+            }
+          },
+          tell: (_sessionId, _turn, steps, minutes) => {
+            const limit = this.turnBudget?.limit ?? TURN_STEPS
+            this.notice('notify', this.profile.current().name || 'Лика', 'Остановила долгий ход', `Ход шёл ${minutes} мин, ${steps} шагов. Остановила, чтобы не тянуть: скажите «продолжай», и дам ещё ${limit} шагов.`)
+          },
+        })
+        this.turnBudget = budget
+        const timer = setInterval(() => budget.sweep(), 30_000)
+        const off = ctx.on('session/event', (session: Session, event: SessionEvent) => {
+          const id = String(session.id)
+          // the agent's own background tasks are its work, not the person waiting for an answer
+          if (Object.values(this.state.taskSessions ?? {}).includes(id)) return
+          budget.onEvent(id, event)
+        })
+        return () => {
+          off()
+          clearInterval(timer)
+          this.turnBudget = undefined
+        }
+      }, 'nanomuse: the budget of a turn')
       ctx.effect(() => this.hub.onSync((cursor, from) => sync.onFrame({ cursor, from })), 'nanomuse cloud: sync frame')
       ctx.effect(() => this.hub.onWorking((frame) => sync.onWorking(frame)), 'nanomuse cloud: working frame')
       ctx.effect(
@@ -2293,6 +2329,7 @@ export default class NanomuseCloud extends Service {
       cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '' },
       conversationNavigation: this.conversationNavigation.request,
       preview: this.previewShow,
+      turns: this.turnBudget?.views() ?? [],
       profile: this.profile.current(),
       hub: this.hubState(),
       hands: { calls: [...this.calls.values()], steps: this.steps, run: this.screenRuns.current() },

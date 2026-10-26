@@ -205,8 +205,12 @@ interface RowProps {
 }
 
 function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain, cloud, onCloud }: RowProps): ReactNode {
+  const live = useLive()
   const status = typeof useSessionStatus === 'function' ? useSessionStatus((map) => map.get(chat.id)) : undefined
   const running = status?.running ?? chat.running
+  // How far into the turn's budget this chat is (src/turn-budget.ts): the person sees a
+  // turn that is about to be stopped instead of a spinner that says nothing.
+  const turn = running ? live.turns?.find((row) => row.sessionId === chat.id) : undefined
   const waiting = status?.pendingInteraction !== undefined
   const unread = status?.completionUnread === true
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -258,7 +262,9 @@ function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useS
           waiting
             ? h('span', { className: 'nm-chat-mark nm-wait', title: t('chWaiting'), 'aria-label': t('chWaiting') }, 'ℹ')
             : running
-              ? h('span', { className: 'nm-chat-dot nm-live', title: t('chRunning'), 'aria-label': t('chRunning') })
+              ? turn
+                ? h('span', { className: 'nm-chat-steps', title: `${t('chRunning')} · ${turn.steps}/${turn.limit}`, 'aria-label': `${t('chRunning')} ${turn.steps}/${turn.limit}` }, `${turn.steps}/${turn.limit}`)
+                : h('span', { className: 'nm-chat-dot nm-live', title: t('chRunning'), 'aria-label': t('chRunning') })
               : unread ? h('span', { className: 'nm-chat-dot', 'aria-hidden': true }) : null,
           // the cloud sits last, quiet: grey, and on a local chat only under the pointer, so it never
           // argues with the dot, the spinner or the unread count for the same glance

@@ -27,7 +27,7 @@ import { AllowanceHeadsUp } from './AllowanceWays.tsx'
 import { interceptComposer, makeAvatarChat } from './AvatarChat.tsx'
 import { makeCapsule } from './Capsule.tsx'
 import { prefillComposer } from './composer.ts'
-import { makeMicButton, makeQuoteAction } from './ComposerExtras.tsx'
+import { makeQuoteAction } from './ComposerExtras.tsx'
 import { makeDocEditor } from './DocEditor.tsx'
 import { renderTrajectory } from './Trajectory.tsx'
 import { makeCloudSection } from './CloudSection.tsx'
@@ -35,7 +35,7 @@ import { CODING_SECTION, makeCodingPanel } from './CodingPanel.tsx'
 import { makeDevicesPanel } from './DevicesPanel.tsx'
 import { makeFeedPanel } from './FeedPanel.tsx'
 import { makePreviewPanel } from './PreviewPanel.tsx'
-import { hidePreview, showPreview } from './preview.ts'
+import { hidePreview, showPreview, type Preview } from './preview.ts'
 import { makeGoalsPanel } from './GoalsPanel.tsx'
 import { makeIdeasPanel } from './IdeasPanel.tsx'
 import { makeLibraryPanel } from './LibraryPanel.tsx'
@@ -142,17 +142,6 @@ function useMood(useSessionStatus: UseSessionStatus | undefined): Mood {
 }
 
 export function apply(ctx: ClientContext): void {
-  // A click on an http(s) link in the conversation opens it in the preview pane
-  // instead of a new tab, so the agent's "see this" lands beside the chat.
-  document.addEventListener('click', (event) => {
-    const target = event.target as Element | null
-    const a = target && typeof target.closest === 'function' ? target.closest('a[href^="http"]') : null
-    if (!a) return
-    const href = a.getAttribute('href') || ''
-    if (href.includes('//127.0.0.1:') || href.startsWith('https://cloud.nanolika.ru') || href.startsWith('https://nanolika.ru')) return
-    event.preventDefault()
-    showPreview({ kind: 'url', url: href })
-  })
   const raw = (ctx as unknown as { slots: SlotRegistrar }).slots
   // A seat that fails to register is reported and skipped, not fatal for the
   // whole plugin: the face, the column and the pages stay independent.
@@ -177,6 +166,31 @@ export function apply(ctx: ClientContext): void {
   const shortcuts = (ctx as unknown as { shortcuts: ShortcutsService }).shortcuts
   const getService = (name: string): unknown => (ctx as unknown as { get(name: string): unknown }).get(name)
   const shell = createShellStore()
+  /**
+   * Something goes into the side pane. A section that is open (settings, a room page)
+   * would keep the pane from showing at all — the harness draws the split only when no
+   * panel is on screen — so the section is closed first, the way the harness's own
+   * "open this conversation" does it.
+   */
+  const openBeside = (preview: Preview): void => {
+    try { shell.close(); layout.selectPanel(null); win.openDoc(null); win.search(false) } catch { /* the frame is not up yet */ }
+    showPreview(preview)
+  }
+  // A click on an http(s) link in the conversation opens it beside the chat rather
+  // than in a new tab, so the agent's "see this" lands next to the words. Links
+  // anywhere else (the sidebar, settings, a page) keep their own behaviour, and a
+  // modified click still opens a tab the way the person asked.
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const target = event.target as Element | null
+    if (!target || typeof target.closest !== 'function') return
+    const a = target.closest('a[href^="http"]')
+    if (!a || !a.closest('[data-conversation-content]')) return
+    const href = a.getAttribute('href') || ''
+    if (href.includes('//127.0.0.1:') || href.startsWith('https://cloud.nanolika.ru') || href.startsWith('https://nanolika.ru')) return
+    event.preventDefault()
+    openBeside({ kind: 'url', url: href })
+  })
   ctx.effect(() => {
     let active = '', timer: ReturnType<typeof setInterval> | undefined
     const stop = () => { if (timer) clearInterval(timer); timer = undefined }
@@ -208,7 +222,7 @@ export function apply(ctx: ClientContext): void {
       }
       if (p.id === shown) return
       shown = p.id
-      showPreview({ kind: p.kind, ...(p.url ? { url: p.url } : {}), ...(p.html ? { html: p.html } : {}), ...(p.title ? { title: p.title } : {}) })
+      openBeside({ kind: p.kind, ...(p.url ? { url: p.url } : {}), ...(p.html ? { html: p.html } : {}), ...(p.title ? { title: p.title } : {}) })
     })
     return off
   }, 'nanomuse: the agent puts something beside the chat')
@@ -464,10 +478,12 @@ export function apply(ctx: ClientContext): void {
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'nanomuse.avatar-chat', locale: 'nanomuse' }, AvatarChat))
   ctx.effect(() => interceptComposer(), 'nanomuse: avatar words')
-  // The microphone at the right of the composer; "reply with a quote" beside Copy.
-  const MicButton = makeMicButton(t, () => { shell.openSection(DICTATION_SECTION) })
-  slots.inject('conversation.input.right', () =>
-    slots.register({ name: 'conversation.input.right', id: 'nanomuse.mic', order: 10, locale: 'nanomuse' }, MicButton))
+  // Микрофон в композере — один, и он не наш: голосовой ввод dsh уже стоит рядом с полем
+  // и работает через локальный распознаватель (`whisper-local` из этого же плагина). Наша
+  // кнопка звала браузерный SpeechRecognition, которого в Electron нет: она либо открывала
+  // настройки, либо падала. Две кнопки на одном месте только путали, поэтому свою убрали.
+  // `makeMicButton` остаётся в ComposerExtras на случай, если понадобится вернуть свою —
+  // тогда её надо ставить вместо встроенной, а не рядом.
   const QuoteAction = makeQuoteAction(t)
   slots.inject('conversation.chat.assistant-actions', () =>
     slots.register({ name: 'conversation.chat.assistant-actions', id: 'nanomuse.quote', order: -10, locale: 'nanomuse' }, QuoteAction))

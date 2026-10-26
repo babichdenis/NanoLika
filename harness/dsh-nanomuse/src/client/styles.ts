@@ -236,6 +236,8 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-unread { min-width: 20px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--nm-accent); color: var(--nm-canvas, white); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
 .nm-chat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nm-accent); flex: none; }
 .nm-chat-dot.nm-live { animation: nm-pulse 2.4s ease-in-out infinite alternate; }
+/* the turn's step count against its budget, where the running dot otherwise sits */
+.nm-chat-steps { flex: none; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--nm-dim, #999); padding: 0 2px; }
 .nm-chat-mark { flex: none; font-size: 12px; color: var(--dsw-alias-state-warn-primary, #d98c1f); }
 /* The cloud on a chat (0.29): a synced chat keeps a grey cloud; a chat only this computer has shows
    its struck one under the pointer, so the row's dot and unread count keep the resting glance. */
@@ -452,7 +454,7 @@ html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-preview-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--nm-divider); }
 .nm-preview-title { flex: 1; min-width: 0; font-size: 13px; color: var(--nm-dim, #999); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nm-preview-open { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); text-decoration: none; }
-.nm-preview-close { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); border: 0; background: transparent; cursor: pointer; }
+.nm-preview-close { flex: none; font-size: 18px; line-height: 1; color: var(--nm-dim, #999); border: 0; background: transparent; cursor: pointer; padding: 0 6px; }
 .nm-preview-open:hover, .nm-preview-close:hover { color: var(--nm-fg, #eee); }
 .nm-preview-body { flex: 1; min-height: 0; position: relative; }
 .nm-preview-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
@@ -460,6 +462,14 @@ html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-preview-body embed { width: 100%; height: 100%; border: 0; }
 .nm-preview-empty { padding: 20px; color: var(--nm-dim, #999); font-size: 13px; }
 html[data-nm-split] [class*="_centerCol"] { min-width: 0; padding-right: var(--nm-split-w, 62vw); box-sizing: border-box; }
+/* The preview pane is a look at something beside the words, not a room of its own:
+   it takes less width than a room. On a window too narrow to hold both, it covers
+   the screen instead of squeezing the conversation into a column of letters. */
+html[data-nm-preview-pane] { --nm-split-w: clamp(340px, 42vw, 780px); }
+@media (max-width: 1100px) {
+  html[data-nm-preview-pane] { --nm-split-w: 100vw; }
+  html[data-nm-preview-pane] [class*="_centerCol"] { padding-right: 0; }
+}
 html[data-nm-split] .nm-header-back { left: 10px; }
 .nm-header-chats { width: auto; padding: 0 10px 0 8px; gap: 6px; border-radius: 8px; font-size: 13px; font-weight: 600; }
 .nm-split .nm-room-head, .nm-split .nm-room-inner { padding-left: 24px; padding-right: 24px; }

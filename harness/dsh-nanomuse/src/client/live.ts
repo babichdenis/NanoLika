@@ -132,11 +132,22 @@ export interface LivePreview {
   at: number
 }
 
+export interface LiveTurn {
+  sessionId: string
+  turn: number
+  steps: number
+  limit: number
+  minutes: number
+  since: number
+}
+
 export interface Live {
   conversationNavigation?: { id: string; cid: string; sessionId: string; expires: number } | null
   cloud: { signedIn: boolean; hint: string }
   /** The last thing the agent put beside the conversation (`preview_show`); null after a close. */
   preview?: LivePreview | null
+  /** The turns running now, with their step count against the budget (src/turn-budget.ts). */
+  turns?: LiveTurn[]
   profile: LiveProfile
   hub: LiveHub
   /** The calls in flight, the step count, and the run that has this screen (`run`; absent on an older host, null between runs). */
