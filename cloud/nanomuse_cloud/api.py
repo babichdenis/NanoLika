@@ -121,6 +121,7 @@ from . import client as client_info
 from . import search as web_search
 from .browser_auth import browser_marker
 from .catalog import Catalog
+from .catalog import descriptions as catalog_descriptions
 from .config import ModelSpec, Settings
 from .controls import ControlError
 from .geo import Geo, collect_ips, group_places
@@ -1057,7 +1058,7 @@ def create_app(
         out = cloud.models_for(caller)
         # Описание и человеческое имя из каталога: в меню их нет, а панели выбора они нужны,
         # чтобы карточка говорила, что модель делает, а не повторяла её id.
-        described = catalog.descriptions(app.state.http, settings.upstream_base, settings.upstream_key)
+        described = await catalog_descriptions(app.state.http, settings.upstream_base, settings.upstream_key)
         if described:
             for row in out["data"]:
                 facts = row.get("nanomuse") or {}
