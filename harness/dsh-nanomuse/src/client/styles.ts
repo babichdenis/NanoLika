@@ -452,7 +452,7 @@ html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-preview-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--nm-divider); }
 .nm-preview-title { flex: 1; min-width: 0; font-size: 13px; color: var(--nm-dim, #999); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nm-preview-open { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); text-decoration: none; }
-.nm-preview-close { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); border: 0; background: transparent; cursor: pointer; }
+.nm-preview-close { flex: none; font-size: 18px; line-height: 1; color: var(--nm-dim, #999); border: 0; background: transparent; cursor: pointer; padding: 0 6px; }
 .nm-preview-open:hover, .nm-preview-close:hover { color: var(--nm-fg, #eee); }
 .nm-preview-body { flex: 1; min-height: 0; position: relative; }
 .nm-preview-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
@@ -460,6 +460,14 @@ html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-preview-body embed { width: 100%; height: 100%; border: 0; }
 .nm-preview-empty { padding: 20px; color: var(--nm-dim, #999); font-size: 13px; }
 html[data-nm-split] [class*="_centerCol"] { min-width: 0; padding-right: var(--nm-split-w, 62vw); box-sizing: border-box; }
+/* The preview pane is a look at something beside the words, not a room of its own:
+   it takes less width than a room. On a window too narrow to hold both, it covers
+   the screen instead of squeezing the conversation into a column of letters. */
+html[data-nm-preview-pane] { --nm-split-w: clamp(340px, 42vw, 780px); }
+@media (max-width: 1100px) {
+  html[data-nm-preview-pane] { --nm-split-w: 100vw; }
+  html[data-nm-preview-pane] [class*="_centerCol"] { padding-right: 0; }
+}
 html[data-nm-split] .nm-header-back { left: 10px; }
 .nm-header-chats { width: auto; padding: 0 10px 0 8px; gap: 6px; border-radius: 8px; font-size: 13px; font-weight: 600; }
 .nm-split .nm-room-head, .nm-split .nm-room-inner { padding-left: 24px; padding-right: 24px; }
@@ -1461,6 +1469,16 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 .nm-fr-sso-btn:focus-visible { outline: 2px solid var(--nm-blue); outline-offset: 1px; }
 .nm-fr-skip-fine { margin-top: 12px; padding: 2px 4px; border: 0; background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; }
 .nm-fr-skip-fine:hover { color: var(--dsw-alias-label-secondary); }
+
+.nm-mp-filters { display:flex;gap:8px;align-items:center;padding:6px;flex-wrap:wrap; }
+.nm-mp-filters select { border:1px solid var(--nm-divider);border-radius:8px;padding:7px;background:var(--nm-field);color:inherit; }
+.nm-mp-model { display:grid;grid-template-columns:minmax(0,1fr) 32px;border-bottom:1px solid var(--nm-divider);padding:5px 0; }
+.nm-mp-favourite { border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
+.nm-model-estimate { grid-column:1/-1;padding:5px 12px;font-size:12px; }
+.nm-model-estimate summary { cursor:pointer;color:var(--dsw-alias-label-secondary); }
+.nm-model-estimate label { display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0; }
+.nm-model-estimate input,.nm-model-estimate select { max-width:170px;padding:6px;border-radius:7px;border:1px solid var(--nm-divider);background:var(--nm-field);color:inherit; }
+.nm-model-estimate output { display:block;margin:8px 0; }
 `
 
 /** Put the stylesheet in the head once and mark the document as ours. */

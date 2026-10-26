@@ -173,7 +173,7 @@ export function apply(ctx: ClientContext): void {
    * "open this conversation" does it.
    */
   const openBeside = (preview: Preview): void => {
-    try { shell.close(); win.openDoc(null); win.search(false) } catch { /* the frame is not up yet */ }
+    try { shell.close(); layout.selectPanel(null); win.openDoc(null); win.search(false) } catch { /* the frame is not up yet */ }
     showPreview(preview)
   }
   // A click on an http(s) link in the conversation opens it beside the chat rather
