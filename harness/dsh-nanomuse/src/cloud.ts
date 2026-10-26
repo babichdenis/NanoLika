@@ -934,9 +934,8 @@ export default class NanomuseCloud extends Service {
           }),
         'nanomuse cloud: sync turns',
       )
-      // A turn's budget (src/turn-budget.ts): the harness has no step cap, so a turn that
-      // keeps calling tools goes on for an hour and says nothing. Forty steps or twenty
-      // minutes, then the turn ends and the person hears where it stopped.
+      // A turn's budget (src/turn-budget.ts): stop runaway tool loops after forty steps.
+      // Slow commands are allowed to finish; there is no wall-clock cancellation.
       ctx.effect(() => {
         const stop = (sessionId: string) => {
           try {
@@ -957,7 +956,6 @@ export default class NanomuseCloud extends Service {
           tell: (sessionId) => { outcomes.mark(sessionId, 'budget') },
         })
         this.turnBudget = budget
-        const timer = setInterval(() => budget.sweep(), 30_000)
         const off = ctx.on('session/event', (session: Session, event: SessionEvent) => {
           const id = String(session.id)
           outcomes.onEvent(id, event)
@@ -967,7 +965,6 @@ export default class NanomuseCloud extends Service {
         })
         return () => {
           off()
-          clearInterval(timer)
           this.turnBudget = undefined
         }
       }, 'nanomuse: the budget of a turn')

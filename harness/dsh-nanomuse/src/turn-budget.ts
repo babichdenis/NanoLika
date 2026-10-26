@@ -1,5 +1,5 @@
 /**
- * A turn's budget: forty steps and twenty minutes.
+ * A turn's budget: forty steps. Long-running tool calls are not cut off by a wall clock.
  *
  * DeepSeek Harness' agent loop has no cap of its own — a turn runs until the
  * model stops calling tools. On a long task (a search that keeps coming up
@@ -7,16 +7,13 @@
  * the person's time and a turn that never says anything; the model's own
  * answers take seconds, the wall clock goes on the tools and the steps.
  *
- * So every open turn is counted here: its steps, and the minutes since it
- * started. The one that goes over is ended through the Session controller, and
- * the person is told where it stopped in their own words — the words come back
- * to them instead of the loop going on. A turn the person cancels themselves
- * ends the same way, and the counter forgets it.
+ * Count tool steps to stop runaway loops. Do not interrupt a slow but still
+ * working command just because it crossed an arbitrary time limit.
  */
 export interface TurnBudgetOptions {
   /** Steps a single turn may take. */
   steps?: number
-  /** Minutes a single turn may run. */
+  /** Optional wall-clock limit in minutes; disabled by default. */
   minutes?: number
   /** End the turn that went over. */
   stop: (sessionId: string, turn: number) => void
@@ -31,9 +28,10 @@ interface OpenTurn {
   stopped: boolean
 }
 
-/** The budget every turn gets unless the caller names another. */
+/** The safety cap every turn gets unless the caller names another. */
 export const TURN_STEPS = 40
-export const TURN_MINUTES = 20
+/** Wall-clock cancellation is disabled unless a caller explicitly opts in. */
+export const TURN_MINUTES = 0
 
 /** What the app shows for a running turn: "step 12 of 40". */
 export interface TurnView {
@@ -95,8 +93,7 @@ export class TurnBudget {
   }
 
   /**
-   * The clock alone: a turn whose single tool call runs for half an hour takes no
-   * new steps, and is exactly the turn that must end. Called on a timer.
+   * Check an optional wall-clock deadline. The step limit is checked as events arrive.
    */
   sweep(now = Date.now()): void {
     for (const [sessionId, state] of this.open) this.check(sessionId, state, now)
@@ -105,7 +102,7 @@ export class TurnBudget {
   private check(sessionId: string, state: OpenTurn, now = Date.now()): void {
     if (state.stopped) return
     const minutes = (now - state.since) / 60_000
-    if (state.steps < this.limit && minutes < this.minutes) return
+    if (state.steps < this.limit && (this.minutes <= 0 || minutes < this.minutes)) return
     state.stopped = true
     this.options.tell(sessionId, state.turn, state.steps, Math.round(minutes))
     this.options.stop(sessionId, state.turn)

@@ -34,6 +34,16 @@ test('a short turn is left alone and its steps are visible', () => {
   assert.deepEqual(told, [])
 })
 
+test('the default budget does not kill a slow turn by elapsed time', () => {
+  const { budget, stopped } = make()
+  budget.onEvent('s1', { type: 'turn/start', data: { turn: 1 } })
+  budget.onEvent('s1', { type: 'step/start', data: { turn: 1, step: 1 } })
+  const since = budget.view('s1').since
+  budget.sweep(since + 90 * 60_000)
+  assert.deepEqual(stopped, [])
+  assert.equal(budget.view('s1').steps, 1)
+})
+
 test('a turn over its steps is stopped once, with the numbers said out loud', () => {
   const { budget, stopped, told } = make({ steps: 3 })
   steps(budget, 's1', 1, 6)
