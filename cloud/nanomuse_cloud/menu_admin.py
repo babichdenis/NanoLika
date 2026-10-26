@@ -46,7 +46,7 @@ def _selection_path(settings: Any) -> Path:
 
 
 def _market() -> list[dict]:
-    """Строки таблицы цен, схлопнутые до моделей: одна модель — одна строка прилавка."""
+    """Строки таблицы цен, схлопнутые по каноническому id: одна модель — одна строка."""
     path = _prices_path()
     try:
         data = json.loads(path.read_text())
@@ -57,17 +57,42 @@ def _market() -> list[dict]:
         name = str(model.get("name") or "")
         if not name:
             continue
-        unit = str(model.get("unit") or model.get("group") or "")
-        row = by_name.setdefault(
-            name,
-            {"name": name, "slug": slug(name), "unit": UNIT_NAMES.get(unit_key(unit), unit), "offers": [], "cheapest_rub": None},
+        # The unsuffixed DeepSeek id is the moving alias for the dated 1017
+        # snapshot. Older price snapshots have separate keys, so fold them here
+        # as well as in the live supplier collector.
+        key = str(model.get("key") or name).strip().lower()
+        key = key.rsplit("/", 1)[-1]
+        if key == "deepseek-v4.1-flash":
+            key = "deepseek-v4.1-flash-1017"
+        display_name = (
+            "deepseek/deepseek-v4.1-flash-1017"
+            if key == "deepseek-v4.1-flash-1017"
+            else name
         )
+        unit = str(model.get("unit") or model.get("group") or "")
+        row = by_name.setdefault(key, {
+            "key": key,
+            "name": display_name,
+            "slug": slug(display_name),
+            "unit": UNIT_NAMES.get(unit_key(unit), unit),
+            "offers": [],
+            "cheapest_rub": None,
+        })
         # цена сравнивается только внутри одной единицы: секунда против минуты не в счёт
         for offer in model.get("offers") or []:
             rub = offer.get("rub")
             offer_unit = str(offer.get("unit") or unit)
-            row["offers"].append({"provider": offer.get("provider"), "rub": float(rub) if rub not in (None, "") else None, "unit": offer_unit})
-            if rub in (None, "") or unit_key(offer_unit) != unit_key(row["unit"]):
+            low_unit = offer_unit.lower()
+            direction = "input" if any(word in low_unit for word in ("вход", "input", "prompt")) else (
+                "output" if any(word in low_unit for word in ("выход", "output", "completion")) else ""
+            )
+            row["offers"].append({
+                "provider": offer.get("provider"),
+                "rub": float(rub) if rub not in (None, "") else None,
+                "unit": offer_unit,
+                "direction": direction,
+            })
+            if rub in (None, "") or unit_key(offer_unit) != unit_key(row["unit"]) or direction == "output":
                 continue
             if row["cheapest_rub"] is None or float(rub) < row["cheapest_rub"]:
                 row["cheapest_rub"] = float(rub)

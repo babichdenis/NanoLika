@@ -132,6 +132,30 @@ async def test_max_steps_wraps_up(settings: Settings):
     assert llm.calls[2]["tools"] is None  # wrap-up call is made without tools
 
 
+async def test_default_task_can_continue_past_forty_tool_steps(settings: Settings):
+    assert settings.agent.max_steps == 0
+    script = [
+        LLMResponse(tool_calls=[tc("add", a=i, b=1)])
+        for i in range(45)
+    ]
+    script.append(LLMResponse(content="Готово"))
+    agent, llm, *_ = make_agent(settings, script)
+
+    assert await agent.run("Продолжай до результата") == "Готово"
+    assert len(llm.calls) == 46
+    assert llm.calls[-1]["tools"] is not None
+
+
+@pytest.mark.parametrize("legacy_limit", [30, 40])
+async def test_legacy_default_step_limits_are_migrated(tmp_path, legacy_limit):
+    from nanomuse.config import load_settings
+
+    path = tmp_path / "config.toml"
+    path.write_text(f"[agent]\nmax_steps = {legacy_limit}\n", encoding="utf-8")
+    settings = load_settings(path)
+    assert settings.agent.max_steps == 0
+
+
 async def test_stuck_detection_nudges(settings: Settings):
     same = lambda: LLMResponse(tool_calls=[tc("add", a=1, b=1)])  # noqa: E731
     script = [same(), same(), same(), LLMResponse(content="changing strategy")]

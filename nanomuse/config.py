@@ -226,7 +226,9 @@ class MediaSettings(BaseModel):
 
 class AgentSettings(BaseModel):
     name: str = "NanoLika"
-    max_steps: int = 30
+    # 0 = no per-task tool-call cap. A hard cap made longer desktop tasks stop
+    # silently; it remains available only when someone explicitly sets a value.
+    max_steps: int = 0
     # Where the agent's files live. A relative path is relative to the current directory, which is
     # what a terminal user expects. When nothing is configured, Settings resolves it: a `workspace/`
     # in the current directory when there is one, otherwise `<data_dir>/workspace` — so a runtime
@@ -1174,6 +1176,11 @@ def load_settings(path: str | Path | None = None) -> Settings:
     raw = _expand_env(raw)
     _apply_env_overrides(raw)
     settings = Settings.model_validate(raw)
+    # Earlier builds wrote the old default (30) or the temporary desktop cap (40)
+    # into user configs. Treat those legacy defaults as unlimited too, otherwise
+    # changing the code default would leave existing installations capped.
+    if settings.agent.max_steps in (30, 40):
+        settings.agent.max_steps = 0
     settings.source = str(config_file) if config_file else "defaults+env"
     settings.data_dir = settings.data_dir.expanduser()
     settings.agent.workspace = settings.agent.workspace.expanduser()

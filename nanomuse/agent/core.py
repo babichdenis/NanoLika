@@ -504,7 +504,7 @@ class MuseAgent:
         )
         session_token = llm_session.enter(self.session_id)
         try:
-            while step < self.settings.agent.max_steps:
+            while self.settings.agent.max_steps <= 0 or step < self.settings.agent.max_steps:
                 step += 1
                 if self._drain_inbox():
                     logger.debug("folded queued user message(s) into the running turn")

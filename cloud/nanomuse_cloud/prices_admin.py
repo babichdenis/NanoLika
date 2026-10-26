@@ -280,16 +280,20 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     continue
                 body = {"model": spec.upstream, "messages": [{"role": "user", "content": "a" * 3000}], "max_tokens": 512}
                 routes = router.routes(spec, body, "", {})
+                eligible_providers = {route.provider for route in routes}
+                all_quotes = router.routes(spec, body, "", {}, include_all=True)
                 offers = []
-                for route in routes:
+                for route in all_quotes:
                     if route.offer is not None:
                         offer = route.offer
                         offers.append({"provider": route.provider, "model": offer.model,
                                        "input_rub": offer.input_rub, "output_rub": offer.output_rub,
                                        "cached_rub": offer.cached_rub, "updated": offer.updated,
                                        "endpoint": offer.endpoint,
-                                       "estimated_rub": offer.estimate(1000, 512)})
-                row["routing"] = {"offers": offers, "selected": offers[0]["provider"] if offers else None,
+                                       "estimated_rub": offer.estimate(1000, 512),
+                                       "eligible": route.provider in eligible_providers,
+                                       "selected": bool(routes and route.provider == routes[0].provider)})
+                row["routing"] = {"offers": offers, "selected": routes[0].provider if routes else None,
                                   "basis": "1000 input + 512 output, no cache, no tools"}
                 if offers:
                     selected = offers[0]

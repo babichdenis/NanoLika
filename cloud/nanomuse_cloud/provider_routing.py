@@ -17,12 +17,22 @@ from typing import Any
 import httpx
 
 log = logging.getLogger(__name__)
-ALIASES = {"deepseek-flash": "deepseek/deepseek-v4.1-flash-1017"}
+FLASH_1017 = "deepseek/deepseek-v4.1-flash-1017"
+ALIASES = {
+    # DeepSeek's moving V4.1 Flash name and OpenRouter's dated snapshot are the
+    # same current model. Without this mapping the live quote table omitted the
+    # OpenRouter offer and made RouterAI look like the only route.
+    "deepseek-flash": FLASH_1017,
+    "deepseek-v4.1-flash": FLASH_1017,
+    "deepseek/deepseek-v4.1-flash": FLASH_1017,
+    "deepseek-v4.1-flash-1017": FLASH_1017,
+    FLASH_1017: FLASH_1017,
+}
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
 
 
 def identity(model: str) -> str:
-    return ALIASES.get(model, model)
+    return ALIASES.get(model.lower(), model)
 
 
 def number(value: Any) -> float | None:
@@ -408,7 +418,7 @@ class ProviderRouter:
             result["offers"] = [asdict(o) for rows in self.offers.values() for o in rows]
         return result
 
-    def routes(self, spec: Any, body: dict, url: str, headers: dict) -> list[Route]:
+    def routes(self, spec: Any, body: dict, url: str, headers: dict, *, include_all: bool = False) -> list[Route]:
         clean_body = {k: v for k, v in body.items() if k not in {"provider", "models", "route"}}
         configured = Route(spec.provider or "", url, headers, clean_body)
         if not self.enabled:
@@ -476,7 +486,7 @@ class ProviderRouter:
                 )
                 candidates.append((fixed.estimate(prompt, expected), name != spec.provider, route))
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
-        if candidates:
+        if candidates and not include_all:
             cap = candidates[0][0] * self.max_fallback_multiple
             candidates = [item for item in candidates if item[0] <= cap]
         routes = [item[2] for item in candidates]

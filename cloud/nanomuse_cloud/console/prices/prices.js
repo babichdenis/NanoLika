@@ -790,7 +790,7 @@ function providerCell(m, name) {
   const cell = h("td", undefined, "num prov-cell");
   if (served === name) {
     cell.classList.add("chosen");
-    cell.append(h("span", "сейчас", "now"));
+    cell.append(h("span", "по расчёту", "now"));
   }
   if (!offer) {
     // Своя котировка без предложения: показываем ставку конфигурации, если она помиллионная.
@@ -805,6 +805,8 @@ function providerCell(m, name) {
   }
   cell.append(h("div", figure(offer.input_rub), "in"), h("div", figure(offer.output_rub), "out"));
   const note = [];
+  if (offer.eligible === false) note.push("вне диапазона автопереключения");
+  else if (offer.eligible === true) note.push("доступен для автопереключения");
   if (offer.cached_rub !== undefined && offer.cached_rub !== null) note.push(`кеш ${money(offer.cached_rub)}`);
   const est = estimate(offer);
   if (est !== null) note.push(`запрос ${money(est, 4)} ₽`);
@@ -892,7 +894,7 @@ function drawHead(providers, rows) {
     const stat = stats.get(name) || { covered: 0, cheaper: 0, chosen: false };
     if (stat.chosen) {
       th.classList.add("chosen");
-      button.prepend(h("span", "сейчас", "now"));
+      button.prepend(h("span", "расчёт", "now"));
     }
     const sub = h("div", undefined, "p-stat");
     sub.append(h("span", `моделей: ${stat.covered}`));
@@ -1037,7 +1039,7 @@ function drawRoutingNote() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, n]) => `${providerLabel(name)}: ${n}`)
     .join(" · ");
-  if (tail) parts.push(h("span", ` Сейчас обслуживают: ${tail}.`, "meta"));
+  if (tail) parts.push(h("span", ` По текущей оценке запроса выберутся: ${tail}. Фактический поставщик последнего обращения показан справа.`, "meta"));
   for (const p of parts) note.append(p);
 }
 

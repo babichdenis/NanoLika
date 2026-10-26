@@ -162,7 +162,7 @@ The app layer sets the same slots: `PUT /api/connections/image` and `PUT /api/co
 ```toml
 [agent]
 name                 = "nanoMuse"      # what the agent calls itself (the app's profile overrides this)
-max_steps            = 30              # tool calls per turn before it must wrap up
+max_steps            = 0               # 0 = no per-task tool-call cap; set a positive value only if desired
 # workspace          = "./workspace"   # the only directory the files tool can touch; default ./workspace if present here, else <data_dir>/workspace
 extra_roots          = []              # directories outside the workspace the files tool may read and write, e.g. ["~/Documents/notes"]; writable inside the sandbox too
 language             = "auto"          # or a fixed language: "English", "中文", ...

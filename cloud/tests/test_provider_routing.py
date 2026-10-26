@@ -13,7 +13,7 @@ import pytest
 from nanomuse_cloud.config import ModelSpec, Settings
 from nanomuse_cloud.db import Database
 from nanomuse_cloud.model_accounting import capture_metadata
-from nanomuse_cloud.provider_routing import Offer, ProviderRouter, Route, request_chat
+from nanomuse_cloud.provider_routing import Offer, ProviderRouter, Route, identity, request_chat
 from nanomuse_cloud.senders import LogSender
 from nanomuse_cloud.service import Caller, Cloud
 
@@ -23,7 +23,8 @@ def setup_router(monkeypatch):
     monkeypatch.setenv("CLOUD_ROUTING_ALLOW_QUANTIZED", "0")
     monkeypatch.delenv("CLOUD_ROUTING_CACHE", raising=False)
     providers = {
-        n: SimpleNamespace(base=f"https://{n}.example", key=lambda: "fixture") for n in ("polza", "openrouter", "aitunnel", "unknown")
+        n: SimpleNamespace(base=f"https://{n}.example", key=lambda: "fixture")
+        for n in ("polza", "routerai", "openrouter", "aitunnel", "unknown")
     }
     s = SimpleNamespace(providers=providers, rub_per_usd=100)
     return ProviderRouter(s)
@@ -57,6 +58,32 @@ def test_total_request_cost_not_cheapest_input(monkeypatch):
     assert routes(r)[0].provider == "openrouter"
     # Long input and a very short output reverses the winner.
     assert routes(r, messages=[{"role": "user", "content": "a" * 30000}], max_tokens=1)[0].provider == "polza"
+
+
+def test_floating_flash_name_matches_openrouter_1017_snapshot(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("flash", "Flash", "deepseek-v4.1-flash", provider="routerai")
+    r.offers = {
+        "routerai": [replace(quote("routerai", 11, 17), model="deepseek-v4.1-flash")],
+        "openrouter": [quote("openrouter", 15, 60)],
+    }
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
+
+    candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+
+    assert identity("deepseek-v4.1-flash") == identity("deepseek/deepseek-v4.1-flash-1017")
+    assert {route.provider for route in candidates} == {"routerai"}
+    assert candidates[0].provider == "routerai"
+    all_quotes = r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
+    assert {route.provider for route in all_quotes} == {"routerai", "openrouter"}
+
+
+def test_flash_model_prices_merge_floating_and_dated_ids():
+    from nanomuse_cloud.provider_prices import model_key
+
+    assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == model_key(
+        "openrouter", "deepseek/deepseek-v4.1-flash-1017"
+    )
 
 
 def test_tool_schemas_are_counted_but_image_base64_is_not_text(monkeypatch):

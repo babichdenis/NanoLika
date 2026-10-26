@@ -98,7 +98,9 @@ function row(model) {
 
   const prices = h("div", undefined, "prices");
   prices.append(h("b", money(model.cheapest_rub) + " ₽"));
-  const best = (model.offers || []).filter((o) => o.rub).sort((a, b) => a.rub - b.rub)[0];
+  const pricedOffers = (model.offers || []).filter((o) => o.rub);
+  const inputs = pricedOffers.filter((o) => o.direction === "input");
+  const best = (inputs.length ? inputs : pricedOffers).sort((a, b) => a.rub - b.rub)[0];
   if (best) prices.append(h("div", "у " + best.provider, "meta"));
   el.append(prices);
 
@@ -133,7 +135,7 @@ function row(model) {
     .filter((o) => o.rub)
     .sort((a, b) => a.rub - b.rub)
     .slice(0, 3)
-    .map((o) => `${o.provider} ${money(o.rub)}${o.unit && o.unit !== model.unit ? " за " + o.unit : ""}`)
+    .map((o) => `${o.provider} ${o.direction === "input" ? "вход" : o.direction === "output" ? "выход" : ""} ${money(o.rub)}${o.unit && o.unit !== model.unit ? " за " + o.unit : ""}`)
     .join(" · ");
   el.append(offers);
   return el;

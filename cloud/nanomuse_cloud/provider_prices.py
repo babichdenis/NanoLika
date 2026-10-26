@@ -455,6 +455,9 @@ FETCHERS = {
 # ── сборка ──────────────────────────────────────────────────────────────
 # одно и то же под разными именами у поставщиков
 ALIASES = {
+    # OpenRouter exposes both the floating current name and dated snapshot; they
+    # refer to the same V4.1 Flash release (1017) and belong in one comparison row.
+    "deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
     "deepseek-flash": "deepseek-v4.1-flash-1017",
     "deepseek-v4-flash": "deepseek-v4.1-flash-1017",
     "deepseek-v4-pro": "deepseek-v4-pro-0813",
@@ -471,6 +474,8 @@ def model_key(provider: str, model: str) -> str:
     slug = slug.replace("deepseek/", "")
     # синонимы — только для ОФИЦИАЛЬНОГО прайса DeepSeek (deepseek-chat → V4.1 Flash);
     # у перепродавцов те же слова могут значить другую модель
+    if slug == "deepseek-v4.1-flash":
+        return ALIASES[slug]
     return ALIASES.get(slug, slug) if provider == "deepseek" else slug
 
 
