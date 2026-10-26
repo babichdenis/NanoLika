@@ -103,7 +103,7 @@ export function SyncControls({ t }: { t: Translate }): ReactNode {
  * @param part - `account`: the account page (who is signed in, the models, the look, the
  * devices); `data`: the Data controls page alone — Muse keeps the two apart in its nav.
  */
-export function makeCloudSection(t: Translate, part: 'account' | 'data' = 'account') {
+export function makeCloudSection(t: Translate, part: 'account' | 'data' | 'keys' = 'account') {
   return function CloudSection(): ReactNode {
     const live = useLive()
     const rooms = useRooms()
@@ -182,6 +182,17 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' = 'accou
               : null,
             notice ? h('div', { style: muted }, notice) : null)
         : h('div', { style: muted }, t('dataOlderRelay'))
+      if (part === 'keys') {
+        // What "add a provider" opens. Providers used to be reachable only through the whole
+        // account page, so a person pressing "add" from Models landed among their password and
+        // sign-in history — two things that have nothing to do with models. This page is the
+        // providers and the proxy, and nothing else.
+        return h('section', { style: { ...column, maxWidth: 560 } },
+          h('div', null, t('signedInAs', { hint: a.hint, channel: t(a.channel === 'phone' ? 'phone' : 'email') })),
+          h(OwnKeyPanel, { t, onChanged: refreshStatus }),
+          h(NetworkRows, { t, relayURL: status.baseURL }),
+          error ? h('div', { style: errorStyle }, error) : null)
+      }
       if (part === 'data') {
         return h('section', { style: { ...column, maxWidth: 560 } },
           h('div', { className: 'nm-card', style: { padding: '14px 16px' } },

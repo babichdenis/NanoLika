@@ -33,6 +33,7 @@ export const HELP_SECTION = 'nanomuse-help'
 export const LEGAL_SECTION = 'nanomuse-legal'
 export const WALLET_SECTION = 'nanomuse-wallet'
 export const STORAGE_SECTION = 'nanomuse-storage'
+export const OWN_KEYS_SECTION = 'nanomuse-ownkeys'
 export const CHANNELS_SECTION = 'nanomuse-channels'
 /** Settings → From your phone: the code that ties Telegram or MAX to the account (`src/client/PhoneLink.tsx`). */
 export const PHONE_SECTION = 'nanomuse-phone'
@@ -339,12 +340,10 @@ export function makeGeneralSection(t: Translate, version: string) {
       h('div', { className: 'nm-card' },
         h(UpdateRow, { t, bundle: version }),
         h(AutomaticUpdateRow, { t }),
-        // going to GitHub from here counts as the star being done: the asks stop (C1)
-        h('button', { type: 'button', className: 'nm-row nm-row-button', onClick: () => openStar(REPO_URL) },
-          h('div', { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, t('gnStar')),
-            h('span', { className: 'nm-row-sub' }, t('gnStarSub'))),
-          h('span', { className: 'nm-row-chevron' }, h(IconChevronRight, { size: 16 })))),
+        // The "source code" row used to sit here. It is a link, not a setting: a person who
+        // wants the repository finds it in the About sheet, and the General page stops
+        // offering a GitHub detour in the middle of their own preferences.
+      ),
       h(DeveloperRows, { t }))
   }
 }

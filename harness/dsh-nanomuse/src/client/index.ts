@@ -49,7 +49,7 @@ import { MuseHeader, type UseSessionStatus } from './MuseHeader.tsx'
 import { CONNECTORS_SECTION, makeConnectorsSection } from './Connectors.tsx'
 import { DICTATION_SECTION, FILES_SECTION, makeDictationSection, makeFilesSection, makePermissionsSection, PERMISSIONS_SECTION } from './Pages.tsx'
 import { makeTurnError } from './RefusalCard.tsx'
-import { CHANNELS_SECTION, COMPUTER_SECTION, createShellStore, DATA_SECTION, HARNESS_SECTION, HELP_SECTION, LEGAL_SECTION, makeGeneralSection, makeHarnessSection, MuseSettings, PHONE_SECTION, STORAGE_SECTION, WALLET_SECTION, type MuseSettingsProps, type OnboardingStep, type SectionRow } from './MuseSettings.tsx'
+import { CHANNELS_SECTION, COMPUTER_SECTION, createShellStore, DATA_SECTION, OWN_KEYS_SECTION, HARNESS_SECTION, HELP_SECTION, LEGAL_SECTION, makeGeneralSection, makeHarnessSection, MuseSettings, PHONE_SECTION, STORAGE_SECTION, WALLET_SECTION, type MuseSettingsProps, type OnboardingStep, type SectionRow } from './MuseSettings.tsx'
 import { MuseSidebar, type MuseSidebarProps, type PanelMeta } from './MuseSidebar.tsx'
 import { makeOnboarding, type OnboardingOwnerProps } from './Onboarding.tsx'
 import { DEVICES_PANEL, FEED_PANEL, GOALS_PANEL, IDEAS_PANEL, ISSUES_URL, LIBRARY_PANEL, PREVIEW_PANEL } from './panels.ts'
@@ -642,6 +642,11 @@ export function apply(ctx: ClientContext): void {
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: COMPUTER_SECTION, order: 22, label: () => t('navComputer'), locale: 'nanomuse' }, ComputerSection))
   // Settings → Models (0.1.41): chat, hands, pictures and clips, one picker each.
+  // Settings → Own models: the providers page on its own, so "add a provider" from Models does
+  // not drop the person among their password and sign-in history (CloudSection, part 'keys').
+  const OwnKeysSection = makeCloudSection(t, 'keys')
+  slots.inject('settings.section', () =>
+    slots.register({ name: 'settings.section', id: OWN_KEYS_SECTION, order: 6, label: () => t('navOwnKeys'), locale: 'nanomuse' }, OwnKeysSection))
   const ModelsSection = makeModelsSection(t)
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: MODELS_SECTION, order: 5, label: () => t('mlTitle'), locale: 'nanomuse' }, ModelsSection))

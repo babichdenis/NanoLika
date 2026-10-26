@@ -16,7 +16,8 @@ import { IconHand, IconImage, IconMessage, IconVideo } from './icons.tsx'
 import { useLive } from './live.ts'
 import type { ModelGroup } from './model-list.ts'
 import { ModelPicker, type PickerHead } from './ModelPicker.tsx'
-import { ACCOUNT_SECTION, MODELS_SECTION, providersNamed, useProviders, type ModelOption } from './OwnKey.tsx'
+import { MODELS_SECTION, providersNamed, useProviders, type ModelOption } from './OwnKey.tsx'
+import { OWN_KEYS_SECTION } from './MuseSettings.tsx'
 
 export { MODELS_SECTION }
 
@@ -141,7 +142,9 @@ export function SlotPicker({ t, slot, view, disabled, catalogue, onPick }: { t: 
 }
 
 export function openAccountWays(): void {
-  settingsBus.openSection?.(ACCOUNT_SECTION)
+  // The providers page, not the whole account: pressing "add a provider" here used to land a
+  // person among their password and sign-in history, which has nothing to do with models.
+  settingsBus.openSection?.(OWN_KEYS_SECTION)
 }
 
 export function makeModelsSection(t: Translate) {
