@@ -20,6 +20,43 @@ const KIND_LABELS = {
 
 const KIND_ORDER = ['chat', 'image', 'video', 'audio', 'embedding', 'rerank'];
 
+/** Цена в юанях за единицу работы: картинка, клип, минута речи или 1M токенов. */
+function priceOf(facts) {
+  if (typeof facts.per_image === 'number' && facts.per_image > 0) return facts.per_image;
+  if (typeof facts.per_clip === 'number' && facts.per_clip > 0) return facts.per_clip;
+  if (typeof facts.per_speech === 'number' && facts.per_speech > 0) return facts.per_speech;
+  if (typeof facts.per_minute === 'number' && facts.per_minute > 0) return facts.per_minute;
+  const cny = facts.price_cny || {};
+  const input = Number(cny.per_m_input) || 0;
+  const output = Number(cny.per_m_output) || 0;
+  return input + output || null;
+}
+
+/**
+ * Порядок карточек: ECO — сначала дешёвые, PRO — сначала способные.
+ *
+ * Это тот же переключатель, что у Bothub: он не меняет список, только порядок, чтобы
+ * «что подешевле» и «что посильнее» были в одном месте, а не в двух вкладках.
+ */
+function sortCards(cards, mode, kind = '') {
+  const rows = cards.slice();
+  if (!kind || kind === '__fav') {
+    // смешанный список: цена за токены и цена за картинку несравнимы
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    return rows;
+  }
+  if (mode === 'pro') {
+    rows.sort((a, b) => b.context - a.context || Number(b.recommended) - Number(a.recommended) || a.name.localeCompare(b.name));
+    return rows;
+  }
+  rows.sort((a, b) => {
+    const pa = a.free ? 0 : a.price ?? Number.MAX_SAFE_INTEGER;
+    const pb = b.free ? 0 : b.price ?? Number.MAX_SAFE_INTEGER;
+    return pa - pb || a.name.localeCompare(b.name);
+  });
+  return rows;
+}
+
 /** Строка каталога → карточка: тип, производитель, описание. */
 function cardOf(row) {
   const facts = row.nanomuse || row;
@@ -34,7 +71,9 @@ function cardOf(row) {
     provider: facts.provider || '',
     desc: facts.description || facts.desc || '',
     free: facts.free === true,
-    price: facts.per_image || facts.per_clip || facts.per_speech || null,
+    price: priceOf(facts),
+    context: Number(facts.context_length) || 0,
+    recommended: facts.recommended === true,
   };
 }
 
@@ -71,10 +110,12 @@ export function kindCounts(cards) {
 }
 
 /** Отбор: тип, производитель, строка поиска. Пустой тип или вендор значит «все». */
-export function filterCards(cards, { kind = '', vendor = '', query = '' } = {}) {
+export function filterCards(cards, { kind = '', vendor = '', query = '', favourites = null } = {}) {
   const q = String(query || '').trim().toLowerCase();
   return cards.filter((card) => {
-    if (kind && card.kind !== kind) return false;
+    if (kind === '__fav') {
+      if (!favourites || !favourites.has(card.id)) return false;
+    } else if (kind && card.kind !== kind) return false;
     if (vendor && (card.vendor || 'другие') !== vendor) return false;
     if (!q) return true;
     return (
@@ -98,6 +139,7 @@ export function installModelSheet({ onPick, api, session }) {
     '<div class="model-vendors" id="ms-vendors"></div>' +
     '<div class="model-body">' +
     '<div class="model-searchline"><input id="ms-search" type="search" placeholder="Поиск модели" autocomplete="off" spellcheck="false">' +
+
     '<button id="ms-close" type="button" class="quiet" aria-label="Закрыть">✕</button></div>' +
     '<div class="model-kindrow" id="ms-kinds"></div>' +
     '<div class="model-cards" id="ms-cards"></div>' +
@@ -105,7 +147,7 @@ export function installModelSheet({ onPick, api, session }) {
   document.body.append(sheet);
 
   const el = (id) => sheet.querySelector('#' + id);
-  const state = { cards: [], kind: '', vendor: '', query: '', picked: '', favourites: new Set() };
+  const state = { cards: [], kind: '', vendor: '', query: '', picked: '', mode: 'eco', favourites: new Set() };
 
   try {
     const saved = JSON.parse(localStorage.getItem('nl.web.favmodels') || '[]');
@@ -135,6 +177,21 @@ export function installModelSheet({ onPick, api, session }) {
       paint();
     };
     box.append(all);
+    const favCount = state.cards.filter((c) => state.favourites.has(c.id)).length;
+    const fav = document.createElement('button');
+    fav.type = 'button';
+    fav.className = 'model-kind-btn';
+    fav.setAttribute('aria-pressed', String(state.kind === '__fav'));
+    fav.textContent = '★ Избранное ';
+    const favN = document.createElement('span');
+    favN.className = 'n';
+    favN.textContent = String(favCount);
+    fav.append(favN);
+    fav.onclick = () => {
+      state.kind = state.kind === '__fav' ? '' : '__fav';
+      paint();
+    };
+    box.append(fav);
     for (const { kind, count } of kindCounts(state.cards)) {
       const meta = KIND_LABELS[kind] || { label: kind, glyph: '•' };
       const button = document.createElement('button');
@@ -183,7 +240,7 @@ export function installModelSheet({ onPick, api, session }) {
   function paintCards() {
     const box = el('ms-cards');
     box.replaceChildren();
-    const rows = filterCards(state.cards, state);
+    const rows = sortCards(filterCards(state.cards, { ...state, favourites: state.favourites }), state.mode, state.kind);
     if (!rows.length) {
       const empty = document.createElement('div');
       empty.className = 'model-empty';
