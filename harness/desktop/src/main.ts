@@ -441,7 +441,7 @@ function ensurePluginOutsideBundle(dshDir: string): void {
     }
     // External ESM imports still resolve against this installation's pinned runtime.
     const dependencies = join(target, "node_modules");
-    if (!existsSync(dependencies)) symlinkSync(join(dshDir, "node_modules"), dependencies, "dir");
+    if (!existsSync(dependencies)) symlinkSync(join(dshDir, "node_modules"), dependencies, process.platform === "win32" ? "junction" : "dir");
     mkdirSync(modules, { recursive: true });
     let current = "";
     try {
