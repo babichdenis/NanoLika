@@ -346,7 +346,7 @@ def install_oauth(app, cloud, settings) -> None:
         response = RedirectResponse(target, status_code=302)
         response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")
-        browser_marker(response, settings)
+        browser_marker(response, settings, api_key=api_key)
         if created:
             welcome = getattr(cloud.sender, "send_first_login", None)
             if callable(welcome):

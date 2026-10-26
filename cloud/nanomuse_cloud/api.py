@@ -570,7 +570,7 @@ def create_app(
                     # Welcome mail is helpful, but must never undo a successful sign-in.
                     log.warning("first-login welcome mail failed: %s", type(exc).__name__)
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": created, **me}), settings)
+        return browser_marker(JSONResponse({"api_key": key, "created": created, **me}), settings, api_key=key)
 
     @app.post("/v1/auth/login")
     async def auth_login(request: Request) -> dict:
@@ -586,7 +586,7 @@ def create_app(
         device = str(body.get("device", ""))[:80]
         key, caller = await asyncio.to_thread(cloud.login_password, ident, password, device, client_ip(request))
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": False, **me}), settings)
+        return browser_marker(JSONResponse({"api_key": key, "created": False, **me}), settings, api_key=key)
 
     def bot_caller(request: Request) -> None:
         """The bot's own proof: one shared secret, and nothing a person could hold."""
@@ -724,7 +724,7 @@ def create_app(
 
         return HTMLResponse(
             '<!doctype html><html><head><meta charset="utf-8"><title>nanoLika account</title></head>'
-            '<body><script src="/web/site-account-bridge.js?v=20261025-account"></script></body></html>',
+            '<body><script src="/web/site-account-bridge.js?v=20261026-session"></script></body></html>',
             headers={
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
@@ -854,7 +854,7 @@ def create_app(
     async def sign_out(caller: Caller = Depends(caller_dep)) -> Response:
         cloud.sign_out(caller)
         await _drop_signed_out(caller.account_id)
-        return Response(status_code=204)
+        return browser_marker(Response(status_code=204), settings, signed_in=False)
 
     async def _drop_signed_out(account_id: str) -> None:
         # a key that was just revoked may still hold a hub socket (the device signed out
@@ -2103,6 +2103,10 @@ def create_app(
     from .channel_start import install as install_channel_start
 
     install_channel_start(app, cloud, caller_dep)
+
+    from .browser_sessions import install as install_browser_sessions
+
+    install_browser_sessions(app, cloud, caller_dep)
 
     from .model_accounting import capture_metadata, record_metadata
     from .model_accounting import install as install_model_accounting

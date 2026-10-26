@@ -772,3 +772,22 @@ storage failures explicitly. Callback refusals log only the provider and boolean
 of the code, state and cookie; values must never be logged. Missing or invalid state still
 refuses sign-in. A mobile browser losing its OAuth state must retry in the same tab; the
 server does not bypass CSRF checks to make the failure disappear.
+
+### Website identity and host-only browser session
+
+Successful email-code, password and OAuth responses set `__Host-nanolika_session` as a
+Secure, HttpOnly, SameSite=Lax host-only cookie. It holds the same web key, so revocation
+invalidates both representations. It never authorizes other API routes, which still
+require Bearer. The old public `nm_signed` cookie is only a presentation marker.
+
+`GET /v1/auth/site-session` returns only verified state and email/hint, never an API key.
+Responses are private/no-store; credentialed CORS is restricted to the explicit website
+origins. `POST /v1/auth/site-session/logout` requires an allowed Origin and JSON, revokes
+the key and closes its hub sockets. `POST /v1/auth/browser-session` requires an already
+valid Bearer and lets an old local-storage login establish its host-only cookie.
+
+The website checks the server first rather than relying on iframe localStorage. Its
+legacy bridge can still migrate a valid older login. Missing or partitioned iframe
+storage must not override a positive server identity. Homepage sign-in continues to the
+web client; other pages retain their requested return. When deploying the auth header,
+bump its script query across pages: the hosting serves JavaScript with a long cache.
