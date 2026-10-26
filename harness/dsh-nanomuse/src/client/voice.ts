@@ -153,7 +153,7 @@ export function makeVoiceMic(t: Translate, hooks: { onError?: (message: string) 
       type: 'button',
       className: `nm-mic${state === 'recording' ? ' nm-live' : ''}`,
       'aria-label': state === 'recording' ? t('micStop') : t('micStart'),
-      title: state === 'recording' ? t('micStop') : state === 'working' ? t('micWorking') : t('micStart'),
+      title: state === 'recording' ? t('micStop') : state === 'working' ? t('working') : t('micStart'),
       'aria-pressed': state === 'recording',
       disabled: state === 'working',
       onMouseDown: (event: { preventDefault(): void }) => event.preventDefault(),

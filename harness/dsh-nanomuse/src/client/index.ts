@@ -23,6 +23,7 @@ import { syncOverlay } from './overlay.ts'
 import { renderFenceCards } from './FenceCards.ts'
 import { renderRemoteBubbles } from './RemoteBubbles.ts'
 import { makeFirstRunIntro } from './FirstRun.tsx'
+import { TurnOutcomeCard } from './TurnOutcome.tsx'
 import { AllowanceHeadsUp } from './AllowanceWays.tsx'
 import { interceptComposer, makeAvatarChat } from './AvatarChat.tsx'
 import { makeCapsule } from './Capsule.tsx'
@@ -502,6 +503,8 @@ export function apply(ctx: ClientContext): void {
   const TurnError = makeTurnError(t, { retry: resend, newChat: () => { workspaces.startSession() } })
   slots.inject('conversation.chat.node', () =>
     slots.register({ name: 'conversation.chat.node', key: 'turn-error', priority: -1, locale: 'nanomuse' }, TurnError))
+  slots.inject('conversation.input.dock', () =>
+    slots.register({ name: 'conversation.input.dock', id: 'nanolika.turn-outcome', order: -11, locale: 'nanomuse' }, TurnOutcomeCard))
   // The 80 % heads-up above the composer, once per pool size (the phones' one-line heads-up in the chat).
   slots.inject('conversation.input.dock', () =>
     slots.register({ name: 'conversation.input.dock', id: 'nanomuse.headsup', order: -10, locale: 'nanomuse' }, () => h(AllowanceHeadsUp, { t })))

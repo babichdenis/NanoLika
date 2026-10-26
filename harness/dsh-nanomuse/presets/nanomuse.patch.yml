@@ -33,7 +33,13 @@
                 would do, and not at all unless the person asked for them or the
                 answer cannot be had otherwise. If two attempts in a row bring
                 nothing new, stop and say plainly what you have and what is
-                missing, rather than trying a third variation.
+                missing, rather than trying a third variation. After a failed
+                attempt, explain the observed failure and what you will change
+                before retrying. Never repeat the same failed operation without
+                new evidence. Before ending any unfinished task, state what was
+                actually changed, what remains unverified, and the next concrete
+                step. A successful tool call alone does not prove task completion.
+                Do not replace the final result with a promise to keep working.
               suffix: Your working directory is {{cwd}}.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'

@@ -1,5 +1,6 @@
 import { ConversationNavigation, type ConversationNavigationRequest } from './conversation-navigation.ts'
-import { TURN_STEPS, TurnBudget, type TurnView } from './turn-budget.ts'
+import { RECOVERY_RULES, restoreOutcomes, TurnOutcomes, type TurnOutcome } from './turn-outcomes.ts'
+import { TurnBudget, type TurnView } from './turn-budget.ts'
 /**
  * NanoLika Cloud for the harness: `ctx.nanomuseCloud`.
  *
@@ -269,6 +270,7 @@ export interface PreviewShow {
 
 /** The live state the browser half mirrors over `/events`. */
 export interface LiveState {
+  turnOutcomes?: TurnOutcome[]
   conversationNavigation?: ConversationNavigationRequest | null
   /** The last thing the agent asked to show in the side pane; null after a close. */
   preview?: PreviewShow | null
@@ -395,6 +397,7 @@ const STUDIO_PICTURES = 8
 const NO_STAGE: StageState = { seq: 0, at: 0, source: 'computer', device: '', width: 0, height: 0, title: '', mode: 'screen', action: null, sessionId: '' }
 
 interface State {
+  turnOutcomes?: TurnOutcome[]
   account?: Account
   models?: RelayModel[]
   deviceId?: string
@@ -935,23 +938,29 @@ export default class NanomuseCloud extends Service {
       // keeps calling tools goes on for an hour and says nothing. Forty steps or twenty
       // minutes, then the turn ends and the person hears where it stopped.
       ctx.effect(() => {
+        const stop = (sessionId: string) => {
+          try {
+            ctx.sessionController.cancel({ sessionId: sessionId as SessionId })
+          } catch (error: unknown) {
+            this.ctx.logger.warn('nanolika: turn cancellation failed: %s', message(error))
+          }
+        }
+        const outcomes = new TurnOutcomes((outcome) => {
+          void this.serialize(async () => {
+            this.state.turnOutcomes = [...(this.state.turnOutcomes ?? []).filter((row) => row.sessionId !== outcome.sessionId || row.turn !== outcome.turn), outcome].slice(-100)
+            await this.writeState()
+            this.broadcast()
+          }).catch((error: unknown) => this.ctx.logger.warn('nanolika: turn outcome not saved: %s', message(error)))
+        }, stop)
         const budget = new TurnBudget({
-          stop: (sessionId) => {
-            try {
-              ctx.sessionController.cancel({ sessionId: sessionId as SessionId })
-            } catch (error: unknown) {
-              this.ctx.logger.warn('nanomuse: the long turn did not stop: %s', message(error))
-            }
-          },
-          tell: (_sessionId, _turn, steps, minutes) => {
-            const limit = this.turnBudget?.limit ?? TURN_STEPS
-            this.notice('notify', this.profile.current().name || 'Лика', 'Остановила долгий ход', `Ход шёл ${minutes} мин, ${steps} шагов. Остановила, чтобы не тянуть: скажите «продолжай», и дам ещё ${limit} шагов.`)
-          },
+          stop,
+          tell: (sessionId) => { outcomes.mark(sessionId, 'budget') },
         })
         this.turnBudget = budget
         const timer = setInterval(() => budget.sweep(), 30_000)
         const off = ctx.on('session/event', (session: Session, event: SessionEvent) => {
           const id = String(session.id)
+          outcomes.onEvent(id, event)
           // the agent's own background tasks are its work, not the person waiting for an answer
           if (Object.values(this.state.taskSessions ?? {}).includes(id)) return
           budget.onEvent(id, event)
@@ -1074,6 +1083,7 @@ export default class NanomuseCloud extends Service {
     const cloud = this
     this.ctx.inject(['llm'], (ctx) => {
       ctx.on('llm/stream', function (options, next) {
+        if (options.sessionId && !options.purpose) options.system = `${options.system ?? ''}\n\n${RECOVERY_RULES}`
         if (options.provider !== PROVIDER_ID) return next()
         if (!cloud.cloudModels() && !(options.sessionId && cloud.cloudOnce.has(String(options.sessionId)))) {
           const own = options.purpose ? cloud.ownChatChoice() : undefined
@@ -2330,6 +2340,7 @@ export default class NanomuseCloud extends Service {
       conversationNavigation: this.conversationNavigation.request,
       preview: this.previewShow,
       turns: this.turnBudget?.views() ?? [],
+      turnOutcomes: this.state.turnOutcomes ?? [],
       profile: this.profile.current(),
       hub: this.hubState(),
       hands: { calls: [...this.calls.values()], steps: this.steps, run: this.screenRuns.current() },
@@ -3406,6 +3417,7 @@ export default class NanomuseCloud extends Service {
     try {
       const raw = JSON.parse(await readFile(this.statePath(), 'utf8')) as State
       return {
+        turnOutcomes: restoreOutcomes(raw.turnOutcomes),
         ...(raw.account ? { account: raw.account } : {}),
         ...(raw.models ? { models: raw.models } : {}),
         ...(typeof raw.deviceId === 'string' && raw.deviceId ? { deviceId: raw.deviceId } : {}),

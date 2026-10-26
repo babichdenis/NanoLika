@@ -5,6 +5,7 @@
  * its devices, the Hands/Reach calls in flight and the notices from other
  * devices all arrive on it; a dropped stream reconnects by itself.
  */
+import type { TurnOutcome } from '../turn-outcomes.ts'
 import { useSyncExternalStore } from 'react'
 import type { Grant, Hold, PendingApproval, SharedConnector, UpdateInfo } from '../desk.ts'
 
@@ -142,6 +143,7 @@ export interface LiveTurn {
 }
 
 export interface Live {
+  turnOutcomes?: TurnOutcome[]
   conversationNavigation?: { id: string; cid: string; sessionId: string; expires: number } | null
   cloud: { signedIn: boolean; hint: string }
   /** The last thing the agent put beside the conversation (`preview_show`); null after a close. */
