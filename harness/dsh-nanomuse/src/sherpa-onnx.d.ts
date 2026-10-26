@@ -75,7 +75,8 @@ declare module 'sherpa-onnx-node' {
   export interface Vad {
     acceptWaveform(samples: Float32Array): void
     isEmpty(): boolean
-    front(): SpeechSegment
+    /** Disable the native external buffer and return samples in JS-owned memory. */
+    front(enableExternalBuffer?: boolean): SpeechSegment
     pop(): void
     flush(): void
     reset(): void

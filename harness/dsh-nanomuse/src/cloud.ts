@@ -1081,12 +1081,24 @@ export default class NanomuseCloud extends Service {
     // compaction) is sent to the chat slot's own model instead, a turn is refused with a card,
     // and only a session under *Use NanoLika Cloud this time* (`cloudOnce`) goes through.
     const cloud = this
+    // LOOP-built LLM requests are deep-frozen by design. Add language and recovery rules
+    // through the prompt-context registry instead of mutating `llm/stream` options.
+    this.ctx.inject(['systemPrompt'], (ctx) => {
+      ctx.effect(
+        () =>
+          ctx.systemPrompt.context({
+            name: 'nanolika-recovery-rules',
+            order: 89,
+            text: () => {
+              const locale = cloud.ctx.settings.describe().find((row) => row.ns === 'locale')?.value as { preference?: unknown } | undefined
+              return recoveryRulesFor(locale?.preference)
+            },
+          }),
+        'nanomuse cloud: language and recovery guidance',
+      )
+    })
     this.ctx.inject(['llm'], (ctx) => {
       ctx.on('llm/stream', function (options, next) {
-        if (options.sessionId && !options.purpose) {
-          const locale = cloud.ctx.settings.describe().find((row) => row.ns === 'locale')?.value as { preference?: unknown } | undefined
-          options.system = `${options.system ?? ''}\n\n${recoveryRulesFor(locale?.preference)}`
-        }
         if (options.provider !== PROVIDER_ID) return next()
         if (!cloud.cloudModels() && !(options.sessionId && cloud.cloudOnce.has(String(options.sessionId)))) {
           const own = options.purpose ? cloud.ownChatChoice() : undefined

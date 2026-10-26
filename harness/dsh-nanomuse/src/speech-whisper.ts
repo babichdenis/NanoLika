@@ -378,7 +378,9 @@ class SherpaWhisper implements LocalWhisper {
     vad.flush()
     const parts: string[] = []
     while (!vad.isEmpty()) {
-      const segment = vad.front()
+      // sherpa-onnx-node returns an external ArrayBuffer by default; Electron rejects it.
+      // `false` asks the native binding to copy the samples into a regular JS-owned buffer.
+      const segment = vad.front(false)
       vad.pop()
       // `front` hands out a window into the detector's ring buffer: copy before the next pop.
       const speech = Float32Array.from(segment.samples)
