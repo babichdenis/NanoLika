@@ -38,7 +38,7 @@ const PLATFORM_MODULES = [
 await rm(new URL('./lib/', import.meta.url), { recursive: true, force: true })
 
 await build({
-  entryPoints: ['src/conversation-navigation.ts', 'src/index.ts', 'src/admit.ts', 'src/cloud.ts', 'src/relay.ts', 'src/reach.ts', 'src/hub.ts', 'src/profile.ts', 'src/actions.ts', 'src/task.ts', 'src/work.ts', 'src/sync.ts', 'src/rooms.ts', 'src/rooms-tools.ts', 'src/memory-tools.ts', 'src/connectors.ts', 'src/connectors-tools.ts', 'src/hands-tools.ts', 'src/images.ts', 'src/desk.ts', 'src/avatar-flow.ts', 'src/fences.ts', 'src/video.ts', 'src/motion.ts', 'src/own-clip.ts', 'src/hands-check.ts', 'src/firstrun.ts', 'src/nudges.ts', 'src/providers.ts', 'src/trajectory.ts', 'src/refusals.ts', 'src/coding.ts', 'src/coding-readers.ts', 'src/coding-runner.ts', 'src/voice.ts', 'src/speech-whisper.ts', 'src/web-search.ts'],
+  entryPoints: ['src/conversation-navigation.ts', 'src/index.ts', 'src/admit.ts', 'src/cloud.ts', 'src/relay.ts', 'src/reach.ts', 'src/hub.ts', 'src/profile.ts', 'src/actions.ts', 'src/task.ts', 'src/work.ts', 'src/sync.ts', 'src/rooms.ts', 'src/rooms-tools.ts', 'src/memory-tools.ts', 'src/preview-tools.ts', 'src/connectors.ts', 'src/connectors-tools.ts', 'src/hands-tools.ts', 'src/images.ts', 'src/desk.ts', 'src/avatar-flow.ts', 'src/fences.ts', 'src/video.ts', 'src/motion.ts', 'src/own-clip.ts', 'src/hands-check.ts', 'src/firstrun.ts', 'src/nudges.ts', 'src/providers.ts', 'src/trajectory.ts', 'src/refusals.ts', 'src/coding.ts', 'src/coding-readers.ts', 'src/coding-runner.ts', 'src/voice.ts', 'src/speech-whisper.ts', 'src/web-search.ts'],
   outdir: 'lib',
   format: 'esm',
   platform: 'node',

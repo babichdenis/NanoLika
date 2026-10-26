@@ -123,9 +123,20 @@ export interface LiveStage {
   sessionId: string
 }
 
+export interface LivePreview {
+  id: string
+  kind: 'url' | 'html' | 'image' | 'pdf'
+  url?: string
+  html?: string
+  title?: string
+  at: number
+}
+
 export interface Live {
   conversationNavigation?: { id: string; cid: string; sessionId: string; expires: number } | null
   cloud: { signedIn: boolean; hint: string }
+  /** The last thing the agent put beside the conversation (`preview_show`); null after a close. */
+  preview?: LivePreview | null
   profile: LiveProfile
   hub: LiveHub
   /** The calls in flight, the step count, and the run that has this screen (`run`; absent on an older host, null between runs). */

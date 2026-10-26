@@ -35,7 +35,7 @@ import { CODING_SECTION, makeCodingPanel } from './CodingPanel.tsx'
 import { makeDevicesPanel } from './DevicesPanel.tsx'
 import { makeFeedPanel } from './FeedPanel.tsx'
 import { makePreviewPanel } from './PreviewPanel.tsx'
-import { showPreview } from './preview.ts'
+import { hidePreview, showPreview } from './preview.ts'
 import { makeGoalsPanel } from './GoalsPanel.tsx'
 import { makeIdeasPanel } from './IdeasPanel.tsx'
 import { makeLibraryPanel } from './LibraryPanel.tsx'
@@ -197,6 +197,21 @@ export function apply(ctx: ClientContext): void {
     return () => { off(); stop() }
   }, 'nanolika: requested conversation navigation')
 
+
+  ctx.effect(() => {
+    let shown = ''
+    const off = subscribeLive((live) => {
+      const p = live.preview ?? null
+      if (!p) {
+        if (shown) { shown = ''; hidePreview() }
+        return
+      }
+      if (p.id === shown) return
+      shown = p.id
+      showPreview({ kind: p.kind, ...(p.url ? { url: p.url } : {}), ...(p.html ? { html: p.html } : {}), ...(p.title ? { title: p.title } : {}) })
+    })
+    return off
+  }, 'nanomuse: the agent puts something beside the chat')
 
   ctx.effect(() => locale.register('nanomuse', { en, ru, zh }), 'nanomuse: dictionaries')
   const t = locale.bind('nanomuse') as Translate

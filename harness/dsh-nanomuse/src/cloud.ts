@@ -252,9 +252,25 @@ export interface StageState {
   sessionId: string
 }
 
+/**
+ * Something the agent asks the app to show beside the conversation: a page by URL,
+ * inline HTML, a picture or a PDF. The pane keeps nothing: the bytes live in this
+ * object or are fetched by the browser's own iframe.
+ */
+export interface PreviewShow {
+  id: string
+  kind: 'url' | 'html' | 'image' | 'pdf'
+  url?: string
+  html?: string
+  title?: string
+  at: number
+}
+
 /** The live state the browser half mirrors over `/events`. */
 export interface LiveState {
   conversationNavigation?: ConversationNavigationRequest | null
+  /** The last thing the agent asked to show in the side pane; null after a close. */
+  preview?: PreviewShow | null
   cloud: { signedIn: boolean; hint: string }
   profile: Profile
   hub: HubState
@@ -610,6 +626,8 @@ export default class NanomuseCloud extends Service {
   private readonly cloudOnce = new Map<string, CloudOnce>()
   /** The scoped context with the session API, once it is up. */
   private readonly conversationNavigation = new ConversationNavigation(() => this.state.account?.id ?? '', () => this.broadcast())
+  /** What the agent put beside the conversation (`preview_show`, src/preview-tools.ts). */
+  private previewShow: PreviewShow | null = null
   private sessionCtx: Context | undefined
   private steps = 0
   private lastCallAt = 0
@@ -2252,12 +2270,29 @@ export default class NanomuseCloud extends Service {
     if (slot) await this.defaultModelService()?.saveSelection(slot).catch(() => undefined)
   }
 
+  /** Put something in the side pane of this computer's app (the agent's `preview_show`). */
+  showPreview(input: { url?: string; html?: string; title?: string }): PreviewShow {
+    const url = (input.url ?? '').trim()
+    const html = input.html ?? ''
+    const kind: PreviewShow['kind'] = html ? 'html' : /\.(png|jpe?g|gif|webp|avif)(\?|#|$)/i.test(url) ? 'image' : /\.pdf(\?|#|$)/i.test(url) ? 'pdf' : 'url'
+    this.previewShow = { id: randomUUID(), kind, at: Date.now(), ...(url ? { url } : {}), ...(html ? { html } : {}), ...(input.title ? { title: input.title.slice(0, 200) } : {}) }
+    this.broadcast()
+    return this.previewShow
+  }
+
+  /** Take the side pane down (`preview_close`). */
+  hidePreview(): void {
+    if (this.previewShow) this.previewShow = null
+    this.broadcast()
+  }
+
   /** The live state, as `/events` streams it. */
   live(): LiveState {
     const account = this.state.account
     return {
       cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '' },
       conversationNavigation: this.conversationNavigation.request,
+      preview: this.previewShow,
       profile: this.profile.current(),
       hub: this.hubState(),
       hands: { calls: [...this.calls.values()], steps: this.steps, run: this.screenRuns.current() },
@@ -3803,6 +3838,15 @@ export default class NanomuseCloud extends Service {
         return send(res, 200, this.handsChoice())
       }
       // Settings → Models (0.1.41): the four slots in one read, the two media slots' setters, the one-time Cloud retry.
+      if ((req.method === 'GET' && route === '/model-catalogue') || (req.method === 'POST' && ['/model-favourites', '/model-quote'].includes(route))) {
+        const token = await this.token()
+        if (!token || !this.state.account) throw new RelayError(401, 'bad_key', 'Sign in to nanoLika')
+        if (route === '/model-catalogue') return send(res, 200, await this.relay.modelCatalogue(token))
+        const body = await json(req)
+        if (route === '/model-quote') return send(res, 200, await this.relay.modelQuote(token, body))
+        if (!Array.isArray(body.favourites) || !body.favourites.every((id: unknown) => typeof id === 'string')) throw new RelayError(400, 'bad_model', 'Invalid favourites')
+        return send(res, 200, await this.relay.modelCatalogue(token, body.favourites as string[]))
+      }
       if (req.method === 'GET' && route === '/models') return send(res, 200, await this.modelsView())
       if (req.method === 'POST' && route === '/cloud-models') {
         const body = await json(req)

@@ -39,6 +39,10 @@
       "types": "./lib/types/memory-tools.d.ts",
       "default": "./lib/memory-tools.js"
     },
+    "./preview-tools": {
+      "types": "./lib/types/preview-tools.d.ts",
+      "default": "./lib/preview-tools.js"
+    },
     "./connectors": {
       "types": "./lib/types/connectors.d.ts",
       "default": "./lib/connectors.js"

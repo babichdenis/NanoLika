@@ -216,6 +216,13 @@
           # cloud row (`nanomuse-cloud`).
           - id: nanomuse-memory-tools
             name: dsh-nanomuse/memory-tools
+          # The side pane from inside a chat: `preview_show` puts a page, a picture,
+          # a PDF or a small piece of HTML beside the conversation, `preview_close`
+          # takes it down (src/preview-tools.ts). The pane keeps nothing: a URL is
+          # loaded by the browser's own frame, inline markup travels with the call.
+          # Needs the cloud row (`nanomuse-cloud`).
+          - id: nanomuse-preview-tools
+            name: dsh-nanomuse/preview-tools
           # The services connected on Settings → Connectors: one MCP client per
           # connection (src/connectors-tools.ts), through the host row
           # `nanomuse-connectors`' loopback proxy, which holds the credentials.
