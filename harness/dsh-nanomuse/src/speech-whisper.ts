@@ -364,10 +364,17 @@ class SherpaWhisper implements LocalWhisper {
   }
 
   async recognize(samples: Float32Array, language: string): Promise<string> {
+    // Пустой звук распознаватель не переживает: sherpa падает на декодировании пустого
+    // потока (проверено, SIGSEGV), поэтому «ничего не сказали» отсекаем до нативной части.
+    if (samples.length === 0) return ''
     const recognizer = await this.recognizer(language)
     const vad = this.detector()
     vad.reset()
-    for (let start = 0; start < samples.length; start += VAD_WINDOW) vad.acceptWaveform(samples.subarray(start, Math.min(start + VAD_WINDOW, samples.length)))
+    for (let start = 0; start < samples.length; start += VAD_WINDOW) {
+      const window = samples.subarray(start, Math.min(start + VAD_WINDOW, samples.length))
+      if (window.length === 0) continue
+      vad.acceptWaveform(window)
+    }
     vad.flush()
     const parts: string[] = []
     while (!vad.isEmpty()) {
