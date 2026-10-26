@@ -111,17 +111,27 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile, WebSocket
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    WebSocket,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
-from . import __version__
+from . import __version__, model_pricing
 from . import client as client_info
 from . import search as web_search
 from .browser_auth import browser_marker
 from .catalog import Catalog
-from .catalog import descriptions as catalog_descriptions
 from .config import ModelSpec, Settings
 from .controls import ControlError
 from .geo import Geo, collect_ips, group_places
@@ -131,7 +141,16 @@ from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
 from .provider_prices import install_provider_prices
 from .provider_routing import ProviderRouter, identity, request_chat
-from .service import Caller, Cloud, CloudError, Usage, dumps, estimate_tokens, prompt_chars, usage_from_json
+from .service import (
+    Caller,
+    Cloud,
+    CloudError,
+    Usage,
+    dumps,
+    estimate_tokens,
+    prompt_chars,
+    usage_from_json,
+)
 from .stats import Stats, api_group
 from .sync import DEFAULT_PAGE, SyncStore
 
@@ -1056,18 +1075,6 @@ def create_app(
         operator's key after it (`listed: false`, `catalog: true`), so the apps' pickers
         offer them (catalog.py). The menu's entries come first, in the menu's order."""
         out = cloud.models_for(caller)
-        # Описание и человеческое имя из каталога: в меню их нет, а панели выбора они нужны,
-        # чтобы карточка говорила, что модель делает, а не повторяла её id.
-        described = await catalog_descriptions(app.state.http, settings.upstream_base, settings.upstream_key)
-        if described:
-            for row in out["data"]:
-                facts = row.get("nanomuse") or {}
-                info = described.get(row.get("id")) or described.get(facts.get("upstream") or "")
-                if info:
-                    if info.get("description"):
-                        facts["description"] = info["description"]
-                    if info.get("vendor") and not facts.get("vendor"):
-                        facts["vendor"] = info["vendor"]
         if not (settings.catalog_enabled and out["nanomuse"].get("any_model")):
             return out
         entries = await catalog.get(app.state.http, settings.upstream_base, settings.upstream_key)
@@ -1095,6 +1102,16 @@ def create_app(
         # how many the key has beyond the menu, and why none if none (the provider's answer)
         out["nanomuse"]["catalog"] = {"models": added, "error": catalog.error, "probing": catalog.probing}
         return out
+
+    @app.post("/v1/models/quote")
+    async def model_quote(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        body = await _json(request)
+        if cloud.s.rub_per_usd <= 0 or cloud.s.usd_cny <= 0:
+            raise CloudError(503, "price_unavailable", "Ruble prices are not configured")
+        spec = settings.model(str(body.get("model") or ""))
+        if spec is None or not cloud.model_visible(spec):
+            raise CloudError(404, "model_not_offered", "Model is not available")
+        return model_pricing.amount(cloud, spec, body, caller)
 
     @app.get("/v1/models/{model_id}")
     async def model(model_id: str, kind: str = "", caller: Caller = Depends(caller_dep)) -> dict:
@@ -1537,7 +1554,7 @@ def create_app(
             params["prompt_extend"] = False
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
-            caller, minimum=spec.per_image, cost_uy=spec.image_cost_uy(size), request_id=request_id, place=client_place(request)
+            caller, minimum=spec.per_image, cost_uy=model_pricing.amount(cloud, spec, {"size": size.replace("*", "x")}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
         )
         try:
             provider, base, key = settings.route(spec)
@@ -1584,7 +1601,7 @@ def create_app(
         cloud.check_budget(
             caller,
             minimum=spec.per_image,
-            cost_uy=spec.image_cost_uy(_size_param(size), inputs=1),
+            cost_uy=model_pricing.amount(cloud, spec, {"size": _size_param(size), "inputs": 1}, caller)["sale_uy"],
             request_id=request_id,
             place=client_place(request),
         )
@@ -1710,7 +1727,7 @@ def create_app(
         cloud.check_budget(
             caller,
             minimum=spec.per_speech,
-            cost_uy=round(len(text) / 1000 * spec.price_speech * 1_000_000),
+            cost_uy=model_pricing.amount(cloud, spec, {"characters": len(text)}, caller)["sale_uy"],
             request_id=request_id,
             place=client_place(request),
         )
@@ -1741,7 +1758,7 @@ def create_app(
         provider, base, key = settings.route(spec)
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
-            caller, minimum=spec.per_minute, cost_uy=spec.price_minute * 1_000_000, request_id=request_id, place=client_place(request)
+            caller, minimum=spec.per_minute, cost_uy=model_pricing.amount(cloud, spec, {"seconds": 60}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
         )
         try:
             if not provider:
@@ -1844,7 +1861,7 @@ def create_app(
             raise CloudError(500, "misconfigured", "The model names a provider the relay cannot reach")
         clip_cost = spec.video_cost_uy(_clip_seconds(body, spec), _clip_resolution(body))
         request_id = uuid.uuid4().hex[:16]
-        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=clip_cost, request_id=request_id, place=client_place(request))
+        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
         try:
             payload = dumps({"model": spec.upstream, "input": _provider_clip_input(body, spec)})
             headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -1862,7 +1879,7 @@ def create_app(
             task_id = str(task_json.get("id") or task_json.get("requestId") or "")
             if not task_id:
                 raise CloudError(502, "upstream", "The video provider sent no task")
-            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False)
+            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False, sale_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"])
             log.info("polza video task %s for %s: %s", task_id[:14], caller.account_id[:8], spec.id)
         finally:
             cloud.settle(caller, request_id)
@@ -1924,7 +1941,7 @@ def create_app(
         # price against the allowance (db.pending_video_cost) until the clip is charged
         headers = upstream_headers()  # before the hold, as for chat: no key, nothing held
         request_id = uuid.uuid4().hex[:16]
-        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=clip_cost, request_id=request_id, place=client_place(request))
+        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
         body["model"] = spec.upstream
         headers["X-DashScope-Async"] = "enable"
         if request.headers.get("x-dashscope-ossresourceresolve"):
@@ -1941,7 +1958,7 @@ def create_app(
                 except (ValueError, KeyError, TypeError):
                     task_id = ""
                 if task_id:
-                    cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=probe)
+                    cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=probe, sale_uy=0 if probe else model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"])
                     log.info("video task %s for %s: %s%s", task_id[:12], caller.account_id[:8], spec.id, " (probe)" if probe else "")
             else:
                 log.warning("dashscope video HTTP %s: %s", r.status_code, r.text[:300])

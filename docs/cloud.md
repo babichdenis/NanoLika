@@ -791,3 +791,11 @@ legacy bridge can still migrate a valid older login. Missing or partitioned ifra
 storage must not override a positive server identity. Homepage sign-in continues to the
 web client; other pages retain their requested return. When deploying the auth header,
 bump its script query across pages: the hosting serves JavaScript with a long cache.
+
+
+### Unified model retail catalogue
+
+See [model-catalogue.md](model-catalogue.md) for the catalogue commerce contract,
+account favourites, the authenticated non-billable POST /v1/models/quote endpoint
+and the admin-only revision-checked retail price editor. Existing video task rows
+remain compatible; new tasks persist accepted sale_uy until settlement.

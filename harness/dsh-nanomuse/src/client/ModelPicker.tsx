@@ -8,7 +8,8 @@
  * close it; the rows are buttons, so Tab reaches them, and the arrows walk them.
  */
 import { createElement as h, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import type { Translate } from './api.ts'
+import { call, type Translate } from './api.ts'
+import { ModelEstimate, type CatalogueModel } from './ModelEstimate.tsx'
 import { IconCheck, IconChevronDown, IconSearch } from './icons.tsx'
 import { hasSearch, layoutGroups, type Current, type ModelGroup, type ModelRow } from './model-list.ts'
 
@@ -38,8 +39,8 @@ export interface ModelPickerProps<R extends ModelRow = ModelRow> {
   rowText?(row: R): ReactNode
 }
 
-const PANEL_WIDTH = 340
-const PANEL_MAX_HEIGHT = 380
+const PANEL_WIDTH = 620
+const PANEL_MAX_HEIGHT = 560
 
 function place(anchor: HTMLElement): Record<string, number> {
   const rect = anchor.getBoundingClientRect()
@@ -56,6 +57,26 @@ function place(anchor: HTMLElement): Record<string, number> {
 export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], headValue, groups, current, disabled, testId, onHead, onPick, rowText }: ModelPickerProps<R>): ReactNode {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [context, setContext] = useState(0)
+  const [onlyFavourites, setOnlyFavourites] = useState(false)
+  const [favourites, setFavourites] = useState<string[]>([])
+  const [catalogue, setCatalogue] = useState<CatalogueModel[]>([])
+  const [catalogueError, setCatalogueError] = useState('')
+  const writes = useRef<Promise<unknown>>(Promise.resolve())
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    call<{ models: CatalogueModel[]; shelf: { favourites?: string[] } }>('model-catalogue')
+      .then(data => { if (alive) { setCatalogue(data.models); setFavourites(data.shelf.favourites ?? []); setCatalogueError('') } })
+      .catch(() => { if (alive) { setCatalogue([]); setFavourites([]) } })
+    return () => { alive = false }
+  }, [open])
+  const star = (id: string) => {
+    const next = favourites.includes(id) ? favourites.filter(x => x !== id) : [...favourites, id]
+    setFavourites(next)
+    writes.current = writes.current.catch(() => {}).then(() => call('model-favourites', { favourites: next }))
+      .catch(() => setCatalogueError(t('mpFavouriteError')))
+  }
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [style, setStyle] = useState<Record<string, number>>({})
   const button = useRef<HTMLButtonElement>(null)
@@ -121,7 +142,11 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
     rows[next]?.focus()
   }
 
-  const shown = layoutGroups(groups, { ...(current ? { current } : {}), query, expanded })
+  const filtered = groups.map(group => ({ ...group, rows: group.rows.filter(row => {
+    const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === row.id) : undefined
+    return (!context || (info?.context_length ?? 0) >= context) && (!onlyFavourites || (group.key === 'nanomuse' && favourites.includes(row.id)))
+  }) }))
+  const shown = layoutGroups(filtered, { ...(current ? { current } : {}), query, expanded })
   const searching = query.trim().length > 0
 
   const row = (key: string, selected: boolean, content: ReactNode, onClick: () => void, extra: Record<string, unknown> = {}) =>
@@ -150,12 +175,23 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
                 h(IconSearch, { size: 15 }),
                 h('input', { type: 'search', value: query, placeholder: t('mpSearch'), 'aria-label': t('mpSearch'), autoComplete: 'off', spellCheck: false, onChange: (e: { currentTarget: HTMLInputElement }) => setQuery(e.currentTarget.value), onKeyDown: walk }))
             : null,
+          h('div', { className: 'nm-mp-filters' },
+            h('select', { 'aria-label': t('mpContext'), value: context, onChange: (e: { currentTarget: HTMLSelectElement }) => setContext(Number(e.currentTarget.value)) },
+              [0, 128000, 200000, 1000000].map(n => h('option', { key: n, value: n }, n ? `${n / 1000}K+` : t('mpAnyContext')))),
+            h('button', { type: 'button', className: 'nm-pill nm-pill-sm', 'aria-pressed': onlyFavourites, onClick: () => setOnlyFavourites(!onlyFavourites) }, t('mpFavourites'))),
+          catalogueError ? h('p', { role: 'status' }, catalogueError) : null,
           h('div', { className: 'nm-mp-list' },
             shown.length === 0 && searching ? h('div', { className: 'nm-mp-none' }, t('mpNoMatch')) : null,
             shown.map((group) =>
               h('div', { key: group.key, className: 'nm-mp-group', role: 'group', 'aria-label': group.label },
                 h('div', { className: 'nm-mp-group-label' }, group.label),
-                group.rows.map((r) => row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id })),
+                group.rows.map((r) => {
+                  const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === r.id) : undefined
+                  return h('div', { key: `${group.key}:${r.id}`, className: 'nm-mp-model' },
+                    row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id }),
+                    info ? h('button', { type: 'button', className: 'nm-mp-favourite', 'aria-label': `${t('mpFavourites')}: ${r.name}`, 'aria-pressed': favourites.includes(r.id), onClick: () => star(r.id) }, favourites.includes(r.id) ? '★' : '☆') : null,
+                    info ? h(ModelEstimate, { model: info, t }) : null)
+                }),
                 group.more > 0
                   ? h('button', { type: 'button', className: 'nm-mp-more', 'data-nm-mp-row': '', onKeyDown: walk, onClick: () => setExpanded((prev) => new Set([...prev, group.key])) }, t('mpShowMore', { n: group.more }))
                   : null))))

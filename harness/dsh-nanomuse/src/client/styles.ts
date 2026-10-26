@@ -1461,6 +1461,16 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 .nm-fr-sso-btn:focus-visible { outline: 2px solid var(--nm-blue); outline-offset: 1px; }
 .nm-fr-skip-fine { margin-top: 12px; padding: 2px 4px; border: 0; background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; }
 .nm-fr-skip-fine:hover { color: var(--dsw-alias-label-secondary); }
+
+.nm-mp-filters { display:flex;gap:8px;align-items:center;padding:6px;flex-wrap:wrap; }
+.nm-mp-filters select { border:1px solid var(--nm-divider);border-radius:8px;padding:7px;background:var(--nm-field);color:inherit; }
+.nm-mp-model { display:grid;grid-template-columns:minmax(0,1fr) 32px;border-bottom:1px solid var(--nm-divider);padding:5px 0; }
+.nm-mp-favourite { border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
+.nm-model-estimate { grid-column:1/-1;padding:5px 12px;font-size:12px; }
+.nm-model-estimate summary { cursor:pointer;color:var(--dsw-alias-label-secondary); }
+.nm-model-estimate label { display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0; }
+.nm-model-estimate input,.nm-model-estimate select { max-width:170px;padding:6px;border-radius:7px;border:1px solid var(--nm-divider);background:var(--nm-field);color:inherit; }
+.nm-model-estimate output { display:block;margin:8px 0; }
 `
 
 /** Put the stylesheet in the head once and mark the document as ours. */

@@ -26,6 +26,8 @@ from typing import Any
 
 from fastapi import Depends, HTTPException
 
+from . import model_pricing
+
 PROVIDERS_DIR = Path(__file__).resolve().parent / "console" / "providers"
 
 
@@ -316,6 +318,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     "input_tokens": entry["prompt_tokens"], "output_tokens": entry["completion_tokens"]}
         for row in models:
             row["last_request"] = actuals.get(row["id"])
+        if cloud is not None:
+            for row in models:
+                spec = settings.model(row["id"])
+                commerce = model_pricing.describe(cloud, spec)
+                row["commerce"] = commerce
+                rates = commerce["rates_rub"]
+                row["sell"].update(rub_in=rates["input"], rub_out=rates["output"], rub_cached_in=rates["cached_input"])
+                row["below_cost"] = any(row["cost"].get("rub_" + side) and rates[field] * .7 < row["cost"]["rub_" + side] for side, field in (("in", "input"), ("out", "output"))) if spec.kind == "chat" else commerce["source"] == "legacy_cost"
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]
@@ -335,6 +345,13 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             "retail": _retail(),
             "drafts": drafts,
         }
+
+    @app.put("/v1/admin/prices/models/{model_id}/pricing", dependencies=[Depends(admin_dep)])
+    async def save_model_price(model_id: str, body: dict) -> dict:
+        spec = settings.model(model_id)
+        if cloud is None or spec is None:
+            raise HTTPException(404, "Unknown model")
+        return model_pricing.save(cloud, spec, body)
 
     @app.put("/v1/admin/prices/models/{model_id}/visibility", dependencies=[Depends(admin_dep)])
     async def model_visibility(model_id: str, body: dict) -> dict:

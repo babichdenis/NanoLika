@@ -1,3 +1,4 @@
+import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
 /* nanoLika web console — the models page.
 
    A chooser, not a table: one search field, one row of kinds, and every model of the relay
@@ -10,7 +11,7 @@
   const words = {
     ru: {
       title: 'Модели', eyebrow: 'nanoLika · Ваш кабинет',
-      intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цена одной генерации и себестоимость — здесь же, до нажатия.',
+      intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа, возможности и предварительный расчёт доступны у каждой модели.',
       search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные',
       chat: 'Переписка', code: 'Кодинг', image: 'Картинки', video: 'Видео', sound: 'Звук', music: 'Музыка',
       showMore: (n, total) => `Показать ещё ${n} из ${total}`, showAll: 'Показать все',
@@ -28,13 +29,13 @@
       reset: 'Вернуть как было', dirty: 'Есть несохранённые изменения', unchanged: 'Ничего не изменено',
       chatCannotEmpty: 'Переписка не может остаться пустой: хотя бы одна модель должна быть отмечена.',
       nothing: 'Ничего не нашлось.', found: (n) => `моделей: ${n}`,
-      footer: 'Выбор хранится на сервере и работает на всех ваших устройствах. Токены — внутренняя мера лимита; себестоимость показана для честности, рублёвый прайс появится позже.',
+      footer: 'Цены продажи поступают из прайса nanoLika. Действующая скидка учтена. Расчёт не запускает генерацию.',
       back: '← В кабинет', voice: (v) => `голос: ${v}`, id: 'у провайдера', takes: (l) => `принимает: ${l}`,
       mod: { text: 'текст', image: 'картинки', audio: 'звук', video: 'видео' },
     },
     en: {
       title: 'Models', eyebrow: 'nanoLika · Your account',
-      intro: 'Pick what the app should offer and which model answers by default. The price of one generation and the provider cost sit on the row, before you press anything.',
+      intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices, model capabilities and estimates are shown before generation.',
       search: 'Search models', all: 'All models', mine: 'My picks',
       chat: 'Chat', code: 'Coding', image: 'Pictures', video: 'Clips', sound: 'Sound', music: 'Music',
       showMore: (n, total) => `Show ${n} more of ${total}`, showAll: 'Show all',
@@ -52,7 +53,7 @@
       reset: 'Undo changes', dirty: 'Unsaved changes', unchanged: 'Nothing changed',
       chatCannotEmpty: 'Chat cannot be left empty: at least one model stays ticked.',
       nothing: 'Nothing found.', found: (n) => `${n} models`,
-      footer: 'The choice is stored on the server and works on every device of yours. Tokens are the inner measure of the allowance; the provider cost is shown for honesty, a ruble price list comes later.',
+      footer: 'Retail prices come from nanoLika. Your active discount is included. Estimates do not start a generation.',
       back: '← Account', voice: (v) => `voice: ${v}`, id: 'upstream', takes: (l) => `takes: ${l}`,
       mod: { text: 'text', image: 'pictures', audio: 'sound', video: 'video' },
     },
@@ -139,6 +140,7 @@
 
   let loaded = null; // что сказал сервер в прошлый раз
   let draft = null; // что человек выбрал сейчас
+  let contextMin=0;let favouriteWrites=Promise.resolve();
   let section = 'all'; // какой раздел открыт
   let needle = ''; // что в поиске
   let shownCount = {}; // сколько строк раздела уже показано
@@ -161,44 +163,10 @@
 
   /** Что покупают за токены и сколько это стоит у провайдера — словами, без выдуманных цен. */
   function priceBlock(model) {
-    const cost = model.cost || {};
-    const media = model.media || {};
-    const tokens = model.tokens || {};
-    const lines = [];
-
-    if (model.kind === 'chat') {
-      if (cost.in) lines.push([T.perMillionIn, rub(cost.in)]);
-      if (cost.out) lines.push([T.perMillionOut, rub(cost.out)]);
-      return { lines, note: '' };
-    }
-    if (model.kind === 'image') {
-      lines.push([T.perPicture, rub(media.picture_cny || cost.image || 0)]);
-      return { lines, note: tokens.per_picture ? T.tokensNote(num(tokens.per_picture)) : '' };
-    }
-    if (model.kind === 'video') {
-      lines.push([T.perSecond, rub(media.second_cny || 0)]);
-      const clip = media.clip_seconds || 4;
-      return {
-        lines,
-        note: tokens.per_clip ? `${T.perClip(clip)} · ${T.tokensNote(num(tokens.per_clip))}` : '',
-      };
-    }
-    const audio = model.audio || {};
-    if (audio.kind === 'speech') {
-      lines.push([T.perSpeech, rub(media.speech_cny || 0)]);
-      return {
-        lines,
-        note: [tokens.per_speech ? T.tokensNote(num(tokens.per_speech)) : '', audio.voice ? T.voice(audio.voice) : '']
-          .filter(Boolean)
-          .join(' · '),
-      };
-    }
-    if (audio.kind === 'transcribe') {
-      lines.push([T.perMinute, rub(media.minute_cny || 0)]);
-      return { lines, note: tokens.per_minute ? T.tokensNote(num(tokens.per_minute)) : '' };
-    }
-    lines.push([T.perTrack, rub(media.second_cny || 0)]);
-    return { lines, note: tokens.per_clip ? T.tokensNote(num(tokens.per_clip)) : '' };
+    const commerce=model.commerce||{},rates=commerce.effective_rub||{};
+    const labels={input:T.perMillionIn,output:T.perMillionOut,image:T.perPicture,second:T.perSecond,speech:T.perSpeech,minute:T.perMinute};
+    const fields=model.kind==='chat'?['input','output']:model.kind==='image'?['image']:model.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
+    return {lines:fields.filter(k=>Number(rates[k])>0).map(k=>[labels[k],num(rates[k],4)+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
   }
 
   function details(model) {
@@ -285,7 +253,9 @@
     pick.title = T.makeDefault;
     pick.append(radio, h('span', radio.checked ? T.defaultMark : T.makeDefault));
 
-    line.append(box, names, prices);
+    const calc=document.createElement('details');calc.className='mm-calculator';const caption=h('summary','Параметры и расчёт');calc.append(caption);let calculated=false;calc.ontoggle=()=>{if(calc.open&&!calculated){calculated=true;calc.append(modelDetails(model,{api:async(path,options={})=>{const response=await fetch(path,{...options,cache:'no-store',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'}});if(!response.ok)throw new Error('quote');return response.json();}}));}};
+    const star=h('button',(loaded.shelf?.favourites||[]).includes(model.id)?'★':'☆','chip');star.type='button';star.setAttribute('aria-label','В избранное: '+model.name);star.setAttribute('aria-pressed',String((loaded.shelf?.favourites||[]).includes(model.id)));star.onclick=()=>{const old=loaded.shelf?.favourites||[],next=old.includes(model.id)?old.filter(id=>id!==model.id):[...old,model.id];loaded.shelf.favourites=next;draw();favouriteWrites=favouriteWrites.catch(()=>{}).then(async()=>{const response=await fetch('/v1/me/models',{method:'PUT',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({enabled:{},favourites:next})});if(!response.ok)throw new Error('favourite');}).catch(()=>{el('status').textContent='Избранное не сохранилось. Обновите страницу.';});};
+    line.append(box, names, prices,star);line.append(calc);
     if (usable) line.append(pick);
     return line;
   }
@@ -297,6 +267,8 @@
     return all.filter((model) => {
       const hay = `${model.name} ${model.vendor || ''} ${model.id} ${model.upstream || ''}`.toLowerCase();
       if (wanted && !hay.includes(wanted)) return false;
+      if(contextMin && Number(model.context_length||0)<contextMin)return false;
+      if(section==='favourites')return (loaded.shelf?.favourites||[]).includes(model.id);
       if (section === 'mine') return SHELF_KINDS.some((k) => draft.enabled[k].has(model.id));
       if (section === 'code') return isCoding(model);
       if (!spec) return true;
@@ -350,6 +322,7 @@
       all.filter((m) => (spec.sub ? m.kind === 'audio' && (m.audio || {}).kind === spec.sub : m.kind === spec.kind)).length;
     const chips = [
       ['all', T.all, all.length],
+      ['favourites', '★ Избранное', (loaded.shelf?.favourites||[]).length],
       ['mine', T.mine, all.filter((m) => SHELF_KINDS.some((k) => draft.enabled[k].has(m.id))).length],
       ['code', T.code, all.filter(isCoding).length],
       ...SECTIONS.map((spec) => [spec.key, T[spec.title], ofKind(spec)]),
@@ -423,6 +396,8 @@
       }
       if (!response.ok) throw new Error('request');
       loaded = await response.json();
+      if(!el('context-filter')){const label=h('label','Контекст ');const select=h('select');select.id='context-filter';select.setAttribute('aria-label','Контекст');for(const n of [0,128000,200000,1000000]){const option=h('option',n?(n/1000)+'K+':'Любой');option.value=n;select.append(option);}select.onchange=()=>{contextMin=Number(select.value);draw();};label.append(select);document.querySelector('.search-row').append(label);const refresh=h('button','Обновить цены','chip');refresh.type='button';refresh.onclick=load;document.querySelector('.search-row').append(refresh);}
+
       draft = fromServer(loaded.shelf || {});
       draw();
     } catch (_) {

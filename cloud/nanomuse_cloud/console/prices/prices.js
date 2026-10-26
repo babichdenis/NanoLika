@@ -3,6 +3,7 @@
 // Пароль хранится только в текущей вкладке, если браузер разрешает хранилище.
 // Private browsing may disallow storage. Login still works in memory.
 const memoryStorage = new Map();
+const dirtyPrices = new Set();
 const SS = {
   getItem(key) { try { return window.sessionStorage.getItem(key); } catch { return memoryStorage.get(key) || null; } },
   setItem(key, value) { memoryStorage.set(key, value); try { window.sessionStorage.setItem(key, value); } catch {} }
@@ -24,7 +25,6 @@ const state = {
   worldIn: null,        // $ за 1M входа, не больше
   ctxMin: 0,            // контекст, не меньше
   iqMin: null,          // качество (индекс), не меньше
-  freeOnly: false,      // только бесплатные у наших поставщиков
   showEmpty: true,      // показывать всё; пустые строки уходят в конец списка
   mode: "",             // режим: chat, embedding, image_generation …
   q: "",
@@ -48,6 +48,7 @@ const GROUPS = [
   ["video", "Видео"],
   ["audio", "Озвучка и распознавание"],
   ["embedding", "Эмбеддинги"],
+  ["rerank", "Ранжирование"],
 ];
 
 const PROVIDER_NAMES = {
@@ -226,11 +227,12 @@ function groupOf(m) {
   const kind = String(m.kind || "chat");
   const lanes = (m.lanes || []).map((lane) => String(lane).toLowerCase());
   const id = String(m.id || "").toLowerCase();
+  if (kind === "rerank") return "rerank";
   if (kind === "image") return "image";
   if (kind === "video") return "video";
   if (kind === "embedding" || (kind !== "chat" && /embed/.test(id))) return "embedding";
   if (kind === "audio" || lanes.some((lane) => /speech|audio|transcri|voice|music/.test(lane))) return "audio";
-  if (lanes.some((lane) => /code|coding|coder|dev/.test(lane))) return "code";
+  if (lanes.some((lane) => /code|coding|coder|dev/.test(lane)) || /coder|coding|codestral|devstral/.test(id)) return "code";
   return "text";
 }
 
@@ -321,7 +323,6 @@ function baseRows() {
       if (state.priceMax !== null && price > state.priceMax) return false;
     }
     // пустые строки не прячем, а уводим вниз: показываем всё, что есть
-    if (state.freeOnly && !(infoOf(m) || {}).free) return false;
     if (!state.showEmpty && !hasData(m)) return false;
     if (state.hereOnly === "yes" && !infoOf(m)) return false;
     if (state.hereOnly === "no" && infoOf(m)) return false;
@@ -676,6 +677,7 @@ function modelCell(m) {
   if (!m.listed) meta.append(h("span", " · скрыта из меню"));
   if (!m.default_on) meta.append(h("span", " · выключена у нового"));
   cell.append(meta);
+  const provider=servingProvider(m);if(provider)cell.append(h("span",providerLabel(provider),"retail-provider"));
   return cell;
 }
 
@@ -702,36 +704,13 @@ function costCell(m) {
 
 /** Правка цены продажи: пересчитывает кратность и маржу на месте. */
 function sellCell(m) {
-  const group = groupOf(m);
-  const cell = h("td", undefined, "num sell-edit");
-  if (group !== "text" && group !== "code") {
-    cell.append(h("span", m.sell.hint || "не задана", "meta"));
-    return cell;
-  }
-  const field = (value, label) => {
-    const input = h("input");
-    input.type = "number";
-    input.min = "0";
-    input.step = "0.01";
-    input.value = value ? String(value) : "";
-    input.className = "sell-input";
-    input.setAttribute("aria-label", `${label}: ${m.name}`);
-    input.title = "Правка для расчёта, в конфигурацию релея не сохраняется";
-    input.oninput = () => {
-      m.sell.rub_in = numberOrNull(fieldIn.value);
-      m.sell.rub_out = numberOrNull(fieldOut.value);
-      recalcRow(m);
-    };
-    return input;
-  };
-  const fieldIn = field(m.sell.rub_in, "Цена продажи входа");
-  const fieldOut = field(m.sell.rub_out, "Цена продажи выхода");
-  fieldIn.placeholder = "—";
-  fieldOut.placeholder = "—";
-  const line = h("div", undefined, "sell-line");
-  line.append(fieldIn, h("span", "/", "sep"), fieldOut);
-  cell.append(line);
-  return cell;
+  const cell=h("td",undefined,"num sell-edit"), commerce=m.commerce;
+  if(!commerce){cell.textContent="Нет рабочего прайса";return cell;}
+  const labels={input:"Вход / 1M",cached_input:"Кеш / 1M",output:"Ответ / 1M",image:"Картинка",image_2k:"Картинка 2K",image_input:"Исходная картинка",second:"Секунда видео",speech:"1000 знаков",minute:"Минута записи"};
+  if(commerce.source==="legacy_cost")cell.append(h("small","Розничная ставка не задана. Сохраните цену продажи.","bad"));
+  const fields=m.kind==='chat'?['input','cached_input','output']:m.kind==='image'?['image','image_2k']:m.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
+  const inputs={};for(const key of fields){const label=h('label',labels[key],'retail-field'),input=h('input');input.type='number';input.min='0.000001';input.step='0.01';input.value=commerce.rates_rub[key]||'';input.className='sell-input';input.setAttribute('aria-label',`${labels[key]}: ${m.name}`);input.oninput=()=>dirtyPrices.add(m.id);inputs[key]=input;label.append(input);cell.append(label);}
+  const save=h('button','Сохранить','chip'),status=h('span','','meta');save.type='button';save.onclick=async()=>{const values={};for(const [key,input] of Object.entries(inputs)){const n=Number(input.value);if(!Number.isFinite(n)||n<=0){status.textContent='Укажите положительную цену';return;}values[key]=n;}save.disabled=true;status.textContent='Сохраняем…';try{m.commerce=await api('/v1/admin/prices/models/'+encodeURIComponent(m.id)+'/pricing',{method:'PUT',body:JSON.stringify({revision:m.commerce.revision,rates_rub:values})});m.sell.rub_in=m.commerce.rates_rub.input;m.sell.rub_out=m.commerce.rates_rub.output;m.sell.rub_cached_in=m.commerce.rates_rub.cached_input;dirtyPrices.delete(m.id);status.textContent='Сохранено. Клиенты получат новый прайс при обновлении каталога.';recalcRow(m);}catch(e){status.textContent='Не сохранено: '+e.message;}finally{save.disabled=false;}};cell.append(save,status);return cell;
 }
 
 function numberOrNull(value) {
@@ -897,7 +876,6 @@ function drawHead(providers, rows) {
   top.append(h("th", group, "pick sticky-1"));
   const nameTh = sortableTh("Модель", "name", "name sticky-2");
   top.append(nameTh);
-  top.append(h("th", "Название для выбора", "clean-name"));
   top.append(sortableTh("Вендор", "vendor", "vendor"));
   top.append(sortableTh("Контекст", "context", "num ctx"));
   top.append(sortableTh("Макс. выход", "max_output", "num ctx"));
@@ -925,11 +903,11 @@ function drawHead(providers, rows) {
     top.append(th);
   }
 
-  top.append(sortableTh("Закупка, ₽ / 1M", "cost_in", "num"));
-  top.append(sortableTh("Сейчас, ₽ / 1M", "sell_in", "num"));
+  top.append(sortableTh("Закупка, ₽", "cost_in", "num"));
+  top.append(sortableTh("Продажа, ₽", "sell_in", "num"));
   top.append(sortableTh("Кратность", "ratio_in", "num"));
-  top.append(h("th", "При наценке, ₽", "num"));
-  top.append(h("th", "Маржа, ₽", "num"));
+  top.append(h("th", "При наценке, ₽", "num markup"));
+  top.append(h("th", "Маржа, ₽", "num margin"));
   top.append(h("th", "Последний запрос", "last"));
   head.append(top);
 }
@@ -983,9 +961,9 @@ function buildRow(m, providers) {
   tr.append(pick);
 
   const name = modelCell(m);
+  if(m.below_cost)name.append(h("span","Ниже закупки при скидке 30%","bad retail-warning"));
   name.classList.add("sticky-2");
   tr.append(name);
-  tr.append(cleanNameCell(m));
 
   const vendor = vendorOf(m);
   const vendorCell = h("td", undefined, "vendor");
@@ -1015,16 +993,6 @@ function buildRow(m, providers) {
 }
 
 /** Доллар за миллион токенов: мельче копейки округляем до четырёх знаков. */
-/** Чистое имя: то, под которым модель показывается человеку при выборе. */
-function cleanNameCell(m) {
-  const info = infoOf(m);
-  const text = (info && info.clean_name) || m.name || m.id || "";
-  const td = h("td", undefined, "clean-name");
-  td.append(h("span", text));
-  if (info && info.free) td.append(h("span", "free", "free-badge"));
-  return td;
-}
-
 function worldCell(value) {
   if (value === null || value === undefined) return h("td", "—", "num world dim");
   const text = value >= 1 ? money(value, 2) : String(value.toFixed(value < 0.01 ? 4 : 3));
@@ -1288,11 +1256,6 @@ function wireCatalogFilters() {
   bind("ctx-min", (v) => { state.ctxMin = Number(v) || 0; });
   bind("world-in", (v) => { state.worldIn = v === "" ? null : Number(v); });
   bind("iq-min", (v) => { state.iqMin = v === "" ? null : Number(v); });
-  const freeOnly = document.getElementById("free-only");
-  if (freeOnly) {
-    freeOnly.checked = state.freeOnly;
-    freeOnly.onchange = (e) => { state.freeOnly = e.target.checked; draw(); };
-  }
   const showEmpty = document.getElementById("show-empty");
   if (showEmpty) {
     showEmpty.checked = state.showEmpty;
@@ -1322,7 +1285,7 @@ async function load() {
     drawBalances();
     drawRetail();
     drawDrafts();
-    document.getElementById("footer").textContent = `Справочный снимок рынка: ${stamp(state.data.generated_at)}. Галочки сохраняются на сервере. Розничный прайс не меняется автоматически, правка цены продажи живёт только в этой вкладке.`;
+    document.getElementById("footer").textContent = `Справочный снимок рынка: ${stamp(state.data.generated_at)}. Галочки сохраняются на сервере. Розничные ставки сохраняются кнопкой «Сохранить». Обновление закупочных котировок не меняет их автоматически.`;
     note.textContent = "";
   } catch (e) {
     note.textContent = String(e.message || e);
@@ -1376,11 +1339,6 @@ document.getElementById("reset").onclick = () => {
   state.iqMin = null;
   state.mode = "";
   state.showEmpty = false;
-  const freeOnly = document.getElementById("free-only");
-  if (freeOnly) {
-    freeOnly.checked = state.freeOnly;
-    freeOnly.onchange = (e) => { state.freeOnly = e.target.checked; draw(); };
-  }
   const showEmpty = document.getElementById("show-empty");
   if (showEmpty) showEmpty.checked = false;
   for (const el of document.querySelectorAll("#caps-filter .cap-chip")) el.classList.remove("on");
@@ -1421,6 +1379,10 @@ document.getElementById("refresh-routing").onclick = async (event) => {
   finally { button.disabled = false; }
 };
 setInterval(() => {
-  if (TOKEN && state.data && !document.hidden &&
+  if (TOKEN && state.data && !dirtyPrices.size && !document.hidden &&
       !document.querySelector("#refresh-routing:disabled, #content input:disabled")) load();
 }, 120000);
+
+document.getElementById("detailed-columns")?.addEventListener("change",e=>document.body.classList.toggle("prices-detailed",e.target.checked));
+
+window.addEventListener('beforeunload',event=>{if(dirtyPrices.size){event.preventDefault();event.returnValue='';}});

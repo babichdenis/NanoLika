@@ -444,6 +444,8 @@ class Database:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN unlimited INTEGER NOT NULL DEFAULT 0")
         if "charged" not in cols("video_tasks"):
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN charged INTEGER NOT NULL DEFAULT 0")
+        if "sale_uy" not in cols("video_tasks"):
+            self._conn.execute("ALTER TABLE video_tasks ADD COLUMN sale_uy INTEGER")
         if "cost_uy" not in cols("video_tasks"):
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN cost_uy INTEGER NOT NULL DEFAULT 0")
         if "cost_uy" not in cols("ledger"):
@@ -2163,7 +2165,7 @@ class Database:
         provider has not finished, so not yet in the ledger — held against the allowance."""
         with self._lock:
             r = self._conn.execute(
-                "SELECT COALESCE(SUM(cost_uy),0) FROM video_tasks WHERE account_id=? AND charged=0 "
+                "SELECT COALESCE(SUM(COALESCE(sale_uy,cost_uy)),0) FROM video_tasks WHERE account_id=? AND charged=0 "
                 "AND probe=0 AND status NOT IN ('FAILED','CANCELED','UNKNOWN') AND created_at >= ?",
                 (account_id, now() - self.VIDEO_HOLD_S),
             ).fetchone()
@@ -2398,14 +2400,14 @@ class Database:
 
     # -- video tasks (the provider's async API, relayed) --------------------------
 
-    def insert_video_task(self, task_id: str, account_id: str, model: str, cost_uy: int = 0, probe: bool = False) -> None:
+    def insert_video_task(self, task_id: str, account_id: str, model: str, cost_uy: int = 0, probe: bool = False, sale_uy: int | None = None) -> None:
         t = now()
         with self.tx() as c:
             # a second insert for the same task (a retried poll) must not forget that it was charged
             c.execute(
-                "INSERT INTO video_tasks(task_id, account_id, model, created_at, cost_uy, probe) VALUES (?,?,?,?,?,?) "
+                "INSERT INTO video_tasks(task_id, account_id, model, created_at, cost_uy, probe, sale_uy) VALUES (?,?,?,?,?,?,?) "
                 "ON CONFLICT(task_id) DO UPDATE SET model=excluded.model, cost_uy=excluded.cost_uy",
-                (task_id, account_id, model, t, max(0, int(cost_uy)), 1 if probe else 0),
+                (task_id, account_id, model, t, max(0, int(cost_uy)), 1 if probe else 0, sale_uy),
             )
             c.execute("DELETE FROM video_tasks WHERE created_at < ?", (t - self.VIDEO_KEEP_S,))
 

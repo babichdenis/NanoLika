@@ -226,13 +226,16 @@ export function makeModelsSection(t: Translate) {
       h('p', null, t('mlLead')),
       view.signedIn ? h('div', { className: 'nm-card', style: { padding: 18, marginBottom: 14 }, 'data-testid': 'nm-primary-cloud-slot' },
         h('strong', null, 'nanoLika Cloud'), h('p', { className: 'nm-row-sub nm-wrap' }, t('nlCloudReady')),
-        h('button', { type: 'button', className: 'nm-pill nm-pill-sm',
-          disabled: busy !== null || !view.cloudModels || view.slots.chat.provider === 'nanomuse',
-          onClick: () => {
-            const cloud = view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.recommended)
-              ?? view.slots.chat.options.find(o => o.provider === 'nanomuse')
-            if (cloud) pick('chat', cloud.provider, cloud.id)
-          } }, t('nlUseCloud'))) : null,
+        h(ModelPicker<ModelOption>, {
+          t, label: t('mlCloudModels'),
+          text: view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.id === view.slots.chat.model)?.name ?? t('nlUseCloud'),
+          groups: [{ key: 'nanomuse', label: 'nanoLika Cloud', rows: view.slots.chat.options.filter(o => o.provider === 'nanomuse') }],
+          ...(view.slots.chat.provider === 'nanomuse' ? { current: { group: 'nanomuse', id: view.slots.chat.model } } : {}),
+          disabled: busy !== null || !view.cloudModels,
+          testId: 'nm-cloud-model-library',
+          onPick: (_provider, row) => pick('chat', 'nanomuse', row.id),
+        })) : null,
+
       h('div', { className: 'nm-card' }, rows),
       cloudRow,
       failed ? h('div', { style: errorStyle }, failed) : null,

@@ -654,6 +654,19 @@ export class Relay {
     })
   }
 
+  /** Retail metadata and account favourites, without provider credentials. */
+  async modelCatalogue(apiKey: string, favourites?: string[]): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(`${this.origin}/v1/me/models`, { method: favourites ? 'PUT' : 'GET', headers: { ...this.auth(apiKey), 'Content-Type': 'application/json' }, ...(favourites ? { body: JSON.stringify({ enabled: {}, favourites }) } : {}) })
+    if (!res.ok) await fail(res)
+    return await res.json() as Record<string, unknown>
+  }
+
+  async modelQuote(apiKey: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(`${this.origin}/v1/models/quote`, { method: 'POST', headers: { ...this.auth(apiKey), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    if (!res.ok) await fail(res)
+    return await res.json() as Record<string, unknown>
+  }
+
   /** The hub socket for this relay (`ws://` for a dev relay on plain HTTP). */
   get hubURL(): string {
     return `${this.origin.replace(/^http/, 'ws')}/v1/hub`

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>nanoLika Cloud: цены, поставщики и розница</title>
-    <link rel="stylesheet" href="prices.css?v=20261025-providers-1" />
+    <link rel="stylesheet" href="prices.css?v=20261026-catalogue" />
     <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
   <link rel="stylesheet" href="/web/brand-foundations.css?v=20261025-account"></head>
   <body>
@@ -45,7 +45,7 @@
           <input id="k" type="number" min="0.5" max="50" step="0.5" value="5" />
           <span class="meta">× от закупки</span>
         </label>
-        <button id="refresh-routing" class="chip" type="button">Обновить цены и балансы</button>
+        <label class="switch"><input id="detailed-columns" type="checkbox"> Сравнить поставщиков</label><button id="refresh-routing" class="chip" type="button">Обновить цены и балансы</button>
       </div>
       <div class="bar-row">
         <details class="multi" id="vendor-box">
@@ -57,7 +57,7 @@
           <div class="menu" id="prov-menu"></div>
         </details>
         <div class="chips" id="status" role="group" aria-label="Видимость для клиента"></div>
-        <label class="field">вход от <input id="price-min" type="number" min="0" step="0.01" placeholder="₽" /></label>
+        </div><details class="advanced-filters"><summary>Дополнительные фильтры</summary><div class="bar-row"><label class="field">вход от <input id="price-min" type="number" min="0" step="0.01" placeholder="₽" /></label>
         <label class="field">до <input id="price-max" type="number" min="0" step="0.01" placeholder="₽" /></label>
         <label class="field">сортировка
           <select id="sort"></select>
@@ -100,12 +100,11 @@
         <label class="field">контекст от <input id="ctx-min" type="number" min="0" step="1000" placeholder="128000" /></label>
         <label class="field">$ вход до <input id="world-in" type="number" min="0" step="0.1" placeholder="$" /></label>
         <label class="field">качество от <input id="iq-min" type="number" min="0" max="100" step="1" placeholder="40" /></label>
-        <label class="switch"><input id="free-only" type="checkbox" /> только бесплатные (у наших)</label>
         <label class="switch"><input id="show-empty" type="checkbox" checked /> показывать модели без данных</label>
         <div class="chips caps-filter" id="caps-filter" role="group" aria-label="Возможности"></div>
         <button id="reset" class="chip quiet" type="button">Сбросить фильтры</button>
         <span class="meta found" id="found"></span>
-      </div>
+      </div></details>
     </div>
 
     <p class="note" id="note"></p>
@@ -122,8 +121,7 @@
         <p class="lead">
           Закупка берётся из свежего API, если есть котировка. В столбце поставщика цена входа и под ней
           цена выхода, в рублях за миллион токенов. Галочка скрывает модель из выбора клиентов, но не
-          запрещает продолжать существующую беседу. Ставки продажи правятся только для расчёта:
-          кратность и маржа пересчитываются на месте, в конфигурацию релея ничего не пишется.
+          запрещает продолжать существующую беседу. Ставки продажи сохраняются кнопкой «Сохранить» и используются в каталоге, расчётах и новых списаниях. Уже запущенные видео сохраняют принятую цену. Цены в рублях, скидка тарифа применяется при расходе.
         </p>
         <div class="table-wrap tall">
           <table id="models">
@@ -208,6 +206,6 @@
     </main>
 
     <footer id="footer"></footer>
-    <script type="module" src="prices.js?v=20261025-providers-1"></script>
+    <script type="module" src="prices.js?v=20261026-catalogue"></script>
   </body>
 </html>

@@ -1,3 +1,4 @@
+import {modelDetails} from './model-detail.js?v=20261026-catalogue';
 /**
  * Панель выбора модели: провайдеры слева, карточки справа, фильтры по типу и поиск.
  *
@@ -20,43 +21,6 @@ const KIND_LABELS = {
 
 const KIND_ORDER = ['chat', 'image', 'video', 'audio', 'embedding', 'rerank'];
 
-/** Цена в юанях за единицу работы: картинка, клип, минута речи или 1M токенов. */
-function priceOf(facts) {
-  if (typeof facts.per_image === 'number' && facts.per_image > 0) return facts.per_image;
-  if (typeof facts.per_clip === 'number' && facts.per_clip > 0) return facts.per_clip;
-  if (typeof facts.per_speech === 'number' && facts.per_speech > 0) return facts.per_speech;
-  if (typeof facts.per_minute === 'number' && facts.per_minute > 0) return facts.per_minute;
-  const cny = facts.price_cny || {};
-  const input = Number(cny.per_m_input) || 0;
-  const output = Number(cny.per_m_output) || 0;
-  return input + output || null;
-}
-
-/**
- * Порядок карточек: ECO — сначала дешёвые, PRO — сначала способные.
- *
- * Это тот же переключатель, что у Bothub: он не меняет список, только порядок, чтобы
- * «что подешевле» и «что посильнее» были в одном месте, а не в двух вкладках.
- */
-function sortCards(cards, mode, kind = '') {
-  const rows = cards.slice();
-  if (!kind || kind === '__fav') {
-    // смешанный список: цена за токены и цена за картинку несравнимы
-    rows.sort((a, b) => a.name.localeCompare(b.name));
-    return rows;
-  }
-  if (mode === 'pro') {
-    rows.sort((a, b) => b.context - a.context || Number(b.recommended) - Number(a.recommended) || a.name.localeCompare(b.name));
-    return rows;
-  }
-  rows.sort((a, b) => {
-    const pa = a.free ? 0 : a.price ?? Number.MAX_SAFE_INTEGER;
-    const pb = b.free ? 0 : b.price ?? Number.MAX_SAFE_INTEGER;
-    return pa - pb || a.name.localeCompare(b.name);
-  });
-  return rows;
-}
-
 /** Строка каталога → карточка: тип, производитель, описание. */
 function cardOf(row) {
   const facts = row.nanomuse || row;
@@ -67,11 +31,12 @@ function cardOf(row) {
     id: row.id,
     name: row.name || facts.name || row.id,
     kind,
-    vendor: facts.vendor || facts.provider || '',
+    vendor: facts.vendor || '',
     provider: facts.provider || '',
     desc: facts.description || facts.desc || '',
     free: facts.free === true,
-    price: priceOf(facts),
+    price: facts.commerce ? (kind==='chat'?((facts.commerce.effective_rub||{}).input||0)+((facts.commerce.effective_rub||{}).output||0)*.512:(facts.commerce.effective_rub||{})[kind==='image'?'image':kind==='video'?'second':facts.commerce.unit==='speech'?'speech':'minute']??null) : null,
+    row,
     context: Number(facts.context_length) || 0,
     recommended: facts.recommended === true,
   };
@@ -110,12 +75,10 @@ export function kindCounts(cards) {
 }
 
 /** Отбор: тип, производитель, строка поиска. Пустой тип или вендор значит «все». */
-export function filterCards(cards, { kind = '', vendor = '', query = '', favourites = null } = {}) {
+export function filterCards(cards, { kind = '', vendor = '', query = '' } = {}) {
   const q = String(query || '').trim().toLowerCase();
   return cards.filter((card) => {
-    if (kind === '__fav') {
-      if (!favourites || !favourites.has(card.id)) return false;
-    } else if (kind && card.kind !== kind) return false;
+    if (kind && card.kind !== kind) return false;
     if (vendor && (card.vendor || 'другие') !== vendor) return false;
     if (!q) return true;
     return (
@@ -126,251 +89,27 @@ export function filterCards(cards, { kind = '', vendor = '', query = '', favouri
   });
 }
 
-/**
- * Собрать панель в документе. `onPick(id)` зовут, когда человек выбрал модель.
- * Панель строит себя сама: элемент в разметке не нужен, крепится к body.
- */
-export function installModelSheet({ onPick, api, session }) {
-  const sheet = document.createElement('div');
-  sheet.className = 'model-sheet';
-  sheet.dataset.open = '0';
-  sheet.innerHTML =
-    '<div class="model-sheet-panel" role="dialog" aria-modal="true" aria-label="Выбор модели">' +
-    '<div class="model-vendors" id="ms-vendors"></div>' +
-    '<div class="model-body">' +
-    '<div class="model-searchline"><input id="ms-search" type="search" placeholder="Поиск модели" autocomplete="off" spellcheck="false">' +
-
-    '<button id="ms-close" type="button" class="quiet" aria-label="Закрыть">✕</button></div>' +
-    '<div class="model-kindrow" id="ms-kinds"></div>' +
-    '<div class="model-cards" id="ms-cards"></div>' +
-    '</div></div>';
-  document.body.append(sheet);
-
-  const el = (id) => sheet.querySelector('#' + id);
-  const state = { cards: [], kind: '', vendor: '', query: '', picked: '', mode: 'eco', favourites: new Set() };
-
-  try {
-    const saved = JSON.parse(localStorage.getItem('nl.web.favmodels') || '[]');
-    if (Array.isArray(saved)) state.favourites = new Set(saved);
-  } catch {
-    /* испорченное хранилище — просто без избранного */
-  }
-
-  function saveFavourites() {
-    try {
-      localStorage.setItem('nl.web.favmodels', JSON.stringify([...state.favourites]));
-    } catch {
-      /* приватный режим: избранное живёт до перезагрузки */
-    }
-  }
-
-  function paintKinds() {
-    const box = el('ms-kinds');
-    box.replaceChildren();
-    const all = document.createElement('button');
-    all.type = 'button';
-    all.className = 'model-kind-btn';
-    all.setAttribute('aria-pressed', String(state.kind === ''));
-    all.innerHTML = 'Все типы <span class="n">' + state.cards.length + '</span>';
-    all.onclick = () => {
-      state.kind = '';
-      paint();
-    };
-    box.append(all);
-    const favCount = state.cards.filter((c) => state.favourites.has(c.id)).length;
-    const fav = document.createElement('button');
-    fav.type = 'button';
-    fav.className = 'model-kind-btn';
-    fav.setAttribute('aria-pressed', String(state.kind === '__fav'));
-    fav.textContent = '★ Избранное ';
-    const favN = document.createElement('span');
-    favN.className = 'n';
-    favN.textContent = String(favCount);
-    fav.append(favN);
-    fav.onclick = () => {
-      state.kind = state.kind === '__fav' ? '' : '__fav';
-      paint();
-    };
-    box.append(fav);
-    for (const { kind, count } of kindCounts(state.cards)) {
-      const meta = KIND_LABELS[kind] || { label: kind, glyph: '•' };
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'model-kind-btn';
-      button.setAttribute('aria-pressed', String(state.kind === kind));
-      button.textContent = meta.label + ' ';
-      const n = document.createElement('span');
-      n.className = 'n';
-      n.textContent = String(count);
-      button.append(n);
-      button.onclick = () => {
-        state.kind = state.kind === kind ? '' : kind;
-        paint();
-      };
-      box.append(button);
-    }
-  }
-
-  function paintVendors() {
-    const box = el('ms-vendors');
-    box.replaceChildren();
-    const rows = [{ name: '', count: state.cards.length }, ...vendorRows(state.cards)];
-    for (const row of rows) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'model-vendor-row';
-      button.setAttribute('aria-pressed', String(state.vendor === row.name));
-      const dot = document.createElement('span');
-      dot.className = 'model-vendor-dot';
-      dot.textContent = (row.name || 'Все').slice(0, 2).toUpperCase();
-      const label = document.createElement('span');
-      label.textContent = row.name || 'Все производители';
-      const count = document.createElement('span');
-      count.className = 'model-vendor-count';
-      count.textContent = String(row.count);
-      button.append(dot, label, count);
-      button.onclick = () => {
-        state.vendor = row.name;
-        paint();
-      };
-      box.append(button);
-    }
-  }
-
-  function paintCards() {
-    const box = el('ms-cards');
-    box.replaceChildren();
-    const rows = sortCards(filterCards(state.cards, { ...state, favourites: state.favourites }), state.mode, state.kind);
-    if (!rows.length) {
-      const empty = document.createElement('div');
-      empty.className = 'model-empty';
-      empty.textContent = 'Ничего не нашлось. Сбросьте фильтры или измените запрос.';
-      box.append(empty);
-      return;
-    }
-    for (const card of rows) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'model-card';
-      button.setAttribute('aria-pressed', String(state.picked === card.id));
-      button.dataset.id = card.id;
-
-      const icon = document.createElement('span');
-      icon.className = 'model-card-icon';
-      icon.textContent = (KIND_LABELS[card.kind] || { glyph: '•' }).glyph;
-
-      const middle = document.createElement('span');
-      const title = document.createElement('span');
-      title.className = 'model-card-title';
-      title.textContent = card.name;
-      if (card.free) {
-        const badge = document.createElement('span');
-        badge.className = 'model-card-badge';
-        badge.textContent = 'free';
-        title.append(badge);
-      }
-      middle.append(title);
-      if (card.desc) {
-        const desc = document.createElement('span');
-        desc.className = 'model-card-desc';
-        desc.textContent = card.desc;
-        middle.append(desc);
-      } else {
-        const desc = document.createElement('span');
-        desc.className = 'model-card-desc';
-        desc.textContent = (KIND_LABELS[card.kind] || { label: card.kind }).label + ' · ' + card.id;
-        middle.append(desc);
-      }
-
-      const star = document.createElement('button');
-      star.type = 'button';
-      star.className = 'model-card-star';
-      star.textContent = '★';
-      star.title = 'В избранное';
-      star.setAttribute('aria-pressed', String(state.favourites.has(card.id)));
-      star.onclick = (event) => {
-        event.stopPropagation();
-        if (state.favourites.has(card.id)) state.favourites.delete(card.id);
-        else state.favourites.add(card.id);
-        saveFavourites();
-        paintCards();
-      };
-
-      button.append(icon, middle, star);
-      button.onclick = () => {
-        state.picked = card.id;
-        onPick?.(card.id);
-        close();
-      };
-      box.append(button);
-    }
-  }
-
-  function paint() {
-    paintKinds();
-    paintVendors();
-    paintCards();
-  }
-
-  function open() {
-    sheet.dataset.open = '1';
-    el('ms-search').focus();
-    if (!state.cards.length) void load();
-    paint();
-  }
-
-  function close() {
-    sheet.dataset.open = '0';
-  }
-
-  let loading = null;
-  async function load() {
-    if (loading) return loading;
-    loading = (async () => {
-      try {
-        const data = await api('/v1/models');
-        state.cards = modelCards(data);
-        paint();
-      } catch {
-        const box = el('ms-cards');
-        box.replaceChildren();
-        const empty = document.createElement('div');
-        empty.className = 'model-empty';
-        empty.textContent = 'Не удалось загрузить список моделей.';
-        box.append(empty);
-      } finally {
-        loading = null;
-      }
-    })();
-    return loading;
-  }
-
-  el('ms-search').addEventListener('input', (event) => {
-    state.query = event.target.value;
-    paintCards();
-  });
-  el('ms-close').onclick = close;
-  sheet.addEventListener('click', (event) => {
-    if (event.target === sheet) close();
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && sheet.dataset.open === '1') close();
-  });
-
-  return {
-    open,
-    close,
-    setCards(cards) {
-      state.cards = cards;
-      paint();
-    },
-    setPicked(id) {
-      state.picked = id;
-      paintCards();
-    },
-    refresh() {
-      state.cards = [];
-      return load();
-    },
-  };
+/** Accessible catalogue shared by the chat picker and model settings. */
+export function installModelSheet({onPick,api,session}){
+ const sheet=document.createElement('div');sheet.className='model-sheet';sheet.dataset.open='0';
+ sheet.innerHTML='<div class="model-sheet-panel" role="dialog" aria-modal="true" aria-label="Выбор модели"><aside class="model-vendors" id="ms-vendors"></aside><div class="model-body"><div class="model-searchline"><input id="ms-search" type="search" placeholder="Поиск модели" aria-label="Поиск модели"><button id="ms-close" type="button" class="quiet" aria-label="Закрыть">✕</button></div><div class="model-kindrow" id="ms-kinds"></div><div class="model-filterrow"><label>Контекст <select id="ms-context"><option value="0">Любой</option><option value="128000">128 тыс. и больше</option><option value="200000">200 тыс. и больше</option><option value="1000000">1 млн и больше</option></select></label><label>Порядок <select id="ms-sort"><option value="recommended">Рекомендованные</option><option value="price">По цене</option><option value="context">По контексту</option></select></label><button type="button" id="ms-reload" class="quiet">Обновить цены</button></div><div id="ms-status" role="status"></div><div class="model-cards" id="ms-cards"></div></div></div>';
+ document.body.append(sheet);const el=id=>sheet.querySelector('#'+id);
+ const state={cards:[],kind:'chat',vendor:'',query:'',picked:'',context:0,sort:'recommended',favourites:new Set()};
+ let owner='',key='',version=0,previousFocus=null,queue=Promise.resolve();
+ function paintKinds(){const box=el('ms-kinds');box.replaceChildren();for(const [kind,label] of [['','Все'],['__fav','★ Избранное'],...kindCounts(state.cards).map(k=>[k.kind,KIND_LABELS[k.kind]?.label||k.kind])]){const b=document.createElement('button');b.type='button';b.className='model-kind-btn';b.textContent=label;b.setAttribute('aria-pressed',String(kind===state.kind));b.onclick=()=>{state.kind=kind;paint();};box.append(b);}}
+ function paintVendors(){const box=el('ms-vendors');box.replaceChildren();for(const row of [{name:'',count:state.cards.length},...vendorRows(state.cards)]){const b=document.createElement('button');b.type='button';b.className='model-vendor-row';b.textContent=(row.name||'Все производители')+' · '+row.count;b.setAttribute('aria-pressed',String(state.vendor===row.name));b.onclick=()=>{state.vendor=row.name;paint();};box.append(b);}}
+ function persist(){const identity=session(),ids=[...state.favourites];queue=queue.catch(()=>{}).then(async()=>{if(session()?.key!==identity?.key)return;try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:ids})});}catch{el('ms-status').textContent='Избранное не сохранилось. Обновите список и попробуйте ещё раз.';}});}
+ function paintCards(){const box=el('ms-cards');box.replaceChildren();let rows=filterCards(state.cards,{...state,favourites:state.favourites}).filter(c=>!state.context||c.context>=state.context);
+ rows.sort((a,b)=>state.sort==='context'?b.context-a.context||a.name.localeCompare(b.name):state.sort==='price'&&state.kind&&state.kind!=='__fav'?(a.price??Infinity)-(b.price??Infinity):Number(b.recommended)-Number(a.recommended)||a.name.localeCompare(b.name));
+ if(!rows.length){const empty=document.createElement('p');empty.textContent='Ничего не нашлось. Измените поиск или фильтры.';box.append(empty);}
+ for(const card of rows){const article=document.createElement('article');article.className='model-card';article.dataset.id=card.id;const pick=document.createElement('button');pick.type='button';pick.className='model-card-pick';pick.setAttribute('aria-pressed',String(card.id===state.picked));const title=document.createElement('strong');title.textContent=card.name;const desc=document.createElement('span');desc.className='model-card-desc';desc.textContent=card.desc||`${KIND_LABELS[card.kind]?.label||card.kind}${card.context?' · '+card.context.toLocaleString('ru-RU')+' токенов':''}`;pick.append(title,desc);const rates=card.row.nanomuse?.commerce?.effective_rub||{},price=document.createElement('span');price.className='model-card-price';const rub=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:4}).format(n)+' ₽';price.textContent=card.kind==='chat'&&rates.input!=null?`${rub(rates.input)} вход · ${rub(rates.output)} ответ / 1 млн токенов`:rates.image!=null&&card.kind==='image'?rub(rates.image)+' / картинка':rates.second!=null&&card.kind==='video'?rub(rates.second)+' / секунда':'';pick.append(price);pick.onclick=()=>{if(card.kind!=='chat'){details.open=true;return;}state.picked=card.id;onPick?.(card.id);close();};
+ const star=document.createElement('button');star.type='button';star.className='model-card-star';star.textContent=state.favourites.has(card.id)?'★':'☆';star.setAttribute('aria-label','В избранное: '+card.name);star.setAttribute('aria-pressed',String(state.favourites.has(card.id)));star.onclick=()=>{state.favourites.has(card.id)?state.favourites.delete(card.id):state.favourites.add(card.id);persist();paintCards();};
+ const details=document.createElement('details');details.className='model-card-details';const summary=document.createElement('summary');summary.textContent=card.kind==='chat'?'Цены и расчёт':'Параметры и расчёт';details.append(summary);let loaded=false;details.ontoggle=()=>{if(details.open&&!loaded){loaded=true;details.append(modelDetails(card.row,{api}));}};article.append(pick,star,details);box.append(article);}}
+ function paint(){paintKinds();paintVendors();paintCards();}
+ async function load(){const identity=session();if(!identity?.key)return;const request=++version,requestedKey=identity.key;if(key!==identity.key){key=identity.key;owner=identity.owner;state.cards=[];state.favourites=new Set();}el('ms-status').textContent='Загружаем модели и цены…';try{const [data,shelf]=await Promise.all([api('/v1/models'),api('/v1/me/models')]);if(request!==version||session()?.key!==requestedKey)return;state.cards=modelCards(data);state.favourites=new Set(shelf.shelf?.favourites||[]);el('ms-status').textContent='';paint();}catch{if(request===version)el('ms-status').textContent='Не удалось загрузить каталог. Нажмите «Обновить цены».';}}
+ function open(){previousFocus=document.activeElement;sheet.dataset.open='1';paint();el('ms-search').focus();void load();}
+ function close(){version++;sheet.dataset.open='0';previousFocus?.focus();}
+ el('ms-search').oninput=e=>{state.query=e.target.value;paintCards();};el('ms-context').onchange=e=>{state.context=Number(e.target.value);paintCards();};el('ms-sort').onchange=e=>{state.sort=e.target.value;paintCards();};el('ms-close').onclick=close;el('ms-reload').onclick=load;
+ sheet.onclick=e=>{if(e.target===sheet)close();};sheet.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){const focus=[...sheet.querySelectorAll('button,input,select,summary')].filter(n=>n.getClientRects().length&&!n.disabled),first=focus[0],last=focus.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
+ return {open,close,setCards(cards){state.cards=cards;paint();},setPicked(id){state.picked=id;paintCards();},refresh:load};
 }

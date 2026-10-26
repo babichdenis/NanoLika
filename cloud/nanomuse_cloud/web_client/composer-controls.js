@@ -25,7 +25,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
   const version=++generation;status.textContent=words.loading;select.disabled=true;
   const task=(async()=>{try{
    const data=await api('/v1/models');if(session()?.key!==identity.key||session()?.owner!==identity.owner||generation!==version)return '';
-   all=allModels(data);
+   all=allModels(data).filter(m=>m.forChat);
    const chat=chatModels(data);
    let saved='';try{saved=storage.getItem(key())||'';}catch{}
    selected=(chat.some(row=>row.id===(selected||saved))?(selected||saved):(chatModel(data)||''))||'';
@@ -34,7 +34,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
   pending=task;paint();return task;
  }
  refresh.addEventListener('click',()=>{load().catch(()=>{});});
- return {load,setBusy(value){busy=value;paint();},
+ return {load,selectModel(id){kind="chat";query="";selected=id;applyFilters();select.dispatchEvent(new Event("change"));},setBusy(value){busy=value;paint();},
   /** Фильтры списка: тип модели и кусок названия. */
   setKind(value){kind=value||'chat';applyFilters();},
   setQuery(value){query=value||'';applyFilters();},

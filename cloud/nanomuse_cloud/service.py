@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
-from . import __version__
+from . import __version__, model_pricing
 from .client import client_version, platform_of
 from .config import ModelSpec, Settings, menu_warnings
 from .controls import Controls
@@ -2158,7 +2158,7 @@ class Cloud:
                 default.pop(kind, None)
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
-        return {"enabled": enabled, "default": default}
+        return {"enabled": enabled, "default": default, "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models()}]}
 
     def catalogue_public(self) -> dict[str, Any]:
         """The menu for anyone, key or not: what each model is for and what an account pays
@@ -2256,6 +2256,11 @@ class Cloud:
                     "default": shelf["default"].get(spec.kind) == spec.id,
                 }
             )
+        for row in models:
+            spec = self.s.model(row["id"])
+            row["commerce"] = model_pricing.describe(self, spec, caller)
+            row["context_length"] = spec.context_length
+            row["max_output"] = spec.max_output
         return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf}
 
     def put_shelf(self, caller: Caller, data: dict[str, Any]) -> dict[str, Any]:
@@ -2265,7 +2270,7 @@ class Cloud:
         least one model — the account must have something to answer with; pictures and clips
         may be emptied. An id that is not on the menu, or is of another kind, is 400
         `bad_model`."""
-        raw = data.get("enabled")
+        raw = data.get("enabled", {})
         if not isinstance(raw, dict):
             raise CloudError(400, "bad_request", "enabled maps a kind to a list of model ids")
         by_kind = self._menu_by_kind()
@@ -2307,7 +2312,11 @@ class Cloud:
                 default.pop(kind, None)
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
-        body = {"enabled": {kind: ids for kind, ids in enabled.items()}, "default": default}
+        favourites = data.get("favourites", stored.get("favourites", []))
+        known_ids = {m.id for m in self.visible_models()}
+        if not isinstance(favourites, list) or len(favourites) > 500 or any(not isinstance(mid, str) or mid not in known_ids for mid in favourites):
+            raise CloudError(400, "bad_model", "Invalid favourites")
+        body = {"enabled": {kind: ids for kind, ids in enabled.items()}, "default": default, "favourites": list(dict.fromkeys(favourites))}
         self.db.put_shelf(caller.account_id, json.dumps(body, ensure_ascii=False))
         return self.shelf(caller.account_id)
 
@@ -2545,11 +2554,16 @@ class Cloud:
                 (json.dumps(choices), self.clock()),
             )
 
+    def public_model(self, spec: ModelSpec, caller: Caller | None = None) -> dict:
+        row = spec.to_public()
+        row["nanomuse"]["commerce"] = model_pricing.describe(self, spec, caller)
+        return row
+
     def models_for(self, caller: Caller) -> dict:
         """The menu, and whether this account may name a model beyond it."""
         return {
             "object": "list",
-            "data": [m.to_public() for m in self.visible_models()],
+            "data": [self.public_model(m, caller) for m in self.visible_models()],
             "nanomuse": {"any_model": self.any_model(caller)},
         }
 
@@ -2649,7 +2663,7 @@ class Cloud:
         # what the provider bills the relay (telemetry, and the margin's other half) and what
         # the account pays: the operator's sale rate, less the running tariff's share
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
-        sale = self.discount(self.s.chat_charge_uy(model, prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
+        sale = self.discount(self.s.chat_charge_uy(model_pricing.retail_spec(self, model), prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
         if (
             provider_cost_rub is not None
             and not isinstance(provider_cost_rub, bool)
@@ -2683,7 +2697,8 @@ class Cloud:
         """`n` pictures out at the tier `size` falls in; `inputs` pictures sent in (an edit)."""
         charged = model.per_image * max(1, n)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
-        self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost)
+        sale = model_pricing.amount(self, model, {"size": size or "1024x1024", "count": n, "inputs": inputs}, caller)["sale_uy"]
+        self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2693,7 +2708,8 @@ class Cloud:
         thousands = max(1, -(-max(0, characters) // 1000))
         charged = model.per_speech * thousands
         cost = round(model.price_speech * thousands * 1_000_000)
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost)
+        sale = model_pricing.amount(self, model, {"characters": characters}, caller)["sale_uy"]
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2702,7 +2718,8 @@ class Cloud:
         minutes = max(1, -(-int(max(0.0, seconds)) // 60))
         charged = model.per_minute * minutes
         cost = round(model.price_minute * minutes * 1_000_000)
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost)
+        sale = model_pricing.amount(self, model, {"seconds": seconds}, caller)["sale_uy"]
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2735,6 +2752,7 @@ class Cloud:
             charged,
             task_id[:16],
             cost_uy=int(task["cost_uy"] or 0),
+            sale_uy=task["sale_uy"] if "sale_uy" in task.keys() else None,
             video_task_id=task_id,
         )
         if not recorded:
@@ -3221,14 +3239,14 @@ class Cloud:
             m = self.model_for(image_model, "image", caller) if image_model else next((x for x in self.s.models if x.kind == "image"), None)
             if m is None:
                 raise CloudError(404, "model_not_offered", "NanoLika Cloud offers no image model")
-            c = m.image_cost_uy(size) * images
+            c = model_pricing.amount(self, m, {"size": size or "1024x1024", "count": images}, caller)["sale_uy"]
             cost += c
             parts.append({"kind": "image", "model": m.id, "count": images, "cny": self.s.uy_to_cny(c)})
         if clips:
             m = self.model_for(video_model, "video", caller) if video_model else next((x for x in self.s.models if x.kind == "video"), None)
             if m is None:
                 raise CloudError(404, "model_not_offered", "NanoLika Cloud offers no video model")
-            c = m.video_cost_uy(m.clip_seconds) * clips
+            c = model_pricing.amount(self, m, {"seconds": m.clip_seconds}, caller)["sale_uy"] * clips
             cost += c
             parts.append({"kind": "video", "model": m.id, "count": clips, "seconds": m.clip_seconds, "cny": self.s.uy_to_cny(c)})
         a = self.allowance(caller)
