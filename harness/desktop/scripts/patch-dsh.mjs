@@ -67,21 +67,52 @@ if (existsSync(clientPath)) {
   }
 }
 
-// 3a. Голосовой ввод падал с «External buffers are not allowed»: Chromium отдаёт из
-//     Blob.arrayBuffer() буфер, помеченный внешним, а decodeAudioData такие не принимает.
-//     Копия через slice делает буфер обычным. Патчим собранный клиент dsh, потому что
-//     пакет ставится из npm и своей копии у нас нет.
+// 3a. Голосовой ввод падал с «External buffers are not allowed». Падает не декодирование,
+//     а само чтение записи: в Electron `Blob.arrayBuffer()` отдаёт ArrayBuffer на внешней
+//     памяти Blink, и Chromium отказывается работать с таким буфером. Поэтому копия через
+//     `slice(0)` не помогала — она делалась уже после отказа (прежний патч лечил не то
+//     место, и микрофон оставался сломанным). Здесь чтение идёт через `FileReader`, чей
+//     результат копируется в обычный ArrayBuffer: `decodeAudioData` получает свой буфер и
+//     отвечает текстом.
+//
+//     Патч не привязан к тому, как пакет оборачивает вызов (`await blob.arrayBuffer()`
+//     стоит то прямо в `decodeAudioData`, то в отдельной строке под `stage("decode", …)`),
+//     и не зависит от имён переменных вокруг. Повторный проход ничего не делает: чтение
+//     уже идёт через `recordingBytes`.
 const voiceClient = join(root, "node_modules", "@deepseek-ai", "dsh-experimental-client-ui-voice-input", "lib", "client.js");
 if (existsSync(voiceClient)) {
   const text = readFileSync(voiceClient, "utf8");
-  const from = "const decoded = await context.decodeAudioData(await blob.arrayBuffer());";
-  const to =
-    "const raw = await blob.arrayBuffer();\n" +
-    "\t\t\t\t\t// NanoLika: decodeAudioData не принимает внешние буферы из Blob.\n" +
-    "\t\t\t\t\tconst decoded = await context.decodeAudioData(raw.slice(0));";
-  if (text.includes(from)) {
-    writeFileSync(voiceClient, text.replace(from, to));
-    console.log("patch-dsh: голосовой ввод принимает буфер из Blob");
+  const HELPER = "recordingBytes";
+  const bytesHelper = [
+    "",
+    "// NanoLika: Blob.arrayBuffer() в Electron даёт внешний буфер, который Chromium не принимает",
+    "// («External buffers are not allowed»). FileReader отдаёт обычный, копия его закрепляет.",
+    "async function recordingBytes(blob) {",
+    "\tconst read = await new Promise((resolve, reject) => {",
+    "\t\tconst reader = new FileReader();",
+    "\t\treader.onload = () => resolve(reader.result);",
+    "\t\treader.onerror = () => reject(reader.error ?? new Error('the recording could not be read'));",
+    "\t\treader.readAsArrayBuffer(blob);",
+    "\t});",
+    "\t// slice() отдаёт копию в обычной памяти — с ней decodeAudioData уже работает.",
+    "\treturn new Uint8Array(read).slice().buffer;",
+    "}",
+    "",
+  ].join("\n");
+  if (!text.includes(HELPER)) {
+    const reads = text.split("await blob.arrayBuffer()").length - 1;
+    if (reads > 0) {
+      writeFileSync(voiceClient, text.split("await blob.arrayBuffer()").join("await recordingBytes(blob)") + bytesHelper);
+      console.log(`patch-dsh: голосовой ввод читает запись без внешнего буфера (${reads})`);
+    } else {
+      // Ни починить, ни подтвердить: код пакета изменился, и фикса в нём нет. Молчать
+      // нельзя — так микрофон уже один раз остался сломанным при зелёной сборке.
+      console.error(
+        "patch-dsh: ВНИМАНИЕ — в голосовом вводе не нашла чтения записи из Blob.\n" +
+          "  Пакет @deepseek-ai/dsh-experimental-client-ui-voice-input изменился, микрофон\n" +
+          "  в этой сборке не проверен. Посмотрите " + voiceClient + " и поправьте патч.",
+      );
+    }
   }
 }
 
