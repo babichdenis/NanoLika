@@ -32,6 +32,7 @@ import urllib.request
 # Request импортируется на уровне модуля: аннотации строковые (from __future__),
 # а FastAPI разрешает их по globals модуля, иначе параметр станет query-параметром
 from fastapi import Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .browser_auth import browser_marker
 
@@ -259,8 +260,6 @@ def read_state(cookie: str, key: str | bytes, provider: str, nonce: str) -> dict
 # ── ручки ───────────────────────────────────────────────────────────────
 def install_oauth(app, cloud, settings) -> None:
     """Три ручки: список провайдеров, старт и возврат. Плюс вход по виджету Telegram."""
-    from fastapi.responses import JSONResponse, RedirectResponse
-
     from .identifiers import parse as parse_identifier
 
     base = (getattr(settings, "public_base", "") or "https://cloud.nanolika.ru").rstrip("/")
@@ -275,6 +274,7 @@ def install_oauth(app, cloud, settings) -> None:
             base + "/app/?signin=1&next=" + urllib.parse.quote(target, safe="") + "&auth_error=" + urllib.parse.quote(reason),
             status_code=302,
         )
+        response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")
         return response
 
@@ -288,16 +288,18 @@ def install_oauth(app, cloud, settings) -> None:
         return {"providers": enabled_providers()}
 
     @app.get("/v1/auth/oauth/{provider}/start")
-    async def oauth_start(provider: str, next: str = ""):
+    async def oauth_start(provider: str, request: Request, next: str = ""):
         if provider not in {"yandex", "google"}:
             return JSONResponse({"error": {"code": "no_provider"}}, status_code=404)
         state = provider_state(provider)
         if not state["enabled"]:
             return JSONResponse({"error": {"code": "provider_off", "provider": provider}}, status_code=503)
+        log.info("oauth %s start mobile=%s", provider, any(word in request.headers.get("user-agent", "").lower() for word in ("mobile", "android", "iphone")))
         nonce = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48) if provider == "google" else ""
         target = authorize_url(provider, redirect_uri(provider), nonce, verifier)
         response = RedirectResponse(target, status_code=302)
+        response.headers["Cache-Control"] = "no-store"
         nxt = pick_next(next or "")
         response.set_cookie(
             "nm_oauth",
@@ -320,6 +322,7 @@ def install_oauth(app, cloud, settings) -> None:
         data = read_state(request.cookies.get("nm_oauth", ""), settings.hmac_key, provider, state)
         nxt = pick_next(data.get("next", "") if data else "")
         if error or not code or data is None:
+            log.warning("oauth %s callback refused: denied=%s code_present=%s cookie_present=%s state_valid=%s", provider, bool(error), bool(code), bool(request.cookies.get("nm_oauth")), data is not None)
             return _back(nxt, "denied" if error else "state")
         try:
             profile = await asyncio.to_thread(fetch_profile, provider, code, redirect_uri(provider), data.get("verifier", ""))
@@ -341,6 +344,7 @@ def install_oauth(app, cloud, settings) -> None:
         # (витрина, профиль, любая страница) консоль откроет сама после сохранения
         target = f"{base}/app/?next={urllib.parse.quote(nxt, safe='')}#sso={api_key}"
         response = RedirectResponse(target, status_code=302)
+        response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")
         browser_marker(response, settings)
         if created:
@@ -358,6 +362,7 @@ def install_oauth(app, cloud, settings) -> None:
         target = pick_next(next or "https://nanolika.ru/")
         response = RedirectResponse(target, status_code=302)
         browser_marker(response, settings, signed_in=False)
+        response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")
         return response
 

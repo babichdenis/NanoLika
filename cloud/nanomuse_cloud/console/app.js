@@ -214,7 +214,26 @@
     LS.setItem("nl.web.session.v1", JSON.stringify({key:r.api_key,owner,hint:name}));
     key = r.api_key;
   }
-  function finishBrowserSignIn(r) { saveBrowserSession(r); location.replace(safeReturn(nmNextJump)); }
+  function finishBrowserSignIn(r) {
+    saveBrowserSession(r);
+    if (LS.getItem("nm.key") !== r.api_key) throw Object.assign(new Error("storage"), {code:"browser_storage"});
+    location.replace(safeReturn(nmNextJump));
+  }
+  function oauthFailureText(reason) {
+    if (reason === "state") return L("The sign-in check expired or this browser did not keep it. Start again in this tab and return here after confirmation.", "登录验证已过期或浏览器未保留验证信息。请在此标签页重试并返回此处。", "Проверка входа истекла или браузер её не сохранил. Начните вход заново в этой вкладке и вернитесь в неё после подтверждения.");
+    if (reason === "browser_storage") return L("This browser could not save your sign-in. Allow site storage or open the link in your regular browser.", "浏览器无法保存登录信息，请允许网站存储或使用常用浏览器打开。", "Браузер не смог сохранить вход. Разрешите хранение данных сайта или откройте ссылку в обычном браузере.");
+    if (reason === "offline") return L("Confirmation succeeded, but Lika could not be reached. Check your connection and retry sign-in.", "验证已成功，但无法连接 Lika。请检查网络后重试。", "Подтверждение получено, но соединиться с Ликой не удалось. Проверьте связь и повторите вход.");
+    if (reason === "session") return L("Confirmation succeeded, but the account session was not restored. Please retry sign-in.", "验证已成功，但无法恢复登录会话，请重试。", "Подтверждение получено, но завершить вход в аккаунт не удалось. Повторите вход.");
+    if (reason === "no_email") return L("The service did not provide an email address. Allow email access and retry.", "服务未提供邮箱地址，请允许访问邮箱后重试。", "Сервис не передал адрес почты. Разрешите доступ к почте и повторите вход.");
+    return L("Sign-in through this service could not be completed. Select its button to try again.", "登录未完成，请点击对应按钮重试。", "Не удалось завершить вход через выбранный сервис. Нажмите его кнопку, чтобы повторить попытку.");
+  }
+  function failedBrowserSignIn(error) {
+    key = "";
+    const reason = error?.code === "offline" ? "offline" : error?.code === "browser_storage" || error?.name === "QuotaExceededError" || error?.name === "SecurityError" ? "browser_storage" : "session";
+    params.set("auth_error", reason);
+    history.replaceState(null, "", location.pathname + "?" + params.toString());
+    renderSignIn();
+  }
   let hint = LS.getItem("nm.hint") || "";
   let ws = null, wsState = "off", hubPaused = false, backoff = 1000, devices = [], selected = params.get("device") || LS.getItem("nm.selected") || "";
   const pending = new Map(); // call id → {onEvent, resolve, reject}
@@ -292,7 +311,7 @@
   // ── cloud HTTP ───────────────────────────────────────────────────
   async function api(method, path, body, token) {
     const r = await fetch(base + path, {
-      method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      method, cache: "no-store", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     }).catch(() => { throw { code: "offline" }; });
     if (r.status === 204) return {};
@@ -339,7 +358,7 @@
   function renderSignIn() {
     { const b = document.getElementById("nm-acct"); if (b) b.remove(); }
     loadOauth();
-    let identifier = LS.getItem("nm.identifier") || "", mode = LS.getItem("nm.mode") || "code", sent = false, busy = false, msg = params.has("auth_error") ? L("Sign-in through this service could not be completed. Select its button to try again.", "登录未完成，请重试或使用邮件验证码。", "Не удалось завершить вход через выбранный сервис. Нажмите его кнопку, чтобы повторить попытку.") : "", bad = params.has("auth_error"), showPw = false;
+    let identifier = LS.getItem("nm.identifier") || "", mode = LS.getItem("nm.mode") || "code", sent = false, busy = false, msg = params.has("auth_error") ? oauthFailureText(params.get("auth_error")) : "", bad = params.has("auth_error"), showPw = false;
     const draw = () => {
       const byPw = mode === "password";
       app.replaceChildren(h("div", { class: "signin" }, h("div", { class: "card rise" },
@@ -1092,7 +1111,7 @@
     if (token) api("POST", "/v1/auth/sign-out", {}, token).catch(() => {}).finally(leave); else leave();
   } else if (nmSsoKey) {
     app.replaceChildren(h("p", {class:"auth-loading",role:"status"}, L("Finishing sign-in…", "正在完成登录…", "Завершаю вход…")));
-    api("GET", "/v1/me", null, nmSsoKey).then((me) => finishBrowserSignIn({...me, api_key:nmSsoKey})).catch(() => { key = ""; renderSignIn(); });
+    api("GET", "/v1/me", null, nmSsoKey).then((me) => finishBrowserSignIn({...me, api_key:nmSsoKey})).catch(failedBrowserSignIn);
   } else if (q.get("signin") === "1") renderSignIn();
   else if (key) { renderMain(); connect(); nmMountAccount();
     if (/^#account/.test(location.hash)) setTimeout(() => { try { openAccount(); } catch (e) {} }, 60); }

@@ -762,3 +762,13 @@ For the separate DEMO checkout and its full/partial refund invariants, see [T-Ba
 ## Automatic supplier routing
 
 Text requests use live structured supplier quotes and record the actual supplier cost separately from the customer sale rate. The operator can refresh quotes and balances and save model visibility in the database. See [Automatic supplier routing](provider-routing.md) for configuration and limits.
+
+### Browser OAuth completion diagnostics
+
+OAuth success must be checked through the browser landing in `/web/`, not just a provider
+callback log. The console restores the account through `/v1/me` with `cache: no-store`,
+checks that the browser retained the new key, and reports session, network or browser
+storage failures explicitly. Callback refusals log only the provider and boolean presence
+of the code, state and cookie; values must never be logged. Missing or invalid state still
+refuses sign-in. A mobile browser losing its OAuth state must retry in the same tab; the
+server does not bypass CSRF checks to make the failure disappear.
