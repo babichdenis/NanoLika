@@ -448,6 +448,17 @@ html[data-nm-muse] [data-slot="conversation.session.header.corner"] [data-sideba
 /* a narrow chat column at the left, the room wide at the right — the room's own top-left toggle closes it */
 html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-split { position: fixed; top: 0; right: 0; bottom: 0; width: var(--nm-split-w, 62vw); z-index: 50; display: flex; flex-direction: column; background: var(--nm-base); border-left: 1px solid var(--nm-divider); animation: nm-slide-in 180ms ease-out; }
+.nm-preview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.nm-preview-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--nm-divider); }
+.nm-preview-title { flex: 1; min-width: 0; font-size: 13px; color: var(--nm-dim, #999); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nm-preview-open { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); text-decoration: none; }
+.nm-preview-close { flex: none; font-size: 12.5px; color: var(--nm-dim, #999); border: 0; background: transparent; cursor: pointer; }
+.nm-preview-open:hover, .nm-preview-close:hover { color: var(--nm-fg, #eee); }
+.nm-preview-body { flex: 1; min-height: 0; position: relative; }
+.nm-preview-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.nm-preview-body img { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
+.nm-preview-body embed { width: 100%; height: 100%; border: 0; }
+.nm-preview-empty { padding: 20px; color: var(--nm-dim, #999); font-size: 13px; }
 html[data-nm-split] [class*="_centerCol"] { min-width: 0; padding-right: var(--nm-split-w, 62vw); box-sizing: border-box; }
 html[data-nm-split] .nm-header-back { left: 10px; }
 .nm-header-chats { width: auto; padding: 0 10px 0 8px; gap: 6px; border-radius: 8px; font-size: 13px; font-weight: 600; }

@@ -9,6 +9,9 @@ export const LIBRARY_PANEL = 'nanomuse-library'
 /** The Devices page: this computer on the account's hub and the other devices. */
 export const DEVICES_PANEL = 'nanomuse-devices'
 
+/** The preview pane: a page or an artifact the agent puts beside the chat. */
+export const PREVIEW_PANEL = 'nanomuse-preview'
+
 export const ROOM_PANELS = [FEED_PANEL, IDEAS_PANEL, GOALS_PANEL, LIBRARY_PANEL, DEVICES_PANEL] as const
 
 /** Where a problem with NanoLika is reported. */

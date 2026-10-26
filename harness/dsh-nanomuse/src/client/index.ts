@@ -34,6 +34,8 @@ import { makeCloudSection } from './CloudSection.tsx'
 import { CODING_SECTION, makeCodingPanel } from './CodingPanel.tsx'
 import { makeDevicesPanel } from './DevicesPanel.tsx'
 import { makeFeedPanel } from './FeedPanel.tsx'
+import { makePreviewPanel } from './PreviewPanel.tsx'
+import { showPreview } from './preview.ts'
 import { makeGoalsPanel } from './GoalsPanel.tsx'
 import { makeIdeasPanel } from './IdeasPanel.tsx'
 import { makeLibraryPanel } from './LibraryPanel.tsx'
@@ -50,7 +52,7 @@ import { makeTurnError } from './RefusalCard.tsx'
 import { CHANNELS_SECTION, COMPUTER_SECTION, createShellStore, DATA_SECTION, HARNESS_SECTION, HELP_SECTION, LEGAL_SECTION, makeGeneralSection, makeHarnessSection, MuseSettings, PHONE_SECTION, STORAGE_SECTION, WALLET_SECTION, type MuseSettingsProps, type OnboardingStep, type SectionRow } from './MuseSettings.tsx'
 import { MuseSidebar, type MuseSidebarProps, type PanelMeta } from './MuseSidebar.tsx'
 import { makeOnboarding, type OnboardingOwnerProps } from './Onboarding.tsx'
-import { DEVICES_PANEL, FEED_PANEL, GOALS_PANEL, IDEAS_PANEL, ISSUES_URL, LIBRARY_PANEL } from './panels.ts'
+import { DEVICES_PANEL, FEED_PANEL, GOALS_PANEL, IDEAS_PANEL, ISSUES_URL, LIBRARY_PANEL, PREVIEW_PANEL } from './panels.ts'
 import { getPrefs, recordApproval, subscribePrefs, usePrefs } from './prefs.ts'
 import { makeProfileDrawer } from './ProfileDrawer.tsx'
 import { nav as roomsNav, roomsCall } from './rooms.ts'
@@ -140,6 +142,17 @@ function useMood(useSessionStatus: UseSessionStatus | undefined): Mood {
 }
 
 export function apply(ctx: ClientContext): void {
+  // A click on an http(s) link in the conversation opens it in the preview pane
+  // instead of a new tab, so the agent's "see this" lands beside the chat.
+  document.addEventListener('click', (event) => {
+    const target = event.target as Element | null
+    const a = target && typeof target.closest === 'function' ? target.closest('a[href^="http"]') : null
+    if (!a) return
+    const href = a.getAttribute('href') || ''
+    if (href.includes('//127.0.0.1:') || href.startsWith('https://cloud.nanolika.ru') || href.startsWith('https://nanolika.ru')) return
+    event.preventDefault()
+    showPreview({ kind: 'url', url: href })
+  })
   const raw = (ctx as unknown as { slots: SlotRegistrar }).slots
   // A seat that fails to register is reported and skipped, not fatal for the
   // whole plugin: the face, the column and the pages stay independent.
@@ -379,6 +392,8 @@ export function apply(ctx: ClientContext): void {
   for (const [key, Panel] of rooms) slots.inject('main', () => slots.register({ name: 'main', key, locale: 'nanomuse' }, Panel))
   const DevicesPanel = makeDevicesPanel(t)
   slots.inject('main', () => slots.register({ name: 'main', key: DEVICES_PANEL, locale: 'nanomuse' }, DevicesPanel))
+  // The preview pane: a page or an artifact the agent puts beside the chat.
+  slots.inject('main', () => slots.register({ name: 'main', key: PREVIEW_PANEL, locale: 'nanomuse' }, makePreviewPanel(t)))
   // The split pane itself, over the frame beside the chat; it keeps the active
   // panel mirrored for the rooms' `nav.activePanel`.
   slots.inject('shell.overlay', () =>
