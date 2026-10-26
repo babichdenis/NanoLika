@@ -1,7 +1,7 @@
 # Model catalogue and retail prices
 
 The operator's price page is `/app/prices/`. Customer model settings are at
-`/app/models/?web=1`. The web chat and desktop model pickers use the same relay
+`/app/models/?source=web`. The web chat and desktop model pickers use the same relay
 catalogue. No provider credential is included in the catalogue.
 
 ## Retail source

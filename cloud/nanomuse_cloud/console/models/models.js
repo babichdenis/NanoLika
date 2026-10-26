@@ -166,7 +166,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const commerce=model.commerce||{},rates=commerce.effective_rub||{};
     const labels={input:T.perMillionIn,output:T.perMillionOut,image:T.perPicture,second:T.perSecond,speech:T.perSpeech,minute:T.perMinute};
     const fields=model.kind==='chat'?['input','output']:model.kind==='image'?['image']:model.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
-    return {lines:fields.filter(k=>Number(rates[k])>0).map(k=>[labels[k],num(rates[k],4)+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
+    return {lines:fields.filter(k=>Number(rates[k])>0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:4}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
   }
 
   function details(model) {
@@ -373,6 +373,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     drawSections(holder);
     const isChanged = changed();
     el('save').disabled = busy || !isChanged;
+    el('save').parentElement.classList.toggle('has-changes',isChanged);
     el('reset').hidden = !isChanged;
     el('status').textContent = busy ? T.saving : isChanged ? T.dirty : T.unchanged;
     el('count').textContent = T.found(visible().length);
@@ -427,6 +428,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        busy = false;
+        draw();
         el('status').textContent = (data.error && data.error.message) || T.error;
         return;
       }
