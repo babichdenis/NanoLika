@@ -20,6 +20,19 @@
  */
 
 const STYLE_ID = 'nanomuse-muse-style'
+const SKIN = Symbol.for('nanolika.document-skin')
+interface SkinState {
+  owners: Map<object, string>
+  observer: MutationObserver
+  mode?: { on: boolean; steps: boolean }
+  timer?: ReturnType<typeof setTimeout>
+  repair: () => void
+}
+/** Shared across module generations: an old disposer must not strip a new skin. */
+function skinState(): SkinState | undefined {
+  return (document as Document & { [SKIN]?: SkinState })[SKIN]
+}
+
 
 /** The agent's accent, from the account's chosen colour when it has one. */
 export function setAccent(color: string | undefined): void {
@@ -31,6 +44,8 @@ export function setAccent(color: string | undefined): void {
 /** Whether the harness's own controls show (`false`: the Muse composer and column). */
 export function setMuseMode(on: boolean, placeholder?: string, steps = false): void {
   const root = document.documentElement
+  const skin = skinState()
+  if (skin) skin.mode = { on, steps }
   if (on) root.setAttribute('data-nm-muse', '')
   else root.removeAttribute('data-nm-muse')
   // "Show the agent's steps": the tool rows come back into the Muse chat
@@ -1483,22 +1498,55 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 .nm-model-estimate output { display:block;margin:8px 0; }
 `
 
-/** Put the stylesheet in the head once and mark the document as ours. */
+/** Keep the skin alive through overlapping plugin reloads and head replacements. */
 export function ensureStyles(): () => void {
-  const root = document.documentElement
-  root.setAttribute('data-nanomuse', '')
-  let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null
-  if (!style) {
-    style = document.createElement('style')
-    style.id = STYLE_ID
-    document.head.appendChild(style)
+  const holder = document as Document & { [SKIN]?: SkinState }
+  let state = skinState()
+  if (!state) {
+    const owners = new Map<object, string>()
+    const repair = () => {
+      const css = [...owners.values()].at(-1)
+      if (!css) return
+      const root = document.documentElement
+      if (!root.hasAttribute('data-nanomuse')) root.setAttribute('data-nanomuse', '')
+      let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null
+      if (!style) { style = document.createElement('style'); style.id = STYLE_ID; document.head.append(style) }
+      if (style.textContent !== css) style.textContent = css
+      const mode = skinState()?.mode
+      if (mode) {
+        if (root.hasAttribute('data-nm-muse') !== mode.on) root.toggleAttribute('data-nm-muse', mode.on)
+        if (root.hasAttribute('data-nm-steps') !== mode.steps) root.toggleAttribute('data-nm-steps', mode.steps)
+      }
+    }
+    const observer = new MutationObserver(repair)
+    // Head mutations only; never watch the conversation's rapidly changing subtree.
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-nanomuse', 'data-nm-muse', 'data-nm-steps'] })
+    state = { owners, observer, repair }
+    holder[SKIN] = state
   }
-  style.textContent = CSS
+  if (state.timer) { clearTimeout(state.timer); delete state.timer }
+  const owner = {}
+  state.owners.set(owner, CSS)
+  state.repair()
+  const owned = state
+  let disposed = false
   return () => {
-    style?.remove()
-    root.removeAttribute('data-nanomuse')
-    root.removeAttribute('data-nm-muse')
-    root.style.removeProperty('--nm-accent')
+    if (disposed) return
+    disposed = true
+    owned.owners.delete(owner)
+    if (owned.owners.size) { owned.repair(); return }
+    // A service rebind may dispose the old plugin before creating the replacement.
+    owned.timer = setTimeout(() => {
+      if (owned.owners.size || holder[SKIN] !== owned) return
+      owned.observer.disconnect()
+      document.getElementById(STYLE_ID)?.remove()
+      const root = document.documentElement
+      root.removeAttribute('data-nanomuse')
+      root.removeAttribute('data-nm-muse')
+      root.removeAttribute('data-nm-steps')
+      root.style.removeProperty('--nm-accent')
+      delete holder[SKIN]
+    }, 250)
   }
 }
-
