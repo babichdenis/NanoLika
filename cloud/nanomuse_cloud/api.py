@@ -1055,6 +1055,18 @@ def create_app(
         operator's key after it (`listed: false`, `catalog: true`), so the apps' pickers
         offer them (catalog.py). The menu's entries come first, in the menu's order."""
         out = cloud.models_for(caller)
+        # Описание и человеческое имя из каталога: в меню их нет, а панели выбора они нужны,
+        # чтобы карточка говорила, что модель делает, а не повторяла её id.
+        described = catalog.descriptions(app.state.http, settings.upstream_base, settings.upstream_key)
+        if described:
+            for row in out["data"]:
+                facts = row.get("nanomuse") or {}
+                info = described.get(row.get("id")) or described.get(facts.get("upstream") or "")
+                if info:
+                    if info.get("description"):
+                        facts["description"] = info["description"]
+                    if info.get("vendor") and not facts.get("vendor"):
+                        facts["vendor"] = info["vendor"]
         if not (settings.catalog_enabled and out["nanomuse"].get("any_model")):
             return out
         entries = await catalog.get(app.state.http, settings.upstream_base, settings.upstream_key)

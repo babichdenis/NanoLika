@@ -23,3 +23,51 @@
 .chat-row .chat-cloud-action{width:27px;height:30px;padding:6px;opacity:0}
 .chat-row:hover .chat-cloud-action,.chat-row:focus-within .chat-cloud-action{opacity:1}
 @media(max-width:760px){.chat-row .chat-cloud-action{opacity:1}}
+
+/* Фильтры списка моделей в композере: поиск и тип. */
+.model-search{min-width:110px;max-width:170px;padding:4px 8px;border:1px solid var(--line,#d8d8d8);border-radius:8px;font:inherit;font-size:12px;background:transparent;color:inherit}
+.model-kind{padding:4px 6px;border:1px solid var(--line,#d8d8d8);border-radius:8px;font:inherit;font-size:12px;background:transparent;color:inherit}
+@media (max-width:720px){.model-search{max-width:120px}}
+
+/* ---- Панель выбора модели: карточки, фильтры по типу, поиск ---------------- */
+.model-sheet{position:fixed;inset:0;z-index:60;display:none;background:rgba(0,0,0,.42);align-items:center;justify-content:center;padding:16px}
+.model-sheet[data-open="1"]{display:flex}
+.model-sheet-panel{display:flex;width:min(980px,100%);max-height:min(640px,92vh);border-radius:16px;overflow:hidden;
+ background:var(--surface,#1b1b1f);color:var(--ink,#f2f2f4);box-shadow:0 24px 64px rgba(0,0,0,.45)}
+@media (max-width:760px){.model-sheet-panel{flex-direction:column;max-height:92vh}}
+
+/* левая колонка: провайдеры */
+.model-vendors{width:230px;flex:0 0 auto;overflow:auto;padding:10px 8px;border-right:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02)}
+@media (max-width:760px){.model-vendors{width:auto;max-height:34vh;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}}
+.model-vendor-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:0;border-radius:9px;
+ background:transparent;color:inherit;font:inherit;font-size:13.5px;text-align:left;cursor:pointer}
+.model-vendor-row:hover{background:rgba(255,255,255,.06)}
+.model-vendor-row[aria-pressed="true"]{background:rgba(120,110,255,.22);box-shadow:inset 0 0 0 1px rgba(140,130,255,.5)}
+.model-vendor-dot{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;
+ background:rgba(255,255,255,.1);flex:0 0 auto}
+.model-vendor-count{margin-left:auto;font-size:11.5px;opacity:.6}
+
+/* правая часть: карточки и фильтры */
+.model-body{display:flex;flex-direction:column;min-width:0;flex:1}
+.model-searchline{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
+.model-searchline input{flex:1;min-width:0;padding:8px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.14);
+ background:rgba(255,255,255,.05);color:inherit;font:inherit;font-size:13px}
+.model-kindrow{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
+.model-kind-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;border:1px solid rgba(255,255,255,.14);
+ background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer}
+.model-kind-btn[aria-pressed="true"]{background:rgba(120,110,255,.26);border-color:rgba(140,130,255,.6)}
+.model-kind-btn .n{opacity:.55;font-size:11px}
+.model-cards{overflow:auto;padding:10px;display:grid;gap:8px}
+
+/* карточка модели */
+.model-card{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:11px 12px;border-radius:11px;
+ border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);cursor:pointer;text-align:left;color:inherit;font:inherit}
+.model-card:hover{background:rgba(255,255,255,.07)}
+.model-card[aria-pressed="true"]{border-color:rgba(140,130,255,.75);background:rgba(120,110,255,.16)}
+.model-card-icon{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:11px;font-weight:700;background:rgba(255,255,255,.1)}
+.model-card-title{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600}
+.model-card-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:rgba(110,231,168,.2);color:#8ff0bb}
+.model-card-desc{margin-top:3px;font-size:12px;line-height:1.45;opacity:.72;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.model-card-star{border:0;background:transparent;color:inherit;opacity:.35;cursor:pointer;font-size:15px;padding:2px 4px;line-height:1}
+.model-card-star[aria-pressed="true"]{opacity:1;color:#ffd166}
+.model-empty{padding:26px 14px;text-align:center;opacity:.65;font-size:13px}

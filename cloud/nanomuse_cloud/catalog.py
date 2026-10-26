@@ -31,6 +31,8 @@ good list in place, or none. ``CLOUD_CATALOG=0`` switches the whole thing off.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncio
 import base64
 import json
@@ -341,3 +343,67 @@ async def probe_model(http: httpx.AsyncClient, base: str, key: str, model_id: st
     except ValueError:
         answer = ""
     return Probe(model_id=model_id, works=True, vision=bool(_SEEN_WORDS.search(answer)), checked_at=checked, note=answer.strip()[:60])
+
+_DESCRIPTIONS: dict[str, dict[str, str]] = {}
+_DESCRIPTIONS_AT = 0.0
+DESCRIPTIONS_TTL = 900  # пятнадцать минут: каталог меняется раз в сутки
+
+
+async def descriptions(http, base: str, key: str) -> dict[str, dict[str, str]]:
+    """Описание и производитель по каждому id из энциклопедии моделей.
+
+    Панель выбора показывает карточку: без описания она повторяет id, а человеку нужно
+    «что эта модель делает». Энциклопедия (`console/prices/catalog.json`, её собирает
+    `cloud/scripts/model_catalog.py`) уже свела LiteLLM, models.dev и Artificial Analysis,
+    поэтому второй раз те же данные не тянем.
+
+    Читаем с диска, а не по HTTP к самому себе: файл лежит в пакете рядом с этим модулем,
+    а запрос к собственному публичному адресу внутри контейнера не резолвится. Сбой чтения
+    не должен ронять список моделей — возвращаем то, что уже в памяти.
+    """
+    global _DESCRIPTIONS_AT
+    now = time.monotonic()
+    if _DESCRIPTIONS and now - _DESCRIPTIONS_AT < DESCRIPTIONS_TTL:
+        return _DESCRIPTIONS
+    path = Path(__file__).with_name("console") / "prices" / "catalog.json"
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return _DESCRIPTIONS
+
+    found: dict[str, dict[str, str]] = {}
+    for card in data.get("models") or []:
+        info: dict[str, str] = {}
+        dev = card.get("dev") or {}
+        desc = dev.get("description") or ""
+        vendor = dev.get("provider") or card.get("vendor") or ""
+        mode = card.get("mode") or ""
+        if desc:
+            info["description"] = " ".join(str(desc).split())[:220]
+        elif mode:
+            # без описания говорим хотя бы род занятий: «генерация видео», «распознавание речи»
+            info["description"] = MODE_TEXT.get(mode, mode.replace("_", " "))
+        if vendor:
+            info["vendor"] = str(vendor)
+        if info and card.get("id"):
+            found[str(card["id"])] = info
+            clean = card.get("clean_name") or ""
+            if clean:
+                found.setdefault(clean.lower(), info)
+    if found:
+        _DESCRIPTIONS.clear()
+        _DESCRIPTIONS.update(found)
+        _DESCRIPTIONS_AT = now
+    return _DESCRIPTIONS
+
+
+#: Род занятий модели по-русски: то, что показываем в карточке, когда описания нет.
+MODE_TEXT = {
+    "chat": "разговорная модель",
+    "image_generation": "генерация изображений",
+    "video_generation": "генерация видео",
+    "audio_speech": "синтез речи",
+    "audio_transcription": "распознавание речи",
+    "embedding": "векторное представление текста",
+    "rerank": "ранжирование результатов",
+}

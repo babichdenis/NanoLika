@@ -5,6 +5,7 @@ import {text,locales} from './i18n.js';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
 import {installComposerControls} from './composer-controls.js?v=20261026-models';
+import {installModelSheet} from './model-sheet.js?v=20261026-sheet';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 const $=id=>document.getElementById(id);const sessionKey='nl.web.session.v1';
 const local={get(key){try{return localStorage.getItem(key);}catch{return null;}},set(key,value){try{localStorage.setItem(key,value);}catch{notice(t('storageBlocked'));}},remove(key){try{localStorage.removeItem(key);}catch{}}};
@@ -114,6 +115,17 @@ const chatSync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:row
 const channelOpener=new ConversationOpener({session:()=>session,device:chatSync.device,language:()=>lang});
 
 const composerControls=installComposerControls({form:$('composer'),message:$('message'),select:$('model-select'),refresh:$('models-refresh'),status:$('model-status'),session:()=>session,api,words:{loading:t('modelsLoading'),empty:t('modelsEmpty'),error:t('modelsError')}});
+// Фильтры списка моделей: тип и поиск по названию. Список показывает все типы, чтобы
+// рисующие модели было видно и можно было проверить, что они есть.
+{const search=$('model-search'),kind=$('model-kind');
+ if(search)search.addEventListener('input',()=>composerControls.setQuery(search.value));
+ if(kind)kind.addEventListener('change',()=>composerControls.setKind(kind.value));}
+
+// Кнопка открывает панель с карточками: провайдеры слева, типы и поиск сверху.
+const modelSheet=installModelSheet({api,session:()=>session,
+ onPick:id=>{const select=$('model-select');if(select&&[...select.options].some(o=>o.value===id)){select.value=id;select.dispatchEvent(new Event('change'));}}});
+{const open=$('model-browse');if(open)open.addEventListener('click',()=>{modelSheet.setPicked($('model-select')?.value||'');modelSheet.open();});}
+
 if(!authenticated())location.replace('/app/?signin=1&next='+encodeURIComponent(location.origin+location.pathname+location.search));
 translate();await db.openDB().catch(()=>notice(t('storageBlocked')));await loadChats();renderConversation();
 if(authenticated()&&navigator.onLine){try{const me=await api('/v1/me');if(me.account?.id!==session.owner)throw new Error('identity_mismatch');session.email=me.account.email||'';session.hint=me.account.hint||session.hint;local.set(sessionKey,JSON.stringify(session));renderAccount();}catch(e){if(e.status===401||e.message==='identity_mismatch'){session=null;local.remove(sessionKey);chats=[];current=null;renderChats();renderConversation();notice(t('needsLogin'));}}}

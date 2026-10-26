@@ -196,6 +196,7 @@ class ModelSpec:
                 "max_output": self.max_output,
                 "for": list(self.lanes),
                 "provider": self.provider,
+                "vendor": self.vendor,
                 "listed": self.listed,
                 "default_on": self.default_on,
                 "priced_as": self.priced_as,
