@@ -65,6 +65,10 @@ SHELF_MAX_PER_KIND = 24
 CHANNEL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CHANNEL_CODE_LENGTH = 6
 CHANNEL_CODE_TTL_S = 10 * 60
+# A QR is a photograph waiting to happen, so it lives less than a typed code: whoever sees the
+# screen has to act inside these minutes, and the person linking has the phone already in hand.
+# Ten minutes (the typed code's life) is long enough for a shoulder to read it and use it later.
+CHANNEL_START_TTL_S = 3 * 60
 # The messengers a chat can come from, and the identity space a chat is sorted into. Both
 # hand their bot a numeric id, and both count their users in a space of their own: the same
 # number on Telegram and on MAX is two people. The messenger is part of the account key
@@ -1291,12 +1295,26 @@ class Cloud:
         if not self.s.link_code_ttl_s:
             raise CloudError(503, "link_off", "Linking a chat to an account is switched off on this relay")
         ident = chat_identity(surface, chat_id)
-        held = self._account_for(ident) is not None or self._chat_alias(surface, ident) is not None
-        if held:
+        held_row = self._chat_alias(surface, ident)
+        held_own = self._account_for(ident) if held_row is None else None
+        if held_row is not None or held_own is not None:
+            # `taken` says where from, so the bot can ask a real question instead of leaving a
+            # person at a wall: "this chat is connected to that account, do you want to leave
+            # it and connect here instead?". The mask is never the whole address, and it is
+            # the account the person is about to leave, not a stranger's.
+            held_account = self.db.account(str(held_row["account_id"])) if held_row is not None else held_own
             raise CloudError(
                 409,
                 "link_taken",
                 "This chat already has an account of its own; two accounts are not merged here",
+                extra={
+                    "taken": {
+                        "label": str(held_account["hint"]) if held_account is not None else "",
+                        "channel": surface,
+                        # a chat that made its account cannot leave it: that would be a deletion
+                        "own": bool(held_own is not None),
+                    }
+                },
             )
         written = (code or "").strip().upper()
         # Дверь считает попытки этого чата до того, как спросить про код: шесть символов
@@ -1326,7 +1344,31 @@ class Cloud:
                 "This chat already has an account of its own; two accounts are not merged here",
             )
         self.db.add_event(str(account["id"]), "account.linked", ident.channel)
+        self._tell_owner_of_link(account, surface, shown or ident.hint)
         return {"linked": True, "channel": surface, "identifier": shown, "label": ident.hint, "linked_at": now()}
+
+    def _tell_owner_of_link(self, account: sqlite3.Row, surface: str, who: str) -> None:
+        """A letter to the account's own address: a chat has just become this account.
+
+        Sent on every link, not only the suspicious ones. Linking is rare, and the person who
+        did not do it has only this letter to learn from: the app shows the list of connected
+        chats, but nobody opens it looking for a surprise. A failure here is logged and
+        swallowed — the link itself already happened, and undoing it would be worse.
+
+        The address comes out of `identifier_enc`, the same place every other letter to an
+        account reads it from, so a MAX account with no address simply has nobody to tell."""
+        if str(account["channel"]) != "email":
+            return
+        sender = getattr(self, "sender", None)
+        tell = getattr(sender, "send_channel_link", None)
+        if not callable(tell):
+            return
+        try:
+            ident = Identifier("email", self.crypto.decrypt(str(account["id"]), str(account["identifier_enc"])))
+            when = time.strftime("%d.%m.%Y %H:%M", time.localtime())
+            tell(ident, surface, who, when)
+        except Exception as exc:  # noqa: BLE001 — a missing letter must not undo a link
+            log.warning("link notice mail failed: %s", type(exc).__name__)
 
     # -- tariffs (0.26) ---------------------------------------------------------------
 

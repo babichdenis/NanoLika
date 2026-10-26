@@ -272,6 +272,21 @@ class TelegramChannel(Channel):
                 getattr(self.bus, "lang", "") or "",
             )
             if answer:
+                # A chat that already belongs to an account is a question with two buttons
+                # rather than a sentence: the person scanned a code for another account and
+                # may well want to leave the old one. `taken` is set by `answer_code`.
+                if link.taken and not link.taken.get("own"):
+                    menu = getattr(self.bus, "menu", None)
+                    if menu is not None:
+                        probe = InboundMessage(
+                            channel=self.name,
+                            chat_id=chat_id,
+                            sender_id=str(sender.get("id") or ""),
+                            sender_name=name,
+                            text="",
+                        )
+                        await menu.switch_ask(probe, answer, str(link.taken.get("code") or ""))
+                        return
                 await self.send(chat_id, answer)
                 return
         self.bus.inbound(

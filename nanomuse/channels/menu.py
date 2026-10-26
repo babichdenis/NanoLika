@@ -24,6 +24,8 @@ COPY = {
         "new": "Новая беседа",
         "settings": "Настройки",
         "account": "Кабинет ↗",
+                "switch_yes": "Выйти и подключить",
+        "switch_no": "Оставить как есть",
         "unlink": "Отвязать этот чат",
         "unlink_hint": "Чат перестанет быть этим аккаунтом: своя касса, своя история. Аккаунт в приложении останется.",
         "chats": "Чаты",
@@ -77,6 +79,8 @@ COPY = {
         "new": "New chat",
         "settings": "Settings",
         "account": "Account ↗",
+                "switch_yes": "Leave and connect",
+        "switch_no": "Keep as it is",
         "unlink": "Unlink this chat",
         "unlink_hint": "The chat stops being this account: its own allowance, its own history. The account in the app stays.",
         "chats": "Chats",
@@ -130,6 +134,8 @@ COPY = {
         "new": "新对话",
         "settings": "设置",
         "account": "账户 ↗",
+                "switch_yes": "离开并连接",
+        "switch_no": "保持原样",
         "unlink": "解除此聊天的绑定",
         "unlink_hint": "这个聊天将不再是该账号：自己的额度，自己的记录。App 里的账号保持不变。",
         "chats": "对话",
@@ -204,6 +210,11 @@ class ChatMenu:
             Path(manager.svc.data_dir) / "channels" / "chat-menu-tickets.json"
         )
         manager.svc.app.sentinel.channel_mode = self.preferences.mode
+        # The words of a pending "leave the old account and connect here?" question, and the
+        # code the person scanned, so the answer can act on it. Per chat, in memory: a restart
+        # forgets the question, which is right — the QR it came from has lapsed by then anyway.
+        self.switch_text = ""
+        self.switch_pending: dict[tuple[str, str], str] = {}
 
     def access_scope(self, msg: InboundMessage) -> str:
         account = getattr(getattr(self.m.svc, "sync", None), "account_id", "")
@@ -419,6 +430,14 @@ class ChatMenu:
                 # the way out of a link sits with the settings, where somebody looking for it
                 # would look, and says what it costs before it does anything
                 row("unlink", "unlink"),
+            ]
+        elif page == "switch":
+            # The question a scanned QR asks when the chat is already somebody's: two buttons
+            # and nothing else, so the answer is one tap and cannot be mistyped.
+            text = self.switch_text or c["switch_yes"]
+            rows = [
+                row("switch_yes", "switch:yes"),
+                row("switch_no", "switch:no"),
             ]
         elif page == "models":
             # Кнопки вместо номеров: список листается, как выбор времени, и нажатие
@@ -649,6 +668,8 @@ class ChatMenu:
             unlink = getattr(self.m, "_unlink_chat", None)
             if unlink is not None:
                 await unlink(msg)
+        elif action.startswith("switch:"):
+            await self.switch_answer(msg, action.split(":", 1)[1] == "yes")
         elif action == "inherit":
             self.preferences.put(thread, mode="", access_source="")
             if scope := self.access_scope(msg):
@@ -862,6 +883,45 @@ class ChatMenu:
             if await self._chat_write(msg, "PATCH", {"title": title[:120]})
             else c["rename_failed"]
         )
+
+    async def switch_ask(self, msg: InboundMessage, text: str, code: str) -> None:
+        """Ask, in two buttons, whether to leave the account this chat belongs to.
+
+        The question is what turns a scanned QR from a wall into a choice. It is asked only
+        when the relay said which account holds the chat (`taken.label`), and its answer acts
+        on the same code that was scanned, so nothing here invents a link."""
+        self.switch_text = text
+        self.switch_pending[(msg.channel, msg.chat_id)] = code
+        await self.show(replace(msg, text=""), "switch")
+
+    async def switch_answer(self, msg: InboundMessage, yes: bool) -> None:
+        """Take the answer: leave the old account and connect to the new one, or keep as it is.
+
+        Leaving first and connecting second is the order that matters: the relay refuses to
+        link a chat that belongs to somebody (`link_taken`), so the old row has to go before
+        the new one can be written. If the link then fails, the chat is left as a stranger
+        with its own fresh account, which is a state the person can see and fix from the chat;
+        saying nothing would be worse."""
+        c = COPY[self.language(msg)]
+        code = self.switch_pending.pop((msg.channel, msg.chat_id), "")
+        self.switch_text = ""
+        if not code:
+            await self.show(msg, note=c["expired"])
+            return
+        if not yes:
+            await self.show(msg, note=c["switch_no"])
+            return
+        ch = self.m.channels.get(msg.channel)
+        link = getattr(ch, "chat_link", None) if ch is not None else None
+        if link is None:
+            await self.show(msg, note=c["models_error"])
+            return
+        try:
+            await link().release(msg.sender_id or msg.chat_id, self.language(msg))
+            answer = await link().redeem(msg.chat_id, code, msg.sender_name[:80], self.language(msg))
+        except Exception:  # noqa: BLE001 — a question's answer must not break the chat
+            answer = c["models_error"]
+        await self.show(msg, note=answer or c["switch_no"])
 
     async def chat_delete_prompt(self, msg: InboundMessage) -> str:
         c = COPY[self.language(msg)]

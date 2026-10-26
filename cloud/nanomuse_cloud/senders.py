@@ -75,6 +75,23 @@ class SmtpSender:
         if ident.channel == "email":
             smtp_send(self.s, compose_first_login_mail(self.s.smtp_from, ident.value))
 
+    def send_channel_link(self, ident: Identifier, channel: str, who: str, when: str) -> None:
+        """A chat has joined this account: tell its owner, so a link nobody asked for is seen.
+
+        Rare by nature (a person links a messenger once), and the only warning there is: the
+        app lists connected chats, but nobody opens that list looking for a surprise."""
+        if ident.channel != "email":
+            return
+        msg = EmailMessage()
+        msg["From"] = self.s.smtp_from if "<" in self.s.smtp_from else f"NanoLika <{self.s.smtp_from}>"
+        msg["To"] = ident.value
+        msg["Subject"] = channel_link_mail_subject(channel)
+        msg["Auto-Submitted"] = "auto-generated"
+        msg["X-Auto-Response-Suppress"] = "All"
+        msg.set_content(channel_link_mail_text(channel, who, when))
+        msg.add_alternative(channel_link_mail_html(channel, who, when), subtype="html")
+        smtp_send(self.s, msg)
+
 
 def smtp_send(s: Settings, msg: EmailMessage) -> None:
     """One message out through the relay's SMTP settings; SendError when it did not go."""
@@ -171,10 +188,71 @@ class WebhookMailSender:
                         "страницу, разобрать документ. Доступы вы выбираете сами, а важные "
                         "действия Лика спрашивает перед тем, как сделать.",
                     ],
-                    action_label="Идеи для первой просьбы",
+                                    action_label="Идеи для первой просьбы",
                     action_url="https://nanolika.ru/tips.html",
                 ),
             )
+
+    def send_channel_link(self, ident: Identifier, channel: str, who: str, when: str) -> None:
+        """The same letter as the SMTP sender's, out through the relay's mail webhook."""
+        if ident.channel != "email":
+            return
+        webhook_send(
+            self.s,
+            ident.value,
+            channel_link_mail_subject(channel),
+            channel_link_mail_text(channel, who, when),
+            html=channel_link_mail_html(channel, who, when),
+        )
+
+
+def channel_link_mail_text(channel: str, who: str, when: str) -> str:
+    """The words of the "a chat joined your account" letter, text first.
+
+    Written for the person who owns the account and did not do this: the first line says what
+    happened, the second what to do about it. Nothing here needs the letter to be understood
+    twice, so the Russian comes first and the English follows, as the code letter does."""
+    messenger = "Telegram" if channel == "telegram" else "MAX"
+    return (
+        f"К вашему аккаунту nanoLika подключён чат в {messenger}.\n\n"
+        f"Кто: {who or 'имя не показано'}\n"
+        f"Когда: {when}\n\n"
+        "С этого момента этот чат работает с вашим аккаунтом: тратит вашу кассу, видит беседы, "
+        "которые хранятся в облаке, и может отдавать поручения вашим устройствам.\n\n"
+        "Если это были вы, ничего делать не нужно.\n"
+        "Если нет: откройте приложение, раздел «Аккаунт» → «Устройства и каналы», и отвяжите этот чат. "
+        "Он перестанет быть вами сразу же.\n\n"
+        f"A {messenger} chat has been linked to your nanoLika account.\n"
+        f"Who: {who or 'no name shown'}\n"
+        f"When: {when}\n\n"
+        "If this was you, nothing needs doing. If it was not, open the app, Account, Devices and "
+        "channels, and unlink that chat.\n\n"
+        "nanoLika · https://nanolika.ru/"
+    )
+
+
+def channel_link_mail_subject(channel: str) -> str:
+    messenger = "Telegram" if channel == "telegram" else "MAX"
+    return f"nanoLika · к аккаунту подключён чат в {messenger}"
+
+
+def channel_link_mail_html(channel: str, who: str, when: str) -> str:
+    messenger = "Telegram" if channel == "telegram" else "MAX"
+    return _brand_email_html(
+        preheader=f"Чат в {messenger} подключён к вашему аккаунту nanoLika",
+        title=f"Чат в {messenger} подключён",
+        paragraphs=[
+            f"К вашему аккаунту nanoLika подключён чат в {messenger}.",
+            f"Кто: {who or 'имя не показано'}. Когда: {when}.",
+            "Этот чат теперь работает с вашим аккаунтом: тратит вашу кассу, видит беседы из "
+            "облака и может отдавать поручения вашим устройствам.",
+            "Если это были вы, ничего делать не нужно. Если нет, отвяжите чат в приложении: "
+            "«Аккаунт» → «Устройства и каналы». Он перестанет быть вами сразу же.",
+        ],
+        action_label="Устройства и каналы",
+        action_url="https://cloud.nanolika.ru/web/account/#devices",
+        safety_note="Это автоматическое письмо nanoLika о подключении чата к аккаунту.",
+    )
 
 
 def webhook_send(s: Settings, to: str, subject: str, text: str, html: str | None = None) -> None:

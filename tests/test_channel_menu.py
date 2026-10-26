@@ -26,7 +26,10 @@ def manager(tmp_path):
             cid_of=lambda thread: "",
         ),
     )
-    channel = SimpleNamespace(_call=AsyncMock())
+    # a channel as the manager sees it for linking: one public `chat_link()` handing back the
+    # relay client, whose `release` and `redeem` the switch question uses
+    link = SimpleNamespace(release=AsyncMock(), redeem=AsyncMock())
+    channel = SimpleNamespace(_call=AsyncMock(), chat_link=lambda: link)
     m = SimpleNamespace(
         svc=svc,
         lang="ru",
@@ -240,3 +243,51 @@ async def test_permissions_command_really_sends_mode_buttons(channel, tmp_path):
     payload = str(m.channels[channel]._call.call_args)
     for label in ("Полный доступ", "Запись в рабочей папке", "Только чтение"):
         assert label in payload
+
+
+@pytest.mark.asyncio
+async def test_a_scanned_code_for_a_taken_chat_asks_and_can_leave(tmp_path):
+    """The whole point of the change: a QR scanned into a chat that already has an account.
+
+    Old behaviour: the relay said `link_taken` and the person was left at a wall, holding a
+    fresh code with nowhere to put it. New behaviour: a question in two buttons — "connected to
+    that account, leave it and connect here instead?" — and answering "yes" really moves the
+    chat: the old link goes first (the relay refuses to link a chat that belongs to somebody),
+    then the scanned code is redeemed.
+    """
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    message = msg()
+
+    await menu.switch_ask(message, "Этот чат подключён к аккаунту ba***@gmail.com. Выйти?", "TGABC")
+    assert menu.switch_pending[(message.channel, message.chat_id)] == "TGABC"
+    # the question went out with two buttons, not silently
+    assert m.channels[message.channel]._call.called
+
+    link = m.channels[message.channel].chat_link()
+    link.release = AsyncMock(return_value="unlinked")
+    link.redeem = AsyncMock(return_value="подключено")
+
+    await menu.switch_answer(message, True)
+
+    link.release.assert_awaited_once()
+    link.redeem.assert_awaited_once()
+    # the code that was scanned is the one redeemed, and the pending question is spent
+    assert link.redeem.await_args.args[1] == "TGABC"
+    assert (message.channel, message.chat_id) not in menu.switch_pending
+
+
+@pytest.mark.asyncio
+async def test_answering_no_changes_nothing(tmp_path):
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    message = msg()
+    await menu.switch_ask(message, "question", "TGABC")
+    link = m.channels[message.channel].chat_link()
+    link.release = AsyncMock()
+    link.redeem = AsyncMock()
+
+    await menu.switch_answer(message, False)
+
+    link.release.assert_not_awaited()
+    link.redeem.assert_not_awaited()

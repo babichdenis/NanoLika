@@ -59,6 +59,10 @@ class ChatLink:
         self.channel = (channel or "").strip().lower() or "telegram"
         self._settings = settings
         self._transport = transport
+        # The last refusal that was a question rather than an error: the chat is connected to
+        # an account (`label`, masked) and the person may want to leave it. Set by `redeem`,
+        # read by the manager, cleared by the next successful link.
+        self.taken: dict[str, Any] = {}
 
     def configured(self) -> bool:
         """Is there a relay to ask at all (the same pair the bot's sign-in uses)?"""
@@ -122,6 +126,7 @@ class ChatLink:
         except ValueError:
             data = {}
         if answer.status_code == 200:
+            self.taken = {}
             return channel_text(language, "link_linked")
         said = data.get("error") if isinstance(data, dict) else None
         error: dict[str, Any] = said if isinstance(said, dict) else {}
@@ -129,6 +134,21 @@ class ChatLink:
         if code_name in ("link_wrong", "code_expired"):
             return channel_text(language, "link_wrong")
         if code_name == "link_taken":
+            # The chat is somebody's already. The relay says whose (a masked address) and
+            # whether that chat *is* the account, because the answer is a question rather than
+            # a wall: "connected to this account, leave it and connect here instead?".
+            taken = error.get("taken") if isinstance(error.get("taken"), dict) else {}
+            self.taken = {
+                "label": str(taken.get("label") or ""),
+                "own": bool(taken.get("own")),
+                "code": code,
+            }
+            if not self.taken["label"] and not self.taken["own"]:
+                # The relay refused without saying whose the chat is (an older relay, or a
+                # refusal from another door). There is nothing to ask about, so this stays the
+                # plain sentence it always was: a question with no account in it would confuse
+                # more than it helps.
+                self.taken = {}
             return channel_text(language, "link_taken")
         if code_name == "link_off":
             # the operator switched linking off: the code is silence, not an error
@@ -177,18 +197,28 @@ class ChatLink:
 async def answer_code(
     link: ChatLink, chat_id: str, text: str, identifier: str = "", language: str = ""
 ) -> str:
-    """The words to send back when `text` is a code for a chat that has no account yet.
+    """The words to send back when `text` is a code.
 
-    "" when the message is not a code, when the chat already belongs to an account (its
-    messages are ordinary messages, code or not), or when the relay has no opinion: the
-    caller then passes the message on, exactly as before."""
+    "" when the message is not a code at all, or when the relay has no opinion: the caller then
+    passes the message on, exactly as before.
+
+    A chat that already belongs to an account used to be skipped here — its code was never even
+    asked about, which left a person holding a fresh QR with nowhere to put it. It is asked
+    about now: the relay answers `link_taken` with the account the chat belongs to, and the
+    manager turns that into the question "leave that account and connect here instead?"."""
     code = as_code(text)
     if not code or not link.configured():
         return ""
-    known = await link.status(chat_id)
-    if known is None or known.get("linked"):
-        return ""
-    return await link.redeem(chat_id, code, identifier, language)
+    link.taken = {}
+    answer = await link.redeem(chat_id, code, identifier, language)
+    if not link.taken:
+        return answer
+    # The chat belongs to an account already: a question, not a refusal, and not a dead end.
+    # The caller sends these two buttons instead of the plain text.
+    label = link.taken.get("label") or channel_text(language, "link_switch_unknown")
+    if link.taken.get("own"):
+        return channel_text(language, "link_switch_own")
+    return channel_text(language, "link_switch_ask").replace("{label}", label)
 
 
 __all__ = ["CODE_ALPHABET", "CODE_LENGTH", "ChatLink", "answer_code", "as_code"]

@@ -254,3 +254,62 @@ async def test_a_second_chat_of_the_same_messenger_can_still_leave():
         assert let_go.json()["unlinked"] is True
         # and the account is untouched
         assert (await client.get("/v1/me", headers=auth(key))).status_code == 200
+
+
+# -- the letter that makes a silent link visible ---------------------------------------------
+
+
+class RecordingMailer:
+    """A sender that keeps what it was asked to post, instead of a mailbox."""
+
+    def __init__(self) -> None:
+        self.links: list[tuple[str, str, str, str]] = []
+        # the sign-in codes the fixture reads out of the mailbox
+        self.sent: list[tuple[object, str]] = []
+
+    def send(self, ident, code: str) -> None:
+        self.sent.append((ident, code))
+
+    def accepts(self, ident) -> bool:
+        return ident.channel == "email"
+
+    def send_channel_link(self, ident, channel: str, who: str, when: str) -> None:
+        self.links.append((ident.value, channel, who, when))
+
+
+async def test_a_link_writes_to_the_accounts_own_address():
+    """A chat that joins an account must not be invisible: the only warning a person gets is
+    this letter, because nobody opens the list of connected chats looking for a surprise."""
+    from test_bot import stack as bot_stack
+
+    app, cloud = bot_stack()
+    mail = RecordingMailer()
+    cloud.sender = mail
+    async with client_of(app) as client:
+        account = await sign_in_with_email(client, cloud, "letter@example.com")
+        code = (await link_code(client, account["api_key"]))["code"]
+        assert (await link_chat(client, CHAT, code, identifier="@denis")).status_code == 200
+
+        assert len(mail.links) == 1
+        address, channel, who, when = mail.links[0]
+        assert address == "letter@example.com"
+        assert channel == "telegram"
+        assert who == "@denis"
+        assert when, "the letter says when it happened"
+
+
+async def test_unlinking_does_not_write_about_itself():
+    """Only joining is the news a person may not expect; letting a chat go is not."""
+    from test_bot import stack as bot_stack
+
+    app, cloud = bot_stack()
+    mail = RecordingMailer()
+    cloud.sender = mail
+    async with client_of(app) as client:
+        account = await sign_in_with_email(client, cloud, "quiet@example.com")
+        key = account["api_key"]
+        code = (await link_code(client, key))["code"]
+        assert (await link_chat(client, CHAT, code)).status_code == 200
+        assert len(mail.links) == 1
+        assert (await client.delete("/v1/link/channels/telegram", headers=auth(key))).status_code == 200
+        assert len(mail.links) == 1, "no letter for the unlink"

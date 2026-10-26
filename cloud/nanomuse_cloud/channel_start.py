@@ -8,7 +8,7 @@ import secrets
 from fastapi import Depends, Request, Response
 
 from .db import now
-from .service import CHANNEL_CODE_TTL_S, Caller, Cloud, CloudError, _code_hash
+from .service import CHANNEL_START_TTL_S, Caller, Cloud, CloudError, _code_hash
 
 BOT_URLS = {"telegram": "https://t.me/nanolika_bot", "max": "https://max.ru/id420517592685_bot"}
 PREFIXES = {"telegram": "TG", "max": "MX"}
@@ -24,13 +24,13 @@ def create_start(cloud: Cloud, caller: Caller, channel: str) -> dict:
         raise CloudError(403, "account_disabled", "This account is unavailable")
     # 120 random bits, not an API key. The channel prefix is part of the stored hash.
     token = PREFIXES[channel] + secrets.token_hex(15).upper()
-    cloud.db.add_link_code(_code_hash(cloud.s.hmac_key, token), caller.account_id, CHANNEL_CODE_TTL_S)
+    cloud.db.add_link_code(_code_hash(cloud.s.hmac_key, token), caller.account_id, CHANNEL_START_TTL_S)
     cloud.db.add_event(caller.account_id, "link.start", channel)
     return {
         "channel": channel,
         "url": BOT_URLS[channel] + "?start=nl_" + token,
-        "expires_at": now() + CHANNEL_CODE_TTL_S,
-        "expires_in_s": CHANNEL_CODE_TTL_S,
+        "expires_at": now() + CHANNEL_START_TTL_S,
+        "expires_in_s": CHANNEL_START_TTL_S,
     }
 
 

@@ -20,7 +20,9 @@ async def test_start_link_connects_the_same_account_once(channel, host, prefix):
         token = parse_qs(url.query)["start"][0].removeprefix("nl_")
         assert token.startswith(prefix) and len(token) == 32
         assert key not in data["url"]
-        assert data["expires_in_s"] == 600
+        # a QR is a photograph waiting to happen, so it lives three minutes, not the typed
+        # code's ten: whoever sees the screen has to act inside them
+        assert data["expires_in_s"] == 180
         linked = await client.post("/v1/bot/link", headers={"X-Bot-Token": BOT}, json={"channel": channel, "chat_id": CHAT, "code": token})
         assert linked.status_code == 200, linked.text
         rows = (await client.get("/v1/link/channels", headers=auth(key))).json()

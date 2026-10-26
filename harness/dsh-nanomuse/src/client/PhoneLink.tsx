@@ -50,6 +50,24 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
     finally { if (request === revision.current) setBusy(false) }
   }
 
+  /* Letting a chat go: the button asks first, because the chat stops reaching this account and
+   * going back needs a fresh code. A chat that *is* the account is refused by the relay
+   * (`channel_is_the_account`), and its own sentence says so instead of an error. */
+  const unlink = async (channel: string) => {
+    if (!window.confirm(t('plUnlinkAsk'))) return
+    const request = ++revision.current
+    setBusy(true)
+    setError(undefined)
+    try {
+      await call('link/unlink', { channel })
+      const body = await call<{ channels?: LinkChannel[] }>('link/channels')
+      if (request !== revision.current) return
+      setChannels(Array.isArray(body.channels) ? body.channels : [])
+      setStart(undefined)
+    } catch (err) { if (request === revision.current) setError(failureText(t, err)) }
+    finally { if (request === revision.current) setBusy(false) }
+  }
+
   if (!live.cloud.signedIn) return h('div', { className: 'nm-section', 'data-testid': 'nm-phone-link' }, h('p', null, t('plLead')), h('p', { className: 'nm-fine' }, t('plSignedOut')))
   const connected = !!start && channels.some(c => c.channel === start.channel)
   const left = Math.max(0, Math.ceil(((start?.expiresAt ?? 0) - now) / 1000))
@@ -70,7 +88,7 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
       alive ? h('p', { className: 'nm-fine' }, t('plFine')) : null) : null,
     error ? h('p', { style: errorStyle, role: 'alert' }, error) : null,
     h('h2', null, t('plChannelsTitle')),
-    h('div', { className: 'nm-card' }, channels.length ? channels.map(c => h('div', { key: c.channel, className: 'nm-row' }, h('span', { className: 'nm-row-title' }, c.label || (c.channel === 'telegram' ? 'Telegram' : 'MAX')), h('span', { className: 'nm-state nm-state-on' }, t('plOn')))) : h('p', null, t('plNoChannelsSub'))))
+    h('div', { className: 'nm-card' }, channels.length ? channels.map(c => h('div', { key: c.channel, className: 'nm-row' }, h('span', { className: 'nm-row-title' }, c.label || (c.channel === 'telegram' ? 'Telegram' : 'MAX')), h('span', { className: 'nm-state nm-state-on' }, t('plOn')), h('span', { style: { marginLeft: 'auto' } }, h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => { void unlink(c.channel) } }, t('plUnlink')))) ) : h('p', null, t('plNoChannelsSub'))))
 }
 
 export function makePhoneLinkSection(t: Translate) {

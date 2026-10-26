@@ -270,15 +270,24 @@ class MaxChannel(Channel):
         if bus is None:
             return
         try:
+            link = self._link()
             answer = await answer_code(
-                self._link(), msg.sender_id, msg.text, "", getattr(bus, "lang", "") or ""
+                link, msg.sender_id, msg.text, "", getattr(bus, "lang", "") or ""
             )
         except Exception as exc:  # noqa: BLE001 — a code must never break the chat
             logger.warning("max: link code failed: {}", type(exc).__name__)
             answer = ""
+            link = None
         if not answer:
             bus.inbound(msg)
             return
+        # A scanned code for a chat that already belongs to an account: ask, in two buttons,
+        # whether to leave that account. The same rule as Telegram, so the two bots behave alike.
+        if link is not None and link.taken and not link.taken.get("own"):
+            menu = getattr(bus, "menu", None)
+            if menu is not None:
+                await menu.switch_ask(msg, answer, str(link.taken.get("code") or ""))
+                return
         with suppress(MaxError):
             await self.send(msg.chat_id, answer)
 

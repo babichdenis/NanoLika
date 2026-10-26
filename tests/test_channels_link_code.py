@@ -32,6 +32,14 @@ class Bus:
         self.inbound_msgs: list[Any] = []
         self.statuses: list[tuple[str, str, str]] = []
         self.actions: list[tuple[str, str, str, dict[str, Any]]] = []
+        # what the channel asked the menu to show: the words and the code of the question
+        # "this chat belongs to that account, leave it?" — the manager's own job is tested
+        # in test_channel_menu.py, this only checks that the question is asked at all
+        self.switch: tuple[str, str] | None = None
+        self.menu = self
+
+    async def switch_ask(self, msg: Any, text: str, code: str) -> None:
+        self.switch = (text, code)
 
     def inbound(self, msg: Any) -> None:
         self.inbound_msgs.append(msg)
@@ -162,7 +170,7 @@ async def test_a_code_from_a_chat_with_no_account_links_it():
     ch = channel(relay)
     await ch.start(bus)
     await ch._handle_update(update(CODE.lower()))
-    assert [m for m, _p, _b in relay.calls] == ["GET", "POST"]
+    assert [m for m, _p, _b in relay.calls] == ["POST"]
     posted = [b for m, p, b in relay.calls if m == "POST"][0]
     assert posted == {
         "channel": "telegram",
@@ -176,16 +184,29 @@ async def test_a_code_from_a_chat_with_no_account_links_it():
     await ch.stop()
 
 
-async def test_a_code_for_a_chat_that_already_has_an_account_is_just_a_message():
+async def test_a_code_for_a_chat_that_already_has_an_account_asks_about_leaving():
+    """It used to be silence: the code was never even shown to the relay, so a person holding
+    a fresh QR had nowhere to put it. It is a question now, in two buttons."""
     relay = FakeRelay(status={"linked": True, "channel": "telegram", "identifier": "@denis"})
+    relay.link = (
+        409,
+        {
+            "error": {
+                "message": "already has an account",
+                "code": "link_taken",
+                "taken": {"label": "ba***@gmail.com", "own": False},
+            }
+        },
+    )
     bus = Bus()
     ch = channel(relay)
     await ch.start(bus)
     await ch._handle_update(update(CODE))
-    await until(lambda: bus.inbound_msgs)
-    assert bus.inbound_msgs[0].text == CODE
-    assert [m for m, p, _b in relay.calls] == ["GET"]
-    assert relay.sent == []
+    await until(lambda: bus.switch or relay.sent)
+    assert bus.switch, "the answer must be a question with two buttons"
+    text, code = bus.switch
+    assert "ba***@gmail.com" in text
+    assert code == CODE.upper()
     await ch.stop()
 
 
@@ -263,10 +284,12 @@ async def test_a_relay_that_is_not_there_at_all_changes_nothing():
 async def test_an_unreachable_relay_leaves_an_ordinary_message_alone():
     bus = Bus()
 
+    relay = FakeRelay()
+
     async def refuse(request: httpx.Request) -> httpx.Response:
         if request.url.host == "relay.test":
             raise httpx.ConnectError("no relay", request=request)
-        return await FakeRelay().handler(request)
+        return await relay.handler(request)
 
     ch = TelegramChannel(
         {"bot_token": "123:abc", "cloud_url": "http://relay.test", "cloud_bot_token": "s"},
@@ -274,8 +297,11 @@ async def test_an_unreachable_relay_leaves_an_ordinary_message_alone():
     )
     await ch.start(bus)
     await ch._handle_update(update(CODE))
-    await until(lambda: bus.inbound_msgs)
-    assert bus.inbound_msgs[0].text == CODE
+    # The person is told the server did not answer, and the six characters do not go on to the
+    # model: a code is a one-time secret, and a prompt is the last place it should end up. The
+    # reply is the whole of its answer.
+    assert bus.inbound_msgs == []
+    assert len(relay.sent) == 1 and "не ответил" in relay.sent[0]
     await ch.stop()
 
 
@@ -330,11 +356,10 @@ async def test_the_max_bot_answers_a_code_too():
     await until(lambda: relay.sent)
     assert relay.sent == [channel_text("ru", "link_linked")]
     assert bus.inbound_msgs == []
-    assert [m for m, _p, _b in relay.calls] == ["GET", "POST"]
+    assert [m for m, _p, _b in relay.calls] == ["POST"]
     # the messenger this bot is, and the id under the neutral name: the relay keys a chat's
-    # account on the pair, and a MAX chat is not a Telegram one
-    assert relay.params[0]["channel"] == "max"
-    assert relay.params[0]["chat_id"] == str(CHAT)
+    # account on the pair, and a MAX chat is not a Telegram one. The body carries it — there is
+    # no status GET any more, since every code is offered to the relay.
     posted = [b for m, _p, b in relay.calls if m == "POST"][0]
     assert posted["channel"] == "max"
     assert posted["chat_id"] == str(CHAT)
@@ -377,7 +402,7 @@ async def test_a_code_is_asked_about_once_and_linked_once(text: str):
     ch = channel(relay)
     await ch.start(bus)
     await ch._handle_update(update(text))
-    assert [m for m, _p, _b in relay.calls] == ["GET", "POST"]
+    assert [m for m, _p, _b in relay.calls] == ["POST"]
     await ch.stop()
 
 
