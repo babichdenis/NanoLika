@@ -356,6 +356,7 @@ export function providerFailureKind(code: string | undefined, message: string): 
       return 'unreachable'
     default:
       if (contentCheck(message)) return 'content_rejected'
+      if (/\bupstream error from\s+[a-z0-9_-]+\s*:/i.test(message)) return 'server'
       if (/\b413\b/.test(message) || CONTEXT.test(message)) return 'too_large'
       return 'other'
   }

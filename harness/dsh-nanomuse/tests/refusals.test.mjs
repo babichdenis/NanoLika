@@ -263,3 +263,8 @@ test('the wire, not a refusal: a deadline passed is a timeout, a connection that
   assert.equal(transportFailure(undefined), undefined)
   assert.equal(transportFailure('fetch failed'), undefined)
 })
+
+test('upstream provider failures wrapped in PI_AI_ERROR get a human server-error explanation', () => {
+  assert.equal(providerFailureKind('PI_AI_ERROR', 'Upstream error from Reka: Something wrong happened during your request! Please retry.'), 'server')
+  assert.equal(providerFailureKind('PI_AI_ERROR', 'something else'), 'other')
+})
