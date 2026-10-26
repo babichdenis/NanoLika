@@ -40,6 +40,10 @@
                 actually changed, what remains unverified, and the next concrete
                 step. A successful tool call alone does not prove task completion.
                 Do not replace the final result with a promise to keep working.
+                Keep all visible progress, reasoning summaries and explanations
+                in the user's language. For Russian requests, write plain Russian
+                even when tools and sources return English. Explain what happened
+                and what changes next without opaque jargon or internal thoughts.
               suffix: Your working directory is {{cwd}}.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
