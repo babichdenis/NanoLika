@@ -215,3 +215,42 @@ async def test_deleting_the_account_also_lets_its_chats_go():
         after = await client.post("/v1/bot/signin", json={"telegram_id": CHAT}, headers=BOT_HEADERS)
         assert after.status_code == 200, after.text
         assert after.json()["created"] is True
+
+
+async def test_a_second_chat_of_the_same_messenger_can_still_leave():
+    """The account began in one Telegram chat; a second Telegram chat was tied by a code.
+    `/unlink` in the second one must work: that chat is an ordinary row, and refusing every
+    Telegram chat because the account started in Telegram would leave a person stuck.
+
+    This is the shape my first version got wrong: it compared the account's *messenger* to
+    the chat's, so both chats of one messenger were refused together.
+    """
+    app, cloud = stack()
+    async with client_of(app) as client:
+        # the account begins in this chat, and has no alias row of its own
+        first = await client.post(
+            "/v1/bot/signin", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS
+        )
+        assert first.status_code == 200, first.text
+        key = first.json()["api_key"]
+        assert first.json()["created"] is True
+
+        # a second Telegram chat joins it by code
+        code = (await link_code(client, key))["code"]
+        assert (await link_chat(client, "222000222", code)).status_code == 200
+
+        # the chat that made the account cannot leave
+        refused = await client.post(
+            "/v1/bot/unlink", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS
+        )
+        assert refused.status_code == 200, refused.text
+        assert refused.json()["reason"] == "channel_is_the_account"
+
+        # the second one can
+        let_go = await client.post(
+            "/v1/bot/unlink", json={"chat_id": "222000222", "channel": "telegram"}, headers=BOT_HEADERS
+        )
+        assert let_go.status_code == 200, let_go.text
+        assert let_go.json()["unlinked"] is True
+        # and the account is untouched
+        assert (await client.get("/v1/me", headers=auth(key))).status_code == 200

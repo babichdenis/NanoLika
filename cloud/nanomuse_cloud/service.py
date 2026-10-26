@@ -1135,18 +1135,33 @@ class Cloud:
         a person's own decision made in the app. It is refused here with the reason, rather
         than silently emptying their account. A `force` switch does not exist on purpose.
 
+        `unlinked: 0` there. Cutting a *different* chat of the same messenger is fine and
+        ordinary: one person may have the bot in two Telegram chats, and the one that made
+        the account is the only one that cannot leave.
+
         Returns how many chats were cut and what is left, so the app can say something true."""
         surface = self._surface(surface)
         account = self.db.account(caller.account_id)
         if account is None:
             raise CloudError(404, "no_account", "This account is gone")
-        if str(account["channel"]) == surface:
-            raise CloudError(
-                409,
-                "channel_is_the_account",
-                "The account began in this chat, so this chat is the account. Delete the account from "
-                "the app if that is what you want; unlinking would take the whole account with it.",
-            )
+        aliases = [
+            row
+            for row in self.db.aliases_of(caller.account_id)
+            if str(row["surface"] or "") in ("", surface) and str(row["channel"] or "") in ("telegram", "max")
+        ]
+        if not aliases:
+            # nothing to cut: the account may have begun in this messenger (then the whole
+            # messenger is the account, and that is a deletion, not a goodbye), or nothing of
+            # this messenger was ever tied
+            if str(account["channel"]) == surface:
+                raise CloudError(
+                    409,
+                    "channel_is_the_account",
+                    "The account began in a chat of this messenger, so that chat is the account. Delete "
+                    "the account from the app if that is what you want; unlinking would take the whole "
+                    "account with it.",
+                )
+            return {"unlinked": 0, "channel": surface, "before": self.channel_links(caller), "left": self.channel_links(caller)}
         before = self.channel_links(caller)
         cut = self.db.remove_aliases_for_surface(caller.account_id, surface)
         after = self.channel_links(caller)
@@ -1159,17 +1174,22 @@ class Cloud:
 
         The bot's half: a person who no longer wants this messenger to be their account types
         `/unlink` there, and the chat becomes a stranger to the account. The same refusal as
-        above when the chat is the account itself, because that is a deletion and not a
-        goodbye."""
+        above when *this* chat is the account itself, because that is a deletion and not a
+        goodbye. Another chat of the same messenger is an ordinary row and is let go: one
+        person may have the bot in two Telegram chats, and `/unlink` in one must not refuse
+        because the other one made the account."""
         surface = self._surface(channel)
         ident = chat_identity(surface, chat_id)
         row = self._chat_alias(surface, ident)
         if row is None:
             # no alias, but the chat may still *be* an account: a chat that wrote first makes
             # its own account and has no row beside it. Saying `not_linked` there would tell a
-            # person with a working account that they have none.
-            own = self._account_for(self._chat_key(surface, chat_identity(surface, chat_id)))
-            if own is not None and str(own["channel"]) == surface:
+            # person with a working account that they have none. The comparison is by the
+            # account's own `id_hash`, not by messenger: the account's channel says which
+            # messenger it started in, and this asks whether it started in *this* chat.
+            key = self._chat_key(surface, ident)
+            own = self._account_for(key)
+            if own is not None and str(own["id_hash"]) == key.hash(self.s.hmac_key):
                 return {"unlinked": False, "channel": surface, "reason": "channel_is_the_account"}
             return {"unlinked": False, "channel": surface, "reason": "not_linked"}
         account_id = str(row["account_id"])
@@ -1179,7 +1199,7 @@ class Cloud:
             # cleaned up): the row is litter, and dropping it is the whole answer
             self.db.remove_alias_by_row(str(row["id_hash"]))
             return {"unlinked": True, "channel": surface, "reason": "account_gone"}
-        if str(account["channel"]) == surface:
+        if str(account["channel"]) == surface and str(account["id_hash"]) == str(row["id_hash"]):
             return {"unlinked": False, "channel": surface, "reason": "channel_is_the_account"}
         removed = self.db.remove_alias_by_row(str(row["id_hash"]))
         if removed:
