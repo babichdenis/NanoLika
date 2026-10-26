@@ -156,6 +156,13 @@ export interface LinkCode {
   expiresAt: number
 }
 
+/** An expiring bot start link. No account key is included in the URL. */
+export interface ChannelStart {
+  channel: 'telegram' | 'max'
+  url: string
+  expiresAt: number
+}
+
 /** A messenger already on the account (`GET /v1/link/channels`). */
 export interface LinkChannel {
   /** `telegram` or `max`. */
@@ -523,6 +530,16 @@ export class Relay {
     if (!res.ok) await fail(res)
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
     return { code: String(body.code ?? ''), expiresAt: milliseconds(body.expires_at) }
+  }
+
+  async linkStart(apiKey: string, channel: 'telegram' | 'max', signal?: AbortSignal): Promise<ChannelStart> {
+    const res = await this.fetchImpl(`${this.origin}/v1/link/start`, {
+      method: 'POST', headers: { ...this.auth(apiKey), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }), signal: signal ?? null,
+    })
+    if (!res.ok) await fail(res)
+    const body = await res.json() as Record<string, unknown>
+    return { channel, url: String(body.url ?? ''), expiresAt: milliseconds(body.expires_at) }
   }
 
   /** The messengers already on the account (`GET /v1/link/channels`). */

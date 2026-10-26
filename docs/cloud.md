@@ -66,6 +66,19 @@ account linking admits that sender to the bot; device and tool permissions are u
 Invalid, expired, wrong-channel and group payloads never reach a model. Existing manual
 link endpoints remain compatible. Unlinking or moving an already linked messenger belongs
 to the separate account sign-out flow; this guide does not merge accounts.
+The desktop application's messenger settings use the same QR flow through authenticated
+`POST nanomuse/cloud/link/start`, forwarded to `/v1/link/start`. Telegram and MAX are
+selected explicitly; the QR is generated locally, expires after ten minutes and is hidden
+when the linked-channel poll confirms success. Old `/link/code` clients remain compatible.
+
+The browser composer sends with Enter; Shift+Enter inserts a line break. Composition/IME,
+keyboard shortcuts and repeated key events do not submit. Its model selector reads only
+the account-authorized, listed chat entries from `/v1/models`, excludes media and hidden
+models, and keeps the choice under an account-scoped browser preference. The chosen ID is
+sent with each completion request, including the follow-up after a navigation tool result;
+changing a selection preserves the current conversation. There is no client-side billing
+change. The selector is locked during a response and can refresh a failed catalogue load.
+
 The desktop guide links to the download page and asks the user to sign in with the same
 email and keep the app open. Multiple online desktops are shown as explicit choices.
 These guides do not call a model or transfer identities between accounts.

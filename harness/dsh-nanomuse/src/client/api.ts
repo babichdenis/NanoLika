@@ -34,6 +34,13 @@ export interface LinkCode {
   expiresAt: number
 }
 
+/** An expiring bot start link. No account key is included in the URL. */
+export interface ChannelStart {
+  channel: 'telegram' | 'max'
+  url: string
+  expiresAt: number
+}
+
 /** A messenger already on the account (`GET nanomuse/cloud/link/channels`, the relay's `GET /v1/link/channels`). */
 export interface LinkChannel {
   /** `telegram` or `max`. */
