@@ -563,6 +563,23 @@ export class Relay {
     return out
   }
 
+  /**
+   * Unlink the account's chats of one messenger (`DELETE /v1/link/channels/{channel}`).
+   *
+   * The way out of a link, from the app that made it. `unlinked` is how many chats were cut —
+   * zero is a plain answer, not an error. A chat that *is* the account is refused by the relay
+   * (`channel_is_the_account`) and that refusal is thrown, because it means the person asked
+   * to delete the account and this is not that.
+   */
+  async linkUnlink(apiKey: string, channel: string, signal?: AbortSignal): Promise<number> {
+    const res = await this.fetchImpl(`${this.origin}/v1/link/channels/${encodeURIComponent(channel)}`, {
+      method: 'DELETE', headers: this.auth(apiKey), signal: signal ?? null,
+    })
+    if (!res.ok) await fail(res)
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    return Number(body.unlinked ?? 0)
+  }
+
   /** Set or change the password (`POST /v1/auth/password`); `current` when one exists; an empty password with `current` removes it. */
   async setPassword(apiKey: string, password: string, current?: string, signal?: AbortSignal): Promise<void> {
     const res = await this.fetchImpl(`${this.origin}/v1/auth/password`, {

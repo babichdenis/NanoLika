@@ -3661,6 +3661,15 @@ export default class NanomuseCloud extends Service {
       }
       if (req.method === 'POST' && route === '/link/code') return send(res, 200, await this.withToken((token) => this.relay.linkCode(token)))
       if (req.method === 'GET' && route === '/link/channels') return send(res, 200, { channels: await this.withToken((token) => this.relay.linkChannels(token)) })
+      // The way out of a link: the app that made it can also undo it. `channel` is checked
+      // against the two messengers before anything reaches the relay, so a typo cannot turn
+      // into a request for something else.
+      if (req.method === 'POST' && route === '/link/unlink') {
+        const body = await json(req)
+        const channel = String(body.channel ?? '')
+        if (channel !== 'telegram' && channel !== 'max') return send(res, 400, { error: { code: 'bad_request', message: 'Choose Telegram or MAX' } })
+        return send(res, 200, { unlinked: await this.withToken((token) => this.relay.linkUnlink(token, channel)) })
+      }
       // Conversations synced between the account's devices (C7, C8): the switch, the delete, the main chat, the rows from elsewhere.
       if (req.method === 'POST' && route === '/conversation/visible') {
         const body = await json(req)
