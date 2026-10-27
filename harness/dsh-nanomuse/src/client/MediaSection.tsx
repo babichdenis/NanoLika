@@ -203,14 +203,21 @@ export function makeMediaSection(t: Translate) {
           h(
             'div',
             { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, progress?.running ? motionStatus(live, t) : haveClips.length ? t('mdClipsDone', { n: haveClips.length, total: MOODS.length }) : t('mdClipsList')),
+            h('span', { className: 'nm-row-title' }, progress?.running
+              ? motionStatus(live, t)
+              : haveClips.length
+                ? t('mdClipsDone', { n: haveClips.length, total: MOODS.length })
+                : !face
+                  // the look she wears now is built in, with its own four clips
+                  ? t('mdClipsBuiltIn')
+                  : t('mdClipsList')),
             h(
               'span',
               { className: 'nm-row-sub nm-wrap' },
               progress?.running
                 ? `${progress.current ? moodName(progress.current) : ''}${stageText ? ` · ${stageText}` : ''}`
                 : !face
-                  ? t('mdClipsNoFace')
+                  ? t('mdClipsBuiltInSub')
                   : !videoOn
                     ? t('mdClipsNoVideo')
                     : t('mdClipsCost', { s: SECONDS, model: video.model }),
@@ -245,7 +252,12 @@ export function makeMediaSection(t: Translate) {
             'div',
             { key: m, className: 'nm-row' },
             clip ? h('video', { className: 'nm-md-clip', src: `nanomuse/avatar/motion/${m}.mp4?v=${clip.v}`, muted: true, loop: true, playsInline: true, autoPlay: true, 'aria-hidden': true }) : h('span', { className: 'nm-md-clip nm-md-clip-none', 'aria-hidden': true }),
-            h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, moodName(m)), h('span', { className: 'nm-row-sub' }, clip ? sizeOf(clip.size) : progress?.running && progress.current === m ? stageText || t('moStageSubmitted') : '—')),
+            h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, moodName(m)), h('span', { className: 'nm-row-sub' },
+              clip
+                ? sizeOf(clip.size)
+                : progress?.running && progress.current === m
+                  ? stageText || t('moStageSubmitted')
+                  : face ? '—' : t('mdClipBuiltIn'))),
             clip ? h('span', { className: 'nm-ob-granted' }, h(IconCheck, { size: 16 })) : null,
           )
         }),
