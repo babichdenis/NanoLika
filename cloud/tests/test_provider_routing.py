@@ -112,6 +112,23 @@ def test_provider_402_quarantine_survives_router_restart(tmp_path, monkeypatch):
     assert restored.routes(spec, body, "https://configured.example/v1/chat/completions", {})[0].provider == "polza"
 
 
+def test_provider_with_balance_below_estimated_request_cost_is_skipped(monkeypatch):
+    r = setup_router(monkeypatch)
+    now = time.time()
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 100)],
+        "polza": [quote("polza", 2, 200)],
+    }
+    r.balances = {
+        "openrouter": {"amount": 0.02, "currency": "RUB", "rub_estimate": 0.02, "checked": now, "error": None},
+        "polza": {"amount": 10, "currency": "RUB", "rub_estimate": 10, "checked": now, "error": None},
+    }
+    spec = ModelSpec("flash", "Flash", "deepseek-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+
+    assert routes(r)[0].provider == "polza"
+
+
 def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
     r = setup_router(monkeypatch)
     r.offers = {

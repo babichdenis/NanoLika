@@ -538,6 +538,15 @@ class ProviderRouter:
                     }
                 inp, out, cache = offer.rates(now)
                 fixed = replace(offer, input_rub=inp, output_rub=out, cached_rub=cache, overrides=())
+                estimated_cost = fixed.estimate(prompt, expected)
+                available_rub = number(balance.get("rub_estimate"))
+                balance_is_fresh = (
+                    balance.get("error") is None
+                    and available_rub is not None
+                    and now - balance.get("checked", 0) < 300
+                )
+                if balance_is_fresh and available_rub < estimated_cost:
+                    continue
                 route = Route(
                     name,
                     provider.base.rstrip("/") + "/v1/chat/completions",
@@ -545,7 +554,7 @@ class ProviderRouter:
                     payload,
                     fixed,
                 )
-                candidates.append((fixed.estimate(prompt, expected), name != spec.provider, route))
+                candidates.append((estimated_cost, name != spec.provider, route))
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
         eligible = []
         annotated = []
