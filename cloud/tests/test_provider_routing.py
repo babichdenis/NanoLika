@@ -81,6 +81,17 @@ def test_1017_flash_endpoint_is_excluded_from_generic_flash(monkeypatch):
     assert "1017" in excluded.exclusion_reason
 
 
+def test_1017_is_not_reintroduced_as_configured_openrouter_fallback(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("flash", "Flash", "deepseek-flash", provider="openrouter")
+    r.offers = {
+        "openrouter": [replace(quote("openrouter", 45, 180), model="deepseek/deepseek-v4.1-flash-1017")],
+    }
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
+
+    assert r.routes(spec, body, "https://configured.example/v1/chat/completions", {}) == []
+
+
 def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
     r = setup_router(monkeypatch)
     r.offers = {

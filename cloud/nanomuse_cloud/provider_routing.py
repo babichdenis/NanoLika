@@ -555,6 +555,9 @@ class ProviderRouter:
             for offers in self.offers.values() for o in offers
         )
         balance = self.balances.get(configured.provider, {})
+        unsafe_dated_flash_fallback = (
+            configured.provider == "openrouter" and wanted == FLASH_FAMILY
+        )
         blocked = (
             balance.get("error") is None
             and balance.get("amount") is not None
@@ -564,6 +567,7 @@ class ProviderRouter:
         if (
             (not has_quote or self.allow_unpriced)
             and not blocked
+            and not unsafe_dated_flash_fallback
             and not any(r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
         ):
             routes.append(configured)
