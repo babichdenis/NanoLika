@@ -364,3 +364,22 @@ body:not(.prices-detailed) #models :is(.prov-cell,.caps,.clean-name,.markup,.mar
 .plan-price strong{font-weight:600}
 .plan-price em{color:#985b26;font-style:normal;font-size:10px}
 .plan-price.below-cost{color:#8a5122}
+
+.provider-links{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 16px;color:var(--muted,#667062);font-size:13px}
+.provider-links a{display:inline-flex;padding:6px 10px;border:1px solid var(--line,#d9dfd2);border-radius:9px;background:#fffdf7;color:#38573d;text-decoration:none}
+.provider-links a:hover{background:#edf2e6;border-color:#9caf97}
+.route-unavailable{color:#8a5122;font-weight:650}
+
+.family-routes{margin-top:8px;border-top:1px solid var(--line,#d9dfd2);padding-top:6px}
+.family-routes>summary{cursor:pointer;color:#38573d;font-size:12px;font-weight:600}
+.family-generation{margin:8px 0 0 8px;padding-left:9px;border-left:2px solid #d9dfd2}
+.family-generation-title{display:block;margin-bottom:4px;color:#4f5d4b;font-size:11px}
+.family-offer{display:grid;grid-template-columns:minmax(86px,.7fr) minmax(160px,1.5fr) minmax(95px,.8fr) auto;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;font-size:11px}
+.family-offer.is-serving{background:#edf2e6}
+.family-provider{font-weight:600}
+.family-model-id{overflow-wrap:anywhere;color:#5f655d}
+.family-cost{white-space:nowrap;font-variant-numeric:tabular-nums}
+.family-serving{color:#356b3c;font-weight:700;white-space:nowrap}
+.family-status{color:var(--muted,#667062);font-size:10px}
+.family-unquoted{border-color:#d4b98f}
+@media(max-width:900px){.family-offer{grid-template-columns:1fr 1fr}.family-cost{grid-column:1}.family-serving,.family-status{grid-column:2}}

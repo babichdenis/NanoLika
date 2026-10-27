@@ -253,21 +253,27 @@ function groupLabel(id) {
 // -- маршруты и цены поставщиков -------------------------------------------------
 
 function offersOf(m) {
-  return (m.routing && m.routing.offers) || [];
+  return (m._familyOffers || (m.routing && m.routing.offers)) || [];
 }
 
-/** Кто обслуживает модель сейчас: `selected`, иначе поле `provider`. */
+/** Кто обслуживает модель сейчас: только подтверждённый выбранный маршрут. */
 function servingProvider(m) {
-  if (m.routing && m.routing.selected) return m.routing.selected;
+  if (m.routing) return m.routing.selected || "";
   return m.provider || "";
+}
+
+function servingModel(m) {
+  return m.routing && m.routing.selected_model || "";
 }
 
 function offerOf(m, provider) {
   if (!provider) return null;
-  return offersOf(m).find((offer) => offer.provider === provider) || null;
+  const matches = (m._parentRouteOffers || offersOf(m)).filter((offer) => offer.provider === provider);
+  return matches.find((offer) => offer.selected)
+    || matches.slice().sort((a, b) => (estimate(a) ?? Infinity) - (estimate(b) ?? Infinity))[0]
+    || null;
 }
 
-/** Оценка запроса: 1000 входных и 512 выходных токенов, без кеша и инструментов. */
 function estimate(offer) {
   if (!offer) return null;
   if (typeof offer.estimated_rub === "number") return offer.estimated_rub;
@@ -312,10 +318,95 @@ function connectedProviders() {
 
 // -- фильтры ---------------------------------------------------------------------
 
+function modelFamilyKey(m) {
+  const name = String(m.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const hay = (String(m.id || "") + " " + name).toLowerCase();
+  if (m.kind === "chat" && /deepseek/.test(hay)) {
+    if (/\bflash\b/.test(name) && !/\bvision\b/.test(name)) return "deepseek|flash";
+    if (/\bpro\b/.test(name)) return "deepseek|pro";
+  }
+  return String(m.kind || "chat") + "|" + (name || String(m.id || "").toLowerCase());
+}
+
+function bundleModels(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = modelFamilyKey(row);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  }
+  return [...grouped.entries()].map(([key, members]) => {
+    const preferredId = key === "deepseek|flash" ? "deepseek-flash"
+      : key === "deepseek|pro" ? "deepseek-pro" : "";
+    const parent = members.find((item) => item.id === preferredId)
+      || members.find((item) => item.listed && item.recommended)
+      || members.find((item) => item.listed)
+      || members[0];
+    const parentOffers = offersOf(parent);
+    const allOffers = [];
+    const seen = new Set();
+    for (const member of members) {
+      for (const offer of offersOf(member)) {
+        const dedupe = String(offer.provider) + "|" + String(offer.model);
+        if (seen.has(dedupe)) {
+          const duplicate = allOffers.find((item) => item.provider === offer.provider && item.model === offer.model);
+          if (duplicate) {
+            if (member.id === parent.id) {
+              if (offer.selected) duplicate.selected = true;
+              Object.assign(duplicate, offer);
+            }
+            duplicate.configured_variants.push({name: member.name, id: member.id});
+          }
+          continue;
+        }
+        seen.add(dedupe);
+        allOffers.push({...offer, selected: member.id === parent.id && Boolean(offer.selected),
+          configured_variants: [{name: member.name, id: member.id}]});
+      }
+    }
+    let active = allOffers.find((offer) =>
+      parentOffers.some((candidate) => candidate.provider === offer.provider
+        && candidate.model === offer.model && candidate.selected));
+    if (!active) {
+      const selectedProvider = parent.routing && parent.routing.selected;
+      active = parentOffers.find((offer) => selectedProvider && offer.provider === selectedProvider
+        && (!parent.routing.selected_model || offer.model === parent.routing.selected_model))
+        || parentOffers.filter((offer) => selectedProvider && offer.provider === selectedProvider)
+          .sort((a, b) => (estimate(a) ?? Infinity) - (estimate(b) ?? Infinity))[0];
+      if (active) active = allOffers.find((offer) => offer.provider === active.provider && offer.model === active.model);
+    }
+    if (active) active.selected = true;
+    for (const offer of allOffers) {
+      offer.in_parent_route = parentOffers.some((candidate) =>
+        candidate.provider === offer.provider && candidate.model === offer.model);
+    }
+    allOffers.sort((a, b) => Number(b.selected) - Number(a.selected)
+      || (estimate(a) ?? Infinity) - (estimate(b) ?? Infinity));
+    const model = {...parent, _familyModels: members, _familyOffers: allOffers, _parentRouteOffers: parentOffers};
+    if (key === "deepseek|flash") model.name = "DeepSeek Flash";
+    if (key === "deepseek|pro") model.name = "DeepSeek Pro";
+    model.listed = Boolean(parent.listed);
+    model._familyText = members.map((item) => item.name + " " + item.id).join(" ");
+    model.routing = {
+      ...(parent.routing || {}),
+      offers: parentOffers,
+      selected: active ? active.provider : "",
+      selected_model: active ? active.model : "",
+    };
+    if (active) {
+      model.cost = {...(parent.cost || {}), rub_in: active.input_rub, rub_out: active.output_rub};
+    } else if (parent.routing) {
+      model.cost = {...(parent.cost || {}), rub_in: null, rub_out: null};
+      model.ratio = {in: null, out: null};
+    }
+    return model;
+  });
+}
+
 /** Модели, проходящие все фильтры, кроме группы: по ним считаются счётчики чипов. */
 function baseRows() {
   const q = state.q.trim().toLowerCase();
-  return ((state.data && state.data.models) || []).filter((m) => {
+  return bundleModels((state.data && state.data.models) || []).filter((m) => {
     if (state.onlySell && !(m.sell.rub_in || m.sell.rub_out)) return false;
     if (state.visibility === "visible" && !m.listed) return false;
     if (state.visibility === "hidden" && m.listed) return false;
@@ -361,7 +452,7 @@ function baseRows() {
     }
     if (!q) return true;
     const info = infoOf(m);
-    const hay = `${m.name || ""} ${m.id || ""} ${info && info.aa ? info.aa.creator || "" : ""}`.toLowerCase();
+    const hay = [m.name, m.id, m._familyText, info && info.aa && info.aa.creator].filter(Boolean).join(" ").toLowerCase();
     return q.split(/\s+/).every((word) => !word || hay.includes(word));
   });
 }
@@ -508,16 +599,16 @@ function drawRate() {
 }
 
 function drawCounts() {
-  const c = state.data.count || {};
+  const rows = bundleModels((state.data && state.data.models) || []);
   const box = document.getElementById("counts");
   box.replaceChildren();
   const add = (label, value) => {
     if (box.childNodes.length) box.append(h("span", " · ", "meta"));
     box.append(h("span", label + " ", "meta"), h("b", String(value ?? 0)));
   };
-  add("моделей", c.models);
-  add("с закупкой", c.with_cost);
-  add("с ценой продажи", c.with_sell);
+  add("моделей в меню", rows.length);
+  add("с текущей закупкой", rows.filter((m) => m.routing ? Boolean(m.routing.selected) : Boolean(m.cost?.rub_image || m.cost?.rub_second || m.cost?.rub_speech)).length);
+  add("с ценой продажи", rows.filter((m) => m.sell?.rub_in || m.sell?.rub_out).length);
 }
 
 // -- чипы групп и фильтры --------------------------------------------------------
@@ -607,7 +698,7 @@ function drawVendors() {
 }
 
 function drawProvidersFilter() {
-  const all = (state.data && state.data.models) || [];
+  const all = bundleModels((state.data && state.data.models) || []);
   const entries = connectedProviders().map((name) => ({
     id: name,
     label: providerLabel(name),
@@ -656,20 +747,37 @@ function visibilityCell(m) {
   const cell = h("td", undefined, "pick");
   const label = h("label");
   const input = h("input"); input.type = "checkbox"; input.checked = Boolean(m.listed);
-  input.setAttribute("aria-label", `Показывать клиентам: ${m.name}`);
+  input.setAttribute("aria-label", "Показывать клиентам: " + m.name);
   const text = h("span", input.checked ? " Видна" : " Скрыта", "pick-text");
   input.onchange = async () => {
     input.disabled = true;
+    const visible = input.checked;
+    const members = m._familyModels || [m];
+    const changed = [];
     try {
-      const result = await api(`/v1/admin/prices/models/${encodeURIComponent(m.id)}/visibility`, {
-        method: "PUT", body: JSON.stringify({visible: input.checked}),
-      });
-      m.listed = result.visible; input.checked = result.visible;
-      text.textContent = result.visible ? " Видна" : " Скрыта";
-      document.getElementById("note").textContent = `Видимость «${m.name}» сохранена.`;
+      for (const member of members) {
+        const nextVisible = member.id === m.id && visible;
+        if (Boolean(member.listed) === nextVisible) continue;
+        await api("/v1/admin/prices/models/" + encodeURIComponent(member.id) + "/visibility", {
+          method: "PUT", body: JSON.stringify({visible: nextVisible}),
+        });
+        changed.push({member, previous: Boolean(member.listed)});
+        member.listed = nextVisible;
+      }
+      m.listed = visible;
+      text.textContent = visible ? " Видна" : " Скрыта";
+      document.getElementById("note").textContent = "Видимость всей модели «" + m.name + "» сохранена.";
     } catch (error) {
+      for (const change of changed.reverse()) {
+        try {
+          await api("/v1/admin/prices/models/" + encodeURIComponent(change.member.id) + "/visibility", {
+            method: "PUT", body: JSON.stringify({visible: change.previous}),
+          });
+          change.member.listed = change.previous;
+        } catch {}
+      }
       input.checked = Boolean(m.listed);
-      document.getElementById("note").textContent = `Не сохранено: ${error.message}`;
+      document.getElementById("note").textContent = "Не сохранено полностью: " + error.message + ". Проверьте варианты модели.";
     } finally { input.disabled = false; }
   };
   label.append(input, text); cell.append(label); return cell;
@@ -691,21 +799,66 @@ function modelCell(m) {
   cell.append(meta);
   const provider = servingProvider(m);
   const live = offerOf(m, provider);
-  if (provider) {
+  if (provider && live) {
     const route = h("div", undefined, "route-now");
-    route.append(h("span", "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0441\u0435\u0439\u0447\u0430\u0441", "route-label"));
-    route.append(h("strong", providerLabel(provider) + " \u00b7 " + ((live && live.model) || m.upstream || "\u043c\u043e\u0434\u0435\u043b\u044c \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430"), "route-value"));
+    route.append(h("span", "Сейчас раздаёт", "route-label"));
+    route.append(h("strong", providerLabel(provider) + " · " + (servingModel(m) || live.model), "route-value"));
+    cell.append(route);
+  } else if (m.routing) {
+    const route = h("div", undefined, "route-now");
+    route.append(h("strong", "Нет рабочего маршрута с подтверждённой ценой", "route-unavailable"));
+    const configured = m.routing.configured || {};
+    if (configured.provider || configured.model) {
+      const providerName = configured.provider ? providerLabel(configured.provider) : "поставщик не задан";
+      const modelName = configured.model || "ID модели не задан";
+      route.append(h("span", "Настройка: " + providerName + " · " + modelName, "route-label"));
+    }
     cell.append(route);
   }
-  const others = offersOf(m).filter((offer) => offer.provider !== provider).slice(0, 4);
-  if (others.length) {
-    const line = h("div", undefined, "route-alternatives");
-    line.append(h("span", "\u0414\u0440\u0443\u0433\u0438\u0435 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u044f", "route-label"));
-    line.append(h("span", others.map((offer) => {
-      const state = offer.eligible === false ? " \u00b7 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e" : offer.eligible === true ? " \u00b7 \u0440\u0435\u0437\u0435\u0440\u0432" : "";
-      return providerLabel(offer.provider) + " \u00b7 " + offer.model + state;
-    }).join("; ")));
-    cell.append(line);
+
+  const offers = offersOf(m);
+  const generations = new Map();
+  for (const offer of offers) {
+    const modelId = String(offer.model || "");
+    const revision = modelId.match(/(?:^|[-_])(\d{3,4})(?:$|[-_])/)
+      || (offer.configured_variants || []).map((item) => String(item.name || "").match(/\b(\d{3,4})\b/)).find(Boolean);
+    const key = revision ? revision[1] : modelId;
+    if (!generations.has(key)) generations.set(key, []);
+    generations.get(key).push(offer);
+  }
+  const familyMembers = m._familyModels || [m];
+  if (generations.size || familyMembers.length > 1) {
+    const details = h("details", undefined, "family-routes");
+    details.append(h("summary", "Поколения и подключения · " + (generations.size || "нет актуальных цен")));
+    for (const [generation, generationOffers] of generations) {
+      const section = h("section", undefined, "family-generation");
+      const title = /^\d{3,4}$/.test(generation) ? "Поколение " + generation : "Версия " + generation;
+      section.append(h("strong", title, "family-generation-title"));
+      for (const offer of generationOffers) {
+        const row = h("div", undefined, offer.selected ? "family-offer is-serving" : "family-offer");
+        row.append(h("span", providerLabel(offer.provider), "family-provider"));
+        row.append(h("code", offer.model || "модель не указана", "family-model-id"));
+        row.append(h("span", pair(offer.input_rub, offer.output_rub), "family-cost"));
+        if (offer.selected) row.append(h("span", "✓ Сейчас раздаёт", "family-serving"));
+        else if (!offer.in_parent_route) row.append(h("span", "Котировка варианта, не включена в маршрут модели", "family-status"));
+        else if (offer.eligible === false) row.append(h("span", "Не участвует в переключении", "family-status"));
+        else if (offer.eligible === true) row.append(h("span", "Резерв", "family-status"));
+        else row.append(h("span", "Котировка", "family-status"));
+        section.append(row);
+      }
+      details.append(section);
+    }
+    const unquoted = familyMembers.filter((member) =>
+      !(member.routing && (member.routing.offers || []).length));
+    if (unquoted.length) {
+      const section = h("section", undefined, "family-generation family-unquoted");
+      section.append(h("strong", "Варианты без подтверждённой закупки", "family-generation-title"));
+      for (const member of unquoted) {
+        section.append(h("div", member.name + " · " + providerLabel(member.provider) + " · " + (member.upstream || member.id) + " · закупка не подтверждена", "family-status"));
+      }
+      details.append(section);
+    }
+    cell.append(details);
   }
   return cell;
 }
@@ -719,6 +872,9 @@ function mediaCost(m) {
 
 /** Столбец закупки: для текста пара вход/выход, для медиа цена за штуку. */
 function costCell(m) {
+  if (m.routing && !m.routing.selected) {
+    return h("td", "Нет подтверждённой закупочной цены", "num cost bad");
+  }
   const group = groupOf(m);
   if (group === "text" || group === "code") {
     const cell = h("td", pair(m.cost?.rub_in, m.cost?.rub_out), "num cost");

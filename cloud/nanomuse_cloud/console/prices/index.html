@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>nanoLika Cloud: цены, поставщики и розница</title>
-    <link rel="stylesheet" href="prices.css?v=20261027-provider-catalog" />
+    <link rel="stylesheet" href="prices.css?v=20261027-family-routing" />
     <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
   <link rel="stylesheet" href="/web/brand-foundations.css?v=20261025-account"></head>
   <body>
@@ -43,13 +43,18 @@
         <h2>Сверка поставщиков</h2>
         <p class="lead" id="routing-status"></p>
         <p class="lead">Остатки и состояние проверки. Долларовые суммы отдельно от рублёвых; ошибка проверки не означает нулевой баланс. У ProxyAPI оба подключения используют один счёт, их не нужно складывать.</p>
+        <nav class="provider-links" aria-label="Кабинеты поставщиков">
+          <span>Кабинеты:</span>
+          <a href="https://console.proxyapi.ru/" target="_blank" rel="noopener noreferrer">ProxyAPI ↗</a>
+          <a href="https://polza.ai/dashboard" target="_blank" rel="noopener noreferrer">Polza ↗</a>
+          <a href="https://routerai.ru/settings/activity" target="_blank" rel="noopener noreferrer">RouterAI ↗</a>
+        </nav>
         <div class="table-wrap"><table><thead><tr><th>Поставщик</th><th>Доступный остаток</th><th>Оценка в рублях</th><th>Проверено</th><th>Состояние</th></tr></thead><tbody id="balances-body"></tbody></table></div>
       </section>
       <section>
         <h2>Модели в меню <span class="meta" id="chat-count"></span></h2>
         <p class="lead">
-          Производитель — кто создал модель; поставщик — через кого сейчас отправлен запрос. «Цена клиенту» — базовая ставка, ниже показана цена после скидки каждого тарифа.
-          Закупку и маршруты видит только администратор. Автоматическая смена поставщика не меняет цену клиента.
+          В строке показана модель для клиента и её цена. Раскройте «Поколения и подключения», чтобы сравнить версии и закупку у поставщиков. Галочка слева включает модель целиком, отметка ✓ показывает единственный маршрут, который сейчас обслуживает запросы. Закупку видит только администратор.
         </p>
     <div class="bar" id="bar" hidden>
       <div class="bar-row">

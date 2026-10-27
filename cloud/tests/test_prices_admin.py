@@ -19,7 +19,12 @@ from types import SimpleNamespace
 import pytest
 from test_accounts import make
 
-from nanomuse_cloud.prices_admin import _catalog_snapshot, _discovered, _model_kind
+from nanomuse_cloud.prices_admin import (
+    _catalog_snapshot,
+    _clear_unquoted_purchase_cost,
+    _discovered,
+    _model_kind,
+)
 
 ADMIN = {"X-Admin-Token": "admin"}
 CLOUD = Path(__file__).resolve().parents[1] / "nanomuse_cloud"
@@ -134,8 +139,11 @@ async def test_every_chat_model_carries_purchase_and_sale(market):
         assert set(row["cost"]) >= {"cny_in", "cny_out", "rub_in", "rub_out"}
         assert set(row["sell"]) >= {"rub_in", "rub_out", "hint"}
         assert set(row["ratio"]) == {"in", "out"}
-    priced = next(m for m in chats if m["cost"]["cny_in"] and m["sell"]["rub_in"])
-    assert priced["ratio"]["in"] is not None
+    quoted = [m for m in chats if m.get("cost_source") == "live_provider_quote"]
+    unquoted = [m for m in chats if m.get("cost_source") == "no_live_provider_quote"]
+    assert all(m["ratio"]["in"] is not None for m in quoted)
+    assert all(m["cost"]["rub_in"] is None and m["cost"]["rub_out"] is None for m in unquoted)
+    assert all(m["ratio"] == {"in": None, "out": None} for m in unquoted)
     free = next((m for m in chats if not m["sell"]["rub_in"]), None)
     if free is not None:
         # a model with no sale rate shows no multiple rather than an invented one
@@ -245,3 +253,16 @@ def test_master_catalog_keeps_reference_rows_and_separates_route_evidence(tmp_pa
     assert models["old-model"]["deprecated"] is True
     assert _model_kind({"id": "deepseek-chat", "mode": "chat"}) == "text"
     _catalog_snapshot.cache_clear()
+
+
+def test_unrouted_model_does_not_masquerade_as_a_live_supplier_quote():
+    row = {
+        "cost": {"cny_in": 0.28, "cny_out": 1.18, "rub_in": 3.62, "rub_out": 15.12},
+        "ratio": {"in": 2.8, "out": 2.8},
+    }
+    _clear_unquoted_purchase_cost(row)
+    assert row["cost"]["rub_in"] is None
+    assert row["cost"]["rub_out"] is None
+    assert row["configured_cost"]["rub_in"] == 3.62
+    assert row["ratio"] == {"in": None, "out": None}
+    assert row["cost_source"] == "no_live_provider_quote"

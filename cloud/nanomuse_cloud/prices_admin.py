@@ -132,6 +132,7 @@ def _models(settings: Any, cny_rub: float) -> list[dict]:
                 "context": getattr(spec, "context_length", 0),
                 "max_output": getattr(spec, "max_output", 0),
                 "provider": getattr(spec, "provider", ""),
+                "upstream": getattr(spec, "upstream", ""),
                 "cost": {
                     "cny_in": getattr(spec, "price_in", 0),
                     "cny_out": getattr(spec, "price_out", 0),
@@ -153,6 +154,15 @@ def _models(settings: Any, cny_rub: float) -> list[dict]:
             }
         )
     return rows
+
+
+def _clear_unquoted_purchase_cost(row: dict[str, Any]) -> None:
+    """Do not present configuration-era prices as a current supplier quote."""
+    row["configured_cost"] = dict(row.get("cost") or {})
+    row.setdefault("cost", {})["rub_in"] = None
+    row["cost"]["rub_out"] = None
+    row["ratio"] = {"in": None, "out": None}
+    row["cost_source"] = "no_live_provider_quote"
 
 
 def _catalog_path() -> Path:
@@ -494,8 +504,13 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                                        "eligible": route.routing_eligible and any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes),
                                        "exclusion_reason": route.exclusion_reason or ("за пределами диапазона переключения" if route.routing_eligible and not any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes) else ""),
                                        "selected": bool(selected_route and route.provider == selected_route.provider and route.body.get("model") == selected_route.body.get("model"))})
-                row["routing"] = {"offers": offers, "selected": routes[0].provider if routes else None,
-                                  "basis": "1000 input + 512 output, no cache, no tools"}
+                row["routing"] = {
+                    "offers": offers,
+                    "selected": selected_route.provider if selected_route and selected_route.offer else None,
+                    "selected_model": selected_route.body.get("model") if selected_route and selected_route.offer else None,
+                    "configured": {"provider": spec.provider, "model": spec.upstream},
+                    "basis": "1000 input + 512 output, no cache, no tools",
+                }
                 if selected_route and selected_route.offer:
                     row["cost"]["rub_in"], row["cost"]["rub_out"] = selected_route.offer.rates()[:2]
                     selected = selected_route.offer
@@ -503,6 +518,9 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                         "in": row["sell"]["rub_in"] / selected.rates()[0] if selected.rates()[0] else None,
                         "out": row["sell"]["rub_out"] / selected.rates()[1] if selected.rates()[1] else None,
                     }
+                    row["cost_source"] = "live_provider_quote"
+                else:
+                    _clear_unquoted_purchase_cost(row)
         actuals = {}
         if cloud is not None:
             with cloud.db._lock:
