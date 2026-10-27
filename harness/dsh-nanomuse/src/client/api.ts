@@ -52,6 +52,19 @@ export interface LinkChannel {
   linkedAt: number
 }
 
+/** A skin from the person's collection on their site: a style a face can be drawn in, or a theme for the app. */
+export interface Skin {
+  id: string
+  name: string
+  kind?: string
+  /** The style's prompt (kind "style"); absent on themes. */
+  prompt?: string
+  /** A theme's light and dark variable maps (kind "theme"). */
+  light?: Record<string, string>
+  dark?: Record<string, string>
+  added?: string
+}
+
 export interface CloudStatus {
   signedIn: boolean
   ready: boolean

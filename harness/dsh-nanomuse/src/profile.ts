@@ -65,11 +65,17 @@ export interface Profile {
   style: string
   /** The folder under `faces/` when `avatar` is `face`. */
   faceId: string
+  /**
+   * «Без образа»: no picture at all, the name alone. Kept on this computer only (the account
+   * has no such look), and preserved across account pulls, so signing in does not bring her
+   * picture back. A drawn face on the account keeps its files; this only stops them showing.
+   */
+  plain: boolean
   /** The account's connections on every device, as the relay lists them (this device's rows included). */
   connectors: SharedConnector[]
 }
 
-export const DEFAULT_PROFILE: Profile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', connectors: [] }
+export const DEFAULT_PROFILE: Profile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', plain: false, connectors: [] }
 
 const FACE_ID = /^[a-f0-9]{6,40}$/
 
@@ -129,6 +135,8 @@ export class ProfileStore {
       description: light.description,
       style: light.style,
       faceId: '',
+      // this computer's choice of no picture at all survives what the account says
+      plain: this.profile.plain,
       connectors: light.connectors,
     }
     if (light.avatar === 'emoji') {
@@ -205,6 +213,7 @@ function normalize(raw: Partial<Profile>): Profile {
     description: String(raw.description ?? ''),
     style: String(raw.style ?? ''),
     faceId: avatar === 'face' && FACE_ID.test(String(raw.faceId ?? '')) ? String(raw.faceId) : '',
+    plain: raw.plain === true,
     connectors: Array.isArray(raw.connectors) ? raw.connectors : [],
   }
 }

@@ -95,8 +95,27 @@ export const BUNDLE_VERSION = process.env.NANOMUSE_VERSION ?? '0.0.0'
 export const VERSION = `dsh-nanomuse ${BUNDLE_VERSION}`
 /** The hub actions this computer answers whatever the remote-control switch says (`docs/hub.md`). */
 export const ACTIONS = ['info', 'notify']
-/** Incoming actions worth a toast — the ones that act or look, not a folder listing. */
 const TOAST_ACTIONS = new Set(['shell', 'file.get', 'file.put', 'open', 'screen'])
+
+/** The skins collection the person keeps on their site: a folder of JSON files, one catalogue. */
+const SKINS_URL = process.env.NANOMUSE_SKINS_URL ?? 'https://nanolika.ru/skins/index.json'
+/** How long the fetched catalogue is reused before the site is asked again. */
+const SKINS_TTL_MS = 60 * 60 * 1000
+
+/** A skin from the person's collection: a style a face can be drawn in, or a theme for the app. */
+export interface Skin {
+  id: string
+  name: string
+  kind?: string
+  /** The style's prompt (kind "style"); absent on themes. */
+  prompt?: string
+  /** A theme's light and dark variable maps (kind "theme"). */
+  light?: Record<string, string>
+  dark?: Record<string, string>
+  added?: string
+}
+
+let skinsCache: { at: number; skins: Skin[] } | null = null
 
 export interface Config {
   /** The relay origin. */
@@ -299,6 +318,8 @@ export interface LiveState {
   update: UpdateInfo | null
   /** The face's clips: which exist (with a cache key) and how the drawing goes (desk-b). */
   motion: MotionView
+  /** Settings → Pictures and clips switched off: her look stays still in every surface. */
+  stillLook?: boolean
   /** The person's own clip as the face (#324): its size, cache key and whether a first frame was kept; null for none. Absent on an older host. */
   ownClip?: OwnClipView | null
   /** Local video overrides for individual moods. Older clients ignore this field. */
@@ -448,6 +469,12 @@ export interface MediaState {
   imageProvider?: string
   /** Absent means on. */
   animate?: boolean
+  /**
+   * «Ничего не рисовать»: no pictures and no clips at all. Absent means on. A person who does
+   * not want a drawn face asks here once — the video slot, the studio and the automatic
+   * animation of a new face all keep quiet, and the look keeps its built-in pictures.
+   */
+  off?: boolean
   /** The last check of which video models the own key reaches: by host, with the models and when. */
   checked?: Record<string, { models: string[]; at: number }>
 }
@@ -466,6 +493,8 @@ export interface MediaView {
   /** The video source: `cloud`, an own-key provider, or none (`reason`: `no_video` when nothing configured has video models). */
   video: { source: 'cloud' | 'provider' | 'none'; label: string; model: string; models: { id: string; name: string }[]; off: boolean; reason: string }
   animate: boolean
+  /** «Nothing is drawn»: pictures and clips are off. */
+  off: boolean
   motion: MotionView
 }
 
@@ -2379,6 +2408,7 @@ export default class NanomuseCloud extends Service {
       handsModel: this.handsModel(),
       update: this.state.update ?? null,
       motion: this.motion.view(),
+      stillLook: this.state.media?.off === true,
       ownClip: this.ownClip.view(),
       ownClips: this.ownClip.moods(),
       blackScreenAt: this.blackScreenAt,
@@ -2505,7 +2535,7 @@ export default class NanomuseCloud extends Service {
    * `profile` frame and pull). A drawn face keeps its pictures when only the
    * name moves.
    */
-  writeProfile(patch: { name?: string; avatar?: 'dragon' | 'emoji'; emoji?: string; color?: string }): Promise<Profile> {
+  writeProfile(patch: { name?: string; avatar?: 'dragon' | 'emoji'; emoji?: string; color?: string; plain?: boolean }): Promise<Profile> {
     return this.serialize(async () => {
       const token = await this.token()
       const current = this.profile.current()
@@ -2518,6 +2548,15 @@ export default class NanomuseCloud extends Service {
         color: avatar === 'emoji' ? (patch.color ?? current.color) || '#0064d4' : '',
         style: current.style,
         description: current.description,
+      }
+      // «Без образа» is this computer's alone: it never travels to the account, and the profile
+      // is written here so a later pull keeps it (the account's own look stays as it was)
+      if (patch.plain !== undefined) {
+        await this.profile.wearLocal({ ...current, plain: patch.plain })
+        if (patch.name === undefined && patch.avatar === undefined && patch.emoji === undefined && patch.color === undefined) {
+          this.broadcast()
+          return this.profile.current()
+        }
       }
       if (token && this.state.account) {
         const rev = await this.relay.putProfile(token, write, this.writerId())
@@ -2574,6 +2613,7 @@ export default class NanomuseCloud extends Service {
     }
     if (opts.cloud) return cloud()
     const media = this.state.media ?? {}
+    if (media.off === true && !opts.auto) return undefined
     const own = async (id: string, model: string): Promise<ImageEndpoint | undefined> => {
       const row = this.state.providers?.[id]
       if (!row || !model || !row.capabilities.includes('image')) return undefined
@@ -2667,10 +2707,35 @@ export default class NanomuseCloud extends Service {
    * image provider draws without an account.
    */
   private async studioEndpoint(viaCloud = false): Promise<ImageEndpoint> {
+    if (this.state.media?.off === true && !viaCloud) throw new RelayError(409, 'media_off', 'Drawing is switched off in Settings → Pictures and clips')
     const ep = await this.imageEndpoint({ cloud: viaCloud })
     if (ep) return ep
     if (!this.signedInCache || !this.state.account) throw new RelayError(401, 'signed_out', 'Sign in to draw a face')
     throw new RelayError(409, 'no_image_model', 'Nothing configured has an image model to draw with')
+  }
+
+  /**
+   * The skins collection the person keeps on their own site — one folder of JSON files
+   * (`skins/index.json` and one file per skin). Fetched here, server-side, so the webview's
+   * CORS rules never apply; cached an hour, and the stale copy answers when the site is down.
+   */
+  async skinsList(refresh = false): Promise<{ skins: Skin[] }> {
+    if (!refresh && skinsCache && Date.now() - skinsCache.at < SKINS_TTL_MS) return { skins: skinsCache.skins }
+    try {
+      const res = await fetch(SKINS_URL, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { skins?: Skin[] }
+      const skins = Array.isArray(data.skins)
+        ? data.skins.filter((s): s is Skin => Boolean(s) && typeof s.id === 'string' && (s.kind === 'theme'
+          ? Boolean(s.light && typeof s.light === 'object' && s.dark && typeof s.dark === 'object')
+          : typeof s.prompt === 'string' && s.prompt.trim().length > 0))
+        : []
+      skinsCache = { at: Date.now(), skins }
+      return { skins }
+    } catch (error: unknown) {
+      this.ctx.logger.warn('nanomuse skins: catalogue not fetched: %s', message(error))
+      return { skins: skinsCache?.skins ?? [] }
+    }
   }
 
   /**
@@ -2739,6 +2804,7 @@ export default class NanomuseCloud extends Service {
    */
   async videoEndpoint(opts: { cloud?: boolean; auto?: boolean } = {}): Promise<VideoEndpoint | undefined> {
     const media = this.state.media ?? {}
+    if (media.off === true && !opts.cloud && !opts.auto) return undefined
     if (media.videoModel === VIDEO_OFF && !opts.cloud && !opts.auto) return undefined
     const token = (opts.cloud ? this.signedInCache && this.state.account : this.cloudModels()) ? await this.token() : undefined
     const cloudModels = this.cloudVideoModels()
@@ -2831,6 +2897,7 @@ export default class NanomuseCloud extends Service {
       image: { source: 'none', label: '', model: '', reason: 'no_image' },
       video: { source: 'none', label: '', model: '', models: [], off, reason: '' },
       animate: media.animate !== false,
+      off: media.off === true,
       motion: this.motion.view(),
     }
     // Pictures: the image slot's resolution (Settings → Models); nothing configured has one → `no_image`,
@@ -2852,7 +2919,7 @@ export default class NanomuseCloud extends Service {
   }
 
   /** Settings → Media: the video model (`off` for none) and the animate switch. */
-  async setMedia(patch: { videoModel?: string; videoProvider?: string; animate?: boolean }): Promise<MediaView> {
+  async setMedia(patch: { videoModel?: string; videoProvider?: string; animate?: boolean; off?: boolean }): Promise<MediaView> {
     if (patch.videoModel !== undefined) {
       const id = patch.videoModel.trim()
       let provider = patch.videoProvider
@@ -2866,6 +2933,23 @@ export default class NanomuseCloud extends Service {
       const next: MediaState = { ...this.state.media }
       if (patch.animate) delete next.animate
       else next.animate = false
+      this.state = { ...this.state, media: next }
+      await this.writeState()
+      this.broadcast()
+    }
+    if (patch.off !== undefined) {
+      const next: MediaState = { ...this.state.media }
+      if (patch.off) {
+        // one switch for a person who wants none of it: no clips, no automatic animation
+        next.off = true
+        next.videoModel = VIDEO_OFF
+        delete next.videoProvider
+        next.animate = false
+      } else {
+        delete next.off
+        if (next.videoModel === VIDEO_OFF) delete next.videoModel
+        delete next.animate
+      }
       this.state = { ...this.state, media: next }
       await this.writeState()
       this.broadcast()
@@ -3741,6 +3825,7 @@ export default class NanomuseCloud extends Service {
         if (body.avatar === 'dragon' || body.avatar === 'emoji') patch.avatar = body.avatar
         if (typeof body.emoji === 'string') patch.emoji = body.emoji
         if (typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color)) patch.color = body.color
+        if (typeof body.plain === 'boolean') patch.plain = body.plain
         return send(res, 200, await this.writeProfile(patch))
       }
       if (req.method === 'POST' && route === '/refresh') return send(res, 200, await this.refresh())
@@ -3748,6 +3833,7 @@ export default class NanomuseCloud extends Service {
         await this.headsUpSeen()
         return send(res, 200, { ok: true })
       }
+      if (req.method === 'GET' && route === '/skins/list') return send(res, 200, await this.skinsList(url.searchParams.get('refresh') === '1'))
       if (req.method === 'GET' && route === '/studio/estimate') return send(res, 200, await this.studioEstimate())
       if (req.method === 'POST' && route === '/studio/draw') {
         const body = await json(req)
@@ -4023,10 +4109,11 @@ export default class NanomuseCloud extends Service {
       if (req.method === 'GET' && route === '/media') return send(res, 200, await this.media())
       if (req.method === 'POST' && route === '/media') {
         const body = await json(req)
-        const patch: { videoModel?: string; videoProvider?: string; animate?: boolean } = {}
+        const patch: { videoModel?: string; videoProvider?: string; animate?: boolean; off?: boolean } = {}
         if (typeof body.videoModel === 'string') patch.videoModel = body.videoModel
         if (typeof body.videoProvider === 'string' && body.videoProvider) patch.videoProvider = body.videoProvider
         if (typeof body.animate === 'boolean') patch.animate = body.animate
+        if (typeof body.off === 'boolean') patch.off = body.off
         return send(res, 200, await this.setMedia(patch))
       }
       if (req.method === 'POST' && route === '/media/check') return send(res, 200, { models: await this.checkVideoModels() })

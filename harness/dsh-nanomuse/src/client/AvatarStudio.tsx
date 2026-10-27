@@ -12,7 +12,7 @@
  */
 import { createElement as h, Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { StarNudgeOnce } from './AccountPage.tsx'
-import { call, errorCode, type Translate, failureText } from './api.ts'
+import { call, errorCode, type Translate, failureText, type Skin } from './api.ts'
 import { useLive } from './live.ts'
 import { useMoney } from './money.ts'
 import type { Words } from './locales.ts'
@@ -47,9 +47,9 @@ const MOODS = ['working', 'waiting', 'happy', 'error']
 const STILL_PX = 512
 const STILL_BYTES = 190 * 1024
 
-export function buildPrompt(description: string, index: number, style: string): string {
+export function buildPrompt(description: string, index: number, style: string, styles: Record<string, string> = STYLES): string {
   const subject = description.trim().replace(/[.。!！,，]+$/, '')
-  const look = STYLES[style] ?? STYLES.muse
+  const look = styles[style] ?? STYLES.muse
   return `A cute character based on: ${subject}. ${look}. Full body, standing, facing the viewer, centred, whole figure visible with margin on all sides, big head and small body, friendly expression, pure white background, soft ground shadow only. ${VARIATIONS[index % 4]}. Square composition. No text, no watermark, no border, no props other than what is described, one character only.`
 }
 
@@ -125,7 +125,10 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
   const { cash } = useMoney()
   const [stage, setStage] = useState<Stage>('describe')
   const [text, setText] = useState(initial)
-  const [style, setStyle] = useState(initialStyle in STYLES ? initialStyle : 'muse')
+  const [style, setStyle] = useState(initialStyle || 'muse')
+  // Skins from the person's collection on their site (skins/index.json): fetched through the host,
+  // merged over the built-in styles; the built-in ones stay when the site is down or offline.
+  const [extra, setExtra] = useState<Skin[]>([])
   const [estimate, setEstimate] = useState<Estimate | undefined>()
   const [estimateError, setEstimateError] = useState<string | undefined>()
   const [candidates, setCandidates] = useState<(string | null)[]>([null, null, null, null])
@@ -145,6 +148,22 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
   useEffect(() => {
     call<Estimate>('studio/estimate').then((e) => { if (alive.current) setEstimate(e) }).catch((err: unknown) => { if (alive.current) setEstimateError(errorCode(err) === 'signed_out' ? t('stSignedOut') : failureText(t, err)) })
   }, [])
+  useEffect(() => {
+    // refresh=1: every open pulls the list from the site, so a skin edited there shows up without reinstalling the app
+    call<{ skins: Skin[] }>('skins/list?refresh=1')
+      .then((d) => {
+        if (!alive.current) return
+        const fetched = (d.skins ?? []).filter((s): s is Skin & { id: string; prompt: string } => Boolean(s) && typeof s.id === 'string' && typeof s.prompt === 'string' && s.prompt.trim().length > 0 && (s.kind === undefined || s.kind === 'style'))
+        setExtra(fetched)
+        const mergedNow = { ...STYLES, ...Object.fromEntries(fetched.map((s) => [s.id, s.prompt])) }
+        setStyle((cur) => (cur in mergedNow ? cur : 'muse'))
+      })
+      .catch(() => { /* the built-in styles still work offline */ })
+  }, [])
+
+  // The merged table the draw uses: skins downloaded from the site over the built-in ones.
+  const merged: Record<string, string> = { ...STYLES, ...Object.fromEntries(extra.filter((s): s is Skin & { prompt: string } => typeof s.prompt === 'string').map((s) => [s.id, s.prompt] as [string, string])) }
+  const activeStyle = style in merged ? style : 'muse'
 
   const draw = (cloud = viaCloud) => {
     const description = text.trim()
@@ -159,7 +178,7 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
     let failures = 0
     const one = async (index: number) => {
       try {
-        const r = await call<{ image: string }>('studio/draw', { prompt: buildPrompt(description, index, style), ...(cloud ? { cloud: true } : {}) })
+        const r = await call<{ image: string }>('studio/draw', { prompt: buildPrompt(description, index, activeStyle, merged), ...(cloud ? { cloud: true } : {}) })
         if (alive.current && round.current === mine) setCandidates((c) => c.map((v, i) => (i === index ? r.image : v)))
       } catch (err: unknown) {
         failures++
@@ -199,7 +218,7 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
       }
       await Promise.all([one('working'), one('waiting')])
       await Promise.all([one('happy'), one('error')])
-      await call('studio/wear', { description: text.trim(), style, face: stills })
+      await call('studio/wear', { description: text.trim(), style: activeStyle, face: stills })
       if (alive.current) setStage('done')
     } catch (err: unknown) {
       if (alive.current) {
@@ -211,8 +230,12 @@ export function AvatarStudioSheet({ t, initial, style: initialStyle, onClose }: 
     }
   }
 
-  const styleChips = h('div', { className: 'nm-chips' }, Object.keys(STYLES).map((id) =>
-    h('button', { key: id, type: 'button', className: `nm-chip${style === id ? ' nm-active' : ''}`, onClick: () => setStyle(id) }, t(`style_${id}` as Words))))
+  const styleChips = h('div', { className: 'nm-chips' }, [
+    ...Object.keys(STYLES).map((id) =>
+      h('button', { key: id, type: 'button', className: `nm-chip${style === id ? ' nm-active' : ''}`, onClick: () => setStyle(id) }, t(`style_${id}` as Words))),
+    ...extra.filter((s) => !(s.id in STYLES)).map((s) =>
+      h('button', { key: s.id, type: 'button', className: `nm-chip${style === s.id ? ' nm-active' : ''}`, onClick: () => setStyle(s.id) }, s.name)),
+  ])
 
   let body: ReactNode
   let footer: ReactNode

@@ -19,6 +19,13 @@ export interface TurnBudgetOptions {
   stop: (sessionId: string, turn: number) => void
   /** Tell the person, in the words they will read. */
   tell: (sessionId: string, turn: number, steps: number, minutes: number) => void
+  /**
+   * Asked once, when the cap is reached, before the turn is ended: hand the person the
+   * answer now instead of cutting the work off. The turn keeps `grace` more steps to do it.
+   */
+  wrapUp?: (sessionId: string, turn: number, steps: number) => void
+  /** Steps a wrapping-up turn may still take before it is ended. */
+  grace?: number
 }
 
 interface OpenTurn {
@@ -26,12 +33,16 @@ interface OpenTurn {
   steps: number
   since: number
   stopped: boolean
+  /** The wrap-up was already asked for, so the grace steps are being spent. */
+  warned: boolean
 }
 
 /** The safety cap every turn gets unless the caller names another. */
 export const TURN_STEPS = 40
 /** Wall-clock cancellation is disabled unless a caller explicitly opts in. */
 export const TURN_MINUTES = 0
+/** Steps a turn may still take after it was asked to answer now. */
+export const TURN_GRACE = 8
 
 /** What the app shows for a running turn: "step 12 of 40". */
 export interface TurnView {
@@ -74,7 +85,7 @@ export class TurnBudget {
       const running = this.open.get(sessionId)
       // a turn already open (a resumed session, a replay) keeps its clock: the steps count on
       if (running && running.turn === turn) return
-      this.open.set(sessionId, { turn, steps: 0, since: Date.now(), stopped: false })
+      this.open.set(sessionId, { turn, steps: 0, since: Date.now(), stopped: false, warned: false })
       return
     }
     if (event.type === 'turn/end') {
@@ -85,7 +96,7 @@ export class TurnBudget {
     const turn = Number(data.turn ?? 0)
     let state = this.open.get(sessionId)
     if (!state || state.turn !== turn) {
-      state = { turn, steps: 0, since: Date.now(), stopped: false }
+      state = { turn, steps: 0, since: Date.now(), stopped: false, warned: false }
       this.open.set(sessionId, state)
     }
     state.steps += 1
@@ -99,10 +110,26 @@ export class TurnBudget {
     for (const [sessionId, state] of this.open) this.check(sessionId, state, now)
   }
 
+  /**
+   * Over the cap: first ask for the answer (once), and keep the turn alive for `grace` more
+   * steps so the model can give it; ended only if the tools go on past that. A caller
+   * without `wrapUp` keeps the plain behaviour — the cap ends the turn at once.
+   */
   private check(sessionId: string, state: OpenTurn, now = Date.now()): void {
     if (state.stopped) return
     const minutes = (now - state.since) / 60_000
-    if (state.steps < this.limit && (this.minutes <= 0 || minutes < this.minutes)) return
+    const over = state.steps >= this.limit || (this.minutes > 0 && minutes >= this.minutes)
+    if (!over) return
+    const grace = this.options.grace ?? TURN_GRACE
+    if (!state.warned && this.options.wrapUp) {
+      state.warned = true
+      this.options.wrapUp(sessionId, state.turn, state.steps)
+      return
+    }
+    // the grace: those steps, or two more minutes when the clock was what ran out
+    const pastSteps = state.steps >= this.limit + grace
+    const pastClock = this.minutes > 0 && minutes >= this.minutes + 2
+    if (state.warned && !pastSteps && !pastClock) return
     state.stopped = true
     this.options.tell(sessionId, state.turn, state.steps, Math.round(minutes))
     this.options.stop(sessionId, state.turn)

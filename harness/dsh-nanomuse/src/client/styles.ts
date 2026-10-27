@@ -20,11 +20,15 @@
  */
 
 const STYLE_ID = 'nanomuse-muse-style'
+/** The chosen UI theme's stylesheet, appended after the Muse sheet so its variables win. */
+const THEME_ID = 'nanomuse-theme-style'
 const SKIN = Symbol.for('nanolika.document-skin')
 interface SkinState {
   owners: Map<object, string>
   observer: MutationObserver
   mode?: { on: boolean; steps: boolean }
+  /** The chosen theme's CSS text from the skins collection; undefined means the Muse look. */
+  theme?: string
   timer?: ReturnType<typeof setTimeout>
   repair: () => void
 }
@@ -39,6 +43,35 @@ export function setAccent(color: string | undefined): void {
   const root = document.documentElement
   if (color && /^#[0-9a-f]{6}$/i.test(color)) root.style.setProperty('--nm-accent', color)
   else root.style.removeProperty('--nm-accent')
+}
+
+/**
+ * The CSS a skin of kind "theme" compiles to: its light and dark variable maps as the same
+ * selectors the Muse look uses, so a theme appended after the Muse sheet overrides it cleanly.
+ * Variables are checked to be CSS custom properties with plain values, so a malformed file
+ * cannot smuggle a rule in.
+ */
+export function themeCss(theme: { light?: Record<string, string>; dark?: Record<string, string> }): string {
+  const declarations = (map?: Record<string, string>) =>
+    Object.entries(map ?? {})
+      .filter(([key, value]) => /^--[a-z0-9-]+$/i.test(key) && typeof value === 'string' && /^[^;{}]+$/.test(value))
+      .map(([key, value]) => `${key}: ${value};`)
+      .join(' ')
+  const rules: string[] = []
+  const light = declarations(theme.light)
+  if (light) rules.push(`html[data-nanomuse] body { ${light} }`)
+  const dark = declarations(theme.dark)
+  if (dark) rules.push(`html[data-nanomuse] body[data-ds-dark-theme] { ${dark} }`)
+  return rules.join('\n')
+}
+
+/** Put a theme's CSS on the page (after the Muse sheet), or remove it with undefined. */
+export function applyTheme(css?: string): void {
+  const state = skinState()
+  if (!state) return
+  if (css === undefined) delete state.theme
+  else state.theme = css
+  state.repair()
 }
 
 /** Whether the harness's own controls show (`false`: the Muse composer and column). */
@@ -676,6 +709,14 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-pf-top { padding-t
 .nm-switch[aria-checked="true"]::after { transform: translateX(16px); }
 .nm-switch:disabled { opacity: 0.5; cursor: default; }
 
+/* ---- skins (Settings → Skins) ------------------------------------------ */
+.nm-skin-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--nm-divider); border-radius: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; cursor: pointer; padding: 11px 0; }
+.nm-skin-row:last-child { border-bottom: 0; }
+.nm-skin-row:hover { background: var(--nm-hover); }
+.nm-skin-row-active { background: var(--nm-selected); }
+.nm-skin-swatches { display: inline-flex; gap: 6px; flex: none; }
+.nm-skin-dot { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+
 /* ---- settings dialog -------------------------------------------------- */
 .nm-settings-overlay { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; }
 .nm-settings-mask { position: absolute; inset: 0; background: var(--dsw-alias-bg-mask-1, rgba(0,0,0,0.3)); }
@@ -1216,7 +1257,10 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-avatar { display: block; flex: 0 0 auto; border-radius: 50%; overflow: hidden; background: var(--dsw-alias-surface-sunken, #f1efe9); will-change: transform; transform-origin: 50% 60%; }
 .nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 50%; animation: nm-avatar-in 180ms ease-out both; }
 @keyframes nm-avatar-in { from { opacity: 0; } to { opacity: 1; } }
+.nm-row-pills { display: inline-flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
 .nm-avatar-emoji { display: block; width: 100%; height: 100%; text-align: center; user-select: none; }
+/* «Без образа»: the letter on the page's own surface and a hairline, so a strict screen still shows where she speaks from. */
+.nm-avatar-plain { display: block; width: 100%; height: 100%; box-sizing: border-box; text-align: center; user-select: none; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1px var(--nm-divider, rgba(127,127,127,0.3)); color: var(--dsw-alias-label-secondary); font-weight: 600; }
 @keyframes nm-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 @keyframes nm-sway { 0%, 100% { transform: rotate(-4deg) translateY(0); } 25% { transform: rotate(0deg) translateY(-2%); } 50% { transform: rotate(4deg) translateY(0); } 75% { transform: rotate(0deg) translateY(-2%); } }
 @keyframes nm-hop { 0%, 70%, 100% { transform: translateY(0) scale(1); } 78% { transform: translateY(-9%) scale(1.04, 0.97); } 86% { transform: translateY(0) scale(0.98, 1.03); } 92% { transform: translateY(-3%) scale(1); } }
@@ -1266,6 +1310,9 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-mp-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .nm-mp-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
 .nm-mp-group + .nm-mp-group { margin-top: 6px; }
+.nm-mp-kind + .nm-mp-kind { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--nm-divider); }
+.nm-mp-kind-head { width: 100%; border: 0; padding: 7px 10px; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.nm-mp-kind-head:hover, .nm-mp-kind-head:focus-visible { background: var(--nm-hover); outline: none; }
 .nm-mp-group-label { padding: 6px 10px 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nm-mp-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; text-align: left; padding: 7px 10px; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
 .nm-mp-row:hover, .nm-mp-row:focus-visible, .nm-mp-more:hover, .nm-mp-more:focus-visible { background: var(--nm-hover); outline: none; }
@@ -1274,6 +1321,8 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-mp-row-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nm-mp-more { display: block; width: 100%; border: 0; text-align: left; padding: 6px 10px; border-radius: 8px; background: transparent; color: var(--nm-blue); font: inherit; font-size: 12.5px; cursor: pointer; }
 .nm-mp-none { padding: 10px; font-size: 13px; color: var(--dsw-alias-label-tertiary); }
+.nm-mp-manage { flex: none; width: 100%; margin-top: 5px; padding: 9px 10px 7px; border: 0; border-top: 1px solid var(--nm-divider); border-radius: 0 0 8px 8px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.nm-mp-manage:hover, .nm-mp-manage:focus-visible { background: var(--nm-hover); color: var(--dsw-alias-label-primary); outline: none; }
 .nm-menu-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--nm-accent); vertical-align: middle; }
 
 /* ---- the look changed from the chat (AvatarChat.tsx) ------------------ */
@@ -1492,6 +1541,9 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 
 .nm-mp-filters { display:flex;gap:8px;align-items:center;padding:6px;flex-wrap:wrap; }
 .nm-mp-filters select { border:1px solid var(--nm-divider);border-radius:8px;padding:7px;background:var(--nm-field);color:inherit; }
+.nm-mp-kinds { display:flex;flex-wrap:wrap;gap:5px; }
+.nm-mp-kinds .nm-pill[aria-pressed="true"] { border-color:var(--nm-blue);color:var(--nm-blue); }
+.nm-mp-sort { display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary); }
 .nm-mp-model { display:grid;grid-template-columns:minmax(0,1fr) 32px;border-bottom:1px solid var(--nm-divider);padding:5px 0; }
 .nm-mp-favourite { border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
 .nm-model-estimate { grid-column:1/-1;padding:5px 12px;font-size:12px; }
@@ -1517,6 +1569,16 @@ export function ensureStyles(): () => void {
       let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null
       if (!style) { style = document.createElement('style'); style.id = STYLE_ID; document.head.append(style) }
       if (style.textContent !== css) style.textContent = css
+      // The chosen theme's sheet rides right after the Muse one, so its variables win by order.
+      const theme = skinState()?.theme
+      let themeStyle = document.getElementById(THEME_ID) as HTMLStyleElement | null
+      if (theme) {
+        if (!themeStyle) { themeStyle = document.createElement('style'); themeStyle.id = THEME_ID; document.head.append(themeStyle) }
+        if (themeStyle.textContent !== theme) themeStyle.textContent = theme
+        if (themeStyle.previousSibling !== style) style.after(themeStyle)
+      } else if (themeStyle) {
+        themeStyle.remove()
+      }
       const mode = skinState()?.mode
       if (mode) {
         if (root.hasAttribute('data-nm-muse') !== mode.on) root.toggleAttribute('data-nm-muse', mode.on)
@@ -1546,6 +1608,7 @@ export function ensureStyles(): () => void {
       if (owned.owners.size || holder[SKIN] !== owned) return
       owned.observer.disconnect()
       document.getElementById(STYLE_ID)?.remove()
+      document.getElementById(THEME_ID)?.remove()
       const root = document.documentElement
       root.removeAttribute('data-nanomuse')
       root.removeAttribute('data-nm-muse')
@@ -1555,11 +1618,3 @@ export function ensureStyles(): () => void {
     }, 250)
   }
 }
-.nm-mp-kind + .nm-mp-kind { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--nm-divider); }
-.nm-mp-kind-head { width: 100%; border: 0; padding: 7px 10px; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
-.nm-mp-kind-head:hover, .nm-mp-kind-head:focus-visible { background: var(--nm-hover); outline: none; }
-.nm-mp-manage { flex: none; width: 100%; margin-top: 5px; padding: 9px 10px 7px; border: 0; border-top: 1px solid var(--nm-divider); border-radius: 0 0 8px 8px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
-.nm-mp-manage:hover, .nm-mp-manage:focus-visible { background: var(--nm-hover); color: var(--dsw-alias-label-primary); outline: none; }
-.nm-mp-kinds { display:flex;flex-wrap:wrap;gap:5px; }
-.nm-mp-kinds .nm-pill[aria-pressed="true"] { border-color:var(--nm-blue);color:var(--nm-blue); }
-.nm-mp-sort { display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary); }

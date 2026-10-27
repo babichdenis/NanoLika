@@ -17,7 +17,7 @@ import { DOCS_URL, ISSUES_URL, REPO_URL } from './panels.ts'
 import { Sheet } from './ui.tsx'
 import { useWindowsUpdates, updatePresentation, requestWindowsUpdate } from './windows-updates.ts'
 
-export const RELEASES_URL = 'https://nanolika.ru/'
+export const RELEASES_URL = 'https://github.com/nano-muse/nanoMuse/releases'
 
 interface AppInfo {
   version: string
@@ -137,11 +137,9 @@ export function makeAboutSheet(t: Translate, bundle: string) {
             h('span', { className: 'nm-row-title' }, t('legalLicense')),
             h('span', { className: 'nm-row-sub nm-wrap' }, t('legalLicenseText'))))),
       h('div', { className: 'nm-card' },
-        // going to GitHub from here counts as the star being done: the asks stop (C1)
-        link(t('gnStar'), REPO_URL, () => openStar(REPO_URL)),
-        link(t('abReleases'), RELEASES_URL),
-        link(t('abDocs'), DOCS_URL),
-        link(t('abIssues'), ISSUES_URL)))
+        // the source, the docs and the issue tracker live in the Help section once; here only
+        // what belongs to this build: where the releases are
+        link(t('abReleases'), RELEASES_URL)))
   }
 }
 

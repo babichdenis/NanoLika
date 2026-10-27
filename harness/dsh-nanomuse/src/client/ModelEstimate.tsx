@@ -13,6 +13,7 @@ export interface CatalogueModel {
   commerce?: {
     discount_pct: number
     effective_rub: Record<string, number>
+    unit?: string
     controls: { key: string; label: string; type: string; default: string | number; options?: string[] }[]
   }
 }

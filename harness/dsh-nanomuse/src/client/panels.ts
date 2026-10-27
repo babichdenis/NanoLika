@@ -16,6 +16,8 @@ export const ROOM_PANELS = [FEED_PANEL, IDEAS_PANEL, GOALS_PANEL, LIBRARY_PANEL,
 
 /** Where a problem with NanoLika is reported. */
 export const SITE_URL = 'https://nanolika.ru'
-export const REPO_URL = `${SITE_URL}/source`
-export const ISSUES_URL = `${SITE_URL}/help`
-export const DOCS_URL = `${SITE_URL}/help`
+export const REPO_URL = 'https://github.com/nano-muse/nanoMuse'
+export const ISSUES_URL = `${REPO_URL}/issues`
+export const DOCS_URL = `${REPO_URL}/tree/main/docs`
+export const DISCUSSIONS_URL = `${REPO_URL}/discussions`
+export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`

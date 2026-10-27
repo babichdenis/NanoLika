@@ -13,7 +13,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { closeTopModal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useRef, type ReactNode } from 'react'
-import { call, type Translate } from './api.ts'
+import { call, type Skin, type Translate } from './api.ts'
 import { Avatar, BrandName, type Mood } from './Avatar.tsx'
 import { makeAvatarStudio } from './AvatarStudio.tsx'
 import { bridge } from './bridge.ts'
@@ -60,8 +60,9 @@ import { SearchModal } from './SearchModal.tsx'
 import { makeChannelsSection, makeComputerSection, makeHelpSection, makeLegalSection, makeStorageSection, makeWalletSection } from './Sections.tsx'
 import { makePhoneLinkSection } from './PhoneLink.tsx'
 import { makeMediaSection } from './MediaSection.tsx'
+import { makeSkinsSection } from './SkinsSection.tsx'
 import { makeModelsSection, MODELS_SECTION } from './ModelsSection.tsx'
-import { ensureStyles, setAccent, setMuseMode } from './styles.ts'
+import { applyTheme, ensureStyles, setAccent, setMuseMode, themeCss } from './styles.ts'
 import { useWin, win, peekWin } from './win.ts'
 
 export const name = 'nanomuse-client'
@@ -230,6 +231,23 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => locale.register('nanomuse', { en, ru, zh }), 'nanomuse: dictionaries')
   const t = locale.bind('nanomuse') as Translate
   ctx.effect(() => ensureStyles(), 'nanomuse: stylesheet')
+  // The chosen UI theme from the skins collection: applied at startup, so the look survives a restart.
+  void (async () => {
+    let saved = ''
+    try {
+      saved = localStorage.getItem('nanomuse.theme') ?? ''
+    } catch {
+      return
+    }
+    if (!saved) return
+    try {
+      const { skins } = await call<{ skins: Skin[] }>('skins/list?refresh=1')
+      const theme = skins.find((s) => s.id === saved && s.kind === 'theme' && s.light && s.dark)
+      if (theme) applyTheme(themeCss(theme))
+    } catch {
+      /* keep the Muse look when the list cannot be fetched */
+    }
+  })()
   // The Muse composer and column unless the Developer switch asks for the harness's own.
   ctx.effect(() => {
     const apply = () => setMuseMode(!getPrefs().showHarness, t('cpPlaceholder'), getPrefs().showSteps)
@@ -670,6 +688,10 @@ export function apply(ctx: ClientContext): void {
   const MediaSection = makeMediaSection(t)
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: 'nanomuse-media', order: 29, label: () => t('mdMediaTitle'), locale: 'nanomuse' }, MediaSection))
+  // Settings → Skins: themes for the app's own look, from the skins folder on the site.
+  const SkinsSection = makeSkinsSection(t)
+  slots.inject('settings.section', () =>
+    slots.register({ name: 'settings.section', id: 'nanomuse-skins', order: 30, label: () => t('skTitle'), locale: 'nanomuse' }, SkinsSection))
   const DataSection = makeCloudSection(t, 'data')
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: DATA_SECTION, order: 32, label: () => t('navData'), locale: 'nanomuse' }, DataSection))

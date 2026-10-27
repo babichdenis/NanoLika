@@ -42,7 +42,15 @@ export const HARNESS_SECTION = 'nanomuse-harness'
 const MEDIA_SECTION = 'nanomuse-media'
 /** Settings → Models (0.1.41): the four slots, right after General. */
 const MODELS_SECTION = 'nanomuse-models'
-const PRIMARY: readonly string[] = ['general', MODELS_SECTION, 'nanomuse-connectors', COMPUTER_SECTION, MEDIA_SECTION, 'nanomuse-files', 'nanomuse-dictation', WALLET_SECTION, STORAGE_SECTION, 'nanomuse-permissions', CHANNELS_SECTION, PHONE_SECTION, 'nanomuse-devices', DATA_SECTION, HELP_SECTION, LEGAL_SECTION]
+const PRIMARY: readonly string[] = ['general', MODELS_SECTION, OWN_KEYS_SECTION, 'nanomuse-connectors', COMPUTER_SECTION, MEDIA_SECTION, 'nanomuse-files', 'nanomuse-dictation', WALLET_SECTION, STORAGE_SECTION, 'nanomuse-permissions', CHANNELS_SECTION, PHONE_SECTION, 'nanomuse-devices', DATA_SECTION, HELP_SECTION, LEGAL_SECTION]
+
+/**
+ * Pages the harness's own plugins register that ours already are. They stay registered and load
+ * as before — the harness's *Models* page lists exactly the provider rows Settings → Own models
+ * manages (the own-key rows are the harness model adapter's rows, `src/providers.ts`), with fewer
+ * words and no HTTP proxy — but the nav stops offering a third way to the same store.
+ */
+const REPLACED_BY_OURS: readonly string[] = ['models']
 
 export interface SectionRow {
   id: string
@@ -120,7 +128,7 @@ function SettingsPanel({ t, rows, renderSlot, activeId, from, onSelect, onBack, 
 
   const active = rows.find((r) => r.id === activeId)?.id ?? rows[0]?.id
   const primary = PRIMARY.map((id) => rows.find((r) => r.id === id)).filter((r): r is SectionRow => r !== undefined)
-  const advanced = rows.filter((r) => !PRIMARY.includes(r.id))
+  const advanced = rows.filter((r) => !PRIMARY.includes(r.id) && !REPLACED_BY_OURS.includes(r.id))
   // the page a link brought us from, named so the way back is one click (a jump into
   // Advanced from Models or General otherwise leaves the person to find the page again)
   const fromRow = from !== undefined && from !== active ? rows.find((r) => r.id === from) : undefined

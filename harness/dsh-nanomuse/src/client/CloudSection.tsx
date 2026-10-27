@@ -12,7 +12,7 @@ import { Avatar } from './Avatar.tsx'
 import { settingsBus } from './bus.ts'
 import { useLive, type LiveHub } from './live.ts'
 import { DEVICES_PANEL } from './panels.ts'
-import { PHONE_SECTION } from './MuseSettings.tsx'
+import { OWN_KEYS_SECTION, PHONE_SECTION } from './MuseSettings.tsx'
 import { DataRows } from './Memory.tsx'
 import { NetworkRows } from './Network.tsx'
 import { OwnKeyPanel } from './OwnKey.tsx'
@@ -208,11 +208,13 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' | 'keys'
       return h('section', { style: { ...column, maxWidth: 560 } },
         header,
         h('div', null, t('signedInAs', { hint: a.hint, channel: t(a.channel === 'phone' ? 'phone' : 'email') }), a.member ? ` · ${t('member')}` : ''),
-        // The pickers and the "ways on" (C11): the account's models and each own row's in one
-        // chooser, the account's row first, then the catalogue grouped for the region.
-        h(OwnKeyPanel, { t, onChanged: refreshStatus }),
-        // The proxy for the providers (the shell's setting; drawn inside NanoLika Desktop only).
-        h(NetworkRows, { t, relayURL: status.baseURL }),
+        // The own providers — their keys and sign-ins, and the proxy those requests go through —
+        // are one page of their own, Settings → Own models. This page used to draw the whole panel
+        // inside the account too, so the same keys and the same model pickers appeared twice, in
+        // two pages with different neighbours; now the account only points at the one place.
+        h('h3', { style: heading }, t('navOwnKeys')),
+        h('div', { style: muted }, t('ownKeysSummary'), ' ',
+          h(Button, { variant: 'ghost', size: 'sm', onClick: () => { settingsBus.openSection?.(OWN_KEYS_SECTION) } }, t('navOwnKeys'))),
         // The account as the phone shows it — the pool in yuan, the ways on, invite, usage,
         // password, devices holding a key, the timeline, deletion — read live from the relay.
         h(AccountPage, { t, status, locale: rooms.lang, onEnded: apply }),
@@ -241,10 +243,12 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' | 'keys'
       header,
       error ? h('div', { style: errorStyle }, error) : null,
       h(SignIn, { t, onSignedIn: apply, footer: status ? h('div', { style: muted }, t('relay', { baseURL: status.baseURL })) : null }),
-      // Signed out, the own keys are still the person's (C11): the same pickers and rows, so a key
-      // can be changed or the ChatGPT sign-in redone without an account.
-      h(OwnKeyPanel, { t, onChanged: refreshStatus }),
-      h(NetworkRows, { t, relayURL: status?.baseURL }))
+      // Signed out the own keys are still the person's (C11) — on their own page: a key can be
+      // changed, or the ChatGPT sign-in redone, without an account. The panel used to be drawn
+      // here as well, which is what made the same keys appear on two pages.
+      h('h3', { style: heading }, t('navOwnKeys')),
+      h('div', { style: muted }, t('ownKeysSummary'), ' ',
+        h(Button, { variant: 'ghost', size: 'sm', onClick: () => { settingsBus.openSection?.(OWN_KEYS_SECTION) } }, t('navOwnKeys'))))
   }
 }
 

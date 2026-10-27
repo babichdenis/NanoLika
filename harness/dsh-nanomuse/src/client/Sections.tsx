@@ -21,10 +21,10 @@ import { DOCS_URL, ISSUES_URL, REPO_URL } from './panels.ts'
 import { setPrefs, usePrefs } from './prefs.ts'
 
 const SITE_URL = 'https://nanolika.ru/'
-const DISCUSS_URL = 'https://nanolika.ru/help'
+const DISCUSS_URL = 'https://github.com/nano-muse/nanoMuse/discussions'
 /** The privacy policy as every client links it (the relay, the web console and the phones agree). */
 const PRIVACY_URL = 'https://nanolika.ru/privacy/'
-const LICENSE_URL = 'https://nanolika.ru/source'
+const LICENSE_URL = 'https://github.com/nano-muse/nanoMuse/blob/main/LICENSE'
 
 function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange(next: boolean): void; label: string; disabled?: boolean }): ReactNode {
   return h('button', { type: 'button', role: 'switch', className: 'nm-switch', 'aria-checked': checked, 'aria-label': label, disabled, onClick: () => onChange(!checked) })
@@ -133,23 +133,13 @@ export function makeHelpSection(t: Translate, version: string) {
 export function makeLegalSection(t: Translate) {
   return function LegalSection(): ReactNode {
     return h('div', { className: 'nm-section' },
+      // Two rows only: the licence (its text is one click away) and the policy. The long
+      // explanations that used to sit here as separate rows are one click behind these links;
+      // only the Meta disclaimer stays, as a footnote, because it is a legal statement.
       h('div', { className: 'nm-card' },
-        h('div', { className: 'nm-row' },
-          h('span', { className: 'nm-row-icon' }, h(IconScale, { size: 18 })),
-          h('div', { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, t('legalLicense')),
-            h('span', { className: 'nm-row-sub nm-wrap' }, t('legalLicenseText')))),
-        h('div', { className: 'nm-row' },
-          h('div', { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, t('legalMeta')),
-            h('span', { className: 'nm-row-sub nm-wrap' }, t('legalMetaText')))),
-        h('div', { className: 'nm-row' },
-          h('div', { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, t('legalThanks')),
-            h('span', { className: 'nm-row-sub nm-wrap' }, t('legalThanksText'))))),
-      h('div', { className: 'nm-card' },
-        h(LinkRow, { icon: h(IconFile, { size: 18 }), title: t('legalPrivacy'), onClick: () => openLink(PRIVACY_URL) }),
-        h(LinkRow, { icon: h(IconScale, { size: 18 }), title: 'GPL-3.0-or-later', onClick: () => openLink(LICENSE_URL) })))
+        h(LinkRow, { icon: h(IconScale, { size: 18 }), title: t('legalLicense'), sub: t('legalLicenseText'), onClick: () => openLink(LICENSE_URL) }),
+        h(LinkRow, { icon: h(IconFile, { size: 18 }), title: t('legalPrivacy'), onClick: () => openLink(PRIVACY_URL) })),
+      h('p', { className: 'nm-fine nm-legal-fine' }, t('legalMetaText')))
   }
 }
 

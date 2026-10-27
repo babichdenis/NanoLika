@@ -44,6 +44,8 @@ const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia 
  * and no drawn face, the own clip's first frame stands in for the dragon.
  */
 export function stillUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', ownClip?: LiveOwnClip | null, ownClips?: Partial<Record<Mood, LiveOwnClip>>): string {
+  // «Без образа»: nothing to load at all, so the mark is a letter and not a picture
+  if (profile?.plain === true) return ''
   if (profile?.avatar === 'face' && profile.faceId) return `nanomuse/assets/face/${profile.faceId}/${mood}.webp`
   const override = ownClips?.[mood]
   if (override?.poster) return `nanomuse/avatar/own-clip-${mood}.png?v=${override.v}`
@@ -63,8 +65,11 @@ export function ownClipUrl(ownClip: LiveOwnClip | null | undefined, mood?: Mood,
  * drawn face has one only when this computer drew it (`motion`), and the URL carries the
  * clip's mtime so a redrawn clip is fetched anew.
  */
-export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', motion?: LiveMotion): string | null {
+export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', motion?: LiveMotion, stillLook = false): string | null {
+  if (profile?.plain === true) return null
   if (mood === 'error' || profile?.avatar === 'emoji') return null
+  // Settings → Pictures and clips off: her own pictures stay, nothing moves
+  if (stillLook) return null
   if (profile?.avatar === 'face' && profile.faceId) {
     if (!motion || motion.faceId !== profile.faceId) return null
     const clip = motion.clips[mood]
@@ -115,8 +120,9 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const video = useRef<HTMLVideoElement | null>(null)
   const standard = profile?.avatar !== 'face' && profile?.avatar !== 'emoji' && !live.ownClip && !live.ownClips?.[mood]
   const operator = useOperatorAvatar(standard)
-  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? operator?.clips[mood] ?? clipUrl(profile, mood, live.motion)
+  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? operator?.clips[mood] ?? clipUrl(profile, mood, live.motion, live.stillLook === true)
   const clip = candidate && !noClip.has(candidate) ? candidate : null
+  const plain = profile?.plain === true
   const localPoster = stillUrl(profile, mood, live.ownClip, live.ownClips)
   const poster = operator?.stills[mood] ?? localPoster
   // the whole face moves as well as the clip inside it: the clips are short loops cut in
@@ -133,7 +139,10 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const box: CSSProperties = { width: size, height: size }
   const emoji = profile?.avatar === 'emoji'
   // the own clip plays over any look; without it an emoji is drawn, not loaded
-  const inner = clip
+  const inner = plain
+    // a strict screen: the first letter of the name on the page's own surface, nothing drawn
+    ? h('span', { className: 'nm-avatar-plain', style: { fontSize: Math.round(size * 0.42), lineHeight: `${size}px` } }, (name.trim()[0] ?? 'N').toUpperCase())
+    : clip
     ? h('video', {
         key: clip,
         ref: video,

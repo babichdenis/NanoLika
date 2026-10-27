@@ -30,6 +30,8 @@ export interface MediaView {
   image?: { source: 'cloud' | 'provider' | 'none'; label: string; model: string; reason: string }
   video: { source: 'cloud' | 'provider' | 'none'; label: string; model: string; models: { id: string; name: string }[]; off: boolean; reason: string }
   animate: boolean
+  /** «Nothing is drawn»: pictures and clips are off. */
+  off?: boolean
   motion: LiveMotion
 }
 
@@ -83,6 +85,23 @@ export function makeMediaSection(t: Translate) {
       setError('')
       void call('image-model', id === 'auto' ? { model: '' } : { model: id, provider })
         .then(() => { reload(); models.reload() })
+        .catch((err: unknown) => setError(failureText(t, err)))
+        .finally(() => setBusy(null))
+    }
+    // three looks: the usual one, the same held still, and none at all (a missed screen)
+    const setPlain = (plain: boolean) => {
+      setBusy('animate')
+      setError('')
+      void call('profile', { plain })
+        .then(() => reload())
+        .catch((err: unknown) => setError(failureText(t, err)))
+        .finally(() => setBusy(null))
+    }
+    const setOff = (off: boolean) => {
+      setBusy('animate')
+      setError('')
+      void call<MediaView>('media', { off })
+        .then(setView)
         .catch((err: unknown) => setError(failureText(t, err)))
         .finally(() => setBusy(null))
     }
@@ -158,10 +177,64 @@ export function makeMediaSection(t: Translate) {
     const stageText = !stage ? '' : stage.kind === 'uploading' ? t('moStageUploading') : stage.kind === 'submitted' ? t('moStageSubmitted') : stage.kind === 'running' ? t('moStageRunning', { s: stage.elapsedSec ?? 0 }) : t('moStageDownloading')
     const moodName = (m: MotionMood) => (m === 'idle' ? t('moMoodIdle') : m === 'working' ? t('moMoodWorking') : m === 'waiting' ? t('moMoodWaiting') : t('moMoodHappy'))
 
+    // «Nothing is drawn»: the switch, and the one line that says what it did — a person who
+    // wants no pictures and no clips should not have to find four separate settings
+    const look = live.profile.plain === true ? 'plain' : view.off ? 'still' : 'usual'
+    const lookPill = (id: 'usual' | 'still' | 'plain', label: string) =>
+      h('button', {
+        type: 'button',
+        className: `nm-pill nm-pill-sm${look === id ? '' : ' nm-pill-ghost'}`,
+        'aria-pressed': look === id,
+        disabled: busy !== null,
+        onClick: () => { if (id === 'plain') setPlain(true); else { if (view.off) setOff(false); setPlain(false) } },
+      }, label)
+    const lookRow = h(
+      'div',
+      { className: 'nm-card' },
+      h(
+        'div',
+        { className: 'nm-row' },
+        h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, t('mdLook')), h('span', { className: 'nm-row-sub nm-wrap' }, t('mdLookSub'))),
+        h('div', { className: 'nm-row-pills' }, lookPill('usual', t('mdLookUsual')), lookPill('still', t('mdLookStill')), lookPill('plain', t('mdLookPlain'))),
+      ),
+    )
+
+    if (view.off) {
+      return h(
+        'div',
+        { className: 'nm-section' },
+        h('p', null, t('mdMediaLead')),
+        lookRow,
+        h(
+          'div',
+          { className: 'nm-card' },
+          h(
+            'div',
+            { className: 'nm-row' },
+            h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, t('mdOff')), h('span', { className: 'nm-row-sub nm-wrap' }, t('mdOffSub'))),
+            h(Switch, { checked: true, label: t('mdOff'), disabled: busy !== null, onChange: setOff }),
+          ),
+          h('div', { className: 'nm-row' }, h('span', { className: 'nm-row-sub nm-wrap' }, t('mdOffLine'))),
+        ),
+        error ? h('div', { style: errorStyle }, error) : null,
+      )
+    }
+
     return h(
       'div',
       { className: 'nm-section' },
       h('p', null, t('mdMediaLead')),
+      lookRow,
+      h(
+        'div',
+        { className: 'nm-card' },
+        h(
+          'div',
+          { className: 'nm-row' },
+          h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, t('mdOff')), h('span', { className: 'nm-row-sub nm-wrap' }, t('mdOffSub'))),
+          h(Switch, { checked: false, label: t('mdOff'), disabled: busy !== null, onChange: setOff }),
+        ),
+      ),
       h(
         'div',
         { className: 'nm-card' },

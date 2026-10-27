@@ -20,6 +20,8 @@ export interface LiveProfile {
   description: string
   style: string
   faceId: string
+  /** «Без образа»: the name alone, no picture anywhere. This computer's own choice. */
+  plain?: boolean
   /** The account's connections on every device (this one included), as the relay lists them. */
   connectors: SharedConnector[]
 }
@@ -168,6 +170,8 @@ export interface Live {
   update: UpdateInfo | null
   /** The drawn face's clips and how their drawing goes (desk-b). */
   motion: LiveMotion
+  /** Settings → Pictures and clips switched off: her look stays still everywhere. Absent on an older host. */
+  stillLook?: boolean
   /** The person's own clip as the face (#324): size, the mtime (`v`) its URL carries, whether a first frame was kept; null for none. */
   ownClip: LiveOwnClip | null
   /** Optional local video replacements for individual moods. */
@@ -224,7 +228,7 @@ export interface LiveOwnClip {
   poster: boolean
 }
 
-export const DEFAULT_PROFILE: LiveProfile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', connectors: [] }
+export const DEFAULT_PROFILE: LiveProfile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', plain: false, connectors: [] }
 
 const INITIAL: Live = {
   cloud: { signedIn: false, hint: '' },
