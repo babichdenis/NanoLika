@@ -1286,7 +1286,7 @@ def create_app(
         if not stream:
             try:
                 try:
-                    r, selected = await request_chat(http, chain, stream=False)
+                    r, selected = await request_chat(http, chain, stream=False, on_failure=router.note_failure)
                 except httpx.HTTPError as e:
                     raise CloudError(502, "upstream", "The model provider did not answer") from e
                 log.info("chat %s answered by %s", spec.id, selected.provider or "configured")
@@ -1340,7 +1340,7 @@ def create_app(
             r = None
             selected = None
             try:
-                r, selected = await request_chat(http, chain, stream=True)
+                r, selected = await request_chat(http, chain, stream=True, on_failure=router.note_failure)
                 accounting_meta.update(capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee))
                 if r.status_code >= 400:
                     raw = await r.aread()

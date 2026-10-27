@@ -192,6 +192,7 @@ class ProviderRouter:
         self.price_mismatch_min_rub = max(0.0, float(os.getenv("CLOUD_ROUTING_PRICE_MISMATCH_MIN_RUB", "0.02")))
         self.quarantine_seconds = max(self.refresh_seconds, int(os.getenv("CLOUD_ROUTING_PRICE_QUARANTINE_SECONDS", "1800")))
         self.quarantined: dict[tuple[str, str], float] = {}
+        self.provider_blocked_until: dict[str, float] = {}
         self.price_alerted: dict[tuple[str, str], float] = {}
         self.lock = asyncio.Lock()
         path = os.getenv("CLOUD_ROUTING_CACHE")
@@ -465,6 +466,8 @@ class ProviderRouter:
             provider = self.settings.providers.get(name)
             if provider is None or not provider.key():
                 continue
+            if self.provider_blocked_until.get(name, 0) > now:
+                continue
             balance = self.balances.get(name, {})
             if (
                 balance.get("error") is None
@@ -606,6 +609,24 @@ class ProviderRouter:
                     result["provider_price_alert"] = True
         return result
 
+    def note_failure(self, route: Route, status_code: int) -> None:
+        """Quarantine a provider after payment-required; don't retry it on every turn."""
+        if status_code != 402 or not route.provider:
+            return
+        until = time.time() + max(self.quarantine_seconds, 1800)
+        self.provider_blocked_until[route.provider] = until
+        self.balances[route.provider] = {
+            **self.balances.get(route.provider, {}),
+            "amount": 0,
+            "checked": time.time(),
+            "error": "HTTP 402; temporarily disabled",
+            "disabled_until": int(until),
+        }
+        log.error(
+            "provider disabled after HTTP 402: provider=%s disabled_until=%s",
+            route.provider, int(until),
+        )
+
     def schedule_price_alert(self, http: httpx.AsyncClient, meta: dict) -> None:
         """Send an anomaly without blocking a user's model response; secrets stay in env."""
         if not meta.get("provider_price_alert"):
@@ -652,7 +673,7 @@ def retryable(response: httpx.Response) -> bool:
     return False
 
 
-async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: bool) -> tuple[httpx.Response, Route]:
+async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: bool, on_failure=None) -> tuple[httpx.Response, Route]:
     last: httpx.HTTPError | None = None
     for index, route in enumerate(routes):
         try:
@@ -663,6 +684,8 @@ async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: boo
             continue
         if response.status_code >= 400:
             await response.aread()
+            if on_failure is not None:
+                on_failure(route, response.status_code)
         if retryable(response) and index + 1 < len(routes):
             log.warning("routing retry %s HTTP %s", route.provider or "configured", response.status_code)
             await response.aclose()

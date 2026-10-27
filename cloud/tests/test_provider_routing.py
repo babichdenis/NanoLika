@@ -209,6 +209,24 @@ def test_scheduled_prices_change_without_waiting_for_refresh(monkeypatch):
     assert q.rates(peak)[0] == pytest.approx(q.rates(idle)[0] * 2)
 
 
+def test_402_temporarily_removes_provider_from_all_routes(monkeypatch):
+    router = setup_router(monkeypatch)
+    router.offers = {
+        "openrouter": [quote("openrouter", 45, 180)],
+        "polza": [quote("polza", 6, 18)],
+    }
+    spec = ModelSpec("flash", "Flash", "deepseek-flash")
+    body = {"model": "flash", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 10}
+    route = Route("openrouter", "https://openrouter.example", {}, {"model": "deepseek-flash"})
+
+    router.note_failure(route, 402)
+    selected = router.routes(spec, body, "https://fallback.example", {})
+
+    assert all(candidate.provider != "openrouter" for candidate in selected)
+    assert router.status()["balances"]["openrouter"]["error"] == "HTTP 402; temporarily disabled"
+    assert router.provider_blocked_until["openrouter"] > time.time()
+
+
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("failure", [402, 429, 503, "network"])
 def test_both_modes_fallback_before_response_only(failure, stream):

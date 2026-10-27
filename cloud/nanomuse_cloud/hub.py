@@ -379,28 +379,7 @@ class Hub:
             await ws.send_text(json.dumps({"type": "error", "code": "api_key_scope", "message": "Personal API keys cannot connect devices"}))
             await self._close(ws, 4001, "api_key_scope")
             return
-        # 0.26: the relay's connection between a person's devices is its own product. Below
-        # the operator's threshold the socket is refused with `connect_limited` (4004) and
-        # each device works on its own; the message says what is missing, so an app can show
-        # it instead of a connection error.
-        state = self.cloud.connect_state(caller.account_id)
-        if not state["allowed"]:
-            await ws.send_text(
-                json.dumps(
-                    {
-                        "type": "error",
-                        "code": "connect_limited",
-                        "message": (
-                            "The relay connects an account's devices on a tariff that opens it; this "
-                            "account has none running, so every device works on its own and keeps its own "
-                            "chats."
-                        ),
-                        "open_from_rub": state["open_from_rub"],
-                    }
-                )
-            )
-            await self._close(ws, 4004, "connect_limited")
-            return
+        # Device sync is included for every account; tariffs change model discounts, not connectivity.
         dev = hello.get("device") if isinstance(hello.get("device"), dict) else {}
         try:
             conn = self._connection(ws, caller, dev)
