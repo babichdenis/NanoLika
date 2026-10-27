@@ -79,6 +79,31 @@ def test_flash_revision_joins_family_and_routes_by_lowest_live_quote(monkeypatch
     ))
 
 
+def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("deepseek-flash", "DeepSeek Flash", "deepseek-v4.1-flash")
+    r.offers = {
+        "aitunnel": [
+            replace(quote("aitunnel", 30, 120), model="deepseek-v4.1-flash-1017"),
+            replace(quote("aitunnel", 10, 32), model="deepseek-v4-flash-0731", modalities=("text",)),
+            replace(quote("aitunnel", 13.6, 33.6), model="deepseek-v4-flash", modalities=("text",)),
+        ],
+    }
+    text_body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
+    text_routes = r.routes(spec, text_body, "https://configured.example/v1/chat/completions", {})
+
+    assert [route.body["model"] for route in text_routes] == [
+        "deepseek-v4-flash-0731", "deepseek-v4-flash", "deepseek-v4.1-flash-1017",
+    ]
+    image_body = {
+        **text_body,
+        "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://example.test/image.png"}}]}],
+    }
+    image_routes = r.routes(spec, image_body, "https://configured.example/v1/chat/completions", {})
+
+    assert [route.body["model"] for route in image_routes] == ["deepseek-v4.1-flash-1017"]
+
+
 def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monkeypatch):
     r = setup_router(monkeypatch)
     spec = ModelSpec(

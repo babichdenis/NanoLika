@@ -23,6 +23,13 @@ ALIASES = {
     "deepseek-flash": FLASH_FAMILY,
     "deepseek-v4.1-flash": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash": FLASH_FAMILY,
+    # Older Flash generations are lower-priced implementations of the same
+    # customer-facing product. Feature checks below still keep vision/tool routes
+    # on providers and generations that actually support those capabilities.
+    "deepseek-v4-flash": FLASH_FAMILY,
+    "deepseek/deepseek-v4-flash": FLASH_FAMILY,
+    "deepseek-v4-flash-0731": FLASH_FAMILY,
+    "deepseek/deepseek-v4-flash-0731": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash-1017": FLASH_FAMILY,
     "deepseek-v4.1-flash-1017": FLASH_FAMILY,
 }
