@@ -934,8 +934,10 @@ export default class NanomuseCloud extends Service {
           }),
         'nanomuse cloud: sync turns',
       )
-      // A turn's budget (src/turn-budget.ts): stop runaway tool loops after forty steps.
-      // Slow commands are allowed to finish; there is no wall-clock cancellation.
+      // A turn's budget (src/turn-budget.ts): after forty steps the turn is asked to answer
+      // (a steer message, so the conversation ends with words, not with a cut) and gets a few
+      // steps to do it; only a turn that keeps calling tools past those is ended. Slow commands
+      // are allowed to finish; there is no wall-clock cancellation.
       ctx.effect(() => {
         const stop = (sessionId: string) => {
           try {
@@ -943,6 +945,18 @@ export default class NanomuseCloud extends Service {
           } catch (error: unknown) {
             this.ctx.logger.warn('nanolika: turn cancellation failed: %s', message(error))
           }
+        }
+        // What the model is told when its budget runs out: finish with the answer the person is
+        // waiting for, saying plainly what is done and what is left. Not a tool call — words.
+        const wrapUp = (sessionId: string, _turn: number, steps: number) => {
+          void Promise.resolve(
+            ctx.sessionController.prompt({
+              requestId: randomUUID() as never,
+              sessionId: sessionId as SessionId,
+              mode: 'steer',
+              content: [{ type: 'text', text: `Ты израсходовала ${steps} шагов в этом ходе. Больше инструментов не вызывай: напиши человеку итог прямо сейчас — что сделано, что проверено, что осталось и с чего продолжить. Если что-то не готово, скажи это словами, а не новой командой.` }],
+            }, new AbortController().signal),
+          ).catch((error: unknown) => this.ctx.logger.warn('nanolika: wrap-up not delivered: %s', message(error)))
         }
         const outcomes = new TurnOutcomes((outcome) => {
           void this.serialize(async () => {
@@ -953,6 +967,7 @@ export default class NanomuseCloud extends Service {
         }, stop)
         const budget = new TurnBudget({
           stop,
+          wrapUp,
           tell: (sessionId) => { outcomes.mark(sessionId, 'budget') },
         })
         this.turnBudget = budget
@@ -2398,6 +2413,17 @@ export default class NanomuseCloud extends Service {
     return this.sync ? this.sync.setMain(sessionId) : sessionId
   }
 
+  /** Put a newly created conversation in the account cloud by default. */
+  async setSyncChat(sessionId: string, on = true): Promise<boolean> {
+    if (!this.sync) return false
+    const outcome = await this.sync.setSynced(sessionId, on)
+    return outcome.ok
+  }
+
+  async setSyncChatArchived(sessionId: string, archived: boolean): Promise<void> {
+    await this.sync?.setArchived(sessionId, archived)
+  }
+
   /** Step one: a code to the phone or the mailbox. */
   async requestCode(identifier: string): Promise<void> {
     await this.serialize(() => this.relay.requestCode(identifier.trim()))
@@ -3725,7 +3751,10 @@ export default class NanomuseCloud extends Service {
       if (req.method === 'GET' && route === '/studio/estimate') return send(res, 200, await this.studioEstimate())
       if (req.method === 'POST' && route === '/studio/draw') {
         const body = await json(req)
+        const began = Date.now()
+        this.ctx.logger.info('nanomuse studio: draw asked (cloud=%s)', body.cloud === true)
         const png = await this.studioDraw(String(body.prompt ?? '').slice(0, 2000), body.cloud === true)
+        this.ctx.logger.info('nanomuse studio: draw done in %d ms, %d bytes', Date.now() - began, png.length)
         return send(res, 200, { image: png.toString('base64') })
       }
       if (req.method === 'POST' && route === '/studio/pose') {
@@ -3739,7 +3768,10 @@ export default class NanomuseCloud extends Service {
         const body = await json(req, 4 * 1024 * 1024)
         const face = body.face as Record<string, string> | undefined
         if (!face || typeof face !== 'object' || typeof face.idle !== 'string') return send(res, 400, { error: { code: 'bad_request', message: 'face is a {mood: base64 WebP} map with idle' } })
-        return send(res, 200, await this.wearFace(String(body.description ?? ''), String(body.style ?? 'muse'), face))
+        this.ctx.logger.info('nanomuse studio: wear %s', Object.keys(face).join(','))
+        const worn = await this.wearFace(String(body.description ?? ''), String(body.style ?? 'muse'), face)
+        this.ctx.logger.info('nanomuse studio: worn %s (%s)', worn.avatar, worn.faceId)
+        return send(res, 200, worn)
       }
       if (req.method === 'POST' && route === '/sign-out') return send(res, 200, await this.signOut())
       if (req.method === 'POST' && route === '/data/contribute') {
@@ -3821,6 +3853,11 @@ export default class NanomuseCloud extends Service {
           // another account's chat shows no bubbles and no working line (C10)
           const remote = sessionId && sync.owns(sessionId) ? await this.remoteLines(this.ctx, sessionId) : { lines: [], prompts: [] }
           return send(res, 200, { lines: remote.lines, prompts: remote.prompts, hidden: sync.view().hidden, working: sync.workingOf(sessionId) })
+        }
+        if (req.method === 'POST' && route === '/sync/archive') {
+          const body = await json(req)
+          await sync.setArchived(String(body.sessionId ?? ''), body.archived === true)
+          return send(res, 204)
         }
         if (req.method === 'POST' && route === '/sync/archived') {
           const body = await json(req)
@@ -3996,6 +4033,7 @@ export default class NanomuseCloud extends Service {
       if (req.method === 'POST' && route === '/media/animate') {
         const body = await json(req)
         const viaCloud = body.cloud === true
+        this.ctx.logger.info('nanomuse media: animate asked (cloud=%s, face=%s)', viaCloud, this.faceId() || 'none')
         if (!this.faceId()) return send(res, 409, { error: { code: 'no_face', message: 'No drawn face to animate' } })
         if (!(await this.videoEndpoint({ cloud: viaCloud }))) return send(res, 409, { error: { code: viaCloud ? 'signed_out' : 'no_video_model', message: viaCloud ? 'Sign in to draw the clips with NanoLika Cloud' : 'No video model to draw clips with' } })
         const started = await this.motion.animateAll(body.force === true, viaCloud)

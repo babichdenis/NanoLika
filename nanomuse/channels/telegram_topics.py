@@ -109,8 +109,8 @@ def normalize_name(name: str) -> str:
             break
         text = cut
     text = text.strip(_EDGES)
-    if text.casefold().startswith("feed"):
-        return "Feed"
+    if text.casefold().startswith(("feed", "лента", "динамика", "动态")):
+        return "Лента"
     return text[:100]
 
 

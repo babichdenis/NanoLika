@@ -8,7 +8,12 @@ from fastapi import Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import CloudError
-from .sync import _conversation_row, _message_row, valid_id
+from .sync import _conversation_row, _message_row, now, valid_id
+
+
+class ArchiveMark(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    archived: bool
 
 
 class ReadMark(BaseModel):
@@ -40,9 +45,39 @@ class ChatCatalog:
         ):
             raise CloudError(404, "chat_missing", "This chat is not available")
 
+    @staticmethod
+    def _is_feed_title(value: str) -> bool:
+        title = value.strip().casefold()
+        return title in {"лента", "feed", "动态"} or any(title.startswith(prefix) for prefix in ("feed ·", "feed •", "feed —", "feed -", "feed (", "динамика ·", "动态 ·", "лента ·"))
+
+    def _fold_daily_feed(self, c: Any, account: str) -> None:
+        rows = c.execute(
+            "SELECT * FROM sync_conversations WHERE account_id=? AND deleted=0 AND kind='side' ORDER BY updated_at DESC, created_at DESC, cid",
+            (account,),
+        ).fetchall()
+        feeds = [row for row in rows if self._is_feed_title(str(row["title"] or ""))]
+        if not feeds:
+            return
+        canonical = next((row for row in feeds if str(row["title"]).strip().casefold() == "лента" and not bool(row["archived"])), None) or next((row for row in feeds if not bool(row["archived"])), None) or next((row for row in feeds if str(row["title"]).strip().casefold() == "лента"), feeds[0])
+        canonical_cid = str(canonical["cid"])
+        max_updated = max(int(row["updated_at"]) for row in feeds)
+        for row in feeds:
+            cid = str(row["cid"])
+            if cid == canonical_cid:
+                continue
+            c.execute("UPDATE sync_messages SET cid=? WHERE account_id=? AND cid=?", (canonical_cid, account, cid))
+            c.execute("DELETE FROM sync_read_marks WHERE account_id=? AND cid=?", (account, cid))
+            self.store._tombstone(c, account, cid, now())
+        seq = self.store._next_seq(c, account)
+        c.execute(
+            "UPDATE sync_conversations SET title='Лента', updated_at=?, seq=? WHERE account_id=? AND cid=?",
+            (max_updated, seq, account, canonical_cid),
+        )
+
     def catalog(self, account: str, client: str, device: str) -> dict:
         with self.db.tx() as c:
             self.check(c, account)
+            self._fold_daily_feed(c, account)
             names = self.store._device_names(c, account)
             rows = c.execute(
                 """SELECT sc.*,
@@ -79,6 +114,9 @@ class ChatCatalog:
                 "cursor": self.store._cursor(c, account),
                 "complete": True,
             }
+
+    def set_archived(self, account: str, cid: str, archived: bool) -> dict:
+        return self.store.set_archived(account, cid, archived)
 
     def messages(self, account: str, cid: str, after: int, before: int, limit: int) -> dict:
         with self.db.tx() as c:
@@ -144,6 +182,15 @@ def install(app: Any, store: Any, caller_dep: Any) -> None:
     ) -> dict:  # noqa: B008
         response.headers["Cache-Control"] = "no-store"
         return service.catalog(caller.account_id, client, device)
+
+    @app.post("/v1/sync/conversations/{cid}/archive")
+    async def archive(cid: str, body: ArchiveMark, response: Response, caller: Any = Depends(caller_dep)) -> dict:
+        response.headers["Cache-Control"] = "no-store"
+        result = service.set_archived(caller.account_id, cid, body.archived)
+        hub = getattr(app.state, "hub", None)
+        if hub is not None:
+            await hub.notify_sync(caller.account_id, result["cursor"], "")
+        return result
 
     @app.get("/v1/sync/conversations/{cid}/messages")
     async def messages(

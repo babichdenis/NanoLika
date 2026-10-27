@@ -799,3 +799,7 @@ See [model-catalogue.md](model-catalogue.md) for the catalogue commerce contract
 account favourites, the authenticated non-billable POST /v1/models/quote endpoint
 and the admin-only revision-checked retail price editor. Existing video task rows
 remain compatible; new tasks persist accepted sale_uy until settlement.
+
+## Archived shared conversations
+
+Shared conversation metadata has an account-wide archived flag. POST /v1/sync/conversations/{cid}/archive with {"archived": true|false} moves a chat into or out of the archive without deleting its messages; the change appears in sync catalog and change pages. The web client provides archive and restore controls. Dated daily Feed conversations are consolidated into one Лента row on catalog refresh, with their messages retained in sequence.

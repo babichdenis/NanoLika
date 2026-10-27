@@ -340,7 +340,7 @@ export function apply(ctx: ClientContext): void {
   const chatActions: ChatActions = {
     openSession: (id) => { workspaces.openSession(id) },
     startSession: () => { workspaces.startSession() },
-    archiveSession: (id) => workspaces.archiveSession(id, { stopActivity: true }),
+    archiveSession: async (id) => { await workspaces.archiveSession(id, { stopActivity: true }); await call('sync/archive', { sessionId: id, archived: true }).catch(() => undefined) },
     pinSession: (id) => workspaces.pinSession(id),
     unpinSession: (id) => workspaces.unpinSession(id),
     renameSession,

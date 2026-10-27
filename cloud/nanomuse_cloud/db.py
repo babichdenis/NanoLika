@@ -437,6 +437,7 @@ class Database:
                 self.added.add(f"{table}.{col}")
 
         add("accounts", "is_test", "INTEGER NOT NULL DEFAULT 0")
+        add("sync_conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
 
         if "identifier_enc" not in cols("accounts"):
             self._conn.execute("ALTER TABLE accounts ADD COLUMN identifier_enc TEXT NOT NULL DEFAULT ''")

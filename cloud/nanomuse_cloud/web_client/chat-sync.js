@@ -13,7 +13,7 @@ export class ChatSync {
   if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}await this.save(chat);
   for(let offset=0;offset<Math.max(1,pending.length);offset+=200){
    if(!this.valid(session))return;
-   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:'side',title:chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000)}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:m.content,created_at:Math.floor(m.at/1000),attachments:[]}))};
+   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:'side',title:chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:m.content,created_at:Math.floor(m.at/1000),attachments:[]}))};
    const result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);
    if(result.rejected?.length)throw new Error('Some chat messages could not be synced');
    for(const m of batch)m.shared=true;chat.shared=true;await this.save(chat);
@@ -33,7 +33,7 @@ export class ChatSync {
   const result=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{},session);
   if(!this.valid(session)||result.complete!==true||(result.account_id&&result.account_id!==session.owner))return;
   const existing=new Map(this.getChats().map(c=>[c.syncCid,c]));const rows=[];const ids=new Set();
-  for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;rows.push(chat);await this.save(chat);}
+  for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;rows.push(chat);await this.save(chat);}
   const deleted=new Set((result.deleted||[]).map(c=>c.cid));
   for(const chat of this.getChats())if(!ids.has(chat.syncCid)){if(deleted.has(chat.syncCid)){chat.deleted=true;await this.remove(chat.key);}else rows.push(chat);}
   if(!this.valid(session))return;
@@ -95,6 +95,11 @@ export class ChatSync {
   delete chat.syncCid;chat.local=false;chat.shared=false;for(const m of chat.messages)m.shared=false;
   await this.save(chat);
   await this.upload(chat,session,{force:true});
+ });}
+ async setArchived(chat,archived){return this.run(async()=>{
+  const session=this.session();if(!session?.key||session.owner!==chat.owner)throw new Error('Sign in again');
+  if(chat.syncCid)await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid)+'/archive',{method:'POST',body:JSON.stringify({archived:!!archived})},session);
+  chat.archived=!!archived;await this.save(chat);this.onChange({archive:true});return chat;
  });}
  async delete(chat){return this.run(async()=>{const session=this.session();if(chat.syncCid&&session?.owner===chat.owner){await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid),{method:'DELETE'},session);}await this.remove(chat.key);this.known.delete(chat.syncCid);});}
 }

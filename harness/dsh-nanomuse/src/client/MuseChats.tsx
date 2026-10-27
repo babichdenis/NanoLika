@@ -297,6 +297,15 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   const archivedSet = new Set(archived)
   const pinnedSet = new Set(pinned)
   const sync = useSyncList()
+  const previousArchived = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const next = new Set(archived)
+    const previous = previousArchived.current
+    previousArchived.current = next
+    if (!previous) return
+    const restored = [...previous].filter((id) => !next.has(id) && sync.sessions.has(id))
+    if (restored.length) void Promise.all(restored.map((sessionId) => call('sync/archive', { sessionId, archived: false }).catch(() => undefined)))
+  }, [archived, sync.sessions])
   // the rooms' running batches (the feed being written) are the agent's work, not chats of the person's
   const batches = new Set(useRooms().batches)
   // signed in, the column shows this account's chats and the ones never synced (C10); another account's stay, hidden

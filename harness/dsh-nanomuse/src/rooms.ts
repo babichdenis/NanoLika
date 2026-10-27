@@ -228,7 +228,7 @@ export interface FeedRoutine {
 
 interface Store {
   lang: string
-  feed: { instructions: string; generatedAt: number; lastTry: number; posts: FeedPost[]; routine: FeedRoutine }
+  feed: { instructions: string; sessionId?: string; generatedAt: number; lastTry: number; posts: FeedPost[]; routine: FeedRoutine }
   /** `marks` is what the person did with each idea of the static list; `items` is the list as the browser sees it. */
   ideas: { generatedAt: number; lastTry: number; items: Idea[]; marks: Record<string, { started?: string; dismissed?: boolean }> }
   goals: Goal[]
@@ -1047,7 +1047,7 @@ export default class NanomuseRooms extends Service {
     try {
       const before = this.store.feed.posts.length
       const zh = this.lang.startsWith('zh')
-      const text = await this.run(zh ? '动态 · ' + today(this.lang) : 'Feed · ' + today(this.lang), this.feedPrompt(), zh ? '写今天的动态' : "Writing today's feed")
+      const text = await this.run(zh ? '动态' : this.lang.startsWith('en') ? 'Feed' : 'Лента', this.feedPrompt(), zh ? '写今天的动态' : "Writing today's feed", this.store.feed.sessionId)
       const rows = parseArray(text)
       const now = Date.now()
       const posts: FeedPost[] = []
@@ -1532,14 +1532,23 @@ export default class NanomuseRooms extends Service {
    * short line in the window should the chat ever be opened) and the chat stays out of the chats
    * column while it runs (`RoomsView.batches`).
    */
-  private async run(title: string, prompt: string, summary: string): Promise<string> {
+  private async run(title: string, prompt: string, summary: string, existingSessionId?: string): Promise<string> {
     const sc = this.ctx.get('sessionController')
     if (!sc) throw new Error('chats are not available yet')
     if (!(await this.ctx.nanomuseCloud.status()).ready) throw new Error('no model is set up')
-    const created = await sc.create({ agentPreset: 'nanomuse', cwd: homeDir() })
-    await sc.rename({ sessionId: created.sessionId, title }).catch(() => undefined)
-    const resolved = await sc.resolveAgent(created.sessionId)
-    if ('error' in resolved) throw new Error(`the chat could not be opened: ${String(resolved.error)}`)
+    let sessionId = existingSessionId as SessionId | undefined
+    let resolved = sessionId ? await sc.resolveAgent(sessionId).catch(() => undefined) : undefined
+    if (!resolved || 'error' in resolved) {
+      const created = await sc.create({ agentPreset: 'nanomuse', cwd: homeDir() })
+      sessionId = created.sessionId
+      this.store.feed.sessionId = String(sessionId)
+      await this.save()
+      await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), true).catch(() => false)
+      resolved = await sc.resolveAgent(sessionId)
+    }
+    if (!sessionId || !resolved || 'error' in resolved) throw new Error(`the chat could not be opened: ${String(resolved && 'error' in resolved ? resolved.error : 'unknown session')}`)
+    await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), true).catch(() => false)
+    await sc.rename({ sessionId, title }).catch(() => undefined)
     const agent = resolved.agent
     let text = ''
     try {
@@ -1550,21 +1559,19 @@ export default class NanomuseRooms extends Service {
         }, RUN_TIMEOUT_MS)
         const done = (value: string) => {
           clearTimeout(timer)
-          this.runs.delete(created.sessionId)
+          this.runs.delete(sessionId)
           resolve(value)
         }
         const fail = (error: Error) => {
           clearTimeout(timer)
-          this.runs.delete(created.sessionId)
+          this.runs.delete(sessionId)
           reject(error)
         }
-        this.runs.set(created.sessionId, { final: '', resolve: done, reject: fail })
+        this.runs.set(sessionId, { final: '', resolve: done, reject: fail })
         this.broadcast()
         agent.followup(createUserMessage({ content: [{ type: 'text', text: prompt }], source: { kind: 'nanomuse', form: 'notice', summary: summary.slice(0, 120) } }))
       })
     } finally {
-      // The batch is a means, not a chat: out of the list, kept in the archive.
-      await (this.ctx.get('workspaceRegistry') as RegistryLike | undefined)?.archiveSession(created.sessionId, { stopActivity: true }).catch(() => undefined)
       this.broadcast()
     }
     return text

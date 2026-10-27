@@ -91,3 +91,35 @@ async def test_wiping_server_copy_cleans_read_marks_without_fabricating_tombston
     catalog = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
     assert catalog["conversations"] == [] and catalog["deleted"] == []
     assert app.state.sync.db._conn.execute("SELECT COUNT(*) FROM sync_read_marks").fetchone()[0] == 0
+
+
+async def test_archive_can_hide_and_restore_conversation_without_losing_text():
+    _, client, a, _, c1, _ = await setup()
+    archived = await client.post(f"/v1/sync/conversations/{c1}/archive", headers=a, json={"archived": True})
+    assert archived.status_code == 200 and archived.json()["archived"] is True
+    row = next(r for r in (await client.get("/v1/sync/catalog?client=view", headers=a)).json()["conversations"] if r["cid"] == c1)
+    assert row["archived"] is True and row["message_count"] == 2
+    page = await client.get(f"/v1/sync/conversations/{c1}/messages", headers=a)
+    assert [m["text"] for m in page.json()["messages"]] == ["private first", "answer"]
+    restored = await client.post(f"/v1/sync/conversations/{c1}/archive", headers=a, json={"archived": False})
+    assert restored.status_code == 200 and restored.json()["archived"] is False
+    assert next(r for r in (await client.get("/v1/sync/catalog?client=view", headers=a)).json()["conversations"] if r["cid"] == c1)["archived"] is False
+
+
+async def test_daily_feed_conversations_fold_into_one_lenta_without_losing_messages():
+    _, client, a, _, _, _ = await setup()
+    feed1, feed2 = uid(), uid()
+    await client.post("/v1/sync/changes", headers=a, json={
+        "device": "computer",
+        "conversations": [
+            conv(feed1, title="Feed \u00b7 sunday, 25 october 2026"),
+            conv(feed2, title="Feed \u00b7 monday, 26 october 2026"),
+        ],
+        "messages": [msg(uid(), feed1, text="First note"), msg(uid(), feed2, text="Second note")],
+    })
+    data = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
+    feeds = [r for r in data["conversations"] if r["title"] == "\u041b\u0435\u043d\u0442\u0430"]
+    assert len(feeds) == 1 and feeds[0]["archived"] is False and feeds[0]["message_count"] == 2
+    page = (await client.get(f"/v1/sync/conversations/{feeds[0]['cid']}/messages", headers=a)).json()
+    assert {m["text"] for m in page["messages"]} == {"First note", "Second note"}
+    assert feeds[0]["cid"] in {feed1, feed2}

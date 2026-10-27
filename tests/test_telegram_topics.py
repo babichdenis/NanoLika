@@ -156,10 +156,10 @@ def world(tmp_path: Path) -> World:
 
 
 def test_the_date_and_the_weekday_are_cut_from_a_name():
-    assert normalize_name("Feed · воскресенье, 25 октября 2026 г.") == "Feed"
-    assert normalize_name("Feed — 25.10.2026") == "Feed"
-    assert normalize_name("Feed (25 октября)") == "Feed"
-    assert normalize_name("Feed · sunday, 25 october 2026") == "Feed"
+    assert normalize_name("Feed · воскресенье, 25 октября 2026 г.") == "Лента"
+    assert normalize_name("Feed — 25.10.2026") == "Лента"
+    assert normalize_name("Feed (25 октября)") == "Лента"
+    assert normalize_name("Feed · sunday, 25 october 2026") == "Лента"
     assert normalize_name("Отчёт · 25.10.2026") == "Отчёт"
 
 
@@ -190,7 +190,7 @@ def test_a_service_line_is_told_from_a_name():
 async def test_a_dated_feed_title_and_a_plain_one_are_one_topic(world: World):
     first = world.thread("Feed · воскресенье, 25 октября 2026 г.")
     assert await world.topics.open(inbound("Собери новости"), first) is True
-    assert [call["name"] for call in world.topic_calls("createForumTopic")] == ["Feed"]
+    assert [call["name"] for call in world.topic_calls("createForumTopic")] == ["Лента"]
     assert len(world.topics.file.load()) == 1
 
     second = world.thread("Feed")
@@ -200,7 +200,7 @@ async def test_a_dated_feed_title_and_a_plain_one_are_one_topic(world: World):
     rows = world.topics.file.load()
     assert len(rows) == 1
     saved = next(iter(rows.values()))
-    assert saved["name"] == "Feed" and saved["thread"] == second.id
+    assert saved["name"] == "Лента" and saved["thread"] == second.id
 
 
 async def test_an_old_dated_topic_is_renamed_to_the_plain_name(world: World):
@@ -208,10 +208,10 @@ async def test_an_old_dated_topic_is_renamed_to_the_plain_name(world: World):
     thread = world.thread("Feed · понедельник, 26 октября 2026 г.")
     assert await world.topics.open(inbound("новости"), thread) is True
     assert world.topic_calls("createForumTopic") == []
-    assert [edit["name"] for edit in world.topic_calls("editForumTopic")] == ["Feed"]
+    assert [edit["name"] for edit in world.topic_calls("editForumTopic")] == ["Лента"]
     rows = world.topics.file.load()
     saved = next(iter(rows.values()))
-    assert len(rows) == 1 and saved["name"] == "Feed" and saved["thread"] == thread.id
+    assert len(rows) == 1 and saved["name"] == "Лента" and saved["thread"] == thread.id
 
 
 async def test_a_rename_in_the_app_puts_the_plain_name_into_the_topic(world: World):
@@ -219,7 +219,7 @@ async def test_a_rename_in_the_app_puts_the_plain_name_into_the_topic(world: Wor
     world.row(name="Старое имя", topic=7, thread=thread.id)
     thread.title = "Feed · вторник, 27 октября 2026 г."
     await world.topics.rename(thread.id)
-    assert [edit["name"] for edit in world.topic_calls("editForumTopic")] == ["Feed"]
+    assert [edit["name"] for edit in world.topic_calls("editForumTopic")] == ["Лента"]
 
 
 # ---------------------------------------------------------------------- service lines
@@ -272,7 +272,7 @@ async def test_discover_makes_one_topic_for_one_conversation(world: World):
     thread = world.thread("Feed · воскресенье, 25 октября 2026 г.")
     thread.timeline.events.append({"type": "user", "text": "Собери новости", "mid": "m1"})
     await world.topics.discover()
-    assert [call["name"] for call in world.topic_calls("createForumTopic")] == ["Feed"]
+    assert [call["name"] for call in world.topic_calls("createForumTopic")] == ["Лента"]
     await world.topics.discover()
     assert len(world.topic_calls("createForumTopic")) == 1
     assert len(world.topics.file.load()) == 1

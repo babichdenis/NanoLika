@@ -113,6 +113,7 @@ export interface WireConversation {
   created_at: number
   updated_at: number
   deleted: boolean
+  archived: boolean
   seq: number
 }
 
@@ -156,6 +157,11 @@ export class SyncRelay {
     const res = await this.fetchImpl(`${this.origin}/v1/sync/state`, { headers: this.auth(apiKey) })
     if (!res.ok) await fail(res)
     return toState(await res.json())
+  }
+
+  async setArchived(apiKey: string, cid: string, archived: boolean): Promise<void> {
+    const res = await this.fetchImpl(this.origin + '/v1/sync/conversations/' + encodeURIComponent(cid) + '/archive', { method: 'POST', headers: { ...this.auth(apiKey), ...JSON_HEADERS }, body: JSON.stringify({ archived }) })
+    if (!res.ok) await fail(res)
   }
 
   async setEnabled(apiKey: string, enabled: boolean): Promise<SyncRelayState> {
@@ -282,6 +288,7 @@ function toConversation(value: unknown): WireConversation {
     created_at: Number(c.created_at ?? 0),
     updated_at: Number(c.updated_at ?? 0),
     deleted: c.deleted === true,
+    archived: c.archived === true,
     seq: Number(c.seq ?? 0),
   }
 }
@@ -320,6 +327,7 @@ export interface SessionInfo {
   blank: boolean
   createdAt: number
   updatedAt: number
+  archived?: boolean
 }
 
 /** A turn of the conversation written on another device, as it goes into a session's log here (C8). */
@@ -472,6 +480,7 @@ export interface KnownConversation {
   /** Unix seconds, the relay's clock. */
   createdAt: number
   updatedAt: number
+  archived?: boolean
 }
 
 /**
@@ -764,8 +773,18 @@ export class SyncEngine {
   start(): void {
     this.signedIn = true
     this.pullTimer ??= setInterval(() => void this.pullQuietly(), this.options.pullEveryMs ?? PULL_EVERY_MS)
-    // pull first: the relay's history reaches the sessions here before ours goes up
-    void this.pullQuietly().then(() => this.pushAllSoon())
+    // Keep chats that already existed on this computer local by default. The first message
+    // in a later-created chat will put its cloud on unless the person explicitly turned it off.
+    void this.options.sessions.list().then(async (sessions) => {
+      if (!this.state.sideChats) {
+        for (const session of sessions) {
+          if (!session.blank && session.id !== this.state.mainSession && !this.state.cids[session.id] && this.state.clouds[session.id] === undefined) this.state.clouds[session.id] = 'local'
+        }
+        await this.save()
+      }
+      await this.pullQuietly()
+      this.pushAllSoon()
+    }).catch(() => undefined)
   }
 
   stop(): void {
@@ -859,6 +878,18 @@ export class SyncEngine {
     this.pushSoon(200)
     this.changed()
     return sessionId
+  }
+
+  /** Archive a shared chat without deleting its transcript; local chat state remains on the host. */
+  async setArchived(sessionId: string, archived: boolean): Promise<void> {
+    const cid = this.state.cids[sessionId]
+    const token = await this.options.token()
+    if (!cid || !token || !this.state.enabled || !this.signedIn) return
+    await this.options.relay.setArchived(token, cid, archived)
+    const known = this.state.conversations[cid]
+    if (known) known.archived = archived
+    await this.save()
+    this.changed()
   }
 
   /** The browser half archived the sessions whose conversations were deleted elsewhere. */
@@ -1088,7 +1119,13 @@ export class SyncEngine {
 
   /** The person sent a message in a session here: it goes up now (C8), not when the turn ends. */
   messageSent(sessionId: string): void {
-    if (!this.syncs(sessionId)) return
+    if (!this.syncs(sessionId)) {
+      if (!this.signedIn || !this.state.accountId || !this.state.enabled || this.state.sideChats || this.state.clouds[sessionId] === 'local' || this.state.cids[sessionId] || !this.owns(sessionId)) return
+      this.state.clouds[sessionId] = 'device'
+      this.adopt(sessionId)
+      void this.save()
+      this.changed()
+    }
     this.dirty.add(sessionId)
     this.presence.set(sessionId, true)
     this.pushSoon(Math.min(SEND_DELAY_MS, this.options.pushDelayMs ?? PUSH_DELAY_MS))
@@ -1456,7 +1493,9 @@ export class SyncEngine {
       deviceName: known?.deviceName || c.device_name,
       createdAt: known?.createdAt || c.created_at,
       updatedAt: Math.max(known?.updatedAt ?? 0, c.updated_at),
+      archived: c.archived,
     }
+    if (c.archived && sessionId && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
     if (!sessionId) {
       if (c.kind === 'main' && this.state.mainSession) {
         // Identifiers: the account's main conversation already exists — our main chat adopts its id
@@ -1485,6 +1524,7 @@ export class SyncEngine {
         if (c.kind === 'main') this.state.mainSession = sessionId
       }
       this.noteCloud(sessionId, c.device)
+      if (c.archived && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
       return
     }
     if (c.title && known && known.title !== c.title && this.state.titles[sessionId] !== c.title) {

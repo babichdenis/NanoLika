@@ -126,6 +126,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "created_at": int(r["created_at"]),
         "updated_at": int(r["updated_at"]),
         "deleted": bool(r["deleted"]),
+        "archived": bool(r["archived"]) if "archived" in r.keys() else False,
         "seq": int(r["seq"]),
     }
 
@@ -416,6 +417,7 @@ class SyncStore:
                 # renamed, since its `updated_at` fell back to `created_at` and lost
                 updated_at = max(created_at, _ts(conv.get("updated_at"), created_at, ceiling=t))
                 deleted = bool(conv.get("deleted"))
+                archived = bool(conv.get("archived", False))
                 row = c.execute("SELECT * FROM sync_conversations WHERE account_id=? AND cid=?", (account_id, cid)).fetchone()
                 if row is None:
                     if (
@@ -440,8 +442,8 @@ class SyncStore:
                             continue
                     seq = self._next_seq(c, account_id)
                     c.execute(
-                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             account_id,
                             cid,
@@ -453,6 +455,7 @@ class SyncStore:
                             1 if deleted else 0,
                             t if deleted else None,
                             seq,
+                            1 if archived and not deleted else 0,
                         ),
                     )
                     accepted += 1
@@ -462,13 +465,16 @@ class SyncStore:
                 if deleted:
                     self._tombstone(c, account_id, cid, t)
                     accepted += 1
-                elif updated_at >= int(row["updated_at"]) and (title != row["title"] or updated_at != int(row["updated_at"])):
-                    seq = self._next_seq(c, account_id)
-                    c.execute(
-                        "UPDATE sync_conversations SET title=?, updated_at=?, seq=? WHERE account_id=? AND cid=?",
-                        (title, updated_at, seq, account_id, cid),
-                    )
-                    accepted += 1
+                else:
+                    next_archived = archived if "archived" in conv else bool(row["archived"])
+                    title_changed = updated_at >= int(row["updated_at"]) and (title != row["title"] or updated_at != int(row["updated_at"]))
+                    if title_changed or next_archived != bool(row["archived"]):
+                        seq = self._next_seq(c, account_id)
+                        c.execute(
+                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, seq=? WHERE account_id=? AND cid=?",
+                            (title if title_changed else row["title"], max(updated_at, int(row["updated_at"])), 1 if next_archived else 0, seq, account_id, cid),
+                        )
+                        accepted += 1
             touched_cids: set[str] = set()
             for msg in messages:
                 if not isinstance(msg, dict):
@@ -542,6 +548,28 @@ class SyncStore:
         )
         c.execute("DELETE FROM sync_messages WHERE account_id=? AND cid=?", (account_id, cid))
         return seq
+
+    def set_archived(self, account_id: str, cid: str, archived: bool) -> dict:
+        """Move a conversation between the active list and archive without deleting its text."""
+        cid_ok = valid_id(cid)
+        if cid_ok is None:
+            raise CloudError(400, "bad_cid", "That is not a conversation id")
+        with self.db.tx() as c:
+            if not self._enabled(c, account_id):
+                raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            row = c.execute(
+                "SELECT archived, deleted FROM sync_conversations WHERE account_id=? AND cid=?",
+                (account_id, cid_ok),
+            ).fetchone()
+            if row is None or row["deleted"]:
+                raise CloudError(404, "no_conversation", "No synced conversation with that id")
+            if bool(row["archived"]) != bool(archived):
+                seq = self._next_seq(c, account_id)
+                c.execute(
+                    "UPDATE sync_conversations SET archived=?, updated_at=?, seq=? WHERE account_id=? AND cid=?",
+                    (1 if archived else 0, now(), seq, account_id, cid_ok),
+                )
+            return {"cid": cid_ok, "archived": bool(archived), "cursor": self._cursor(c, account_id)}
 
     def delete_conversation(self, account_id: str, cid: str) -> dict:
         """`DELETE /v1/sync/conversations/{cid}`: the tombstone every other device will see."""

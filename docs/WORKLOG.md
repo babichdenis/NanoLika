@@ -1061,3 +1061,10 @@ macOS ставила на панель строку **приложения** с 
 - Полный прайс выгружен в `docs/prices-2026-10-25.xlsx`.
 
 Уточнение: язык читается из действующей настройки locale.preference перед каждым запросом пользовательской сессии. Правило применяется ко всем видимым сводкам рассуждений и пояснениям действий, а не только к ошибкам; при отсутствии выбора используется язык пользователя.
+
+## 2026-10-27 — Shared chat list and feed
+
+- Folded dated Feed conversations into a single shared conversation while keeping message history and preserving the chosen archive state.
+- Added account-wide archive and restore metadata for shared conversations; web list now separates active chats from archive.
+- Reuse one persistent desktop Feed session and render Markdown/legacy safe HTML as formatted messages in web.
+- Verification: chat catalog tests (7 passed), desktop TypeScript check and web JavaScript syntax checks passed. Telegram topic tests could not collect because the Mac 6 project environment lacks `loguru`.
