@@ -144,6 +144,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
   let section = 'all'; // какой раздел открыт
   let needle = ''; // что в поиске
   let shownCount = {}; // сколько строк раздела уже показано
+  let collapsedKinds = new Set(); // разделы можно свернуть, не меняя выбранные модели
   const PAGE = 40; // столько строк ждёт человека, остальное по кнопке: 384 модели разом браузер не любит
   let busy = false;
 
@@ -213,7 +214,11 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
     if (!usable) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
-    if (model.vendor) names.append(h('div', T.vendor(model.vendor), 'mm-vendor'));
+    const meta = [];
+    if (model.vendor) meta.push(T.vendor(model.vendor));
+    if (model.context_length) meta.push(`Контекст ${num(model.context_length)} токенов`);
+    if (model.max_output) meta.push(`Ответ до ${num(model.max_output)} токенов`);
+    if (meta.length) names.append(h('div', meta.join(' · '), 'mm-vendor'));
 
     const more = h('button', T.more, 'mm-link');
     more.type = 'button';
@@ -289,11 +294,22 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       );
       if (!rows.length) continue;
       const block = h('section', undefined, 'kind');
-      const head = h('h2', undefined, 'kind-title');
+      const head = h('button', undefined, `kind-title${collapsedKinds.has(spec.key) ? ' kind-title-folded' : ''}`);
+      head.type = 'button';
+      head.setAttribute('aria-expanded', String(!collapsedKinds.has(spec.key)));
+      head.onclick = () => {
+        if (collapsedKinds.has(spec.key)) collapsedKinds.delete(spec.key);
+        else collapsedKinds.add(spec.key);
+        draw();
+      };
       // когда открыт «Кодинг», раздел называется кодингом, а не перепиской
       const title = section === 'code' ? T.code : T[spec.title];
-      head.append(h('span', title), h('span', T.found(rows.length), 'kind-count'));
+      head.append(h('span', `${collapsedKinds.has(spec.key) ? '＋' : '−'} ${title}`), h('span', T.found(rows.length), 'kind-count'));
       block.append(head);
+      if (collapsedKinds.has(spec.key)) {
+        holder.append(block);
+        continue;
+      }
       // включённые по умолчанию — первыми, дальше по имени: дорогое не прячется, но и не лезет вперёд
       const sorted = [...rows].sort(
         (a, b) => Number(b.default_on !== false) - Number(a.default_on !== false) || a.name.localeCompare(b.name),

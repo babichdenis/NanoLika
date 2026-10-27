@@ -133,13 +133,28 @@ h1 {
 }
 
 .kind-title {
+  width: 100%;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
   margin: 0 0 8px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   font-size: 15px;
   font-weight: 600;
+}
+
+.kind-title:hover { color: var(--good); }
+
+.kind-title:focus-visible {
+  outline: 2px solid var(--good);
+  outline-offset: 3px;
+  border-radius: 5px;
 }
 
 .kind-count {
@@ -198,6 +213,7 @@ h1 {
   margin-top: 2px;
   color: var(--muted);
   font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .mm-link {

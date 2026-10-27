@@ -41,6 +41,36 @@ export interface ModelPickerProps<R extends ModelRow = ModelRow> {
 
 const PANEL_WIDTH = 620
 const PANEL_MAX_HEIGHT = 560
+const MODEL_KINDS = [
+  ['chat', 'mpKindText'], ['image', 'mpKindImages'], ['video', 'mpKindVideo'], ['audio', 'mpKindAudio'],
+  ['embedding', 'mpKindEmbeddings'], ['rerank', 'mpKindRerank'],
+] as const
+
+function cataloguePrice(model: CatalogueModel | undefined): number {
+  if (!model) return Number.POSITIVE_INFINITY
+  const rates = model.commerce?.effective_rub ?? {}
+  if (model.kind === 'chat') return Number(rates.input ?? 0) + Number(rates.output ?? 0) * 0.512
+  if (model.kind === 'image') return Number(rates.image ?? Number.POSITIVE_INFINITY)
+  if (model.kind === 'video') return Number(rates.second ?? Number.POSITIVE_INFINITY)
+  return Number(rates.speech ?? rates.minute ?? Number.POSITIVE_INFINITY)
+}
+
+function visiblePrice(model: CatalogueModel | undefined, t: Translate): string | undefined {
+  if (!model) return undefined
+  const rates = model.commerce?.effective_rub ?? {}
+  const fmt = (value: unknown) => Number(value) > 0
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(Number(value))
+    : undefined
+  if (model.free) return t('mpFreeModel')
+  if (model.kind === 'chat') {
+    const input = fmt(rates.input), output = fmt(rates.output)
+    return input || output ? `${t('mpPriceMillion')}: ${input ?? '—'} / ${output ?? '—'}` : undefined
+  }
+  const media = model.kind === 'image' ? fmt(rates.image) : model.kind === 'video' ? fmt(rates.second) : fmt(rates.speech ?? rates.minute)
+  if (!media) return undefined
+  const unit = model.kind === 'image' ? t('mpPriceImage') : model.kind === 'video' ? t('mpPriceSecond') : rates.speech ? t('mpPriceSpeech') : t('mpPriceMinute')
+  return `${media} ${unit}`
+}
 
 function place(anchor: HTMLElement): Record<string, number> {
   const rect = anchor.getBoundingClientRect()
@@ -58,7 +88,12 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [context, setContext] = useState(0)
-  const [onlyFavourites, setOnlyFavourites] = useState(false)
+  const [kind, setKind] = useState('all')
+  const [sort, setSort] = useState('recommended')
+  // Keep the quick list short by default. The footer opens the full catalogue when the
+  // person wants to change which models are starred.
+  const [onlyFavourites, setOnlyFavourites] = useState(true)
+  const [collapsedKinds, setCollapsedKinds] = useState<Set<string>>(() => new Set())
   const [favourites, setFavourites] = useState<string[]>([])
   const [catalogue, setCatalogue] = useState<CatalogueModel[]>([])
   const [catalogueError, setCatalogueError] = useState('')
@@ -144,10 +179,31 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
 
   const filtered = groups.map(group => ({ ...group, rows: group.rows.filter(row => {
     const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === row.id) : undefined
-    return (!context || (info?.context_length ?? 0) >= context) && (!onlyFavourites || (group.key === 'nanomuse' && favourites.includes(row.id)))
+    const rowKind = info?.kind || 'chat'
+    return (kind === 'all' || rowKind === kind) && (!context || (info?.context_length ?? 0) >= context) && (!onlyFavourites || (group.key === 'nanomuse' && favourites.includes(row.id)))
   }) }))
-  const shown = layoutGroups(filtered, { ...(current ? { current } : {}), query, expanded })
+  const laidOut = layoutGroups(filtered, { ...(current ? { current } : {}), query, expanded })
+  const shown = laidOut.map(group => ({ ...group, rows: sort === 'recommended' ? group.rows : [...group.rows].sort((a, b) => {
+    const left = catalogue.find(model => model.id === a.id), right = catalogue.find(model => model.id === b.id)
+    if (sort === 'price') return cataloguePrice(left) - cataloguePrice(right) || a.name.localeCompare(b.name)
+    if (sort === 'context') return (right?.context_length ?? 0) - (left?.context_length ?? 0) || a.name.localeCompare(b.name)
+    return a.name.localeCompare(b.name)
+  }) }))
+  // Counts describe the list the person can currently pick from: starred models in the
+  // quick view, the full catalogue in management mode. They do not change when one kind is
+  // selected, so the other filters remain useful for navigation.
+  const kindCounts = MODEL_KINDS.map(([value, label]) => ({ value, label: t(label), count: groups.reduce((n, group) => n + group.rows.filter(row =>
+    (!onlyFavourites || (group.key === 'nanomuse' && favourites.includes(row.id))) &&
+    (catalogue.find(model => model.id === row.id)?.kind || 'chat') === value,
+  ).length, 0) })).filter(item => item.count > 0)
   const searching = query.trim().length > 0
+  const sections = kindCounts.map(item => ({
+    ...item,
+    groups: shown.map(group => ({
+      ...group,
+      rows: group.rows.filter(row => (catalogue.find(model => model.id === row.id)?.kind || 'chat') === item.value),
+    })).filter(group => group.rows.length > 0),
+  })).filter(item => item.groups.length > 0)
 
   const row = (key: string, selected: boolean, content: ReactNode, onClick: () => void, extra: Record<string, unknown> = {}) =>
     h('button', { key, type: 'button', role: 'option', 'aria-selected': selected, 'data-nm-mp-row': '', className: `nm-mp-row${selected ? ' nm-selected' : ''}`, onClick, onKeyDown: walk, ...extra },
@@ -176,28 +232,46 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
                 h('input', { type: 'search', value: query, placeholder: t('mpSearch'), 'aria-label': t('mpSearch'), autoComplete: 'off', spellCheck: false, onChange: (e: { currentTarget: HTMLInputElement }) => setQuery(e.currentTarget.value), onKeyDown: walk }))
             : null,
           h('div', { className: 'nm-mp-filters' },
+            kindCounts.length > 1 ? h('div', { className: 'nm-mp-kinds', role: 'group', 'aria-label': 'Тип моделей' },
+              h('button', { type: 'button', className: 'nm-pill nm-pill-sm', 'aria-pressed': kind === 'all', onClick: () => setKind('all') }, `${t('mpAllKinds')} · ${groups.reduce((n, group) => n + group.rows.length, 0)}`),
+              kindCounts.map(item => h('button', { key: item.value, type: 'button', className: 'nm-pill nm-pill-sm', 'aria-pressed': kind === item.value, onClick: () => setKind(item.value) }, `${item.label} · ${item.count}`))) : null,
             h('select', { 'aria-label': t('mpContext'), value: context, onChange: (e: { currentTarget: HTMLSelectElement }) => setContext(Number(e.currentTarget.value)) },
               [0, 128000, 200000, 1000000].map(n => h('option', { key: n, value: n }, n ? `${n / 1000}K+` : t('mpAnyContext')))),
+            h('label', { className: 'nm-mp-sort' }, t('mpSort'), h('select', { value: sort, onChange: (e: { currentTarget: HTMLSelectElement }) => setSort(e.currentTarget.value) },
+              [['recommended', t('mpRecommended')], ['price', t('mpLowestPrice')], ['context', t('mpLargestContext')], ['name', t('mpName')]].map(([value, title]) => h('option', { key: value, value }, title)))),
             h('button', { type: 'button', className: 'nm-pill nm-pill-sm', 'aria-pressed': onlyFavourites, onClick: () => setOnlyFavourites(!onlyFavourites) }, t('mpFavourites'))),
           catalogueError ? h('p', { role: 'status' }, catalogueError) : null,
           h('div', { className: 'nm-mp-list' },
-            shown.length === 0 && searching ? h('div', { className: 'nm-mp-none' }, t('mpNoMatch')) : null,
-            shown.map((group) =>
-              h('div', { key: group.key, className: 'nm-mp-group', role: 'group', 'aria-label': group.label },
-                h('div', { className: 'nm-mp-group-label' }, group.label),
-                group.rows.map((r) => {
-                  const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === r.id) : undefined
-                  return h('div', { key: `${group.key}:${r.id}`, className: 'nm-mp-model' },
-                    row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id }),
-                    info && (info.free || info.context_length || info.max_output) ? h('div', { className: 'nm-mp-meta' },
-                      info.free ? h('span', { className: 'nm-model-free' }, t('mpFreeModel')) : null,
-                      info.context_length ? h('span', null, `${t('mpContext')} ${info.context_length.toLocaleString()}`) : null,
-                      info.max_output ? h('span', null, `${t('mpMaxOutput')} ${info.max_output.toLocaleString()}`) : null) : null,
-                    info ? h('button', { type: 'button', className: 'nm-mp-favourite', 'aria-label': `${t('mpFavourites')}: ${r.name}`, 'aria-pressed': favourites.includes(r.id), onClick: () => star(r.id) }, favourites.includes(r.id) ? '★' : '☆') : null,
-                    info ? h(ModelEstimate, { model: info, t }) : null)
+            shown.every(group => group.rows.length === 0) ? h('div', { className: 'nm-mp-none' }, t(onlyFavourites ? 'mpNoFavourites' : 'mpNoMatch')) : null,
+            sections.map(section => h('section', { key: section.value, className: 'nm-mp-kind' },
+              h('button', {
+                type: 'button', className: 'nm-mp-kind-head',
+                'aria-expanded': searching || !collapsedKinds.has(section.value),
+                onClick: () => setCollapsedKinds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(section.value)) next.delete(section.value)
+                  else next.add(section.value)
+                  return next
                 }),
-                group.more > 0
-                  ? h('button', { type: 'button', className: 'nm-mp-more', 'data-nm-mp-row': '', onKeyDown: walk, onClick: () => setExpanded((prev) => new Set([...prev, group.key])) }, t('mpShowMore', { n: group.more }))
-                  : null))))
+              }, `${searching || !collapsedKinds.has(section.value) ? '▾' : '▸'} ${section.label} · ${section.count}`),
+              searching || !collapsedKinds.has(section.value) ? section.groups.map(group =>
+                h('div', { key: group.key, className: 'nm-mp-group', role: 'group', 'aria-label': group.label },
+                  h('div', { className: 'nm-mp-group-label' }, group.label),
+                  group.rows.map((r) => {
+                    const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === r.id) : undefined
+                    return h('div', { key: `${group.key}:${r.id}`, className: 'nm-mp-model' },
+                      row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id }),
+                      info && (info.free || info.context_length || info.max_output || visiblePrice(info, t)) ? h('div', { className: 'nm-mp-meta' },
+                        info.context_length ? h('span', null, `${t('mpContext')} ${info.context_length.toLocaleString()}`) : null,
+                        visiblePrice(info, t) ? h('span', { className: info.free ? 'nm-model-free' : undefined }, visiblePrice(info, t)) : null,
+                        info.max_output ? h('span', null, `${t('mpMaxOutput')} ${info.max_output.toLocaleString()}`) : null) : null,
+                      info ? h('button', { type: 'button', className: 'nm-mp-favourite', 'aria-label': `${t('mpFavourites')}: ${r.name}`, 'aria-pressed': favourites.includes(r.id), onClick: () => star(r.id) }, favourites.includes(r.id) ? '★' : '☆') : null,
+                      info ? h(ModelEstimate, { model: info, t }) : null)
+                  }),
+                  group.more > 0
+                    ? h('button', { type: 'button', className: 'nm-mp-more', 'data-nm-mp-row': '', onKeyDown: walk, onClick: () => setExpanded((prev) => new Set([...prev, group.key])) }, t('mpShowMore', { n: group.more }))
+                    : null)) : null)),
+          h('button', { type: 'button', className: 'nm-mp-manage', onClick: () => { setOnlyFavourites(!onlyFavourites); setQuery(''); setExpanded(new Set()) } }, onlyFavourites ? t('mpManageModels') : t('mpShowFavourites'))
+        ))
       : null)
 }

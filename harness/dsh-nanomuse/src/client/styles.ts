@@ -1555,3 +1555,11 @@ export function ensureStyles(): () => void {
     }, 250)
   }
 }
+.nm-mp-kind + .nm-mp-kind { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--nm-divider); }
+.nm-mp-kind-head { width: 100%; border: 0; padding: 7px 10px; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.nm-mp-kind-head:hover, .nm-mp-kind-head:focus-visible { background: var(--nm-hover); outline: none; }
+.nm-mp-manage { flex: none; width: 100%; margin-top: 5px; padding: 9px 10px 7px; border: 0; border-top: 1px solid var(--nm-divider); border-radius: 0 0 8px 8px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.nm-mp-manage:hover, .nm-mp-manage:focus-visible { background: var(--nm-hover); color: var(--dsw-alias-label-primary); outline: none; }
+.nm-mp-kinds { display:flex;flex-wrap:wrap;gap:5px; }
+.nm-mp-kinds .nm-pill[aria-pressed="true"] { border-color:var(--nm-blue);color:var(--nm-blue); }
+.nm-mp-sort { display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary); }
