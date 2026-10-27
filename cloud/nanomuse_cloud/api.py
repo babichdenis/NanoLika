@@ -1286,6 +1286,7 @@ def create_app(
                 meta = capture_metadata(r.headers, obj, provider=selected.provider,
                                         usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
                 meta = router.accounting(selected, meta, usage.prompt, usage.completion, usage.cached)
+                router.schedule_price_alert(http, meta)
                 charged = cloud.charge_chat(
                     caller, spec, usage.prompt, usage.completion, request_id,
                     cached_tokens=usage.cached, provider_cost_rub=meta.get("provider_cost_rub"),
@@ -1385,6 +1386,7 @@ def create_app(
                         if usage is None:
                             usage = Usage(fallback_prompt_tokens, text_cjk + math.ceil((text_len - text_cjk) / 3.5))
                         accounting_meta = router.accounting(selected, accounting_meta, usage.prompt, usage.completion, usage.cached)
+                        router.schedule_price_alert(http, accounting_meta)
                         cloud.charge_chat(
                             caller, spec, usage.prompt, usage.completion, request_id,
                             cached_tokens=usage.cached, provider_cost_rub=accounting_meta.get("provider_cost_rub"),

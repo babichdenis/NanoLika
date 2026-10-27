@@ -81,6 +81,32 @@ def test_1017_flash_endpoint_is_excluded_from_generic_flash(monkeypatch):
     assert "1017" in excluded.exclusion_reason
 
 
+def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 1)],
+        "polza": [quote("polza", 2, 2)],
+    }
+    spec = ModelSpec("flash", "Flash", "deepseek-v4.1-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+    first = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+    assert first[0].provider == "openrouter"
+    assert first[0].body["usage"] == {"include": True}
+
+    observed = r.accounting(first[0], {"provider_cost_rub": 1.0}, 1, 512, 0)
+
+    assert observed["provider_price_mismatch"] is True
+    assert observed["provider_price_alert"] is True
+    assert r.routes(spec, body, "https://configured.example/v1/chat/completions", {})[0].provider == "polza"
+
+
+def test_openrouter_conversion_uses_fixed_base_rate(monkeypatch):
+    monkeypatch.delenv("CLOUD_ROUTING_USD_RUB", raising=False)
+    monkeypatch.delenv("CLOUD_ROUTING_CACHE", raising=False)
+    r = ProviderRouter(SimpleNamespace(providers={}, rub_per_usd=123))
+    assert r.usd_rub == 90
+
+
 def test_flash_model_prices_merge_floating_and_dated_ids():
     from nanomuse_cloud.provider_prices import model_key
 

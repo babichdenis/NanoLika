@@ -174,7 +174,9 @@ class ProviderRouter:
         self.errors: dict[str, str] = {}
         self.balances: dict[str, dict] = {}
         self.refreshed = 0.0
-        self.usd_rub = float(os.getenv("CLOUD_ROUTING_USD_RUB", settings.rub_per_usd))
+        # Use a stable accounting basis. The operator may change it explicitly, but
+        # automatic daily FX movement must not rewrite historical provider costs.
+        self.usd_rub = float(os.getenv("CLOUD_ROUTING_USD_RUB", "90"))
         self.usd_fee = float(os.getenv("CLOUD_ROUTING_USD_FEE_PCT", "5.5"))
         self.refresh_seconds = max(60, int(os.getenv("CLOUD_ROUTING_REFRESH_SECONDS", "1800")))
         self.max_age = max(self.refresh_seconds, int(os.getenv("CLOUD_ROUTING_MAX_AGE_SECONDS", "86400")))
@@ -183,6 +185,11 @@ class ProviderRouter:
         self.allow_quantized = os.getenv("CLOUD_ROUTING_ALLOW_QUANTIZED", "0") == "1"
         self.allow_unpriced = os.getenv("CLOUD_ROUTING_ALLOW_UNPRICED_FALLBACK", "0") == "1"
         self.enabled = os.getenv("CLOUD_AUTO_ROUTING", "1") == "1"
+        self.price_mismatch_pct = max(0.0, float(os.getenv("CLOUD_ROUTING_PRICE_MISMATCH_PCT", "25")))
+        self.price_mismatch_min_rub = max(0.0, float(os.getenv("CLOUD_ROUTING_PRICE_MISMATCH_MIN_RUB", "0.02")))
+        self.quarantine_seconds = max(self.refresh_seconds, int(os.getenv("CLOUD_ROUTING_PRICE_QUARANTINE_SECONDS", "1800")))
+        self.quarantined: dict[tuple[str, str], float] = {}
+        self.price_alerted: dict[tuple[str, str], float] = {}
         self.lock = asyncio.Lock()
         path = os.getenv("CLOUD_ROUTING_CACHE")
         self.path = Path(path) if path else None
@@ -422,7 +429,6 @@ class ProviderRouter:
             "max_age_seconds": self.max_age,
             "errors": dict(self.errors),
             "max_fallback_multiple": self.max_fallback_multiple,
-            "max_fallback_multiple": self.max_fallback_multiple,
             "balances": dict(self.balances),
             "providers": {name: len(rows) for name, rows in self.offers.items()},
         }
@@ -480,6 +486,8 @@ class ProviderRouter:
                             "исключена дорогая версия 1017; не используется как обычный Flash",
                         ))
                     continue
+                if self.quarantined.get((name, offer.model.lower()), 0) > now:
+                    continue
                 if not self.allow_quantized and any(q in offer.endpoint.lower() for q in ("fp4", "int4", "q4")):
                     continue
                 if tools and "tools" not in offer.parameters:
@@ -501,6 +509,11 @@ class ProviderRouter:
                     payload["max_tokens"] = payload.pop("max_completion_tokens")
                 if name == "openrouter":
                     payload["provider"] = {"sort": "price", "require_parameters": True}
+                    usage_options = payload.get("usage")
+                    payload["usage"] = {
+                        **(usage_options if isinstance(usage_options, dict) else {}),
+                        "include": True,
+                    }
                 inp, out, cache = offer.rates(now)
                 fixed = replace(offer, input_rub=inp, output_rub=out, cached_rub=cache, overrides=())
                 route = Route(
@@ -557,12 +570,70 @@ class ProviderRouter:
             routed_model=route.body["model"],
             routing_price_updated=route.offer.updated if route.offer else None,
         )
-        if number(meta.get("provider_cost_rub")) is not None:
+        actual = number(meta.get("provider_cost_rub"))
+        if actual is not None:
             result.setdefault("provider_cost_basis", "reported_rub")
         elif route.offer:
-            result["provider_cost_rub"] = route.offer.estimate(prompt, completion, cached)
+            actual = route.offer.estimate(prompt, completion, cached)
+            result["provider_cost_rub"] = actual
             result["provider_cost_basis"] = "catalog_estimate"
+        if route.offer and actual is not None:
+            expected = route.offer.estimate(prompt, completion, cached)
+            difference = actual - expected
+            ratio = actual / max(expected, 0.000001)
+            result["provider_cost_expected_rub"] = round(expected, 8)
+            result["provider_cost_difference_rub"] = round(difference, 8)
+            result["provider_cost_ratio"] = round(ratio, 4)
+            if difference >= self.price_mismatch_min_rub and ratio >= 1 + self.price_mismatch_pct / 100:
+                key = (route.provider, route.body["model"].lower())
+                until = time.time() + self.quarantine_seconds
+                self.quarantined[key] = until
+                # Ask the catalog loop to refresh soon. Until then, the bad offer is
+                # excluded and routes() chooses the cheapest compatible alternative.
+                self.refreshed = 0
+                result["provider_price_mismatch"] = True
+                result["provider_price_quarantined_until"] = int(until)
+                log.error(
+                    "provider price mismatch: provider=%s model=%s expected_rub=%.8f actual_rub=%.8f ratio=%.3f",
+                    route.provider, route.body["model"], expected, actual, ratio,
+                )
+                last_alert = self.price_alerted.get(key, 0)
+                if time.time() - last_alert >= self.quarantine_seconds:
+                    self.price_alerted[key] = time.time()
+                    result["provider_price_alert"] = True
         return result
+
+    def schedule_price_alert(self, http: httpx.AsyncClient, meta: dict) -> None:
+        """Send an anomaly without blocking a user's model response; secrets stay in env."""
+        if not meta.get("provider_price_alert"):
+            return
+        token = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_TOKEN", "").strip()
+        chat_id = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_CHAT_ID", "").strip()
+        if not token or not chat_id:
+            log.error("provider price alert cannot reach Telegram: alert credentials are not configured")
+            return
+        message = (
+            "nanoLika: цена поставщика выше каталога.\n"
+            f"Модель: {meta.get('routed_model', 'unknown')}\n"
+            f"Поставщик: {meta.get('provider', 'unknown')}\n"
+            f"Ожидалось: {meta.get('provider_cost_expected_rub', 0):.6f} ₽, "
+            f"списано: {meta.get('provider_cost_rub', 0):.6f} ₽ "
+            f"({meta.get('provider_cost_ratio', 0):.2f}×).\n"
+            "Маршрут временно исключён. Если есть совместимая альтернатива, следующий запрос уйдёт через неё."
+        )
+        asyncio.create_task(self._send_price_alert(http, token, chat_id, message))
+
+    @staticmethod
+    async def _send_price_alert(http: httpx.AsyncClient, token: str, chat_id: str, message: str) -> None:
+        try:
+            response = await http.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": message},
+                timeout=8,
+            )
+            response.raise_for_status()
+        except (httpx.HTTPError, ValueError):
+            log.exception("provider price alert could not be delivered to Telegram")
 
 
 def retryable(response: httpx.Response) -> bool:
