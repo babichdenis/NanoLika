@@ -12,12 +12,13 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
-import time
 
 import pytest
 from test_accounts import make
+
 from nanomuse_cloud.prices_admin import _catalog_snapshot, _discovered, _model_kind
 
 ADMIN = {"X-Admin-Token": "admin"}
@@ -106,6 +107,9 @@ async def test_prices_answers_with_a_working_rate(market):
     assert rate["cny_rub"] == 10.0
     assert body["count"]["models"] == len(body["models"]) > 0
     assert body["count"]["chat"] > 0
+    assert [(plan["id"], plan["discount_pct"]) for plan in body["plan_discounts"]] == [
+        ("lika", 10), ("lika-plus", 20), ("team", 30),
+    ]
 
 
 async def test_without_a_rate_the_page_says_the_ruble_figure_is_a_reference(market):

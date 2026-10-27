@@ -684,15 +684,31 @@ function modelCell(m) {
   const meta = h("div", undefined, "meta");
   meta.append(h("code", m.id));
   const lanes = (m.lanes || []).join(", ");
-  if (lanes) meta.append(h("span", ` · ${lanes}`));
-  if (m.recommended) meta.append(h("span", " · по умолчанию"));
-  if (!m.listed) meta.append(h("span", " · скрыта из меню"));
-  if (!m.default_on) meta.append(h("span", " · выключена у нового"));
+  if (lanes) meta.append(h("span", " \u00b7 " + lanes));
+  if (m.recommended) meta.append(h("span", " \u00b7 \u043f\u043e \u0443\u043c\u043e\u043b\u0447\u0430\u043d\u0438\u044e"));
+  if (!m.listed) meta.append(h("span", " \u00b7 \u0441\u043a\u0440\u044b\u0442\u0430 \u0438\u0437 \u043c\u0435\u043d\u044e"));
+  if (!m.default_on) meta.append(h("span", " \u00b7 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0430 \u0443 \u043d\u043e\u0432\u043e\u0433\u043e"));
   cell.append(meta);
-  const provider=servingProvider(m);if(provider)cell.append(h("span",providerLabel(provider),"retail-provider"));
+  const provider = servingProvider(m);
+  const live = offerOf(m, provider);
+  if (provider) {
+    const route = h("div", undefined, "route-now");
+    route.append(h("span", "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0441\u0435\u0439\u0447\u0430\u0441", "route-label"));
+    route.append(h("strong", providerLabel(provider) + " \u00b7 " + ((live && live.model) || m.upstream || "\u043c\u043e\u0434\u0435\u043b\u044c \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430"), "route-value"));
+    cell.append(route);
+  }
+  const others = offersOf(m).filter((offer) => offer.provider !== provider).slice(0, 4);
+  if (others.length) {
+    const line = h("div", undefined, "route-alternatives");
+    line.append(h("span", "\u0414\u0440\u0443\u0433\u0438\u0435 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u044f", "route-label"));
+    line.append(h("span", others.map((offer) => {
+      const state = offer.eligible === false ? " \u00b7 \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e" : offer.eligible === true ? " \u00b7 \u0440\u0435\u0437\u0435\u0440\u0432" : "";
+      return providerLabel(offer.provider) + " \u00b7 " + offer.model + state;
+    }).join("; ")));
+    cell.append(line);
+  }
   return cell;
 }
-
 function mediaCost(m) {
   const cost = m.cost || {};
   const group = groupOf(m);
@@ -716,15 +732,58 @@ function costCell(m) {
 
 /** Правка цены продажи: пересчитывает кратность и маржу на месте. */
 function sellCell(m) {
-  const cell=h("td",undefined,"num sell-edit"), commerce=m.commerce;
-  if(!commerce){cell.textContent="Нет рабочего прайса";return cell;}
-  const labels={input:"Вход / 1M",cached_input:"Кеш / 1M",output:"Ответ / 1M",image:"Картинка",image_2k:"Картинка 2K",image_input:"Исходная картинка",second:"Секунда видео",speech:"1000 знаков",minute:"Минута записи"};
-  if(commerce.source==="legacy_cost")cell.append(h("small","Розничная ставка не задана. Сохраните цену продажи.","bad"));
-  const fields=m.kind==='chat'?['input','cached_input','output']:m.kind==='image'?['image','image_2k']:m.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
-  const inputs={};for(const key of fields){const label=h('label',labels[key],'retail-field'),input=h('input');input.type='number';input.min='0.000001';input.step='0.01';input.value=commerce.rates_rub[key]||'';input.className='sell-input';input.setAttribute('aria-label',`${labels[key]}: ${m.name}`);input.oninput=()=>dirtyPrices.add(m.id);inputs[key]=input;label.append(input);cell.append(label);}
-  const save=h('button','Сохранить','chip'),status=h('span','','meta');save.type='button';save.onclick=async()=>{const values={};for(const [key,input] of Object.entries(inputs)){const n=Number(input.value);if(!Number.isFinite(n)||n<=0){status.textContent='Укажите положительную цену';return;}values[key]=n;}save.disabled=true;status.textContent='Сохраняем…';try{m.commerce=await api('/v1/admin/prices/models/'+encodeURIComponent(m.id)+'/pricing',{method:'PUT',body:JSON.stringify({revision:m.commerce.revision,rates_rub:values})});m.sell.rub_in=m.commerce.rates_rub.input;m.sell.rub_out=m.commerce.rates_rub.output;m.sell.rub_cached_in=m.commerce.rates_rub.cached_input;dirtyPrices.delete(m.id);status.textContent='Сохранено. Клиенты получат новый прайс при обновлении каталога.';recalcRow(m);}catch(e){status.textContent='Не сохранено: '+e.message;}finally{save.disabled=false;}};cell.append(save,status);return cell;
+  const cell = h("td", undefined, "num sell-edit");
+  const commerce = m.commerce;
+  if (!commerce) { cell.textContent = "\u041d\u0435\u0442 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u043f\u0440\u0430\u0439\u0441\u0430"; return cell; }
+  const labels = {input:"\u0412\u0445\u043e\u0434 / 1M",cached_input:"\u041a\u0435\u0448 / 1M",output:"\u041e\u0442\u0432\u0435\u0442 / 1M",image:"\u041a\u0430\u0440\u0442\u0438\u043d\u043a\u0430",image_2k:"\u041a\u0430\u0440\u0442\u0438\u043d\u043a\u0430 2K",image_input:"\u0418\u0441\u0445\u043e\u0434\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0438\u043d\u043a\u0430",second:"\u0421\u0435\u043a\u0443\u043d\u0434\u0430 \u0432\u0438\u0434\u0435\u043e",speech:"1000 \u0437\u043d\u0430\u043a\u043e\u0432",minute:"\u041c\u0438\u043d\u0443\u0442\u0430 \u0437\u0430\u043f\u0438\u0441\u0438"};
+  if (commerce.source === "legacy_cost") cell.append(h("small","\u0420\u043e\u0437\u043d\u0438\u0447\u043d\u0430\u044f \u0441\u0442\u0430\u0432\u043a\u0430 \u043d\u0435 \u0437\u0430\u0434\u0430\u043d\u0430. \u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u0435 \u0446\u0435\u043d\u0443 \u043f\u0440\u043e\u0434\u0430\u0436\u0438.","bad"));
+  const fields = m.kind === "chat" ? ["input","cached_input","output"] : m.kind === "image" ? ["image","image_2k"] : m.kind === "video" ? ["second"] : commerce.unit === "speech" ? ["speech"] : ["minute"];
+  const inputs = {};
+  for (const key of fields) {
+    const label = h("label", labels[key], "retail-field"), input = h("input");
+    input.type = "number"; input.min = "0.000001"; input.step = "0.01"; input.value = commerce.rates_rub[key] || "";
+    input.className = "sell-input"; input.setAttribute("aria-label", labels[key] + ": " + m.name);
+    input.oninput = () => dirtyPrices.add(m.id); inputs[key] = input; label.append(input); cell.append(label);
+  }
+  if (m.kind === "chat") {
+    const plans = state.data?.plan_discounts || [];
+    if (plans.length) {
+      const preview = h("div", undefined, "plan-preview");
+      preview.append(h("div", "\u0426\u0435\u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0443 \u043f\u043e\u0441\u043b\u0435 \u0441\u043a\u0438\u0434\u043a\u0438 \u0442\u0430\u0440\u0438\u0444\u0430 \u00b7 \u20bd \u0437\u0430 1M", "plan-preview-title"));
+      for (const plan of plans) {
+        const pct = Math.max(0, Math.min(100, Number(plan.discount_pct) || 0));
+        const input = Number(commerce.rates_rub.input || 0) * (100 - pct) / 100;
+        const output = Number(commerce.rates_rub.output || 0) * (100 - pct) / 100;
+        const costIn = Number(m.cost?.rub_in || 0), costOut = Number(m.cost?.rub_out || 0);
+        const below = (costIn > 0 && input < costIn) || (costOut > 0 && output < costOut);
+        const row = h("div", undefined, below ? "plan-price below-cost" : "plan-price");
+        row.append(h("strong", plan.name), h("span", money(input) + " / " + money(output)));
+        if (below) row.append(h("em", "\u043d\u0438\u0436\u0435 \u0437\u0430\u043a\u0443\u043f\u043a\u0438"));
+        preview.append(row);
+      }
+      cell.append(preview);
+    }
+  }
+  const save = h("button","\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c","chip"), status = h("span","","meta");
+  save.type = "button";
+  save.onclick = async () => {
+    const values = {};
+    for (const [key,input] of Object.entries(inputs)) {
+      const n = Number(input.value);
+      if (!Number.isFinite(n) || n <= 0) { status.textContent = "\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u043f\u043e\u043b\u043e\u0436\u0438\u0442\u0435\u043b\u044c\u043d\u0443\u044e \u0446\u0435\u043d\u0443"; return; }
+      values[key] = n;
+    }
+    save.disabled = true; status.textContent = "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u043c\u2026";
+    try {
+      m.commerce = await api("/v1/admin/prices/models/" + encodeURIComponent(m.id) + "/pricing", {method:"PUT",body:JSON.stringify({revision:m.commerce.revision,rates_rub:values})});
+      m.sell.rub_in=m.commerce.rates_rub.input; m.sell.rub_out=m.commerce.rates_rub.output; m.sell.rub_cached_in=m.commerce.rates_rub.cached_input;
+      dirtyPrices.delete(m.id); status.textContent="\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e. \u041a\u043b\u0438\u0435\u043d\u0442\u044b \u043f\u043e\u043b\u0443\u0447\u0430\u0442 \u043d\u043e\u0432\u044b\u0439 \u043f\u0440\u0430\u0439\u0441 \u043f\u0440\u0438 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0438 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430."; recalcRow(m);
+    } catch (e) { status.textContent="\u041d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e: " + e.message; }
+    finally { save.disabled=false; }
+  };
+  cell.append(save,status);
+  return cell;
 }
-
 function numberOrNull(value) {
   const n = Number(String(value).replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -890,7 +949,7 @@ function drawHead(providers, rows) {
   top.append(h("th", group, "pick sticky-1"));
   const nameTh = sortableTh("Модель", "name", "name sticky-2");
   top.append(nameTh);
-  top.append(sortableTh("Вендор", "vendor", "vendor"));
+  top.append(sortableTh("Производитель", "vendor", "vendor"));
   top.append(sortableTh("Контекст", "context", "num ctx"));
   top.append(sortableTh("Макс. выход", "max_output", "num ctx"));
   top.append(sortableTh("$ вход", "world_in", "num world"));
@@ -917,8 +976,8 @@ function drawHead(providers, rows) {
     top.append(th);
   }
 
-  top.append(sortableTh("Закупка, ₽", "cost_in", "num"));
-  top.append(sortableTh("Продажа, ₽", "sell_in", "num"));
+  top.append(sortableTh("Закупка, ₽/1M", "cost_in", "num"));
+  top.append(sortableTh("Цена клиенту", "sell_in", "num"));
   top.append(sortableTh("Кратность", "ratio_in", "num"));
   top.append(h("th", "При наценке, ₽", "num markup"));
   top.append(h("th", "Маржа, ₽", "num margin"));

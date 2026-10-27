@@ -674,12 +674,19 @@ def retryable(response: httpx.Response) -> bool:
 
 async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: bool, on_failure=None) -> tuple[httpx.Response, Route]:
     last: httpx.HTTPError | None = None
+    failures: list[str] = []
     for index, route in enumerate(routes):
         try:
             request = http.build_request("POST", route.url, headers=route.headers, json=route.body)
             response = await http.send(request, stream=stream)
         except httpx.HTTPError as exc:
             last = exc
+            provider = route.provider or "configured"
+            model = str(route.body.get("model") or "")
+            failure = f"{provider}/{model}:{type(exc).__name__}"
+            failures.append(failure)
+            # Never log response bodies, URLs, or credentials; identify only the route and failure class.
+            log.warning("routing transport failure provider=%s model=%s error=%s", provider, model, type(exc).__name__)
             continue
         if response.status_code >= 400:
             await response.aread()
@@ -690,4 +697,5 @@ async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: boo
             await response.aclose()
             continue
         return response, route
-    raise httpx.ConnectError("No configured model provider answered") from last
+    detail = ", ".join(failures) if failures else "no routes"
+    raise httpx.ConnectError(f"No configured model provider answered ({detail})") from last

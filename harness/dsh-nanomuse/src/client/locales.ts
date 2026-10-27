@@ -1260,6 +1260,8 @@ export const en = {
 
   mpShowMore: 'Show {n} more',
   mpNoMatch: 'No model matches',
+  mpCloudBilling: 'Cloud models use your nanoLika balance. The supplier may switch automatically; this is the price your plan charges.',
+  mpCatalogueUnavailable: 'Model details could not be loaded. Showing available models without prices or context details.',
   mlAppliesNew: 'Applies to the main chat and to new chats; a side chat keeps its model.',
   mlHandsLive: 'Saved. The hands use it from their next step.',
   mlSaved: 'Saved.',
@@ -2832,6 +2834,8 @@ export const zh: typeof en = {
 
   mpShowMore: '还有 {n} 个',
   mpNoMatch: '没有匹配的模型',
+  mpCloudBilling: '\u4e91\u7aef\u6a21\u578b\u4f7f\u7528 nanoLika \u4f59\u989d\u3002\u4f9b\u5e94\u5546\u53ef\u80fd\u81ea\u52a8\u5207\u6362\uff1b\u8fd9\u91cc\u663e\u793a\u7684\u662f\u5f53\u524d\u5957\u9910\u5411\u60a8\u6536\u53d6\u7684\u4ef7\u683c\u3002',
+  mpCatalogueUnavailable: '\u65e0\u6cd5\u52a0\u8f7d\u6a21\u578b\u8be6\u60c5\u3002\u73b0\u5728\u663e\u793a\u53ef\u7528\u6a21\u578b\uff0c\u4f46\u4e0d\u663e\u793a\u4ef7\u683c\u548c\u4e0a\u4e0b\u6587\u4fe1\u606f\u3002',
   mlAppliesNew: '对主要聊天和新对话生效；旁聊保留自己的模型。',
   mlHandsLive: '已保存。屏幕操作从下一步起用它。',
   mlSaved: '已保存。',
@@ -4362,6 +4366,8 @@ export const ru: typeof en = {
 
   mpShowMore: 'Показать ещё {n}',
   mpNoMatch: 'Ничего не подошло',
+  mpCloudBilling: '\u041c\u043e\u0434\u0435\u043b\u0438 nanoLika Cloud \u043e\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u044e\u0442\u0441\u044f \u0441 \u0431\u0430\u043b\u0430\u043d\u0441\u0430 \u041b\u0438\u043a\u0438. \u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u043c\u043e\u0436\u0435\u0442 \u043c\u0435\u043d\u044f\u0442\u044c\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438; \u0437\u0434\u0435\u0441\u044c \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u0430 \u0446\u0435\u043d\u0430 \u0434\u043b\u044f \u0432\u0430\u0448\u0435\u0433\u043e \u0442\u0430\u0440\u0438\u0444\u0430.',
+  mpCatalogueUnavailable: '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u0432\u0435\u0434\u0435\u043d\u0438\u044f \u043e \u043c\u043e\u0434\u0435\u043b\u044f\u0445. \u041f\u043e\u043a\u0430 \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u044b \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u0435 \u043c\u043e\u0434\u0435\u043b\u0438 \u0431\u0435\u0437 \u0446\u0435\u043d \u0438 \u043a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u0430.',
   mlAppliesNew: 'Действует в главной переписке и в новых; у боковой переписки остаётся своя модель.',
   mlHandsLive: 'Сохранено. Руки возьмут её со следующего шага.',
   mlSaved: 'Сохранено.',

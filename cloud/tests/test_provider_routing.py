@@ -303,8 +303,8 @@ def test_all_network_failures_raise_http_error_not_attribute_error():
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
-            with pytest.raises(httpx.HTTPError):
-                await request_chat(c, [Route("p", "https://p.example", {}, {})], False)
+            with pytest.raises(httpx.ConnectError, match=r"p/m:ConnectError"):
+                await request_chat(c, [Route("p", "https://p.example", {}, {"model": "m"})], False)
 
     asyncio.run(go())
 

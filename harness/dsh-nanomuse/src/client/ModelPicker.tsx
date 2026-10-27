@@ -36,7 +36,7 @@ export interface ModelPickerProps<R extends ModelRow = ModelRow> {
   onHead?(value: string): void
   onPick(group: string, row: R): void
   /** How a row is written; the row's name by default. */
-  rowText?(row: R): ReactNode
+  rowText?(row: R, info?: CatalogueModel): ReactNode
 }
 
 const PANEL_WIDTH = 620
@@ -103,7 +103,7 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
     let alive = true
     call<{ models: CatalogueModel[]; shelf: { favourites?: string[] } }>('model-catalogue')
       .then(data => { if (alive) { setCatalogue(data.models); setFavourites(data.shelf.favourites ?? []); setCatalogueError('') } })
-      .catch(() => { if (alive) { setCatalogue([]); setFavourites([]) } })
+      .catch(() => { if (alive) { setCatalogue([]); setFavourites([]); setOnlyFavourites(false); setCatalogueError(t('mpCatalogueUnavailable')) } })
     return () => { alive = false }
   }, [open])
   const star = (id: string) => {
@@ -257,10 +257,11 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
               searching || !collapsedKinds.has(section.value) ? section.groups.map(group =>
                 h('div', { key: group.key, className: 'nm-mp-group', role: 'group', 'aria-label': group.label },
                   h('div', { className: 'nm-mp-group-label' }, group.label),
+                  group.key === 'nanomuse' ? h('div', { className: 'nm-mp-group-note' }, t('mpCloudBilling')) : null,
                   group.rows.map((r) => {
                     const info = group.key === 'nanomuse' ? catalogue.find(m => m.id === r.id) : undefined
                     return h('div', { key: `${group.key}:${r.id}`, className: 'nm-mp-model' },
-                      row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r) : r.name, () => { onPick(group.key, r); close(true) }, { title: r.id }),
+                      row(`${group.key}:${r.id}`, current?.group === group.key && current.id === r.id, rowText ? rowText(r, info) : (info?.name || r.name), () => { onPick(group.key, r); close(true) }, { title: r.id }),
                       info && (info.free || info.context_length || info.max_output || visiblePrice(info, t)) ? h('div', { className: 'nm-mp-meta' },
                         info.context_length ? h('span', null, `${t('mpContext')} ${info.context_length.toLocaleString()}`) : null,
                         visiblePrice(info, t) ? h('span', { className: info.free ? 'nm-model-free' : undefined }, visiblePrice(info, t)) : null,

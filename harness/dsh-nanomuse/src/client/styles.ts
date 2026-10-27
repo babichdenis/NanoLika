@@ -1314,6 +1314,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 .nm-mp-kind-head { width: 100%; border: 0; padding: 7px 10px; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
 .nm-mp-kind-head:hover, .nm-mp-kind-head:focus-visible { background: var(--nm-hover); outline: none; }
 .nm-mp-group-label { padding: 6px 10px 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nm-mp-group-note { margin: 2px 9px 6px; padding: 7px 9px; border-radius: 8px; background: var(--nm-hover); color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.4; }
 .nm-mp-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; text-align: left; padding: 7px 10px; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13.5px; cursor: pointer; }
 .nm-mp-row:hover, .nm-mp-row:focus-visible, .nm-mp-more:hover, .nm-mp-more:focus-visible { background: var(--nm-hover); outline: none; }
 .nm-mp-row.nm-selected { color: var(--nm-blue); }

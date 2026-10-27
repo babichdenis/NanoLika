@@ -455,6 +455,11 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         prices = _read("prices.json")
         rate = _rate(settings, prices)
         models = _models(settings, float(rate["cny_rub"] or 0))
+        plan_discounts = [
+            {"id": row["id"], "name": row["name"], "discount_pct": row["discount_pct"]}
+            for row in (cloud.plan_menu() if cloud is not None and callable(getattr(cloud, "plan_menu", None)) else [])
+        ]
+        max_discount_pct = max((int(row["discount_pct"]) for row in plan_discounts), default=0)
         if router is not None:
             for row, spec in zip(models, settings.models, strict=True):
                 if cloud is not None:
@@ -524,12 +529,13 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 row["commerce"] = commerce
                 rates = commerce["rates_rub"]
                 row["sell"].update(rub_in=rates["input"], rub_out=rates["output"], rub_cached_in=rates["cached_input"])
-                row["below_cost"] = any(row["cost"].get("rub_" + side) and rates[field] * .7 < row["cost"]["rub_" + side] for side, field in (("in", "input"), ("out", "output"))) if spec.kind == "chat" else commerce["source"] == "legacy_cost"
+                row["below_cost"] = any(row["cost"].get("rub_" + side) and rates[field] * (100 - max_discount_pct) / 100 < row["cost"]["rub_" + side] for side, field in (("in", "input"), ("out", "output"))) if spec.kind == "chat" else commerce["source"] == "legacy_cost"
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]
         return {
             "routing": router.status() if router is not None else None,
+            "plan_discounts": plan_discounts,
             "rate": rate,
             "generated_at": _mtime("prices.json"),
             "count": {

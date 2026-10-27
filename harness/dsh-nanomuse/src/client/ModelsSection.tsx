@@ -41,7 +41,7 @@ export const DEPENDENT: readonly Slot[] = ['hands', 'image', 'video']
 
 /** `<provider> · <model>`, as the page writes a value. */
 export function valueText(provider: string, providerLabel: string, model: string): string {
-  return provider === 'nanomuse' ? 'nanoLika Cloud' : `${providerLabel || provider} · ${model}`
+  return provider === 'nanomuse' ? (providerLabel || 'nanoLika Cloud') + ' \u00b7 ' + model : (providerLabel || provider) + ' \u00b7 ' + model
 }
 
 /** `GET /models`. */
@@ -120,7 +120,9 @@ export function slotGroups(slot: Slot, options: readonly ModelOption[], catalogu
 export function SlotPicker({ t, slot, view, disabled, catalogue, onPick }: { t: Translate; slot: Slot; view: SlotView; disabled: boolean; catalogue?: readonly Pick<ProviderEntry, 'id' | 'defaults'>[]; onPick(provider: string, model: string): void }): ReactNode {
   const automatic = DEPENDENT.includes(slot)
   const onHead = view.off ? 'off' : automatic && !view.chosen ? 'auto' : ''
-  const text = onHead === 'off' ? t('mdVideoOff') : onHead === 'auto' ? t('mlAutomatic') : view.model ? valueText(view.provider, view.providerLabel, view.model) : t('mdPick')
+  const selectedOption = view.options.find((option) => option.provider === view.provider && option.id === view.model)
+  const selectedName = selectedOption?.name || view.model
+  const text = onHead === 'off' ? t('mdVideoOff') : onHead === 'auto' ? t('mlAutomatic') : view.model ? valueText(view.provider, view.providerLabel, selectedName) : t('mdPick')
   const heads: PickerHead[] = [
     ...(automatic ? [{ value: 'auto', label: t('mlAutomatic') }] : []),
     ...(slot === 'video' ? [{ value: 'off', label: t('mdVideoOff') }] : []),
@@ -137,7 +139,7 @@ export function SlotPicker({ t, slot, view, disabled, catalogue, onPick }: { t: 
     testId: `nm-ml-${slot}`,
     onHead: (value) => onPick('', value),
     onPick: (provider, row) => onPick(provider, row.id),
-    rowText: (o) => (o.recommended ? `${o.name} · ${t('mlRecommended')}` : o.name),
+    rowText: (o, info) => { const name = o.provider === 'nanomuse' ? (info?.name || o.name) : o.name; return o.recommended ? name + ' \u00b7 ' + t('mlRecommended') : name },
   })
 }
 

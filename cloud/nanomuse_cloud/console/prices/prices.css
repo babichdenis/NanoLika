@@ -353,3 +353,14 @@ body:not(.prices-detailed) #models :is(.prov-cell,.caps,.clean-name,.markup,.mar
 
 /* Editable rates remain recognisable as fields, including without hover. */
 .retail-field input{width:104px;padding:6px 8px;background:#fffef9;border:1px solid #ced8c8;border-radius:7px;color:#294a35;font-variant-numeric:tabular-nums}.sell-edit .chip:hover{background:#dfe9d8}.table-wrap{scrollbar-color:#a8b8a0 #f5f3ec}
+
+.route-now,.route-alternatives{display:flex;gap:5px;align-items:baseline;flex-wrap:wrap;margin-top:5px;font-size:11px;line-height:1.4}
+.route-label{color:#6c7568;font-size:10px}
+.route-value{color:#38573d;font-weight:650}
+.route-alternatives{color:#667062}
+.plan-preview{display:grid;gap:2px;margin:8px 0;padding:7px 8px;border-radius:8px;background:#f1f3eb;text-align:left;white-space:normal}
+.plan-preview-title{margin-bottom:2px;color:#65705f;font-size:10px;font-weight:600}
+.plan-price{display:flex;justify-content:space-between;gap:8px;color:#3d4b3b;font-size:10.5px}
+.plan-price strong{font-weight:600}
+.plan-price em{color:#985b26;font-style:normal;font-size:10px}
+.plan-price.below-cost{color:#8a5122}
