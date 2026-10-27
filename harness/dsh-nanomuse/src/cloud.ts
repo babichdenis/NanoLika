@@ -983,7 +983,7 @@ export default class NanomuseCloud extends Service {
               requestId: randomUUID() as never,
               sessionId: sessionId as SessionId,
               mode: 'steer',
-              content: [{ type: 'text', text: 'Пора подвести итог этого хода: скажи словами, что сделано, что проверено и с чего продолжить — без новых инструментов.' }],
+              content: [{ type: 'text', text: `${personName(this.ctx) ? `${personName(this.ctx)}, пора` : 'Пора'} подвести итог этого хода: скажи словами, что сделано, что проверено и с чего продолжить — без новых инструментов.` }],
             }, new AbortController().signal),
           ).catch((error: unknown) => this.ctx.logger.warn('nanolika: wrap-up not delivered: %s', message(error)))
         }
@@ -4326,4 +4326,16 @@ export function send(res: ServerResponse, status: number, body?: unknown): void 
 
 export function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * What the person is called, or '' when they never said: the rooms keep it as the memory's
+ * "- Call them: X" line (`rooms.ts`). The same helper as in reach.ts; a local copy keeps the
+ * wrap-up steer independent of that module's import graph.
+ */
+function personName(ctx: Context): string {
+  const rooms = ctx.get('nanomuseRooms') as { memory?: readonly { text: string }[] } | undefined
+  const line = rooms?.memory?.find((m) => /^call them:/i.test(m.text))
+  if (!line) return ''
+  return line.text.replace(/^call them:\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 60)
 }
