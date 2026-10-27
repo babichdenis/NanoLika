@@ -38,6 +38,7 @@ from .nudges import merge as nudges_merge
 from .nudges import validate as nudges_validate
 from .providers import exhausted_key_line, guidance
 from .providers import provider as catalogue_provider
+from .provider_routing import blocked_price_variant
 from .senders import CodeSender, LogSender, SendError, make_sender
 
 log = logging.getLogger("nanomuse_cloud")
@@ -2549,6 +2550,11 @@ class Cloud:
         raise CloudError(404, "model_not_offered", f"NanoLika Cloud does not offer {model_id!r}; choose one of: {offered}{more}")
 
     def model_visible(self, spec: ModelSpec) -> bool:
+        # A dated, known-expensive endpoint must never reappear in a customer's
+        # picker, even if a saved admin visibility override or environment menu
+        # accidentally turns it back on.
+        if blocked_price_variant(spec.id) or blocked_price_variant(spec.upstream):
+            return False
         saved = self.db.settings_get("model_visibility")
         choices = saved[0] if saved and isinstance(saved[0], dict) else {}
         return bool(choices.get(spec.id, spec.listed)) and bool(spec.available)

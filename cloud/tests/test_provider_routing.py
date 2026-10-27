@@ -457,7 +457,7 @@ async def test_admin_visibility_persists_and_changes_client_catalog(monkeypatch)
         signup_tokens=100000,
         public_base="http://cloud.test",
         catalog_enabled=True,
-        models=(ModelSpec("friendly", "Friendly", "deepseek/deepseek-v4.1-flash-1017"),),
+        models=(ModelSpec("friendly", "Friendly", "deepseek/deepseek-v4.1-flash"),),
     )
     sender = LogSender()
     cloud = Cloud(settings, Database(":memory:"), sender)
@@ -489,6 +489,24 @@ async def test_admin_visibility_persists_and_changes_client_catalog(monkeypatch)
         response = await client.put(path, headers={"X-Admin-Token": "admin"}, json={"visible": True})
         assert response.status_code == 200 and cloud.model_visible(spec)
     await app.state.http.aclose()
+
+
+def test_expensive_dated_flash_variant_stays_hidden_even_if_admin_enables_it():
+    from nanomuse_cloud.service import Cloud
+
+    spec = ModelSpec(
+        "deepseek-deepseek-v4-1-flash-1017",
+        "DeepSeek V4.1 Flash 1017",
+        "deepseek/deepseek-v4.1-flash-1017",
+        listed=True,
+        available=True,
+    )
+    settings = Settings(database=":memory:", models=(spec,))
+    cloud = Cloud(settings, Database(":memory:"), LogSender())
+
+    assert not cloud.model_visible(spec)
+    cloud.set_model_visibility(spec.id, True)
+    assert not cloud.model_visible(spec)
 
 
 def test_proxy_public_catalog_uses_numeric_breakdown_not_from_label(monkeypatch):
