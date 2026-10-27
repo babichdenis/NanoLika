@@ -71,12 +71,14 @@ def readiness(cloud, payments) -> dict:
     """Facts about the running process, not promises inferred from a terminal key."""
     retail = any(getattr(m, "sells_at_own_rate", lambda: False)() for m in cloud.s.models if m.kind == "chat")
     plans = payments.plans()
+    provider_name = "ЮKassa" if getattr(payments, "provider", "tbank") == "yookassa" else "Т-Банк"
+    test_mode = bool(getattr(payments, "test_mode", payments.terminal.endswith("DEMO")))
     checks = [
         {
             "id": "demo_terminal",
             "ok": payments.terminal.endswith("DEMO") and bool(payments.password),
-            "label": "Тестовый терминал настроен",
-            "label_en": "Test terminal configured",
+            "label": f"Тестовое подключение {provider_name} настроено",
+            "label_en": f"{provider_name} test connection configured",
         },
         {
             "id": "live_settlement",
@@ -120,7 +122,7 @@ def readiness(cloud, payments) -> dict:
     return {
         "live_enabled": False,
         "ready_for_first_live_payment": False,
-        "mode": "demo" if payments.terminal.endswith("DEMO") else "blocked",
+        "mode": "demo" if test_mode else "blocked",
         "checks": checks,
         "plans": plans,
         "site_checkout": "placeholder",

@@ -82,6 +82,18 @@ class OrderRequest(BaseModel):
 
 
 class Payments:
+    payment_hosts = {
+        "pay.tbank-online.com",
+        "securepayments.tinkoff.ru",
+        "securepayments.tbank.ru",
+        "securepay.tinkoff.ru",
+        "securepay.tbank.ru",
+    }
+
+    @staticmethod
+    def valid_payment_id(payment_id: str) -> bool:
+        return payment_id.isdigit() and len(payment_id) <= 20
+
     def __init__(self, cloud: Cloud, terminal: str, password: str, public_base: str, transport=None):
         self.cloud, self.db = cloud, cloud.db
         self.terminal, self.password, self.public_base = terminal, password, public_base.rstrip("/")
@@ -305,7 +317,7 @@ class Payments:
     async def create(self, caller: Caller, request: OrderRequest, *, fiscal: FiscalConfig | None = None, receipt_email: str = "") -> dict:
         self.ready()
         if not request.accept_terms:
-            raise CloudError(400, "payment_terms", "Подтвердите ознакомление с условиями тестового оформления")
+            raise CloudError(400, "payment_terms", "Подтвердите ознакомление с условиями оплаты")
         menu = self.plans()
         if request.plan == "plus" and "plus" not in menu and "lika-plus" in menu:
             request = request.model_copy(update={"plan": "lika-plus"})
@@ -372,8 +384,7 @@ class Payments:
         url = str(result.get("PaymentURL", ""))
         parsed = urlparse(url)
         if (
-            not payment_id.isdigit()
-            or len(payment_id) > 20
+            not self.valid_payment_id(payment_id)
             or parsed.scheme != "https"
             or parsed.hostname
             not in {
@@ -537,7 +548,10 @@ class Payments:
         with self.db.tx() as c:
             row = c.execute("SELECT * FROM tbank_demo_wallets WHERE account_id=?", (caller.account_id,)).fetchone()
         return {
-            "test_mode": True,
+            "test_mode": bool(getattr(p, "test_mode", p.terminal.endswith("DEMO"))),
+            "provider": str(getattr(p, "provider", "tbank")),
+            "provider_name": "ЮKassa" if getattr(p, "provider", "tbank") == "yookassa" else "Т-Банк",
+            "webhook_url": getattr(p, "webhook_url", ""),
             "balance_kopecks": row["balance"] if row else 0,
             "plan": row["plan"] if row else "",
             "expires_at": row["expires_at"] if row else 0,
@@ -545,9 +559,14 @@ class Payments:
 
 
 def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, admin_dep=None):
-    p = payments or Payments(
-        cloud, os.getenv("TBANK_TERMINAL_KEY", ""), os.getenv("TBANK_PASSWORD", ""), os.getenv("TBANK_PUBLIC_BASE", "")
-    )
+    if payments is not None:
+        p = payments
+    elif os.getenv("PAYMENT_PROVIDER", "tbank").strip().lower() == "yookassa":
+        from .yookassa import configured_yookassa
+
+        p = configured_yookassa(cloud, cloud.s.public_base)
+    else:
+        p = Payments(cloud, os.getenv("TBANK_TERMINAL_KEY", ""), os.getenv("TBANK_PASSWORD", ""), os.getenv("TBANK_PUBLIC_BASE", ""))
     caller_auth = Depends(caller_dep)
     app.state.payments = p
     router = APIRouter()
@@ -560,6 +579,13 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
             headers={
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
+    if hasattr(p, "handle_notification"):
+
+        @router.post("/v1/payments/yookassa/notify")
+        async def yookassa_notify(request: Request):
+            await p.handle_notification(request)
+            return PlainTextResponse("OK")
+
                 "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             },
         )

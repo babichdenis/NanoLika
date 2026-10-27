@@ -48,7 +48,7 @@ async def reconcile_batch(payments: Payments, *, at: int | None = None, limit: i
                     raise ValueError("payment_lookup_ambiguous")
                 item = matches[0]
                 pid = str(item.get("PaymentId", ""))
-                if not pid.isdigit() or len(pid) > 20 or type(item.get("Amount")) is not int or not 0 <= item["Amount"] <= row["amount"]:
+                if not payments.valid_payment_id(pid) or type(item.get("Amount")) is not int or not 0 <= item["Amount"] <= row["amount"]:
                     raise ValueError("payment_lookup_mismatch")
                 # Always validate against independent GetState before storing a recovered ID.
                 row["payment_id"] = pid

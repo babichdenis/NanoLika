@@ -13,5 +13,5 @@ export function groupWebDevices(devices){
  return [...ordinary,{kind:'web',name:'web',online:web.some(d=>d.online),last_seen:Math.max(0,...web.map(d=>Number(d.last_seen)||0)),connections:web}];
 }
 export function bankTarget(value){
- try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru'].includes(u.hostname)?u.href:null;}catch{return null;}
+ try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru','yookassa.ru','yoomoney.ru'].includes(u.hostname)?u.href:null;}catch{return null;}
 }

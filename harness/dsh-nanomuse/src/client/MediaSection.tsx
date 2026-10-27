@@ -8,10 +8,17 @@
  * clips" with the host's progress ("Animating 2/4…", the stage of the current clip), and
  * the clips on this computer with their sizes. Clips are per device; the account keeps
  * stills only.
+ *
+ * With no face drawn yet the row that would draw the clips offers the studio instead
+ * ("Draw her face"): the clips are drawn from a face's stills, so there is nothing to
+ * animate until one exists, and the person should not have to find the studio elsewhere
+ * (the profile drawer, or asking the agent). Drawing a face starts its clips by itself
+ * when the switch below is on and a video model is set.
  */
 import { createElement as h, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { call, errorStyle, failureText, type Translate } from './api.ts'
 import { motionStatus } from './Avatar.tsx'
+import { studioBus } from './AvatarStudio.tsx'
 import { IconCheck, IconImage, IconVideo } from './icons.tsx'
 import { useLive, type LiveMotion, type MotionMood } from './live.ts'
 import { SlotPicker, useModels } from './ModelsSection.tsx'
@@ -104,6 +111,8 @@ export function makeMediaSection(t: Translate) {
         .catch((err: unknown) => setError(failureText(t, err)))
         .finally(() => setBusy(null))
     }
+    /** The studio that draws her face, opened on the look she wears now. */
+    const drawFace = () => studioBus.open?.(live.profile.description || '', live.profile.style || 'muse')
 
     if (!view) return h('div', { className: 'nm-section' }, h('p', null, t('mdMediaLead')), error ? h('div', { style: errorStyle }, error) : null)
 
@@ -209,7 +218,10 @@ export function makeMediaSection(t: Translate) {
           ),
           progress?.running
             ? h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: () => void call('media/cancel', {}).catch(() => undefined) }, t('mdStopClips'))
-            : h('button', { type: 'button', className: 'nm-pill nm-pill-sm', disabled: busy !== null || !face || !videoOn, onClick: () => animate(haveClips.length > 0) }, haveClips.length ? t('mdRedoClips') : t('mdMakeClips')),
+            : !face
+              // nothing to animate yet: the studio that draws her face opens from here
+              ? h('button', { type: 'button', className: 'nm-pill nm-pill-sm', disabled: busy !== null, onClick: drawFace }, t('mdDrawFace'))
+              : h('button', { type: 'button', className: 'nm-pill nm-pill-sm', disabled: busy !== null || !videoOn, onClick: () => animate(haveClips.length > 0) }, haveClips.length ? t('mdRedoClips') : t('mdMakeClips')),
         ),
         progress && !progress.running && progress.failed.length
           ? h('div', { className: 'nm-row' },
