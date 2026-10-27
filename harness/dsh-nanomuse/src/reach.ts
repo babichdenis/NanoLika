@@ -419,6 +419,16 @@ export function apply(ctx: Context): void {
         }),
       'nanomuse reach: prompt context',
     )
+    // The memory rule, invisible to the person: a system-prompt section, never a chat message.
+    ctx.effect(
+      () =>
+        ctx.systemPrompt.section({
+          name: 'nanolika-project-memory',
+          order: 95,
+          text: "When your work changes the state of the project in the current workspace — code, settings, infrastructure, configuration — record a short summary in that project's shared memory (its worklog or memory file): what was done and what remains. If only your answer to the person changed (a letter, a translation, an explanation), do not write to long-term memory.",
+        }),
+      'nanomuse reach: project memory rule',
+    )
   })
 }
 
