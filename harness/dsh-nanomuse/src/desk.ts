@@ -570,12 +570,16 @@ export function pickHandsModel<M extends { id: string; kind: string; for?: strin
 }
 
 /**
- * Whether a chat model takes pictures. The relay's modalities decide, except for
- * DeepSeek: only the `v4.1`, `vision` and `ocr` ids are sighted, whatever the
- * list says (older relays marked every DeepSeek model as taking images).
+ * Whether a chat model takes pictures. The relay's modalities decide; missing
+ * modalities fall back to the DeepSeek name check (older relays marked every
+ * DeepSeek model as taking images, so only the `v4.1`, `vision` and `ocr` ids
+ * used to count; our own `deepseek-flash` is DeepSeek V4.1 Flash and the relay
+ * lists its `image` modality, which wins here).
  */
 export function takesImages(m: { id: string; inputModalities?: string[] }): boolean {
+  const modalities = m.inputModalities
+  if (modalities && modalities.length) return modalities.includes('image')
   const id = m.id.toLowerCase()
   if (id.includes('deepseek')) return /v4\.1|vision|ocr/.test(id)
-  return (m.inputModalities ?? []).includes('image')
+  return false
 }
