@@ -1339,3 +1339,19 @@ macOS ставила на панель строку **приложения** с 
 а не выдумывает новые ставки.
 
 ## 2026-10-27 — Каталог моделей и быстрый список избранного
+
+## 2026-10-27"��y��y� Pricing and routing overlay deployment
+
+- Source commit: `179ee939 fix(models): clarify provider routing and client prices`.
+- Applied the changes to the production overlays actually mounted by the relay: admin catalogue,
+  plan price preview, current provider and alternative offers, and provider transport diagnostics.
+- Updated the CSS cache version in the served HTML so browsers request the new styles.
+- Restarted the relay. `/healthz` returns HTTP 200; the relay serves the updated CSS URL and
+  JavaScript containing the route and plan-price UI.
+- The previous `git apply` attempt silently skipped untracked overlay files. The changes are now
+  applied with a patch tool and verified from the live relay responses.
+- Source checks: 54 cloud tests passed, Ruff passed, desktop build and typecheck passed.
+  The desktop suite passed 408/409; the remaining failure is the existing expectation in
+  `tests/sync.test.mjs`.
+- No paid inference request was made during deployment. A short controlled request is still needed
+  to confirm the provider charge against the displayed price.
