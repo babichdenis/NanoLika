@@ -116,7 +116,7 @@
     catalog: "模型目录", catalogNote: "key 下能用的模型（菜单之外）：relay 向每个模型各问一句话、再给一张品红色小图，确认它能回答、能不能看图；答案保存 7 天。客户端拿到的「能看图」就是这里的结果。", catalogOff: "模型目录未开启（CLOUD_CATALOG=0）。", catalogNames: "按名字推断，未逐个验证（CLOUD_CATALOG_PROBE=0）。", catalogProbing: "正在验证…", catalogPending: (n) => `${fmt(n)} 个待验证`, catalogFetched: (t) => `列表更新于 ${t}`, catalogError: (e) => `读取列表失败：${e}`,
     cModel: "模型", cKind: "类型", cSees: "看图", cVerified: "已验证", cYes: "是", cNo: "否", cUnusable: "服务商拒绝的模型（不出现在客户端）", cNoUnusable: "没有被拒绝的模型。", cCount: (n, v) => `${fmt(n)} 个对话模型 · ${fmt(v)} 个能看图`,
     // 0.14: the page in pages
-    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", providers: "供应商", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
+    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", providers: "供应商", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", traffic: "访问", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
     // 0.22: the Controls page, the Stats page, the GitHub series
     ctl: {
       title: "控制", note: "每个开关立刻生效、重启后保持；谁在何时改了什么记在下面的日志里。关闭前会先说明确切后果。",
@@ -261,7 +261,7 @@
     pCountry: "Country / region", pProvince: "Province / state", pAccounts: "Accounts", pNew: "New", pSignins: "Sign-ins", pRequests: "Requests", pDemo: "Demo visitors", pUnknown: "unknown", pLocal: "local network", pNone: "No visits recorded yet.", pAccountsNote: "accounts by their latest address",
     catalog: "Model catalog", catalogNote: "The models under the key beyond the menu: the relay asks each one a one-word question and then shows it a small magenta picture, to learn whether it answers and whether it sees; the answers stand for seven days. The “sees pictures” the apps show is what is here.", catalogOff: "The catalog is off (CLOUD_CATALOG=0).", catalogNames: "Guessed from names, not checked one by one (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Checking…", catalogPending: (n) => `${fmt(n)} to check`, catalogFetched: (t) => `list read ${t}`, catalogError: (e) => `The list could not be read: ${e}`,
     cModel: "Model", cKind: "Kind", cSees: "Sees pictures", cVerified: "Checked", cYes: "yes", cNo: "no", cUnusable: "Models the provider refuses (not offered to the apps)", cNoUnusable: "None refused.", cCount: (n, v) => `${fmt(n)} chat models · ${fmt(v)} see pictures`,
-    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", providers: "Providers", activity: "Activity", demo: "Demo", data: "Data", site: "Site", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
+    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", providers: "Providers", activity: "Activity", demo: "Demo", data: "Data", site: "Site", traffic: "Visits", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
     ctl: {
       title: "Controls", note: "Each switch applies at once and survives a restart; who changed what, and when, is in the log below. A switch says exactly what turning it off does before it flips.",
       names: { free_allowance: "Free allowance", signups: "Sign-ups", cloud_service: "Cloud service", sync: "Conversation sync", hub: "Device hub" },
@@ -413,7 +413,7 @@
     pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
     catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
     cModel: "Модель", cKind: "Тип", cSees: "Видит картинки", cVerified: "Проверена", cYes: "да", cNo: "нет", cUnusable: "Модели, от которых отказывается провайдер (приложениям не предлагаются)", cNoUnusable: "Таких нет.", cCount: (n, v) => `${fmt(n)} чат-моделей · ${fmt(v)} видят картинки`,
-    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", providers: "Поставщики", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
+    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", providers: "Поставщики", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", traffic: "Посещения", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
     ctl: {
       title: "Управление", note: "Каждый переключатель действует сразу и переживает перезапуск; кто, что и когда менял — в журнале ниже. Перед переключением переключатель точно описывает, что отключит.",
       names: { free_allowance: "Бесплатный баланс", signups: "Регистрации", cloud_service: "Облачный сервис", sync: "Синхронизация диалогов", hub: "Хаб устройств" },
@@ -529,6 +529,7 @@
     demo: ICON.phone,
     data: svg('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>'),
     site: ICON.web,
+    traffic: svg('<path d="M3 12s3.2-7 9-7 9 7 9 7-3.2 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="3"/>'),
     models: svg('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>'),
     stats: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
     controls: svg('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/>'),
@@ -542,7 +543,7 @@
     "control.switch": ["warn", ICON.warn], "control.rule": ["warn", ICON.warn],
   };
   const FILTERS = [["", "all"], ["sign_in.code,sign_in.password,sign_in.session,sign_in.failed,account.created", "signIns"], ["budget.refused", "refusals"], ["upstream.error", "errors"], ["content.rejected", "contentChecks"], ["call.ended", "calls"], ["password.set,password.changed,password.cleared", "passwords"]];
-  const VIEWS = ["overview", "people", "invites", "places", "money", "providers", "activity", "demo", "data", "site", "models", "health", "stats", "controls", "settings", "payments"];
+  const VIEWS = ["overview", "people", "invites", "places", "money", "providers", "activity", "demo", "data", "site", "traffic", "models", "health", "stats", "controls", "settings", "payments"];
   const PAGE = 50;
 
   // ── state ──────────────────────────────────────────────────────
@@ -670,6 +671,48 @@
       h("div", { class: "grid2 pad" },
         h("div", { class: "kv" }, ...(v.pages || []).slice(0, 10).flatMap(r => [h("b", {}, r.name), h("span", {}, fmt(r.hits))])),
         h("div", { class: "kv" }, ...(v.refs || []).slice(0, 10).flatMap(r => [h("b", {}, r.name), h("span", {}, fmt(r.hits))]))));
+  }
+
+  function siteTrafficView() {
+    const v = need("siteCounter");
+    const aggregate = need("traffic");
+    const aggregatePanel = !aggregate ? loadingPanel(T.site(days)) : aggregate._error ? failedPanel(T.site(days), "traffic", aggregate._error) : sitePanel(aggregate);
+    const title = L3("Подробные посещения сайта", "Website visit details", "网站访问详情");
+    if (!v) return [aggregatePanel, loadingPanel(title)];
+    if (v._error || !v.available) return [aggregatePanel, panel(title, h("div", { class: "pad" },
+      h("p", {}, L3("Счётчик сайта не отвечает. Сводка и журнал посещений пока недоступны.", "The site counter is not responding. Summary and visit log are unavailable.", "网站计数器暂不可用。")),
+      h("button", { class: "btn quiet sm", onclick: () => { forget("siteCounter"); draw(); } }, T.refresh)))];
+    const rows = Array.isArray(v.visits) ? v.visits.slice().reverse() : [];
+    const sourceCounts = v.sources || [];
+    const sourceTiles = sourceCounts.slice(0, 8).map((x) => h("span", { class: "pill" }, `${x.name}: ${fmt(x.hits)}`));
+    const body = [
+      h("div", { class: "kpis in-panel" },
+        flatKpi(L3("Просмотры всего", "Page views", "浏览量"), fmt(v.total || 0)),
+        flatKpi(L3("Сегодня", "Today", "今天"), fmt(v.today || 0), L3(`новых визитов ${fmt(v.uniq_today || 0)}`, `${fmt(v.uniq_today || 0)} new visits`, `${fmt(v.uniq_today || 0)} 次新访问`)),
+        flatKpi(L3("Записей в журнале", "Logged visits", "日志记录"), fmt(v.visits_total || rows.length), L3(`хранение до ${fmt(v.retention_days || 30)} дней`, `kept up to ${fmt(v.retention_days || 30)} days`, `最多保留 ${fmt(v.retention_days || 30)} 天`))),
+      h("div", { class: "pad" },
+        h("h3", {}, L3("Источники", "Sources", "来源")),
+        sourceTiles.length ? h("div", { class: "chips" }, ...sourceTiles) : h("p", { class: "fine" }, L3("Пока нет размеченных переходов.", "No tagged referrals yet.", "暂无来源数据。"))),
+      h("div", { class: "pad fine" }, L3(
+        "Адрес и браузер видны только здесь, в админке. По IP можно определить сетевое подключение, но не конкретного человека. Telegram/MAX показываются точно при переходе по ссылке с UTM-меткой; мессенджер может скрыть referrer.",
+        "IP address and browser details are restricted to this admin view. An IP identifies a network connection, not a person. Telegram/MAX are attributed reliably only when links carry UTM tags; messengers may hide the referrer.",
+        "IP 和浏览器信息仅在管理员页面可见。IP 只能识别网络连接，不能确认具体个人。")),
+      v.details_available === false ? h("div", { class: "pad warn" }, L3("Подробный журнал пока не подключён. Нужен SITE_COUNTER_DETAILS_URL с секретом на сервере релея; секрет не должен попадать в браузер.", "Detailed log is not connected yet. Configure SITE_COUNTER_DETAILS_URL on the relay; keep its key out of the browser.", "详细日志尚未连接。")) : null,
+      rows.length ? h("div", { class: "ledger", style: "max-height:680px;overflow:auto" }, h("table", {},
+        h("thead", {}, h("tr", {}, ...[
+          L3("Когда", "When", "时间"), L3("Визит", "Visit", "访问"), "IP",
+          L3("Источник", "Source", "来源"), L3("Страница", "Page", "页面"),
+          L3("Переход", "Referrer", "引荐来源"), L3("Браузер", "Browser", "浏览器"),
+        ].map((x) => h("th", {}, x)))),
+        h("tbody", {}, ...rows.map((r) => h("tr", {},
+          h("td", {}, when(r.at)),
+          h("td", { title: r.visitor || "" }, r.new ? L3("Новый визит", "New visit", "新访问") : (r.visitor || "—").slice(0, 10)),
+          h("td", {}, r.ip || "—"), h("td", {}, r.source || "direct", r.medium ? h("div", { class: "fine" }, r.medium) : null, r.campaign ? h("div", { class: "fine" }, r.campaign) : null),
+          h("td", {}, r.page || "—"), h("td", {}, r.ref || "—"), h("td", {}, browserOf(r.ua || ""), r.ua ? h("div", { class: "fine", title: r.ua }, r.ua.slice(0, 80)) : null))))))
+        : h("div", { class: "empty" }, v.details_available ? L3("Пока нет записей посещений.", "No visits recorded yet.", "暂无访问记录。") : L3("Для подробных записей подключите защищённый источник.", "Connect the protected detail source to show visit records.", "请连接受保护的数据源。")),
+      h("div", { class: "panel-actions pad" }, h("button", { class: "btn quiet sm", onclick: () => { forget("siteCounter"); draw(); } }, T.refresh)),
+    ];
+    return [aggregatePanel, panel(title, ...body)];
   }
 
   async function load() {
@@ -1846,6 +1889,7 @@
   }
   function dataView() { const dv = need("data"); return [!dv ? loadingPanel(T.data(days)) : dv._error ? failedPanel(T.data(days), "data", dv._error) : dataPanel(dv), syncPanel()]; }
   function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
+  function trafficView() { return siteTrafficView(); }
   /** Цены поставщиков: одна таблица, у кого на каждую модель дешевле. */
   function providersView() {
     window.location.replace("/app/prices/");
@@ -2279,7 +2323,7 @@
         h("div", {}, h("h3", {}, T.gh.releases), rankRows((latest.releases || []).map((r) => ({ name: r.tag, hits: r.downloads }))))),
       h("div", { class: "fine", style: "padding:0 16px 12px" }, T.gh.note));
   }
-  const RENDER = { overview: overviewView, providers: providersView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
+  const RENDER = { overview: overviewView, providers: providersView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, traffic: trafficView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
 
   // ── the shell: bar, nav, one view ──────────────────────────────
   function drawMain() {

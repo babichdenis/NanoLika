@@ -189,6 +189,9 @@ for the full list. The ones that matter:
 | `OPENROUTER_URL` | `https://openrouter.ai/keys` | the page for a key from OpenRouter, the way on for people outside mainland China (0.17) — the apps order the two by the person's `region` |
 | `DAY_OFFSET_H` | 8 | the operator's reports group by local day, midnight UTC+8 (Beijing) |
 | `TRAFFIC_DB` | empty | the site's daily traffic counts (`demo/showcase/mirror/traffic.py`), mounted read-only, for the operator's page; empty = that panel says it is not connected |
+| `SITE_COUNTER_URL` | empty | nanoLika public aggregate endpoint (`counter.php?stats=1`) for the admin site overview |
+| `SITE_COUNTER_DETAILS_URL` | empty | protected visit-log endpoint (`counter.php?details=1`); fetched only by the relay |
+| `SITE_COUNTER_DETAILS_KEY` | empty | secret sent by the relay as `X-Counter-Key`; never put it in the URL or browser. Detailed entries include IP and browser data, are pruned after 30 days, and are capped to the latest 2,000 |
 | `WEB_INFO_URL` | empty | nanoMuse Web's gateway (`http://gateway:8000/api/web/info` on the same docker network) for its account and session counts on the operator's page |
 | `WEB_ADMIN_URL`, `WEB_ADMIN_TOKEN` | empty | the showcase gateway's `/api/demo/admin` and its `SHOWCASE_ADMIN_TOKEN`: who tried the phone in the browser from where and with what, every demo and what it used — a panel on the operator's page and a section in the account drawer (relay 0.10) |
 | `USD_CNY` | 7.1 | for showing dollars next to yuan; display only |

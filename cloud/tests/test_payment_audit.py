@@ -115,6 +115,43 @@ async def test_counter_is_cached_and_drops_visit_details_and_credentials():
     assert await counter.get() == first and len(calls) == 1
 
 
+async def test_counter_details_are_fetched_only_by_the_server_and_capped():
+    calls = []
+
+    def upstream(request):
+        calls.append(request)
+        if request.url.params.get("details") == "1":
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "retention_days": 30,
+                    "visits_total": 1,
+                    "recent": [{
+                        "id": 7, "visitor": "abc123", "at": 1772000000, "page": "/pricing.html",
+                        "source": "telegram", "medium": "messenger", "campaign": "launch",
+                        "ref": "t.me", "ip": "203.0.113.8", "ua": "Telegram Android", "new": True,
+                    }],
+                    "key": "must-not-escape",
+                },
+            )
+        return httpx.Response(200, json={"ok": True, "total": 9, "today": 2, "uniq_today": 1})
+
+    counter = SiteCounter(
+        "https://site.example.test/counter.php?stats=1",
+        transport=httpx.MockTransport(upstream),
+        details_url="https://site.example.test/counter.php?details=1",
+        details_key="private-key",
+    )
+    result = await counter.get()
+    assert result["available"] and result["details_available"] is True
+    assert result["visits"][0]["source"] == "telegram"
+    assert result["visits"][0]["ip"] == "203.0.113.8"
+    assert "private-key" not in json.dumps(result) and "must-not-escape" not in json.dumps(result)
+    assert len(calls) == 2 and calls[1].headers.get("X-Counter-Key") == "private-key"
+    assert "private-key" not in str(calls[1].url)
+
+
 async def test_counter_failure_is_cached_to_avoid_redraw_request_loop():
     calls = []
 

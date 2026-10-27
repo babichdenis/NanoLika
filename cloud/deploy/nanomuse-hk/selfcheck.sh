@@ -56,23 +56,27 @@ if [ -z "$health" ]; then
 	add "relay /v1/admin/health not answering"
 	summary="(no relay data)"
 else
-	summary=$(printf '%s' "$health" | python3 -c "
+	parsed="$state/health-parsed"
+	if ! printf '%s' "$health" | python3 -c '
 import json, sys
-h = json.load(sys.stdin)
-hub = h.get('hub') or {}
-lh = h.get('last_hour') or {}
-inf = h.get('in_flight') or {}
-print('v%s hub=%s online/%s accounts, pending=%s, dropped=%s, flood_closes=%s; last hour: %s requests, %s upstream errors, %s content checks, %s refused, %s sign-ins (%s failed); in flight %s/%s accounts; db %.1f MB%s' % (
-    h.get('version'), hub.get('online'), hub.get('accounts_online'), hub.get('pending_calls'), hub.get('dropped_frames'), hub.get('flood_closes'),
-    lh.get('requests'), lh.get('upstream_errors'), lh.get('content_rejected', 0), lh.get('budget_refused'), lh.get('sign_ins'), lh.get('sign_in_failures'),
-    inf.get('requests'), inf.get('accounts'), (h.get('db') or {}).get('size_bytes', 0) / 1048576, '' if (h.get('db') or {}).get('writable') else ' NOT WRITABLE'))
-for p in h.get('problems') or []:
-    print('PROBLEM ' + p)
-")
-	for p in $(printf '%s\n' "$summary" | sed -n 's/^PROBLEM //p' | tr ' ' '_'); do
-		add "$(printf '%s' "$p" | tr '_' ' ')"
-	done
-	summary=$(printf '%s\n' "$summary" | sed '/^PROBLEM /d')
+h=json.load(sys.stdin)
+hub=h.get("hub") or {}; lh=h.get("last_hour") or {}; inf=h.get("in_flight") or {}; db=h.get("db") or {}
+print("SUMMARY v%s hub=%s online/%s accounts, pending=%s, dropped=%s, flood_closes=%s; last hour: %s requests, %s upstream errors, %s content checks, %s refused, %s sign-ins (%s failed); in flight %s/%s accounts; db %.1f MB%s" % (
+    h.get("version"),hub.get("online"),hub.get("accounts_online"),hub.get("pending_calls"),hub.get("dropped_frames"),hub.get("flood_closes"),
+    lh.get("requests"),lh.get("upstream_errors"),lh.get("content_rejected",0),lh.get("budget_refused"),lh.get("sign_ins"),lh.get("sign_in_failures"),
+    inf.get("requests"),inf.get("accounts"),db.get("size_bytes",0)/1048576,"" if db.get("writable") else " NOT WRITABLE"))
+for problem in h.get("problems") or []:
+    print("PROBLEM " + str(problem).replace("\n", " ").strip())
+' >"$parsed"; then
+		add "relay health returned invalid data"
+		summary="(invalid relay data)"
+	else
+		summary=$(sed -n 's/^SUMMARY //p' "$parsed")
+		while IFS= read -r problem; do
+			case "$problem" in PROBLEM\ *) add "${problem#PROBLEM }";; esac
+		done <"$parsed"
+		rm -f "$parsed"
+	fi
 fi
 
 # 3. the disk the data lives on

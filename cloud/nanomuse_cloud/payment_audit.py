@@ -15,11 +15,17 @@ from .service import CloudError
 
 
 class SiteCounter:
-    """Fetch aggregate visits once per minute. The URL and credentials stay server-side."""
+    """Fetch public aggregates and, separately, key-protected visit details.
 
-    def __init__(self, url: str, transport=None):
+    The detail URL (including its key) is only used server-to-server and is never returned
+    to the browser. The public stats endpoint must not contain IP addresses or user agents.
+    """
+
+    def __init__(self, url: str, transport=None, details_url: str = "", details_key: str = ""):
         self.url = url
         self.transport = transport
+        self.details_url = details_url
+        self.details_key = details_key
         self.cached: dict | None = None
         self.until = 0.0
 
@@ -59,9 +65,55 @@ class SiteCounter:
                     ],
                     "pages": [{"name": str(r["name"])[:200], "hits": number(r["hits"])} for r in data.get("pages", [])[:100]],
                     "refs": [{"name": str(r["name"])[:200], "hits": number(r["hits"])} for r in data.get("refs", [])[:100]],
+                    "sources": [{"name": str(r["name"])[:100], "hits": number(r["hits"])} for r in data.get("sources", [])[:100]],
+                    "details_available": False,
                 }
+                details = urlsplit(self.details_url)
+                if details.scheme == "https" and details.hostname and not details.username and not details.password:
+                    async with httpx.AsyncClient(
+                        transport=self.transport, timeout=5, trust_env=False, follow_redirects=False
+                    ) as client:
+                        headers = {"X-Counter-Key": self.details_key} if self.details_key else {}
+                        async with client.stream("GET", self.details_url, headers=headers) as response:
+                            response.raise_for_status()
+                            raw_details = bytearray()
+                            async for chunk in response.aiter_bytes():
+                                raw_details.extend(chunk)
+                        if len(raw_details) > 2_097_152:
+                            raise ValueError("counter_details_size")
+                    details_data = json.loads(raw_details)
+                    if isinstance(details_data, dict) and details_data.get("ok") is True:
+                        visits = []
+                        for row in details_data.get("recent", [])[-2000:]:
+                            if not isinstance(row, dict):
+                                continue
+                            visits.append({
+                                "id": number(row.get("id", 0)),
+                                "visitor": str(row.get("visitor", ""))[:32],
+                                "at": number(row.get("at", 0)),
+                                "page": str(row.get("page", ""))[:160],
+                                "source": str(row.get("source", ""))[:100],
+                                "medium": str(row.get("medium", ""))[:100],
+                                "campaign": str(row.get("campaign", ""))[:100],
+                                "content": str(row.get("content", ""))[:100],
+                                "ref": str(row.get("ref", ""))[:120],
+                                "ip": str(row.get("ip", ""))[:60],
+                                "ua": str(row.get("ua", ""))[:240],
+                                "new": bool(row.get("new", False)),
+                            })
+                        out["visits"] = visits
+                        out["visits_total"] = number(details_data.get("visits_total", len(visits)))
+                        out["retention_days"] = number(details_data.get("retention_days", 0))
+                        out["details_available"] = True
             except (httpx.HTTPError, ValueError, TypeError, KeyError):
-                out = {"available": False, "error": "counter_unavailable"}
+                # A private details endpoint may be temporarily unreachable. Keep public
+                # aggregates available but never leak the URL/key or partial detail data.
+                if out.get("available"):
+                    out["details_available"] = False
+                    out.pop("visits", None)
+                    out.pop("visits_total", None)
+                else:
+                    out = {"available": False, "error": "counter_unavailable"}
         self.cached = out
         self.until = time.monotonic() + (60 if out["available"] else 15)
         return out
@@ -161,7 +213,11 @@ def readiness(cloud, payments) -> dict:
 
 
 def install_payment_audit(app, cloud, payments, admin_dep):
-    counter = SiteCounter(os.getenv("SITE_COUNTER_URL", ""))
+    counter = SiteCounter(
+        os.getenv("SITE_COUNTER_URL", ""),
+        details_url=os.getenv("SITE_COUNTER_DETAILS_URL", ""),
+        details_key=os.getenv("SITE_COUNTER_DETAILS_KEY", ""),
+    )
     app.state.site_counter = counter
 
     @app.get("/v1/admin/site-counter", dependencies=[Depends(admin_dep)])
