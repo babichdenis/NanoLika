@@ -23,7 +23,13 @@ def test_flash_aliases_merge_and_input_output_prices_stay_distinct(tmp_path, mon
             "name": "deepseek/deepseek-v4.1-flash-1017",
             "unit": "1M токенов (вход)",
             "offers": [
-                {"provider": "RouterAI", "unit": "1M токенов (вход)", "rub": 5},
+                {
+                    "provider": "RouterAI",
+                    "unit": "1M токенов (вход)",
+                    "rub": 5,
+                    "route_eligible": False,
+                    "exclusion_reason": "устаревший фильтр ревизии",
+                },
                 {"provider": "RouterAI", "unit": "1M токенов (выход)", "rub": 10},
             ],
         },
@@ -35,9 +41,11 @@ def test_flash_aliases_merge_and_input_output_prices_stay_distinct(tmp_path, mon
     assert len(rows) == 1
     assert rows[0]["key"] == "deepseek-v4.1-flash"
     assert rows[0]["name"] == "DeepSeek V4.1 Flash"
-    assert rows[0]["cheapest_rub"] == 6
+    assert rows[0]["cheapest_rub"] == 5
     assert {offer["direction"] for offer in rows[0]["offers"]} == {"input", "output"}
-    assert any(not offer["route_eligible"] and "1017" in offer["exclusion_reason"] for offer in rows[0]["offers"])
+    revised = next(offer for offer in rows[0]["offers"] if offer["model"].endswith("1017"))
+    assert revised["route_eligible"] is True
+    assert revised["exclusion_reason"] == ""
 
 
 def test_new_models_are_not_enabled_by_default(tmp_path, monkeypatch):

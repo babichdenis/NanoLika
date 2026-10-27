@@ -60,36 +60,40 @@ def test_total_request_cost_not_cheapest_input(monkeypatch):
     assert routes(r, messages=[{"role": "user", "content": "a" * 30000}], max_tokens=1)[0].provider == "polza"
 
 
-def test_1017_flash_endpoint_is_excluded_from_generic_flash(monkeypatch):
+def test_flash_revision_joins_family_and_routes_by_lowest_live_quote(monkeypatch):
     r = setup_router(monkeypatch)
-    spec = ModelSpec("flash", "Flash", "deepseek-v4.1-flash", provider="routerai")
+    spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek-v4.1-flash", provider="routerai")
     r.offers = {
         "routerai": [replace(quote("routerai", 11, 17), model="deepseek-v4.1-flash")],
-        "openrouter": [replace(quote("openrouter", 15, 60), model="deepseek/deepseek-v4.1-flash-1017")],
+        "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4.1-flash-1017")],
     }
     body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
 
     candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
 
     assert identity("deepseek-v4.1-flash") == identity("deepseek/deepseek-v4.1-flash-1017")
-    assert {route.provider for route in candidates} == {"routerai"}
-    assert candidates[0].provider == "routerai"
-    all_quotes = r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
-    assert {route.provider for route in all_quotes} == {"routerai", "openrouter"}
-    excluded = next(route for route in all_quotes if route.provider == "openrouter")
-    assert not excluded.routing_eligible
-    assert "1017" in excluded.exclusion_reason
+    assert [route.provider for route in candidates] == ["openrouter", "routerai"]
+    assert candidates[0].body["model"].endswith("1017")
+    assert all(route.routing_eligible for route in r.routes(
+        spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True
+    ))
 
 
-def test_1017_is_not_reintroduced_as_configured_openrouter_fallback(monkeypatch):
+def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monkeypatch):
     r = setup_router(monkeypatch)
-    spec = ModelSpec("flash", "Flash", "deepseek-flash", provider="openrouter")
+    spec = ModelSpec(
+        "flash", "DeepSeek V4.1 Flash", "deepseek/deepseek-v4.1-flash-1017", provider="openrouter"
+    )
     r.offers = {
-        "openrouter": [replace(quote("openrouter", 45, 180), model="deepseek/deepseek-v4.1-flash-1017")],
+        "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4.1-flash-1017")],
     }
     body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
 
-    assert r.routes(spec, body, "https://configured.example/v1/chat/completions", {}) == []
+    candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+
+    assert candidates and candidates[0].provider == "openrouter"
+    assert identity(candidates[0].body["model"]) == identity("deepseek-v4.1-flash")
+
 
 
 def test_provider_402_quarantine_survives_router_restart(tmp_path, monkeypatch):
@@ -121,11 +125,8 @@ def test_provider_with_balance_below_estimated_request_cost_is_skipped(monkeypat
     }
     r.balances = {
         "openrouter": {"amount": 0.02, "currency": "RUB", "rub_estimate": 0.02, "checked": now, "error": None},
-        "polza": {"amount": 10, "currency": "RUB", "rub_estimate": 10, "checked": now, "error": None},
+        "polza": {"amount": 100, "currency": "RUB", "rub_estimate": 100, "checked": now, "error": None},
     }
-    spec = ModelSpec("flash", "Flash", "deepseek-flash")
-    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
-
     assert routes(r)[0].provider == "polza"
 
 
@@ -164,7 +165,7 @@ def test_flash_model_prices_merge_floating_and_dated_ids():
     assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == "deepseek-v4.1-flash"
 
 
-def test_rate_outlier_is_excluded_even_if_one_side_is_cheap(monkeypatch):
+def test_high_price_quote_remains_available_as_last_resort(monkeypatch):
     r = setup_router(monkeypatch)
     r.offers = {
         "polza": [quote("polza", 1, 2)],
@@ -172,11 +173,8 @@ def test_rate_outlier_is_excluded_even_if_one_side_is_cheap(monkeypatch):
     }
     body = {"model": "deepseek-v4.1-flash", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
     routes = r.routes(ModelSpec("flash", "Flash", "deepseek-v4.1-flash"), body, "", {})
-    assert [route.provider for route in routes] == ["polza"]
-    all_quotes = r.routes(ModelSpec("flash", "Flash", "deepseek-v4.1-flash"), body, "", {}, include_all=True)
-    rejected = next(route for route in all_quotes if route.provider == "openrouter")
-    assert not rejected.routing_eligible
-    assert "стоимость этого запроса" in rejected.exclusion_reason
+    assert [route.provider for route in routes] == ["polza", "openrouter"]
+    assert all(route.routing_eligible for route in routes)
 
 
 def test_tool_schemas_are_counted_but_image_base64_is_not_text(monkeypatch):
@@ -271,7 +269,7 @@ def test_402_temporarily_removes_provider_from_all_routes(monkeypatch):
     selected = router.routes(spec, body, "https://fallback.example", {})
 
     assert all(candidate.provider != "openrouter" for candidate in selected)
-    assert router.status()["balances"]["openrouter"]["error"] == "HTTP 402; temporarily disabled"
+    assert router.status()["balances"]["openrouter"]["error"] == "HTTP 402; awaiting a successful balance check"
     assert router.provider_blocked_until["openrouter"] > time.time()
 
 
@@ -491,22 +489,91 @@ async def test_admin_visibility_persists_and_changes_client_catalog(monkeypatch)
     await app.state.http.aclose()
 
 
-def test_expensive_dated_flash_variant_stays_hidden_even_if_admin_enables_it():
-    from nanomuse_cloud.service import Cloud
-
+def test_flash_revision_visibility_uses_normal_operator_setting():
     spec = ModelSpec(
         "deepseek-deepseek-v4-1-flash-1017",
-        "DeepSeek V4.1 Flash 1017",
+        "DeepSeek V4.1 Flash",
         "deepseek/deepseek-v4.1-flash-1017",
         listed=True,
         available=True,
     )
-    settings = Settings(database=":memory:", models=(spec,))
-    cloud = Cloud(settings, Database(":memory:"), LogSender())
+    cloud = Cloud(
+        Settings(database=":memory:", models=(spec,)),
+        Database(":memory:"),
+        LogSender(),
+    )
 
+    assert cloud.model_visible(spec)
+    cloud.set_model_visibility(spec.id, False)
     assert not cloud.model_visible(spec)
     cloud.set_model_visibility(spec.id, True)
-    assert not cloud.model_visible(spec)
+    assert cloud.model_visible(spec)
+
+
+def test_402_falls_through_every_compatible_supplier_then_skips_exhausted_provider(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 1)],
+        "polza": [quote("polza", 2, 2)],
+        "routerai": [quote("routerai", 4, 4)],
+    }
+    spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek-v4.1-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 16}
+    attempts = []
+
+    def handle(request):
+        attempts.append(request.url.host)
+        if request.url.host in {"openrouter.example", "polza.example"}:
+            return httpx.Response(402, json={"error": {"code": "insufficient_funds"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            response, chosen = await request_chat(
+                client,
+                r.routes(spec, body, "https://configured.example", {}),
+                False,
+                on_failure=r.note_failure,
+            )
+            assert response.status_code == 200 and chosen.provider == "routerai"
+            await response.aclose()
+
+    asyncio.run(go())
+
+    assert attempts == ["openrouter.example", "polza.example", "routerai.example"]
+    next_routes = r.routes(spec, body, "https://configured.example", {})
+    assert [route.provider for route in next_routes] == ["routerai"]
+
+
+def test_successful_balance_refresh_reenables_cheapest_provider_after_top_up(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 1)],
+        "polza": [quote("polza", 2, 2)],
+    }
+    r.provider_blocked_until["openrouter"] = time.time() + 300
+    r.balances["openrouter"] = {
+        "amount": 0, "currency": "USD", "rub_estimate": 0,
+        "checked": time.time(), "error": "HTTP 402",
+    }
+
+    def handle(request):
+        if request.url.host == "openrouter.example":
+            return httpx.Response(200, json={"data": {"total_credits": 20, "total_usage": 18}})
+        return httpx.Response(403)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            await r.refresh_balances(client)
+
+    asyncio.run(go())
+
+    assert "openrouter" not in r.provider_blocked_until
+    assert r.balances["openrouter"]["rub_estimate"] == pytest.approx(200)
+    spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek-v4.1-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 16}
+    assert r.routes(spec, body, "https://configured.example", {})[0].provider == "openrouter"
+
 
 
 def test_proxy_public_catalog_uses_numeric_breakdown_not_from_label(monkeypatch):
@@ -574,3 +641,32 @@ def test_proxy_model_not_supported_is_retryable_but_input_errors_are_not():
 
     assert retryable(httpx.Response(400, json={"detail": "Model not supported"}))
     assert not retryable(httpx.Response(400, json={"detail": "Invalid messages"}))
+
+
+@pytest.mark.parametrize(
+    ("provider", "balance", "currency", "fallback"),
+    [
+        ("openrouter", 0.99, "USD", "polza"),
+        ("openrouter", 1.0, "USD", "polza"),
+        ("polza", 89.99, "RUB", "openrouter"),
+        ("polza", 90.0, "RUB", "openrouter"),
+    ],
+)
+def test_provider_below_operating_balance_floor_is_skipped(monkeypatch, provider, balance, currency, fallback):
+    r = setup_router(monkeypatch)
+    now = time.time()
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 1)],
+        "polza": [quote("polza", 2, 2)],
+    }
+    r.balances = {
+        provider: {
+            "amount": balance,
+            "currency": currency,
+            "rub_estimate": balance * 100 if currency == "USD" else balance,
+            "checked": now,
+            "error": None,
+        }
+    }
+
+    assert routes(r)[0].provider == fallback

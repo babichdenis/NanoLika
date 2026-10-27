@@ -145,15 +145,20 @@ def fetch_deepseek() -> list[dict]:
     for ln in lines:
         low = ln.lower()
         if "cache hit" in low:
-            section = "вход (кэш)"; continue
+            section = "вход (кэш)"
+            continue
         if "cache miss" in low:
-            section = "вход"; continue
+            section = "вход"
+            continue
         if "1m output" in low:
-            section = "выход"; continue
+            section = "выход"
+            continue
         if ln.strip() == "PEAK":
-            peak = True; continue
+            peak = True
+            continue
         if ln.strip() == "OFF-PEAK":
-            peak = False; continue
+            peak = False
+            continue
         m = re.fullmatch(r"\$(\d+(?:\.\d+)?)", ln.strip())
         if m and section:
             groups.setdefault((section, "peak" if peak else "off-peak"), []).append(float(m.group(1)))
@@ -462,8 +467,7 @@ FETCHERS = {
 # ── сборка ──────────────────────────────────────────────────────────────
 # одно и то же под разными именами у поставщиков
 ALIASES = {
-    # Compare a dated endpoint with the clean family label. Routing still keeps
-    # the original provider model id and can block a specific expensive variant.
+    # Compare provider endpoint revisions under one customer-facing family name.
     "deepseek-v4.1-flash-1017": "deepseek-v4.1-flash",
     "deepseek-v4.1-flash": "deepseek-v4.1-flash",
     "deepseek-flash": "deepseek-v4.1-flash",
@@ -497,8 +501,6 @@ def offer_exclusion(model: str) -> str:
     slug = model.strip().lower().rsplit("/", 1)[-1]
     if slug.endswith(":free"):
         return "free-предложение поставщика, не использовать в платном автопереключении"
-    if slug == "deepseek-v4.1-flash-1017":
-        return "дорогая версия 1017, исключена из обычного DeepSeek Flash"
     return ""
 
 
@@ -608,7 +610,7 @@ def refresh_now() -> dict:
     previous = read_snapshot()
     rate, rate_source = usd_rub()
     results = {}
-    for name, (url, fn) in active_fetchers().items():
+    for name, (_url, fn) in active_fetchers().items():
         t0 = time.time()
         try:
             offers = fn()
@@ -688,7 +690,7 @@ def main(argv: list[str]) -> int:
             i += 1
     rate, rate_source = usd_rub()
     results = {}
-    for name, (url, fn) in active_fetchers().items():
+    for name, (_url, fn) in active_fetchers().items():
         t0 = time.time()
         try:
             offers = fn()

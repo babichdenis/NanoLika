@@ -17,17 +17,14 @@ from typing import Any
 import httpx
 
 log = logging.getLogger(__name__)
-FLASH_1017 = "deepseek/deepseek-v4.1-flash-1017"
 FLASH_FAMILY = "deepseek/deepseek-v4.1-flash"
 ALIASES = {
-    # Keep a clean family identity for comparisons, but never route the dated
-    # 1017 endpoint as the default Flash model. Its current quote is a costly
-    # endpoint variant, not the price of the generic DeepSeek Flash offer.
+    # Provider revision IDs are normalized to one customer-facing Flash family.
     "deepseek-flash": FLASH_FAMILY,
     "deepseek-v4.1-flash": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash": FLASH_FAMILY,
+    "deepseek/deepseek-v4.1-flash-1017": FLASH_FAMILY,
     "deepseek-v4.1-flash-1017": FLASH_FAMILY,
-    FLASH_1017: FLASH_FAMILY,
 }
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
 # Names with an implemented authenticated model-catalog and priced chat-route adapter.
@@ -37,11 +34,6 @@ ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitun
 
 def identity(model: str) -> str:
     return ALIASES.get(model.lower(), model)
-
-
-def blocked_price_variant(model: str) -> bool:
-    """Known expensive dated Flash endpoint; do not use as generic Flash."""
-    return model.lower().removeprefix("deepseek/") == "deepseek-v4.1-flash-1017"
 
 
 def number(value: Any) -> float | None:
@@ -184,7 +176,8 @@ class ProviderRouter:
         self.refresh_seconds = max(60, int(os.getenv("CLOUD_ROUTING_REFRESH_SECONDS", "1800")))
         self.max_age = max(self.refresh_seconds, int(os.getenv("CLOUD_ROUTING_MAX_AGE_SECONDS", "86400")))
         self.expected_output = max(1, int(os.getenv("CLOUD_ROUTING_EXPECTED_OUTPUT", "512")))
-        self.max_fallback_multiple = max(1.0, float(os.getenv("CLOUD_ROUTING_MAX_FALLBACK_MULTIPLE", "3")))
+        self.minimum_balance_usd = max(0.0, float(os.getenv("CLOUD_ROUTING_MIN_BALANCE_USD", "1")))
+        self.minimum_balance_rub = max(0.0, float(os.getenv("CLOUD_ROUTING_MIN_BALANCE_RUB", "90")))
         self.allow_quantized = os.getenv("CLOUD_ROUTING_ALLOW_QUANTIZED", "0") == "1"
         self.allow_unpriced = os.getenv("CLOUD_ROUTING_ALLOW_UNPRICED_FALLBACK", "0") == "1"
         self.enabled = os.getenv("CLOUD_AUTO_ROUTING", "1") == "1"
@@ -222,6 +215,13 @@ class ProviderRouter:
                     }
             except (OSError, ValueError, TypeError, KeyError):
                 pass
+
+    def below_balance_floor(self, balance: dict) -> bool:
+        amount = number(balance.get("amount"))
+        if amount is None:
+            return False
+        floor = self.minimum_balance_usd if str(balance.get("currency", "RUB")).upper() == "USD" else self.minimum_balance_rub
+        return amount <= floor
 
     def parse(self, provider: str, data: Any, at: float) -> list[Offer]:
         """Only supported schemas with explicit currency and separate token units."""
@@ -415,8 +415,15 @@ class ProviderRouter:
             except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
                 entry["error"] = type(exc).__name__
             self.balances[name] = entry
+            amount = number(entry.get("amount"))
+            floor = self.minimum_balance_usd if currency == "USD" else self.minimum_balance_rub
+            if entry.get("error") is None and amount is not None and amount > floor:
+                # A fresh top-up above the operating floor immediately re-enables
+                # this provider. Route ranking then puts it first if it is cheapest.
+                self.provider_blocked_until.pop(name, None)
 
         await asyncio.gather(*(one(k, p) for k, p in self.settings.providers.items()))
+        self.persist()
 
     def persist(self) -> None:
         if not self.path:
@@ -443,9 +450,10 @@ class ProviderRouter:
             "updated": self.refreshed,
             "usd_rub": self.usd_rub,
             "usd_funding_fee_pct": self.usd_fee,
+            "minimum_balance_usd": self.minimum_balance_usd,
+            "minimum_balance_rub": self.minimum_balance_rub,
             "max_age_seconds": self.max_age,
             "errors": dict(self.errors),
-            "max_fallback_multiple": self.max_fallback_multiple,
             "balances": dict(self.balances),
             "provider_blocked_until": {
                 name: until for name, until in self.provider_blocked_until.items() if until > time.time()
@@ -466,12 +474,11 @@ class ProviderRouter:
             limit = int(body.get("max_completion_tokens") or body.get("max_tokens") or self.expected_output)
         except (TypeError, ValueError, OverflowError):
             limit = self.expected_output  # Preserve the original body for supplier validation.
-        expected = min(limit, self.expected_output)
+        expected = limit
         tools = bool(body.get("tools") or body.get("functions"))
         messages = json.dumps(body.get("messages", []))
         vision = '"image_url"' in messages or '"input_image"' in messages
         candidates = []
-        blocked_candidates = []
         now = time.time()
         wanted = identity(spec.upstream)
         if spec.provider:
@@ -486,27 +493,12 @@ class ProviderRouter:
                 continue
             balance = self.balances.get(name, {})
             if (
-                balance.get("error") is None
-                and balance.get("amount") is not None
-                and balance["amount"] <= 0
+                self.below_balance_floor(balance)
                 and now - balance.get("checked", 0) < 300
             ):
                 continue
             for offer in offers:
                 if identity(offer.canonical_model or offer.model) != wanted or now - offer.updated > self.max_age:
-                    continue
-                if blocked_price_variant(offer.model):
-                    if include_all:
-                        fixed = replace(offer, overrides=())
-                        blocked_candidates.append(Route(
-                            name,
-                            provider.base.rstrip("/") + "/v1/chat/completions",
-                            {"Authorization": "Bearer " + provider.key(), "Content-Type": "application/json"},
-                            dict(clean_body, model=offer.model),
-                            fixed,
-                            False,
-                            "исключена дорогая версия 1017; не используется как обычный Flash",
-                        ))
                     continue
                 if self.quarantined.get((name, offer.model.lower()), 0) > now:
                     continue
@@ -556,43 +548,20 @@ class ProviderRouter:
                 )
                 candidates.append((estimated_cost, name != spec.provider, route))
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
-        eligible = []
-        annotated = []
-        if candidates:
-            cap = candidates[0][0] * self.max_fallback_multiple
-            for estimate, configured_first, route in candidates:
-                allowed = estimate <= cap
-                checked = replace(
-                    route,
-                    routing_eligible=allowed,
-                    exclusion_reason="" if allowed else "стоимость этого запроса выше допустимого резерва",
-                )
-                annotated.append((estimate, configured_first, checked))
-                if allowed:
-                    eligible.append((estimate, configured_first, checked))
-        routes = [item[2] for item in (annotated if include_all else eligible)]
-        if include_all:
-            routes.extend(blocked_candidates)
+        # Keep every compatible, priced provider as a fallback. A relative-price
+        # cutoff would defeat failover when the cheapest provider has no funds.
+        routes = [item[2] for item in candidates]
         # Only the explicitly configured route is allowed as an unpriced last resort.
         # Never send the model to arbitrary known providers or a different model version.
         has_quote = any(
-            identity(o.canonical_model or o.model) == wanted and not blocked_price_variant(o.model)
+            identity(o.canonical_model or o.model) == wanted
             for offers in self.offers.values() for o in offers
         )
         balance = self.balances.get(configured.provider, {})
-        unsafe_dated_flash_fallback = (
-            configured.provider == "openrouter" and wanted == FLASH_FAMILY
-        )
-        blocked = (
-            balance.get("error") is None
-            and balance.get("amount") is not None
-            and balance["amount"] <= 0
-            and now - balance.get("checked", 0) < 300
-        )
+        blocked = self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300
         if (
             (not has_quote or self.allow_unpriced)
             and not blocked
-            and not unsafe_dated_flash_fallback
             and not any(r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
         ):
             routes.append(configured)
@@ -642,13 +611,13 @@ class ProviderRouter:
         """Quarantine a provider after payment-required; don't retry it on every turn."""
         if status_code != 402 or not route.provider:
             return
-        until = time.time() + max(self.quarantine_seconds, 1800)
+        until = time.time() + 300
         self.provider_blocked_until[route.provider] = until
         self.balances[route.provider] = {
             **self.balances.get(route.provider, {}),
             "amount": 0,
             "checked": time.time(),
-            "error": "HTTP 402; temporarily disabled",
+            "error": "HTTP 402; awaiting a successful balance check",
             "disabled_until": int(until),
         }
         log.error(

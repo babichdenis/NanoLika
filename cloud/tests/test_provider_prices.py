@@ -50,10 +50,10 @@ def test_existing_model_is_not_marked_new_again():
     assert payload["changes"]["new_count"] == 0
 
 
-def test_1017_quote_stays_visible_but_cannot_be_the_family_best_price():
+def test_flash_revision_is_compared_as_the_same_family_and_can_be_cheapest():
     payload = provider_prices.build(90, "fixture", {
         "openrouter": (True, "ok", [
-            {"model": "deepseek/deepseek-v4.1-flash-1017", "unit": "1M токенов (вход)", "price": 0.15, "currency": "USD"},
+            {"model": "deepseek/deepseek-v4.1-flash-1017", "unit": "1M токенов (вход)", "price": 0.05, "currency": "USD"},
         ]),
         "routerai": (True, "ok", [
             {"model": "deepseek-v4.1-flash", "unit": "1M токенов (вход)", "price": 8, "currency": "RUB"},
@@ -62,7 +62,7 @@ def test_1017_quote_stays_visible_but_cannot_be_the_family_best_price():
 
     row = payload["models"][0]
     dated = next(offer for offer in row["offers"] if offer["model"].endswith("1017"))
-    assert dated["route_eligible"] is False
-    assert "1017" in dated["exclusion_reason"]
-    assert row["cheapest"] == "routerai"
-    assert row["cheapest_rub"] == 8
+    assert dated["route_eligible"] is True
+    assert dated["exclusion_reason"] == ""
+    assert row["cheapest"] == "openrouter"
+    assert row["cheapest_rub"] == 4.5
