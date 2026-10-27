@@ -403,6 +403,9 @@ export function apply(ctx: Context): void {
           text: () => {
             const profile = cloud.profile.current()
             const lines = [`The person calls you ${profile.name}; answer to that name.`]
+            // What the person is called: the memory's "- Call them: X" line, when they gave a name.
+            const named = personName(ctx)
+            if (named) lines.push(`The person's name is ${named}; address them by it rather than saying "the person". Without a name, leave the name out instead of inventing one.`)
             lines.push(CONVERSATION_CHANNEL_RULES)
             if (profile.description) lines.push(`Your look, as the person drew it: ${profile.description.slice(0, 200)}.`)
             lines.push('Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery.')
@@ -425,11 +428,23 @@ export function apply(ctx: Context): void {
         ctx.systemPrompt.section({
           name: 'nanolika-project-memory',
           order: 95,
-          text: "When your work changes the state of the project in the current workspace — code, settings, infrastructure, configuration — record a short summary in that project's shared memory (its worklog or memory file): what was done and what remains. If only your answer to the person changed (a letter, a translation, an explanation), do not write to long-term memory.",
+          text: "When your work changes the state of the project in the current workspace — code, settings, infrastructure, configuration — record a short summary in that project's shared memory (its worklog or memory file): what was done and what remains. When only your answer changed (a letter, a translation, an explanation), write nothing to long-term memory.",
         }),
       'nanomuse reach: project memory rule',
     )
   })
+}
+
+/**
+ * What the person is called, or '' when they never said: the rooms keep it as the memory's
+ * "- Call them: X" line (`rooms.ts`). Read through `ctx.get`, so a profile without the rooms
+ * plugin still gets its prompt.
+ */
+function personName(ctx: Context): string {
+  const rooms = ctx.get('nanomuseRooms') as { memory?: readonly { text: string }[] } | undefined
+  const line = rooms?.memory?.find((m) => /^call them:/i.test(m.text))
+  if (!line) return ''
+  return line.text.replace(/^call them:\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 60)
 }
 
 /** Save one screenshot as a durable image for the model, when the model can look at it. */

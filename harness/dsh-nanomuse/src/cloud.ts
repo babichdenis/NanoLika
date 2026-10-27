@@ -983,7 +983,7 @@ export default class NanomuseCloud extends Service {
               requestId: randomUUID() as never,
               sessionId: sessionId as SessionId,
               mode: 'steer',
-              content: [{ type: 'text', text: `Пора подвести итог этого хода: скажи словами, что сделано, что проверено и с чего продолжить — без новых инструментов.` }],
+              content: [{ type: 'text', text: `${personName(this.ctx) ? `${personName(this.ctx)}, пора` : 'Пора'} подвести итог этого хода: скажи словами, что сделано, что проверено и с чего продолжить — без новых инструментов.` }],
             }, new AbortController().signal),
           ).catch((error: unknown) => this.ctx.logger.warn('nanolika: wrap-up not delivered: %s', message(error)))
         }
