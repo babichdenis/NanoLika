@@ -28,8 +28,14 @@ ALIASES = {
     # on providers and generations that actually support those capabilities.
     "deepseek-v4-flash": FLASH_FAMILY,
     "deepseek/deepseek-v4-flash": FLASH_FAMILY,
+    "deepseek-v4-flash-vision-exp": FLASH_FAMILY,
+    "deepseek/deepseek-v4-flash-vision-exp": FLASH_FAMILY,
     "deepseek-v4-flash-0731": FLASH_FAMILY,
     "deepseek/deepseek-v4-flash-0731": FLASH_FAMILY,
+    # OpenRouter's tilde-prefixed aliases are dynamic Flash routes. Keep them in
+    # the same internal family so their live prices and availability are visible.
+    "~deepseek/deepseek-flash-latest": FLASH_FAMILY,
+    "~deepseek/deepseek-v4-flash-latest": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash-1017": FLASH_FAMILY,
     "deepseek-v4.1-flash-1017": FLASH_FAMILY,
 }
@@ -486,6 +492,7 @@ class ProviderRouter:
         messages = json.dumps(body.get("messages", []))
         vision = '"image_url"' in messages or '"input_image"' in messages
         candidates = []
+        inventory = []
         now = time.time()
         wanted = identity(spec.upstream)
         if spec.provider:
@@ -494,30 +501,41 @@ class ProviderRouter:
                 wanted = identity(configured_offer.canonical_model or configured_offer.model)
         for name, offers in self.offers.items():
             provider = self.settings.providers.get(name)
-            if provider is None or not provider.key():
+            if provider is None:
                 continue
+            if not provider.key() and not include_all:
+                continue
+            provider_reasons = []
+            if not provider.key():
+                provider_reasons.append("ключ поставщика не настроен")
             if self.provider_blocked_until.get(name, 0) > now:
-                continue
+                if not include_all:
+                    continue
+                provider_reasons.append("временная блокировка после отказа поставщика")
             balance = self.balances.get(name, {})
-            if (
-                self.below_balance_floor(balance)
-                and now - balance.get("checked", 0) < 300
-            ):
-                continue
+            if self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300:
+                if not include_all:
+                    continue
+                provider_reasons.append("баланс ниже рабочего порога")
             for offer in offers:
-                if identity(offer.canonical_model or offer.model) != wanted or now - offer.updated > self.max_age:
+                if identity(offer.canonical_model or offer.model) != wanted:
                     continue
+                exclusions = list(provider_reasons)
+                if now - offer.updated > self.max_age:
+                    exclusions.append("котировка устарела")
                 if self.quarantined.get((name, offer.model.lower()), 0) > now:
-                    continue
+                    exclusions.append("временно отключена после расхождения цены")
                 if not self.allow_quantized and any(q in offer.endpoint.lower() for q in ("fp4", "int4", "q4")):
-                    continue
+                    exclusions.append("квантованная версия исключена правилами")
                 if tools and "tools" not in offer.parameters:
-                    continue
+                    exclusions.append("не поддерживает вызов инструментов")
                 if vision and "image" not in offer.modalities:
-                    continue
+                    exclusions.append("не поддерживает изображения")
                 if offer.context and prompt + limit > offer.context:
-                    continue
+                    exclusions.append("недостаточный контекст")
                 if offer.output_limit and limit > offer.output_limit:
+                    exclusions.append("запрошенный ответ превышает лимит модели")
+                if exclusions and not include_all:
                     continue
                 payload = dict(clean_body, model=offer.model)
                 if "max_tokens" in payload and "max_tokens" not in offer.parameters and "max_completion_tokens" in offer.parameters:
@@ -545,16 +563,26 @@ class ProviderRouter:
                     and now - balance.get("checked", 0) < 300
                 )
                 if balance_is_fresh and available_rub < estimated_cost:
-                    continue
+                    if not include_all:
+                        continue
+                    exclusions.append("баланса недостаточно для оценки запроса")
                 route = Route(
                     name,
                     provider.base.rstrip("/") + "/v1/chat/completions",
                     {"Authorization": "Bearer " + provider.key(), "Content-Type": "application/json"},
                     payload,
                     fixed,
+                    routing_eligible=not exclusions,
+                    exclusion_reason="; ".join(dict.fromkeys(exclusions)),
                 )
-                candidates.append((estimated_cost, name != spec.provider, route))
+                ranked = (estimated_cost, name != spec.provider, route)
+                inventory.append(ranked)
+                if not exclusions:
+                    candidates.append(ranked)
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
+        inventory.sort(key=lambda item: (item[0], item[1], item[2].provider))
+        if include_all:
+            return [item[2] for item in inventory]
         # Keep every compatible, priced provider as a fallback. A relative-price
         # cutoff would defeat failover when the cheapest provider has no funds.
         routes = [item[2] for item in candidates]

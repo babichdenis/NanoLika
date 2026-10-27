@@ -155,6 +155,45 @@ def test_provider_with_balance_below_estimated_request_cost_is_skipped(monkeypat
     assert routes(r)[0].provider == "polza"
 
 
+def test_admin_inventory_keeps_supplier_quotes_below_balance_floor(monkeypatch):
+    r = setup_router(monkeypatch)
+    now = time.time()
+    r.offers = {
+        "openrouter": [
+            replace(quote("openrouter", 30, 120), model="deepseek/deepseek-v4.1-flash-1017"),
+            replace(quote("openrouter", 10, 32), model="deepseek/deepseek-v4-flash-0731"),
+            replace(quote("openrouter", 13.6, 33.6), model="deepseek/deepseek-v4-flash"),
+        ],
+        "polza": [quote("polza", 3, 4)],
+    }
+    r.balances = {
+        "openrouter": {"amount": 0.0068, "currency": "USD", "rub_estimate": 0.68, "checked": now, "error": None},
+    }
+    spec = ModelSpec("flash", "DeepSeek Flash", "deepseek-v4.1-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+
+    runtime = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+    inventory = r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
+
+    assert [route.provider for route in runtime] == ["polza"]
+    suspended = [route for route in inventory if route.provider == "openrouter"]
+    assert {route.body["model"] for route in suspended} == {
+        "deepseek/deepseek-v4.1-flash-1017",
+        "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-flash",
+    }
+    assert all(route.offer is not None and route.routing_eligible is False for route in suspended)
+    assert all("баланс ниже рабочего порога" in route.exclusion_reason for route in suspended)
+    assert next(route for route in inventory if route.provider == "polza").routing_eligible is True
+
+
+def test_openrouter_vision_and_latest_aliases_share_flash_family():
+    family = "deepseek/deepseek-v4.1-flash"
+    assert identity("deepseek/deepseek-v4-flash-vision-exp") == family
+    assert identity("~deepseek/deepseek-flash-latest") == family
+    assert identity("~deepseek/deepseek-v4-flash-latest") == family
+
+
 def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
     r = setup_router(monkeypatch)
     r.offers = {

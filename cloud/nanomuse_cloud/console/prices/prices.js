@@ -838,10 +838,31 @@ function modelCell(m) {
         const row = h("div", undefined, offer.selected ? "family-offer is-serving" : "family-offer");
         row.append(h("span", providerLabel(offer.provider), "family-provider"));
         row.append(h("code", offer.model || "модель не указана", "family-model-id"));
+        const balance = (state.data.routing?.balances || {})[offer.provider];
+        if (balance) {
+          const balanceLine = h("span", undefined, "family-balance");
+          if (balance.error) {
+            balanceLine.textContent = `Остаток не проверен: ${balance.error}`;
+            balanceLine.classList.add("is-error");
+          } else if (balance.amount === null || balance.amount === undefined) {
+            balanceLine.textContent = "Остаток неизвестен";
+          } else {
+            const currency = String(balance.currency || "RUB").toUpperCase();
+            const estimate = currency === "USD" && Number.isFinite(Number(balance.rub_estimate))
+              ? ` · ≈ ${money(balance.rub_estimate, 2)} ₽` : "";
+            const floor = currency === "USD" ? state.data.routing.minimum_balance_usd : state.data.routing.minimum_balance_rub;
+            const belowFloor = Number.isFinite(Number(floor)) && Number(balance.amount) < Number(floor);
+            balanceLine.textContent = `Остаток ${money(balance.amount, 4)} ${currency}${estimate}${belowFloor ? " · ниже порога пополнения" : ""}`;
+            if (belowFloor) balanceLine.classList.add("is-low");
+          }
+          row.append(balanceLine);
+        }
         row.append(h("span", pair(offer.input_rub, offer.output_rub), "family-cost"));
         if (offer.selected) row.append(h("span", "✓ Сейчас раздаёт", "family-serving"));
         else if (!offer.in_parent_route) row.append(h("span", "Котировка варианта, не включена в маршрут модели", "family-status"));
-        else if (offer.eligible === false) row.append(h("span", "Не участвует в переключении", "family-status"));
+        else if (offer.eligible === false) {
+          row.append(h("span", "Не активна: " + (offer.exclusion_reason || "не проходит условия маршрута"), "family-status"));
+        }
         else if (offer.eligible === true) row.append(h("span", "Резерв", "family-status"));
         else row.append(h("span", "Котировка", "family-status"));
         section.append(row);
@@ -1386,11 +1407,20 @@ function drawBalances() {
   document.getElementById("routing-status").textContent = `Автовыбор ${routing.enabled ? "включён" : "выключен"}. Каталоги: ${stamp(routing.updated * 1000)}. Курс для долларовой закупки: ${money(routing.usd_rub)} ₽/$; комиссия пополнения ${money(routing.usd_funding_fee_pct)}%. Балансы проверяются раз в две минуты.`;
   for (const [name, balance] of Object.entries(routing.balances || {})) {
     const row = h("tr");
-    const status = balance.error ? (name.startsWith("proxyapi") && balance.error === "HTTP 403" ? "Включите «Запрос баланса» в правах ключа" : `Не удалось проверить: ${balance.error}`) : (balance.amount <= 0 ? "Недостаточно средств" : "Доступен");
+    const currency = String(balance.currency || "RUB").toUpperCase();
+    const floor = currency === "USD" ? routing.minimum_balance_usd : routing.minimum_balance_rub;
+    const hasAmount = balance.amount !== null && balance.amount !== undefined && Number.isFinite(Number(balance.amount));
+    const belowFloor = hasAmount && Number.isFinite(Number(floor)) && Number(balance.amount) < Number(floor);
+    const status = balance.error
+      ? (name.startsWith("proxyapi") && balance.error === "HTTP 403" ? "Включите «Запрос баланса» в правах ключа" : `Не удалось проверить: ${balance.error}`)
+      : !hasAmount ? "Баланс не получен"
+        : belowFloor ? `Ниже порога пополнения (${money(floor, 2)} ${currency})`
+          : "Выше рабочего порога";
+    row.classList.add(balance.error || !hasAmount ? "balance-error" : belowFloor ? "balance-low" : "balance-ok");
     const note = balance.lim !== undefined && balance.usage !== undefined
       ? ` (лимит ${money(balance.lim, 2)}, израсходовано ${money(balance.usage, 2)})`
       : "";
-    row.append(h("td", providerLabel(name), "name"), h("td", balance.amount === null ? "—" : `${money(balance.amount, 4)} ${balance.currency}${note}`),
+    row.append(h("td", providerLabel(name), "name"), h("td", !hasAmount ? "—" : `${money(balance.amount, 4)} ${currency}${note}`),
       h("td", balance.currency === "USD" ? `≈ ${money(balance.rub_estimate, 2)} ₽` : "—"),
       h("td", stamp(balance.checked * 1000)), h("td", status));
     body.append(row);
