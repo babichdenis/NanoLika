@@ -43,6 +43,15 @@ VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-ll
 # Names with an implemented authenticated model-catalog and priced chat-route adapter.
 # This is deliberately narrower than the market-reference catalog in model_catalog.py.
 ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitunnel", "proxyapi"})
+# AITUNNEL's model-list schema does not return supported_parameters, even when
+# the individual model page documents function calling. Keep this allowlist
+# explicit: support varies by model, so do not infer it for the whole provider.
+AITUNNEL_TOOL_MODELS = frozenset({
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
+})
 
 
 def identity(model: str) -> str:
@@ -287,7 +296,9 @@ class ProviderRouter:
                 inp, out = number(row.get("prompt_cost")), number(row.get("completion_cost"))
                 discount = number(row.get("cache_discount"))
                 cache = inp * (1 - discount) if inp is not None and discount is not None and discount <= 1 else None
-                parameters = row.get("supported_parameters") or []
+                parameters = list(row.get("supported_parameters") or [])
+                if model.lower() in AITUNNEL_TOOL_MODELS:
+                    parameters = list(dict.fromkeys([*parameters, "tools", "tool_choice"]))
             else:
                 continue  # An unpriced model list is not a supplier offer.
             if inp is None or out is None or inp == out == 0:

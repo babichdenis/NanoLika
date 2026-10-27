@@ -289,6 +289,31 @@ def test_provider_ids_and_parameters_are_adapted(monkeypatch):
     assert "max_tokens" not in result.body and "provider" not in result.body and "models" not in result.body
 
 
+def test_aitunnel_flash_tool_support_is_restored_from_model_documentation(monkeypatch):
+    r = setup_router(monkeypatch)
+    at_offers = r.parse("aitunnel", {
+        "deepseek-v4-flash-0731": {
+            "prompt_cost": 10,
+            "completion_cost": 32,
+            "context_length": 1_048_576,
+            "max_output": 943_718,
+        },
+    }, time.time())
+    r.offers = {
+        "aitunnel": at_offers,
+        "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4-flash")],
+    }
+    r.balances = {
+        "openrouter": {"amount": 0.0068, "currency": "USD", "checked": time.time(), "error": None},
+    }
+
+    selected = routes(r, tools=[{"type": "function", "function": {"name": "lookup"}}], max_tokens=512)
+
+    assert "tools" in at_offers[0].parameters
+    assert selected[0].provider == "aitunnel"
+    assert selected[0].body["model"] == "deepseek-v4-flash-0731"
+
+
 def test_structured_prices_use_units_not_cached_minimum(monkeypatch):
     r = setup_router(monkeypatch)
     row = {
