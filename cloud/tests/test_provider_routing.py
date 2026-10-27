@@ -92,6 +92,26 @@ def test_1017_is_not_reintroduced_as_configured_openrouter_fallback(monkeypatch)
     assert r.routes(spec, body, "https://configured.example/v1/chat/completions", {}) == []
 
 
+def test_provider_402_quarantine_survives_router_restart(tmp_path, monkeypatch):
+    r = setup_router(monkeypatch)
+    monkeypatch.setenv("CLOUD_ROUTING_CACHE", str(tmp_path / "routing.json"))
+    r = ProviderRouter(r.settings)
+    r.offers = {
+        "openrouter": [quote("openrouter", 1, 1)],
+        "polza": [quote("polza", 2, 2)],
+    }
+    spec = ModelSpec("flash", "Flash", "deepseek-flash")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
+    failed_route = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})[0]
+    assert failed_route.provider == "openrouter"
+
+    r.note_failure(failed_route, 402)
+    restored = ProviderRouter(r.settings)
+
+    assert restored.provider_blocked_until["openrouter"] > time.time()
+    assert restored.routes(spec, body, "https://configured.example/v1/chat/completions", {})[0].provider == "polza"
+
+
 def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
     r = setup_router(monkeypatch)
     r.offers = {

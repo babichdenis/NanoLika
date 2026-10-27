@@ -207,6 +207,19 @@ class ProviderRouter:
                     row["overrides"] = tuple(row.get("overrides", []))
                     offer = Offer(**row)
                     self.offers.setdefault(offer.provider, []).append(offer)
+                balances = raw.get("balances", {})
+                if isinstance(balances, dict):
+                    self.balances = {
+                        str(name): value for name, value in balances.items() if isinstance(value, dict)
+                    }
+                blocked = raw.get("provider_blocked_until", {})
+                if isinstance(blocked, dict):
+                    now = time.time()
+                    self.provider_blocked_until = {
+                        str(name): until
+                        for name, value in blocked.items()
+                        if (until := number(value)) is not None and until > now
+                    }
             except (OSError, ValueError, TypeError, KeyError):
                 pass
 
@@ -434,6 +447,9 @@ class ProviderRouter:
             "errors": dict(self.errors),
             "max_fallback_multiple": self.max_fallback_multiple,
             "balances": dict(self.balances),
+            "provider_blocked_until": {
+                name: until for name, until in self.provider_blocked_until.items() if until > time.time()
+            },
             "providers": {name: len(rows) for name, rows in self.offers.items()},
         }
         if include_offers:
@@ -630,6 +646,7 @@ class ProviderRouter:
             "provider disabled after HTTP 402: provider=%s disabled_until=%s",
             route.provider, int(until),
         )
+        self.persist()
 
     def schedule_price_alert(self, http: httpx.AsyncClient, meta: dict) -> None:
         """Send an anomaly without blocking a user's model response; secrets stay in env."""
