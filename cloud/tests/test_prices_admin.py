@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+import time
 
 import pytest
 from test_accounts import make
+from nanomuse_cloud.prices_admin import _catalog_snapshot, _discovered, _model_kind
 
 ADMIN = {"X-Admin-Token": "admin"}
 CLOUD = Path(__file__).resolve().parents[1] / "nanomuse_cloud"
@@ -172,6 +175,10 @@ async def test_providers_show_which_ones_are_connected(market):
     assert providers["snapshot"][0]["excluded_offers"] == 1
     for row in providers["snapshot"]:
         assert row["connected"] == (row["name"] in providers["connected"])
+    known = {row["name"]: row for row in providers["known"]}
+    assert known["bothub"]["snapshot_present"] is False
+    assert known["bothub"]["routing_supported"] is False
+    assert known["polza"]["routing_supported"] is True
 
 
 async def test_prices_needs_the_admin_token(market):
@@ -202,3 +209,35 @@ def test_the_shipped_retail_file_is_the_compact_form():
     for name, entry in retail["services"].items():
         assert "priced" in entry, name
         assert len(entry.get("sample") or []) <= 3, name
+
+
+def test_master_catalog_keeps_reference_rows_and_separates_route_evidence(tmp_path, monkeypatch):
+    path = tmp_path / "catalog.json"
+    path.write_text(json.dumps({
+        "generated_at": "2026-10-27T00:00:00Z",
+        "models": [
+            {"id": "deepseek-chat", "name": "DeepSeek Chat", "mode": "chat", "ours": {"polza": {"rub": 1}}, "dev": {"provider": "deepseek", "description": "General assistant"}},
+            {"id": "deepseek-coder-v2", "name": "DeepSeek Coder V2", "mode": "chat", "ours": {}, "dev": {"provider": "deepseek"}},
+            {"id": "image-live", "name": "Image Live", "mode": "image_generation", "ours": {}, "deprecated": False},
+            {"id": "old-model", "name": "Old Model", "mode": "chat", "deprecated": True},
+        ],
+    }), encoding="utf-8")
+    monkeypatch.setenv("MODEL_CATALOG_PATH", str(path))
+    _catalog_snapshot.cache_clear()
+    settings = SimpleNamespace(
+        models=[SimpleNamespace(id="deepseek-chat", upstream="deepseek-chat")],
+        providers={"polza": SimpleNamespace(key=lambda: "configured-secret")},
+    )
+    router = SimpleNamespace(offers={"polza": [SimpleNamespace(model="deepseek/deepseek-chat", canonical_model="", updated=time.time())]}, refreshed=time.time())
+    result = _discovered(settings, router)
+    models = {row["id"]: row for row in result["models"]}
+    assert result["count"] == 4
+    assert result["in_menu"] == 1
+    assert models["deepseek-chat"]["in_menu"] is True
+    assert models["deepseek-chat"]["live_providers"] == ["polza"]
+    assert models["deepseek-coder-v2"]["kind"] == "code"
+    assert models["deepseek-coder-v2"]["offers"] == []
+    assert models["image-live"]["kind"] == "image"
+    assert models["old-model"]["deprecated"] is True
+    assert _model_kind({"id": "deepseek-chat", "mode": "chat"}) == "text"
+    _catalog_snapshot.cache_clear()

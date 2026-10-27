@@ -189,6 +189,9 @@ export function apply(ctx: Context): void {
             }
             // the words under the face: the person watches the step's own description there
             lines.push('', `Where a tool takes a \`description\` or \`step\` argument (bash, pwsh, run_code, the computer_* tools), write there what the step does for the person, in ${languageName(rooms.lang)}, in a few words ("打开携程网站", "Check the login page") — it is shown under your face while the tool runs. Fill it in on every such call.`)
+            // the person's language governs the thinking too, not just the answer: the app shows
+            // the step's own title and summary, and English there reads as a foreign voice
+            lines.push('', `Think and write your intermediate reasoning — the title and the one-line summary of each step you take — in ${languageName(rooms.lang)}, the language the person reads. Keep code, commands, file paths, identifiers and quotes exactly as they are.`)
             return lines.join('\n')
           },
         }),

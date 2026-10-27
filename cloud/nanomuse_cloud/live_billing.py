@@ -58,18 +58,9 @@ class LiveBilling:
                 c.execute(sql)
 
     def validate_plan_purchase(self, c: sqlite3.Connection, account_id: str, plan_id: str, *, now: int) -> None:
-        if not plan_id:
-            return
-        current = c.execute("SELECT * FROM subscriptions WHERE account_id=?", (account_id,)).fetchone()
-        if current and current["expires_at"] > now and current["plan"] != plan_id:
-            raise CloudError(409, "payment_plan_change", "Действует другой пакет. Дождитесь его окончания или напишите в поддержку")
-        pending = c.execute(
-            "SELECT 1 FROM tbank_orders WHERE account_id=? AND plan<>'' AND terminal NOT LIKE '%DEMO' "
-            "AND status IN ('CREATING','NEW','FORM_SHOWED','AUTHORIZING','AUTHORIZED','CONFIRMING') LIMIT 1",
-            (account_id,),
-        ).fetchone()
-        if pending:
-            raise CloudError(409, "payment_plan_pending", "Уже есть незавершённый заказ пакета. Проверьте его статус")
+        # Checkout selections are top-up presets. The tariff is evaluated atomically from
+        # the paid balance after bank confirmation, so changing cards mid-term is allowed.
+        return
 
     @staticmethod
     def _subscription(c: sqlite3.Connection, account: str) -> dict:
@@ -93,29 +84,37 @@ class LiveBilling:
         if existing:
             return
         units = credit_units(self.cloud.s, row["amount"])
-        terms = json.loads(row["plan_snapshot"] or "{}") if row["plan"] else {}
-        if row["plan"] and (not terms or terms.get("id", row["plan"]) != row["plan"]):
-            raise CloudError(409, "payment_plan_snapshot", "Не сохранены условия оплаченного пакета")
+        # A card on the checkout page is a suggested top-up amount, not a separate
+        # subscription purchase. The active tariff is chosen from the remaining paid
+        # balance after this confirmed credit; free grants never count toward a threshold.
+        terms = {}
         previous = self._subscription(c, row["account_id"])
         after = dict(previous)
         review = 0
-        if row["plan"]:
-            if previous and previous["expires_at"] > at and previous["plan"] != row["plan"]:
-                # A delayed bank confirmation cannot lose the money or overwrite another plan.
-                review = 1
-            else:
-                after = {
-                    "account_id": row["account_id"],
-                    "plan": row["plan"],
-                    "name": terms["name"],
-                    "price_rub": float(Decimal(row["amount"]) / 100),
-                    "discount_pct": int(terms["discount_pct"]),
-                    "connect": int(bool(terms["connect"])),
-                    "started_at": previous["started_at"] if previous and previous["expires_at"] > at else at,
-                    "expires_at": max(at, previous.get("expires_at", 0)) + int(terms.get("days", 30)) * 86400,
-                    "paid_uy": units,
-                }
-                self._write_subscription(c, after, row["account_id"])
+        account = c.execute("SELECT paid_balance_uy FROM accounts WHERE id=?", (row["account_id"],)).fetchone()
+        paid_balance = max(0, int(account["paid_balance_uy"] or 0)) + units if account else units
+        eligible = [
+            plan for plan in self.cloud.plan_menu()
+            if plan["price_rub"] > 0 and self.cloud.s.rub_to_uy(plan["price_rub"]) <= paid_balance
+        ]
+        threshold_plan = max(eligible, key=lambda plan: plan["price_rub"], default=None)
+        active = bool(previous and int(previous.get("expires_at", 0)) > at)
+        current_threshold = float(previous.get("price_rub", 0) or 0) if active else 0
+        should_activate = bool(threshold_plan and (not active or threshold_plan["price_rub"] > current_threshold))
+        if should_activate:
+            terms = threshold_plan
+            after = {
+                "account_id": row["account_id"],
+                "plan": terms["id"],
+                "name": terms["name"],
+                "price_rub": float(terms["price_rub"]),
+                "discount_pct": int(terms["discount_pct"]),
+                "connect": int(bool(terms["connect"])),
+                "started_at": at,
+                "expires_at": at + int(terms.get("days", 30)) * 86400,
+                "paid_uy": units,
+            }
+            self._write_subscription(c, after, row["account_id"])
         c.execute(
             "INSERT INTO tbank_live_state(order_id,account_id,total_uy,captured_at,plan_snapshot,previous_subscription,entitlement_before,entitlement_after,review_required) VALUES(?,?,?,?,?,?,?,?,?)",
             (
@@ -130,7 +129,7 @@ class LiveBilling:
                 review,
             ),
         )
-        c.execute("UPDATE accounts SET grant_uy=grant_uy+? WHERE id=?", (units, row["account_id"]))
+        c.execute("UPDATE accounts SET grant_uy=grant_uy+?,paid_balance_uy=paid_balance_uy+? WHERE id=?", (units, units, row["account_id"]))
         c.execute(
             "INSERT INTO ledger(account_id,ts,kind,charged,extra) VALUES(?,?,?,?,?)",
             (
@@ -142,7 +141,10 @@ class LiveBilling:
             ),
         )
         c.execute("INSERT INTO tbank_live_events VALUES(?,?,?,?,?,?)", (row["id"], "capture", 0, row["amount"], units, at))
-        c.execute("UPDATE tbank_orders SET credited=1,status='CONFIRMED' WHERE id=?", (row["id"],))
+        c.execute(
+            "UPDATE tbank_orders SET credited=1,status='CONFIRMED',plan_granted_at=CASE WHEN ? THEN ? ELSE plan_granted_at END,plan_granted_by=CASE WHEN ? THEN 'balance_threshold' ELSE plan_granted_by END WHERE id=?",
+            (int(should_activate), at, int(should_activate), row["id"]),
+        )
         PaymentOutbox.enqueue_settled(c, row["id"], kind="payment_confirmed", now=at)
 
     def apply(self, row: dict, data: dict, *, reconciled: bool) -> dict:
@@ -173,7 +175,10 @@ class LiveBilling:
                         state = dict(c.execute("SELECT * FROM tbank_live_state WHERE order_id=?", (row["id"],)).fetchone())
                         total_refund_uy = state["total_uy"] if refunded == row["amount"] else state["total_uy"] * refunded // row["amount"]
                         delta = total_refund_uy - state["refunded_uy"]
-                        c.execute("UPDATE accounts SET grant_uy=grant_uy-? WHERE id=?", (delta, row["account_id"]))
+                        c.execute(
+                            "UPDATE accounts SET grant_uy=grant_uy-?,paid_balance_uy=MAX(0,paid_balance_uy-?) WHERE id=?",
+                            (delta, delta, row["account_id"]),
+                        )
                         c.execute(
                             "INSERT INTO ledger(account_id,ts,kind,charged,extra) VALUES(?,?,?,?,?)",
                             (
@@ -192,14 +197,14 @@ class LiveBilling:
                         )
                         c.execute("UPDATE tbank_live_state SET refunded_uy=? WHERE order_id=?", (total_refund_uy, row["id"]))
                         c.execute("UPDATE tbank_orders SET refunded=?,status=? WHERE id=?", (refunded, status, row["id"]))
-                        if row["plan"]:
-                            current = self._subscription(c, row["account_id"])
-                            expected = json.loads(state["entitlement_after"])
-                            if refunded == row["amount"] and current == expected and not state["review_required"]:
-                                self._write_subscription(c, json.loads(state["entitlement_before"]), row["account_id"])
-                            else:
-                                # Never overwrite a later operator action or guess partial-month terms.
-                                c.execute("UPDATE tbank_live_state SET review_required=1 WHERE order_id=?", (row["id"],))
+                        current = self._subscription(c, row["account_id"])
+                        expected = json.loads(state["entitlement_after"])
+                        before = json.loads(state["entitlement_before"])
+                        if refunded == row["amount"] and current == expected and expected != before and not state["review_required"]:
+                            self._write_subscription(c, before, row["account_id"])
+                        elif expected != before:
+                            # Never overwrite a later operator action or guess partial-month terms.
+                            c.execute("UPDATE tbank_live_state SET review_required=1 WHERE order_id=?", (row["id"],))
                         PaymentOutbox.enqueue_settled(c, row["id"], kind="payment_refunded", now=at)
             elif not row["credited"] and row["status"] not in {"REJECTED", "AUTH_FAIL", "DEADLINE_EXPIRED"}:
                 c.execute("UPDATE tbank_orders SET status=? WHERE id=?", (status, row["id"]))

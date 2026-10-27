@@ -135,8 +135,10 @@ def readiness(cloud, payments) -> dict:
         {
             "id": "live_settlement",
             "ok": False,
-            "label": "Боевые зачисления и возвраты ещё не реализованы",
-            "label_en": "Live settlement and refunds are not implemented",
+            "implemented": hasattr(payments, "live_billing"),
+            "blocked": True,
+            "label": f"Боевые платежи через {provider_name} закрыты до проверки чеков и возвратов",
+            "label_en": f"Live {provider_name} payments are blocked until receipts and refunds are verified",
         },
         {
             "id": "fiscal_receipts",

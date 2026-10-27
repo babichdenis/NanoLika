@@ -30,6 +30,9 @@ ALIASES = {
     FLASH_1017: FLASH_FAMILY,
 }
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
+# Names with an implemented authenticated model-catalog and priced chat-route adapter.
+# This is deliberately narrower than the market-reference catalog in model_catalog.py.
+ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitunnel", "proxyapi"})
 
 
 def identity(model: str) -> str:
@@ -296,7 +299,7 @@ class ProviderRouter:
         async with self.lock:
 
             async def one(name: str, provider: Any) -> None:
-                if not provider.key() or name not in {"polza", "routerai", "openrouter", "aitunnel", "proxyapi"}:
+                if not provider.key() or name not in ROUTING_CATALOG_PROVIDERS:
                     return
                 url = provider.base.rstrip("/") + "/v1/models"
                 headers = {"Authorization": "Bearer " + provider.key()}

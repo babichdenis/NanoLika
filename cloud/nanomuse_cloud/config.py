@@ -524,10 +524,11 @@ DEFAULT_SIGNUP_DOMAIN_BLOCK: tuple[str, ...] = (
 )
 
 
-# The tariffs offered when PLANS is not set: the operator's own menu (2026-10). A plain top-up
-# is not a tariff: it costs nothing extra, takes nothing off a spend and opens no connection.
+# The tariffs offered when PLANS is not set: the current nanoLika site menu (2026-10-26).
+# Every package adds its full amount to the balance, discounts every offered model for 30 days,
+# and includes connection between supported devices on the account.
 DEFAULT_PLANS = (
-    '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 10, "connect": false},'
+    '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 10, "connect": true},'
     ' {"id": "lika-plus", "name": "Лика+", "price_rub": 1490, "discount_pct": 20, "connect": true},'
     ' {"id": "team", "name": "Лика Команда", "price_rub": 3900, "discount_pct": 30, "connect": true}]'
 )
@@ -694,7 +695,7 @@ class Settings:
     hub_enabled: bool = field(default_factory=lambda: _env("HUB_ENABLED", "1") not in ("0", "false", "no"))
     hub_frame_limit: int = field(default_factory=lambda: _int("HUB_FRAME_LIMIT", 16 * 1024 * 1024))
 
-    # Money (0.5). Every account has one allowance for its lifetime, not a day:
+    # Money (0.5). Every account has one base allowance for its lifetime, not a day:
     # ALLOWANCE_CNY yuan of the operator's provider bill (0 = no limit), counted
     # at the list prices above across chat, pictures and clips alike — a clip is
     # not counted apart, it just costs more. The pool grows by INVITE_BONUS_CNY
@@ -710,6 +711,11 @@ class Settings:
     # until it is cleared — what is here is the starting point.
     allowance_cny: float = field(default_factory=lambda: float(_env("ALLOWANCE_CNY", "10")))
     invite_bonus_cny: float = field(default_factory=lambda: float(_env("INVITE_BONUS_CNY", "5")))
+    # A separate free slice is credited once per UTC day on the account's first chat request.
+    # It joins the ordinary balance and carries over; this is not a daily spending cap.
+    daily_free_cny: float = field(default_factory=lambda: float(_env("DAILY_FREE_CNY", "0")))
+    # A one-time launch credit, separate from the lifetime allowance and daily slices.
+    start_free_cny: float = field(default_factory=lambda: float(_env("START_FREE_CNY", "0")))
     # Minimum provider spend (in micro-yuan) by an invited account before its invite bonus
     # is settled when the account has not registered a Hub device; default 200 micro-yuan
     # refuses single-line scripted probes while settling normal chat turns.
@@ -790,22 +796,15 @@ class Settings:
     # за жизнь кода: шесть символов без похожих букв — это немного, если ответ бесплатный,
     # а бот, передающий чужие догадки, не должен быть оракулом «какой код подошёл». 0 = выкл.
     link_max_attempts: int = field(default_factory=lambda: _int("LINK_MAX_ATTEMPTS", 10))
-    # What the relay's own connection between a person's devices costs: the devices meet
-    # through the hub only when what they have topped up in all, at any time, adds up to this
-    # many rubles (parts count). Below it every device works on its own, with its own chats,
-    # and a chat app still reaches them. 0 = off, everyone connects; a member is never held
-    # back. Said in rubles, read through the same RUB_PER_USD and TOPUP_FEE_PCT as the pool.
-    # The menu, as JSON: one row per tariff with `id`, `name`, `price_rub`, `discount_pct`
-    # (what it takes off a spend while it lasts), `connect` (may this account's devices meet
-    # through the relay) and `days` (30 by default). What a person pays goes into the pool in
-    # full at the ruble rate below; the tariff is what opens the connection and what makes a
-    # spend cheaper, and how long the balance lasts is the person's own business.
+    # The menu, as JSON. A successful paid top-up adds to the wallet; when the unspent paid
+    # portion reaches a menu price, the matching discount and device link start for `days`.
+    # Free grants do not count toward a threshold. Spending reduces the paid portion. Money
+    # is not removed to buy a tariff and ordinary top-ups during an active term do not extend it.
     plans_json: str = field(default_factory=lambda: _env("PLANS", DEFAULT_PLANS))
-    # Whether the relay's connection between a person's devices needs a running tariff
-    # (`connect: true` in the menu). 0 = every account connects as before, which is what a
-    # relay whose tariffs are not sold yet must keep; 1 = the tariff is the key, and a plain
-    # top-up or Лика alone leaves each device on its own.
-    connect_requires_plan: bool = field(default_factory=lambda: _env("CONNECT_REQUIRES_PLAN", "0") not in ("0", "false", "no"))
+    # An active tariff is the monthly service key for the cross-device hub. Paid balance
+    # thresholds are evaluated after confirmed top-ups; no automatic charge is made at expiry.
+    # A member is exempt.
+    connect_requires_plan: bool = field(default_factory=lambda: _env("CONNECT_REQUIRES_PLAN", "1") not in ("0", "false", "no"))
     # A sign-in for an app store's reviewer, who cannot receive our codes: for the
     # e-mail addresses in REVIEW_ADDRESSES (comma-separated) a code request sends nothing and
     # answers as if it had, and /v1/auth/verify accepts exactly REVIEW_CODE (six digits) —

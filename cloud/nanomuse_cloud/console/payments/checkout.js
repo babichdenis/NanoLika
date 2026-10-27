@@ -55,7 +55,9 @@
     if (!plan && !/^\d+(\.\d{1,2})?$/.test(value)) throw Error('Выберите сумму на странице тарифов.');
     $('item').textContent = plan ? 'Пакет «' + plan.name + '»' : 'Пополнение баланса';
     $('amount').textContent = format(plan ? plan.amount : Math.round(Number(value) * 100));
-    $('terms').textContent = plan ? 'Вся сумма на тестовый баланс. Скидка ' + plan.discount + '% на 30 дней. ' + (plan.connect ? 'Связка ваших устройств.' : 'Без связки устройств.') + ' Остаток сохраняется.' : 'Пополнение добавляет деньги без продления скидки и связки.';
+    $('terms').textContent = plan
+      ? `Сумма поступит на баланс. Когда оплаченный остаток достигнет ${format(plan.amount)}, включится тариф «${plan.name}» на 30 дней. Деньги останутся на балансе.`
+      : 'Пополнение поступит на баланс. Достигнутый порог включит соответствующий тариф на 30 дней; само пополнение действующий срок не продлевает.';
   }
   $('email-form').addEventListener('submit', async e => {
     e.preventDefault(); const button=e.submitter; button.disabled=true;
@@ -76,11 +78,11 @@
       }
       if(data.credited){await check();return;}
       const target=new URL(data.payment_url);
-      if(target.protocol!=='https:' || !['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru'].includes(target.hostname))throw Error('Недопустимый адрес оплаты.');
+      if(target.protocol!=='https:' || !['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru','yookassa.ru','yoomoney.ru'].includes(target.hostname))throw Error('Недопустимый адрес оплаты.');
       location.assign(target.href);
     }catch(e){message(e.message);}finally{busy=false;$('pay').disabled=false;}
   });
   $('refresh').addEventListener('click',async()=>{if(busy)return;busy=true;$('refresh').disabled=true;try{await check();}catch(e){message(e.message);}finally{busy=false;$('refresh').disabled=false;}});
   $('logout').addEventListener('click',()=>{key='';try{localStorage.removeItem('nm.key');}catch(_){}$('purchase').hidden=true;$('login').hidden=false;message('Введите почту другого аккаунта.');});
-  api('/v1/payments/config').then(data=>{config=data;return show();}).catch(e=>message(e.message));
+  api('/v1/payments/config').then(data=>{config=data;$('provider-label').textContent=`nanoLika · ${data.provider_name}${data.test_mode?' · тестовый режим':''}`;$('payment-notice').textContent=data.test_mode?'Тестовое оформление. Тестовый баланс и условия не меняют рабочий аккаунт.':'Оплата проходит через защищённую форму платёжного сервиса. Статус подтверждается сервером.';$('pay').textContent=`Перейти в ${data.provider_name}${data.test_mode?' · тест':''}`;return show();}).catch(e=>message(e.message));
 })();

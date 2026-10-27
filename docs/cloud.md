@@ -678,25 +678,29 @@ tariff also makes a spend cheaper while it runs. The menu is the operator's
 (`PLANS`, a JSON list of `id`, `name`, `price_rub`, `discount_pct`, `connect`,
 `days`):
 
-| tariff | what it takes off a spend | the relay's connection |
-|---|---|---|
-| a plain top-up | nothing | no |
-| Лика | 20 % | no |
-| Лика+ | 20 % | yes |
-| Лика Команда | 30 % | yes |
+| tariff | paid-balance threshold | discount while active |
+|---|---:|---:|
+| Лика | ₽590 | 10 % |
+| Лика+ | ₽1490 | 20 % |
+| Лика Команда | ₽3900 | 30 % |
 
-Buying one credits its whole price into the pool at the ruble rate (`RUB_PER_USD`
-and `TOPUP_FEE_PCT`): ₽590 buys the tariff and ₽590 of balance, and how long that
-balance lasts is the person's own business. The terms are kept with the account,
-so a later change of the menu does not rewrite what someone already paid for; a
-second sale inside the month adds a month to what is left instead of starting
-over. `GET /v1/config` carries the menu, `/v1/me` the account's `plan` and whether
-`connect` is open, and the operator sells one with `POST /v1/admin/plan`.
+Every confirmed customer top-up adds to the paid balance. Charged use reduces that
+paid remainder. When it reaches a tariff threshold, that tariff and the account's
+device connection activate for 30 days; the threshold amount is not deducted. For
+example, ₽300 added, ₽100 spent and another ₽400 added leaves ₽600 and activates
+Лика. Signup, daily and referral bonuses do not count toward thresholds. A payment
+does not extend an active tariff; it may upgrade to a higher tier if its threshold
+is reached. After expiry the remaining balance stays available, but the discount
+and device connection end. A later confirmed top-up can activate another 30-day
+term if the remaining paid balance still reaches a threshold. `GET /v1/config`
+carries the threshold menu and `/v1/me` carries the current or expired tariff.
+`POST /v1/admin/plan` is a legacy support override, not the customer purchase path.
 
 `CONNECT_REQUIRES_PLAN=1` makes that the rule for `/v1/hub`: an account without a
-running `connect` tariff keeps every device on its own, and the socket is closed
-with `4004 connect_limited` ([hub.md](hub.md)). `0`, the default, keeps a relay
-that does not sell the key yet working as before: everyone connects.
+running tariff keeps every device on its own, and the socket is closed with
+`4004 connect_limited` ([hub.md](hub.md)). All three current tariffs include the
+connection while active. A top-up below the next threshold adds working balance
+but does not renew the monthly entitlement.
 
 What each model costs the operator and what it sells for is one page,
 `/app/prices/` (`GET /v1/admin/prices`): every model in the menu with its purchase
@@ -799,6 +803,14 @@ See [model-catalogue.md](model-catalogue.md) for the catalogue commerce contract
 account favourites, the authenticated non-billable POST /v1/models/quote endpoint
 and the admin-only revision-checked retail price editor. Existing video task rows
 remain compatible; new tasks persist accepted sale_uy until settlement.
+
+## Personal API keys
+
+A person can issue and revoke personal model API keys from Account → Sign-in and security. The full
+secret is returned only when created; the account stores only its hash and prefix. Requests use the
+same account balance and usage ledger as the person's other devices. Keys are limited to model-list
+and inference endpoints and do not grant access to account settings, payment operations, conversations,
+or device synchronization. Revoke a key immediately if it may have been exposed.
 
 ## Archived shared conversations
 

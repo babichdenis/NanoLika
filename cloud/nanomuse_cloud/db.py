@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     credit_used_uy INTEGER NOT NULL DEFAULT 0, -- 0.4, unused since 0.5
     clips_bonus   INTEGER NOT NULL DEFAULT 0,  -- 0.4, unused since 0.5 (clips are not counted apart)
     grant_uy      INTEGER NOT NULL DEFAULT 0,  -- 0.5: the lifetime pool, micro-yuan (allowance + invites + co-creation + operator)
+    paid_balance_uy INTEGER NOT NULL DEFAULT 0, -- unspent paid portion of the pool; only this unlocks monthly tariff thresholds
     contribute_bonus_at INTEGER,               -- 0.5: when the one-time co-creation bonus was granted
     invite_settled_at INTEGER                  -- when the invite bonus was paid to both sides (NULL: not yet, paid at the first charged request)
 );
@@ -393,6 +394,27 @@ CREATE TABLE IF NOT EXISTS bot_projects (
     UNIQUE(platform,provider_id)
 );
 CREATE INDEX IF NOT EXISTS bot_projects_account ON bot_projects(account_id);
+-- 0.31: what people say to the site — the chat on the front page and the support form.
+-- Written on arrival, read only by an operator in the console. A chat line keeps the
+-- question and the answer that was given; a support line keeps the topic it was filed
+-- under and the address to reply to. No account is needed: most of these people have none.
+CREATE TABLE IF NOT EXISTS site_messages (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    at            INTEGER NOT NULL,
+    source        TEXT NOT NULL,              -- chat | feedback
+    page          TEXT NOT NULL DEFAULT '',   -- where on the site it was written
+    ip            TEXT NOT NULL DEFAULT '',
+    ua            TEXT NOT NULL DEFAULT '',
+    email         TEXT NOT NULL DEFAULT '',   -- the address to answer (feedback)
+    topic         TEXT NOT NULL DEFAULT '',   -- the subject chosen in the form (feedback)
+    body          TEXT NOT NULL,              -- the question, or the text of the message
+    reply         TEXT NOT NULL DEFAULT '',   -- what Lika answered (chat)
+    session       TEXT NOT NULL DEFAULT '',   -- the chat's own id, to keep one visit together
+    code          TEXT NOT NULL DEFAULT '',   -- ok | off_topic | upstream_error | ...
+    read_at       INTEGER                     -- when an operator opened it; NULL until then
+);
+CREATE INDEX IF NOT EXISTS site_messages_at ON site_messages(at);
+CREATE INDEX IF NOT EXISTS site_messages_source_at ON site_messages(source, at);
 """
 
 
@@ -459,6 +481,8 @@ class Database:
         if "expires_at" not in cols("api_keys"):
             # 0.13: a session key (NanoLika Web's containers) stops working at this time
             self._conn.execute("ALTER TABLE api_keys ADD COLUMN expires_at INTEGER")
+        if "key_hash" not in cols("ledger"):
+            self._conn.execute("ALTER TABLE ledger ADD COLUMN key_hash TEXT NOT NULL DEFAULT ''")
         if "extra" not in cols("ledger"):
             self._conn.execute("ALTER TABLE ledger ADD COLUMN extra TEXT NOT NULL DEFAULT ''")
         for col, ddl in (
@@ -494,10 +518,22 @@ class Database:
             self._conn.execute("ALTER TABLE accounts ADD COLUMN contribute INTEGER NOT NULL DEFAULT 0")
         # 0.5: one lifetime pool instead of a daily cap; the co-creation bonus, once
         add("accounts", "grant_uy", "INTEGER NOT NULL DEFAULT 0")
+        add("accounts", "paid_balance_uy", "INTEGER NOT NULL DEFAULT 0")
         # 0.26: what the person put in themselves, in micro-yuan, added up across top-ups;
         # the free allowance, invites and the operator's own gifts never count here, and the
         # figure never goes down when the pool is spent (it is a door key, not a balance)
         add("accounts", "topped_uy", "INTEGER NOT NULL DEFAULT 0")
+        # Seed the new spendable paid-balance counter once for existing accounts. The old
+        # `topped_uy` is cumulative, so subtract recorded spend and cap it by the remaining
+        # total pool. Future top-ups and charges maintain `paid_balance_uy` directly.
+        if "accounts.paid_balance_uy" in self.added:
+            self._conn.execute(
+                """UPDATE accounts SET paid_balance_uy=MIN(
+                       MAX(0, grant_uy-(SELECT COALESCE(SUM(CASE WHEN sale_uy>0 THEN sale_uy ELSE cost_uy END),0)
+                                        FROM ledger WHERE account_id=accounts.id AND cost_uy>0)),
+                       MAX(0, topped_uy-(SELECT COALESCE(SUM(CASE WHEN sale_uy>0 THEN sale_uy ELSE cost_uy END),0)
+                                          FROM ledger WHERE account_id=accounts.id AND cost_uy>0)))"""
+            )
         add("accounts", "contribute_bonus_at", "INTEGER")
         # 0.10: the address and the client software behind sign-ins, requests, events and
         # devices (client.py) — the operator's page reads them; nothing else does
@@ -590,6 +626,28 @@ class Database:
                 "ON CONFLICT(day, metric, key) DO UPDATE SET value=value+excluded.value, updated_at=excluded.updated_at",
                 (utc_day(t), metric, key or "", int(n), t),
             )
+
+    def daily_grant_once(self, account_id: str, credit_uy: int, ts: int | None = None) -> bool:
+        """Atomically grant one account's daily free balance at most once per UTC day."""
+        t = now() if ts is None else int(ts)
+        amount = max(0, int(credit_uy))
+        if amount == 0:
+            return False
+        with self.tx() as c:
+            claim = c.execute(
+                "INSERT OR IGNORE INTO daily(day,metric,key,value,updated_at) VALUES(?,?,?,?,?)",
+                (utc_day(t), "free_daily", account_id, 1, t),
+            )
+            if claim.rowcount != 1:
+                return False
+            updated = c.execute("UPDATE accounts SET grant_uy=grant_uy+? WHERE id=?", (amount, account_id))
+            if updated.rowcount != 1:
+                raise KeyError("daily grant account does not exist")
+            c.execute(
+                "INSERT INTO ledger(account_id,ts,kind,charged,extra) VALUES(?,?,?,?,?)",
+                (account_id, t, "credit", 0, json.dumps({"credit_uy": amount, "from": "daily_free"})),
+            )
+            return True
 
     def daily_set(self, day: int, metric: str, key: str, value: int, ts: int | None = None) -> None:
         """Set the day's figure — a snapshot (stars as of today), replacing an earlier one."""
@@ -1097,8 +1155,7 @@ class Database:
         expires_at: int,
         paid_uy: int,
     ) -> None:
-        """The terms sold, and until when. A second purchase in the same month extends the
-        date and keeps the terms it now carries."""
+        """Store a tariff entitlement and its validity window."""
         with self.tx() as c:
             c.execute(
                 """INSERT INTO subscriptions
@@ -1280,6 +1337,90 @@ class Database:
     def set_contribute(self, account_id: str, on: bool) -> None:
         with self.tx() as c:
             c.execute("UPDATE accounts SET contribute=? WHERE id=?", (1 if on else 0, account_id))
+
+    # -- what the site's visitors say ------------------------------------------------------------
+
+    def add_site_message(
+        self,
+        source: str,
+        body: str,
+        *,
+        at: int | None = None,
+        page: str = "",
+        ip: str = "",
+        ua: str = "",
+        email: str = "",
+        topic: str = "",
+        reply: str = "",
+        session: str = "",
+        code: str = "",
+    ) -> int:
+        """One line from the site: the chat's question and answer, or a support message.
+
+        `at` is the moment the person wrote it, not the moment the relay heard about it: a
+        chat line arrives from the chat service a second later and keeps its own clock.
+        """
+        with self.tx() as c:
+            cur = c.execute(
+                "INSERT INTO site_messages(at, source, page, ip, ua, email, topic, body, reply, session, code) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (at or now(), source, page[:200], ip[:60], ua[:300], email[:254], topic[:80],
+                 body, reply, session[:80], code[:40]),
+            )
+            return int(cur.lastrowid or 0)
+
+    def site_messages(
+        self,
+        *,
+        source: str = "",
+        search: str = "",
+        limit: int = 100,
+        before: int | None = None,
+    ) -> list[sqlite3.Row]:
+        """Newest first; `before` pages back through older lines, `search` looks in the text."""
+        where: list[str] = []
+        args: list[Any] = []
+        if source:
+            where.append("source=?")
+            args.append(source)
+        if search.strip():
+            where.append("(body LIKE ? ESCAPE '\\' OR reply LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR topic LIKE ? ESCAPE '\\')")
+            args.extend([_like(search)] * 4)
+        if before is not None:
+            where.append("id<?")
+            args.append(before)
+        clause = f"WHERE {' AND '.join(where)}" if where else ""
+        with self._lock:
+            return self._conn.execute(
+                f"SELECT * FROM site_messages {clause} ORDER BY id DESC LIMIT ?",
+                (*args, max(1, min(limit, 500))),
+            ).fetchall()
+
+    def site_message_counts(self) -> dict[str, Any]:
+        """How much there is to read: per source, and how much of it is unread."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT source, COUNT(*) AS total, SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) AS unread "
+                "FROM site_messages GROUP BY source"
+            ).fetchall()
+        out: dict[str, Any] = {"chat": {"total": 0, "unread": 0}, "feedback": {"total": 0, "unread": 0}}
+        for row in rows:
+            out[str(row["source"])] = {"total": int(row["total"] or 0), "unread": int(row["unread"] or 0)}
+        return out
+
+    def mark_site_messages_read(self, ids: list[int] | None = None) -> int:
+        """Mark one line, several, or (with no ids) everything as read."""
+        ts = now()
+        with self.tx() as c:
+            if ids:
+                marks = ",".join("?" for _ in ids)
+                cur = c.execute(
+                    f"UPDATE site_messages SET read_at=? WHERE read_at IS NULL AND id IN ({marks})",
+                    (ts, *[int(i) for i in ids]),
+                )
+            else:
+                cur = c.execute("UPDATE site_messages SET read_at=? WHERE read_at IS NULL", (ts,))
+            return int(cur.rowcount or 0)
 
     def add_sample(
         self,
@@ -1827,6 +1968,15 @@ class Database:
                     (who.ip, who.ua, t, who.ip, account_id),
                 )
 
+    def key_spent_uy(self, key_hash: str) -> int:
+        """The total sale_uy (what accounts were charged) from the ledger lines of one key."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT SUM(sale_uy) AS total FROM ledger WHERE key_hash=? AND sale_uy>0",
+                (key_hash,),
+            ).fetchone()
+            return int(row["total"] or 0) if row else 0
+
     def revoke_key(self, key_hash: str) -> None:
         with self.tx() as c:
             c.execute("UPDATE api_keys SET revoked_at=? WHERE key_hash=? AND revoked_at IS NULL", (now(), key_hash))
@@ -1944,6 +2094,7 @@ class Database:
         cost_uy: int = 0,
         sale_uy: int | None = None,
         extra: str = "",
+        key_hash: str = "",
         *,
         video_task_id: str | None = None,
     ) -> bool:
@@ -1966,10 +2117,13 @@ class Database:
                 )
                 if updated.rowcount != 1:
                     return False
-            c.execute("UPDATE accounts SET used=used+? WHERE id=?", (charged, account_id))
             c.execute(
-                "INSERT INTO ledger(account_id, ts, kind, model, prompt_tokens, completion_tokens, charged, request_id, cost_uy, sale_uy, extra, ip, ua) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "UPDATE accounts SET used=used+?, paid_balance_uy=MAX(0,paid_balance_uy-?) WHERE id=?",
+                (charged, sale_uy, account_id),
+            )
+            c.execute(
+                "INSERT INTO ledger(account_id, ts, kind, model, prompt_tokens, completion_tokens, charged, request_id, cost_uy, sale_uy, extra, key_hash, ip, ua) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     account_id,
                     now(),
@@ -1982,6 +2136,7 @@ class Database:
                     cost_uy,
                     sale_uy,
                     extra or "",
+                    key_hash or "",
                     who.ip,
                     who.ua,
                 ),

@@ -714,6 +714,10 @@ class Cloud:
             "paused": [k for k, v in self.controls.paused().items() if v],
             "allowance_cny": self.s.allowance_cny,
             "allowance_usd": self.s.cny_to_usd(self.s.allowance_cny),
+            "daily_free_cny": self.s.daily_free_cny,
+            "daily_free_rub": self.s.cny_to_rub(self.s.daily_free_cny),
+            "start_free_cny": self.s.start_free_cny,
+            "start_free_rub": self.s.cny_to_rub(self.s.start_free_cny),
             "invite_bonus_cny": self.s.invite_bonus_cny,
             "invitee_bonus_cny": self.s.invite_bonus_cny,
             "usd_cny": self.s.usd_cny,
@@ -1391,14 +1395,13 @@ class Cloud:
                     "discount_pct": max(0, min(90, int(row.get("discount_pct") or 0))),
                     "connect": bool(row.get("connect")),
                     "days": max(1, int(row.get("days") or 30)),
+                    "opens_at_paid_balance_rub": float(row.get("price_rub") or 0),
                 }
             )
         return menu
 
     def plan_state(self, account_id: str) -> dict[str, Any] | None:
-        """The tariff this account is on, with what it takes off a spend and whether it opens
-        the relay's connection. ``None`` when it never bought one; ``active`` says whether it
-        is still running."""
+        """The tariff activated by its paid-balance threshold, or the last expired one."""
         row = self.db.subscription(account_id)
         if row is None:
             return None
@@ -1407,6 +1410,7 @@ class Cloud:
             "id": str(row["plan"]),
             "name": str(row["name"]),
             "price_rub": float(row["price_rub"]),
+            "opens_at_paid_balance_rub": float(row["price_rub"]),
             "discount_pct": int(row["discount_pct"]),
             "connect": bool(row["connect"]),
             "started_at": int(row["started_at"]),
@@ -1415,9 +1419,7 @@ class Cloud:
         }
 
     def plan_buy(self, account_id: str, plan_id: str, actor: str = "console", note: str = "") -> dict[str, Any]:
-        """Sell one tariff: the whole price goes into the pool at the ruble rate, the terms
-        are kept with the account, and a second purchase inside the same month extends the
-        date instead of starting over. No price is charged twice: the money is the balance."""
+        """Legacy operator helper for explicit grants; customer checkout uses paid thresholds."""
         account = self.db.account(account_id)
         if account is None:
             raise CloudError(404, "no_account", "No such account")
@@ -1432,8 +1434,7 @@ class Cloud:
         now_ts = self.clock()
         starts_at = now_ts
         if current is not None and current["active"]:
-            # a purchase inside the month adds a month to what is left, and the terms are the
-            # new plan's from now on
+            # Explicit operator overrides preserve the existing window while changing terms.
             starts_at = current["started_at"]
             expires_at = max(now_ts, current["expires_at"]) + plan["days"] * 86400
         else:
@@ -1458,12 +1459,10 @@ class Cloud:
     def payment_grant(
         self, account_id: str, tier: dict[str, Any], rub_amount: float, actor: str = "payment", *, credit: bool = True
     ) -> dict[str, Any]:
-        """Оплата становится тарифом: права — по уровню суммы, токены — по тому, что заплатили.
+        """Legacy operator settlement helper; current DEMO and live paths do not call this.
 
-        Тариф задаёт две вещи: разрешения (проход через релей и связь устройств) и срок.
-        Сколько токенов начислить, решает не цена тарифа, а фактическая оплата: человек,
-        плативший частями, получает столько, сколько внёс. Поэтому сумма идёт в пул как есть,
-        а уровень тарифа берётся из меню по накопленной сумме.
+        LiveBilling writes the tariff and the matching balance in its own atomic transaction.
+        A custom top-up must never call this helper because it must not create or extend a tariff.
         """
         account = self.db.account(account_id)
         if account is None:
@@ -1499,7 +1498,7 @@ class Cloud:
         return {"plan": self.plan_state(account_id) or {}, "credited_uy": paid_uy}
 
     def payment_revoke(self, account_id: str, actor: str = "payment") -> None:
-        """Возврат уменьшил сумму ниже любого тарифа: права снимаются, деньги остаются в кошельке."""
+        """Legacy manual entitlement revoke; refunds use the payment-specific settlement path."""
         if self.plan_state(account_id) is None:
             return
         self.db.clear_subscription(account_id)
@@ -1507,10 +1506,12 @@ class Cloud:
         log.info("account %s: tariff revoked after a refund", account_id[:8])
 
     def discount(self, money_uy: int, account_id: str) -> int:
-        """What a running tariff takes off a text turn: 20 % on Лика and Лика+, 30 % on Лика
-        Команда, nothing without one. `money_uy` is the money the turn would take from the
-        account and not a token count, since a share off a counter would be no discount at
-        all. The provider is paid the same either way; the difference is the operator's."""
+        """Apply the active tariff percentage to a monetary charge.
+
+        Chat, image, video and audio operations use the same active percentage. The tariff
+        changes the customer's charge, not the provider's invoice; `money_uy` is money, not
+        a token count.
+        """
         pct = self.spend_discount_pct(account_id)
         return money_uy if pct <= 0 else max(1, math.ceil(money_uy * (100 - pct) / 100))
 
@@ -1522,9 +1523,9 @@ class Cloud:
     def connect_state(self, account_id: str) -> dict[str, Any]:
         """Whether this account's devices may meet through the relay, and on what tariff.
 
-        The relay's connection is what a tariff buys: Лика+ and Лика Команда open it, a plain
-        top-up and Лика do not, and a member is never held back. Below it every device works
-        on its own and keeps its own chats."""
+        All three site tariffs open the connection while active. Successful paid top-ups
+        evaluate the unspent paid-balance threshold. A member is never held back. When this
+        relay requires a plan, expiry closes the connection while preserving the balance."""
         account = self.db.account(account_id)
         member = bool(account["unlimited"]) if account is not None else False
         state = self.plan_state(account_id)
@@ -1923,6 +1924,8 @@ class Cloud:
         with the one making the request marked."""
         out = []
         for k in self.db.keys_for(caller.account_id, live_only=True):
+            if (k["via"] or "code") == "user":
+                continue  # model API credentials are managed separately from sign-ins
             out.append(
                 {
                     "prefix": k["prefix"],
@@ -1936,6 +1939,38 @@ class Cloud:
             )
         out.sort(key=lambda s: (not s["current"], -(s["last_used_at"] or s["created_at"])))
         return out
+
+    def list_keys(self, caller: Caller) -> list[dict]:
+        """Return all (live and revoked) keys for this account with spend per key."""
+        rows = self.db.keys_for(caller.account_id, live_only=False)
+        out = []
+        for k in rows:
+            kh = k["key_hash"]
+            spent = self.db.key_spent_uy(kh) or 0
+            out.append(
+                {
+                    "prefix": k["prefix"],
+                    "device": k["device"] or "-",
+                    "via": k["via"] or "code",
+                    "created_at": int(k["created_at"]),
+                    "last_used_at": int(k["last_used_at"]) if k["last_used_at"] else None,
+                    "expires_at": int(k["expires_at"]) if k["expires_at"] else None,
+                    "revoked": k["revoked_at"] is not None,
+                    "total_sale_uy": spent,
+                }
+            )
+        out.sort(key=lambda s: -(s["last_used_at"] or s["created_at"]))
+        return out
+
+    def create_user_key(self, caller: Caller, device: str = "console", ttl_s: int | None = None) -> tuple[str, str]:
+        """Create a permanent user key for this account.
+        Returns (full_key, prefix). If ttl_s is None the key never expires (expires_at=NULL)."""
+        key, new_caller = self._issue_key(caller.account_id, device, "user", expires_at=ttl_s if ttl_s else None)
+        return key, new_caller.key_prefix
+
+    def revoke_key(self, caller: Caller, prefix: str) -> bool:
+        """Revoke a key by its prefix (what shows on the account page)."""
+        return self.db.revoke_key_by_prefix(caller.account_id, prefix)
 
     def events(self, caller: Caller, limit: int = 50) -> list[dict]:
         return [dict(r) for r in self.db.events_for(caller.account_id, max(1, min(limit, 200)))]
@@ -2060,10 +2095,12 @@ class Cloud:
         grant = f"¥{self.s.uy_to_cny(a['grant_uy']):g}"
         bonus = f"+¥{self.s.invite_bonus_cny:g} for each of you"
         key = exhausted_key_line(region)
-        message = (
-            f"Your free allowance ({grant}) is used up. Three ways on: {key}, or invite a friend ({bonus}). "
-            "Your sign-in and your devices keep working either way."
-        )
+        daily = max(0.0, float(getattr(self.s, "daily_free_cny", 0) or 0))
+        message = f"Your shared balance ({grant}) is used up. Three ways on: {key}, or invite a friend ({bonus}). "
+        if daily:
+            message += "A configured free daily credit is added again tomorrow. "
+        message += "Your sign-in and your devices keep working either way."
+        daily_next = (int(self.clock()) // 86400 + 1) * 86400 if daily else 0
         return CloudError(
             429,
             "allowance_exhausted",
@@ -2071,6 +2108,8 @@ class Cloud:
             extra={
                 "left": self.s.uy_to_cny(a["left_uy"] or 0),
                 "grant": self.s.uy_to_cny(a["grant_uy"]),
+                "daily_free_cny": daily,
+                "daily_free_next_at": daily_next,
                 "region": region,
                 "ways": self.ways_on(caller, region),
                 # 0.21: every provider for the region with what each covers, the plans an
@@ -2205,7 +2244,6 @@ class Cloud:
                 {
                     "id": spec.id,
                     "name": spec.name,
-                    "upstream": spec.upstream,
                     "vendor": spec.vendor,
                     "available": spec.available,
                     "unit": _unit(spec),
@@ -2225,32 +2263,8 @@ class Cloud:
                         "cached_in": getattr(spec, "sell_cached_in", 0.0),
                         "out": getattr(spec, "sell_out", 0.0),
                     },
-                    # what the provider bills the operator, yuan per million tokens
-                    "cost": {
-                        "currency": "CNY",
-                        "in": spec.price_in,
-                        "out": spec.price_out,
-                        "cached_in_rate": spec.cached_in_rate,
-                    },
-                    # a picture or a clip has no token count of its own: this is what one
-                    # costs in tokens of the grant, and what the provider charges for it
-                    "tokens": {
-                        "per_picture": spec.per_image,
-                        "per_clip": spec.per_clip,
-                        "per_speech": spec.per_speech,
-                        "per_minute": spec.per_minute,
-                    },
                     # what a voice model does, and the voice it speaks with by default
                     "audio": {"kind": spec.audio_kind, "voice": spec.voice},
-                    "media": {
-                        "picture_cny": spec.price_image,
-                        "picture_2k_cny": spec.price_image_2k,
-                        "second_cny": spec.price_second,
-                        "second_by_size_cny": dict(spec.price_second_res),
-                        "speech_cny": spec.price_speech,
-                        "minute_cny": spec.price_minute,
-                        "clip_seconds": spec.clip_seconds,
-                    },
                     # on the shelf right now, and the default of its kind
                     "enabled": spec.id in shelf["enabled"].get(spec.kind, []),
                     "default": shelf["default"].get(spec.kind) == spec.id,
@@ -2329,6 +2343,7 @@ class Cloud:
         grant_cny = self.s.uy_to_cny(a["grant_uy"])
         left_cny = None if a["left_uy"] is None else self.s.uy_to_cny(a["left_uy"])
         region = self.region(caller, place)
+        money_account = self.db.account(caller.account_id)
         return {
             # 0.17: where the person seems to be — the apps order the "ways on" by it
             # (REGIONS: cn | intl | unknown) when the allowance runs low or out
@@ -2397,6 +2412,9 @@ class Cloud:
                 "total_rub": self.s.cny_to_rub(self.s.uy_to_cny(spent_uy)),
                 "grant_rub": self.s.cny_to_rub(grant_cny),
                 "left_rub": None if left_cny is None else self.s.cny_to_rub(left_cny),
+                "paid_balance_rub": self.s.cny_to_rub(
+                    self.s.uy_to_cny(int(money_account["paid_balance_uy"] or 0) if money_account is not None else 0)
+                ),
                 "today_rub": self.s.cny_to_rub(self.s.uy_to_cny(spent_today_uy)),
                 # how the pool grows, for the account page
                 "allowance_cny": self.s.allowance_cny,
@@ -2689,6 +2707,7 @@ class Cloud:
             cost_uy=cost,
             sale_uy=sale,
             extra=json.dumps(detail) if detail else "",
+            key_hash=caller.key_hash,
         )
         self.settle_invite(caller.account_id)
         return charged
@@ -2698,7 +2717,7 @@ class Cloud:
         charged = model.per_image * max(1, n)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
         sale = model_pricing.amount(self, model, {"size": size or "1024x1024", "count": n, "inputs": inputs}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
+        self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2709,7 +2728,7 @@ class Cloud:
         charged = model.per_speech * thousands
         cost = round(model.price_speech * thousands * 1_000_000)
         sale = model_pricing.amount(self, model, {"characters": characters}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2719,7 +2738,7 @@ class Cloud:
         charged = model.per_minute * minutes
         cost = round(model.price_minute * minutes * 1_000_000)
         sale = model_pricing.amount(self, model, {"seconds": seconds}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale)
+        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
         self.settle_invite(caller.account_id)
         return charged
 

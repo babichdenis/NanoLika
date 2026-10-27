@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>nanoLika Cloud: цены, поставщики и розница</title>
-    <link rel="stylesheet" href="prices.css?v=20261027-model-audit" />
+    <link rel="stylesheet" href="prices.css?v=20261027-provider-catalog" />
     <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
   <link rel="stylesheet" href="/web/brand-foundations.css?v=20261025-account"></head>
   <body>
@@ -12,9 +12,8 @@
       <a class="back" href="/app/admin/#overview">← в админку</a>
       <h1>Цены, поставщики и розница</h1>
       <p class="intro">
-        Закупка по каждой модели и наша цена рядом. Ставки текста обновляются из API поставщиков;
-        для медиа пока показана существующая конфигурация. Галочки сохраняют видимость моделей
-        для клиентов; продажные цены автоматически не меняются.
+        Сверка поставщиков, закупки и нашей цены. Всё на этой странице — внутренняя информация;
+        клиентам показываются только цены nanoLika.
       </p>
       <p class="rate" id="rate"></p>
       <p class="counts" id="counts"></p>
@@ -37,6 +36,21 @@
       </p>
     </section>
 
+    <p class="note" id="note"></p>
+
+    <main id="content" hidden>
+      <section>
+        <h2>Сверка поставщиков</h2>
+        <p class="lead" id="routing-status"></p>
+        <p class="lead">Остатки и состояние проверки. Долларовые суммы отдельно от рублёвых; ошибка проверки не означает нулевой баланс. У ProxyAPI оба подключения используют один счёт, их не нужно складывать.</p>
+        <div class="table-wrap"><table><thead><tr><th>Поставщик</th><th>Доступный остаток</th><th>Оценка в рублях</th><th>Проверено</th><th>Состояние</th></tr></thead><tbody id="balances-body"></tbody></table></div>
+      </section>
+      <section>
+        <h2>Модели в меню <span class="meta" id="chat-count"></span></h2>
+        <p class="lead">
+          Здесь активные модели с закупочной стоимостью, выбранным поставщиком, нашей ценой, лимитами и возможностями.
+          Закупка и сравнение поставщиков видны только администратору. Изменение закупки само по себе не меняет цену клиента.
+        </p>
     <div class="bar" id="bar" hidden>
       <div class="bar-row">
         <input id="q" type="search" placeholder="Название или id модели" autocomplete="off" />
@@ -108,22 +122,6 @@
       </div></details>
     </div>
 
-    <p class="note" id="note"></p>
-
-    <main id="content" hidden>
-      <section>
-        <h2>Балансы поставщиков</h2>
-        <p class="lead" id="routing-status"></p>
-        <p class="lead">Долларовые суммы отдельно от рублёвых. Ошибка проверки не означает нулевой баланс. У ProxyAPI оба подключения используют один счёт, их не нужно складывать.</p>
-        <div class="table-wrap"><table><thead><tr><th>Поставщик</th><th>Доступный остаток</th><th>Оценка в рублях</th><th>Проверено</th><th>Состояние</th></tr></thead><tbody id="balances-body"></tbody></table></div>
-      </section>
-      <section>
-        <h2>Наше меню и цена <span class="meta" id="chat-count"></span></h2>
-        <p class="lead">
-          Закупка берётся из свежего API, если есть котировка. В столбце поставщика цена входа и под ней
-          цена выхода, в рублях за миллион токенов. Галочка скрывает модель из выбора клиентов, но не
-          запрещает продолжать существующую беседу. Ставки продажи сохраняются кнопкой «Сохранить» и используются в каталоге, расчётах и новых списаниях. Уже запущенные видео сохраняют принятую цену. Цены в рублях, скидка тарифа применяется при расходе.
-        </p>
         <div class="table-wrap tall">
           <table id="models">
             <thead></thead>
@@ -141,6 +139,23 @@
         </p>
       </section>
 
+      <section id="model-discovery">
+        <h2>Полная база моделей <span class="meta" id="discovery-count"></span></h2>
+        <p class="lead">Здесь весь собранный справочник, а не только модели с найденной ценой. «В списке API» означает, что модель вернулась из каталога подключённого поставщика; это ещё не проверка реального ответа. Цена в снимке также не подтверждает доступ по текущему ключу.</p>
+        <div class="catalog-tools">
+          <input id="discovery-q" type="search" placeholder="Найти модель или описание" autocomplete="off" />
+          <div class="chips" id="discovery-groups" role="group" aria-label="Типы моделей у поставщиков"></div>
+          <label class="field">Поставщик <select id="discovery-provider"><option value="">Все поставщики</option></select></label>
+        </div>
+        <div class="table-wrap discovery-wrap">
+          <table id="discovery">
+            <thead><tr><th>Модель и описание</th><th>Тип</th><th>Контекст / ответ</th><th>Возможности и пробелы</th><th>Поставщик / снимок цены</th><th>Доступность</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button id="discovery-more" class="chip quiet" type="button" hidden>Показать ещё</button>
+      </section>
+
       <details>
         <summary>Справочные материалы и старые черновики, не участвуют в маршрутизации</summary>
       <section>
@@ -151,7 +166,9 @@
             <thead>
               <tr>
                 <th>Поставщик</th>
-                <th>Подключён</th>
+                <th>Ключ задан</th>
+                <th>Авто-роутер</th>
+                <th>Снимок</th>
                 <th class="num">Предложений</th>
                 <th class="num">Вход от, ₽ / 1M</th>
                 <th class="num">Медиана входа</th>
@@ -207,6 +224,6 @@
     </main>
 
     <footer id="footer"></footer>
-    <script type="module" src="prices.js?v=20261027-model-audit"></script>
+    <script type="module" src="prices.js?v=20261027-provider-catalog"></script>
   </body>
 </html>

@@ -53,7 +53,19 @@ def install(app, cloud, caller_dep) -> None:
             return browser_marker(response(request, {"state": "signed-out"}), cloud.s, signed_in=False)
         me = await asyncio.to_thread(cloud.me, caller)
         account = me.get("account", {})
-        return response(request, {"state": "signed-in", "email": account.get("email") or account.get("hint") or ""})
+        plan = me.get("plan")
+        account_plan = None
+        if isinstance(plan, dict):
+            account_plan = {
+                "name": str(plan.get("name") or plan.get("id") or ""),
+                "discount_pct": int(plan.get("discount_pct") or 0),
+                "expires_at": int(plan.get("expires_at") or 0),
+                "active": bool(plan.get("active")),
+            }
+        return response(
+            request,
+            {"state": "signed-in", "email": account.get("email") or account.get("hint") or "", "plan": account_plan},
+        )
 
     @app.post("/v1/auth/browser-session", include_in_schema=False)
     async def establish(request: Request, caller: Caller = Depends(caller_dep)):

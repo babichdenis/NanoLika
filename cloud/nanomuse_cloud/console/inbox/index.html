@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nanoLika Cloud: входящие с сайта</title>
+    <link rel="stylesheet" href="inbox.css?v=20261027-inbox" />
+    <link rel="icon" href="/web/assets/icon.svg?v=20261024-butterfly" type="image/svg+xml" />
+    <link rel="stylesheet" href="/web/brand-foundations.css?v=20261025-account" />
+  </head>
+  <body>
+    <header>
+      <a class="back" href="/app/admin/#overview">← в админку</a>
+      <h1>Входящие с сайта</h1>
+      <p class="intro">
+        Всё, что люди пишут на nanoLika: вопросы в чате на первой странице и сообщения из формы
+        поддержки. Собирается на сервере; здесь видно, кто и когда написал, о чём и что ответила
+        Лика. Чужим сюда хода нет — страница открывается только паролем администратора.
+      </p>
+      <p class="counts" id="counts"></p>
+    </header>
+
+    <section id="gate">
+      <h2>Вход для администратора</h2>
+      <p class="lead">
+        Нужен пароль администратора. Он сохраняется только в этой вкладке, как в остальной админке.
+      </p>
+      <noscript><p class="lead">Для входа включите JavaScript в настройках браузера.</p></noscript>
+      <form id="gate-form" class="gate-form">
+        <input id="gate-token" name="admin-password" type="password" inputmode="text" size="32"
+               placeholder="Полный пароль администратора" autocomplete="current-password"
+               autocapitalize="none" spellcheck="false"
+               aria-label="Пароль администратора, не код из письма" />
+        <button id="gate-go" type="submit">Открыть</button>
+      </form>
+      <p class="lead mono" id="gate-hint">
+        Введите полный пароль администратора. Это не шестизначный код из письма; вход в
+        пользовательский аккаунт здесь не нужен.
+      </p>
+    </section>
+
+    <p class="note" id="note"></p>
+
+    <main id="content" hidden>
+      <div class="bar" id="bar">
+        <div class="bar-row">
+          <div class="chips" id="sources" role="group" aria-label="Источник"></div>
+          <input id="q" type="search" placeholder="Поиск по тексту, адресу или теме" autocomplete="off" />
+          <button id="refresh" class="chip" type="button">Обновить</button>
+          <button id="read-all" class="chip" type="button">Отметить всё прочитанным</button>
+        </div>
+      </div>
+
+      <section id="list" class="list" aria-live="polite"></section>
+      <p class="more"><button id="more" class="chip" type="button" hidden>Показать более старые</button></p>
+    </main>
+
+    <footer id="footer"></footer>
+
+    <script src="inbox.js?v=20261027-inbox" defer></script>
+  </body>
+</html>

@@ -375,6 +375,10 @@ class Hub:
                 await ws.send_text(json.dumps({"type": "error", "code": e.code, "message": e.message}))
                 await self._close(ws, 4001, e.code)
                 return
+        if caller.via == "user":
+            await ws.send_text(json.dumps({"type": "error", "code": "api_key_scope", "message": "Personal API keys cannot connect devices"}))
+            await self._close(ws, 4001, "api_key_scope")
+            return
         # 0.26: the relay's connection between a person's devices is its own product. Below
         # the operator's threshold the socket is refused with `connect_limited` (4004) and
         # each device works on its own; the message says what is missing, so an app can show

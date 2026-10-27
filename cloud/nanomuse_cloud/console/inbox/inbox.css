@@ -1,0 +1,89 @@
+/* Входящие с сайта: чат и форма поддержки. Стиль тот же, что у остальной админки. */
+:root {
+  color-scheme: light;
+  --paper: #f7f1e6;
+  --ink: #37433c;
+  --muted: #6b7770;
+  --line: #e2d9c9;
+  --card: #fffdf8;
+  --accent: #b4552d;
+  --ok: #2f7d4f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px clamp(16px, 4vw, 48px) 64px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+header { max-width: 1100px; margin: 0 auto 15px; }
+h1 { margin: 6px 0 4px; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
+h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; }
+.intro, .lead { margin: 0 0 8px; color: var(--muted); max-width: 78ch; }
+.back { display: inline-block; color: var(--accent); text-decoration: none; font-size: 14px; }
+.back:hover { text-decoration: underline; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.counts { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.note { max-width: 1100px; margin: 8px auto; color: var(--accent); font-size: 14px; }
+.note:empty { display: none; }
+
+#gate {
+  max-width: 560px; margin: 40px auto; padding: 20px 22px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+}
+.gate-form { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
+.gate-form input {
+  flex: 1 1 240px; min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit;
+}
+.gate-form button, .chip {
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink); font: inherit; cursor: pointer;
+}
+.gate-form button { border-radius: 10px; background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip:disabled { opacity: 0.5; cursor: default; }
+
+.bar { max-width: 1100px; margin: 0 auto 14px; }
+.bar-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bar-row input[type="search"] {
+  flex: 1 1 260px; min-width: 0; padding: 9px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit;
+}
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.list { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+.msg {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 16px;
+}
+.msg.unread { border-left: 4px solid var(--accent); }
+.msg-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.when { font-weight: 600; }
+.badge {
+  font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted);
+}
+.badge.chat { color: #2f5f7d; border-color: #c3d8e5; background: #eef6fa; }
+.badge.feedback { color: #7d4a2f; border-color: #e5d2c3; background: #faf1ea; }
+.badge.unread { color: var(--accent); border-color: #e8c3b2; background: #fbece4; }
+.where { margin-left: auto; color: var(--muted); font-size: 13px; }
+.who { color: var(--muted); font-size: 13px; }
+.topic { font-weight: 600; margin: 2px 0 6px; }
+.text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 8px; }
+.answer {
+  margin: 8px 0 0; padding: 10px 12px; border-radius: 12px;
+  background: #f3efe3; border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.answer-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.msg-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.meta { color: var(--muted); font-size: 12px; }
+.empty { max-width: 1100px; margin: 24px auto; color: var(--muted); }
+.more { max-width: 1100px; margin: 16px auto 0; }
+footer { max-width: 1100px; margin: 28px auto 0; color: var(--muted); font-size: 12px; }

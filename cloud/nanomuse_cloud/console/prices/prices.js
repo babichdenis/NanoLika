@@ -224,7 +224,16 @@ function vendorOf(m) {
 }
 
 function groupOf(m) {
-  const kind = String(m.kind || "chat");
+  const info = infoOf(m) || {};
+  const mode = String(info.mode || "").toLowerCase();
+  const modeGroups = {
+    image_generation: "image", image_edit: "image", video_generation: "video",
+    audio_speech: "audio", audio_transcription: "audio", realtime: "audio",
+    embedding: "embedding", rerank: "rerank",
+  };
+  if (modeGroups[mode]) return modeGroups[mode];
+  if ((info.caps || {}).code) return "code";
+  const kind = String(m.kind || "chat").toLowerCase();
   const lanes = (m.lanes || []).map((lane) => String(lane).toLowerCase());
   const id = String(m.id || "").toLowerCase();
   if (kind === "rerank") return "rerank";
@@ -669,6 +678,9 @@ function visibilityCell(m) {
 function modelCell(m) {
   const cell = h("td", undefined, "name");
   cell.append(h("div", m.name));
+  const info = infoOf(m);
+  const description = info?.dev?.description;
+  if (description) cell.append(h("div", description, "model-description"));
   const meta = h("div", undefined, "meta");
   meta.append(h("code", m.id));
   const lanes = (m.lanes || []).join(", ");
@@ -951,6 +963,115 @@ function drawTable() {
   drawRoutingNote();
 }
 
+const discoveryState = { kind: "all", provider: "", query: "", limit: 120 };
+const DISCOVERY_GROUPS = [
+  ["all", "Все"], ["text", "Текст"], ["code", "Кодовые"], ["image", "Изображения"],
+  ["video", "Видео"], ["audio", "Аудио"], ["embedding", "Эмбеддинги"], ["rerank", "Ранжирование"],
+  ["safety", "Безопасность"], ["other", "Другие"],
+];
+
+function discoveryRows() {
+  return state.data?.discovery?.models || [];
+}
+
+function filteredDiscoveryRows() {
+  const q = discoveryState.query.trim().toLocaleLowerCase("ru");
+  return discoveryRows().filter((row) => {
+    if (discoveryState.kind !== "all" && row.kind !== discoveryState.kind) return false;
+    if (discoveryState.provider && row.source_provider !== discoveryState.provider
+      && !row.offers.some((offer) => offer.provider === discoveryState.provider)
+      && !row.live_providers.includes(discoveryState.provider)) return false;
+    if (!q) return true;
+    return `${row.name} ${row.id} ${row.description} ${row.kind_label}`.toLocaleLowerCase("ru").includes(q);
+  });
+}
+
+function drawDiscovery() {
+  const all = discoveryRows();
+  const groupBox = document.getElementById("discovery-groups");
+  const counts = new Map();
+  for (const row of all) counts.set(row.kind, (counts.get(row.kind) || 0) + 1);
+  groupBox.replaceChildren();
+  for (const [kind, label] of DISCOVERY_GROUPS) {
+    const count = kind === "all" ? all.length : counts.get(kind) || 0;
+    if (kind !== "all" && !count) continue;
+    const button = h("button", label);
+    button.type = "button";
+    button.className = "chip" + (discoveryState.kind === kind ? " on" : "");
+    button.append(h("b", String(count)));
+    button.setAttribute("aria-pressed", String(discoveryState.kind === kind));
+    button.onclick = () => { discoveryState.kind = kind; drawDiscovery(); };
+    groupBox.append(button);
+  }
+
+  const providerSelect = document.getElementById("discovery-provider");
+  const selectedProvider = discoveryState.provider;
+  const providerNames = [...new Set(all.flatMap((row) => [
+    row.source_provider, ...row.offers.map((offer) => offer.provider), ...row.live_providers,
+  ]).filter(Boolean))].sort((a, b) => providerLabel(a).localeCompare(providerLabel(b), "ru"));
+  providerSelect.replaceChildren(new Option("Все поставщики", ""));
+  for (const name of providerNames) providerSelect.add(new Option(providerLabel(name), name));
+  providerSelect.value = selectedProvider;
+
+  const rows = filteredDiscoveryRows();
+  const snapshotDate = state.data?.discovery?.generated_at;
+  const stale = snapshotDate && Date.now() - Date.parse(snapshotDate) > 48 * 60 * 60 * 1000;
+  const total = state.data?.discovery?.count ?? all.length;
+  const liveCheckedAt = state.data?.discovery?.provider_catalog_checked_at;
+  document.getElementById("discovery-count").textContent = `${rows.length} из ${all.length} · база ${total} · цены ${stamp(snapshotDate)}${stale ? " · снимок устарел" : ""} · каталог маршрутизатора ${liveCheckedAt ? stamp(liveCheckedAt * 1000) : "ещё не проверен"}`;
+  const body = document.querySelector("#discovery tbody");
+  body.replaceChildren();
+  for (const item of rows.slice(0, discoveryState.limit)) {
+    const tr = h("tr");
+    const model = h("td", undefined, "discovery-name");
+    model.append(h("strong", item.name), h("code", item.id));
+    if (item.description) model.append(h("span", item.description, "discovery-description"));
+    tr.append(model, h("td", item.kind_label));
+    const limits = [item.context ? `Контекст ${money(item.context, 0)}` : "", item.max_output ? `Ответ ${money(item.max_output, 0)}` : ""].filter(Boolean).join(" · ") || "—";
+    tr.append(h("td", limits, "meta"));
+    const capabilityText = item.capabilities.length ? item.capabilities.map((cap) => CAP_SHORT[cap] || cap).join(" · ") : "—";
+    const modalityText = [
+      item.modalities?.in?.length ? `Вход: ${item.modalities.in.join("/")}` : "",
+      item.modalities?.out?.length ? `Выход: ${item.modalities.out.join("/")}` : "",
+      item.quality ? `Качество ${money(item.quality, 1)}` : "",
+    ].filter(Boolean).join(" · ");
+    const missingText = item.missing?.length ? `Нет данных: ${item.missing.map((field) => ({
+      context: "контекст", max_output: "лимит ответа", description: "описание",
+      input_price: "цена входа", output_price: "цена выхода",
+      quality: "оценка качества", release_date: "дата выпуска", modalities: "модальности",
+    }[field] || field)).join(", ")}` : "Карточка заполнена";
+    tr.append(h("td", [capabilityText, modalityText, missingText].filter(Boolean).join(" · "), "meta"));
+    const offers = h("td", undefined, "discovery-offers");
+    if (item.source_provider) offers.append(h("div", `Источник карточки: ${providerLabel(item.source_provider)}`));
+    if (item.world_in_usd !== null || item.world_out_usd !== null) {
+      offers.append(h("div", `Мировой ориентир: $${item.world_in_usd ?? "—"} / $${item.world_out_usd ?? "—"} за 1M`));
+    }
+    if (item.unit_usd?.usd !== undefined) offers.append(h("div", `Мировой ориентир: $${item.unit_usd.usd} / ${item.unit_usd.unit || "ед."}`));
+    if (item.free) offers.append(h("div", "Free по данным каталога", "meta"));
+    for (const offer of item.offers) offers.append(h("div", `${providerLabel(offer.provider)} · ${money(Number(offer.rub), 4)} ₽ / ${offer.unit || "ед."}`));
+    if (!item.source_provider && !item.offers.length) offers.append(h("span", "Ценовых данных нет", "meta"));
+    const status = item.deprecated ? "Устаревшая модель"
+      : item.in_menu ? "В клиентском меню"
+      : item.live_providers.length ? `В каталоге API: ${item.live_providers.map(providerLabel).join(", ")} · вызов не проверен`
+      : item.offers.length ? `Только снимок цен: ${item.offers.map((offer) => providerLabel(offer.provider)).join(", ")}`
+      : "Справочная запись · поставщик не подтверждён";
+    tr.append(offers, h("td", status, "candidate-state"));
+    body.append(tr);
+  }
+  if (!rows.length) {
+    const tr = h("tr");
+    const td = h("td", "Нет совпадений. Измените фильтры.", "meta");
+    td.colSpan = 6;
+    tr.append(td);
+    body.append(tr);
+  }
+  const more = document.getElementById("discovery-more");
+  if (more) {
+    more.hidden = rows.length <= discoveryState.limit;
+    more.textContent = `Показать ещё ${Math.min(120, rows.length - discoveryState.limit)}`;
+  }
+}
+
 function buildRow(m, providers) {
   const tr = h("tr");
   tr.dataset.id = m.id;
@@ -1064,14 +1185,18 @@ function drawBalances() {
 function drawProviders() {
   const p = state.data.providers || {};
   document.getElementById("providers-when").textContent = p.at
-    ? `Снимок прайсов: ${stamp(p.at)}${p.usd_rub ? `, доллар ${money(p.usd_rub, 2)} ₽ (${p.rate_source || "—"})` : ""}. Подключены сейчас: ${(p.connected || []).join(", ") || "никто"}. Некоторые наши поставщики в снимок не попали: он собирался раньше, чем их добавили.`
+    ? `Снимок прайсов: ${stamp(p.at)}${p.usd_rub ? `, доллар ${money(p.usd_rub, 2)} ₽ (${p.rate_source || "—"})` : ""}. Имя в списке поставщиков или в прайс-снимке само по себе не означает, что релей умеет отправлять туда запросы.`
     : "Снимка прайсов ещё нет.";
   const body = document.querySelector("#providers tbody");
   body.replaceChildren();
-  for (const row of p.snapshot || []) {
+  const snapshots = new Map((p.snapshot || []).map((row) => [row.name, row]));
+  for (const known of p.known || []) {
+    const row = snapshots.get(known.name) || { offers: 0, note: "Нет ценового снимка", connected: known.key_configured, routing_supported: known.routing_supported };
     const tr = h("tr");
-    tr.append(h("td", row.name, "name"));
-    tr.append(h("td", row.connected ? "да" : "—", row.connected ? "meta" : "meta"));
+    tr.append(h("td", known.name, "name"));
+    tr.append(h("td", known.key_configured ? "задан" : "нет", "meta"));
+    tr.append(h("td", known.routing_supported ? "адаптер есть" : "адаптера нет", known.routing_supported ? "meta" : "candidate-state"));
+    tr.append(h("td", known.snapshot_present ? "есть" : "нет", "meta"));
     tr.append(h("td", money(row.offers, 0), "num meta"));
     tr.append(h("td", row.min_in === undefined ? "—" : money(row.min_in), "num"));
     tr.append(h("td", row.median_in === undefined ? "—" : money(row.median_in), "num"));
@@ -1301,6 +1426,7 @@ async function load() {
     draw();
     drawProviders();
     drawBalances();
+    drawDiscovery();
     drawRetail();
     drawDrafts();
     document.getElementById("footer").textContent = `Справочный снимок рынка: ${stamp(state.data.generated_at)}. Галочки сохраняются на сервере. Розничные ставки сохраняются кнопкой «Сохранить». Обновление закупочных котировок не меняет их автоматически.`;
@@ -1319,6 +1445,20 @@ document.getElementById("k").oninput = (e) => {
 document.getElementById("q").oninput = (e) => {
   state.q = e.target.value;
   if (state.data) draw();
+};
+document.getElementById("discovery-q").oninput = (e) => {
+  discoveryState.query = e.target.value;
+  discoveryState.limit = 120;
+  drawDiscovery();
+};
+document.getElementById("discovery-provider").onchange = (e) => {
+  discoveryState.provider = e.target.value;
+  discoveryState.limit = 120;
+  drawDiscovery();
+};
+document.getElementById("discovery-more").onclick = () => {
+  discoveryState.limit += 120;
+  drawDiscovery();
 };
 document.getElementById("only-sell").onchange = (e) => {
   state.onlySell = e.target.checked;

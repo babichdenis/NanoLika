@@ -198,7 +198,7 @@ off: a client waits and reconnects later instead of retrying at once
 account has no running tariff that opens the relay's connection, so its devices cannot
 meet; the `error` frame before the close says so and names the cheapest tariff that
 would (`open_from_rub`), and the client shows that instead of a network error. A relay
-that does not sell the key keeps everyone connected (`CONNECT_REQUIRES_PLAN=0`);
+configured without monthly entitlements may keep everyone connected (`CONNECT_REQUIRES_PLAN=0`);
 `4008` too many frames (the
 rate limit below was ignored); and `4009` slow consumer (the relay had 512
 frames or 32 MB queued for a socket that was not reading them; the client

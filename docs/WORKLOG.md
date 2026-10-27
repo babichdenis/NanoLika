@@ -1,3 +1,110 @@
+## 2026-10-27 — Каталог моделей и быстрый список избранного
+
+**Просили:** привести выбор моделей к каталогу с поиском, счётчиками категорий, избранным,
+контекстом и стоимостью; сделать выбор удобным в вебе и настольном приложении; выяснить, почему
+список чатов не изменился и где единообразно показывать тариф.
+
+**Сделано в исходниках** (`cloud/nanomuse_cloud/console/models/` и
+`harness/dsh-nanomuse/src/client/`):
+
+* разделы каталога в кабинете сворачиваются, в каждой карточке сразу видны контекст и предел
+  ответа; счётчики категорий уже формируются в исходнике страницы;
+* в настройках настольного приложения список выбора начинает с избранных моделей, снизу добавлено
+  переключение на полный каталог; категории можно сворачивать, цена из клиентского прайса и
+  контекст показываются рядом с названием;
+* избранное читается и записывается через `/v1/me/models`, поэтому синхронизируется аккаунтом.
+  Веб-кабинет использует ту же серверную полку.
+* быстрый список показывает число избранных моделей по типам; полный каталог открывается через
+  нижнюю кнопку управления. Для пустого избранного добавлена явная подсказка вместо пустого места.
+
+**Проверка:** `node --check` для страницы каталога и `python3 -m py_compile` для API завершились
+без ошибок; клиентский TSX компонент собран esbuild и проверен Node 22. Полная проверка TypeScript
+и тесты подвисли при чтении исходников с подключённого диска и были остановлены. Живой сервер не
+обновлялся.
+
+**Осталось:** веб-чат в `cloud/nanomuse_cloud/console/app.js` отправляет `chat.send` напрямую
+устройству по Hub и не передаёт выбранную модель; отдельного селектора, который реально меняет
+модель выполнения, в этом потоке нет. Изменённый настольный picker находится в настройках, а не в
+выпадающем списке самого чата, показанном на снимке экрана. Для выбора модели в чате нужна поддержка
+этого выбора на принимающем устройстве и в протоколе Hub. Текущий список бесед без преобразований
+показывает результат `chat.list`;
+группировка лент и архивирование в этом изменении не делались. Стили тарифных кнопок публичного
+сайта сюда не менялись. Задача не выложена полностью.
+
+## 2026-10-27 — Скины Лики: папка на сайте, студия тянет каталог по запросу
+
+**Просили:** свою базу скинов на сайте как хранилище, которая пополняется без переустановки приложения; при открытии списка он подтягивается с сайта. Уточнение Дениса: главное — скины самого приложения (UI), но образы Лики тоже оставить.
+
+**Сделано:**
+* На nanolika.ru появилась папка `skins/`: `index.json` (каталог) и по файлу на скин в `skins/styles/` — 7 встроенных стилей Лики (muse, flat, clay, watercolor, pixel, line, sticker) с промптами. Сборка каталога — `scripts/build_skins.py`; выкладка — прежним `deploy.py` (с копией сайта перед заливкой). Живьём: https://nanolika.ru/skins/index.json отдаёт 7 скинов.
+* Пополнение: новый JSON в `publish/skins/styles/` → `python3 scripts/build_skins.py` → `python3 deploy.py`.
+* Host-половина плагина (`src/cloud.ts`): маршрут `GET /skins/list` тянет каталог с сайта со стороны хоста (CORS не мешает), кэш на час, при недоступном сайте отдаёт прошлую копию. `refresh=1` обходит кэш — студия открывается и забирает список заново, поэтому правки на сайте видны без переустановки.
+* Клиентская студия (`AvatarStudio.tsx`): при открытии загружает каталог, подмешивает скачанные стили поверх встроенных (скачанный промпт перекрывает встроенный), новые стили появляются чипсами рядом с Muse; выбранный стиль уходит в профиль аккаунта.
+
+**Проверено:** `pnpm run typecheck` чистый, `pnpm run build` собрался, `lib` установлен в живое приложение (резерв `lib.bak-20261027-130927`), в собранном чанке маршрут и адрес каталога на месте, сайт-каталог отвечает 200.
+
+**Не проверено:** живое поведение студии после перезапуска приложения (host-половина читается при старте) — нужен рестарт и открытие студии. Автотесты плагина не гонялись.
+
+**Осталось:** скины самого приложения (UI-оформление) — Денис считает их главными; формат папки уже несёт поле `kind`, темы можно класть рядом и добавлять выбор в настройках оформления. Импорт чужих наборов — по желанию, позже.
+## 2026-10-27 — «Итог незавершённой работы» вместо ответа: ход больше не обрывается молча
+
+**Просили:** убрать сообщение «Достигнут лимит времени или шагов… Завершение всей задачи не
+подтверждено», которое появлялось вместо нормального ответа после длинной серии команд.
+
+**Почему так вышло.** Это не сбой и не ошибка провайдера: это наш собственный бюджет хода
+(`src/turn-budget.ts`, коммит `a42030d6`). Счётчик шагов доходил до сорока, и ход **обрезался**
+через `sessionController.cancel`, а карточка итога (`TurnOutcome.tsx`) честно писала, что работа не
+закончена. Модель при этом не успевала ничего сказать: её просто останавливали.
+
+**Что сделано** (`turn-budget.ts`, `cloud.ts`, `tests/turn-budget.test.mjs`):
+* у бюджета появились `wrapUp` и `grace` (8 шагов): на пределе ход больше не отменяется, а
+  получает steer-сообщение «инструментов больше не вызывай, напиши итог словами: что сделано, что
+  проверено, что осталось»;
+* ход завершается принудительно только если после этой просьбы инструменты продолжаются; по часам
+  те же два дополнительных минуты;
+* поведение без `wrapUp` осталось прежним (на это есть тест), поэтому старые вызовы не ломаются;
+* тесты: 9 из 9 по бюджету, 12 из 12 по итогам хода, `tsc` чистый.
+
+**Собрано и положено в живой каталог:** `pnpm run build` → `lib` скопирован в
+`~/Library/Application Support/nanolika-desktop/payload/dsh/node_modules/dsh-nanomuse`, прежняя
+копия сохранена в `plugin-backups/dsh-nanomuse-20261027-…`. **Нужен перезапуск приложения**:
+host-половина (`cloud.ts`) читается при старте.
+
+**Что не проверено:** живой ход длиной больше сорока шагов. Такая проверка требует перезапуска и
+специально длинной задачи; до неё правка подтверждена только тестами и проверкой типов.
+
+## 2026-10-27 — model catalogue safety and picker details
+
+- Removed the generic alias that routed DeepSeek V4.1 Flash to the dated OpenRouter `1017` endpoint. That endpoint is now explicitly excluded from ordinary Flash routing; compatible offers are compared by estimated request cost and each input/output rate is rejected if it exceeds the cheapest comparable rate by more than the configured multiple (default ×3).
+- Fixed the admin cost row to use the actual selected route rather than the first item in the provider list. Excluded offers now carry a reason into the provider table.
+- Kept excluded `1017` and `:free` supplier quotes visible for review but removed them from the eligible “best offer” calculation. Provider minimum/median input prices ignore excluded offers and show their excluded count separately.
+- Normalized Flash market rows to `DeepSeek V4.1 Flash`, retained the original provider ids for routing/audit, added context, response limits, modalities and parameters when a supplier exposes them, retained zero-priced OpenRouter offers as `free`, and added new/changed model detection. Newly detected entries default to hidden until reviewed.
+- Added free/context/capability details to the web and desktop model selectors where catalogue data supplies them. Unknown metadata remains unknown instead of being guessed.
+- Checks: Python files compile; targeted Ruff checks on routing, menu, price-admin and tests pass; JavaScript syntax checks pass. `provider_prices.py` still has pre-existing lint findings (semicolon statements and unused fetcher URL variables). The targeted Python tests and desktop TypeScript check stalled while reading the mounted `/Volumes/babichdenis` checkout. No live relay change or deployment was made, so the `1017` block takes effect only after the updated source is deployed.
+
+## 2026-10-26 — DeepSeek Flash routing and task step cap
+
+- Confirmed the OpenRouter `DeepSeek V4.1 Flash 1017` entry is the dated snapshot of V4.1 Flash; its public listing shows 1M context and $0.15 input / $0.60 output per 1M tokens. The exact $11 breakdown still requires the OpenRouter Activity page: this checkout has no OpenRouter credential or account activity log.
+- Fixed route identity so the floating DeepSeek V4.1 Flash id and the OpenRouter `...-1017` id match. The admin table now labels the least-cost estimate as a calculated route and keeps the actual supplier of the last request distinct.
+- Updated the local supplier price key so the floating name and dated snapshot land under the same family key; provider-specific input/output quotes remain separately visible.
+- Changed agent tool steps to unlimited by default, while retaining an explicitly configured cap. Existing configs with the legacy defaults 30 and 40 are migrated to unlimited. The phone operator's separate `max_steps` remains independent.
+- Validation: agent tests 24 passed; provider-routing and menu-admin tests 30 passed; Ruff checks for changed Python modules passed; both admin JavaScript files pass syntax checks. No production relay was changed or restarted.
+
+## 2026-10-26 — API key check and Riga VPN
+
+- Verified that the account page already exposes personal model API keys: create, one-time copy, per-key spend and revoke. Personal keys can list models and call inference, are blocked from account/device APIs and the device hub, and their inference charges carry that key hash into the ledger.
+- Added `cloud/tests/test_user_api_keys.py` for key creation, inference accounting, scope denial, session-list separation and revocation. The focused test passes; Ruff check and format pass.
+- Related account, hub and web-client tests: 28 passed, 14 failed. The failures are the existing `connect_limited` tariff gate assumptions in hub tests plus one invite-rate expectation; they are outside personal-key behavior and need separate cleanup.
+- Checked the Riga VPN host read-only: the VLESS inbound and client are enabled; ports 8390 and 443 accept connections from this Mac. Client traffic last appeared on 2026-10-21. No server-side outage or config change was found. The phone's VPN app/profile and current error are still unknown.
+- Region separation remains a design assessment in `docs/relay-regions.md`, not a deployed second relay. A foreign provider still receives prompt data when called by the Russian relay; region allowlists must be enforced in routing before claiming regional separation. No production deployment performed.
+
+## 2026-10-26 · отключение навязчивой карточки остановки
+
+- Убрана карточка «Итог незавершённой работы» из интерфейса: раньше она автоматически вставлялась в переписку после незаконченного хода. Учёт ошибок инструментов для защиты от повторов сохранён.
+- Снято автоматическое завершение хода только из-за 20 минут ожидания. Медленный вызов больше не обрывается таймером; остаётся предел в 40 шагов, защищающий от бесконечного цикла.
+- Добавлена проверка, что долгий ход не отменяется одним лишь временем.
+- Validation: plugin build, TypeScript check, and 19 budget/outcome tests passed. The installed app was not restarted; it will take effect after the plugin is updated.
+
 # Журнал работы: что сделано и что осталось
 
 ## 2026-10-26 · подготовлен тестовый адаптер YooKassa
@@ -26,6 +133,67 @@
 обработку чека к заказу и только после этого обсуждать включение live. Ловушка: YooKassa
 возвращает строковые идентификаторы платежей и неподписанные уведомления, в отличие от T-Банка
 с числовыми ID и подписью; прямое доверие уведомлению позволило бы подделать зачисление.
+
+## 2026-10-26 · Тариф включается по оплаченной части оставшегося баланса
+
+**Просили:** исправить смысл тарифа: например, после пополнений 300 ₽ и 400 ₽ и расхода
+100 ₽ на оплаченной части остаётся 600 ₽, поэтому на 30 дней включается «Лика» со скидкой
+10%. Также рядом с адресом аккаунта нужно постоянно показывать название действующего тарифа.
+
+**Сделано в исходниках:** подтверждённое пополнение накапливает `paid_balance_uy`; оплаченный
+расход уменьшает эту сумму; при достижении порога включается самый высокий подходящий тариф на
+30 дней. Сумма порога остаётся доступна для работы, бонусы не засчитываются, новое пополнение
+не продлевает активный срок, но может открыть более высокий тариф. Полный возврат корректирует
+остаток и восстанавливает прежние условия, если они не были заменены позднее. Старые аккаунты
+однократно получают расчёт оплаченного остатка из накопленных пополнений за вычетом расходов.
+`/v1/me` возвращает оплаченный остаток для порогов. Кабинет показывает его отдельно от общего
+остатка; email в кабинете и меню сайта сопровождается именем тарифа и скидкой.
+
+**Сайт:** карточки называют цену порогом баланса, кнопки — суммой пополнения; пример 300 − 100
++ 400 = 600 ₽ разъясняет включение «Лики». Обновлены публичная оферта, страница тарифа и
+описание ИИ-агента. Текущая оплата остаётся явно помеченной как тестовая/неактивная.
+
+**Проверка:** 49 тестов платёжного контура прошли; `node --check` для изменённых браузерных
+скриптов и `compileall` для relay прошли. **На живом сервере не проверено:** текущий `/v1/payments/config`
+остаётся DEMO, ключа для публикации на сервер нет; реальные списания не включались. **Осталось:**
+перенести исходники сайта и relay в целевое окружение после готовности кассовых настроек, затем
+проверить тестовый и первый разрешённый платёж. Ловушка: в старой логике цена тарифа одновременно
+была отдельной покупкой и суммой пополнения, а обычное пополнение не запускало тариф.
+
+## 2026-10-26 · Модели настраивались в трёх местах; «Свои модели» и «NanoLika Cloud» были одним и тем же
+
+**Просили:** проверить пункты настроек на актуальность и убрать дубль между «Своими моделями» и
+«NanoLika Cloud».
+
+**Почему так вышло.** Навигацию настроек собирает наш `MuseSettings` из всех разделов, что
+регистрируют и наши страницы, и стоковые плагины харнесса, — а плагинов, которые трогают модели,
+оказалось пять: наши «Модели» (четыре слота), наши «Свои модели» (`CloudSection` часть `keys`),
+стоковая `dsh-client-ui-settings-models` («Модели» в «Дополнительно», те же строки провайдеров с
+ключами), панель `OwnKeyPanel`, встроенная ещё и в страницу аккаунта, и пикеры картинок/роликов,
+продублированные на «Картинках и роликах». Ключи наши и стоковой страницы — **один магазин**: свои
+строки провайдеров мы пишем в адаптер моделей харнесса (`src/providers.ts`), поэтому стоковая
+страница показывала ровно то, чем управляют «Свои модели».
+
+**Что сделано** (`CloudSection.tsx`, `MuseSettings.tsx`, `locales.ts`):
+* страница аккаунта больше не рисует `OwnKeyPanel` и прокси-строки — вместо них строка-ссылка
+  «Свои модели» (и во вошедшем, и в не вошедшем состоянии);
+* «Свои модели» переехали в повседневную группу, сразу после «Моделей»;
+* стоковая «Модели» убрана из навигации (`REPLACED_BY_OURS`): плагин остаётся загруженным, страница
+  просто не предлагается третьим путём к тому же;
+* новый ключ локали `ownKeysSummary` во всех трёх языках.
+
+**Собрано и положено:** `node build.mjs` в `harness/dsh-nanomuse` → `lib` скопирован в живой
+payload `~/Library/Application Support/nanolika-desktop/payload/dsh/node_modules/dsh-nanomuse`
+(старый `lib` сохранён как `lib.backup-20261026-1646`). **Нужен перезапуск приложения** — клиент
+читает бандл при старте.
+
+**Осталось (не сделано, требует решения):** «Картинки и ролики» всё ещё держат свои копии пикеров
+картинок и роликов — это третий выбор тех же двух слотов; по аудиту разделов есть ещё пары дублей
+(список «всегда разрешено» на «Работе с компьютером» и на «Разрешениях», «показать папку» на
+«Хранилище» и на «Файлах», опрос `link/channels` в «Мессенджерах» и «С телефона»), устаревшие
+тексты в «Кошельке» и «Хранилище», и осиротевшие ключи локалей (`gnStar`, `legalMeta`,
+`legalThanks`, `legalThanksText`, `abDocs`, `abIssues`) от чужой незакоммиченной правки — из-за них
+`tests/locales.test.mjs` сейчас красный.
 
 ## 2026-10-26 — Исчезает оформление desktop
 
@@ -1062,9 +1230,65 @@ macOS ставила на панель строку **приложения** с 
 
 Уточнение: язык читается из действующей настройки locale.preference перед каждым запросом пользовательской сессии. Правило применяется ко всем видимым сводкам рассуждений и пояснениям действий, а не только к ошибкам; при отсутствии выбора используется язык пользователя.
 
+## 2026-10-26 — Personal API keys and relay regions
+
+- Added the existing personal-key endpoints to the account UI: create, one-time copy, revoke, per-key spend and API base URL.
+- Restricted personal API credentials to model inference and model-list requests; account, device, chat, settings and billing APIs remain sign-in-only.
+- Removed personal API credentials from the active-device/session list.
+- Documented the current all-provider price router and a region-aware rollout design in docs/relay-regions.md.
+- Verification pending: run relay tests and JavaScript syntax checks. No production deployment performed.
+
 ## 2026-10-27 — Shared chat list and feed
 
 - Folded dated Feed conversations into a single shared conversation while keeping message history and preserving the chosen archive state.
 - Added account-wide archive and restore metadata for shared conversations; web list now separates active chats from archive.
 - Reuse one persistent desktop Feed session and render Markdown/legacy safe HTML as formatted messages in web.
 - Verification: chat catalog tests (7 passed), desktop TypeScript check and web JavaScript syntax checks passed. Telegram topic tests could not collect because the Mac 6 project environment lacks `loguru`.
+
+## 2026-10-27 — Model catalogue and provider comparison
+
+- Moved the provider balance/comparison area above the active model list and placed its filters beside that table.
+- Added an admin-only discovery shelf from the daily catalogue: provider-backed model candidates, descriptions, type, context, capabilities, and quote units; candidates are explicitly not marked sellable until route and nanoLika retail price are configured.
+- Category classification now consults catalogue modes so image, video, audio, embedding, and rerank entries do not fall into the text bucket by default. Customer model filter pills include category counts; desktop picker adds retail-price/context/name sorting and type facets where a picker actually contains multiple kinds.
+- Removed upstream route IDs and procurement prices from the account model-catalogue response; customer-facing model rates remain the nanoLika retail rates.
+- Verification: Python compilation and browser JavaScript syntax checks passed. Full desktop typecheck was interrupted after hanging on the mounted project volume; the test run failed at bundle-import tests under the host's Node 20.19.0 because the project requires Node 22+ (`node:zlib` lacks `zstdDecompressSync`). No production files were deployed.
+
+## 2026-10-27 — Full model registry and availability evidence
+
+- Expanded the admin discovery shelf from only rows with a historical supplier quote to every model in the master catalogue, including retired/reference-only rows.
+- Separated model purpose, source metadata provider, old price-snapshot offers, configured relay routes, and models exposed by a configured provider's live routing catalogue. A catalogue entry is explicitly not presented as a successful inference test.
+- Code-specialized models are no longer inferred from the generic chat capability; unknown fields are listed per row rather than filled with guessed values. Old price snapshots are marked stale after 48 hours.
+- The Relay's current catalog route only parses priced chat-compatible offerings from Polza, RouterAI, OpenRouter, AITunnel, and ProxyAPI. Bothub is named as a possible source in the master-catalog builder, but it has no offer in the current provider price snapshot and is not an implemented provider in the runtime router. This needs its own API credentials, endpoint/schema adapter, and live checks before it can be called a connected supplier.
+- Installed Node 22.23.4 in the current Mac user's existing nvm installation for project checks; the system/default Node was not changed. Tests and Git state are tracked separately below after they finish.
+## 2026-10-27 — Сверка фактической себестоимости с каталогом поставщиков
+
+**Просили:** на каждом использовании сравнивать реальное списание поставщика с ценой в каталоге,
+сообщать о расхождении в Telegram, обновлять цены и выбирать более дешёвую совместимую поставку;
+зафиксировать базовый курс доллара, чтобы отчёты не плавали каждый день.
+
+**Сделано в исходниках:**
+* маршруты OpenRouter запрашивают фактическую стоимость каждого ответа (`usage.include`), а релей
+  сравнивает её с расчётом по каталогу;
+* если фактическая сумма больше ожидаемой минимум на 25% и на 0,02 ₽, источник и модель на время
+  обновления каталога исключаются из маршрутизации. Каталог принудительно обновляется, а следующий
+  запрос выберет более дешёвую совместимую поставку, если она доступна;
+* добавлено Telegram-оповещение без текста запроса и данных клиента. Для отправки надо задать
+  `CLOUD_PRICE_ALERT_TELEGRAM_TOKEN` и `CLOUD_PRICE_ALERT_TELEGRAM_CHAT_ID` в окружении релея;
+* базовый курс для расчётов OpenRouter теперь 90 ₽/$, плюс прежние 5,5% на пополнение кредита.
+  Значение можно осознанно переопределить через `CLOUD_ROUTING_USD_RUB`;
+* убран повторный ключ в status-карточке роутера.
+
+**Проверено:** 39 тестов роутера и учёта прошли, Ruff чистый. В тесте 0,50 $ при курсе 90 ₽ и
+сборе 5,5% дают 47,475 ₽. На production VPS подключение по SSH отклонено с `Permission denied
+(publickey)`, поэтому живой релей не обновлялся и настройки Telegram-оповещения на сервере не
+проверены.
+
+**Важно о 5/17 ₽:** в исходниках клиентская цена и фактическая себестоимость поставщика — отдельные
+величины. Кабинет получает розничные ставки из `model_retail_prices` в SQLite (либо из
+`sell_in`/`sell_out` модели), а расход поставщика сохраняется отдельно в `provider_cost_rub`.
+Поэтому 5/17 ₽ сами по себе не подтверждают цену закупки; живую запись аккаунта и её настройки
+нужно сверить на сервере. Нельзя выводить раздельные входную и выходную ставки из одной суммы
+`usage.cost`: она отражает конкретную смесь токенов. При расхождении система блокирует маршрут,
+а не выдумывает новые ставки.
+
+## 2026-10-27 — Каталог моделей и быстрый список избранного

@@ -422,33 +422,21 @@ def create_app(
         out["places"] = geo.places(collect_ips(out)) if geo.ready else {}
         return out
 
-    # What each paid plan carries, in the units a person understands: one ordinary turn,
-    # one picture, one clip. Derived from the operator's cost per unit at 40 % of the
-    # price, so the numbers move with the price list rather than with a guess.
-    PLAN_UNITS = {
-        "lika": {"messages": 11800, "pictures": 31, "clips": 5},
-        "plus": {"messages": 29800, "pictures": 79, "clips": 13},
-        "lika-plus": {"messages": 29800, "pictures": 79, "clips": 13},
-        "team": {"messages": 78000, "pictures": 208, "clips": 34},
-    }
-
     def _plans_for_the_door() -> list[dict]:
-        """The plans as the exhausted account should see them: price, what it carries,
-        and where to buy. 0.29: the refusal used to name only an own key and OpenRouter,
-        which is fine for a developer and useless for a customer."""
+        """Real tariff terms only; do not promise a fixed count of requests or media."""
         from .payments import PLANS
 
         out = []
         for plan_id, plan in PLANS.items():
-            units = dict(PLAN_UNITS.get(plan_id, {}))
             out.append(
                 {
                     "id": plan_id,
                     "name": plan["name"],
                     "rub": plan["amount"] / 100,
                     "discount": plan.get("discount", 0),
-                    **units,
-                    "buy": f"/v1/payments/orders?plan={plan_id}",
+                    "days": plan.get("days", 30),
+                    "connect": bool(plan.get("connect", True)),
+                    "opens_at_paid_balance_rub": plan["amount"] / 100,
                     "checkout": "/payments/checkout",
                 }
             )
@@ -519,11 +507,21 @@ def create_app(
         finally:
             client_info.reset(token)
 
-    def caller_dep(authorization: str | None = Header(default=None)) -> Caller:
+    def caller_dep(request: Request, authorization: str | None = Header(default=None)) -> Caller:
         token = None
         if authorization and authorization.lower().startswith("bearer "):
             token = authorization[7:].strip()
-        return cloud.authenticate(token)
+        caller = cloud.authenticate(token)
+        if caller.via == "user":
+            path = request.url.path
+            inference = request.method == "POST" and (
+                path == "/v1/chat/completions" or path.startswith("/v1/images/")
+                or path.startswith("/v1/audio/") or path.startswith("/v1/videos/")
+            )
+            model_list = request.method == "GET" and path == "/v1/models"
+            if not (inference or model_list):
+                raise CloudError(403, "api_key_scope", "Personal API keys can call model endpoints only")
+        return caller
 
     # платежи устанавливаются ниже, после admin_dep: у них есть админ-раздел
     from .bot_gateway import install as install_bot_gateway
@@ -744,7 +742,7 @@ def create_app(
 
         return HTMLResponse(
             '<!doctype html><html><head><meta charset="utf-8"><title>nanoLika account</title></head>'
-            '<body><script src="/web/site-account-bridge.js?v=20261026-session"></script></body></html>',
+            '<body><script src="/web/site-account-bridge.js?v=20261026-balance-tier"></script></body></html>',
             headers={
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
@@ -869,6 +867,36 @@ def create_app(
     @app.get("/v1/me/events")
     async def me_events(limit: int = 50, caller: Caller = Depends(caller_dep)) -> dict:
         return {"events": cloud.events(caller, limit)}
+
+    # -- user API keys (personal cabinet; 0.30) -----------------------------------------
+    @app.get("/v1/me/keys")
+    async def me_keys(caller: Caller = Depends(caller_dep)) -> dict:
+        keys = cloud.list_keys(caller)
+        for item in keys:
+            cny = cloud.s.uy_to_cny(int(item.get("total_sale_uy") or 0))
+            item["total_sale_rub"] = cloud.s.cny_to_rub(cny)
+        return {"keys": keys}
+
+    @app.post("/v1/me/keys")
+    async def me_create_key(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        body = await _json(request)
+        device = str(body.get("device") or "console")[:80]
+        ttl_s = body.get("ttl_s")
+        if ttl_s is not None:
+            try:
+                ttl_s = int(ttl_s)
+            except (TypeError, ValueError) as e:
+                raise CloudError(400, "bad_request", "ttl_s must be a number of seconds") from e
+        else:
+            ttl_s = None  # permanent (no expiration)
+        api_key, prefix = await asyncio.to_thread(cloud.create_user_key, caller, device, ttl_s)
+        return {"prefix": prefix, "api_key": api_key}
+
+    @app.delete("/v1/me/keys/{prefix}", status_code=204)
+    async def me_revoke_key(prefix: str, caller: Caller = Depends(caller_dep)) -> Response:
+        cloud.revoke_key(caller, prefix)
+        await _drop_signed_out(caller.account_id)
+        return browser_marker(Response(status_code=204), settings, signed_in=False)
 
     @app.post("/v1/auth/sign-out", status_code=204)
     async def sign_out(caller: Caller = Depends(caller_dep)) -> Response:
@@ -1134,17 +1162,13 @@ def create_app(
         on Monday finds a closed door on Tuesday and never comes back. This drops a day's
         worth of ordinary messages onto the balance at the first turn of each day, from a
         cheap provider, so free use is a habit rather than a one-off."""
-        grant = float(os.environ.get("DAILY_FREE_CNY", "0") or 0)
+        grant = settings.daily_free_cny
         if grant <= 0:
             return
         try:
-            day = int(time.time())
-            day -= day % 86400
-            if cloud.db.daily_rows("free_daily", since=day, key=caller.account_id):
-                return
-            cloud.db.daily_add("free_daily", caller.account_id)
-            cloud.admin_credit(caller.account_id, grant, "daily free slice", actor="relay")
-            log.info("daily free slice %.4f for %s", grant, caller.account_id[:8])
+            granted = cloud.db.daily_grant_once(caller.account_id, settings.cny_to_uy(grant))
+            if granted:
+                log.info("daily free slice %.4f for %s", grant, caller.account_id[:8])
         except Exception:
             log.exception("daily free slice failed for %s", caller.account_id[:8])
 
@@ -1195,7 +1219,7 @@ def create_app(
         0.29: the lifetime grant was tiny and the daily slice is a ruble; a person needs
         enough at the first sitting to decide whether the agent is worth it. Once per
         account, not once a day, so it cannot be farmed by waiting."""
-        grant = float(os.environ.get("START_FREE_CNY", "0") or 0)
+        grant = settings.start_free_cny
         if grant <= 0:
             return
         try:
@@ -2161,6 +2185,10 @@ def create_app(
     install_prices_admin(app, settings, admin_dep, cloud=cloud, router=router)
     install_autopay(app, cloud, caller_dep)
 
+    from .site_inbox import install as install_site_inbox
+
+    install_site_inbox(app, cloud, admin_dep)
+
     @app.get("/v1/admin/accounts", dependencies=[Depends(admin_dep)])
     async def admin_accounts() -> dict:
         accounts = cloud.admin_accounts()
@@ -2450,12 +2478,10 @@ def create_app(
 
     @app.post("/v1/admin/plan", dependencies=[Depends(admin_dep)])
     async def admin_plan(request: Request) -> dict:
-        """{account_id | identifier, plan, note?}: sell one tariff of the menu (0.26).
+        """{account_id | identifier, plan, note?}: legacy operator-only tariff override.
 
-        The whole price goes into the pool at the ruble rate, the terms are kept with the
-        account, and the tariff is what takes a share off later spends and whether the
-        account's devices meet through the relay. A second sale in the same month adds a
-        month to what is left."""
+        Customer tariffs are activated by confirmed paid-balance thresholds in LiveBilling.
+        This endpoint remains for explicit support overrides and is not the purchase path."""
         body = await _json(request)
         account_id = cloud.admin_resolve(str(body.get("account_id", "")), str(body.get("identifier", "")))
         return cloud.plan_buy(account_id, str(body.get("plan", ""))[:32], actor=_actor(request), note=str(body.get("note", ""))[:200])

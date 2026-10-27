@@ -20,13 +20,16 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, HTTPException
 
 from . import model_pricing
+from .provider_routing import ROUTING_CATALOG_PROVIDERS
 
 PROVIDERS_DIR = Path(__file__).resolve().parent / "console" / "providers"
 
@@ -152,6 +155,161 @@ def _models(settings: Any, cny_rub: float) -> list[dict]:
     return rows
 
 
+def _catalog_path() -> Path:
+    """Master registry; overrideable for tests and offline catalog builds."""
+    import os
+
+    return Path(os.environ.get("MODEL_CATALOG_PATH") or Path(__file__).resolve().parent / "console" / "prices" / "catalog.json")
+
+
+def _model_kind(source: dict[str, Any]) -> str:
+    """Primary task, separate from secondary capabilities such as writing code."""
+    mode = str(source.get("mode") or "chat").strip().lower()
+    direct = {
+        "image_generation": "image", "image_edit": "image", "video_generation": "video",
+        "audio_speech": "audio", "audio_transcription": "audio", "realtime": "audio",
+        "embedding": "embedding", "rerank": "rerank", "moderation": "safety",
+    }
+    if mode in direct:
+        return direct[mode]
+    if mode in {"chat", "completion", "responses", "text_completion"}:
+        dev = source.get("dev") if isinstance(source.get("dev"), dict) else {}
+        text = " ".join(str(value or "") for value in (
+            source.get("id"), source.get("name"), source.get("clean_name"),
+            dev.get("name"),
+        )).lower()
+        # Do not label every chat model as a coding model just because it can write code.
+        if re.search(r"(^|[\s/_-])(code|coder|coding|codex|codestral|starcoder)([\s/_-]|$)", text):
+            return "code"
+        return "text"
+    return "other"
+
+
+def _model_keys(value: Any) -> set[str]:
+    """Conservative ID forms to compare normalized IDs with provider `/v1/models`."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return set()
+    keys = {text}
+    if "/" in text:
+        keys.add(text.rsplit("/", 1)[-1])
+    return keys
+
+
+def _discovered(settings: Any, router: Any = None) -> dict[str, Any]:
+    """Full registry with separate evidence for reference data, quotes and live provider lists.
+
+    A provider name or an old quote is not proof that the current relay key can call a model.
+    The live status below means only that a configured provider returned the model from its
+    authenticated `/v1/models`; it is not a paid inference probe.
+    """
+    catalog_path = _catalog_path()
+    try:
+        data = _catalog_snapshot(str(catalog_path), catalog_path.stat().st_mtime_ns)
+    except OSError:
+        data = {}
+    labels = {
+        "text": "Текст", "code": "Код", "image": "Изображение", "video": "Видео",
+        "audio": "Аудио", "embedding": "Эмбеддинги", "rerank": "Ранжирование",
+        "safety": "Безопасность", "other": "Другое",
+    }
+    active: set[str] = set()
+    for spec in settings.models:
+        active.update(_model_keys(getattr(spec, "id", "")))
+        active.update(_model_keys(getattr(spec, "upstream", "")))
+    configured = {
+        str(name) for name, provider in (getattr(settings, "providers", {}) or {}).items()
+        if callable(getattr(provider, "key", None)) and provider.key()
+    }
+    live_index: dict[tuple[str, str], bool] = {}
+    now = time.time()
+    max_age = max(60, int(getattr(router, "max_age", 86400) or 86400))
+    for provider, offers in (getattr(router, "offers", {}) or {}).items():
+        if str(provider) not in configured:
+            continue
+        for offer in offers:
+            checked_at = float(getattr(offer, "updated", 0) or 0)
+            if checked_at <= 0 or now - checked_at > max_age:
+                continue
+            for value in (getattr(offer, "model", ""), getattr(offer, "canonical_model", "")):
+                for key in _model_keys(value):
+                    live_index[(str(provider), key)] = True
+
+    rows: list[dict[str, Any]] = []
+    for source in data.get("models") or []:
+        model_id = str(source.get("id") or "").strip()
+        if not model_id:
+            continue
+        source_keys = set().union(*(_model_keys(value) for value in (
+            model_id, source.get("name"), source.get("ours_name"), source.get("clean_name"),
+        )))
+        dev = source.get("dev") if isinstance(source.get("dev"), dict) else {}
+        aa = source.get("aa") if isinstance(source.get("aa"), dict) else {}
+        caps = source.get("caps") if isinstance(source.get("caps"), dict) else {}
+        offers = source.get("ours") if isinstance(source.get("ours"), dict) else {}
+        quote_rows = [
+            {"provider": str(provider), "rub": quote.get("rub"), "unit": str(quote.get("unit") or "")}
+            for provider, quote in offers.items()
+            if isinstance(quote, dict) and quote.get("rub") is not None
+        ]
+        live_providers = sorted({
+            provider for provider in configured
+            if any(live_index.get((provider, key)) for key in source_keys)
+        })
+        kind = _model_kind(source)
+        missing = [field for field, value in (
+            ("context", source.get("context")), ("max_output", source.get("max_output")),
+            ("description", dev.get("description")),
+            ("input_price", source.get("world_in_usd")), ("output_price", source.get("world_out_usd")),
+            ("quality", aa.get("intelligence")),
+            ("release_date", dev.get("released")),
+            ("modalities", source.get("modalities")),
+        ) if value in (None, "", 0, {}, [])]
+        rows.append({
+            "id": model_id,
+            "name": str(source.get("ours_name") or source.get("clean_name") or source.get("name") or model_id),
+            "kind": kind, "kind_label": labels[kind], "mode": str(source.get("mode") or "chat"),
+            "context": source.get("context") or 0, "max_output": source.get("max_output") or 0,
+            "description": str(dev.get("description") or "").strip(),
+            "source_provider": str(dev.get("provider") or source.get("provider") or ""),
+            "capabilities": [name for name, enabled in caps.items() if enabled and name in {
+                "code", "image", "audio_in", "audio_out", "video", "tools", "reasoning",
+                "pdf", "open_weights", "caching", "web_search", "structured",
+            }],
+            "modalities": source.get("modalities") or {"in": [], "out": []},
+            "quality": aa.get("intelligence"),
+            "released": dev.get("released"), "updated": dev.get("updated"),
+            "unit_usd": source.get("unit_usd"), "family": source.get("family") or "",
+            "offers": quote_rows, "live_providers": live_providers,
+            "in_menu": bool(source_keys & active), "deprecated": bool(source.get("deprecated")),
+            "free": bool(source.get("free")), "missing": missing,
+            "world_in_usd": source.get("world_in_usd"), "world_out_usd": source.get("world_out_usd"),
+        })
+    rows.sort(key=lambda row: (row["kind"], row["name"].casefold(), row["id"].casefold()))
+    counts = {kind: sum(row["kind"] == kind for row in rows) for kind in labels}
+    return {
+        "models": rows, "count": len(rows), "counts": counts,
+        "with_quote_snapshot": sum(bool(row["offers"]) for row in rows),
+        "in_live_provider_catalog": sum(bool(row["live_providers"]) for row in rows),
+        "in_menu": sum(row["in_menu"] for row in rows),
+        "generated_at": data.get("generated_at"),
+        "provider_catalog_checked_at": int(max(
+            [float(getattr(router, "refreshed", 0) or 0)]
+            + [float(getattr(offer, "updated", 0) or 0)
+               for offers in (getattr(router, "offers", {}) or {}).values() for offer in offers]
+        )) or None,
+    }
+
+
+@lru_cache(maxsize=1)
+def _catalog_snapshot(path: str, modified_ns: int) -> dict[str, Any]:
+    """Read the 12 MB market catalogue once; refresh automatically after its daily update."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def _sell_hint(spec: Any) -> str:
     """Чем эта модель продаётся: ставкой в рублях или токенами за штуку."""
     if getattr(spec, "sell_in", 0) or getattr(spec, "sell_out", 0):
@@ -168,8 +326,13 @@ def _sell_hint(spec: Any) -> str:
 
 
 def _providers(settings: Any, prices: dict) -> dict:
-    """Кто подключён и что говорят снимки: цена входа по каждому продавцу."""
-    connected = sorted((getattr(settings, "providers", {}) or {}).keys())
+    """Provider IDs from three layers; a source name is not a routing integration."""
+    provider_specs = getattr(settings, "providers", {}) or {}
+    configured = {
+        str(name) for name, provider in provider_specs.items()
+        if callable(getattr(provider, "key", None)) and provider.key()
+    }
+    connected = sorted(configured)
     snapshot: list[dict] = []
     for entry in prices.get("providers") or []:
         name = str(entry.get("name") or "")
@@ -181,6 +344,7 @@ def _providers(settings: Any, prices: dict) -> dict:
                 "offers": offers,
                 "note": entry.get("note") or "",
                 "connected": name in connected,
+                "routing_supported": name in ROUTING_CATALOG_PROVIDERS,
             }
         )
     # «от 0,12 ₽» и медиана входа: только по строкам «1M токенов (вход)»
@@ -205,8 +369,20 @@ def _providers(settings: Any, prices: dict) -> dict:
             row["min_in"] = round(values[0], 2)
             row["median_in"] = round(values[len(values) // 2], 2)
             row["models_priced"] = len(values)
+    known_names = (
+        "routerai", "polza", "aitunnel", "proxyapi", "proxyapi-openai",
+        "bothub", "neuroapi", "openrouter", "own", "deepseek",
+    )
+    market_names = {str(row.get("name") or "") for row in snapshot}
+    known = [{
+        "name": name,
+        "key_configured": name in configured,
+        "routing_supported": name in ROUTING_CATALOG_PROVIDERS,
+        "snapshot_present": name in market_names,
+    } for name in known_names]
     return {
         "connected": connected,
+        "known": known,
         "snapshot": snapshot,
         "at": prices.get("generated_at"),
         "usd_rub": prices.get("usd_rub"),
@@ -364,6 +540,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 "with_sell": len(with_sell),
             },
             "models": models,
+            "discovery": _discovered(settings, router),
             "providers": _providers(settings, prices),
             "retail": _retail(),
             "drafts": drafts,

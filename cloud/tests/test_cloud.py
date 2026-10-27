@@ -689,6 +689,7 @@ async def test_open_signup_members_unlimited_everyone_else_has_one_allowance():
         "total_rub": 0.0,
         "grant_rub": 0.0,
         "left_rub": 0.0,
+        "paid_balance_rub": 0.0,
         "today_rub": 0.0,
         "allowance_cny": 0.002,
         "invite_bonus_cny": 5,
@@ -1851,6 +1852,25 @@ def test_database_from_before_0_4_migrates(tmp_path):
     names = {r["name"] for r in db._conn.execute("PRAGMA index_list(accounts)").fetchall()}
     assert {"accounts_invite_code", "accounts_invited_by", "accounts_created_at"} <= names
     assert db._conn.execute("SELECT invite_code, contribute FROM accounts WHERE id='a1'").fetchone()[0] == ""
+
+
+def test_paid_balance_migration_preserves_unspent_paid_amount(tmp_path):
+    """The threshold feature must use the historical paid remainder, not reset it to zero."""
+    from nanomuse_cloud.db import Database
+
+    path = str(tmp_path / "paid-balance.db")
+    db = Database(path)
+    account = db.create_account("paid-balance-hash", "email", "a***@example.com", 0)["id"]
+    paid = 600_000
+    spent = 100_000
+    db.set_pool(account, delta_uy=paid, note="old top-up")
+    db.charge(account, "chat", "fixture", 1, 1, spent, "old-spend", cost_uy=spent, sale_uy=spent)
+    db._conn.execute("ALTER TABLE accounts DROP COLUMN paid_balance_uy")
+    db._conn.close()
+
+    migrated = Database(path)
+    row = migrated.account(account)
+    assert row is not None and row["paid_balance_uy"] == paid - spent
 
 
 def test_the_three_tables_read_by_address_are_indexed_on_it():

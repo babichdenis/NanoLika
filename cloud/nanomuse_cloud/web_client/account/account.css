@@ -16,3 +16,8 @@ html,body{height:auto;min-height:100%}html{scroll-padding-top:24px}body{margin:0
 #logout{background:#e4e8d8;color:#40563b;border:1px solid #a8b39b;border-radius:9px;padding:11px 18px;min-height:44px;box-shadow:1px 2px 0 #52694e18}
 #logout:hover{background:#d8dfc8}
 #logout:focus-visible{outline:3px solid #72836a;outline-offset:3px}
+.identity-plan{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;border:1px solid #d3dac9;border-radius:999px;background:#e7eadc;color:#506448;font-size:11px;font-weight:600;line-height:1.3}
+
+.paid-balance-note{font-size:.88rem;color:var(--muted,#6b6a60)}
+
+.api-key-controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:12px 0 16px}.api-key-controls code,.api-key-once code{overflow-wrap:anywhere}.api-key-once{margin:12px 0}.api-key-once p{margin-top:0}.api-key-once button{margin-top:12px}.api-key-once[hidden]{display:none}.api-key-controls code{font-size:13px;color:var(--ink-2)}@media(max-width:600px){.api-key-controls{align-items:flex-start;flex-direction:column;gap:10px}}

@@ -43,10 +43,33 @@ async def test_capture_atomic_and_replay(monkeypatch):
     await client.aclose()
 
 
-async def test_plain_topup_never_activates_plan(monkeypatch):
+async def test_topup_balance_threshold_activates_the_matching_tier(monkeypatch):
     client, p, account, row = await fixture(monkeypatch, amount=390000)
     p.live_billing.apply(row, event(row), reconciled=True)
+    plan = p.db.subscription(account)
+    assert plan is not None and plan["plan"] == "team" and plan["discount_pct"] == 30
+    assert plan["expires_at"] - plan["started_at"] == 30 * 86400
+    await client.aclose()
+
+
+async def test_paid_balance_threshold_accumulates_after_spending(monkeypatch):
+    client, p, account, first = await fixture(monkeypatch, amount=30000, order="threshold_first")
+    p.live_billing.apply(first, event(first), reconciled=True)
     assert p.db.subscription(account) is None
+    # Spend ₽100 from the purchased pool; bonuses and signup credits do not count toward a tier.
+    spent = p.cloud.s.rub_to_uy(100)
+    p.db.charge(account, "chat", "test-model", 1, 1, 1, "threshold_spend", cost_uy=spent, sale_uy=spent)
+    with p.db.tx() as c:
+        c.execute(
+            "INSERT INTO tbank_orders(id,account_id,idempotency,plan,amount,payment_id,created_at,terminal,plan_snapshot) VALUES(?,?,?,'',40000,'123457',?,'fixtureLIVE','{}')",
+            ("threshold_second", account, "threshold_second", int(time.time())),
+        )
+    second = p.order("threshold_second")
+    p.live_billing.apply(second, event(second), reconciled=True)
+    balance = p.db.account(account)["paid_balance_uy"]
+    assert balance >= p.cloud.s.rub_to_uy(590)
+    plan = p.db.subscription(account)
+    assert plan is not None and plan["plan"] == "lika" and plan["discount_pct"] == 10
     await client.aclose()
 
 

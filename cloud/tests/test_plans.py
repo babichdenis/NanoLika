@@ -47,7 +47,7 @@ def test_the_menu_is_the_operators_three_tariffs(monkeypatch=None):
     menu = {row["id"]: row for row in cloud.plan_menu()}
     assert list(menu) == ["lika", "lika-plus", "team"]
     assert menu["lika"]["price_rub"] == 590 and menu["lika"]["discount_pct"] == 10
-    assert menu["lika"]["connect"] is False
+    assert menu["lika"]["connect"] is True
     assert menu["lika-plus"]["price_rub"] == 1490 and menu["lika-plus"]["connect"] is True
     assert menu["team"]["price_rub"] == 3900 and menu["team"]["discount_pct"] == 30
     assert all(row["days"] == 30 for row in menu.values())
@@ -93,23 +93,22 @@ def test_the_discount_is_what_the_tariff_says():
     assert cloud.discount(3, lika) == 3
 
 
-def test_a_tariff_that_does_not_open_the_connection_is_not_a_key():
+def test_every_site_tariff_opens_the_connection():
     client, cloud, sender = stack(connect_requires_plan=True)
     key, me = sign_up(client, sender)
     account_id = me["account"]["id"]
     assert cloud.connect_allowed(account_id) is False
-    # Лика gives the discount and the balance, not the relay's connection
+    # The public site promises device connection with every paid package.
     cloud.plan_buy(account_id, "lika")
-    assert cloud.connect_allowed(account_id) is False
-    # Лика+ opens it
-    cloud.plan_buy(account_id, "lika-plus")
     assert cloud.connect_allowed(account_id) is True
     state = cloud.connect_state(account_id)
-    assert state["open_from_rub"] == 1490
+    assert state["open_from_rub"] == 590
+    cloud.plan_buy(account_id, "team")
+    assert cloud.connect_allowed(account_id) is True
 
 
 def test_without_the_switch_every_account_connects_as_before():
-    client, cloud, sender = stack()
+    client, cloud, sender = stack(connect_requires_plan=False)
     _key, me = sign_up(client, sender)
     assert cloud.connect_allowed(me["account"]["id"]) is True
     assert cloud.connect_state(me["account"]["id"])["required"] is False
@@ -122,7 +121,7 @@ def test_the_hub_refuses_a_connection_only_when_the_tariff_is_the_key():
         with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
             ws.send_json(HELLO)
             frame = ws.receive_json()
-            assert frame["code"] == "connect_limited" and frame["open_from_rub"] == 1490
+            assert frame["code"] == "connect_limited" and frame["open_from_rub"] == 590
             ws.receive_json()
     assert refused.value.code == 4004 and refused.value.reason == "connect_limited"
 
@@ -134,6 +133,42 @@ def test_a_tariff_that_opens_it_lets_the_devices_meet():
     with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
         ws.send_json(HELLO)
         assert ws.receive_json()["type"] == "welcome"
+
+
+def test_expired_tariff_keeps_balance_but_removes_discount_and_required_connection():
+    _client, cloud, _sender = stack(connect_requires_plan=True)
+    account_id = cloud.db.create_account("x" * 64, "email", "x***@example.com", 0)["id"]
+    cloud.plan_buy(account_id, "lika")
+    granted = int(cloud.db.account(account_id)["grant_uy"])
+    with cloud.db.tx() as conn:
+        conn.execute("UPDATE subscriptions SET expires_at=? WHERE account_id=?", (cloud.clock() - 1, account_id))
+
+    state = cloud.plan_state(account_id)
+    assert state is not None and state["active"] is False
+    assert cloud.spend_discount_pct(account_id) == 0
+    assert cloud.db.account(account_id)["grant_uy"] == granted
+    assert cloud.connect_allowed(account_id) is False
+
+
+def test_public_config_reports_lifetime_and_daily_free_grants_separately():
+    settings = Settings(database=":memory:", secret="test-secret", daily_free_cny=0.25, start_free_cny=5)
+    cloud = Cloud(settings, Database(":memory:"), LogSender())
+    config = cloud.public_config()
+    assert config["daily_free_cny"] == 0.25
+    assert config["start_free_cny"] == 5
+    assert config["plans"][0]["discount_pct"] == 10
+    assert config["plans"][0]["connect"] is True
+
+
+def test_daily_free_slice_is_credited_once_atomically_per_utc_day():
+    db = Database(":memory:")
+    account_id = db.create_account("d" * 64, "email", "d***@example.com", 0)["id"]
+    grant = 1_250_000
+    assert db.daily_grant_once(account_id, grant, ts=1_800_000_000) is True
+    assert db.daily_grant_once(account_id, grant, ts=1_800_000_100) is False
+    assert int(db.account(account_id)["grant_uy"]) == grant
+    assert db.daily_grant_once(account_id, grant, ts=1_800_086_400) is True
+    assert int(db.account(account_id)["grant_uy"]) == grant * 2
 
 
 def test_the_account_page_carries_the_tariff_and_the_connection():

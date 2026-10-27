@@ -42,6 +42,7 @@
     usage: "Расход", today: "Сегодня", allTime: "Всего", byModel: "По моделям", noUsage: "Пока ничего не израсходовано.", requests: (n) => `${n} запросов`, tokens: (n) => `${n} токенов`, seconds: (n) => `${n} с`, images: (n) => `${n} картинок`,
     kinds: { chat: "Переписка", image: "Картинки", video: "Видео", realtime: "Звонки" },
     signIns: "Выполнены входы", thisOne: "этот", revoke: "Выйти", viaCode: "по коду", viaPassword: "по паролю", viaWeb: "из браузера", lastUsed: "последний раз использован",
+    keys: "Ключи API", createKey: "Новый ключ", createKeyConfirm: "Создать ключ? Он покажется один раз — скопируйте и сохраните.", totalSpent: "потрачено", free: "бесплатно",
     activity: "События", events: {
       "account.created": "Аккаунт создан", "sign_in.code": "Вход по коду", "sign_in.password": "Вход по паролю", "sign_in.failed": "Неудачный вход", "password.set": "Пароль задан", "password.changed": "Пароль изменён",
       "password.cleared": "Пароль убран", "sign_out": "Вышли из аккаунта", "sign_out.all": "Вышли из аккаунта везде", "pool.set": "Лимит изменён", "budget.refused": "Отказано: лимит исчерпан", "upstream.error": "Ошибка сервиса модели", "content.rejected": "Проверка на стороне поставщика модели отклонила запрос", "call.ended": "Звонок завершён", "contribute.on": "Включено «Помогать улучшать модели»", "contribute.off": "Выключено «Помогать улучшать модели»", "contribute.default": "Новый аккаунт: помощь в обучении включена по умолчанию", "contribute.deleted": "Сохранённые переписки удалены", "invite.accepted": "Подруга вошла по вашему коду", "invite.used": "Вход по коду приглашения", "invite.settled": "Бонус за приглашение начислен", "credit.granted": "Начислен лимит", "grant.tokens": "Начисление токенов изменено", "account.disabled": "Аккаунт отключён администратором", "account.enabled": "Аккаунт снова включён", "member.set": "Аккаунт сделан участником", "member.unset": "Участие снято", "contribute.bonus": "+¥10 (бонус первых участников)", "sync.on": "Включена синхронизация переписки", "sync.off": "Синхронизация выключена, сохранённые переписки удалены", "sync.deleted": "Синхронизированные переписки удалены",
@@ -83,6 +84,7 @@
     usage: "用量", today: "今天", allTime: "累计", byModel: "按模型", noUsage: "还没有用量。", requests: (n) => `${n} 次`, tokens: (n) => `${n} tokens`, seconds: (n) => `${n} 秒`, images: (n) => `${n} 张`,
     kinds: { chat: "对话", image: "图片", video: "视频", realtime: "实时通话" },
     signIns: "登录的设备", thisOne: "当前", revoke: "退出", viaCode: "验证码", viaPassword: "密码", viaWeb: "网页", lastUsed: "最近使用",
+    keys: "API 密钥", createKey: "新建密钥", createKeyConfirm: "创建密钥？只会显示一次 — 请复制并保存。", totalSpent: "已用", free: "免费",
     activity: "最近动态", events: {
       "account.created": "账号创建", "sign_in.code": "验证码登录", "sign_in.password": "密码登录", "sign_in.failed": "登录失败", "password.set": "设置了密码", "password.changed": "修改了密码",
       "password.cleared": "移除了密码", "sign_out": "退出登录", "sign_out.all": "在所有设备上退出", "pool.set": "额度调整", "budget.refused": "额度不够，请求被拒绝", "upstream.error": "模型服务出错", "content.rejected": "模型服务商的内容审核没有放行这次请求", "call.ended": "通话结束", "contribute.on": "开启了「帮助改进 NanoLika 的 AI 模型」", "contribute.off": "关闭了「帮助改进 NanoLika 的 AI 模型」", "contribute.default": "新账号默认开启「帮助改进 NanoLika 的 AI 模型」", "contribute.deleted": "删除了已保存的对话", "invite.accepted": "邀请了一位新用户", "invite.used": "通过邀请码注册", "invite.settled": "邀请奖励到账", "credit.granted": "获得了额度奖励", "grant.tokens": "token 额度调整", "account.disabled": "账号被运营者停用", "account.enabled": "账号已恢复", "member.set": "成为成员", "member.unset": "取消成员", "contribute.bonus": "额度 +¥10（早期的共创奖励）", "sync.on": "开启了「在我的设备之间同步对话」", "sync.off": "关闭了「在我的设备之间同步对话」，已删除同步的对话", "sync.deleted": "删除了同步的对话",
@@ -120,6 +122,7 @@
     usage: "Usage", today: "Today", allTime: "All time", byModel: "By model", noUsage: "Nothing used yet.", requests: (n) => `${n} req`, tokens: (n) => `${n} tokens`, seconds: (n) => `${n} s`, images: (n) => `${n} pictures`,
     kinds: { chat: "Chat", image: "Pictures", video: "Video", realtime: "Calls" },
     signIns: "Signed in on", thisOne: "this one", revoke: "Sign out", viaCode: "code", viaPassword: "password", viaWeb: "web", lastUsed: "last used",
+    keys: "API Keys", createKey: "New Key", createKeyConfirm: "Create a key? It will be shown only once — copy and save it.", totalSpent: "spent", free: "free",
     activity: "Activity", events: {
       "account.created": "Account created", "sign_in.code": "Signed in with a code", "sign_in.password": "Signed in with the password", "sign_in.failed": "Failed sign-in", "password.set": "Password set", "password.changed": "Password changed",
       "password.cleared": "Password removed", "sign_out": "Signed out", "sign_out.all": "Signed out everywhere", "pool.set": "Allowance adjusted", "budget.refused": "Refused: allowance used up", "upstream.error": "Model service error", "content.rejected": "The model provider's content check declined the request", "call.ended": "Call ended", "contribute.on": "Turned on “Help improve NanoLika's AI models”", "contribute.off": "Turned off “Help improve NanoLika's AI models”", "contribute.default": "New account: “Help improve NanoLika's AI models” on by default", "contribute.deleted": "Deleted the kept conversations", "invite.accepted": "A friend signed up with your code", "invite.used": "Signed up with an invite code", "invite.settled": "Invite bonus paid", "credit.granted": "Credit granted", "grant.tokens": "Token grant adjusted", "account.disabled": "Account disabled by the operator", "account.enabled": "Account enabled again", "member.set": "Made a member", "member.unset": "Membership removed", "contribute.bonus": "+¥10 (the early co-creation bonus)", "sync.on": "Turned on “Sync conversations between my devices”", "sync.off": "Turned off “Sync conversations between my devices”; the synced conversations were deleted", "sync.deleted": "Deleted the synced conversations",
@@ -275,6 +278,7 @@
     web: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
     person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>'),
     key: svg('<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M15 5l3 3M18 4l2 2"/>'),
+    revoked: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2"/>'),
     chat: svg('<path d="M4 5.5h16v10H9l-5 4z"/>'),
     attach: svg('<path d="M8.5 12.5l5.5-5.5a3.5 3.5 0 0 1 5 5L11 20a5 5 0 0 1-7-7l7.5-7.5"/>'),
     image: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>'),
@@ -287,6 +291,7 @@
     more: svg('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
     refresh: svg('<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>'),
     shield: svg('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>'),
+    plus: svg('<path d="M12 4v16M4 12h16"/>'),
   };
 
   // A very small Markdown: paragraphs, **bold**, `code`, ```blocks```, links, lists.
@@ -1041,6 +1046,19 @@
       h("div", { class: "txt" }, h("div", { class: "t" }, s.device || "—", s.current ? [" ", h("span", { class: "pill blue" }, T.thisOne)] : null),
         h("div", { class: "s" }, `${s.via === "password" ? T.viaPassword : s.via === "session" ? T.viaWeb : T.viaCode} · ${when(s.created_at)}${s.last_used_at ? ` · ${T.lastUsed} ${ago(s.last_used_at)}` : ""}`)),
       s.current ? null : h("button", { class: "btn quiet sm", onclick: async () => { try { await api("DELETE", `/v1/me/sessions/${encodeURIComponent(s.prefix)}`, null, key); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, T.revoke)))));
+    // keys
+    let keys = [];
+    try {
+      keys = await api("GET", "/v1/me/keys", null, key);
+    } catch (_) { /* keep empty */ }
+    const myKeys = keys.keys || [];
+    kids.push(h("div", { class: "label" }, T.keys), h("div", { class: "card" },
+      myKeys.length ? myKeys.map(k => h("div", { class: "row" },
+        h("span", { class: "tile" + (k.revoked ? " grey" : ""), html: k.revoked ? ICON.revoked : ICON.key }),
+        h("div", { class: "txt" }, h("div", { class: "t" }, k.prefix || "—"),
+          h("div", { class: "s" }, `${k.via || "—} · ${when(k.created_at)}${k.last_used_at ? ` · ${T.lastUsed} ${k.last_used_at}` : ""} · ${T.totalSpent}: ${k.total_sale_uy > 0 ? fmtN(k.total_sale_uy) : T.free}`)),
+        !k.revoked ? h("button", { class: "btn quiet sm", onclick: async () => { try { await api("DELETE", `/v1/me/keys/${encodeURIComponent(k.prefix)}`, null, key); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, T.revoke) : null))),
+      h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.createKey, T.createKeyConfirm, T.createKey) !== false) { try { const r = await api("POST", "/v1/me/keys", { device: navigator.userAgent || "console" }, key); await loadMe(); drawAccount(body); } catch (e) { alert(errText(e)); } } } }, h("span", { class: "tile", html: ICON.plus }), h("div", { class: "txt" }, h("div", { class: "t" }, T.createKey))))),
     // activity
     const events = me.events || [];
     if (events.length) kids.push(h("div", { class: "label" }, T.activity), h("div", { class: "card" }, ...events.slice(0, 12).map((e) => h("div", { class: "row" },
