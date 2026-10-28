@@ -654,14 +654,15 @@ def test_hub_carries_working_to_the_other_devices(ws_client):
         assert phone.receive_json()["working"] is False
 
 
-async def test_a_body_over_the_limit_names_both_sizes():
+async def test_a_body_over_the_limit_names_the_configured_limit():
     app, client, sender, up, cloud, settings = make(max_request_bytes=1024)
     key = await signed_in(client, sender)
     cid = uid()
     r = await client.post("/v1/sync/changes", json={"device": "a", "conversations": [conv(cid, title="x" * 2000)]}, headers=auth(key))
     assert r.status_code == 413
     err = r.json()["error"]
-    assert err["code"] == "too_large" and err["message"] == "Request body is 0.0 MB; this relay accepts up to 0 MB"
+    assert err["code"] == "too_large" and err["max_bytes"] == 1024
+    assert "up to 1024 bytes" in err["message"]
     # the default is 16 MiB since 0.20
     from nanomuse_cloud.config import Settings as RelaySettings
 
@@ -686,11 +687,13 @@ async def test_a_body_over_the_limit_is_refused_as_it_arrives_not_after():
     r = await client.post("/v1/sync/changes", content=body(), headers={**auth(key), "Content-Type": "application/json"})
     assert r.status_code == 413
     err = r.json()["error"]
-    assert err["code"] == "too_large" and err["message"] == "Request body is over 0 MB; this relay accepts up to 0 MB"
+    assert err["code"] == "too_large" and err["max_bytes"] == 1024
+    assert "up to 1024 bytes" in err["message"]
     assert seen < 100, "the relay read the whole body before deciding"
     # a declared size over the limit is refused without reading
     r = await client.post("/v1/sync/changes", content=b"{}", headers={**auth(key), "Content-Length": "4096"})
-    assert r.status_code == 413 and r.json()["error"]["message"].startswith("Request body is 0.0 MB")
+    assert r.status_code == 413 and r.json()["error"]["max_bytes"] == 1024
+    assert "up to 1024 bytes" in r.json()["error"]["message"]
 
 
 async def test_deleting_the_account_purges_everything_and_the_next_sign_in_starts_empty():
