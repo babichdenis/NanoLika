@@ -36,6 +36,7 @@ import { makeDevicesPanel } from './DevicesPanel.tsx'
 import { makeFeedPanel } from './FeedPanel.tsx'
 import { makePreviewPanel } from './PreviewPanel.tsx'
 import { hidePreview, showPreview, type Preview } from './preview.ts'
+import { kindOfFile, previewFileUrl } from '../preview-kind.ts'
 import { makeGoalsPanel } from './GoalsPanel.tsx'
 import { makeIdeasPanel } from './IdeasPanel.tsx'
 import { makeLibraryPanel } from './LibraryPanel.tsx'
@@ -192,6 +193,23 @@ export function apply(ctx: ClientContext): void {
     event.preventDefault()
     openBeside({ kind: 'url', url: href })
   })
+  // A deliverable card (the stock `present`) sends its click to the stock Sidebar,
+  // whose document preview has no player for a clip: it answers "preview is not
+  // available for this file type". Video and audio open in this pane instead; the
+  // other kinds keep the stock preview, which reads PDFs and office documents.
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    const target = event.target as Element | null
+    if (!target || typeof target.closest !== 'function') return
+    const button = target.closest('button[class*="cardPreview"]')
+    if (!button) return
+    const path = button.getAttribute('title') ?? ''
+    const kind = kindOfFile(path)
+    if (kind !== 'video' && kind !== 'audio') return
+    event.preventDefault()
+    event.stopPropagation()
+    openBeside({ kind, url: previewFileUrl(path), title: path.split(/[\\/]/).pop() || path })
+  }, true)
   ctx.effect(() => {
     let active = '', timer: ReturnType<typeof setInterval> | undefined
     const stop = () => { if (timer) clearInterval(timer); timer = undefined }
@@ -440,7 +458,8 @@ export function apply(ctx: ClientContext): void {
   const DevicesPanel = makeDevicesPanel(t)
   slots.inject('main', () => slots.register({ name: 'main', key: DEVICES_PANEL, locale: 'nanomuse' }, DevicesPanel))
   // The preview pane: a page or an artifact the agent puts beside the chat.
-  slots.inject('main', () => slots.register({ name: 'main', key: PREVIEW_PANEL, locale: 'nanomuse' }, makePreviewPanel(t)))
+  const PreviewPanel = makePreviewPanel(t)
+  slots.inject('main', () => slots.register({ name: 'main', key: PREVIEW_PANEL, locale: 'nanomuse' }, PreviewPanel))
   // The split pane itself, over the frame beside the chat; it keeps the active
   // panel mirrored for the rooms' `nav.activePanel`.
   slots.inject('shell.overlay', () =>
@@ -455,7 +474,9 @@ export function apply(ctx: ClientContext): void {
         return () => { delete document.documentElement.dataset['nmSplit'] }
       }, [open])
       if (!open) return null
-      const Panel = rooms.find(([key]) => key === split)?.[1]
+      // The rooms are not the only thing the split can hold: the preview pane is
+      // its own seat (PREVIEW_PANEL), registered above, and must be found here too.
+      const Panel = split === PREVIEW_PANEL ? PreviewPanel : rooms.find(([key]) => key === split)?.[1]
       if (!Panel) return null
       return h('aside', { className: 'nm-split', 'aria-label': t('splitPane') }, h(Panel as () => ReactNode, {}) as ReactNode)
     }))

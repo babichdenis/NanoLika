@@ -32,7 +32,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ApprovalDesk, appOf, checkForUpdate, compareVersions, DEVICE_GRANT_PREFIX, HoldDesk, modelFor, pickChatModel, pickHandsModel, REMOTE_CONTROL_GRANT_ID, sharedConnectors, standingGrants, takesImages, UPDATE_RETRY_MS, updateCacheFresh, type Grant, type Hold, type HoldTool, type PendingApproval, type StandingGrant, type UpdateInfo } from './desk.ts'
 import { arch, homedir, hostname, release, type, userInfo } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { createHmac, randomBytes, randomUUID } from 'node:crypto'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -58,6 +58,8 @@ import { SCREEN_RUN_IDLE_MS, ScreenRuns, Trajectory, type ScreenRun, type StepAc
 import { RemoteStore, SyncEngine, SyncRelay, type RemoteLine, type SessionInfo, type SessionLine, type SyncState } from './sync.ts'
 import { AvatarMotion, ANIMATED, type MotionMood, type MotionView } from './motion.ts'
 import { OwnClip, isOwnClipMood, type OwnClipMood, type OwnClipView } from './own-clip.ts'
+import { kindOfFile, previewFileUrl } from './preview-kind.ts'
+import { resolveUserPath } from './preview-file.ts'
 import { DEFAULT_VIDEO_MODEL, hostOf, KNOWN_DASHSCOPE_MODELS, looksLikeVideoModel, probe as probeVideoModel, speaksDashScope, type VideoEndpoint } from './video.ts'
 import { editImage as ownEditImage, generateImage as ownGenerateImage, imageShapeOf, type ImageEndpoint } from './images.ts'
 import { checkMove, checkScreenshot, displayInfo, isBlack, runtimeInfo, screenHead, type MoveCheck, type RuntimeInfo, type ScreenshotCheck } from './hands-check.ts'
@@ -280,7 +282,7 @@ export interface StageState {
  */
 export interface PreviewShow {
   id: string
-  kind: 'url' | 'html' | 'image' | 'pdf'
+  kind: 'url' | 'html' | 'image' | 'pdf' | 'video' | 'audio' | 'text'
   url?: string
   html?: string
   title?: string
@@ -1039,6 +1041,13 @@ export default class NanomuseCloud extends Service {
     })
     this.ctx.inject(['tools'], (ctx) => {
       ctx.on('tools/execute', async (exec, next) => {
+        // A deliverable is shown, not merely listed: `present` of a clip, a picture or a
+        // PDF also puts it in the side pane, so the person sees the thing itself.
+        if (exec.name === 'present') {
+          const result = await next()
+          if (!result.isError) this.presentBeside(exec.arguments)
+          return result
+        }
         if (!isHandsTool(exec.name)) return next()
         // Our own re-dispatch of a step the person just agreed to: the stage already follows the outer call.
         if (exec.parent !== undefined && confirmationOf(exec.arguments) !== undefined) return next()
@@ -2372,14 +2381,45 @@ export default class NanomuseCloud extends Service {
     if (slot) await this.defaultModelService()?.saveSelection(slot).catch(() => undefined)
   }
 
-  /** Put something in the side pane of this computer's app (the agent's `preview_show`). */
-  showPreview(input: { url?: string; html?: string; title?: string }): PreviewShow {
-    const url = (input.url ?? '').trim()
+  /**
+   * Put something in the side pane of this computer's app (the agent's `preview_show`):
+   * a page by URL, inline markup, or a file on this computer by its path. A file is
+   * served from `/nanomuse/file` (preview-file.ts) rather than read as `file://`, which
+   * the app's frame will not load, and the pane picks its player by the kind.
+   */
+  showPreview(input: { url?: string; html?: string; path?: string; title?: string }): PreviewShow {
+    const given = (input.path ?? '').trim()
     const html = input.html ?? ''
-    const kind: PreviewShow['kind'] = html ? 'html' : /\.(png|jpe?g|gif|webp|avif)(\?|#|$)/i.test(url) ? 'image' : /\.pdf(\?|#|$)/i.test(url) ? 'pdf' : 'url'
-    this.previewShow = { id: randomUUID(), kind, at: Date.now(), ...(url ? { url } : {}), ...(html ? { html } : {}), ...(input.title ? { title: input.title.slice(0, 200) } : {}) }
+    const url = given ? previewFileUrl(resolveUserPath(given)) : (input.url ?? '').trim()
+    const kind: PreviewShow['kind'] = given
+      ? (kindOfFile(given) ?? 'url')
+      : html ? 'html' : /\.(png|jpe?g|gif|webp|avif)(\?|#|$)/i.test(url) ? 'image' : /\.pdf(\?|#|$)/i.test(url) ? 'pdf' : 'url'
+    const title = input.title?.slice(0, 200) || (given ? basename(resolveUserPath(given)) : undefined)
+    this.previewShow = { id: randomUUID(), kind, at: Date.now(), ...(url ? { url } : {}), ...(html ? { html } : {}), ...(title ? { title } : {}) }
     this.broadcast()
     return this.previewShow
+  }
+
+  /**
+   * A deliverable the agent handed over (`present`) opens beside the chat on its own:
+   * a clip, a picture or a PDF is the answer itself, and walking the person through a
+   * card first is the step they should not have to take. Other files keep the card —
+   * the pane cannot draw a spreadsheet or a slide deck.
+   */
+  private presentBeside(arguments_: unknown): void {
+    const files = (arguments_ as { files?: unknown } | null)?.files
+    if (!Array.isArray(files)) return
+    for (const file of files) {
+      const path = (file as { path?: unknown } | null)?.path
+      if (typeof path !== 'string' || !path.trim() || !kindOfFile(path)) continue
+      const description = (file as { description?: unknown } | null)?.description
+      try {
+        this.showPreview({ path, ...(typeof description === 'string' && description.trim() ? { title: description } : {}) })
+      } catch {
+        // the card still carries the file; a pane that cannot draw it is not an error of the turn
+      }
+      return
+    }
   }
 
   /** Take the side pane down (`preview_close`). */

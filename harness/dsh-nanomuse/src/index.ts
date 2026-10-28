@@ -28,6 +28,8 @@ import { mountGuarded } from './admit.ts'
 import { packageAssetsDir } from './profile.ts'
 import type {} from './cloud.ts'
 import { MOTION_PREFIX, serveClip } from './motion.ts'
+import { PREVIEW_FILE_PREFIX } from './preview-kind.ts'
+import { servePreviewFile } from './preview-file.ts'
 import { Config as speechConfig, registerSpeechWhisper, type Config as SpeechConfig } from './speech-whisper.ts'
 
 export const name = 'nanomuse'
@@ -67,6 +69,9 @@ export function apply(ctx: Context, config: Config): void {
   // The clips of a drawn face, made on this computer (`motion.ts`): `/nanomuse/avatar/motion/<mood>.mp4?v=<mtime>`;
   // and the person's own clip (`own-clip.ts`): `/nanomuse/avatar/own-clip.mp4?v=<mtime>`, its first frame, the preview copy.
   mountGuarded(ctx, MOTION_PREFIX, (req, res) => serveClip(req, res, (mood) => ctx.get('nanomuseCloud')?.motion.clipPath(mood), (name) => ctx.get('nanomuseCloud')?.ownClip.path(name)), 'nanomuse: avatar clips')
+  // A clip, a picture or a PDF the agent put beside the chat (`preview_show`): the pane
+  // plays it from this route, with ranges, instead of asking the browser to read `file://`.
+  mountGuarded(ctx, PREVIEW_FILE_PREFIX, servePreviewFile, 'nanomuse: preview file')
 }
 
 /** One file from `assets/` by its base name, or a still of the account's face; anything else is 404. */

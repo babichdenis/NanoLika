@@ -510,13 +510,15 @@ html[data-nm-split] { --nm-split-w: clamp(420px, 62vw, 1200px); }
 .nm-preview-body { flex: 1; min-height: 0; position: relative; }
 .nm-preview-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
 .nm-preview-body img { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
+.nm-preview-body video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.nm-preview-body audio { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 90%); }
 .nm-preview-body embed { width: 100%; height: 100%; border: 0; }
 .nm-preview-empty { padding: 20px; color: var(--nm-dim, #999); font-size: 13px; }
 html[data-nm-split] [class*="_centerCol"] { min-width: 0; padding-right: var(--nm-split-w, 62vw); box-sizing: border-box; }
 /* The preview pane is a look at something beside the words, not a room of its own:
    it takes less width than a room. On a window too narrow to hold both, it covers
    the screen instead of squeezing the conversation into a column of letters. */
-html[data-nm-preview-pane] { --nm-split-w: clamp(340px, 42vw, 780px); }
+html[data-nm-preview-pane] { --nm-split-w: clamp(320px, 34vw, 640px); }
 @media (max-width: 1100px) {
   html[data-nm-preview-pane] { --nm-split-w: 100vw; }
   html[data-nm-preview-pane] [class*="_centerCol"] { padding-right: 0; }

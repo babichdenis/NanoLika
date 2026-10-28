@@ -40,9 +40,13 @@ export function makePreviewPanel(t: Translate) {
           ? h('iframe', { srcDoc: p.html, sandbox: 'allow-scripts allow-same-origin', title })
           : p.kind === 'image'
             ? h('img', { src: p.src ?? p.url, alt: title })
-            : p.kind === 'pdf'
-              ? h('embed', { src: p.url, type: 'application/pdf', title })
-              : h('iframe', { src: p.url, title, referrerPolicy: 'no-referrer' }),
+            : p.kind === 'video'
+              ? h('video', { src: p.src ?? p.url, controls: true, autoPlay: true, playsInline: true, title })
+              : p.kind === 'audio'
+                ? h('audio', { src: p.src ?? p.url, controls: true, autoPlay: true, title })
+                : p.kind === 'pdf'
+                  ? h('embed', { src: p.url, type: 'application/pdf', title })
+                  : h('iframe', { src: p.url, title, referrerPolicy: 'no-referrer' }),
       ),
     )
   }

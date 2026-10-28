@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { PREVIEW_PANEL } from './panels.ts'
 import { peekWin, win } from './win.ts'
 
-export type PreviewKind = 'url' | 'html' | 'image' | 'pdf'
+export type PreviewKind = 'url' | 'html' | 'image' | 'pdf' | 'video' | 'audio' | 'text'
 
 export interface Preview {
   kind: PreviewKind

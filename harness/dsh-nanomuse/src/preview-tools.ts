@@ -8,9 +8,12 @@
  * A preset row, like Reach: it needs the cloud row (`nanomuse-cloud`) that holds
  * the pane's state and broadcasts it to the app.
  */
+import { stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from './cloud.ts'
+import { kindOfFile } from './preview-kind.ts'
+import { resolveUserPath } from './preview-file.ts'
 
 export const name = 'nanomuse-preview-tools'
 export const inject = ['tools', 'nanomuseCloud']
@@ -27,10 +30,11 @@ export function apply(ctx: Context): void {
         defineTool({
           name: 'preview_show',
           description:
-            'Show something beside the conversation, in the app\'s side pane: a page by its URL (a site, a document), a picture, a PDF, or a small piece of HTML you write yourself (a table, a card, a comparison). Use it when the person would rather look than read, and when a page or a picture is the answer. Put one thing in a call; call it again to replace what is there. Inline HTML is for small markup only, no scripts that fetch the network.',
+            'Show something beside the conversation, in the app\'s side pane: a page by its URL (a site, a document), a file on this computer by its path (a video clip, a picture, a PDF, text), or a small piece of HTML you write yourself (a table, a card, a comparison). Use it when the person would rather look than read, and when a page, a clip or a picture is the answer — a clip you have just made or downloaded belongs here, not only in the files card. Put one thing in a call; call it again to replace what is there. Inline HTML is for small markup only, no scripts that fetch the network.',
           parameters: {
             url: { type: 'string', description: 'The address to show: a page, an image file or a PDF.' },
-            html: { type: 'string', description: 'Inline markup instead of a URL, when writing the thing itself is simpler than finding it.' },
+            path: { type: 'string', description: 'A file on this computer to show: a video, a picture, a PDF or text. Give its absolute path.' },
+            html: { type: 'string', description: 'Inline markup instead of a URL or a file, when writing the thing itself is simpler than finding it.' },
             title: { type: 'string', description: 'What the pane calls it, in the person\'s language.' },
           },
           output: {
@@ -43,13 +47,19 @@ export function apply(ctx: Context): void {
           },
           async execute(args) {
             const url = (args.url ?? '').trim()
+            const path = (args.path ?? '').trim()
             const html = (args.html ?? '').trim()
-            if (!url && !html) throw new Error('give a url or html to show')
+            if (!url && !path && !html) throw new Error('give a url, a path or html to show')
             if (html.length > MAX_HTML) throw new Error('that markup is too long for the pane; show a page by URL instead')
-            const shownItem = cloud.showPreview({ ...(url ? { url } : {}), ...(html ? { html } : {}), ...(args.title ? { title: args.title } : {}) })
-            return { shown: shownItem.title || url || 'inline markup', kind: shownItem.kind }
+            if (path) {
+              if (!kindOfFile(path)) throw new Error('the pane shows a video, a picture, a PDF or text; this file is none of them')
+              const info = await stat(resolveUserPath(path)).catch(() => undefined)
+              if (!info?.isFile()) throw new Error(`no such file: ${path}`)
+            }
+            const shownItem = cloud.showPreview({ ...(path ? { path } : {}), ...(url ? { url } : {}), ...(html ? { html } : {}), ...(args.title ? { title: args.title } : {}) })
+            return { shown: shownItem.title || path || url || 'inline markup', kind: shownItem.kind }
           },
-          presentCall: (args) => ({ card: 'generic', title: `Show ${args.title || args.url || 'markup'}`, kind: 'other', rawInput: args }),
+          presentCall: (args) => ({ card: 'generic', title: `Show ${args.title || args.path || args.url || 'markup'}`, kind: 'other', rawInput: args }),
         }),
       ),
     'nanomuse preview: preview_show',
