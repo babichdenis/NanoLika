@@ -22,11 +22,17 @@
   let next = null, busy = false, revision = 0;
   function metric(label, value) { const n=h('div',undefined,'metric'); n.append(h('span',label),h('strong',value));return n; }
   function split(row) {const d=h('dl');for(const [label,value] of [[T.input,row.input_tokens ?? row.prompt_tokens],[T.output,row.output_tokens ?? row.completion_tokens],[T.cache,row.cached_tokens]]){d.append(h('dt',label),h('dd',value === undefined || value === null ? T.unknown : number(value)));}return d;}
+  const value=n=>n===undefined||n===null?'—':number(n);
+  function table(headers){const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',headers.join(', '));const t=h('table',undefined,'compact-table'),head=h('thead'),tr=h('tr'),body=h('tbody');for(const text of headers){const th=h('th',text);th.scope='col';tr.append(th);}head.append(tr);t.append(head,body);wrap.append(t);return {wrap,body};}
+  function cell(text,cls){return h('td',text,cls);}
   function record(row) {
-    const box=h('article',undefined,'record'), top=h('div',undefined,'record-head'), time=h('time',new Date(row.ts*1000).toLocaleString(document.documentElement.lang));time.dateTime=new Date(row.ts*1000).toISOString();
-    top.append(h('strong',row.model || T.unknown),h('strong',money(row.recorded_charge_rub)),time);box.append(top,h('p',T.kind[row.kind] || row.kind,'muted'),split(row));
-    const detail=h('details');detail.append(h('summary',T.details));if(admin)detail.append(h('p',row.provider_cost_rub === null ? T.provider : `${T.providerAmount}: ${money(row.provider_cost_rub)}`,'muted'));if(row.gateway_model)detail.append(h('p',`${T.route}: ${row.gateway_model}`));if(row.request_id)detail.append(h('p',T.id),h('code',row.request_id));box.append(detail);return box;
+    const tr=h('tr'),date=new Date(row.ts*1000),time=h('time',date.toLocaleString(document.documentElement.lang));time.dateTime=date.toISOString();const when=cell();when.append(time);
+    const model=cell();model.append(h('strong',row.model||T.unknown),h('small',T.kind[row.kind]||row.kind,'table-subtitle'));
+    const detail=cell(),panel=h('details'),summary=h('summary',T.details);panel.append(summary);
+    if(admin)panel.append(h('p',row.provider_cost_rub===null?T.provider:`${T.providerAmount}: ${money(row.provider_cost_rub)}`));if(row.gateway_model)panel.append(h('p',`${T.route}: ${row.gateway_model}`));if(row.request_id)panel.append(h('code',row.request_id));detail.append(panel);
+    tr.append(when,model,cell(value(row.prompt_tokens),'numeric'),cell(value(row.cached_tokens),'numeric'),cell(value(row.completion_tokens),'numeric'),cell(money(row.recorded_charge_rub),'numeric'),detail);return tr;
   }
+  let historyBody=null;
   async function load(append=false) {
     if(busy && append)return;
     const current=++revision;busy=true;el('refresh').disabled=true;el('more').disabled=true;el('status').textContent=T.loading;
@@ -41,15 +47,15 @@
       if(!append){
         el('summary').replaceChildren(metric(T.total,money(data.recorded_charge_rub)),metric(T.calls,number(data.requests)),metric(T.models,number(data.by_model.length)));
         el('notice').textContent=(data.basis==='retail_ledger'?T.retail:T.note)+(data.unlimited_account?' '+T.unlimited:'');
-        el('models').replaceChildren(...data.by_model.map(row=>{const n=h('article',undefined,'model');n.append(h('h3',row.model || T.unknown),h('p',money(row.recorded_charge_rub),'amount'),h('p',`${T.calls}: ${number(row.requests)}`),split(row));return n;}));
-        el('history').replaceChildren();
+        const models=table([T.models,T.calls,T.input,T.output,T.total]);for(const row of data.by_model){const tr=h('tr'),name=cell();name.append(h('strong',row.model||T.unknown),h('small',T.kind[row.kind]||row.kind,'table-subtitle'));tr.append(name,cell(number(row.requests),'numeric'),cell(value(row.input_tokens),'numeric'),cell(value(row.output_tokens),'numeric'),cell(money(row.recorded_charge_rub),'numeric'));models.body.append(tr);}if(!data.by_model.length){const tr=h('tr'),td=cell(T.none);td.colSpan=5;tr.append(td);models.body.append(tr);}el('models').replaceChildren(models.wrap);
+        const history=table([document.documentElement.lang==='ru'?'Время':document.documentElement.lang==='zh'?'时间':'Time',T.models,T.input,T.cache,T.output,T.total,T.details]);historyBody=history.body;el('history').replaceChildren(history.wrap);
         if(admin){const g=data.gateway, node=el('gateway');node.replaceChildren(h('h2',T.gateway),h('p',g?.available?T.gatewayNote:T.gatewayUnavailable));if(g?.available)node.append(h('p',`${T.channels}: ${number(g.enabled_channels)} · ${T.enabled}: ${number(g.enabled_models)} · ${T.records}: ${number(g.log_records)}`));const a=h('a','New API · GitHub');a.href='https://github.com/QuantumNous/new-api';a.target='_blank';a.rel='noopener noreferrer';node.append(a);}
       }
-      el('history').append(...data.records.map(record));next=data.next_before;el('more').hidden=!next;el('status').textContent=data.requests?'':T.none;
+      historyBody.append(...data.records.map(record));next=data.next_before;el('more').hidden=!next;el('status').textContent=data.requests?'':T.none;
     }catch(_){if(current===revision)el('status').textContent=T.error;}
     finally{if(current===revision){busy=false;el('refresh').disabled=false;el('more').disabled=false;}}
   }
   el('refresh').onclick=()=>load();el('period').onchange=()=>load();el('more').onclick=()=>load(true);
-  addEventListener('storage',e=>{if(!e.key || e.key==='nm.key' || e.key==='nl.web.session.v1'){el('summary').replaceChildren();el('models').replaceChildren();el('history').replaceChildren();next=null;el('more').hidden=true;load();}});
+  addEventListener('storage',e=>{if(!e.key || e.key==='nm.key' || e.key==='nl.web.session.v1'){el('summary').replaceChildren();el('models').replaceChildren();el('history').replaceChildren();historyBody=null;next=null;el('more').hidden=true;load();}});
   load();
 })();

@@ -127,7 +127,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
-from . import __version__, model_pricing
+from . import __version__, catalog_routes, model_pricing
 from . import client as client_info
 from . import search as web_search
 from .browser_auth import browser_marker
@@ -414,6 +414,20 @@ def create_app(
     app.state.provider_router = router
     app.state.geo = geo
     app.state.collector = collector
+
+    # CORS for WebApp (nanolika.ru) and cloud subdomain
+    from starlette.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "https://nanolika.ru",
+            "https://www.nanolika.ru",
+            "https://cloud.nanolika.ru",
+        ],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Bot-Token"],
+    )
 
     def with_places(out: dict) -> dict:
         """The admin page's answers carry addresses; this adds ``places`` — ``{ip: place}``
@@ -1267,6 +1281,10 @@ def create_app(
         # model's own provider stays the fallback, so a refusal or an outage costs a retry
         # rather than a turn.
         chain = router.routes(spec, body, url, headers)
+        if not chain:
+            cloud.settle(caller, request_id)
+            cloud.note(caller.account_id, "upstream.no_routes", f"No eligible provider route for {spec.id}")
+            raise CloudError(503, "provider_routes_unavailable", "No eligible provider is available for this model. Try another model or retry later.")
         fallback_prompt_tokens = math.ceil(prompt_chars(body.get("messages") or []) / 3)
         # For an account that opted in, the turn is kept once it is answered (service.keep_sample)
         # with the platform and language hints from the headers and, since 0.10, the address
@@ -1498,9 +1516,99 @@ def create_app(
     # images endpoint is OpenAI-shaped but answers with a task id, the task carries the
     # picture's URL, and the relay fetches the bytes itself (nothing is measured before the
     # picture exists). Paths are this provider's own, hence one adapter per provider.
-    POLZA_MEDIA = "/api/v1/media"
+    POLZA_MEDIA = "/v1/media"
     POLZA_IMAGE_PAUSE = 2.0
     POLZA_IMAGE_WAIT_S = 180.0
+
+    async def _openai_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
+        """Картинка у OpenAI-совместимого поставщика: ответ сразу с байтами или ссылкой.
+
+        Так отвечает Bothub и подобные: POST {base}/images/generations,
+        в ответе data[0].b64_json или data[0].url.
+        """
+        if not base or not key:
+            raise CloudError(500, "misconfigured", "Провайдер картинок не настроен")
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        payload = dumps({"model": model, "prompt": prompt,
+                         "size": size.replace("*", "x"), "n": 1})
+        # у Bothub база уже кончается на /v1, у RouterAI и AITUNNEL — нет
+        path = "/images/generations" if base.rstrip("/").endswith("/v1") \
+            else "/v1/images/generations"
+        try:
+            r = await http.post(base + path, headers=headers, content=payload)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "Провайдер картинок не ответил") from e
+        if r.status_code >= 400:
+            log.warning("%s image HTTP %s: %s", model, r.status_code, r.text[:300])
+            if r.status_code == 400 and content_check_refusal(r.content):
+                raise CloudError(400, "content_rejected",
+                                 "Провайдер отклонил запрос по содержанию; попробуйте другие слова")
+            raise CloudError(r.status_code if r.status_code in (402, 429) else 502,
+                             "upstream", f"Провайдер картинок отказал ({r.status_code})")
+        try:
+            item = (r.json().get("data") or [])[0]
+        except (ValueError, IndexError, TypeError) as e:
+            raise CloudError(502, "upstream", "Провайдер картинок не прислал картинку") from e
+        if item.get("b64_json"):
+            return base64.b64decode(item["b64_json"])
+        url = item.get("url")
+        if not url:
+            raise CloudError(502, "upstream", "Провайдер картинок не прислал картинку")
+        try:
+            img = await http.get(url)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "Картинку не удалось забрать") from e
+        if img.status_code >= 400:
+            raise CloudError(502, "upstream", "Картинку не удалось забрать")
+        return img.content
+
+    async def _image_with_fallback(spec: ModelSpec, prompt: str, size: str) -> bytes:
+        """Картинка у первого живого поставщика из каталога базы.
+
+        Кандидаты уже отсортированы по закупке. Если поставщик отвечает
+        «нет денег» (402), лимитом (429) или 5xx — идём к следующему; на
+        ошибке содержания и прочих 4xx останавливаемся, чтобы не гонять
+        один и тот же запрещённый промпт по всем.
+        """
+        chain = catalog_routes.image_candidates(spec.id)
+        # текущий поставщик модели остаётся первым: в каталоге у него может
+        # стоять цена за токены, а не за картинку, и по ней он выглядел бы
+        # дороже, чем есть. Резерв — по возрастанию закупки, после него.
+        primary, _, _ = settings.route(spec)
+        if primary:
+            chain = sorted(chain, key=lambda c: 0 if c["provider"] == primary else 1)
+        last: CloudError | None = None
+        for cand in chain:
+            provider = str(cand.get("provider") or "")
+            entry = settings.providers.get(provider)
+            if entry is None:
+                continue
+            base, key = entry.base, entry.key()
+            if not base or not key:
+                continue
+            model = str(cand.get("model") or spec.upstream)
+            try:
+                if provider == "polza":
+                    png = await _polza_image(base, key, model, prompt, size)
+                else:
+                    png = await _openai_image(base, key, model, prompt, size)
+            except CloudError as error:
+                if error.status in (402, 429, 500, 502, 503):
+                    log.warning("картинка: %s отказал (%s), пробую следующего", provider, error.status)
+                    last = error
+                    continue
+                raise
+            if chain and cand is not chain[0]:
+                log.info("картинка: сработал резерв %s (%s)", provider, model)
+            return png
+        if last is not None:
+            raise last
+        # каталога нет — ведём себя как раньше
+        provider, base, key = settings.route(spec)
+        if provider:
+            return await _polza_image(base, key, spec.upstream, prompt, size)
+        return await _dashscope_image(spec.upstream, [{"text": prompt}],
+                                      {"size": size, "watermark": False})
 
     async def _polza_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
         """One picture from Polza, waited out: submit, poll the task, fetch the file."""
@@ -1583,11 +1691,7 @@ def create_app(
             caller, minimum=spec.per_image, cost_uy=model_pricing.amount(cloud, spec, {"size": size.replace("*", "x")}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
         )
         try:
-            provider, base, key = settings.route(spec)
-            if provider:
-                png = await _polza_image(base, key, spec.upstream, prompt, size)
-            else:
-                png = await _dashscope_image(spec.upstream, [{"text": prompt}], params)
+            png = await _image_with_fallback(spec, prompt, size)
             charged = cloud.charge_image(caller, spec, 1, request_id, size=size)
         finally:
             cloud.settle(caller, request_id)
@@ -1878,7 +1982,38 @@ def create_app(
         payload["resolution"] = (resolution or "480P").lower()
         return payload
 
-    async def _provider_video_submit(base: str, key: str, spec: ModelSpec, body: dict, caller, request, probe: bool):
+    VIDEO_PATHS = {"polza": "/v1/media", "aitunnel": "/v1/videos"}
+
+    def _video_payload(provider: str, model: str, spec: ModelSpec, body: dict) -> dict:
+        if provider == "aitunnel":
+            clip = _provider_clip_input(body, spec)
+            payload = {
+                "model": model,
+                "prompt": clip["prompt"],
+                "duration": int(_clip_seconds(body, spec) or 4),
+                "resolution": clip["resolution"],
+            }
+            incoming = body.get("input") if isinstance(body.get("input"), dict) else {}
+            image_url = str(incoming.get("img_url") or "").strip()
+            if image_url:
+                if urlsplit(image_url).scheme != "https":
+                    raise CloudError(400, "bad_request", "AITUNNEL needs a public HTTPS first-frame URL")
+                payload["frame_images"] = [{
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                    "frame_type": "first_frame",
+                }]
+            return payload
+        video_input = _provider_clip_input(body, spec)
+        incoming = body.get("input") if isinstance(body.get("input"), dict) else {}
+        image_url = str(incoming.get("img_url") or "").strip()
+        if provider == "polza" and image_url:
+            video_input["images"] = [{"type": "url", "data": image_url}]
+        return {"model": model, "input": video_input}
+
+    async def _provider_video_submit(provider: str, base: str, key: str, spec: ModelSpec,
+                                     body: dict, caller, request, probe: bool,
+                                     model: str = ""):
         """Поставить клип у провайдера и ответить так, будто это DashScope."""
         if probe:
             # проба (пустой запрос) не должна стоить денег: 400 значит «такая модель есть»
@@ -1889,10 +2024,11 @@ def create_app(
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
         try:
-            payload = dumps({"model": spec.upstream, "input": _provider_clip_input(body, spec)})
+            payload = dumps(_video_payload(provider, model or spec.upstream, spec, body))
             headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            path = VIDEO_PATHS.get(provider, "/v1/media")
             try:
-                r = await http.post(f"{base}/api/v1/media", headers=headers, content=payload)
+                r = await http.post(base + path, headers=headers, content=payload)
             except httpx.HTTPError as e:
                 raise CloudError(502, "upstream", "The video provider did not answer") from e
             if r.status_code >= 400:
@@ -1905,17 +2041,60 @@ def create_app(
             task_id = str(task_json.get("id") or task_json.get("requestId") or "")
             if not task_id:
                 raise CloudError(502, "upstream", "The video provider sent no task")
-            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False, sale_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"])
+            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False, sale_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], provider=provider)
             log.info("polza video task %s for %s: %s", task_id[:14], caller.account_id[:8], spec.id)
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(content={"output": {"task_id": task_id, "task_status": "PENDING"}})
 
-    async def _provider_video_poll(base: str, key: str, task) -> Response:
+    AITUNNEL_STATUS = {"completed": "SUCCEEDED", "succeeded": "SUCCEEDED",
+                       "failed": "FAILED", "cancelled": "CANCELED"}
+
+    def _video_frame_storage(spec: ModelSpec) -> tuple[str, str, str] | None:
+        """Use Polza's temporary public storage for frames shared by provider fallbacks."""
+        provider, base, key = settings.route(spec)
+        if provider == "polza" and base and key:
+            return provider, base, key
+        if not any(c.get("provider") == "polza" for c in catalog_routes.video_candidates(spec.id)):
+            return None
+        storage = settings.providers.get("polza")
+        if storage and storage.base and storage.key():
+            return "polza", storage.base, storage.key()
+        return None
+
+    async def _provider_video_poll(provider: str, base: str, key: str, task) -> Response:
         """Спросить провайдера о клипе, списать его один раз и ответить по-дашскоповски."""
         task_id = str(task["task_id"])
+        if provider == "aitunnel":
+            try:
+                r = await http.get(f"{base}/v1/videos/{task_id}",
+                                   headers={"Authorization": f"Bearer {key}"})
+            except httpx.HTTPError as e:
+                raise CloudError(502, "upstream", "The video provider did not answer") from e
+            if r.status_code >= 400:
+                raise CloudError(502, "upstream", f"The video provider refused ({r.status_code})")
+            try:
+                data = r.json()
+            except ValueError as e:
+                raise CloudError(502, "upstream", "The video provider sent no task") from e
+            status = AITUNNEL_STATUS.get(str(data.get("status", "")).lower(), "RUNNING")
+            output = {"task_id": task_id, "task_status": status}
+            if status == "SUCCEEDED":
+                urls = data.get("unsigned_urls") or []
+                if urls:
+                    output["video_url"] = str(urls[0])
+                else:
+                    output = {"task_id": task_id, "task_status": "FAILED",
+                              "code": "NoFile", "message": "The provider sent no file"}
+            elif status in ("FAILED", "CANCELED"):
+                output["message"] = str(data.get("error") or "the provider could not make this clip")[:300]
+            charged = cloud.settle_video_task(task, output["task_status"])
+            if charged is not None:
+                log.info("aitunnel video task %s done for %s: %s, charged %d",
+                         task_id[:14], str(task["account_id"])[:8], output["task_status"], charged)
+            return JSONResponse(content={"output": output})
         try:
-            r = await http.get(f"{base}/api/v1/media/{task_id}", headers={"Authorization": f"Bearer {key}"})
+            r = await http.get(f"{base}/v1/media/{task_id}", headers={"Authorization": f"Bearer {key}"})
         except httpx.HTTPError as e:
             raise CloudError(502, "upstream", "The video provider did not answer") from e
         if r.status_code >= 400:
@@ -1959,7 +2138,28 @@ def create_app(
         spec = cloud.model_for(str(body.get("model", "")), "video", caller)
         provider, provider_base, provider_key = settings.route(spec)
         if provider:
-            return await _provider_video_submit(provider_base, provider_key, spec, body, caller, request, not body.get("input"))
+            if not body.get("input"):
+                return await _provider_video_submit(provider, provider_base, provider_key,
+                                                    spec, body, caller, request, True)
+            order = [(provider, provider_base, provider_key, spec.upstream)]
+            for cand in catalog_routes.video_candidates(spec.id):
+                entry = settings.providers.get(str(cand.get("provider")))
+                if cand.get("provider") == provider or entry is None:
+                    continue
+                order.append((str(cand["provider"]), entry.base, entry.key(), str(cand["model"])))
+            last: CloudError | None = None
+            for name, base, key, model in order:
+                try:
+                    return await _provider_video_submit(name, base, key, spec, body,
+                                                        caller, request, False, model)
+                except CloudError as error:
+                    if error.status in (402, 429, 500, 502, 503):
+                        log.warning("видео: %s отказал (%s), пробую следующего", name, error.status)
+                        last = error
+                        continue
+                    raise
+            if last is not None:
+                raise last
         # A probe (no input) costs nothing upstream and is not priced here either.
         probe = not body.get("input")
         clip_cost = 0 if probe else spec.video_cost_uy(_clip_seconds(body, spec), _clip_resolution(body))
@@ -1998,9 +2198,14 @@ def create_app(
         if task is None or task["account_id"] != caller.account_id:
             raise CloudError(404, "no_task", "No such task")
         spec = cloud.s.model(str(task["model"])) if task["model"] else None
-        provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
+        provider = str(task["provider"] or "") if "provider" in task.keys() else ""
         if provider:
-            return await _provider_video_poll(provider_base, provider_key, task)
+            entry = settings.providers.get(provider)
+            provider_base, provider_key = (entry.base, entry.key()) if entry else ("", "")
+        else:
+            provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
+        if provider:
+            return await _provider_video_poll(provider, provider_base, provider_key, task)
         try:
             r = await http.get(settings.dashscope_base.rstrip("/") + f"/tasks/{task_id}", headers=upstream_headers())
         except httpx.HTTPError as e:
@@ -2032,10 +2237,15 @@ def create_app(
         for task in cloud.db.video_tasks_to_settle(limit):
             task_id = str(task["task_id"])
             spec = cloud.s.model(str(task["model"])) if task["model"] else None
-            provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
+            provider = str(task["provider"] or "") if "provider" in task.keys() else ""
+            if provider:
+                entry = settings.providers.get(provider)
+                provider_base, provider_key = (entry.base, entry.key()) if entry else ("", "")
+            else:
+                provider, provider_base, provider_key = settings.route(spec) if spec else ("", "", "")
             if provider:
                 try:
-                    await _provider_video_poll(provider_base, provider_key, task)
+                    await _provider_video_poll(provider, provider_base, provider_key, task)
                 except CloudError as error:
                     log.warning("video task %s: the provider did not answer the relay's check: %s", task_id[:12], error)
                     continue
@@ -2071,6 +2281,13 @@ def create_app(
             raise CloudError(400, "bad_request", "action=getPolicy is the only upload call the relay makes")
         spec = cloud.model_for(request.query_params.get("model", ""), "video", caller)
         cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=spec.video_cost_uy(spec.clip_seconds), place=client_place(request))
+        provider, base, key = settings.route(spec)
+        storage = _video_frame_storage(spec)
+        if storage:
+            _, storage_base, storage_key = storage
+            if not storage_base or not storage_key:
+                raise CloudError(503, "upstream_unconfigured", "The video provider is not configured")
+            return JSONResponse(content={"data": {"upload_mode": "relay_storage"}})
         try:
             r = await http.get(
                 settings.dashscope_base.rstrip("/") + "/uploads",
@@ -2080,6 +2297,63 @@ def create_app(
         except httpx.HTTPError as e:
             raise CloudError(502, "upstream", "The video provider did not answer") from e
         return _dashscope_reply(r)
+
+    @app.post("/api/v1/uploads")
+    async def video_upload(
+        request: Request,
+        model: str = Form(""),
+        file: UploadFile = File(...),
+        caller: Caller = Depends(caller_dep),
+    ) -> Response:
+        """Upload a video first frame to Polza's temporary storage using the model's key."""
+        spec = cloud.model_for(model, "video", caller)
+        storage = _video_frame_storage(spec)
+        if storage is None:
+            raise CloudError(400, "bad_request", "This model does not use relay-managed video uploads")
+        _, base, key = storage
+        if not base or not key:
+            raise CloudError(503, "upstream_unconfigured", "The video provider is not configured")
+        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=spec.video_cost_uy(spec.clip_seconds), place=client_place(request))
+        mime = (file.content_type or "").lower().split(";", 1)[0].strip()
+        if mime not in {"image/png", "image/jpeg", "image/webp"}:
+            raise CloudError(400, "bad_request", "The first frame must be a PNG, JPEG, or WebP image")
+        data = await file.read(settings.max_request_bytes + 1)
+        if not data:
+            raise CloudError(400, "bad_request", "The first frame is empty")
+        if len(data) > settings.max_request_bytes:
+            raise CloudError(413, "too_large", "The first frame is too large")
+        try:
+            response = await http.post(
+                base.rstrip("/") + "/v1/storage/upload",
+                headers={"Authorization": f"Bearer {key}"},
+                data={"storagePolicy": "TEMP_UPLOAD", "externalUserId": caller.account_id[:128]},
+                files={"file": (file.filename or "first-frame.png", data, mime)},
+            )
+        except httpx.HTTPError as error:
+            raise CloudError(502, "upstream", "The video provider did not answer") from error
+        if response.status_code >= 400:
+            log.warning("polza video frame upload HTTP %s", response.status_code)
+            raise CloudError(502, "upstream", f"The video provider refused the frame upload ({response.status_code})")
+        try:
+            result = response.json()
+            image_url = str(result.get("url") or (result.get("data") or {}).get("url") or "").strip()
+            base_host = (urlsplit(base).hostname or "").lower()
+            image_parts = urlsplit(image_url)
+        except (ValueError, AttributeError, TypeError):
+            image_url = ""
+            base_host = ""
+            image_parts = urlsplit("")
+        if (
+            not image_url
+            or image_parts.scheme != "https"
+            or not (
+                _same_site((image_parts.hostname or "").lower(), base_host)
+                or (image_parts.hostname or "").lower() == "polza.ai"
+                or (image_parts.hostname or "").lower().endswith(".polza.ai")
+            )
+        ):
+            raise CloudError(502, "upstream", "The video provider returned an invalid frame URL")
+        return JSONResponse(content={"data": {"url": image_url}})
 
     # -- the hub: devices of one account, across networks ------------------------------------------
 
@@ -2761,7 +3035,9 @@ def create_app(
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+                "default-src 'self'; "
+                + ("script-src 'self' https://telegram.org; " if request.url.path == "/web/telegram.html" else "script-src 'self'; ")
+                + "style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org"
             )
         return response
 

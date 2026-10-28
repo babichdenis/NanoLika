@@ -22,16 +22,74 @@ is this chat" however the two were joined.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
+import re
+import time
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
+from .browser_auth import browser_marker
 from .identifiers import BadIdentifier
-from .service import CHANNEL_CODE_TTL_S, Caller, Cloud, CloudError
+from .service import CHANNEL_CODE_TTL_S, Caller, Cloud, CloudError, chat_identity
 
 # a code is a few characters in a JSON object; anything larger is not one
 _BODY_BYTES = 8 * 1024
+
+
+def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
+    """Verify the decoded Mini App query string, including its short launch lifetime.
+
+    https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+    """
+    if not init_data or not bot_token or len(init_data) > _BODY_BYTES:
+        return None
+    try:
+        if re.search(r"%(?![0-9a-fA-F]{2})", init_data):
+            return None
+        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True,
+                          errors="strict", max_num_fields=32)
+        params = dict(pairs)
+        if len(params) != len(pairs):
+            return None
+        received_hash = params.pop("hash", "")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", received_hash):
+            return None
+        check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        expected = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(received_hash.lower(), expected):
+            return None
+        age = time.time() - int(params.get("auth_date", "0"))
+        if age < -30 or age > 300:
+            return None
+        user = json.loads(params.get("user", "null"))
+        if not isinstance(user, dict) or type(user.get("id")) is not int or not 0 < user["id"] < 2**52:
+            return None
+        params["user"] = user
+        return params
+    except (ValueError, TypeError, UnicodeError):
+        return None
+
+
+def _telegram_session(cloud: Cloud, user_id: int) -> dict:
+    """Issue only for an existing Telegram identity; never register or merge accounts."""
+    ident = chat_identity("telegram", str(user_id))
+    # The database lock also protects alias unlinking. No nested transaction is needed.
+    with cloud.db._lock:
+        alias = cloud._chat_alias("telegram", ident)
+        account = (cloud.db.account(str(alias["account_id"])) if alias is not None
+                   else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key)))
+        if account is None:
+            raise CloudError(409, "telegram_not_linked", "Link Telegram to your account first")
+        if account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp",
+                                       expires_at=int(time.time()) + 30 * 86400)
+        return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
 async def _body(request: Request) -> dict[str, Any]:
@@ -50,6 +108,7 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
     """The account's two routes and the bot's two, `bot_caller` being the relay's own check
     of the bot's shared secret (it lives with the other bot doors)."""
     caller_auth = caller_dep
+    caller_auth_dependency = Depends(caller_auth)
     router = APIRouter()
 
     @router.post("/v1/link/code")
@@ -62,6 +121,14 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
         use, and the alphabet has no O/0 or I/1 in it."""
         code, expires_at = await asyncio.to_thread(cloud.channel_code, caller)
         return {"code": code, "expires_at": expires_at, "expires_in_s": CHANNEL_CODE_TTL_S}
+
+    @router.delete("/v1/link/devices/{device_id}", status_code=204)
+    async def disconnect_device(device_id: str, caller: Caller = caller_auth_dependency) -> Response:
+        hub = getattr(app.state, "hub", None)
+        if hub is None:
+            raise CloudError(503, "hub_unavailable", "Device connections are unavailable")
+        await hub.disconnect_device(caller, device_id)
+        return Response(status_code=204)
 
     @router.get("/v1/link/channels")
     async def link_channels(caller: Caller = Depends(caller_auth)) -> list[dict]:
@@ -135,5 +202,68 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
             return await asyncio.to_thread(cloud.unlink_chat, channel, chat)
         except BadIdentifier as e:
             raise CloudError(400, "bad_identifier", "A chat is its numeric id") from e
+
+    @router.post("/v1/auth/telegram-webapp")
+    async def telegram_webapp_sign_in(request: Request, response: Response) -> dict:
+        public = urlsplit(cloud.s.public_base)
+        expected_origin = f"{public.scheme}://{public.netloc}"
+        if request.headers.get("origin") != expected_origin:
+            raise CloudError(403, "bad_origin", "Open the WebApp on the cloud origin")
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise CloudError(415, "bad_content_type", "Send JSON")
+        if not cloud.s.telegram_bot_token:
+            raise CloudError(503, "webapp_check_unconfigured", "Telegram sign-in is unavailable")
+        body = await _body(request)
+        raw = body.get("init_data")
+        validated = _validate_telegram_init_data(raw, cloud.s.telegram_bot_token) if isinstance(raw, str) else None
+        if validated is None:
+            raise CloudError(401, "invalid_init_data", "Reopen the Mini App from Telegram")
+        result = await asyncio.to_thread(_telegram_session, cloud, validated["user"]["id"])
+        response.headers["Cache-Control"] = "private, no-store"
+        browser_marker(response, cloud.s, api_key=result["api_key"])
+        return result
+
+    @router.post("/v1/link/check-webapp")
+    async def check_webapp_link(request: Request) -> dict:
+        """Check if a Telegram WebApp user is linked to an account.
+
+        Accepts {init_data: string} from the WebApp, validates the HMAC using the bot token,
+        extracts the user's chat_id, and returns whether that chat is linked to an account.
+        Does NOT require the user to be signed in to the app — works for unauthenticated WebApp opens.
+        """
+        if not cloud.s.telegram_bot_token:
+            raise CloudError(503, "webapp_check_unconfigured", "Telegram bot token not configured")
+
+        body = await _body(request)
+        init_data = str(body.get("init_data") or "")
+
+        if not init_data:
+            raise CloudError(400, "bad_request", "init_data is required")
+
+        # Validate initData and extract user
+        validated = _validate_telegram_init_data(init_data, cloud.s.telegram_bot_token)
+        if not validated:
+            raise CloudError(401, "invalid_init_data", "Invalid or tampered init_data")
+
+        user = validated.get("user")
+        if not user or not isinstance(user, dict) or "id" not in user:
+            raise CloudError(400, "bad_request", "init_data must contain user.id")
+
+        chat_id = str(user["id"])
+
+        # Check if this Telegram chat is linked to an account
+        try:
+            link_info = await asyncio.to_thread(cloud.chat_link, "telegram", chat_id)
+            return {
+                "linked": link_info.get("linked", False),
+                "channel": "telegram",
+                "chat_id": chat_id,
+                "identifier": link_info.get("identifier", ""),
+                "label": link_info.get("label", ""),
+                "linked_at": link_info.get("linked_at"),
+                "own_account": link_info.get("own", False)
+            }
+        except BadIdentifier as e:
+            raise CloudError(400, "bad_identifier", "Invalid chat id") from e
 
     app.include_router(router)

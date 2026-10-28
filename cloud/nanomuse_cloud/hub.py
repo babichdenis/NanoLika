@@ -252,6 +252,7 @@ class Hub:
                     "actions": c.actions if c else json.loads(row["actions"] or "[]"),
                     "online": c is not None,
                     "last_seen": now() if c else int(row["last_seen"]),
+                    "first_seen": int(row["first_seen"]),
                     "controllable": row["kind"] != "web",
                     "ip": (c.ip if c else "") or row["ip"],
                 }
@@ -317,6 +318,36 @@ class Hub:
         if device_id in self.online.get(account_id, {}):
             raise CloudError(409, "device_online", "That device is connected right now; sign it out there first")
         self.db.forget_device(account_id, device_id)
+
+    async def disconnect_device(self, caller: Caller, device_id: str) -> None:
+        """Revoke the device's own session and remove it from this account's hub."""
+        live = self.online.get(caller.account_id, {})
+        conn = live.get(device_id)
+        rows = {r["id"]: r for r in self.db.devices_for(caller.account_id)}
+        row = rows.get(device_id)
+        if row is None or row["kind"] == "web" or row["name"] == "nanoLika Cloud":
+            raise CloudError(404, "no_device", "No such computer in this account")
+        with self.db.tx() as c:
+            binding = c.execute("SELECT key_hash FROM devices WHERE account_id=? AND id=?", (caller.account_id, device_id)).fetchone()
+        key_hash = conn.key_hash if conn else binding["key_hash"] if binding else ""
+        if not key_hash:
+            raise CloudError(409, "device_session_unknown", "Open the app once to identify its sign-in before disconnecting it")
+        shared = any(c.device_id != device_id and c.key_hash == key_hash for c in live.values())
+        with self.db.tx() as c:
+            shared = shared or c.execute("SELECT 1 FROM devices WHERE account_id=? AND id<>? AND key_hash=? LIMIT 1", (caller.account_id, device_id, key_hash)).fetchone() is not None
+        if key_hash == caller.key_hash or shared:
+            raise CloudError(409, "device_shared_session", "This sign-in is shared; sign out in the computer app to keep other devices signed in")
+        with self.db.tx() as c:
+            # Ownership is checked again in the write transaction. Never infer a session
+            # from a device name or expose the credential hash in the devices API.
+            key = c.execute("SELECT 1 FROM api_keys WHERE account_id=? AND key_hash=?", (caller.account_id, key_hash)).fetchone()
+            if key is None:
+                raise CloudError(409, "device_session_unknown", "The device sign-in is not available")
+            c.execute("UPDATE api_keys SET revoked_at=? WHERE account_id=? AND key_hash=? AND revoked_at IS NULL", (now(), caller.account_id, key_hash))
+            c.execute("DELETE FROM devices WHERE account_id=? AND id=?", (caller.account_id, device_id))
+        self.db.add_event(caller.account_id, "device.disconnected", device_id[:96])
+        await self.drop_signed_out(caller.account_id)
+        await self.broadcast_devices(caller.account_id)
 
     async def drop_account(self, account_id: str) -> None:
         """When an account is deleted or disabled: every socket of it is closed
@@ -479,7 +510,7 @@ class Hub:
             await self._fail_pending_for(old)
             await self._close(old.ws, 4003, "replaced by a newer connection")
         if conn.kind != "web":
-            self.db.upsert_device(conn.account_id, conn.device_id, conn.name, conn.kind, conn.os, conn.version, json.dumps(conn.actions))
+            self.db.upsert_device(conn.account_id, conn.device_id, conn.name, conn.kind, conn.os, conn.version, json.dumps(conn.actions), key_hash=conn.key_hash)
         # the id and the account masked like every other line; the device's name is the
         # person's own words and stays out of the log
         log.info("hub: %s %s connected; account %s has %d online", conn.kind, conn.device_id[:12], conn.account_id[:8], len(account))
@@ -546,7 +577,7 @@ class Hub:
             if name:
                 conn.name = name
                 if conn.kind != "web":
-                    self.db.upsert_device(conn.account_id, conn.device_id, name, conn.kind, conn.os, conn.version, json.dumps(conn.actions))
+                    self.db.upsert_device(conn.account_id, conn.device_id, name, conn.kind, conn.os, conn.version, json.dumps(conn.actions), key_hash=conn.key_hash)
                 await self.broadcast_devices(conn.account_id)
         elif kind == "forget":
             try:

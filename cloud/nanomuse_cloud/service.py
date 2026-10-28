@@ -2683,8 +2683,9 @@ class Cloud:
         for a member, with any_model_members on, any id shaped like one besides."""
         m = self.s.model(model_id)
         if m is not None and m.kind == kind:
-            if not self.model_visible(m):
-                raise CloudError(404, "model_not_offered", f"{model_id!r} is not on the menu")
+            # The operator's visibility switch only edits the menu: a model hidden from the
+            # list still answers a caller who names it, so hiding never breaks work under way.
+            # The tariff is different: a model closed by the plan is refused even by id.
             if not self.plan_allows(caller, m):
                 terms = self.plan_terms(caller.account_id) if caller is not None else {}
                 if m.kind == "video":

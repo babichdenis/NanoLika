@@ -16,6 +16,9 @@ from typing import Any
 
 import httpx
 
+from .deepseek_pricing import PRICE_URL as DEEPSEEK_PRICE_URL
+from .deepseek_pricing import catalog as deepseek_catalog
+
 log = logging.getLogger(__name__)
 FLASH_FAMILY = "deepseek/deepseek-v4.1-flash"
 ALIASES = {
@@ -42,7 +45,7 @@ ALIASES = {
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
 # Names with an implemented authenticated model-catalog and priced chat-route adapter.
 # This is deliberately narrower than the market-reference catalog in model_catalog.py.
-ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitunnel", "proxyapi"})
+ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitunnel", "proxyapi", "deepseek"})
 # AITUNNEL's model-list schema does not return supported_parameters, even when
 # the individual model page documents function calling. Keep this allowlist
 # explicit: support varies by model, so do not infer it for the whole provider.
@@ -153,12 +156,18 @@ class Offer:
     canonical_model: str = ""
     request_rub: float = 0.0
     output_modalities: tuple[str, ...] = ()
+    source_url: str = ""
+    source_currency: str = "RUB"
+    fx_rub_per_unit: float | None = None
+    valid_until: int = 0
 
     def rates(self, at: float | None = None) -> tuple[float, float, float | None]:
         now = datetime.fromtimestamp(time.time() if at is None else at, UTC)
         minute = now.hour * 100 + now.minute
         day = now.strftime("%A").lower()
         for rule in self.overrides:
+            if rule.get("utc_dates") and now.date().isoformat() not in rule["utc_dates"]:
+                continue
             if rule.get("utc_days") and day not in rule["utc_days"]:
                 continue
             start, end = int(rule.get("utc_start", 0)), int(rule.get("utc_end", 0))
@@ -292,6 +301,11 @@ class ProviderRouter:
                             dict(rule, input_rub=ri * factor, output_rub=ro * factor, cached_rub=rc * factor if rc is not None else None)
                         )
                 parameters = row.get("supported_parameters") or []
+            elif provider == "deepseek":
+                inp, out = number(price.get("input_rub")), number(price.get("output_rub"))
+                cache = number(price.get("cached_rub"))
+                overrides = price.get("overrides") or []
+                parameters = row.get("supported_parameters") or []
             elif provider == "aitunnel":
                 inp, out = number(row.get("prompt_cost")), number(row.get("completion_cost"))
                 discount = number(row.get("cache_discount"))
@@ -327,6 +341,10 @@ class ProviderRouter:
                     identity(canonical),
                     request_rub,
                     tuple(outputs),
+                    source_url=str(row.get("source_url") or ""),
+                    source_currency=str(row.get("source_currency") or ("USD" if provider == "openrouter" else "RUB")),
+                    fx_rub_per_unit=number(row.get("fx_rub_per_unit")) or (self.usd_rub if provider == "openrouter" else None),
+                    valid_until=int(row.get("valid_until") or 0),
                 )
             )
         return result
@@ -341,6 +359,8 @@ class ProviderRouter:
                     return
                 url = provider.base.rstrip("/") + "/v1/models"
                 headers = {"Authorization": "Bearer " + provider.key()}
+                if name == "deepseek":
+                    url = provider.base.rstrip("/") + "/models"
                 if name == "aitunnel":
                     url = "https://api.aitunnel.ru/public/aitunnel/models/chat"
                     headers = {}
@@ -351,6 +371,10 @@ class ProviderRouter:
                     response = await http.get(url, headers=headers, timeout=25)
                     response.raise_for_status()
                     data = proxy_catalog(response.text) if name == "proxyapi" else response.json()
+                    if name == "deepseek":
+                        price_response = await http.get(DEEPSEEK_PRICE_URL, timeout=25)
+                        price_response.raise_for_status()
+                        data = deepseek_catalog(price_response.text, data, time.time(), self.usd_rub)
                     if name == "proxyapi":
                         # A public price is eligible only when this key can see the model.
                         catalog = await http.get(
@@ -360,6 +384,7 @@ class ProviderRouter:
                         allowed = {row["id"] for row in catalog.json().get("data", [])}
                         data["data"] = [row for row in data["data"] if row["id"] in allowed]
                     offers = self.parse(name, data, time.time())
+                    offers = [replace(offer, source_url=offer.source_url or url) for offer in offers]
                     if not offers:
                         raise ValueError("no supported token quotes")
                     self.offers[name] = offers
@@ -488,9 +513,33 @@ class ProviderRouter:
             result["offers"] = [asdict(o) for rows in self.offers.values() for o in rows]
         return result
 
+    def _supplier_body(self, name: str, body: dict) -> dict:
+        payload = dict(body)
+        if name == "polza":
+            # polza берёт картинку только как `input_image` со строкой в image_url;
+            # стандартный `image_url` она отвергает с «нет провайдеров с поддержкой:
+            # input_image» — сообщение сбивает с толку, чиним формат на лету
+            payload["messages"] = [_polza_message(m) for m in (payload.get("messages") or [])]
+        if name == "deepseek":
+            thinking = payload.pop("enable_thinking", None)
+            if "thinking" not in payload and isinstance(thinking, bool):
+                payload["thinking"] = {"type": "enabled" if thinking else "disabled"}
+            if payload.get("reasoning_effort") == "none":
+                payload.pop("reasoning_effort")
+                payload.setdefault("thinking", {"type": "disabled"})
+        if name == "aitunnel":
+            # Catalog rates are not a pinned inference endpoint. Ask the aggregator
+            # to try the cheapest compatible endpoint instead of its default balancer.
+            policy: dict[str, Any] = {"sort": "price", "require_parameters": True}
+            if not self.allow_quantized:
+                # Preserve unknown precision (common for closed models); reject known 4-bit routes.
+                policy["quantizations"] = ["int8", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"]
+            payload["provider"] = policy
+        return payload
+
     def routes(self, spec: Any, body: dict, url: str, headers: dict, *, include_all: bool = False) -> list[Route]:
         clean_body = {k: v for k, v in body.items() if k not in {"provider", "models", "route"}}
-        configured = Route(spec.provider or "", url, headers, clean_body)
+        configured = Route(spec.provider or "", url, headers, self._supplier_body(spec.provider or "", clean_body))
         if not self.enabled:
             return [configured]
         prompt = estimate_prompt(body)
@@ -534,6 +583,8 @@ class ProviderRouter:
                 exclusions = list(provider_reasons)
                 if now - offer.updated > self.max_age:
                     exclusions.append("котировка устарела")
+                if offer.valid_until and now >= offer.valid_until:
+                    exclusions.append("истёк срок действия тарифа")
                 if self.quarantined.get((name, offer.model.lower()), 0) > now:
                     exclusions.append("временно отключена после расхождения цены")
                 if not self.allow_quantized and any(q in offer.endpoint.lower() for q in ("fp4", "int4", "q4")):
@@ -548,7 +599,7 @@ class ProviderRouter:
                     exclusions.append("запрошенный ответ превышает лимит модели")
                 if exclusions and not include_all:
                     continue
-                payload = dict(clean_body, model=offer.model)
+                payload = self._supplier_body(name, dict(clean_body, model=offer.model))
                 if "max_tokens" in payload and "max_tokens" not in offer.parameters and "max_completion_tokens" in offer.parameters:
                     payload["max_completion_tokens"] = payload.pop("max_tokens")
                 if (
@@ -607,6 +658,7 @@ class ProviderRouter:
         blocked = self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300
         if (
             (not has_quote or self.allow_unpriced)
+            and (configured.provider != "deepseek" or self.allow_unpriced)
             and not blocked
             and not any(r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
         ):
@@ -619,6 +671,10 @@ class ProviderRouter:
             provider=route.provider or "configured_upstream",
             routed_model=route.body["model"],
             routing_price_updated=route.offer.updated if route.offer else None,
+            price_quote=(dict(asdict(route.offer), token_rate_unit="RUB per 1M tokens",
+                              request_rate_unit="RUB per request", provider_options=route.body.get("provider"),
+                              usd_funding_fee_pct=self.usd_fee if route.provider == "openrouter" else 0)
+                         if route.offer else None),
         )
         actual = number(meta.get("provider_cost_rub"))
         if actual is not None:
@@ -703,6 +759,26 @@ class ProviderRouter:
             response.raise_for_status()
         except (httpx.HTTPError, ValueError):
             log.exception("provider price alert could not be delivered to Telegram")
+
+
+def _polza_message(message: Any) -> Any:
+    """Картинки в сообщении — в формате, который понимает polza."""
+    if not isinstance(message, dict):
+        return message
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+    parts = []
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "image_url":
+            url = part.get("image_url")
+            if isinstance(url, dict):
+                url = url.get("url")
+            if url:
+                parts.append({"type": "input_image", "image_url": url})
+                continue
+        parts.append(part)
+    return {**message, "content": parts}
 
 
 def retryable(response: httpx.Response) -> bool:

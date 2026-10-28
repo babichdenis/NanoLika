@@ -286,7 +286,9 @@ def test_provider_ids_and_parameters_are_adapted(monkeypatch):
     result = routes(r, max_tokens=10, provider={"order": ["expensive"]}, models=["other"])[0]
     assert result.body["model"] == "deepseek-v4.1-flash"
     assert result.body["max_completion_tokens"] == 10
-    assert "max_tokens" not in result.body and "provider" not in result.body and "models" not in result.body
+    assert "max_tokens" not in result.body and "models" not in result.body
+    assert result.body["provider"]["sort"] == "price"
+    assert "order" not in result.body["provider"]  # caller's route choice was stripped
 
 
 def test_aitunnel_flash_tool_support_is_restored_from_model_documentation(monkeypatch):
@@ -759,3 +761,43 @@ def test_provider_below_operating_balance_floor_is_skipped(monkeypatch, provider
     }
 
     assert routes(r)[0].provider == fallback
+
+
+def test_aitunnel_selects_cheapest_compatible_internal_provider(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {"aitunnel": [quote("aitunnel", 10, 32)]}
+    original = {"model": "deepseek-flash", "provider": {"sort": "latency"}, "messages": [{"role": "user", "content": "hi"}]}
+    spec = ModelSpec("flash", "Flash", "deepseek-flash")
+    selected = r.routes(spec, original, "https://own.example/chat/completions", {})[0]
+    assert selected.body["provider"] == {
+        "sort": "price", "require_parameters": True,
+        "quantizations": ["int8", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"],
+    }
+    assert original["provider"] == {"sort": "latency"}
+
+
+def test_aitunnel_quantized_opt_in_keeps_price_and_parameter_policy(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.allow_quantized = True
+    r.offers = {"aitunnel": [quote("aitunnel", 10, 32)]}
+    assert routes(r)[0].body["provider"] == {"sort": "price", "require_parameters": True}
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_aitunnel_configured_fallback_also_sets_internal_provider_policy(monkeypatch, enabled):
+    r = setup_router(monkeypatch)
+    r.enabled = enabled
+    spec = ModelSpec("flash", "Flash", "deepseek-flash", provider="aitunnel")
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}]}
+    selected = r.routes(spec, body, "https://aitunnel.example/v1/chat/completions", {})[0]
+    assert selected.body["provider"]["sort"] == "price"
+    assert selected.body["provider"]["require_parameters"] is True
+    assert "fp4" not in selected.body["provider"]["quantizations"]
+
+
+def test_aitunnel_policy_does_not_leak_to_other_suppliers(monkeypatch):
+    r = setup_router(monkeypatch)
+    r.offers = {"polza": [quote("polza", 1, 1)], "openrouter": [quote("openrouter", 2, 2)]}
+    selected = routes(r)
+    assert "provider" not in selected[0].body
+    assert selected[1].body["provider"] == {"sort": "price", "require_parameters": True}

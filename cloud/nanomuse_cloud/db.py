@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS devices (
     os            TEXT NOT NULL DEFAULT '',
     version       TEXT NOT NULL DEFAULT '',
     actions       TEXT NOT NULL DEFAULT '[]',
+    key_hash      TEXT NOT NULL DEFAULT '', -- session used by this device, never returned to clients
     first_seen    INTEGER NOT NULL,
     last_seen     INTEGER NOT NULL,
     PRIMARY KEY (account_id, id)
@@ -517,6 +518,7 @@ class Database:
         if "contribute" not in cols("accounts"):
             self._conn.execute("ALTER TABLE accounts ADD COLUMN contribute INTEGER NOT NULL DEFAULT 0")
         # 0.5: one lifetime pool instead of a daily cap; the co-creation bonus, once
+        add("devices", "key_hash", "TEXT NOT NULL DEFAULT ''")
         add("accounts", "grant_uy", "INTEGER NOT NULL DEFAULT 0")
         add("accounts", "paid_balance_uy", "INTEGER NOT NULL DEFAULT 0")
         # 0.26: what the person put in themselves, in micro-yuan, added up across top-ups;
@@ -2473,18 +2475,19 @@ class Database:
 
     # -- devices (the hub) ---------------------------------------------------------
 
-    def upsert_device(self, account_id: str, device_id: str, name: str, kind: str, os: str, version: str, actions: str) -> None:
+    def upsert_device(self, account_id: str, device_id: str, name: str, kind: str, os: str, version: str, actions: str, key_hash: str = "") -> None:
         t = now()
         ip = _client.current().ip
         with self.tx() as c:
             c.execute(
-                """INSERT INTO devices(account_id, id, name, kind, os, version, actions, first_seen, last_seen, ip)
-                   VALUES(?,?,?,?,?,?,?,?,?,?)
+                """INSERT INTO devices(account_id, id, name, kind, os, version, actions, first_seen, last_seen, ip, key_hash)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(account_id, id) DO UPDATE SET
                      name=excluded.name, kind=excluded.kind, os=excluded.os, version=excluded.version,
                      actions=excluded.actions, last_seen=excluded.last_seen,
+                     key_hash=CASE WHEN excluded.key_hash<>'' THEN excluded.key_hash ELSE devices.key_hash END,
                      ip=CASE WHEN excluded.ip<>'' THEN excluded.ip ELSE devices.ip END""",
-                (account_id, device_id, name, kind, os, version, actions, t, t, ip),
+                (account_id, device_id, name, kind, os, version, actions, t, t, ip, key_hash),
             )
 
     def touch_device(self, account_id: str, device_id: str) -> None:

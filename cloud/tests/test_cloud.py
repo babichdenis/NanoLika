@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from nanomuse_cloud.api import create_app
-from nanomuse_cloud.config import Settings
+from nanomuse_cloud.config import ProviderSpec, Settings
 from nanomuse_cloud.db import Database
 from nanomuse_cloud.identifiers import BadIdentifier, parse
 from nanomuse_cloud.senders import LogSender
@@ -213,6 +213,24 @@ def fake_upstream() -> FastAPI:
     async def uploads(request: Request):
         up.state.requests.append(("uploads", dict(request.headers), dict(request.query_params)))
         return {"data": {"upload_dir": "tmp/x", "upload_host": "http://oss", "policy": "p", "signature": "s", "oss_access_key_id": "k"}}
+
+    @up.post("/v1/storage/upload")
+    async def polza_storage_upload(request: Request):
+        form = await request.form()
+        up.state.requests.append(("polza_upload", dict(request.headers), {"model_fields": dict(form)}))
+        return {"url": "https://s3.polza.ai/first-frame.png"}
+
+    @up.post("/v1/media")
+    async def polza_media(request: Request):
+        body = await request.json()
+        up.state.requests.append(("polza_video", dict(request.headers), body))
+        return {"id": "polza-task-1", "status": "pending"}
+
+    @up.post("/v1/videos")
+    async def aitunnel_video(request: Request):
+        body = await request.json()
+        up.state.requests.append(("aitunnel_video", dict(request.headers), body))
+        return {"id": "aitunnel-task-1", "status": "pending"}
 
     return up
 
@@ -901,6 +919,137 @@ async def test_video_is_relayed_under_dashscope_paths(stack):
         json={"model": "wan2.2-i2v-flash", "input": {"prompt": "x"}, "parameters": {}},
     )
     assert r.status_code == 402
+
+
+async def test_polza_video_upload_uses_polza_key_and_first_frame_format(monkeypatch):
+    monkeypatch.setenv("POLZA_TEST_KEY", "sk-polza-test")
+    up = fake_upstream()
+    settings = Settings(
+        database=":memory:", secret="test-secret", admin_token="admin",
+        upstream_base="http://upstream/compat/v1", upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1", public_base="http://cloud.test",
+        providers={"polza": ProviderSpec(base="http://api.polza.test", key_env="POLZA_TEST_KEY")},
+        models=tuple(
+            dataclasses.replace(spec, provider="polza", upstream="seedance-2-mini")
+            if spec.id == "wan2.2-i2v-flash" else spec
+            for spec in Settings().models
+        ),
+    )
+    sender = LogSender()
+    cloud = Cloud(settings, Database(":memory:"), sender)
+    app = create_app(settings, cloud, upstream_transport=httpx.ASGITransport(app=up))
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://cloud.test")
+    try:
+        data = await sign_up(client, sender)
+        headers = {"Authorization": f"Bearer {data['api_key']}"}
+        await client.post(
+            "/v1/admin/grant", headers={"X-Admin-Token": "admin"},
+            json={"identifier": "13800138000", "tokens": 2_000_000},
+        )
+        model = "wan2.2-i2v-flash"
+        r = await client.get("/api/v1/uploads", params={"action": "getPolicy", "model": model}, headers=headers)
+        assert r.status_code == 200 and r.json()["data"]["upload_mode"] == "relay_storage"
+
+        r = await client.post(
+            "/api/v1/uploads", headers=headers, data={"model": model},
+            files={"file": ("first-frame.png", PNG_1PX, "image/png")},
+        )
+        assert r.status_code == 200 and r.json()["data"]["url"] == "https://s3.polza.ai/first-frame.png"
+        kind, upload_headers, _ = next(row for row in up.state.requests if row[0] == "polza_upload")
+        assert upload_headers["authorization"] == "Bearer sk-polza-test"
+
+        r = await client.post(
+            "/api/v1/services/aigc/video-generation/video-synthesis", headers=headers,
+            json={"model": model, "input": {"prompt": "a calm avatar", "img_url": r.json()["data"]["url"]}},
+        )
+        assert r.status_code == 200 and r.json()["output"]["task_id"] == "polza-task-1"
+        _, video_headers, video_body = next(row for row in up.state.requests if row[0] == "polza_video")
+        assert video_headers["authorization"] == "Bearer sk-polza-test"
+        assert video_body["model"] == "seedance-2-mini"
+        assert video_body["input"]["images"] == [{"type": "url", "data": "https://s3.polza.ai/first-frame.png"}]
+        assert "img_url" not in video_body["input"]
+    finally:
+        await client.aclose()
+
+
+async def test_aitunnel_video_uses_native_duration_resolution_and_first_frame(monkeypatch, tmp_path):
+    monkeypatch.setenv("AITUNNEL_TEST_KEY", "sk-aitunnel-test")
+    monkeypatch.setenv("POLZA_TEST_KEY", "sk-polza-test")
+    from nanomuse_cloud import catalog_routes
+
+    catalog_path = tmp_path / "aitunnel-video-catalog-test.json"
+    catalog_path.write_text(json.dumps({
+        "menu": {"wan2.2-i2v-flash": "wan-avatar"},
+        "models": {"wan-avatar": {"candidates": [
+            {"provider": "polza", "model": "seedance-2-mini"},
+            {"provider": "aitunnel", "model": "seedance-2.0-mini"},
+        ]}},
+    }), encoding="utf-8")
+    monkeypatch.setattr(catalog_routes, "PATH", catalog_path)
+    monkeypatch.setattr(catalog_routes, "_cache", {"mtime": None, "data": {}})
+    up = fake_upstream()
+    settings = Settings(
+        database=":memory:", secret="test-secret", admin_token="admin",
+        upstream_base="http://upstream/compat/v1", upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1", public_base="http://cloud.test",
+        providers={
+            "aitunnel": ProviderSpec(base="http://upstream", key_env="AITUNNEL_TEST_KEY"),
+            "polza": ProviderSpec(base="http://api.polza.test", key_env="POLZA_TEST_KEY"),
+        },
+        models=tuple(
+            dataclasses.replace(spec, provider="aitunnel", upstream="seedance-2.0-mini")
+            if spec.id == "wan2.2-i2v-flash" else spec
+            for spec in Settings().models
+        ),
+    )
+    sender = LogSender()
+    cloud = Cloud(settings, Database(":memory:"), sender)
+    app = create_app(settings, cloud, upstream_transport=httpx.ASGITransport(app=up))
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://cloud.test")
+    try:
+        data = await sign_up(client, sender)
+        headers = {"Authorization": f"Bearer {data['api_key']}"}
+        await client.post(
+            "/v1/admin/grant", headers={"X-Admin-Token": "admin"},
+            json={"identifier": "13800138000", "tokens": 2_000_000},
+        )
+        policy = await client.get(
+            "/api/v1/uploads", params={"action": "getPolicy", "model": "wan2.2-i2v-flash"}, headers=headers,
+        )
+        assert policy.status_code == 200
+        assert policy.json()["data"]["upload_mode"] == "relay_storage"
+        uploaded = await client.post(
+            "/api/v1/uploads", headers=headers, data={"model": "wan2.2-i2v-flash"},
+            files={"file": ("first-frame.png", PNG_1PX, "image/png")},
+        )
+        assert uploaded.status_code == 200, uploaded.text
+        frame_url = uploaded.json()["data"]["url"]
+        response = await client.post(
+            "/api/v1/services/aigc/video-generation/video-synthesis", headers=headers,
+            json={
+                "model": "wan2.2-i2v-flash",
+                "input": {"prompt": "a calm avatar", "img_url": frame_url},
+                "parameters": {"duration": 5, "resolution": "720P"},
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["output"]["task_id"] == "aitunnel-task-1"
+        _, headers_sent, payload = next(row for row in up.state.requests if row[0] == "aitunnel_video")
+        assert headers_sent["authorization"] == "Bearer sk-aitunnel-test"
+        assert payload == {
+            "model": "seedance-2.0-mini",
+            "prompt": "a calm avatar",
+            "duration": 5,
+            "resolution": "720p",
+            "frame_images": [{
+                "type": "image_url",
+                "image_url": {"url": "https://s3.polza.ai/first-frame.png"},
+                "frame_type": "first_frame",
+            }],
+        }
+        assert frame_url == "https://s3.polza.ai/first-frame.png"
+    finally:
+        await client.aclose()
 
 
 async def test_unlimited_relay_meters_but_never_refuses():

@@ -33,6 +33,8 @@ services:
       - ./dl:/srv/dl:ro
       # the store: skills, code capsules, MCP descriptions (docs/store.md)
       - ./store:/srv/store:ro
+      # база моделей: статические страницы из проекта modelscope
+      - ./models:/srv/models:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

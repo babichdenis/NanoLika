@@ -56,7 +56,7 @@ class ChatCatalog:
             (account,),
         ).fetchall()
         feeds = [row for row in rows if self._is_feed_title(str(row["title"] or ""))]
-        if not feeds:
+        if not feeds or (len(feeds) == 1 and str(feeds[0]["title"]) == "Лента"):
             return
         canonical = next((row for row in feeds if str(row["title"]).strip().casefold() == "лента" and not bool(row["archived"])), None) or next((row for row in feeds if not bool(row["archived"])), None) or next((row for row in feeds if str(row["title"]).strip().casefold() == "лента"), feeds[0])
         canonical_cid = str(canonical["cid"])

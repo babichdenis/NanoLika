@@ -47,11 +47,14 @@ Two kinds of request travel over the hub:
   phone's ShellGuard, the desktop's `guard.py`): reads and builds go quietly,
   deleting / sending / paying / system commands wait for the approval card on
   the device that asked.
-- **Tasks.** `task {text, conversation?, language?}`: a whole job in words for the target device's own
+- **Tasks.** `task {text, conversation?, language?, sync_cid?}`: a whole job in words for the target device's own
   Muse, in a conversation of its own (`conversation` names it; the sender's id
   when absent). `language` (runtime 1.0.0, optional) is the BCP-47 tag of the
   asking device's screens; the target answers in it instead of guessing from
-  the text. It may take minutes. When that Muse hits
+  the text. `sync_cid` (optional) names the account conversation
+  whose retained transcript the target should load before answering a task
+  forwarded from a linked chat; the task's current text is then added once to
+  that context. It may take minutes. When that Muse hits
   something that needs approval, it does not decide alone: the question travels
   back as an `event {stage:"approval"}` and the asking device shows its usual
   card (RiskGate on the phone, the terminal prompt on the desktop, a card in the
@@ -332,6 +335,8 @@ recognise is visible, and *Forget* removes it once it is offline.
 
 A phone's ordinary chat runs on the phone with its configured model provider. Closing the desktop app removes that computer from the available devices, but does not move or stop the phone's own agent. A task delegated to that computer needs its app and runtime to be running. A web console connected to a runtime on a computer also needs that runtime. Check the phone's Models page separately from Devices: a model served on a computer's localhost or LAN address is unavailable when that computer stops.
 
+The Cloud web console's `chat.send` and `chat.upload` use the same runtime thread as the desktop and linked messengers. Before a turn, the runtime refreshes the model context from that thread's retained Cloud transcript; when a messenger forwards a turn to another device, the task carries `sync_cid` so the target loads that same transcript too.
+
 On replacement of a device's socket, the relay publishes the new connection before awaiting closure of the old one. A late detach of the old connection cannot remove the replacement or its account's presence entry. Calls that were in flight on the replaced socket fail explicitly rather than waiting for their deadline.
 
 The desktop retries if the WebSocket handshake or relay welcome does not finish within 20 seconds, as well as when an established connection stops answering pings. Android ignores messages, closes and failures from a socket that has already been replaced. These rules do not make a suspended phone run in the background: Android's background restrictions and iOS's foreground limits still apply.
@@ -343,6 +348,90 @@ MAX approval delivery accepts the channel manager language argument. A blocked a
 ## Optional messenger permission operation
 
 New desktop runtimes accept `channel_permissions {conversation, channel, mode}` from an authenticated paired account peer after the remote-control permission check. `channel` is `telegram` or `max`, `conversation` must use the corresponding `channel-<channel>-` namespace, and `mode` is `read-only`, `workspace-write` or `full-access`. The reply contains `{mode, conversation}` only after the session preset service accepts it. Sessions are resolved by both peer and conversation. Unsupported presets and older clients fail explicitly. Older clients can still process ordinary tasks with their existing app settings when no messenger preset is selected. See [Messenger menu](messenger-menu.md).
+
+
+## Disconnect a computer from the account
+
+The account cabinet uses `DELETE /v1/link/devices/{device_id}`. This requires the
+account session, revokes the target computer's recorded sign-in, closes its hub
+connection and removes its device record. The browser session remains valid.
+An unowned device returns 404. A shared sign-in, including the caller's own
+session, returns 409 instead of signing out another device. A legacy offline
+device with no recorded sign-in also returns 409; opening its app once records
+the binding. Credential hashes stay inside the relay and are never returned
+by the devices API. `DELETE /v1/devices/{id}` retains its older, separate meaning
+of forgetting an offline device.
+
+
+## Telegram Mini App sign-in
+
+`POST /v1/auth/telegram-webapp` accepts `{init_data}` from the Cloud origin only.
+It verifies the URL-decoded Telegram Mini App HMAC with `TELEGRAM_BOT_TOKEN`,
+rejects duplicate fields, launch data older than five minutes and timestamps
+more than thirty seconds in the future, then resolves the existing Telegram
+identity to its account. It never registers or merges accounts. An unlinked
+Telegram returns 409; a disabled account returns 403. Lookup and key issuance
+share the database lock with unlinking. The returned browser session expires
+in thirty days; normal sign-out/revocation also applies.
+
+`/web/telegram.html` consumes the launch data from the URL fragment, clears
+the fragment, creates the session on the same origin and opens `/web/`. The
+legacy marketing `/webapp/` forwards Telegram launches there using a fragment,
+so launch credentials never enter a query string or access log. The chat
+allows framing by Telegram Web (`web.telegram.org` and its subdomains); only
+the entry page permits the official Telegram SDK script. Invalid launch data
+does not reuse a previously saved browser account as proof of Telegram login.
+
+
+## AI Tunnel internal provider selection
+
+AI Tunnel is an aggregator: a model catalog quote does not pin one inference
+endpoint or guarantee its price. Chat routes now send `provider.sort=price`
+and `provider.require_parameters=true` on both priced routes and configured
+fallbacks (also when auto-routing is disabled). When strong quantization is
+not allowed, the nested provider filter allows int8/fp6/fp8/fp16/bf16/fp32/unknown only.
+This selects the cheapest compatible allowed endpoint first; it is not a
+hard monetary ceiling or endpoint pin. To guarantee a particular endpoint,
+verified endpoint quotes and explicit `provider.only` with
+`allow_fallbacks=false` are required. Caller-supplied routing directives
+cannot override relay policy.
+
+Supplier documentation: https://aitunnel.ru/docs/provider . Catalog prices,
+request estimates and supplier-reported final costs must remain distinguishable.
+
+
+## Direct DeepSeek and historical request quotes
+
+The priced router joins DeepSeek's authenticated `/models` capabilities with
+https://api-docs.deepseek.com/quick_start/pricing/ . It parses separate USD/M
+cache-hit, cache-miss and output rates for both peak and off-peak periods,
+converts them with the configured stable USD/RUB basis, and uses live model
+IDs (`deepseek-flash`, `deepseek-v4-pro`). No OpenRouter-specific funding fee
+is added to DeepSeek quotes. Generic `enable_thinking` is translated to
+DeepSeek's `thinking.type`; `reasoning_effort=none` becomes disabled thinking.
+
+Peak windows are Mon-Fri 01:00–04:00 and 06:00–10:00 UTC, except Chinese
+public holidays. The built-in calendar is verified for 2026 using the State
+Council notice https://www.gov.cn/zhengce/content/202511/content_7047090.htm .
+To extend it, configure `CLOUD_DEEPSEEK_HOLIDAYS_FILE` with a JSON mapping
+of year strings to verified ISO date lists. Unverified years or changed price
+schemas do not produce new quotes; calendar-bound cached quotes expire on
+January 1. An unpriced direct DeepSeek fallback requires explicit operator
+opt-in (`CLOUD_ROUTING_ALLOW_UNPRICED_FALLBACK=1`); it is off by default.
+
+`provider-routing.json` retains the latest working catalog, not a full archive.
+Each completed chat ledger row additionally stores
+`extra.model_accounting.price_quote`: the exact selected RUB/M input/output/cache
+rates, fixed request price, source URL, source currency, FX basis, quote check
+time, limits and routing options. It remains attached to that request when the
+catalog updates. Supplier-reported cost and token-based `catalog_estimate` stay
+distinct. These snapshots contain no request text or API credentials. Snapshots
+start with this change; historical tariffs cannot be reconstructed retroactively
+when the older row did not contain them.
+
+An empty provider chain is refused before opening a stream with HTTP 503 and
+`provider_routes_unavailable`; its budget reservation is released. It is not
+reported as a provider that stopped answering midway through a response.
 
 
 ### Shared conversation continuation from messengers

@@ -1,10 +1,11 @@
 /* Optional account-bound connection guides. QR generation stays in this browser. */
 import qrcode from './vendor/qrcode.js';
 const COPY={
- ru:{connect:'Подключить',close:'Закрыть',account:'Вы вошли как',intro:'Отсканируйте QR-код камерой телефона или нажмите кнопку ниже. В открывшемся боте нажмите «Начать», если мессенджер попросит. Вводить код не нужно.',expires:'Ссылка действует 10 минут и подходит для одного подключения. Не передавайте QR-код другим людям.',open:'Открыть',check:'Проверить подключение',refresh:'Обновить QR-код',loading:'Готовим ссылку подключения…',expired:'Срок ссылки истёк. Обновите QR-код.',connected:'Подключено. Можно общаться с Ликой в боте.',pending:'Ждём подключения. Откройте бота по QR-коду или кнопке и подтвердите запуск.',error:'Не удалось проверить подключение. Попробуйте ещё раз.',desktop:'компьютер',download:'Скачать приложение',desktopHelp:'Установите Лику и войдите в приложении под той же почтой, что указана здесь. Приложение появится в вашем аккаунте автоматически.',desktopNote:'Для работы с файлами и программами оставьте приложение открытым. Если хотите общаться только в браузере, устанавливать ничего не нужно.',desktopConnected:'Компьютер подключён к вашему аккаунту.',desktopPending:'Приложение пока не на связи. Откройте его и проверьте почту, под которой вошли.',many:'Выберите компьютер.',choose:'Открыть на выбранном компьютере'},
- en:{connect:'Connect',close:'Close',account:'Signed in as',intro:'Scan the QR code with your phone camera or use the button below. If the messenger asks, press Start in the bot. No code entry is needed.',expires:'This one-use link is valid for 10 minutes. Do not share the QR code with anyone else.',open:'Open',check:'Check connection',refresh:'Refresh QR code',loading:'Preparing your connection link…',expired:'This link has expired. Refresh the QR code.',connected:'Connected. You can talk to Lika in the bot.',pending:'Waiting for connection. Open the bot using the QR code or button and confirm Start.',error:'Could not check the connection. Try again.',desktop:'computer',download:'Download the app',desktopHelp:'Install Lika and sign in with the same email shown here. The app will appear in your account automatically.',desktopNote:'Keep the app open for working with files and programs. Nothing needs installing if you only want to use the browser.',desktopConnected:'The computer is connected to your account.',desktopPending:'The app is not online yet. Open it and check the sign-in email.',many:'Choose a computer.',choose:'Open on this computer'}
+ ru:{connect:'Подключить',close:'Закрыть',account:'Вы вошли как',intro:'Отсканируйте QR-код камерой телефона или нажмите кнопку ниже. В открывшемся боте нажмите «Начать», если мессенджер попросит. Вводить код не нужно.',expires:'Ссылка действует 10 минут и подходит для одного подключения. Не передавайте QR-код другим людям.',open:'Открыть',check:'Проверить подключение',refresh:'Обновить QR-код',loading:'Готовим ссылку подключения…',expired:'Срок ссылки истёк. Обновите QR-код.',connected:'Подключено. Можно общаться с Ликой в боте.',pending:'Ждём подключения. Откройте бота по QR-коду или кнопке и подтвердите запуск.',error:'Не удалось проверить подключение. Попробуйте ещё раз.',desktop:'компьютер',download:'Скачать приложение',desktopHelp:'Установите Лику и войдите в приложении под той же почтой, что указана здесь. Приложение появится в вашем аккаунте автоматически.',desktopNote:'Для работы с файлами и программами оставьте приложение открытым. Если хотите общаться только в браузере, устанавливать ничего не нужно.',desktopConnected:'Компьютер подключён к вашему аккаунту.',desktopPending:'Приложение пока не на связи. Откройте его и проверьте почту, под которой вошли.',many:'Выберите компьютер.',choose:'Открыть на выбранном компьютере',unlink:'Отвязать',unlinkConfirm:'Отвязать {name} от аккаунта? Чат останется, но перестанет быть этим аккаунтом: своя касса, своя история. Аккаунт в приложении не изменится.',unlinked:'{name} отвязан от аккаунта.',unlinkIsAccount:'Этот чат и есть аккаунт: с него аккаунт начался. Отвязать его нельзя, не удалив аккаунт.',unlinkError:'Не удалось отвязать чат. Попробуйте ещё раз.'},
+ en:{connect:'Connect',close:'Close',account:'Signed in as',intro:'Scan the QR code with your phone camera or use the button below. If the messenger asks, press Start in the bot. No code entry is needed.',expires:'This one-use link is valid for 10 minutes. Do not share the QR code with anyone else.',open:'Open',check:'Check connection',refresh:'Refresh QR code',loading:'Preparing your connection link…',expired:'This link has expired. Refresh the QR code.',connected:'Connected. You can talk to Lika in the bot.',pending:'Waiting for connection. Open the bot using the QR code or button and confirm Start.',error:'Could not check the connection. Try again.',desktop:'computer',download:'Download the app',desktopHelp:'Install Lika and sign in with the same email shown here. The app will appear in your account automatically.',desktopNote:'Keep the app open for working with files and programs. Nothing needs installing if you only want to use the browser.',desktopConnected:'The computer is connected to your account.',desktopPending:'The app is not online yet. Open it and check the sign-in email.',many:'Choose a computer.',choose:'Open on this computer',unlink:'Unlink',unlinkConfirm:'Unlink {name} from the account? The chat stays, but stops being this account: its own allowance, its own history. The account in the app is unchanged.',unlinked:'{name} unlinked from the account.',unlinkIsAccount:'This chat is the account itself: the account began there. It cannot be unlinked without deleting the account.',unlinkError:'Could not unlink the chat. Try again.'}
 };
 export const BOT_LINKS=Object.freeze({telegram:'https://t.me/nanolika_bot',max:'https://max.ru/id420517592685_bot'});
+export const isDesktopDevice=d=>d&&d.kind!=='web'&&d.name!=='nanoLika Cloud'&&(['computer','desktop'].includes(d.kind)||(d.actions||[]).includes('chat.open_desktop'));
 export const isChannelLinked=(rows,channel)=>Array.isArray(rows)&&rows.some(row=>row.channel===channel);
 export function validateStartLink(data,channel){
  const expected=new URL(BOT_LINKS[channel]);const url=new URL(data?.url||'');
@@ -20,54 +21,50 @@ export function qrSvg(url,label){
  const path=document.createElementNS(ns,'path');let d='';for(let row=0;row<size;row++)for(let col=0;col<size;col++)if(qr.isDark(row,col))d+=`M${col+4} ${row+4}h1v1h-1z`;
  path.setAttribute('d',d);path.setAttribute('fill','#253020');path.setAttribute('shape-rendering','crispEdges');svg.append(path);return svg;
 }
+Object.assign(COPY.ru,{connectedHeading:'подключён',messengerHeading:'подключён',disconnect:'Разорвать связь',checking:'Проверяем подключение…',disconnecting:'Разрываем связь…',disconnected:'Связь разорвана.',label:'Название',identifier:'Идентификатор чата',linkedAt:'Подключён',deviceId:'Идентификатор устройства',system:'Система',version:'Версия приложения',network:'Соединение',online:'В сети',offline:'Не в сети',seen:'Последнее соединение',first:'Первое подключение',ip:'Сетевой адрес',disconnectConfirm:'Разорвать связь {name} с аккаунтом? Для повторного подключения понадобится снова войти в приложении.',channelConfirm:'Разорвать связь {name} с аккаунтом? Бот перестанет использовать этот аккаунт. Аккаунт в приложении и его данные сохранятся.',shared:'Этот вход используется ещё одним устройством. Выйдите из аккаунта в приложении на компьютере, чтобы не отключить остальные устройства.',unknownSession:'Для старого подключения не сохранён отдельный вход. Откройте приложение на компьютере один раз, затем повторите отключение.',failed:'Не удалось разорвать связь. Попробуйте ещё раз.',retry:'Повторить проверку'});
+Object.assign(COPY.en,{connectedHeading:'connected',messengerHeading:'connected',disconnect:'Disconnect',checking:'Checking connection…',disconnecting:'Disconnecting…',disconnected:'Disconnected.',label:'Name',identifier:'Chat identifier',linkedAt:'Connected',deviceId:'Device identifier',system:'System',version:'App version',network:'Connection',online:'Online',offline:'Offline',seen:'Last connection',first:'First connection',ip:'Network address',disconnectConfirm:'Disconnect {name} from your account? Sign in again in the app to reconnect.',channelConfirm:'Disconnect {name} from your account? The bot will stop using this account. Your app account and its data will remain.',shared:'This sign-in is shared with another device. Sign out in the computer app to keep other devices signed in.',unknownSession:'The sign-in for this older connection is not recorded. Open the computer app once, then retry disconnecting.',failed:'Could not disconnect. Try again.',retry:'Retry'});
 export class ChannelOnboarding{
- constructor({session,api,language,retry}){Object.assign(this,{session,api,language,retry});const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href=new URL('./channel-onboarding.css?v=20261026-qr',import.meta.url);document.head.append(sheet);}
- show(channel,{linked=false,targets=[]}={}){
+ constructor({session,api,language,retry}){Object.assign(this,{session,api,language,retry});const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href=new URL('./channel-onboarding.css?v=20261027-state',import.meta.url);document.head.append(sheet);}
+ show(channel){
   if(!['telegram','max','desktop'].includes(channel))return;
-  this.dialog?.close();this.dialog?.remove();const initial=this.session();if(!initial?.key||!initial.owner)return;const identity={...initial};
-  const valid=()=>this.session()?.key===identity.key&&this.session()?.owner===identity.owner;
-  const words=COPY[this.language()]||COPY.en,name=channel==='desktop'?words.desktop:channel==='telegram'?'Telegram':'MAX';
-  const el=(tag,value,cls)=>{const e=document.createElement(tag);if(value)e.textContent=value;if(cls)e.className=cls;return e;};
-  const dialog=el('dialog','','channel-guide');this.dialog=dialog;dialog.setAttribute('aria-labelledby','channel-guide-title');
-  const title=el('h2',words.connect+' '+name);title.id='channel-guide-title';
+  this.dialog?.close();this.dialog?.remove();const identity={...this.session()};if(!identity.key||!identity.owner)return;
+  const words=COPY[this.language()]||COPY.en,ru=this.language()==='ru',name=channel==='desktop'?(ru?'Компьютер':'Computer'):channel==='telegram'?'Telegram':'MAX';
+  const el=(tag,value,cls)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;if(cls)n.className=cls;return n;};
+  const dialog=el('dialog',undefined,'channel-guide');this.dialog=dialog;dialog.setAttribute('aria-labelledby','channel-guide-title');
   const close=el('button','×','channel-guide-close');close.type='button';close.setAttribute('aria-label',words.close);close.onclick=()=>dialog.close();
-  const address=el('p',words.account,'channel-guide-identity');address.append(el('strong',identity.email||identity.hint||'nanoLika'));
-  const status=el('p','','channel-guide-status');status.setAttribute('role','status');const actions=el('div','','channel-guide-actions');
+  const title=el('h2',words.checking);title.id='channel-guide-title';const address=el('p',words.account,'channel-guide-identity');address.append(el('strong',identity.email||identity.hint||'nanoLika'));
+  const content=el('div',undefined,'channel-guide-content'),actions=el('div',undefined,'channel-guide-actions'),status=el('p',words.checking,'channel-guide-status');status.setAttribute('role','status');dialog.append(close,title,address,content,actions,status);
+  let timer=null,generation=0,deadline=0,checking=false;const valid=()=>this.session()?.key===identity.key&&this.session()?.owner===identity.owner;const alive=()=>valid()&&dialog.open;
+  const stop=()=>{clearInterval(timer);timer=null;};
   const button=(label,action)=>{const b=el('button',label);b.type='button';b.onclick=action;return b;};
   const link=(label,href)=>{const a=el('a',label);a.href=href;a.target='_blank';a.rel='noopener noreferrer';return a;};
-  dialog.append(close,title,address);
-  let timer=null,deadline=0,checking=false,complete=linked;
-  const alive=()=>valid()&&dialog.open;
-  const qrBox=el('div','','channel-guide-qr');let botLink=null,refresh=null;
-  const stop=()=>{clearInterval(timer);timer=null;};
-  const checkConnection=async(manual=false)=>{
-   if(!alive()){stop();if(dialog.open)dialog.close();return;}if(checking||complete)return;
-   if(channel!=='desktop'&&deadline&&Date.now()>=deadline){stop();qrBox.hidden=true;botLink.hidden=true;refresh.hidden=false;status.textContent=words.expired;return;}
-   checking=true;
-   try{
-    const data=await this.api(channel==='desktop'?'/v1/devices':'/v1/link/channels');if(!alive())return;
-    const ready=channel==='desktop'?(data.devices||[]).some(d=>d.online&&d.kind!=='web'&&(d.actions||[]).includes('chat.open_desktop')):isChannelLinked(data,channel);
-    if(!ready){if(manual)status.textContent=channel==='desktop'?words.desktopPending:words.pending;return;}
-    complete=true;stop();qrBox.hidden=true;if(refresh)refresh.hidden=true;if(botLink)botLink.href=BOT_LINKS[channel];status.textContent=channel==='desktop'?words.desktopConnected:words.connected;this.retry(channel);
-   }catch{if(alive()&&manual)status.textContent=words.error;}finally{checking=false;}
-  };
-  const check=button(words.check,()=>checkConnection(true));
-  if(channel==='desktop'){
-   dialog.append(el('p',words.desktopHelp));if(targets.length>1){dialog.append(el('p',words.many));const select=el('select');select.setAttribute('aria-label',words.desktop);for(const target of targets){const option=el('option',target.name||target.id);option.value=target.id;select.append(option);}dialog.append(select);actions.append(button(words.choose,()=>{dialog.close();this.retry(channel,select.value);}));}else actions.append(link(words.download,'https://nanolika.ru/download.html#desktop'));
-   dialog.append(el('p',words.desktopNote,'channel-guide-note'));actions.append(check);
-  }else{
-   dialog.append(el('p',linked?words.connected:words.intro));botLink=link(words.open+' '+name,BOT_LINKS[channel]);actions.append(botLink);
-   if(!linked){
-    botLink.hidden=true;dialog.append(qrBox,el('p',words.expires,'channel-guide-note'));
-    const makeLink=async()=>{
-     if(!alive())return;stop();refresh.disabled=true;refresh.hidden=true;qrBox.hidden=false;qrBox.replaceChildren();botLink.hidden=true;status.textContent=words.loading;
-     try{const data=await this.api('/v1/link/start',{channel});if(!alive())return;const url=validateStartLink(data,channel);deadline=Date.now()+Math.min(600,Math.max(1,Number(data.expires_in_s)||600))*1000;qrBox.append(qrSvg(url,'QR: '+name));botLink.href=url;botLink.hidden=false;status.textContent=words.pending;timer=setInterval(()=>{if(document.visibilityState==='visible')checkConnection();},2500);}catch{if(alive()){status.textContent=words.error;refresh.hidden=false;}}finally{refresh.disabled=false;}
-    };
-    refresh=button(words.refresh,makeLink);refresh.hidden=true;dialog.append(refresh);actions.append(check);
-    dialog.addEventListener('close',stop,{once:true});dialog.addEventListener('ready',makeLink,{once:true});
+  const info=(root,rows)=>{const dl=el('dl',undefined,'connection-facts');for(const[label,value]of rows){if(value===undefined||value===null||value==='')continue;dl.append(el('dt',label),el('dd',String(value)));}root.append(dl);};
+  const date=value=>value?new Date(Number(value)*1000).toLocaleString(ru?'ru-RU':'en-US'):'';
+  const request=async(path,options)=>{const data=await this.api(path,options);if(!alive())throw Error('stale_identity');return data;};
+  const fail=(e)=>{if(!alive())return;const code=e?.code;status.textContent=code==='device_shared_session'?words.shared:code==='device_session_unknown'?words.unknownSession:code==='channel_is_the_account'||e?.status===409&&channel!=='desktop'?words.unlinkIsAccount:words.failed;};
+  const unlink=async(b,path,label)=>{if(!alive()||!confirm((channel==='desktop'?words.disconnectConfirm:words.channelConfirm).replace('{name}',label)))return;b.disabled=true;status.textContent=words.disconnecting;
+   try{await request(path,{method:'DELETE'});if(!alive())return;title.textContent=words.disconnected;content.replaceChildren(el('p',label));actions.replaceChildren();status.textContent='';await this.retry?.(channel);}catch(e){fail(e);}finally{if(b.isConnected)b.disabled=false;}};
+  const desktopRows=rows=>(rows||[]).filter(isDesktopDevice);
+  const connected=(rows)=>{
+   stop();generation++;title.textContent=channel==='desktop'&&rows.length>1?(ru?'Подключённые компьютеры':'Connected computers'):name+' '+words.connectedHeading;content.replaceChildren();actions.replaceChildren();status.textContent='';
+   for(const row of rows){const section=el('section',undefined,'connection-record');
+    if(channel==='desktop'){
+     if(rows.length>1)section.append(el('h3',row.name||name));
+     info(section,[[words.label,row.name],[words.network,row.online?words.online:words.offline],[words.system,row.os],[words.version,row.version],[words.deviceId,row.id],[words.first,date(row.first_seen)],[words.seen,date(row.last_seen)],[words.ip,row.ip]]);
+     const b=button(words.disconnect,()=>unlink(b,'/v1/link/devices/'+encodeURIComponent(row.id),row.name||name));b.classList.add('danger');(rows.length===1?actions:section).append(b);
+    }else info(section,[[words.label,row.label||row.name],[words.identifier,row.identifier],[words.linkedAt,date(row.linked_at)]]);
+    content.append(section);
    }
-  }
-  dialog.append(actions,status);dialog.addEventListener('click',event=>{if(event.target!==dialog)return;const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();});
-  dialog.addEventListener('close',()=>{stop();dialog.remove();},{once:true});document.body.append(dialog);dialog.showModal();dialog.dispatchEvent(new Event('ready'));
+   if(channel!=='desktop'){const b=button(words.disconnect,()=>unlink(b,'/v1/link/channels/'+channel,name));b.classList.add('danger');actions.append(b);}
+  };
+  const pending=()=>{stop();title.textContent=words.connect+' '+(channel==='desktop'?words.desktop:name);content.replaceChildren();actions.replaceChildren();status.textContent='';
+   if(channel==='desktop'){content.append(el('p',words.desktopHelp),el('p',words.desktopNote,'channel-guide-note'));actions.append(link(words.download,'https://nanolika.ru/download.html#desktop'),button(words.check,refresh));return;}
+   content.append(el('p',words.intro));const qrBox=el('div',undefined,'channel-guide-qr');content.append(qrBox,el('p',words.expires,'channel-guide-note'));const bot=link(words.open+' '+name,BOT_LINKS[channel]);bot.hidden=true;
+   const make=async()=>{if(!alive())return;stop();const seq=++generation;qrBox.replaceChildren();bot.hidden=true;renew.disabled=true;status.textContent=words.loading;try{const data=await request('/v1/link/start',{method:'POST',body:JSON.stringify({channel})});if(!alive()||seq!==generation)return;const url=validateStartLink(data,channel);deadline=Date.now()+Math.min(600,Math.max(1,Number(data.expires_in_s)||600))*1000;qrBox.append(qrSvg(url,'QR: '+name));bot.href=url;bot.hidden=false;renew.hidden=true;status.textContent=words.pending;timer=setInterval(async()=>{if(!alive()){stop();return;}if(Date.now()>=deadline){stop();qrBox.replaceChildren();bot.hidden=true;renew.hidden=false;status.textContent=words.expired;return;}if(checking||document.visibilityState!=='visible')return;checking=true;try{const rows=await request('/v1/link/channels');if(alive()&&seq===generation){const own=(rows||[]).filter(r=>r.channel===channel);if(own.length){connected(own);void this.retry?.(channel);}}}catch{}finally{checking=false;}},2500);}catch{if(alive()&&seq===generation){status.textContent=words.error;renew.hidden=false;}}finally{renew.disabled=false;}};
+   const renew=button(words.refresh,make);actions.append(bot,button(words.check,refresh),renew);void make();
+  };
+  const refresh=async()=>{if(!alive())return;const seq=++generation;stop();status.textContent=words.checking;
+   try{const data=await request(channel==='desktop'?'/v1/devices':'/v1/link/channels');if(!alive()||seq!==generation)return;const rows=channel==='desktop'?desktopRows(data.devices):((data||[]).filter(r=>r.channel===channel));rows.length?connected(rows):pending();}catch{if(alive()&&seq===generation){title.textContent=words.error;status.textContent=words.error;actions.replaceChildren(button(words.retry,refresh));}}};
+  dialog.addEventListener('close',()=>{generation++;stop();dialog.remove();},{once:true});dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();});document.body.append(dialog);dialog.showModal();void refresh();
  }
 }

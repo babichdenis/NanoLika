@@ -167,7 +167,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const commerce=model.commerce||{},rates=commerce.effective_rub||{};
     const labels={input:T.perMillionIn,output:T.perMillionOut,image:T.perPicture,second:T.perSecond,speech:T.perSpeech,minute:T.perMinute};
     const fields=model.kind==='chat'?['input','output']:model.kind==='image'?['image']:model.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
-    return {lines:fields.filter(k=>Number(rates[k])>0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:4}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
+    return {lines:fields.filter(k=>rates[k]!==null&&rates[k]!==undefined&&Number.isFinite(Number(rates[k]))&&Number(rates[k])>=0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:4}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
   }
 
   function details(model) {
@@ -189,7 +189,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const kind = model.kind;
     const on = draft.enabled[kind].has(model.id);
     const usable = model.available !== false;
-    const line = h('div', undefined, `mm-row${usable ? '' : ' mm-row-off'}${on ? ' mm-row-on' : ''}`);
+    const line = h('tr', undefined, `mm-row${usable ? '' : ' mm-row-off'}${on ? ' mm-row-on' : ''}`);
 
     const box = h('input');
     box.type = 'checkbox';
@@ -214,11 +214,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
     if (!usable) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
-    const meta = [];
-    if (model.vendor) meta.push(T.vendor(model.vendor));
-    if (model.context_length) meta.push(`Контекст ${num(model.context_length)} токенов`);
-    if (model.max_output) meta.push(`Ответ до ${num(model.max_output)} токенов`);
-    if (meta.length) names.append(h('div', meta.join(' · '), 'mm-vendor'));
+    if (model.vendor) names.append(h('div', T.vendor(model.vendor), 'mm-vendor'));
 
     const more = h('button', T.more, 'mm-link');
     more.type = 'button';
@@ -232,7 +228,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
         more.textContent = T.less;
       }
     };
-    names.append(more);
+
 
     const prices = h('div', undefined, 'mm-prices');
     const block = priceBlock(model);
@@ -260,9 +256,13 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
 
     const calc=document.createElement('details');calc.className='mm-calculator';const caption=h('summary','Параметры и расчёт');calc.append(caption);let calculated=false;calc.ontoggle=()=>{if(calc.open&&!calculated){calculated=true;calc.append(modelDetails(model,{api:async(path,options={})=>{const response=await fetch(path,{...options,cache:'no-store',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'}});if(!response.ok)throw new Error('quote');return response.json();}}));}};
     const star=h('button',(loaded.shelf?.favourites||[]).includes(model.id)?'★':'☆','chip');star.type='button';star.setAttribute('aria-label','В избранное: '+model.name);star.setAttribute('aria-pressed',String((loaded.shelf?.favourites||[]).includes(model.id)));star.onclick=()=>{const old=loaded.shelf?.favourites||[],next=old.includes(model.id)?old.filter(id=>id!==model.id):[...old,model.id];loaded.shelf.favourites=next;draw();favouriteWrites=favouriteWrites.catch(()=>{}).then(async()=>{const response=await fetch('/v1/me/models',{method:'PUT',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({enabled:{},favourites:next})});if(!response.ok)throw new Error('favourite');}).catch(()=>{el('status').textContent='Избранное не сохранилось. Обновите страницу.';});};
-    line.append(box, names, prices,star);line.append(calc);
-    if (usable) line.append(pick);
-    return line;
+    const td=(...nodes)=>{const n=h('td');n.append(...nodes);return n;};
+    const priceCells=[0,1].map(i=>{const n=h('td',undefined,'numeric');const item=block.lines[i];n.append(h('strong',item?item[1]:'—'));if(item)n.append(h('small',item[0],'table-subtitle'));if(i===0&&block.note)n.append(h('small',block.note,'table-subtitle'));return n;});
+    const enabled=h('label',undefined,'table-toggle');enabled.append(box);box.setAttribute('role','switch');
+    const detailRow=h('tr',undefined,'model-detail-row'),detailCell=h('td');detailCell.colSpan=7;detailRow.hidden=true;detailCell.append(details(model),calc);detailRow.append(detailCell);
+    more.setAttribute('aria-expanded','false');more.onclick=()=>{detailRow.hidden=!detailRow.hidden;more.textContent=detailRow.hidden?T.more:T.less;more.setAttribute('aria-expanded',String(!detailRow.hidden));};
+    line.append(td(names),...priceCells,td(enabled),td(...(usable?[pick]:[])),td(star),td(more));
+    const fragment=document.createDocumentFragment();fragment.append(line,detailRow);return fragment;
   }
 
   function visible() {
@@ -294,28 +294,20 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       );
       if (!rows.length) continue;
       const block = h('section', undefined, 'kind');
-      const head = h('button', undefined, `kind-title${collapsedKinds.has(spec.key) ? ' kind-title-folded' : ''}`);
-      head.type = 'button';
-      head.setAttribute('aria-expanded', String(!collapsedKinds.has(spec.key)));
-      head.onclick = () => {
-        if (collapsedKinds.has(spec.key)) collapsedKinds.delete(spec.key);
-        else collapsedKinds.add(spec.key);
-        draw();
-      };
+      const head = h('h2', undefined, 'kind-title');
       // когда открыт «Кодинг», раздел называется кодингом, а не перепиской
       const title = section === 'code' ? T.code : T[spec.title];
-      head.append(h('span', `${collapsedKinds.has(spec.key) ? '＋' : '−'} ${title}`), h('span', T.found(rows.length), 'kind-count'));
+      head.append(h('span', title), h('span', T.found(rows.length), 'kind-count'));
       block.append(head);
-      if (collapsedKinds.has(spec.key)) {
-        holder.append(block);
-        continue;
-      }
       // включённые по умолчанию — первыми, дальше по имени: дорогое не прячется, но и не лезет вперёд
       const sorted = [...rows].sort(
         (a, b) => Number(b.default_on !== false) - Number(a.default_on !== false) || a.name.localeCompare(b.name),
       );
       const shown = shownCount[spec.key] || PAGE;
-      for (const model of sorted.slice(0, shown)) block.append(row(model));
+      const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
+      const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное',''],en:['Model','Price','Output','Enabled','Default','Favourite',''],zh:['模型','价格','输出','启用','默认','收藏','']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite',''];
+      for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
+      for (const model of sorted.slice(0, shown)) tbody.append(row(model));
       if (sorted.length > shown) {
         const more = h('button', T.showMore(Math.min(PAGE, sorted.length - shown), sorted.length), 'chip mm-all');
         more.type = 'button';

@@ -28,21 +28,51 @@
 	# this box serving the page itself. Nothing here depends on another server.
 	@ops_page path /cfp64ns5jgh4er8uxhis3t5t /cfp64ns5jgh4er8uxhis3t5t/*
 	handle_path /cfp64ns5jgh4er8uxhis3t5t/* {
-		basic_auth {
+		@need_auth not remote_ip 95.221.28.57
+		basic_auth @need_auth {
 			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
 		}
+		# the encyclopedia of models sits under the same address but is not the prices page:
+		# its files are served from /app/models, everything else goes to /app/prices
+		@models path /models/*
+		rewrite @models /app{path}
 		rewrite * /app/prices{uri}
 		reverse_proxy relay:8787
 	}
 	handle /cfp64ns5jgh4er8uxhis3t5t {
-		basic_auth {
+		@need_auth not remote_ip 95.221.28.57
+		basic_auth @need_auth {
 			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
 		}
 		redir * /cfp64ns5jgh4er8uxhis3t5t/ 308
 	}
+	# База моделей: статические страницы проекта modelscope. Отдельный закрытый
+	# адрес, чтобы не мешать странице цен и не зависеть от relay.
+	@models_db path /phzhk6tnr6d0e2ac7j3ze8eose /phzhk6tnr6d0e2ac7j3ze8eose/*
+	handle_path /phzhk6tnr6d0e2ac7j3ze8eose/* {
+		@need_auth not remote_ip 95.221.28.57
+		basic_auth @need_auth {
+			operator $2a$14$LCuXh31MUu6YdbveyN0yn.SZecZ.dcCvuLyzwmoCerevR0NqnDDrG
+		}
+		root * /srv/models
+		file_server
+		header {
+			X-Content-Type-Options nosniff
+			Cache-Control "no-cache"
+			-Server
+		}
+	}
+	handle /phzhk6tnr6d0e2ac7j3ze8eose {
+		@need_auth not remote_ip 95.221.28.57
+		basic_auth @need_auth {
+			operator $2a$14$LCuXh31MUu6YdbveyN0yn.SZecZ.dcCvuLyzwmoCerevR0NqnDDrG
+		}
+		redir * /phzhk6tnr6d0e2ac7j3ze8eose/ 308
+	}
 	@ops_numbers path /v1/admin/prices
 	handle @ops_numbers {
-		basic_auth {
+		@need_auth not remote_ip 95.221.28.57
+		basic_auth @need_auth {
 			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
 		}
 		reverse_proxy relay:8787
@@ -82,6 +112,24 @@
 	}
 
 	handle {
+		# CORS for WebApp (nanolika.ru)
+		@options_webapp {
+			method OPTIONS
+			header Origin https://nanolika.ru
+		}
+		handle @options_webapp {
+			header Access-Control-Allow-Origin "https://nanolika.ru"
+			header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+			header Access-Control-Allow-Headers "Authorization, Content-Type, X-Bot-Token"
+			header Access-Control-Allow-Credentials "true"
+			header Access-Control-Max-Age "86400"
+			respond "" 204
+		}
+		@cors_webapp header Origin https://nanolika.ru
+		header @cors_webapp {
+			Access-Control-Allow-Origin "https://nanolika.ru"
+			Access-Control-Allow-Credentials "true"
+		}
 		reverse_proxy relay:8787 {
 			# Chat streams (SSE) and the hub's WebSocket must not be buffered.
 			flush_interval -1
