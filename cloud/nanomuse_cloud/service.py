@@ -2170,6 +2170,33 @@ class Cloud:
             },
         )
 
+    def _insufficient(self, caller: Caller, a: dict, cost_uy: int, left_uy: int, region: str = "unknown") -> CloudError:
+        """A priced request (a picture, a clip, a voice take) does not fit the balance:
+        say the price and the balance, not just "the allowance is used up"."""
+        required = self.s.cny_to_rub(self.s.uy_to_cny(max(0, int(cost_uy))))
+        balance = self.s.cny_to_rub(self.s.uy_to_cny(max(0, int(left_uy))))
+        message = (
+            f"This generation costs ₽{required:g}; the balance has ₽{balance:g}. "
+            "Top up, choose a cheaper model, or shorten the clip."
+        )
+        base = self.s.public_base.rstrip("/")
+        return CloudError(
+            402,
+            "insufficient_funds",
+            message,
+            extra={
+                "required_rub": required,
+                "balance_rub": balance,
+                "currency": "RUB",
+                "topup_url": f"{base}/app" if base else "",
+                "left": self.s.uy_to_cny(max(0, int(left_uy))),
+                "grant": self.s.uy_to_cny(a["grant_uy"]),
+                "region": region,
+                "ways": self.ways_on(caller, region),
+                "guidance": self.guidance(region),
+            },
+        )
+
     def _paused_allowance(self, caller: Caller, a: dict, region: str = "unknown") -> CloudError:
         """0.22: the *Free allowance* switch is off. Built on `_exhausted` so the extra keys
         (ways, guidance, invite link) are the same ones; only the words and two flags differ."""
@@ -2669,6 +2696,8 @@ class Cloud:
                                 "video_reserve",
                                 f"Keep ₽{reserve:g} of paid balance for the clip; top up first",
                             )
+                        # No blanket reserve: the exact clip price is checked when the
+                        # task is submitted, so a 580 ₽ balance still makes a 10 ₽ clip.
                     else:
                         min_paid = float(terms.get("video_min_paid_rub") or 0)
                         if min_paid > 0 and self.s.rub_per_usd > 0:
@@ -2752,7 +2781,7 @@ class Cloud:
         try:
             self._check_budget(caller, minimum, cost_uy, place)
         except CloudError as e:
-            if e.code in ("out_of_tokens", "daily_cap", "allowance_exhausted", "too_many_in_flight"):
+            if e.code in ("out_of_tokens", "daily_cap", "allowance_exhausted", "insufficient_funds", "too_many_in_flight"):
                 self.db.add_event(caller.account_id, "budget.refused", e.code)
             raise
         if request_id is not None:
@@ -2798,8 +2827,13 @@ class Cloud:
             # known price fits on top of it.
             spent, grant = a["spent_uy"], a["grant_uy"]
             held = self.in_flight.reserved(caller.account_id) + self.db.pending_video_cost(caller.account_id)
-            if spent + held >= grant or (cost_uy > 0 and spent + held + cost_uy > grant):
+            left = max(0, grant - spent - held)
+            if spent + held >= grant:
                 raise self._exhausted(caller, a, self.region(caller, place))
+            if cost_uy > 0 and cost_uy > left:
+                # A known price that does not fit: the app can show "₽10.26, balance ₽5"
+                # and a top-up button instead of the generic "allowance used up" card.
+                raise self._insufficient(caller, a, cost_uy, left, self.region(caller, place))
 
     def chat_reserve_uy(self, model: ModelSpec) -> int:
         """What a chat on `model` is held at while it runs."""

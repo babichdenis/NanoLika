@@ -809,7 +809,7 @@ class Settings:
     # spending a few rubles afterwards must not close it again. While a tariff is active,
     # only the provider's own 500 ₽ reserve has to stay on the paid balance.
     video_min_paid_rub: float = field(default_factory=lambda: float(_env("VIDEO_MIN_PAID_RUB", "590")))
-    video_reserve_rub: float = field(default_factory=lambda: float(_env("VIDEO_RESERVE_RUB", "500")))
+    video_reserve_rub: float = field(default_factory=lambda: float(_env("VIDEO_RESERVE_RUB", "0")))
     # An active tariff is the monthly service key for the cross-device hub. Paid balance
     # thresholds are evaluated after confirmed top-ups; no automatic charge is made at expiry.
     # A member is exempt.

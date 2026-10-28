@@ -267,29 +267,27 @@ def test_a_low_tariff_hides_an_expensive_chat_model_and_a_higher_one_opens_it():
     assert "deepseek-v4.1-flash" in high
 
 
-def test_a_video_model_opens_only_when_paid_money_covers_the_provider_deposit():
+def test_a_video_model_stays_open_on_an_active_tariff_and_checks_the_clip_price():
     client, cloud, sender = stack(plans_json=_plans())
     key, me = sign_up(client, sender)
     account_id = me["account"]["id"]
     cloud.plan_buy(account_id, "lika")
     caller = cloud.authenticate(key)
 
+    # A tariff month opened at ₽590 must not close video after a spend: no blanket
+    # ₽500 reserve is applied to the menu. The exact clip price is checked on submit.
+    assert cloud.model_for("wan2.2-i2v-flash", "video", caller).id == "wan2.2-i2v-flash"
+    cloud.check_budget(caller, cost_uy=cloud.s.rub_to_uy(10), request_id="clip-ok")
+    cloud.settle(caller, "clip-ok")
+
+    with cloud.db.tx() as conn:
+        conn.execute(
+            "UPDATE accounts SET grant_uy=? WHERE id=?",
+            (cloud.s.rub_to_uy(5), account_id),
+        )
+    caller = cloud.authenticate(key)
     with pytest.raises(CloudError) as refused:
-        cloud.model_for("wan2.2-i2v-flash", "video", caller)
-    assert refused.value.code == "video_reserve"
-
-    # A tariff month opened at ₽590 must not close video after a ₽10 spend: the
-    # provider's ₽500 reserve is still covered.
-    with cloud.db.tx() as conn:
-        conn.execute(
-            "UPDATE accounts SET paid_balance_uy=? WHERE id=?",
-            (cloud.s.rub_to_uy(580), account_id),
-        )
-    assert cloud.model_for("wan2.2-i2v-flash", "video", caller).id == "wan2.2-i2v-flash"
-
-    with cloud.db.tx() as conn:
-        conn.execute(
-            "UPDATE accounts SET paid_balance_uy=? WHERE id=?",
-            (cloud.s.rub_to_uy(590), account_id),
-        )
-    assert cloud.model_for("wan2.2-i2v-flash", "video", caller).id == "wan2.2-i2v-flash"
+        cloud.check_budget(caller, cost_uy=cloud.s.rub_to_uy(10), request_id="clip-broke")
+    assert refused.value.code == "insufficient_funds"
+    assert refused.value.extra["required_rub"] == 10
+    assert refused.value.extra["balance_rub"] < 10
