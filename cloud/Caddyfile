@@ -143,3 +143,34 @@
 		}
 	}
 }
+
+# Чат Лики на сайте (сервис в контейнере chat, порт 8788).
+# Сайт остаётся на общем хостинге reg.ru, здесь только приёмник вопросов.
+chat.nanolika.ru {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	request_body {
+		max_size 64KB
+	}
+
+	handle /chat* {
+		reverse_proxy chat:8788 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle /healthz {
+		reverse_proxy chat:8788
+	}
+
+	handle {
+		respond "nanoLika chat" 404
+	}
+}
