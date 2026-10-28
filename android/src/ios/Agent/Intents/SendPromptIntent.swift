@@ -178,7 +178,7 @@ struct SendPromptIntent: AppIntent {
             let promptPreview = String(prompt.prefix(50))
             ShortcutNotification.post(
                 id: "shortcut-start-\(sid)",
-                title: AppLocalized("nanoMuse Task Started"),
+                title: AppLocalized("nanoLika Task Started"),
                 body: "\(modelName): \(promptPreview)\(prompt.count > 50 ? "…" : "")",
                 sessionId: sid
             )
@@ -200,7 +200,7 @@ struct SendPromptIntent: AppIntent {
             if sendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(sid)",
-                    title: AppLocalized("nanoMuse Task Completed"),
+                    title: AppLocalized("nanoLika Task Completed"),
                     body: "\(modelName): \(String(responseText.prefix(200)))",
                     sessionId: sid
                 )
@@ -235,7 +235,7 @@ struct SendPromptIntent: AppIntent {
             if capturedSendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(capturedSid)",
-                    title: AppLocalized("nanoMuse Task Completed"),
+                    title: AppLocalized("nanoLika Task Completed"),
                     body: "\(capturedModelName): \(summary)",
                     sessionId: capturedSid
                 )

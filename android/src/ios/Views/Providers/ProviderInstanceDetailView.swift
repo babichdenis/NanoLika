@@ -274,7 +274,7 @@ struct ProviderInstanceDetailView: View {
             } footer: {
                 // nanoMuse: the refusal, under the switch, where the page has it
                 if nmCloudOffRefused {
-                    Text(AppLocalized("Add a provider of your own first; with nanoMuse Cloud off, nothing else could answer."))
+                    Text(AppLocalized("Add a provider of your own first; with nanoLika Cloud off, nothing else could answer."))
                         .foregroundStyle(.red)
                 }
             }
@@ -386,7 +386,7 @@ struct ProviderInstanceDetailView: View {
             // The row offers the switch (Settings → Models) instead, and says so.
             if NanoMuseCloud.instance?.id == instanceId {
                 Section {
-                    Text(AppLocalized("This provider is your nanoMuse Cloud account and cannot be deleted. To stop using its models, switch off Use nanoMuse Cloud models under Models; you stay signed in for sync."))
+                    Text(AppLocalized("This provider is your nanoLika Cloud account and cannot be deleted. To stop using its models, switch off Use nanoLika Cloud models under Models; you stay signed in for sync."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -630,7 +630,7 @@ struct ProviderInstanceDetailView: View {
         } header: {
             Text(AppLocalized("Custom User-Agent"))
         } footer: {
-            Text(AppLocalized("Override the User-Agent header sent to this endpoint. Leave empty to use the nanoMuse default. Useful for relays that only accept specific clients (e.g. \"claude-cli/1.0\")."))
+            Text(AppLocalized("Override the User-Agent header sent to this endpoint. Leave empty to use the nanoLika default. Useful for relays that only accept specific clients (e.g. \"claude-cli/1.0\")."))
         }
     }
 

@@ -49,7 +49,7 @@ struct AppLockOverlay: View {
         guard !isAuthenticating else { return }
         isAuthenticating = true
         Task { @MainActor in
-            let reason = AppLocalized("Unlock nanoMuse")
+            let reason = AppLocalized("Unlock nanoLika")
             let ok = await BiometricAuth.authenticate(reason: reason)
             if ok {
                 withAnimation(.easeOut(duration: 0.25)) {

@@ -61,7 +61,7 @@ def verify_digest(path: Path, expected: str) -> None:
     if got != expected:
         raise RuntimeError(
             f"the downloaded file is not what the catalogue promised "
-            f"(sha256 {got[:12]}… instead of {expected[:12]}…) — nothing was installed"
+            f"(sha256 {got[:12]}… instead of {expected[:12]}…): nothing was installed"
         )
 
 
@@ -73,10 +73,10 @@ class Store(BaseTool):
     name: str = "store"
     description: str = (
         "The NanoLika store: the capabilities that are NOT in this build. Before saying you "
-        "cannot read a scan, convert a document or do some other job, look here — `list` shows "
+        "cannot read a scan, convert a document or do some other job, look here: `list` shows "
         "what is available (skills, code capsules, MCP servers) and which of it this build is "
         "missing. `addon` (name) downloads a code capsule for this platform, checks its sha256, "
-        "unpacks it into the data directory and makes it importable — after that the job works. "
+        "unpacks it into the data directory and makes it importable: after that the job works. "
         "`skill` (name) installs a skill, `mcp` (name) adds an MCP server, `status` shows what is "
         "installed. Never try `pip install`: this runtime is frozen and has no pip; the store is "
         "the way. The catalogue itself: https://cloud.nanolika.ru/store/index.json."
@@ -205,11 +205,11 @@ class Store(BaseTool):
             state = ""
             if section == "capsules":
                 if self._installed(package["name"]) is not None:
-                    state = " — installed"
+                    state = ": installed"
                 elif self._missing(package):
-                    state = " — MISSING in this build"
+                    state = ": MISSING in this build"
                 else:
-                    state = " — not needed (this build has it)"
+                    state = ": not needed (this build has it)"
             size = _human(package.get("bytes") or 0)
             rows.append(f"- [{section}] {label} ({size}){state}: {package.get('description','')}")
         if not rows:
@@ -255,7 +255,7 @@ class Store(BaseTool):
                 continue
             size = _human(package.get("bytes") or 0)
             lines.append(
-                f"- `{package['name']}` ({size}): {package.get('description', '')} — "
+                f"- `{package['name']}` ({size}): {package.get('description', '')}: "
                 f"`store` action=addon name={package['name']}"
             )
         if not lines:

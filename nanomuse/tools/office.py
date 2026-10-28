@@ -243,7 +243,7 @@ def convert_with_office(src: Path, dst: Path) -> tuple[bool, str]:
         return True, "Microsoft Office opened it invisibly"
     if "принтер" in said.lower() or "printer" in said.lower():
         said += (
-            " — Excel and Word need at least one printer driver to export a PDF; "
+            ": Excel and Word need at least one printer driver to export a PDF; "
             "«Microsoft Print to PDF» is enough"
         )
     return False, said
@@ -412,7 +412,7 @@ class OfficeConvert(BaseTool):
     name: str = "office_convert"
     description: str = (
         "Turn a Word, Excel or PowerPoint file into another format with the office suite "
-        "that is on this machine — Microsoft Office over COM on Windows, LibreOffice "
+        "that is on this machine: Microsoft Office over COM on Windows, LibreOffice "
         "elsewhere. Mostly used for `pdf`: a report the user can send, a workbook that "
         "must not be edited, slides to print. Also handles the legacy formats that the "
         "Python libraries cannot read (`.doc`, `.xls`, `.ppt`). `path` is the document, "
@@ -516,7 +516,7 @@ class OfficeVba(BaseTool):
         "ThisDocument). The result is macro-enabled (.xlsm/.docm/.pptm) at `out`, and the "
         "same code is written next to it as a `.bas` file for File → Import. Writing macros "
         "needs Microsoft Office on Windows; elsewhere only the `.bas` file is produced. The "
-        "macro is never run — the user opens the file and runs it."
+        "macro is never run: the user opens the file and runs it."
     )
     parameters: dict[str, Any] = {
         "type": "object",

@@ -617,11 +617,13 @@ def customer_branding(base: Path = ROOT) -> None:
     old = re.compile(r"\b(?:nanoMuse|NanoMuse|NANOMUSE)\b")
     literal = re.compile(r'"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"')
 
-    def display(match: re.Match[str]) -> str:
-        value = match.group(0)
+    def display_value(value: str) -> str:
         if re.search(r"https?://|(?:nanoMuse|NanoMuse|NANOMUSE)[.:/_-][A-Za-z0-9]", value):
             return value
         return old.sub("nanoLika", value)
+
+    def display(match: re.Match[str]) -> str:
+        return display_value(match.group(0))
 
     native = base / "android/src"
     paths = list((native / "ios/NanoMuse").rglob("*.swift"))
@@ -629,6 +631,17 @@ def customer_branding(base: Path = ROOT) -> None:
     for path in paths:
         before = path.read_text(encoding="utf-8")
         after = literal.sub(display, before)
+        if after != before:
+            path.write_text(after, encoding="utf-8")
+            changed.append(str(path.relative_to(base)))
+    # Our localized additions inside upstream Swift share the renamed catalogue keys.
+    # Only AppLocalized arguments are display text here, never arbitrary storage/wire strings.
+    localized = re.compile(r'(AppLocalized\(\s*)("(?:[^"\\\n]|\\.)*")')
+    for path in (native / "ios").rglob("*.swift"):
+        if "NanoMuse" in path.relative_to(native / "ios").parts:
+            continue
+        before = path.read_text(encoding="utf-8")
+        after = localized.sub(lambda m: m.group(1) + display_value(m.group(2)), before)
         if after != before:
             path.write_text(after, encoding="utf-8")
             changed.append(str(path.relative_to(base)))

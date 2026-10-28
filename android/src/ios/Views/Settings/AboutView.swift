@@ -112,7 +112,7 @@ struct AboutView: View {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(AppLocalized("Not affiliated with Meta"))
-                        Text(AppLocalized("Muse is a trademark of Meta Platforms, Inc. nanoMuse is an independent free-software project."))
+                        Text(AppLocalized("Muse is a trademark of Meta Platforms, Inc. nanoLika is an independent free-software project."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

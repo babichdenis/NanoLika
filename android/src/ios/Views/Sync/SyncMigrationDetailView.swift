@@ -675,7 +675,7 @@ struct SyncMigrationDetailView: View {
             }
             return AppLocalized("V1 sync (legacy) · another device's pre-v2 backup. Safe to delete if that device has migrated to V2.")
         case .system:
-            return AppLocalized("CloudKit built-in zone. Not used by nanoMuse.")
+            return AppLocalized("CloudKit built-in zone. Not used by nanoLika.")
         case .other:
             return AppLocalized("Legacy or unknown zone. Inspect before deleting.")
         case .v2:

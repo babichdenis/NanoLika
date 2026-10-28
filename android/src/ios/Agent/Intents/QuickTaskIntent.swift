@@ -181,7 +181,7 @@ struct QuickTaskIntent: AppIntent {
         if sendCompletionNotification {
             ShortcutNotification.post(
                 id: "shortcut-start-\(sid)",
-                title: AppLocalized("nanoMuse: \(taskName)"),
+                title: AppLocalized("nanoLika: \(taskName)"),
                 body: AppLocalized("\(modelName) is working on it…"),
                 sessionId: sid
             )
@@ -203,7 +203,7 @@ struct QuickTaskIntent: AppIntent {
             if sendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(sid)",
-                    title: AppLocalized("nanoMuse: \(taskName) Done"),
+                    title: AppLocalized("nanoLika: \(taskName) Done"),
                     body: "\(modelName): \(String(responseText.prefix(200)))",
                     sessionId: sid
                 )
@@ -239,7 +239,7 @@ struct QuickTaskIntent: AppIntent {
             if capturedSendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(capturedSid)",
-                    title: AppLocalized("nanoMuse: \(capturedTaskName) Done"),
+                    title: AppLocalized("nanoLika: \(capturedTaskName) Done"),
                     body: "\(capturedModelName): \(summary)",
                     sessionId: capturedSid
                 )
