@@ -2174,9 +2174,10 @@ class Cloud:
     def _menu_by_kind(self, caller: Caller | None = None) -> dict[str, list[ModelSpec]]:
         """The menu's models that a shelf can hold, per kind, in menu order."""
         out: dict[str, list[ModelSpec]] = {kind: [] for kind in SHELF_KINDS}
+        terms = self.plan_terms(caller.account_id) if caller is not None else None
         for spec in self.s.models:
             if spec.listed and spec.kind in out and self.model_visible(spec):
-                if caller is None or self.plan_allows(caller, spec):
+                if caller is None or self.plan_allows(caller, spec, terms):
                     out[spec.kind].append(spec)
         return out
 
@@ -2569,24 +2570,31 @@ class Cloud:
 
     def plan_terms(self, account_id: str) -> dict[str, Any]:
         """The model terms in force: the active tariff's, or the lowest tariff's for a
-        free/expired account. The first menu row is the operator's own floor."""
+        free/expired account. The first menu row is the operator's own floor. The paid
+        balance is read once here, so a menu of hundreds of models does not query it
+        once per model."""
         plan = self.plan_state(account_id)
         if plan is not None and plan.get("active"):
-            return plan
-        menu = self.plan_menu()
-        if menu:
-            return {**menu[0], "id": "free", "active": False}
-        return {
-            "id": "free",
-            "active": False,
-            "max_chat_out_rub": 0.0,
-            "max_video_tokens": 0,
-            "video_min_paid_rub": self.s.video_min_paid_rub,
-            "models": [],
-            "exclude": [],
-        }
+            terms = dict(plan)
+        else:
+            menu = self.plan_menu()
+            terms = (
+                {**menu[0], "id": "free", "active": False}
+                if menu
+                else {
+                    "id": "free",
+                    "active": False,
+                    "max_chat_out_rub": 0.0,
+                    "max_video_tokens": 0,
+                    "video_min_paid_rub": self.s.video_min_paid_rub,
+                    "models": [],
+                    "exclude": [],
+                }
+            )
+        terms["paid_rub"] = self.paid_balance_rub(account_id)
+        return terms
 
-    def plan_allows(self, caller: Caller | None, spec: ModelSpec) -> bool:
+    def plan_allows(self, caller: Caller | None, spec: ModelSpec, terms: dict[str, Any] | None = None) -> bool:
         """Whether this account's tariff opens `spec`.
 
         `models` is an allowlist, `exclude` a denylist; an empty list is no restriction.
@@ -2596,7 +2604,7 @@ class Cloud:
         """
         if caller is None:
             return True
-        terms = self.plan_terms(caller.account_id)
+        terms = terms or self.plan_terms(caller.account_id)
         allowed = terms.get("models") or []
         if allowed and spec.id not in allowed:
             return False
@@ -2612,7 +2620,7 @@ class Cloud:
             if cap_tokens > 0 and spec.per_clip > cap_tokens:
                 return False
             min_paid = float(terms.get("video_min_paid_rub") or 0)
-            if min_paid > 0 and self.s.rub_per_usd > 0 and self.paid_balance_rub(caller.account_id) < min_paid:
+            if min_paid > 0 and self.s.rub_per_usd > 0 and float(terms.get("paid_rub") or 0) < min_paid:
                 return False
         return True
 
