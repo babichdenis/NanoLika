@@ -301,7 +301,6 @@ export function ModelPicker<R extends ModelRow>({ t, label, text, heads = [], he
                   groups.some(group => group.key === 'nanomuse') || lockedAll.length
                     ? h('button', {
                         type: 'button', className: 'nm-pill nm-pill-sm', 'aria-pressed': favouritesOnly,
-                        disabled: favouriteCount === 0 && !favouritesOnly,
                         onClick: () => setFavouritesOnly(!favouritesOnly),
                       }, `★ ${t('mpFavourites')}${favouriteCount ? ` · ${favouriteCount}` : ''}`)
                     : null)
