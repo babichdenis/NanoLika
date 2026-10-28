@@ -17,6 +17,8 @@
 export type RefusalKind =
   /** 429 `allowance_exhausted`, 402 `out_of_tokens`: the pool is spent. */
   | 'exhausted'
+  /** 402 `insufficient_funds`: a priced generation (picture, clip, voice) costs more than the balance; the relay's sentence carries the price and the balance. */
+  | 'insufficient_funds'
   /** 429 `allowance_exhausted` with `paused: true` (relay 0.22): the free allowance switched off by the operator, not spent — the same card, other words. */
   | 'allowance_paused'
   /** 413 (the relay's `too_large`, or the proxy's plain `Request too large`); a 400 about the context window. */
@@ -50,7 +52,7 @@ export type RefusalKind =
   /** Any other refusal: the relay's own sentence is shown. */
   | 'other'
 
-export const REFUSAL_KINDS: readonly RefusalKind[] = ['exhausted', 'allowance_paused', 'too_large', 'content_rejected', 'signed_out', 'upstream_budget', 'disabled', 'daily_cap', 'busy', 'model', 'relay_down', 'unreachable', 'service_paused', 'sync_paused', 'hub_paused', 'cloud_off', 'other']
+export const REFUSAL_KINDS: readonly RefusalKind[] = ['exhausted', 'insufficient_funds', 'allowance_paused', 'too_large', 'content_rejected', 'signed_out', 'upstream_budget', 'disabled', 'daily_cap', 'busy', 'model', 'relay_down', 'unreachable', 'service_paused', 'sync_paused', 'hub_paused', 'cloud_off', 'other']
 
 /** The operator's switches (relay 0.22, `docs/cloud.md` → Controls): the code is the kind. */
 const PAUSED_CODES: Record<string, RefusalKind> = { service_paused: 'service_paused', sync_paused: 'sync_paused', hub_paused: 'hub_paused' }
@@ -67,6 +69,11 @@ export interface RelayRefusal {
   /** `allowance_exhausted`: what is left and the pool, in yuan. */
   left?: number
   grant?: number
+  /** `insufficient_funds`: the exact price of the generation and the balance, in rubles. */
+  requiredRub?: number
+  balanceRub?: number
+  /** `insufficient_funds`: where the relay sends the person to top up. */
+  topupUrl?: string
   /** `allowance_exhausted`: where the ways on lead (relay 0.17+). */
   inviteUrl?: string
   inviteBonusCny?: number
@@ -158,6 +165,7 @@ function errorObject(json: string): Record<string, unknown> | undefined {
 export function classifyRefusal(status: number, code: string, message: string, paused = false): RefusalKind {
   if (code === 'allowance_exhausted' && paused) return 'allowance_paused'
   if (code === 'allowance_exhausted' || code === 'out_of_tokens') return 'exhausted'
+  if (code === 'insufficient_funds') return 'insufficient_funds'
   if (PAUSED_CODES[code]) return PAUSED_CODES[code]
   if (status === 413 || code === 'too_large') return 'too_large'
   if (code === 'content_rejected' || (status === 400 && contentCheck(message))) return 'content_rejected'
@@ -166,6 +174,7 @@ export function classifyRefusal(status: number, code: string, message: string, p
   if (status === 401) return 'signed_out'
   if (status === 403) return 'disabled'
   if (code === 'daily_cap') return 'daily_cap'
+  if (status === 402) return 'insufficient_funds'
   if (status === 429) return 'busy'
   if (status === 404 && code === 'model_not_offered') return 'model'
   if (status >= 500) return 'relay_down'
@@ -202,6 +211,12 @@ export function parseRelayFailure(message: string, code?: string): RelayRefusal 
     const grant = num(err.grant)
     if (left !== undefined) refusal.left = left
     if (grant !== undefined) refusal.grant = grant
+    const requiredRub = num(err.required_rub)
+    if (requiredRub !== undefined) refusal.requiredRub = requiredRub
+    const balanceRub = num(err.balance_rub)
+    if (balanceRub !== undefined) refusal.balanceRub = balanceRub
+    const topupUrl = str(err.topup_url)
+    if (topupUrl) refusal.topupUrl = topupUrl
     const inviteUrl = str(err.invite_url)
     if (inviteUrl) refusal.inviteUrl = inviteUrl
     const bonus = num(err.invite_bonus_cny)
@@ -220,6 +235,8 @@ export function refusalSentence(refusal: RelayRefusal): string {
   switch (refusal.kind) {
     case 'exhausted':
       return 'The free allowance is used up. Add a key of your own, sign in with a plan you already pay for, or invite a friend, all under Settings → NanoLika Cloud. Your sign-in and your devices keep working.'
+    case 'insufficient_funds':
+      return refusal.message || 'This generation costs more than the balance. Top up the balance or choose a cheaper model.'
     case 'allowance_paused':
       return 'The free allowance is paused on this relay for now, not used up. Add a key of your own or sign in with a plan you already pay for, both under Settings → NanoLika Cloud. Your sign-in, your devices and what is left stay as they are.'
     case 'too_large':
@@ -293,8 +310,8 @@ export function relayFailure(failure: FailureLike): { failure: FailureLike; refu
 
 // ---- what the card shows, by kind (the browser draws it; tested here as data) --------------------
 
-/** A button on a refusal card; `cloud-once` is *Use NanoLika Cloud this time*, `models` opens Settings › Models. */
-export type RefusalAction = 'ways' | 'sign-in' | 'retry' | 'new-chat' | 'settings' | 'cloud-once' | 'models'
+/** A button on a refusal card; `cloud-once` is *Use NanoLika Cloud this time*, `models` opens Settings › Models, `topup` opens the account where the balance is topped up. */
+export type RefusalAction = 'ways' | 'sign-in' | 'retry' | 'new-chat' | 'settings' | 'cloud-once' | 'models' | 'topup'
 
 /** The card for a kind: which actions it offers, in order, and whether the relay's own sentence is worth showing under ours. */
 export function refusalCard(kind: RefusalKind): { actions: RefusalAction[]; showRelayText: boolean } {
@@ -302,6 +319,9 @@ export function refusalCard(kind: RefusalKind): { actions: RefusalAction[]; show
     case 'exhausted':
     case 'allowance_paused':
       return { actions: ['ways', 'retry'], showRelayText: false }
+    case 'insufficient_funds':
+      // a priced generation did not fit: top up, or send the same turn again after doing so
+      return { actions: ['topup', 'retry'], showRelayText: false }
     case 'too_large':
       return { actions: ['new-chat'], showRelayText: false }
     case 'content_rejected':

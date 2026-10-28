@@ -620,7 +620,11 @@ clips under the provider's own paths (`POST
 /api/v1/services/aigc/video-generation/video-synthesis`, `GET
 /api/v1/tasks/{id}` for the account's own tasks, `GET /api/v1/uploads`). Errors
 are `{"error": {"message", "type": "nanomuse_cloud", "code"}}` with a stable
-`code` the app turns into a sentence.
+`code` the app turns into a sentence. A `402 insufficient_funds` is the one
+priced refusal: a picture, clip or voice take costs more than the balance, and
+the body carries `required_rub`, `balance_rub`, `currency: "RUB"` and
+`topup_url` beside the message, so the app shows the exact price, the balance
+and a top-up button rather than the generic "allowance used up".
 A chat model whose `architecture.input_modalities` carries `image` is offered to
 the apps as a model that reads pictures, and the apps pass screenshots to it
 without a first refused request. `deepseek-flash`, the relay's own id for

@@ -175,6 +175,21 @@ def describe_failure(exc: BaseException) -> tuple[str, str]:
     code = _relay_code(exc)
     if code == "allowance_exhausted" and _relay_error(exc).get("paused") is True:
         return _ALLOWANCE_PAUSED
+    if code == "insufficient_funds":
+        # A priced generation (picture, clip, voice) did not fit the balance. The relay
+        # sends the exact figures; keep them in the sentence rather than a generic card.
+        err = _relay_error(exc)
+        required, balance = err.get("required_rub"), err.get("balance_rub")
+        if isinstance(required, (int, float)) and isinstance(balance, (int, float)):
+            return (
+                "allowance",
+                f"This generation costs ₽{required:g}; the balance has ₽{balance:g}. "
+                "Top up the balance or choose a cheaper model.",
+            )
+        return (
+            "allowance",
+            "This generation costs more than the balance. Top up the balance or choose a cheaper model.",
+        )
     if code in _RELAY:
         return _RELAY[code]
     if isinstance(code, str) and code.startswith("upstream"):

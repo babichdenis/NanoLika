@@ -66,6 +66,31 @@ test('402 out_of_tokens (older relay) is the same card', () => {
   assert.equal(r?.status, 402)
 })
 
+test('402 insufficient_funds: the exact price and balance, not "other"', () => {
+  const body = {
+    message: 'This generation costs ₽10.26; the balance has ₽5. Top up first.',
+    type: 'nanomuse_cloud',
+    code: 'insufficient_funds',
+    required_rub: 10.26,
+    balance_rub: 5,
+    currency: 'RUB',
+    topup_url: 'https://cloud.example/app',
+  }
+  const r = parseRelayFailure(relayLine(402, body), 'QUOTA')
+  assert.ok(r)
+  assert.equal(r.kind, 'insufficient_funds')
+  assert.equal(r.status, 402)
+  assert.equal(r.code, 'insufficient_funds')
+  assert.equal(r.requiredRub, 10.26)
+  assert.equal(r.balanceRub, 5)
+  assert.equal(r.topupUrl, 'https://cloud.example/app')
+  assert.match(r.message, /10\.26/)
+  assert.deepEqual(refusalCard('insufficient_funds').actions, ['topup', 'retry'])
+  assert.equal(refusalCard('insufficient_funds').showRelayText, false)
+  assert.match(refusalSentence(r), /10\.26/)
+  assert.equal(refusalKindOf(refusalCode('insufficient_funds')), 'insufficient_funds')
+})
+
 test('413: the relay’s too_large JSON and the proxy’s plain text both say "too large"', () => {
   const json = parseRelayFailure(relayLine(413, { message: 'Request body is 12.4 MB; this relay accepts up to 8 MB.', type: 'nanomuse_cloud', code: 'too_large' }), 'INVALID_REQUEST')
   assert.equal(json?.kind, 'too_large')

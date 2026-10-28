@@ -37,6 +37,24 @@ def test_relay_refusals_are_named_by_code():
     assert describe_failure(exc)[0] == "provider"
 
 
+def test_insufficient_funds_keeps_the_price_and_the_balance():
+    """A priced generation that does not fit is not the spent pool: the sentence carries
+    the exact price and balance the relay sent, so the app can show both."""
+    exc = _status_error(
+        openai.PermissionDeniedError,
+        402,
+        {
+            "code": "insufficient_funds",
+            "message": "This generation costs ₽10.26; the balance has ₽5.",
+            "required_rub": 10.26,
+            "balance_rub": 5,
+        },
+    )
+    code, text = describe_failure(exc)
+    assert code == "allowance"
+    assert "10.26" in text and "5" in text and "Top up" in text
+
+
 def test_the_showcase_gateways_shares_are_named():
     """The showcase's gateway answers 429 ``session_budget`` / ``daily_budget`` when a demo
     Muse's share of the model is used up; that is not a provider rate-limiting a key."""

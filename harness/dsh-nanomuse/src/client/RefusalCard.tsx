@@ -47,6 +47,8 @@ export function refusalText(t: Translate, kind: RefusalKind, message: string, re
   switch (kind) {
     case 'exhausted':
       return t('awExhausted')
+    case 'insufficient_funds':
+      return message || t('rfInsufficientFunds')
     case 'allowance_paused':
       return t('rfAllowancePaused')
     case 'too_large':
@@ -168,6 +170,8 @@ export function makeTurnError(t: Translate, deps: RefusalDeps) {
             return button(t('rfNewChat'), () => deps.newChat(), true)
           case 'sign-in':
             return button(t('rfSignIn'), openSettings, true)
+          case 'topup':
+            return button(t('rfTopUp'), openSettings, true)
           case 'settings':
             return button(t('rfSettings'), openSettings)
           case 'models':
