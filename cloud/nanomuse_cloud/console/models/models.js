@@ -13,6 +13,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       title: 'Модели', eyebrow: 'nanoLika · Ваш кабинет',
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа, возможности и предварительный расчёт доступны у каждой модели.',
       search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные',
+      allVendors: 'Все провайдеры', otherVendors: 'Другие', vendorFilter: 'Провайдер',
       chat: 'Переписка', code: 'Кодинг', image: 'Картинки', video: 'Видео', sound: 'Звук', music: 'Музыка',
       showMore: (n, total) => `Показать ещё ${n} из ${total}`, showAll: 'Показать все',
       speech: 'Озвучка', transcribe: 'Распознавание',
@@ -37,6 +38,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       title: 'Models', eyebrow: 'nanoLika · Your account',
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices, model capabilities and estimates are shown before generation.',
       search: 'Search models', all: 'All models', mine: 'My picks',
+      allVendors: 'All providers', otherVendors: 'Other', vendorFilter: 'Provider',
       chat: 'Chat', code: 'Coding', image: 'Pictures', video: 'Clips', sound: 'Sound', music: 'Music',
       showMore: (n, total) => `Show ${n} more of ${total}`, showAll: 'Show all',
       speech: 'Speech', transcribe: 'Transcription',
@@ -61,6 +63,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       title: '模型', eyebrow: 'nanoLika · 账户',
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。单次生成的费用与供应商成本直接写在各自一行。',
       search: '快速搜索模型', all: '全部模型', mine: '已选',
+      allVendors: '全部供应商', otherVendors: '其他', vendorFilter: '供应商',
       chat: '对话', code: '编程', image: '图片', video: '视频', sound: '语音', music: '音乐',
       showMore: (n, total) => `再显示 ${n} 个，共 ${total} 个`, showAll: '显示全部',
       speech: '语音合成', transcribe: '语音识别',
@@ -143,6 +146,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
   let contextMin=0;let favouriteWrites=Promise.resolve();
   let section = 'all'; // какой раздел открыт
   let needle = ''; // что в поиске
+  let vendorFilter = ''; // один провайдер или все
   let shownCount = {}; // сколько строк раздела уже показано
   let collapsedKinds = new Set(); // разделы можно свернуть, не меняя выбранные модели
   const PAGE = 40; // столько строк ждёт человека, остальное по кнопке: 384 модели разом браузер не любит
@@ -185,7 +189,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     return wrap;
   }
 
-  function row(model) {
+  function row(model, showVendor = true) {
     const kind = model.kind;
     const on = draft.enabled[kind].has(model.id);
     const usable = model.available !== false;
@@ -214,7 +218,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
     if (!usable) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
-    if (model.vendor) names.append(h('div', T.vendor(model.vendor), 'mm-vendor'));
+    if (model.vendor && showVendor) names.append(h('div', T.vendor(model.vendor), 'mm-vendor'));
 
     const more = h('button', T.more, 'mm-link');
     more.type = 'button';
@@ -272,6 +276,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     return all.filter((model) => {
       const hay = `${model.name} ${model.vendor || ''} ${model.id} ${model.upstream || ''}`.toLowerCase();
       if (wanted && !hay.includes(wanted)) return false;
+      if (vendorFilter === '__other__') { if (model.vendor) return false; }
+      else if (vendorFilter && model.vendor !== vendorFilter) return false;
       if(contextMin && Number(model.context_length||0)<contextMin)return false;
       if(section==='favourites')return (loaded.shelf?.favourites||[]).includes(model.id);
       if (section === 'mine') return SHELF_KINDS.some((k) => draft.enabled[k].has(model.id));
@@ -307,7 +313,25 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
       const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное',''],en:['Model','Price','Output','Enabled','Default','Favourite',''],zh:['模型','价格','输出','启用','默认','收藏','']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite',''];
       for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
-      for (const model of sorted.slice(0, shown)) tbody.append(row(model));
+      const page = sorted.slice(0, shown);
+      const byVendor = new Map();
+      for (const model of page) {
+        const vendor = model.vendor || T.otherVendors;
+        if (!byVendor.has(vendor)) byVendor.set(vendor, []);
+        byVendor.get(vendor).push(model);
+      }
+      const vendorGroups = [...byVendor.entries()].sort((a, b) => a[0].localeCompare(b[0], document.documentElement.lang));
+      for (const [vendor, models] of vendorGroups) {
+        if (vendorGroups.length > 1) {
+          const groupRow = h('tr', undefined, 'model-group-row');
+          const groupHead = h('th', vendor, 'model-group-title');
+          groupHead.colSpan = 7;
+          groupHead.scope = 'colgroup';
+          groupRow.append(groupHead);
+          tbody.append(groupRow);
+        }
+        for (const model of models) tbody.append(row(model, vendorGroups.length === 1));
+      }
       if (sorted.length > shown) {
         const more = h('button', T.showMore(Math.min(PAGE, sorted.length - shown), sorted.length), 'chip mm-all');
         more.type = 'button';
@@ -406,6 +430,22 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       if (!response.ok) throw new Error('request');
       loaded = await response.json();
       if(!el('context-filter')){const label=h('label','Контекст ');const select=h('select');select.id='context-filter';select.setAttribute('aria-label','Контекст');for(const n of [0,128000,200000,1000000]){const option=h('option',n?(n/1000)+'K+':'Любой');option.value=n;select.append(option);}select.onchange=()=>{contextMin=Number(select.value);draw();};label.append(select);document.querySelector('.search-row').append(label);const refresh=h('button','Обновить цены','chip');refresh.type='button';refresh.onclick=load;document.querySelector('.search-row').append(refresh);}
+      if(!el('vendor-filter')){
+        const label=h('label',T.vendorFilter+' ');
+        const select=h('select');select.id='vendor-filter';select.setAttribute('aria-label',T.vendorFilter);
+        select.onchange=()=>{vendorFilter=select.value;draw();};
+        label.append(select);document.querySelector('.search-row').append(label);
+      }
+      const vendorSelect=el('vendor-filter');
+      const vendors=[...new Set((loaded.models||[]).map(m=>m.vendor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,document.documentElement.lang));
+      const hasOther=(loaded.models||[]).some(m=>!m.vendor);
+      vendorSelect.replaceChildren();
+      const anyVendor=h('option',T.allVendors);anyVendor.value='';vendorSelect.append(anyVendor);
+      for(const v of vendors){const option=h('option',v);option.value=v;vendorSelect.append(option);}
+      if(hasOther){const other=h('option',T.otherVendors);other.value='__other__';vendorSelect.append(other);}
+      const known=[...vendors,...(hasOther?['__other__']:[])];
+      vendorSelect.value=known.includes(vendorFilter)?vendorFilter:'';
+      vendorFilter=vendorSelect.value;
 
       draft = fromServer(loaded.shelf || {});
       draw();
