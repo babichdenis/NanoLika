@@ -405,11 +405,12 @@ async def test_invites_and_the_operator_grow_the_one_pool():
     me_a = (await client.get("/v1/me", headers=auth(ka))).json()
     assert me_a["spend"]["total"] == 3.5 and me_a["spend"]["left"] == round(3.6 - 3.5, 4) and me_a["spend"]["warn"] is True
     r = await clip(client, ka)
-    assert r.status_code == 429 and r.json()["error"]["code"] == "allowance_exhausted"
-    assert r.json()["error"]["left"] == 0.1 and r.json()["error"]["contribute_bonus_available"] is False
-    assert "co-creation" not in r.json()["error"]["message"] and "invite a friend" in r.json()["error"]["message"]
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
+    assert r.json()["error"]["left"] == 0.1
+    assert "required_rub" in r.json()["error"] and "topup_url" in r.json()["error"]
+    assert "Top up" in r.json()["error"]["message"]
     r = await client.get("/api/v1/uploads", params={"action": "getPolicy", "model": "wan2.2-i2v-flash"}, headers=auth(ka))
-    assert r.status_code == 429 and r.json()["error"]["code"] == "allowance_exhausted"
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
     # a probe costs nothing and is not refused for money
     r = await client.post(VIDEO, headers=auth(ka), json={"model": "wan2.2-i2v-flash", "input": {}, "parameters": {}})
     assert r.status_code == 400
@@ -424,7 +425,7 @@ async def test_invites_and_the_operator_grow_the_one_pool():
     assert est["cny"] == 0.5 and est["affordable"] is True
     assert (await clip(client, kc)).status_code == 200
     r = await clip(client, kc)
-    assert r.status_code == 429 and r.json()["error"]["code"] == "allowance_exhausted"
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
 
     # The operator credits C for a pull request: straight into the pool.
     admin = {"X-Admin-Token": "admin"}

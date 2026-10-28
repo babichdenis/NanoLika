@@ -203,17 +203,20 @@ async def test_legacy_order_and_wallet_migrate_without_reset(monkeypatch):
     assert again.wallet(p.cloud.authenticate(user["api_key"]))["balance_kopecks"] == 0
     await client.aclose()
 
+
 async def test_a_refund_takes_the_tariff_back_down(monkeypatch):
     """Возврат пересчитывает уровень: сумма упала ниже тарифа — права снимаются."""
     app, client, user, p, calls, bank = await setup(monkeypatch)
     row = await order(client, user, "tier_down", plan="lika-plus")
     p.apply(notice(p, row), signed=True)
-    assert p.cloud.plan_state(user["account"]["id"])["id"] == "lika-plus"
+    # DEMO money and its tariff live in the demo wallet; the live subscription is not touched
+    caller = p.cloud.authenticate(user["api_key"])
+    assert p.wallet(caller)["plan"] == "lika-plus"
     # возвращаем всё: денег на счету нет, тариф снят
     bank_state(p, bank, row, "REFUNDED", 0)
     for _ in range(2):
         response = await client.post("/v1/payments/tbank/notify", json=notice(p, row, Status="REFUNDED", Amount=0))
         assert response.status_code == 200, response.text
-    assert p.wallet(p.cloud.authenticate(user["api_key"]))["balance_kopecks"] == 0
-    assert p.cloud.plan_state(user["account"]["id"]) is None
+    assert p.wallet(caller)["balance_kopecks"] == 0
+    assert p.wallet(caller)["plan"] == ""
     await client.aclose()

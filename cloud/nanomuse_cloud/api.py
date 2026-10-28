@@ -1566,7 +1566,7 @@ def create_app(
             raise CloudError(502, "upstream", "Картинку не удалось забрать")
         return img.content
 
-    async def _image_with_fallback(spec: ModelSpec, prompt: str, size: str) -> bytes:
+    async def _image_with_fallback(spec: ModelSpec, prompt: str, size: str, params: dict | None = None) -> bytes:
         """Картинка у первого живого поставщика из каталога базы.
 
         Кандидаты уже отсортированы по закупке. Если поставщик отвечает
@@ -1612,7 +1612,7 @@ def create_app(
         if provider:
             return await _polza_image(base, key, spec.upstream, prompt, size)
         return await _dashscope_image(spec.upstream, [{"text": prompt}],
-                                      {"size": size, "watermark": False})
+                                      params or {"size": size, "watermark": False})
 
     async def _polza_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
         """One picture from Polza, waited out: submit, poll the task, fetch the file."""
@@ -1695,7 +1695,7 @@ def create_app(
             caller, minimum=spec.per_image, cost_uy=model_pricing.amount(cloud, spec, {"size": size.replace("*", "x")}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
         )
         try:
-            png = await _image_with_fallback(spec, prompt, size)
+            png = await _image_with_fallback(spec, prompt, size, params)
             charged = cloud.charge_image(caller, spec, 1, request_id, size=size)
         finally:
             cloud.settle(caller, request_id)
@@ -2171,7 +2171,8 @@ def create_app(
         # price against the allowance (db.pending_video_cost) until the clip is charged
         headers = upstream_headers()  # before the hold, as for chat: no key, nothing held
         request_id = uuid.uuid4().hex[:16]
-        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
+        if not probe:
+            cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
         body["model"] = spec.upstream
         headers["X-DashScope-Async"] = "enable"
         if request.headers.get("x-dashscope-ossresourceresolve"):

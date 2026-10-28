@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS video_tasks (
     cost_uy       INTEGER NOT NULL DEFAULT 0,  -- priced at submission from the seconds asked for
     probe         INTEGER NOT NULL DEFAULT 0,  -- an empty task the app sent to see if the model exists
     status        TEXT NOT NULL DEFAULT '',    -- the provider's last word: SUCCEEDED / FAILED / ...
-    checks        INTEGER NOT NULL DEFAULT 0   -- 0.24: times the relay itself asked the provider (settle_video_tasks)
+    checks        INTEGER NOT NULL DEFAULT 0,  -- 0.24: times the relay itself asked the provider (settle_video_tasks)
+    provider      TEXT NOT NULL DEFAULT ''     -- 0.30: the supplier that made the clip (poll it there)
 );
 -- 0.4: conversations an account chose to contribute (accounts.contribute=1). The only
 -- place message content ever lands; empty for everyone else, and deleted with the account
@@ -512,6 +513,7 @@ class Database:
             ("probe", "INTEGER NOT NULL DEFAULT 0"),
             ("status", "TEXT NOT NULL DEFAULT ''"),
             ("checks", "INTEGER NOT NULL DEFAULT 0"),
+            ("provider", "TEXT NOT NULL DEFAULT ''"),
         ):
             if col not in cols("video_tasks"):
                 self._conn.execute(f"ALTER TABLE video_tasks ADD COLUMN {col} {ddl}")
@@ -2559,14 +2561,25 @@ class Database:
 
     # -- video tasks (the provider's async API, relayed) --------------------------
 
-    def insert_video_task(self, task_id: str, account_id: str, model: str, cost_uy: int = 0, probe: bool = False, sale_uy: int | None = None) -> None:
+    def insert_video_task(
+        self,
+        task_id: str,
+        account_id: str,
+        model: str,
+        cost_uy: int = 0,
+        probe: bool = False,
+        sale_uy: int | None = None,
+        provider: str = "",
+    ) -> None:
         t = now()
         with self.tx() as c:
             # a second insert for the same task (a retried poll) must not forget that it was charged
             c.execute(
-                "INSERT INTO video_tasks(task_id, account_id, model, created_at, cost_uy, probe, sale_uy) VALUES (?,?,?,?,?,?,?) "
-                "ON CONFLICT(task_id) DO UPDATE SET model=excluded.model, cost_uy=excluded.cost_uy",
-                (task_id, account_id, model, t, max(0, int(cost_uy)), 1 if probe else 0, sale_uy),
+                "INSERT INTO video_tasks(task_id, account_id, model, created_at, cost_uy, probe, sale_uy, provider) "
+                "VALUES (?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(task_id) DO UPDATE SET model=excluded.model, cost_uy=excluded.cost_uy, "
+                "provider=excluded.provider",
+                (task_id, account_id, model, t, max(0, int(cost_uy)), 1 if probe else 0, sale_uy, provider),
             )
             c.execute("DELETE FROM video_tasks WHERE created_at < ?", (t - self.VIDEO_KEEP_S,))
 

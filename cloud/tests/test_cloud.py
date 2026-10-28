@@ -2192,7 +2192,7 @@ async def test_requests_under_way_are_held_against_the_allowance():
     assert cloud.in_flight.reserved(caller.account_id) == grant - picture // 2
     with pytest.raises(CloudError) as refused:
         cloud.check_budget(caller, minimum=1, cost_uy=picture, request_id="pic-1")
-    assert refused.value.code == "allowance_exhausted"
+    assert refused.value.code == "insufficient_funds"
     cloud.settle(caller, "chat-1")
     cloud.check_budget(caller, minimum=1, cost_uy=picture, request_id="pic-1")  # fits now
     cloud.settle(caller, "pic-1")

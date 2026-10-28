@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+
 from nanomuse_cloud.channel_links import (
     _telegram_session,
     _validate_telegram_init_data,
@@ -62,17 +63,16 @@ def cloud_fixture(link=True):
 
 
 def test_decodes_unicode_and_signature():
-    assert (
-        _validate_telegram_init_data(signed(), TOKEN)["user"]["first_name"]
-        == "Лика + & ="
-    )
+    assert _validate_telegram_init_data(signed(), TOKEN)["user"]["first_name"] == "Лика + & ="
 
 
 @pytest.mark.parametrize(
     "raw",
     [
         signed(auth_date=str(int(time.time()) - 301)),
-        signed(auth_date=str(int(time.time()) + 60)),
+        # A launch more than 30 s in the future is invalid; an hour keeps it invalid even
+        # if the suite collects the parameters long before it runs them.
+        signed(auth_date=str(int(time.time()) + 3600)),
         signed(user='{"id":true}'),
         signed(user='{"id":-1}'),
         signed(user="[]"),
@@ -167,11 +167,7 @@ def test_endpoint(origin, content, raw, expected):
                 assert response.json()["account"]["id"] == caller.account_id
                 assert response.headers["cache-control"] == "private, no-store"
                 cookies = ";".join(response.headers.get_list("set-cookie"))
-                assert (
-                    "__Host-nanolika_session=" in cookies
-                    and "HttpOnly" in cookies
-                    and "Secure" in cookies
-                )
+                assert "__Host-nanolika_session=" in cookies and "HttpOnly" in cookies and "Secure" in cookies
             else:
                 assert "set-cookie" not in response.headers
 

@@ -42,6 +42,9 @@ def make(**overrides):
         per_minute_requests=100,
         allowance_cny=10,
         public_base="http://cloud.test",
+        # These tests price pictures and clips; the video deposit is a tariff rule,
+        # covered by test_plans.py, and would stop the first submission here.
+        video_min_paid_rub=0,
     )
     kw.update(overrides)
     settings = Settings(**kw)
@@ -278,7 +281,8 @@ async def test_an_edit_counts_the_picture_sent_in():
     files = {"image": ("in.png", PNG_1PX, "image/png")}
     form = {"model": "qwen-image-3.0", "prompt": "make it blue"}
     r = await client.post("/v1/images/edits", headers=auth, data=form, files=files)
-    assert r.status_code == 429 and r.json()["error"]["code"] == "allowance_exhausted"
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
+    assert "required_rub" in r.json()["error"] and "balance_rub" in r.json()["error"]
     me = (await client.get("/v1/me", headers=auth)).json()
     assert me["spend"]["left"] == 0.19 and [r["requests"] for r in me["usage"]["total"]["by_kind"]] == [1]
     assert not [r for r in up.state.requests if r[0] == "image" and "blue" in json.dumps(r[2])]  # never sent upstream
@@ -327,7 +331,7 @@ async def test_clips_are_priced_by_resolution_and_charged_once():
         headers=auth,
         json={"model": "wan2.2-i2v-flash", "input": {"prompt": "x", "img_url": "oss://y"}, "parameters": {"resolution": "1080P"}},
     )
-    assert r.status_code == 429 and r.json()["error"]["code"] == "allowance_exhausted"
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
     # polled: running, then done, then done again and again; each charged once, at the
     # price fixed when it was submitted
     for n, task_id in enumerate((t480, t1080, tsize), start=1):
@@ -345,7 +349,7 @@ async def test_clips_are_priced_by_resolution_and_charged_once():
         headers=auth,
         json={"model": "wan2.2-i2v-flash", "input": {"prompt": "x", "img_url": "oss://y"}, "parameters": {"resolution": "1080P"}},
     )
-    assert r.status_code == 429
+    assert r.status_code == 402 and r.json()["error"]["code"] == "insufficient_funds"
     assert (await submit({"resolution": "480P"})).startswith("task-")
 
 
