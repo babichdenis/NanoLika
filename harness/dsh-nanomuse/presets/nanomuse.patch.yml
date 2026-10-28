@@ -126,6 +126,12 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  # dsh по умолчанию сжимает на 80% окна: у модели 1M это 838k, и сессия
+                  # Лики (700k) до порога не доходила — каждый запрос тащил весь контекст.
+                  # 0.15 — сжатие около 150k; свежий хвост 13.5k (на 10% меньше прежних 15k).
+                  thresholdRatio: 0.15
+                  retainTokens: 13500
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner
