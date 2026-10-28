@@ -15,6 +15,7 @@ import { settingsBus } from './bus.ts'
 import { IconHand, IconImage, IconMessage, IconVideo } from './icons.tsx'
 import { useLive } from './live.ts'
 import type { ModelGroup } from './model-list.ts'
+import type { CatalogueModel } from './ModelEstimate.tsx'
 import { ModelPicker, type PickerHead } from './ModelPicker.tsx'
 import { MODELS_SECTION, providersNamed, useProviders, type ModelOption } from './OwnKey.tsx'
 import { OWN_KEYS_SECTION } from './MuseSettings.tsx'
@@ -128,6 +129,13 @@ export function SlotPicker({ t, slot, view, disabled, catalogue, onPick }: { t: 
     ...(automatic ? [{ value: 'auto', label: t('mlAutomatic') }] : []),
     ...(slot === 'video' ? [{ value: 'off', label: t('mdVideoOff') }] : []),
   ]
+  // Which closed models the slot would open on a bigger plan: the same lane the open ones
+  // serve (chat, the hands' `gui`, pictures, clips), never another slot's menu.
+  const catalogueFilter = (model: CatalogueModel): boolean => slot === 'hands'
+    ? model.kind === 'chat' && (model.for ?? []).includes('gui')
+    : slot === 'chat'
+      ? model.kind === 'chat' && (model.for ?? []).includes('chat')
+      : model.kind === slot
   return h(ModelPicker<ModelOption>, {
     t,
     label: slotTitle(t, slot),
@@ -138,6 +146,7 @@ export function SlotPicker({ t, slot, view, disabled, catalogue, onPick }: { t: 
     ...(onHead || !view.model ? {} : { current: { group: view.provider, id: view.model } }),
     disabled,
     testId: `nm-ml-${slot}`,
+    catalogueFilter,
     onHead: (value) => onPick('', value),
     onPick: (provider, row) => onPick(provider, row.id),
     rowText: (o, info) => { const name = o.provider === 'nanomuse' ? (info?.name || o.name) : o.name; return o.recommended ? name + ' \u00b7 ' + t('mlRecommended') : name },
@@ -158,6 +167,8 @@ export function makeModelsSection(t: Translate) {
     const [said, setSaid] = useState<Partial<Record<Slot, string>>>({})
     const [failed, setFailed] = useState<string | undefined>()
     const [switching, setSwitching] = useState(false)
+    // the one list that spans chat, pictures and clips says where a picked model landed
+    const [librarySaid, setLibrarySaid] = useState('')
     // the host refused the switch (`409 chat_on_cloud`: the chat slot is the account's and nothing of
     // one's own could answer); one sentence under the switch, which stays on
     const [switchNote, setSwitchNote] = useState<string | undefined>()
@@ -225,6 +236,24 @@ export function makeModelsSection(t: Translate) {
               switchNote ? h('span', { className: 'nm-row-sub nm-wrap', role: 'alert', style: errorStyle, 'data-testid': 'nm-ml-cloud-note' }, switchNote) : null),
             h('button', { type: 'button', role: 'switch', className: 'nm-switch', 'aria-checked': view.cloudModels, 'aria-label': t('mlCloudModels'), 'data-testid': 'nm-ml-cloud-switch', disabled: switching || busy !== null, onClick: () => setCloudModels(!view.cloudModels) })))
       : null
+    // One list over the three slots: the chat, picture and clip menus are separate rows above,
+    // but a person looking for "that model I saw" should not have to guess which row owns it.
+    const libraryRows: ModelOption[] = []
+    const seenCloud = new Set<string>()
+    for (const slot of ['chat', 'image', 'video'] as const) {
+      for (const option of view.slots[slot].options) {
+        if (option.provider !== 'nanomuse' || seenCloud.has(option.id)) continue
+        seenCloud.add(option.id)
+        libraryRows.push(option)
+      }
+    }
+    const slotOfCloud = (id: string): Slot =>
+      view.slots.image.options.some(option => option.provider === 'nanomuse' && option.id === id) ? 'image'
+        : view.slots.video.options.some(option => option.provider === 'nanomuse' && option.id === id) ? 'video'
+          : 'chat'
+    const inUse = (['chat', 'image', 'video'] as const)
+      .map(slot => view.slots[slot].provider === 'nanomuse' ? view.slots[slot].model : '')
+      .filter(Boolean)
     return h('div', { className: 'nm-section', 'data-testid': 'nm-models-section' },
       h('p', null, t('mlLead')),
       view.signedIn ? h('div', { className: 'nm-card', style: { padding: 18, marginBottom: 14 }, 'data-testid': 'nm-primary-cloud-slot' },
@@ -236,8 +265,25 @@ export function makeModelsSection(t: Translate) {
           ...(view.slots.chat.provider === 'nanomuse' ? { current: { group: 'nanomuse', id: view.slots.chat.model } } : {}),
           disabled: busy !== null || !view.cloudModels,
           testId: 'nm-cloud-model-library',
+          catalogueFilter: (model) => model.kind === 'chat' && (model.for ?? []).includes('chat'),
           onPick: (_provider, row) => pick('chat', 'nanomuse', row.id),
-        })) : null,
+        }),
+        libraryRows.length > 1 ? h('div', { style: { marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--nm-divider)' }, 'data-testid': 'nm-cloud-all-models' },
+          h('p', { className: 'nm-row-sub nm-wrap', style: { margin: '0 0 6px' } }, t('mlAllModelsHint')),
+          h(ModelPicker<ModelOption>, {
+            t, label: t('mlAllModels'), text: t('mlAllModels'),
+            groups: [{ key: 'nanomuse', label: 'nanoLika Cloud', rows: libraryRows }],
+            currentIds: inUse,
+            disabled: busy !== null || !view.cloudModels,
+            testId: 'nm-cloud-all-models',
+            catalogueFilter: (model) => ['chat', 'image', 'video'].includes(model.kind),
+            onPick: (_provider, row) => {
+              const slot = slotOfCloud(row.id)
+              setLibrarySaid(t('mlLibrarySaved', { slot: slotTitle(t, slot), model: row.name }))
+              pick(slot, 'nanomuse', row.id)
+            },
+          }),
+          librarySaid ? h('p', { className: 'nm-row-sub nm-wrap', style: { margin: '6px 0 0' }, role: 'status' }, librarySaid) : null) : null) : null,
 
       h('div', { className: 'nm-card' }, rows),
       cloudRow,

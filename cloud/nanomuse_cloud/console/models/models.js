@@ -12,7 +12,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     ru: {
       title: 'Модели', eyebrow: 'nanoLika · Ваш кабинет',
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа, возможности и предварительный расчёт доступны у каждой модели.',
-      search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные',
+      search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные', favouritesShort: '★ Избранное',
+      sort: 'Сортировка', sortRecommended: 'По рекомендации', sortPrice: 'Сначала дешевле', sortContext: 'Сначала большой контекст', sortName: 'По названию',
       allVendors: 'Все провайдеры', otherVendors: 'Другие', vendorFilter: 'Провайдер',
       planLocked: 'на другом тарифе', planNote: (n) => `На старших тарифах доступно ещё ${n}.`, upgrade: 'Тарифы →',
       chat: 'Переписка', code: 'Кодинг', image: 'Картинки', video: 'Видео', sound: 'Звук', music: 'Музыка',
@@ -38,7 +39,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     en: {
       title: 'Models', eyebrow: 'nanoLika · Your account',
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices, model capabilities and estimates are shown before generation.',
-      search: 'Search models', all: 'All models', mine: 'My picks',
+      search: 'Search models', all: 'All models', mine: 'My picks', favouritesShort: '★ Favourites',
+      sort: 'Sort', sortRecommended: 'Recommended', sortPrice: 'Lowest price', sortContext: 'Largest context', sortName: 'Name',
       allVendors: 'All providers', otherVendors: 'Other', vendorFilter: 'Provider',
       planLocked: 'on a higher plan', planNote: (n) => `${n} models open on higher plans.`, upgrade: 'Plans →',
       chat: 'Chat', code: 'Coding', image: 'Pictures', video: 'Clips', sound: 'Sound', music: 'Music',
@@ -64,7 +66,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     zh: {
       title: '模型', eyebrow: 'nanoLika · 账户',
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。单次生成的费用与供应商成本直接写在各自一行。',
-      search: '快速搜索模型', all: '全部模型', mine: '已选',
+      search: '快速搜索模型', all: '全部模型', mine: '已选', favouritesShort: '★ 收藏',
+      sort: '排序', sortRecommended: '推荐', sortPrice: '价格从低到高', sortContext: '上下文从大到小', sortName: '名称',
       allVendors: '全部供应商', otherVendors: '其他', vendorFilter: '供应商',
       planLocked: '更高套餐', planNote: (n) => `${n} 个模型需要更高套餐。`, upgrade: '套餐 →',
       chat: '对话', code: '编程', image: '图片', video: '视频', sound: '语音', music: '音乐',
@@ -143,13 +146,22 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
 
   /** Полка ведётся по видам, поэтому у звука и музыки один вид: «ключ полки». */
   const SHELF_KINDS = ['chat', 'image', 'video', 'audio'];
+  const SECTION_KEYS = new Set(['all', 'favourites', 'mine', 'code', ...SECTIONS.map((spec) => spec.key)]);
+  const readPref = (key, fallback) => {
+    try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; }
+  };
+  const writePref = (key, value) => {
+    try { localStorage.setItem(key, value); } catch (_) { /* storage may be unavailable */ }
+  };
 
   let loaded = null; // что сказал сервер в прошлый раз
   let draft = null; // что человек выбрал сейчас
   let contextMin=0;let favouriteWrites=Promise.resolve();
-  let section = 'all'; // какой раздел открыт
+  let section = readPref('nm.models.section', 'all'); // какой раздел открыт
+  if (!SECTION_KEYS.has(section)) section = 'all';
   let needle = ''; // что в поиске
-  let vendorFilter = ''; // один провайдер или все
+  let vendorFilter = readPref('nm.models.vendor', ''); // один провайдер или все
+  let sortMode = readPref('nm.models.sort', 'recommended'); // как расставлены строки
   let shownCount = {}; // сколько строк раздела уже показано
   let collapsedKinds = new Set(); // разделы можно свернуть, не меняя выбранные модели
   const PAGE = 40; // столько строк ждёт человека, остальное по кнопке: 384 модели разом браузер не любит
@@ -167,6 +179,17 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
   function rub(cny) {
     if (!cny) return '';
     return '₽' + num(Number(cny) * RUB_PER_YUAN, 2);
+  }
+
+  /** Одна сопоставимая цена для сортировки внутри раздела: текст — вход плюс выход. */
+  function priceValue(model) {
+    const rates = (model.commerce || {}).effective_rub || {};
+    const value = (key) => rates[key] === undefined || rates[key] === null ? Infinity : Number(rates[key]);
+    if (model.kind === 'chat') return (Number(rates.input) || 0) + (Number(rates.output) || 0) * 0.512;
+    if (model.kind === 'image') return value('image');
+    if (model.kind === 'video') return value('second');
+    if ((model.audio || {}).kind === 'speech') return value('speech');
+    return value('minute');
   }
 
   /** Что покупают за токены и сколько это стоит у провайдера — словами, без выдуманных цен. */
@@ -321,33 +344,43 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       const title = section === 'code' ? T.code : T[spec.title];
       head.append(h('span', title), h('span', T.found(rows.length), 'kind-count'));
       block.append(head);
-      // включённые по умолчанию — первыми, дальше по имени: дорогое не прячется, но и не лезет вперёд
-      const sorted = [...rows].sort(
-        (a, b) => Number(b.default_on !== false) - Number(a.default_on !== false) || a.name.localeCompare(b.name),
-      );
+      // по умолчанию включённые первыми, дальше по имени: дорогое не прячется, но и не лезет вперёд
+      const byName = (a, b) => a.name.localeCompare(b.name, document.documentElement.lang);
+      const sorted = [...rows].sort((a, b) => {
+        if (sortMode === 'price') return priceValue(a) - priceValue(b) || byName(a, b);
+        if (sortMode === 'context') return Number(b.context_length || 0) - Number(a.context_length || 0) || byName(a, b);
+        if (sortMode === 'name') return byName(a, b);
+        return Number(b.default_on !== false) - Number(a.default_on !== false) || byName(a, b);
+      });
       const shown = shownCount[spec.key] || PAGE;
       const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
       const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное',''],en:['Model','Price','Output','Enabled','Default','Favourite',''],zh:['模型','价格','输出','启用','默认','收藏','']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite',''];
       if (spec.kind !== 'chat') labels[2] = T.capability;
       for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
       const page = sorted.slice(0, shown);
-      const byVendor = new Map();
-      for (const model of page) {
-        const vendor = model.vendor || T.otherVendors;
-        if (!byVendor.has(vendor)) byVendor.set(vendor, []);
-        byVendor.get(vendor).push(model);
-      }
-      const vendorGroups = [...byVendor.entries()].sort((a, b) => a[0].localeCompare(b[0], document.documentElement.lang));
-      for (const [vendor, models] of vendorGroups) {
-        if (vendorGroups.length > 1) {
-          const groupRow = h('tr', undefined, 'model-group-row');
-          const groupHead = h('th', vendor, 'model-group-title');
-          groupHead.colSpan = 7;
-          groupHead.scope = 'colgroup';
-          groupRow.append(groupHead);
-          tbody.append(groupRow);
+      // Провайдерские группы — для обычного просмотра. Сортировка по цене или контексту
+      // важнее: иначе она работала бы только внутри провайдера, а не по всему разделу.
+      if (sortMode === 'recommended') {
+        const byVendor = new Map();
+        for (const model of page) {
+          const vendor = model.vendor || T.otherVendors;
+          if (!byVendor.has(vendor)) byVendor.set(vendor, []);
+          byVendor.get(vendor).push(model);
         }
-        for (const model of models) tbody.append(row(model, vendorGroups.length === 1, spec));
+        const vendorGroups = [...byVendor.entries()].sort((a, b) => a[0].localeCompare(b[0], document.documentElement.lang));
+        for (const [vendor, models] of vendorGroups) {
+          if (vendorGroups.length > 1) {
+            const groupRow = h('tr', undefined, 'model-group-row');
+            const groupHead = h('th', vendor, 'model-group-title');
+            groupHead.colSpan = 7;
+            groupHead.scope = 'colgroup';
+            groupRow.append(groupHead);
+            tbody.append(groupRow);
+          }
+          for (const model of models) tbody.append(row(model, vendorGroups.length === 1, spec));
+        }
+      } else {
+        for (const model of page) tbody.append(row(model, true, spec));
       }
       if (sorted.length > shown) {
         const more = h('button', T.showMore(Math.min(PAGE, sorted.length - shown), sorted.length), 'chip mm-all');
@@ -371,7 +404,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       all.filter((m) => (spec.sub ? m.kind === 'audio' && (m.audio || {}).kind === spec.sub : m.kind === spec.kind)).length;
     const chips = [
       ['all', T.all, all.length],
-      ['favourites', '★ Избранное', (loaded.shelf?.favourites||[]).length],
+      ['favourites', T.favouritesShort, (loaded.shelf?.favourites||[]).length],
       ['mine', T.mine, all.filter((m) => !m.plan_locked && SHELF_KINDS.some((k) => draft.enabled[k].has(m.id))).length],
       ['code', T.code, all.filter(isCoding).length],
       ...SECTIONS.map((spec) => [spec.key, T[spec.title], ofKind(spec)]),
@@ -383,6 +416,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       chip.append(h('span', label), h('span', num(count), 'chip-count'));
       chip.onclick = () => {
         section = key;
+        writePref('nm.models.section', section);
         shownCount = {};
         draw();
       };
@@ -458,7 +492,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       if(!el('vendor-filter')){
         const label=h('label',T.vendorFilter+' ');
         const select=h('select');select.id='vendor-filter';select.setAttribute('aria-label',T.vendorFilter);
-        select.onchange=()=>{vendorFilter=select.value;draw();};
+        select.onchange=()=>{vendorFilter=select.value;writePref('nm.models.vendor',vendorFilter);draw();};
         label.append(select);document.querySelector('.search-row').append(label);
       }
       const vendorSelect=el('vendor-filter');
@@ -471,6 +505,14 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       const known=[...vendors,...(hasOther?['__other__']:[])];
       vendorSelect.value=known.includes(vendorFilter)?vendorFilter:'';
       vendorFilter=vendorSelect.value;
+      if(!el('sort-filter')){
+        const label=h('label',T.sort+' ');
+        const select=h('select');select.id='sort-filter';select.setAttribute('aria-label',T.sort);
+        for(const [value,title] of [['recommended',T.sortRecommended],['price',T.sortPrice],['context',T.sortContext],['name',T.sortName]]){const option=h('option',title);option.value=value;select.append(option);}
+        select.value=sortMode;
+        select.onchange=()=>{sortMode=select.value;writePref('nm.models.sort',sortMode);draw();};
+        label.append(select);document.querySelector('.search-row').append(label);
+      }
 
       draft = fromServer(loaded.shelf || {});
       draw();

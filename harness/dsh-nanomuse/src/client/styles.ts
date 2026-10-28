@@ -1548,9 +1548,15 @@ html[data-nanomuse] .nm-conversation-chips{display:flex;flex-wrap:wrap;justify-c
 .nm-mp-kinds .nm-pill[aria-pressed="true"] { border-color:var(--nm-blue);color:var(--nm-blue); }
 .nm-mp-sort { display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary); }
 .nm-mp-model { display:grid;grid-template-columns:minmax(0,1fr) 32px;border-bottom:1px solid var(--nm-divider);padding:5px 0; }
-.nm-mp-favourite { border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
+.nm-mp-favourite { grid-column:2;grid-row:1;align-self:center;justify-self:center;border:0;background:transparent;color:inherit;cursor:pointer;font-size:20px; }
 .nm-model-estimate { grid-column:1/-1;padding:5px 12px;font-size:12px; }
-.nm-mp-meta { display:flex;flex-wrap:wrap;gap:5px 10px;padding:0 12px 4px;font-size:11px;color:var(--dsw-alias-label-secondary); }
+.nm-mp-meta { grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px 10px;padding:0 12px 4px;font-size:11px;color:var(--dsw-alias-label-secondary); }
+.nm-mp-locked-group { margin-top: 6px; }
+.nm-mp-locked-group .nm-mp-group-label { color: var(--nm-accent, #8a6420); }
+.nm-mp-locked-row { cursor: default; opacity: 0.82; }
+.nm-mp-locked-row:hover { background: transparent; }
+.nm-mp-lock-badge { flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--nm-accent, #a5813a) 16%, transparent); color: var(--nm-accent, #8a6420); font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.nm-model-discount { padding: 0 4px; border-radius: 6px; background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #2f6b45) 14%, transparent); color: var(--dsw-alias-state-success-primary, #2f6b45); font-weight: 600; }
 .nm-model-free { display:inline-block;padding:2px 7px;border-radius:999px;background:color-mix(in srgb, #6fa66f 18%, transparent);color:var(--dsw-alias-label-primary);font-weight:600; }
 .nm-model-estimate summary { cursor:pointer;color:var(--dsw-alias-label-secondary); }
 .nm-model-estimate label { display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0; }

@@ -4,6 +4,12 @@ export interface CatalogueModel {
   id: string
   name: string
   kind: string
+  /** The maker (OpenAI, Anthropic, …), when the relay names one. */
+  vendor?: string
+  /** The tariff keeps this model closed: shown with a lock, never pickable. */
+  plan_locked?: boolean
+  /** The lanes the model serves (`chat`, `gui`, `image`, …), from the relay. */
+  for?: string[]
   context_length?: number
   max_output?: number
   free?: boolean
