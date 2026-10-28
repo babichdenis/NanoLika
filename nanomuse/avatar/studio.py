@@ -988,24 +988,41 @@ class AvatarStudio:
         if pr.status_code >= 400:
             raise StudioError("The upload policy was refused: " + self._http_error(pr))
         policy = (pr.json() or {}).get("data") or {}
-        if not policy.get("upload_host"):
-            raise StudioError("The video provider gave no upload policy.")
-        key = f"{policy.get('upload_dir', '')}/first-frame.png"
-        form = {
-            "OSSAccessKeyId": str(policy.get("oss_access_key_id", "")),
-            "Signature": str(policy.get("signature", "")),
-            "policy": str(policy.get("policy", "")),
-            "x-oss-object-acl": str(policy.get("x_oss_object_acl", "private")),
-            "x-oss-forbid-overwrite": str(policy.get("x_oss_forbid_overwrite", "true")),
-            "key": key,
-        }
-        up = await self._http.post(
-            str(policy["upload_host"]),
-            data=form,
-            files={"file": ("first-frame.png", png, "image/png")},
-        )
-        if up.status_code >= 400:
-            raise StudioError(f"The first frame could not be uploaded (HTTP {up.status_code}).")
+        if policy.get("upload_mode") == "relay_storage":
+            up = await self._http.post(
+                f"{host}/api/v1/uploads",
+                data={"model": model},
+                files={"file": ("first-frame.png", png, "image/png")},
+                headers=headers,
+            )
+            if up.status_code >= 400:
+                raise StudioError("The first frame could not be uploaded: " + self._http_error(up))
+            try:
+                image_url = str(((up.json() or {}).get("data") or {}).get("url") or "").strip()
+            except (ValueError, AttributeError, TypeError):
+                image_url = ""
+            if not image_url:
+                raise StudioError("The video provider returned no URL for the first frame.")
+        else:
+            if not policy.get("upload_host"):
+                raise StudioError("The video provider gave no upload policy.")
+            key = f"{policy.get('upload_dir', '')}/first-frame.png"
+            form = {
+                "OSSAccessKeyId": str(policy.get("oss_access_key_id", "")),
+                "Signature": str(policy.get("signature", "")),
+                "policy": str(policy.get("policy", "")),
+                "x-oss-object-acl": str(policy.get("x_oss_object_acl", "private")),
+                "x-oss-forbid-overwrite": str(policy.get("x_oss_forbid_overwrite", "true")),
+                "key": key,
+            }
+            up = await self._http.post(
+                str(policy["upload_host"]),
+                data=form,
+                files={"file": ("first-frame.png", png, "image/png")},
+            )
+            if up.status_code >= 400:
+                raise StudioError(f"The first frame could not be uploaded (HTTP {up.status_code}).")
+            image_url = f"oss://{key}"
         # 2. the task
         parameters: dict[str, Any] = {
             "watermark": False,
@@ -1017,7 +1034,7 @@ class AvatarStudio:
             parameters["duration"] = CLIP_SECONDS
         body = {
             "model": model,
-            "input": {"prompt": prompt, "img_url": f"oss://{key}"},
+            "input": {"prompt": prompt, "img_url": image_url},
             "parameters": parameters,
         }
         for pause in (*CLIP_PAUSES, None):

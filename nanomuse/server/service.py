@@ -2633,7 +2633,7 @@ class MuseService:
             "profile": self.profile.to_dict(),
             "status": self.ui.overall_status(),
             # the signed-in account's conversations and the ownerless ones (C10)
-            "threads": [t.meta() for t in self.visible_threads()],
+            "threads": self.sync.list_rows(),
             "pending_approvals": [
                 ev
                 for t in self.visible_threads()

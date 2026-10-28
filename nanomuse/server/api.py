@@ -118,6 +118,10 @@ class SendBody(BaseModel):
     via: str = Field("", max_length=20)
 
 
+class ThreadArchiveBody(BaseModel):
+    archived: bool = Field(strict=True)
+
+
 class ThreadBody(BaseModel):
     title: str = ""
 
@@ -573,7 +577,7 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     async def list_threads() -> list[dict[str, Any]]:
         """The current account's conversations and the ones no account has (contract C10);
         every local one when signed out."""
-        return [t.meta() for t in svc.visible_threads()]
+        return svc.sync.list_rows()
 
     @app.post("/api/threads", dependencies=dep)
     async def create_thread(body: ThreadBody) -> dict[str, Any]:
@@ -585,6 +589,27 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         if thread is None:
             raise HTTPException(404, "no such thread")
         return thread.meta()
+
+    @app.post("/api/threads/{thread_id}/archive", dependencies=dep)
+    async def archive_thread(thread_id: str, body: ThreadArchiveBody) -> dict[str, Any]:
+        thread = _thread_or_404(thread_id)
+        if thread_id == MAIN_THREAD:
+            raise HTTPException(400, "The main chat cannot be archived")
+        if thread.busy:
+            raise HTTPException(409, "The conversation is busy")
+        cid = svc.sync.cid_of(thread_id)
+        if cid:
+            try:
+                await svc.sync.client.set_archived(cid, body.archived)
+                await svc.sync.pull()
+            except CloudError as exc:
+                raise HTTPException(502, exc.describe()) from exc
+        else:
+            svc.sync.state.setdefault("local_archives", {})[thread_id] = body.archived
+            svc.sync._save()
+        rows = svc.sync.list_rows()
+        svc.bus.publish({"kind": "threads", "threads": rows})
+        return next(row for row in rows if row["id"] == thread_id)
 
     @app.delete("/api/threads/{thread_id}", dependencies=dep)
     async def delete_thread(thread_id: str) -> dict[str, Any]:

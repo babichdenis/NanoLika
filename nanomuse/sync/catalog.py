@@ -36,6 +36,8 @@ class LazyCatalog:
             self.rows.clear()
             self.unread.clear()
             e.state["message_cursors"] = {}
+            e.state["conversation_marks"] = {}
+            self.selected.clear()
         if self.supported is False or not hasattr(e.client, "catalog"):
             return None
         try:
@@ -53,6 +55,12 @@ class LazyCatalog:
         changed = rows != self.rows
         for row in out.get("deleted", []):
             e._apply_conversation(row)
+        e.state["conversation_marks"] = {
+            cid: {"archived": bool(row.get("archived")), "deleted": bool(row.get("deleted"))}
+            for cid, row in rows.items()
+        }
+        for row in out.get("deleted", []):
+            e.state["conversation_marks"][row["cid"]] = {"deleted": True, "archived": True}
         self.rows = rows
         self.unread = {r["cid"]: int(r.get("unread") or 0) for r in rows.values()}
         e._applying = True
@@ -101,6 +109,8 @@ class LazyCatalog:
             return 0
         e.state["cursor"] = int(out.get("cursor") or 0)
         e._save()
+        if changed:
+            e.svc.bus.publish({"kind": "threads", "threads": e.list_rows()})
         if changed or applied:
             e.svc.bus.publish({"kind": "sync", "sync": e.view()})
         return applied

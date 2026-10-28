@@ -653,6 +653,9 @@ class ChannelManager(ChannelBus):
         try:
             await sync.hydrate_thread(thread, cid)
         except CloudError as exc:
+            if exc.code == "conversation_archived":
+                await self.picker.show(msg)
+                return False
             logger.warning("{} cloud history refresh failed ({})", msg.channel, exc.code)
             await self._send(
                 msg.channel,

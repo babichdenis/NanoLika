@@ -161,8 +161,11 @@ class ConversationSync:
         except (OSError, ValueError):
             return
         if isinstance(data, dict):
-            for key in ("account_id", "cursor", "enabled", "side_chats"):
+            for key in ("account_id", "cursor", "enabled", "side_chats", "catalog_mode"):
                 if key in data:
+                    self.state[key] = data[key]
+            for key in ("conversation_marks", "local_archives"):
+                if isinstance(data.get(key), dict):
                     self.state[key] = data[key]
             cursors = data.get("message_cursors", {})
             if isinstance(cursors, dict):
@@ -290,6 +293,29 @@ class ConversationSync:
             },
             "working": self.working_view(),
         }
+
+    def list_rows(self) -> list[dict[str, Any]]:
+        """Account-visible history, with cloud scope separate from archive state."""
+        result = []
+        catalog = getattr(self, "catalog", None)
+        for thread in self.svc.visible_threads():
+            row = thread.meta()
+            cid = self.cid_of(thread.id)
+            mark = (getattr(catalog, "rows", {}) or {}).get(cid)
+            if mark is None:
+                mark = self.state.get("conversation_marks", {}).get(cid)
+            known_catalog = bool(self.state.get("catalog_mode"))
+            row.update(
+                sync_cid=cid or "",
+                local_only=bool(known_catalog and not cid),
+                archived=bool(
+                    (mark and (mark.get("archived") or mark.get("deleted")))
+                    or (cid and mark is None and getattr(catalog, "supported", None) is True)
+                    or (not cid and self.state.get("local_archives", {}).get(thread.id))
+                ),
+            )
+            result.append(row)
+        return result
 
     def working_view(self) -> list[dict[str, Any]]:
         """The other devices' turns under way (C9): ``[{thread, cid, device, device_name,
@@ -868,6 +894,15 @@ class ConversationSync:
             raise CloudError(409, "sync_unavailable", "Cloud conversation sync is not active")
         if thread.busy:
             raise CloudError(409, "conversation_busy", "The conversation is already answering")
+        if not remote_task:
+            await self.pull()
+            mark = self.catalog.rows.get(cid)
+            if mark and mark.get("archived"):
+                raise CloudError(
+                    409,
+                    "conversation_archived",
+                    "Restore this conversation from the archive before continuing",
+                )
         await self.push()
         async with self._lock:
             if not self.active:
