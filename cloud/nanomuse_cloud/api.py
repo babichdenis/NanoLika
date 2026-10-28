@@ -415,6 +415,10 @@ def create_app(
     app.state.geo = geo
     app.state.collector = collector
 
+    from .request_limits import RequestBodyLimitMiddleware
+
+    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+
     # CORS for WebApp (nanolika.ru) and cloud subdomain
     from starlette.middleware.cors import CORSMiddleware
     app.add_middleware(
