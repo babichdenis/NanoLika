@@ -30,7 +30,8 @@ async def test_console_files_are_revalidated_on_every_load():
     for path in ("/app/", "/app/app.js", "/app/admin/", "/app/admin/admin.js"):
         r = await client.get(path)
         assert r.status_code == 200, (path, r.status_code)
-        assert r.headers.get("cache-control") == "no-cache", path
+        expected_cache = "no-store" if path.startswith("/app/admin/") else "no-cache"
+        assert r.headers.get("cache-control") == expected_cache, path
         assert r.headers.get("etag"), path
     # the API's own answers keep their own caching
     r = await client.get("/v1/config")
