@@ -479,6 +479,7 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       return {
         ...state,
         events: { ...state.events, [msg.thread]: [] },
+        hasMore: { ...state.hasMore, [msg.thread]: false },
         holds: state.holds.filter((h) => h.thread !== msg.thread),
         pendingApprovals: state.pendingApprovals.filter((a) => a.thread !== msg.thread),
       };
@@ -577,7 +578,7 @@ interface StoreValue {
   /** *Use NanoLika Cloud this time*: the words again, one turn on the account's model; rejects with the runtime's sentence */
   sendViaCloud: (thread: string, text: string, files?: string[]) => Promise<void>;
   decide: (id: string, approved: boolean, scope?: string) => Promise<void>;
-  loadEvents: (thread: string, before?: string) => Promise<void>;
+  loadEvents: (thread: string, before?: string, force?: boolean) => Promise<void>;
   refreshGoals: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshHub: () => Promise<void>;
@@ -639,7 +640,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadGeneration = useRef<Record<string, number>>({});
-  const loadEvents = useCallback(async (thread: string, before?: string) => {
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  const loadEvents = useCallback(async (thread: string, before?: string, force = false) => {
+    // `hasMore` is set only after a successful history response, so a failed first load stays
+    // retryable. Keep each thread's last page in memory while switching; WebSocket events keep
+    // loaded histories current, and reconnects bypass the cache to recover anything missed.
+    if (!before && !force && stateRef.current.hasMore[thread] !== undefined) return;
     // a fresh load (not a scroll-back) supersedes any earlier one still in flight for
     // the same thread: the older answer is dropped when it finally comes
     const generation = before ? undefined : (loadGeneration.current[thread] = (loadGeneration.current[thread] ?? 0) + 1);
@@ -672,7 +681,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const next = advanceConnection(connection.current, state.connected);
     connection.current = next;
-    if (next.recovered && state.loaded) void loadEvents(state.activeThread);
+    if (next.recovered && state.loaded) void loadEvents(state.activeThread, undefined, true);
   }, [state.connected, state.loaded, state.activeThread, loadEvents]);
 
   const refreshGoals = useCallback(async () => {
