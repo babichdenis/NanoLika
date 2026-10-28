@@ -16,7 +16,7 @@ export interface CloudRetryContext {
 export function cloudRetryTarget(events: readonly TimelineEvent[], index: number, ctx: CloudRetryContext): { text: string; files: string[] } | undefined {
   if (!ctx.signedIn || ctx.chatOnCloud || ctx.deviceChat) return undefined;
   const ev = events[index];
-  if (ev?.type !== "notice" || ev.level !== "error" || !ev.code || ev.code === "allowance" || ev.model_used) return undefined;
+  if (ev?.type !== "notice" || ev.level !== "error" || !ev.code || (ev.code === "allowance" || ev.code === "insufficient_funds") || ev.model_used) return undefined;
   for (let j = index - 1; j >= 0; j--) {
     const u = events[j];
     if (u?.type === "user") {

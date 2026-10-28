@@ -1,3 +1,4 @@
+import {fundsView} from './funds.js';
 import {navigationTools,performNavigation} from './navigation-tool.js';
 import {ChatSync} from './chat-sync.js';
 import {ConversationOpener} from './conversation-open.js';
@@ -22,6 +23,7 @@ $('sidebar-toggle').onclick=()=>{if(matchMedia('(min-width:761px)').matches){set
 $('sidebar-collapse').onclick=()=>{if(matchMedia('(max-width:760px)').matches)closeSidebar();else setCollapsed(!document.body.classList.contains('sidebar-collapsed'));};
 $('sidebar-backdrop').onclick=closeSidebar;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sidebar-open')&&$('account-menu').hidden){closeSidebar();$('sidebar-toggle').focus();}});
 function notice(message){$('notice').textContent=message||'';$('notice').hidden=!message;}
+function fundsNotice(error){const view=fundsView(error,lang);if(!view)return false;notice(view.message);const link=document.createElement('a');link.href=view.topupUrl;link.textContent=view.topupLabel;link.target='_blank';link.rel='noopener noreferrer';link.style.textDecoration='underline';$('notice').append(' ',link);return true;}
 function translate(){document.documentElement.lang=lang;document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=t(el.dataset.i18n));$('message').placeholder=t('prompt');updateStatus();updateAuth();renderChats();renderConversation();renderAccount();$('export').title=t('export');$('export').setAttribute('aria-label',t('export'));}
 function updateStatus(){composerControls.setBusy(!!controller||sending);setAvatarMood(controller?'working':'idle');$('status').textContent=t(controller?'working':'ready');$('offline').hidden=navigator.onLine;}
 function updateAuth(){$('code-label').hidden=authMode!=='code'||!codeSent;$('password-label').hidden=authMode!=='password';$('code').required=authMode==='code'&&codeSent;$('password').required=authMode==='password';$('auth-submit').textContent=t(authMode==='code'&&!codeSent?'sendCode':'signin');$('auth-mode').textContent=t(authMode==='code'?'usePassword':'useCode');}
@@ -144,7 +146,7 @@ $('composer').onsubmit=async event=>{event.preventDefault();if(controller||sendi
  catch(error){if(signal.aborted)throw error;messages.push(...calls.map(call=>({role:'tool',tool_call_id:call.id,content:JSON.stringify({opened:false,error:error.message})})));}
  responseMessage.content='';
  }responseMessage.interrupted=false;}
- catch(e){if(!responseMessage.content)chat.messages.pop();if(e.name!=='AbortError'){notice(e.status===401?t('needsLogin'):navigator.onLine?(e.message||t('requestError')):t('networkError'));if(e.status===401)showAuth();}}
+ catch(e){if(!responseMessage.content)chat.messages.pop();if(e.name!=='AbortError'){if(!fundsNotice(e))notice(e.status===401?t('needsLogin'):navigator.onLine?(e.message||t('requestError')):t('networkError'));if(e.status===401)showAuth();}}
  finally{controller=null;sending=false;chat.updated=Date.now();if(runEpoch===epoch&&!chat.deleted){await persist(chat);try{await chatSync.publish(chat);}catch(e){notice(t('syncError'));}}$('send').hidden=false;$('stop').hidden=true;updateStatus();if(session?.owner===owner)renderConversation();}};
 $('stop').onclick=()=>controller?.abort();$('new-chat').onclick=newChat;$('show-chats').onclick=()=>showSection('chats');$('show-archive').onclick=()=>showSection('archive');$('show-files').onclick=()=>{if(!authenticated())showAuth();else showSection('files');};
 function closeAccountMenu(restore=false){$('account-menu').hidden=true;$('account').setAttribute('aria-expanded','false');if(restore)$('account').focus();}

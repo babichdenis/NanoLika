@@ -233,6 +233,16 @@ def failure_notice(exc: BaseException, thread_id: str) -> dict[str, Any]:
         "detail": f"{type(exc).__name__}: {str(exc).strip()[:400]}",
         "thread": thread_id,
     }
+    if _relay_code(exc) == "insufficient_funds":
+        error = _relay_error(exc)
+        notice["funds"] = {
+            "code": "insufficient_funds",
+            **{
+                name: error[name]
+                for name in ("required_rub", "balance_rub", "currency", "topup_url")
+                if name in error
+            },
+        }
     allowance = allowance_detail(exc)
     if allowance is not None:
         # the apps draw the ways on (invite a friend / own key) from this

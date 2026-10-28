@@ -27,6 +27,7 @@ describe("Use NanoLika Cloud this time", () => {
     expect(cloudRetryTarget([user("u1", "first"), failed("n1", { model_used: "deepseek-v4.1-flash" })], 1, ctx)).toBeUndefined();
     // the allowance card has its own ways on
     expect(cloudRetryTarget([user("u1", "first"), failed("n1", { code: "allowance" })], 1, ctx)).toBeUndefined();
+    expect(cloudRetryTarget([user("u1", "first"), failed("n1", { code: "insufficient_funds" })], 1, ctx)).toBeUndefined();
     // a notice with no user turn above it
     expect(cloudRetryTarget([failed("n1")], 0, ctx)).toBeUndefined();
   });

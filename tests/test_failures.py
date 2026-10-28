@@ -337,3 +337,28 @@ def test_update_check_caches_and_survives_failures(monkeypatch):
     check.checked_at -= update.RETRY_S * 2
     asyncio.run(check.view())
     assert calls == 2  # a good answer is not asked again after an hour
+
+
+def test_priced_refusal_notice_preserves_structured_fields_without_allowance_card():
+    body = {
+        "code": "insufficient_funds",
+        "required_rub": 10.26,
+        "balance_rub": 0,
+        "currency": "RUB",
+        "topup_url": "https://relay.example/app",
+        "message": "Needs a top up",
+        "unrelated": "must not enter the funds object",
+    }
+    exc = _status_error(openai.PermissionDeniedError, 402, body)
+    notice = failure_notice(exc, "main")
+    assert notice["code"] == "allowance"  # compatibility with older clients
+    assert notice["funds"] == {
+        k: body[k] for k in ("code", "required_rub", "balance_rub", "currency", "topup_url")
+    }
+    assert "allowance" not in notice
+    assert (
+        failure_notice(
+            _status_error(openai.PermissionDeniedError, 402, {"code": "out_of_tokens"}), "main"
+        ).get("funds")
+        is None
+    )

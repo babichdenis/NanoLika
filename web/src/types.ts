@@ -111,6 +111,7 @@ export interface QuestionEvent extends BaseEvent {
 }
 
 export interface NoticeEvent extends BaseEvent {
+  funds?: import("../../cloud/nanomuse_cloud/web_client/funds.js").FundsInfo;
   type: "notice";
   level: "info" | "warn" | "error";
   /** an English sentence; the runtime's failure sentences are keys in the dictionary */

@@ -1,3 +1,4 @@
+import { FundsNotice } from "./FundsNotice";
 import {
   AlertTriangle,
   Ban,
@@ -446,6 +447,7 @@ export function Notice({ event, onCloudRetry }: { event: NoticeEvent; onCloudRet
       .catch((e: Error) => setCloudError(t(e.message || "Could not send")))
       .finally(() => setBusy(false));
   };
+  if (event.funds) return <FundsNotice info={event.funds} />;
   // the relay refused the turn for a spent allowance: the sentence, then the three ways on
   if (event.code === "allowance" && event.allowance) {
     return (
