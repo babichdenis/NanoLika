@@ -453,3 +453,13 @@ If that computer is offline, the server continues the shared history and tells t
 model that current local files/processes cannot be verified. Checking progress must
 not restart a paid generation or reconstruct a task by scanning unrelated files.
 The desktop pulls the accumulated turns when it reconnects.
+
+
+### Device presence and messenger delivery
+
+The runtime `devices` tool includes `presence_scope: "app_control_connection_only"`
+and a `delivery_note` alongside the existing device list. A device's `online` field
+describes its app control connection. `device_offline` and `not_allowed` do not establish
+that Telegram or MAX delivery is unavailable. Shared history and replies on the server
+can continue without that device; checking its local files, processes or screen requires
+the app to reconnect. The model must state that limitation when the request needs it.

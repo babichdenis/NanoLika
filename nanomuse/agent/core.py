@@ -199,11 +199,9 @@ class MuseAgent:
         connector already serves."""
         from nanomuse import capabilities
 
-        if getattr(self, "_capabilities", None) is None:
-            self._capabilities = capabilities.inventory(self.tools, self.settings)
-        return prompts.CAPABILITIES_SECTION.format(
-            inventory=capabilities.render_prompt(self._capabilities)
-        )
+        # Connectors and GUI tools can change while this agent keeps the same session.
+        inventory = capabilities.inventory(self.tools, self.settings)
+        return prompts.CAPABILITIES_SECTION.format(inventory=capabilities.render_prompt(inventory))
 
     def skills_section(self) -> str:
         """The index of skills — names and descriptions; the tool has the instructions."""

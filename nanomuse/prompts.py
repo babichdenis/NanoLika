@@ -226,6 +226,7 @@ PHONE_SECTION = """
 DEVICES_SECTION = """
 ## The user's other devices
 {status}
+- Device presence and device_offline/not_allowed answers refer only to the app control connection. They do not report Telegram or MAX delivery. Shared history and a server reply can remain available while an app is offline. Say that local files, processes and screen actions cannot be checked until that device reconnects; do not claim the messenger is unavailable from app presence alone.
 - `devices` lists them by name; the `device_*` tools do one thing on one of them: a command in its shell (`device_shell`; on a phone that is the app's Linux sandbox, not Android itself), a folder (`device_files`), a file each way (`device_get`, `device_put`), a URL (`device_open`), its screen (`device_screen`), a notification (`device_notify`). `delegate` hands a whole task, in words, to the Muse running on that device and waits for its answer; use it whenever the job needs that device's apps, screen, files or context ("open the calendar and tell me tomorrow's first meeting" on the phone), and pass the answer on faithfully.
 - When the user says "my phone", "the laptop", a device's name, or clearly means something that lives on another device, that is where to act. If a device is offline, say so plainly; do not guess what it would have said.
 - What the other Muse needs approved is shown here as a card; what you did on another device is said in one line, with the device's name.

@@ -1,5 +1,12 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Refresh device capabilities and distinguish app presence
+
+The audit found stale GUI capabilities after tool changes and device presence being read as messenger availability. Recompute the small capability inventory on access; describe device presence as app control only, with server history and Telegram/MAX delivery independent of an offline computer. Add a live tool/settings regression and update the hub contract in both languages. Packaging tests now emulate DMG conversion and stub Finder/sync instead of invoking the host UI. Regenerated CAPABILITIES.md for the earlier office copy punctuation fix.
+
+Validation: 45 packaging, phone, capabilities and presence tests passed; touched-file Ruff and formatting passed. Production runtime installation is pending the idle gate; no live account, device or conversation was changed by these tests. The packaging failure was a stale fake, while the capability cache was a product defect.
+
+
 Подагент устранил 22 Ruff-ошибки и отформатировал разрешённые исходники cloud: 42 файла. Форматирование отдельно проверено через AST без docstrings; разрешённые lint-дельты разобраны явно: порядок импортов, UTC alias того же singleton, unused imports и простой неиспользуемый alias aa_by_name. Неожиданных AST-дельт нет. SQL, тарифы, defaults и подписанные store-артефакты не менялись. Каждый файл сопоставлен по SHA256 с проверенным снимком.
 
 В первом полном прогоне на исходном Mac обнаружилась гонка самого теста controls: он закрывал SQLite после sent.append, пока background worker ещё писал аудит. Исправлено ожидание Event в finally завершения flush_notices. db.py не менялся. Отдельно 14/14 controls-тестов прошли.

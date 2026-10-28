@@ -38,6 +38,8 @@ elif name == "hdiutil":
         stage = "verify-dmg"
     elif args[0] == "create":
         Path(args[-1]).touch()
+    elif args[0] == "convert":
+        Path(args[args.index("-o") + 1]).touch()
 elif name == "ditto":
     Path(args[-1]).touch()
 if stage and stage == os.environ.get("PACKAGING_FAIL"):
@@ -61,7 +63,7 @@ def package_tree(tmp_path: Path) -> PackageTree:
     cli = bin_dir / "fake-cli"
     cli.write_text(CLI, encoding="utf-8")
     cli.chmod(0o755)
-    for name in ("node", "codesign", "file", "hdiutil", "ditto"):
+    for name in ("node", "codesign", "file", "hdiutil", "ditto", "osascript", "sync"):
         (bin_dir / name).symlink_to(cli)
     trace = tmp_path / "trace.jsonl"
     env = dict(os.environ)
@@ -97,6 +99,11 @@ def test_only_the_requested_architecture_is_packaged(
     calls = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
     archive = next(call for call in calls if call["name"] == "ditto")
     assert archive["args"][-2] == str(app_dir / "dist" / folder / "NanoLika.app")
+    converted = next(
+        call for call in calls if call["name"] == "hdiutil" and call["args"][0] == "convert"
+    )
+    assert converted["args"][-1] == str(app_dir / "dist" / f"NanoLika-Desktop-1.0.5-mac-{arch}.dmg")
+    assert any(call["name"] == "osascript" for call in calls)
 
 
 @pytest.mark.parametrize("stage", ["sign-inner", "verify-helper", "verify-app", "verify-dmg"])

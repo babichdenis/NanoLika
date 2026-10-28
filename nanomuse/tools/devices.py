@@ -101,7 +101,8 @@ class Devices(_DeviceTool):
     name: str = "devices"
     description: str = (
         "The user's other devices on the nanoMuse hub (phone, other computers) and whether "
-        "each is online. Use a device's name as listed here in the device_* tools and delegate."
+        "each app control connection is online. This does not check Telegram or MAX delivery. "
+        "Use a device's name as listed here in the device_* tools and delegate."
     )
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
     risk: RiskLevel = RiskLevel.SAFE
@@ -116,7 +117,21 @@ class Devices(_DeviceTool):
                 "not connected to the hub"
                 + ("" if hub.signed_in else "; the user can sign in under Settings → Devices")
             )
-        return ToolResult(output=_json({"this": hub.device_name, "devices": others}))
+        return ToolResult(
+            output=_json(
+                {
+                    "this": hub.device_name,
+                    "devices": others,
+                    "presence_scope": "app_control_connection_only",
+                    "delivery_note": (
+                        "online, device_offline and not_allowed describe app control only, not messenger delivery. "
+                        "Do not infer that Telegram or MAX cannot deliver messages from these values. "
+                        "Server replies and shared history can continue while the app is offline; "
+                        "local files, processes and screen actions need that device online."
+                    ),
+                }
+            )
+        )
 
 
 class DeviceShell(_DeviceTool):
@@ -551,7 +566,10 @@ class ConversationOpen(_DeviceTool):
         "type": "object",
         "properties": {
             "channel": {"type": "string", "enum": ["telegram", "max", "desktop"]},
-            "device": {"type": "string", "description": "Desktop device id; required if multiple computers are connected"},
+            "device": {
+                "type": "string",
+                "description": "Desktop device id; required if multiple computers are connected",
+            },
             "cid": {
                 "type": "string",
                 "description": "Existing shared conversation id; omit for this chat",
@@ -571,7 +589,9 @@ class ConversationOpen(_DeviceTool):
             egress=True,
         )
 
-    async def _run(self, channel: str = "", cid: str = "", device: str = "", **_: Any) -> ToolResult:
+    async def _run(
+        self, channel: str = "", cid: str = "", device: str = "", **_: Any
+    ) -> ToolResult:
         from nanomuse.sentinel.gate import current_task
 
         if channel not in {"telegram", "max", "desktop"}:
@@ -604,7 +624,9 @@ class ConversationOpen(_DeviceTool):
             hosts = [
                 d
                 for d in self.hub.others()
-                if d.get("online") and ("chat.open_desktop" if channel == "desktop" else "chat.open_channel") in (d.get("actions") or [])
+                if d.get("online")
+                and ("chat.open_desktop" if channel == "desktop" else "chat.open_channel")
+                in (d.get("actions") or [])
                 and (not device or d.get("id") == device)
             ]
             if len(hosts) != 1:

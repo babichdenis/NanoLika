@@ -129,3 +129,13 @@ MAX 确认消息支持渠道管理器传入的语言参数，避免确认按钮�
 账号页面使用 `DELETE /v1/link/devices/{device_id}`。它需要账号会话，吊销目标电脑绑定的登录 key，关闭 hub 连接并移除设备记录，浏览器会话不受影响。其他账号的设备返回 404。与调用者或另一台设备共用登录 key 时返回 409；没有记录登录绑定的旧离线设备也返回 409，打开一次应用即可记录绑定。设备接口不会返回 key 的哈希。
 
 旧接口 `DELETE /v1/devices/{id}` 只移除离线设备的列表记录。设备仍在线时返回 `409 device_online`，不关闭套接字，也不吊销登录 key。移除离线记录后，设备仍可用原 key 重连；要撤销访问权限，应使用账号页面的断开接口。
+
+
+### 设备在线状态与聊天入口投递 {#device-presence-and-messenger-delivery}
+
+运行时的 `devices` 工具在已有设备列表旁返回
+`presence_scope: "app_control_connection_only"` 和 `delivery_note`。
+设备的 `online` 只表示 App 控制连接。`device_offline` 和 `not_allowed`
+不能证明 Telegram 或 MAX 无法投递消息。设备离线时，共享历史和服务器回复仍可继续；
+检查设备上的本地文件、进程或屏幕，需要 App 重新连接。请求依赖本地操作时，
+模型必须明确说明这一限制。

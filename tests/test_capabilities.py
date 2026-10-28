@@ -118,3 +118,25 @@ def test_agents_are_pointed_at_the_file():
         text = (ROOT / name).read_text(encoding="utf-8") if (ROOT / name).exists() else ""
         if text:
             assert "CAPABILITIES.md" in text, f"{name} does not point at the inventory"
+
+
+def test_agent_inventory_tracks_live_tool_add_remove_and_settings():
+    from types import SimpleNamespace
+
+    from nanomuse.agent.core import MuseAgent
+    from nanomuse.tools import ToolCollection
+
+    registry = ToolCollection(*tools("files", "read_emails"))
+    agent = SimpleNamespace(tools=registry, settings=FakeSettings(mail=False))
+
+    def render():
+        return MuseAgent.capabilities_section(agent)
+
+    assert "`phone_task`" not in render()
+    registry.add(*tools("phone_task"))
+    assert "`phone_task`" in render()
+    registry.remove("phone_task")
+    assert "`phone_task`" not in render()
+    assert "Not connected in this build: mail" in render()
+    agent.settings = FakeSettings(mail=True)
+    assert "Not connected in this build: mail" not in render()

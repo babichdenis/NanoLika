@@ -27,7 +27,7 @@
 ## Files and documents - файлы и документы
 
 - `files`: Work with files in the workspace.
-- `office_convert`: Turn a Word, Excel or PowerPoint file into another format with the office suite that is on this machine — Microsoft Office over COM on Windows, LibreOffice elsewhere.
+- `office_convert`: Turn a Word, Excel or PowerPoint file into another format with the office suite that is on this machine: Microsoft Office over COM on Windows, LibreOffice elsewhere.
 - `office_vba`: Put a VBA macro into a Word, Excel or PowerPoint file.
 
 ## Web - интернет
