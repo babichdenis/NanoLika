@@ -17,6 +17,9 @@ workspace/
 audit.jsonl
 sessions/
 logs/
+# local backups made by hand before a deploy, and generated media that is not an asset
+*.bak-*/
+outputs/
 
 # python
 __pycache__/

@@ -17,6 +17,568 @@
 
 Ловушки: share отключилась во время работы; доступ восстановлен через SSH владельцем. Не считать `sync-remote.json` доказательством отображения: сообщения уже были на диске, но прятались в DOM. Установленный профиль ссылается на payload плагина, поэтому обновлены обе копии. Остальные несвязанные изменения и подготовленные файлы в общем репозитории не включаются в этот коммит.
 
+## 2026-10-28 · Тарифы: модели по плану, видео только с оплаченным балансом
+
+Владелец: клиентская Лика должна видеть только модели своего тарифа; на низком тарифе убрать дорогие; видео открывать только если оплаченный баланс покрывает резерв (порог 590 ₽).
+
+Сделано:
+- `PLANS` понимает `max_chat_out_rub`, `max_video_tokens`, `video_min_paid_rub`, `models`, `exclude`;
+- дорогие модели скрыты из `/v1/me/models`, `/v1/models`, полки и каталога, а `model_for` отказывает и при прямом вызове по id — 404 `plan_model` или 402 `video_deposit`;
+- бесплатный/истёкший аккаунт получает условия самого низкого тарифа;
+- видео-модели: 590 ₽ — вход в тариф; внутри активного месяца цена считается по конкретному клипу (4 с 480p ≈ 10,26 ₽), общего резерва 500 ₽ нет; на «Лике» остаются `clip-mini`/`clip` (per_clip ≤ 10 000), дорогие клипы закрыты;
+- боевой `PLANS` в `docker-compose.override.yml` обновлён, relay пересоздан; `/v1/config` отдаёт новые поля;
+- тесты: `test_plans.py` — низкий/высокий тариф, прямой вызов скрытой модели, видео-депозит; тесты моделей/полки — 5 зелёных.
+
+Изоляция клиентов: личные ключи `via=user` уже model-only (`test_user_api_keys.py`: `/v1/me`, `/v1/me/keys`, `/v1/devices`, `/v1/auth/sign-out-all` → 403 `api_key_scope`); админка требует `X-Admin-Token`, которого в клиенте нет; токены Telegram/MAX живут на сервере бота. Остаётся организационное: клиентская Лика не должна иметь SSH-ключей/`.env` на своей машине, а её модельный ключ должен быть личным, не сессионным.
+
+## 2026-10-28 · Медиа в Telegram и MAX: клипы играют, MAX больше не текстовый
+
+После разбора upstream-телефонов стало ясно, что главный разрыв у нас — медиа в мессенджерах. У Telegram видео уходило документом, входящее видео игнорировалось; MAX вообще отказывался отправлять файлы (`MAX file delivery is not enabled`) и не читал вложения.
+
+Что сделано:
+- Telegram: `sendVideo`/`sendAnimation`/`sendAudio` вместо `sendDocument` для mp4/mov/webm, gif и звука; входящие `video`, `video_note`, `animation` скачиваются и попадают в сообщение.
+- MAX: `POST /uploads` + `POST /messages` с вложением `image`/`video`/`audio`/`file`; повтор при `attachment.not.ready`; входящие вложения скачиваются (видео — через `GET /videos/{token}`), вебхук отвечает до загрузки клипа.
+- Медиа-запросы идут отдельным HTTP-клиентом без bot token, чтобы токен не уходил на CDN/upload-хосты.
+- Тесты: `tests/test_channels_telegram.py`, `tests/test_channels_max.py` — 24 зелёных; ruff чистый.
+- Выложено на бот `151.248.123.86`: `overrides/channels/{max,telegram}.py` с бэкапами, контейнер перезапущен, Telegram и MAX connected.
+
+Коммит `e09c47cb`.
+
+## 2026-10-28 · Быстрое переключение чатов и проверка изоляции контекста
+
+Владелец заметил медленную загрузку при переключении чатов и спросил, не смешались ли их истории. В веб-консоли сообщения уже хранились в памяти отдельно по ID темы, но при каждом возврате тема повторно запрашивала последние 150 событий. Теперь повторное открытие использует этот кэш; события продолжают обновляться по WebSocket, а после восстановления соединения текущая тема перечитывается с сервера.
+
+Проверил разделение контекста: `MuseService` создаёт отдельный `MuseAgent` и файл сессии на каждый thread ID; Telegram-темы получают отдельные ID, облачная синхронизация отдельно сопоставляет их с CID. Добавлен тест двух синхронизированных чатов с разными вопросами и ответами. Прямого переноса истории одного чата в другой в этих путях не обнаружено. При этом память и цели общие для аккаунта, поэтому Лика может учитывать сохранённые сведения из другой темы; синхронизация переписки в облако сохраняет пользовательские сообщения и финальные ответы, но не трассы инструментов и промежуточные результаты. Это может объяснять забытые действия после перехода между устройствами.
+
+Проверки в этой среде не стартовали: `npm run check` остановился на отсутствующем `eslint`, Python-тесты — на отсутствующем `loguru`, Ruff не установлен. Изменения на сервер не выкладывались, поэтому живой аккаунт и конкретные сохранённые сессии не проверены. Локально продолжить можно после восстановления зависимостей; живую проверку сделать после обновления веб-клиента.
+
+## 2026-10-28 · Сайдбар: локальные файлы и видео, а не только URL
+
+Владелец попросил, чтобы Лика показывала скачанный клип в правом сайдбаре, как opencode. `preview_show` умел только URL/HTML: локальный файл в `<video>`/`<img>` не подставить, `file://` в кадре не грузится. Плюс `present` давал карточку в чате, а клик по ней вёл в стоковый просмотрщик dsh, который отвечает «Предпросмотр для этого типа файлов пока недоступен».
+
+Что сделано:
+- новый маршрут `/nanomuse/file?path=…` (`preview-file.ts`) через `mountGuarded`, с `Range` и типами video/audio/image/pdf/text;
+- `preview_show` принимает `path`, проверяет файл и вид; `showPreview` сам строит URL;
+- панель рисует `<video>`/`<audio>`, `present` с клипом/картинкой/PDF сам открывает её;
+- клик по карточке файла для видео/аудио перехватывается и открывается в нашей панели;
+- найден и исправлен белый экран: `shell.overlay` искал панель только в `rooms` и не находил `PREVIEW_PANEL`; ширина уменьшена до `clamp(320px, 34vw, 640px)`;
+- тесты: `tests/preview-file.test.mjs` (kindOfFile, Range, реальная отдача файла).
+
+Сборка и typecheck зелёные; установлено в `payload/.../dsh-nanomuse/lib`, приложение перезапущено, клип открывается. Коммит `d3b99246`.
+
+## 2026-10-28 · Общая облачная история перед ответом в веб-чате и MAX
+
+Владелец попросил проверить перенос общей истории между компьютером, веб-чатом и MAX. Нашёл два разных пробела: HTTP/WebSocket-отправка в локальном веб-консоли могла сразу передать локально сохранённый контекст модели; при передаче сообщения из мессенджера на компьютер `sync_cid` уже передавался, но обработчик задачи компьютера его не использовал. MAX и Telegram используют один менеджер входящих каналов.
+
+**Изменено:** общий менеджер каналов теперь обновляет контекст из полной облачной истории перед запуском модели; локальные HTTP- и WebSocket-входы делают то же для синхронизированных тем. При обработке задачи на целевом устройстве оно загружает ту же историю по `sync_cid`, исключая из неё текущую фразу, если она уже успела попасть в облако, чтобы не передать её модели дважды. Существующая привязка Telegram-темы остаётся по стабильному ID беседы. История обновляется только когда синхронизация включена и беседа разрешена настройкой синхронизации.
+
+**Проверки:** Ruff и компиляция затронутых Python-файлов проходят. Pytest пока не стартует: доступный Python не содержит `loguru`, а в образе бота нет `pytest`. Добавлены тесты для веб-отправки из устаревшей локальной сессии и задачи на удалённом устройстве. Обновление развёрнуто на боте; проверены загрузка HTTP/WebSocket API, веб-консоли и обработчиков каналов, импорты модулей и health endpoint. Резервные файлы и копия прежнего compose сохранены в `/opt/nanolika-bot/backups/shared-history-all-entrypoints-20261028/`. Для сквозной проверки остаётся отправить по одному тестовому сообщению через веб и MAX.
+
+Протокол задачи и поведение синхронизации описаны в `docs/hub.md` и `docs/cloud.md`.
+
+## 2026-10-28 · Видео отключено в настройках приложения, остались только картинки
+
+Денис решил: видео-генерацию пока не чинить, а просто убрать её из настроек приложения (код пусть живёт в исходниках, но в UI недоступен). Картинки оставить; у раздела медиа — только четыре элемента: модель для картинок, студия («Нарисовать новое лицо»), переключатель «ничего не рисовать» и кнопка «Вернуть образ Лики» (сбрасывает нарисованную внешность на встроенную Лику, с подтверждением).
+
+**Что изменено** (`dsh-nanomuse`, коммит `69ab29c1`, ветка `feat/voice-ru`):
+- `MediaSection.tsx` переписан: убраны выбор видео-модели, переключатель анимации, «сделать/переделать ролики», прогресс, список клипов, выбор «обычный/неподвижный/без картинки». Осталась одна карточка-модель картинок + кнопка студии + off + restore.
+- `ModelsSection.tsx`: из `SLOTS` убран `video` — ряд «Создание роликов» больше не рисуется (тип `Slot` и код `SlotPicker` остались на месте).
+- `OwnKey.tsx`: в карточке «Use it for» (свои ключи) видео-слот скрыт.
+- `MuseSettings.tsx`: иконка раздела медиа — картинка вместо камеры.
+- `locales.ts`: строки `mdDrawFaceSub`, `mdRestore`, `mdRestoreSub`, `mdRestoreConfirm` добавлены в en/zh/ru; `vrImageVideo*` переписаны без «и видео».
+
+**Сборка и установка:** `npm run build` чистый; бандл обновлён в `payload/dsh/node_modules/dsh-nanomuse/lib/` (бэкап старого — `lib.bak-videooff-20261028-135931`). Живая проверка в интерфейсе — после перезапуска приложения. Кнопка restore вызывает `call('profile', { avatar: 'dragon' })` (существующий маршрут, канонический образ Лики).
+
+## 2026-10-28 · Видео: опрос Polza шёл не туда — путь с лишним /api
+
+Владелец попросил разобраться, почему видео не доходит до файла. Лика подала клип через релей, получила `task_id`, но опрос отвечал «генерация не найдена».
+
+**Причина оказалась в одной строке.** Подача идёт на `POST /v1/media` (так задано в `VIDEO_PATHS`), а опрос был захардкожен на `GET /api/v1/media/{task_id}` — лишний `/api`, потому что база провайдера уже указывает на `polza.ai/api`. Прямая проверка: `GET /v1/media/{id}` → 200 `completed` + ссылка на S3, `GET /api/v1/media/{id}` → 404 «маршрут не найден».
+
+Второй слой путаницы: в отчёте Лики id были обрезаны (`gen_2226678725` вместо `gen_2226678725162962945`), поэтому её прямые проверки тоже говорили «не найдено».
+
+Исправлено в `overrides/deepseek-routing-20261027/nanomuse_cloud/api.py`: путь опроса берётся из `VIDEO_PATHS` (как у подачи), запасной путь — `/v1/media`. Бэкап рядом. Релей перезапущен.
+
+**Проверено:** оба клипа Seedance 2 Mini (4 с) на Polza в статусе `completed`, ссылки на `s3.polza.ai` есть. Деньги не списаны — списание идёт при первом успешном опросе; фоновое закрытие подхватит их через 50 минут, приложение — при следующем опросе.
+
+**Форматы, на которых стоят адаптеры:**
+- polza: `POST /v1/media` → `GET /v1/media/{id}`, результат в `data.url` (dict или список);
+- aitunnel: `POST /v1/videos` (202) → `GET /v1/videos/{id}`, статус `pending/completed`, ссылка в `unsigned_urls[0]`.
+
+OpenAI `/v1/videos` как «стандарт» не используем: у OpenAI этот API закрыт 24.09.2026, у Google совместимый эндпоинт — с 22.10.2026. Внутренний контракт Лики (DashScope-подобный) остаётся, адаптеры — под наших поставщиков.
+
+## 2026-10-28 · Telegram should answer from the cloud transcript
+
+The owner clarified that a Telegram topic and the desktop chat must be two clients of one server-owned conversation. Turning off the computer must not fork or shorten the conversation.
+
+The Telegram topic already maps to a stable cloud conversation ID, but the agent answered from the runtime's persisted local session. Incremental sync only fills rows after its cursor, so a stale session could omit older messages that were still present on the relay. Added a pre-turn hydration step: flush any completed local turn, read the mapped cloud transcript in pages, and rebuild the agent's shared user/assistant context from it. If sync is unavailable or the conversation is busy, the bot now declines the turn instead of answering from stale history. Added a focused regression test for a stale local session.
+
+Checks: Python syntax compilation and Ruff lint passed. The focused pytest could not start because the available Python environment lacks `loguru`; Ruff's formatting check also reports pre-existing formatting in the touched modules, outside the new code. Deployed to `/opt/nanolika-bot/overrides/chat-center-20261023-233911/sync/engine.py` and `/opt/nanolika-bot/overrides/channels/telegram_topics.py`; backups are in `/opt/nanolika-bot/backups/telegram-cloud-hydrate-20261028/`. Both modules compiled in the container, the imported live classes expose the hydration call, and the bot is healthy after restart. A real Telegram turn is still needed to verify answer continuity and computer delivery.
+
+Trap: the cloud cursor tells the runtime which events are new, but it does not prove its local agent session contains the complete conversation. A channel turn must hydrate from the conversation transcript itself before inference.
+
+## 2026-10-28 · Telegram topic messages stopped before reaching the agent
+
+The owner reported that a message in a Telegram topic got no AI reply and did not appear on the computer. The live bot log shows Telegram received the update at 10:57:35, then `_handle_inbound` crashed because it always passed `once_key` and `once_model`, while the installed `MuseService.send()` predates those optional parameters. The service call happens before the user event is persisted, so the message was lost from the shared conversation as well as unanswered.
+
+Changed the ordinary channel path to omit per-chat Cloud billing parameters when no per-chat key is configured. Preserved those parameters when a chat has its own Cloud key. Applied only this small change to the live channel manager, preserving its unrelated WebApp keyboard behavior. Server backup: `/opt/nanolika-bot/backups/telegram-send-compat-20261028/manager.py`.
+
+Live check: the patched module compiles in the bot container; after restart `nanolika-bot` is `running healthy`, and the updated file hash differs from the recorded backup. The local Ruff check passed for the source and test; the focused pytest could not run because the mounted Python 3.11 virtualenv points to a missing interpreter and system Python lacks `loguru`. A fresh Telegram message is still needed to confirm the live agent reply and computer sync. The earlier update was acknowledged by Telegram, but was not saved in the conversation and cannot be replayed by the bot.
+
+Trap: the production channel manager contains a legacy WebApp keyboard block absent from the current source tree. Replacing the whole file would have removed it, so the live change was applied narrowly to the deployed file.
+
+## 2026-10-28 · Починка загрузки кадров для видео аватара через Polza
+
+Владелец попросил исправить генерацию четырёх роликов настроек аватара: картинки создавались, видео завершалось `Upload policy failed (HTTP 502)`.
+
+Причина: видео-модели направлены в Polza, но клиент всегда запрашивал upload policy у DashScope с ключом `UPSTREAM_KEY`. У Polza вместо этого есть своё временное хранилище; его API возвращает URL кадра в корне JSON, на `s3.polza.ai`. Polza Media принимает кадр в `input.images` как URL. Также активный override релея всё ещё отправлял медиа по `/api/v1/media`, что прокси дополнял повторным `/api`.
+
+Исправлено: релей теперь сообщает клиенту режим загрузки через Storage API, принимает и ограничивает размер/тип кадра, загружает его с ключом Polza и проверяет ссылку хранилища; видео-запрос переводит `img_url` в `input.images`. Avatar Studio использует этот маршрут для Polza, сохраняя прежнюю загрузку DashScope. Обновлён путь медиа на `/v1/media`.
+
+Выложено в живые overrides; добавлен override Avatar Studio и bind mount в Compose, bot пересоздан. Бэкапы до изменений: `/opt/nanomuse/cloud/backups/avatar-video-20261028/api.py.before` и `/opt/nanolika-bot/backups/avatar-video-20261028/`.
+
+Проверки: Ruff и Python syntax compilation проходят; relay `/healthz` отвечает, relay импортирует API, bot здоров и загружает новый `AvatarStudio._clip_once`. Автотест добавлен для upload → video payload, но не запускался: доступное окружение без совместимого Python 3.11/httpx, а установка зависимостей не выполнялась. Платная генерация клипов для проверки не запускалась.
+
+## 2026-10-28 · Почему DeepSeek шёл через Polza, сколько это стоило и почему контекст не сжимался
+
+Владелец спросил, зачем чат идёт через Polza и откуда 96 ₽ за час, при том что картинки шли другим механизмом.
+
+**Маршрут.** Релей выбирает по живой цене. На `deepseek-v4-flash`: polza 9,43/18,86 ₽ за 1M и кэш 1,89; routerai 11,63/17,27 (но баланс 1,25 ₽ ниже порога 90 ₽, поэтому выключен); deepseek напрямую и openrouter 12,08/48,32. Polza дешевле — потому она. Внутри polza запрос исполняет GMICloud (`inference_provider: GMICloud` в учёте).
+
+**Откуда счёт.** По журналу: 66 запросов за час, **46,1 млн токенов входа**, фактическая закупка **147 ₽**, в среднем 2,23 ₽ и **699 тыс. токенов на запрос** (максимум 708 674). То есть деньги уходят не на наценку провайдера, а на объём: каждый шаг агента заново отправляет всю переписку.
+
+**Почему не сжималось.** В dsh есть пакеты сжатия (`dsh-compaction-basic`, `command-compact`, `tool-result-pruner`), они включены в пресет `nanomuse.patch.yml`. Но порог по умолчанию — `thresholdRatio 0.8`, то есть 80% окна: у модели окно 1 048 575 → сжатие включается на ~838k. Сессия Лики держалась на ~700k и до порога не доходила, поэтому каждый запрос тащил весь контекст.
+
+**Сделано:** в пресете у `compaction-basic` выставлено `thresholdRatio: 0.15` и `retainTokens: 15000` — сжатие около 157k, свежие 15k остаются дословно. Бэкап пресета рядом (`.bak-<время>`). Нужен перезапуск NanoLika, пресет читается при старте сессии.
+
+**Оценка:** при потолке 157k те же 66 запросов — около 33–50 ₽ вместо 147 ₽ (в 3–4 раза меньше). При 84k (ratio 0.08) — около 20 ₽, но это уже заметно режет детали.
+
+**GMICloud напрямую.** Дал владелец токен. Каталог открывается: `https://api.gmi-serving.com/v1/models`, 85 моделей с ценами. Чат отвечает `402 insufficient_quota` — на аккаунте нет баланса. Цены: `deepseek-v4.1-flash-1017` — вход 24,16, выход 96,64, кэш-чтение **0,48 ₽/1M** (вчетверо дешевле кэша polza). Для контекста в 700k с кэшем это было бы выгоднее, но для короткого контекста после сжатия polza дешевле по входу (9,43 против 24,16).
+
+**Как это делает opencode** (для ориентира): сжимает при приближении к пределу модели (буфер 15% окна, минимум 16k), оставляет ~15k свежих токенов дословно, остальное заменяет структурной сводкой (Objective, Requirements, Decisions, Work state, Next Move, Files); запрос сводки переиспользует prompt-кэш; длинные результаты инструментов режутся; при отказе провайдера «слишком длинно» — сжатие и один повтор.
+
+
+## 2026-10-28 — Telegram feed formatting and sync recovery
+
+- Added readable Markdown rendering for JSON cards sent to the mapped Telegram «Лента» topic.
+- Restored the signed-in Cloud account binding to conversation sync at runtime startup.
+- Kept Telegram topics attached by stable relay conversation ID when local thread IDs differ.
+- Replayed a bounded recent sync window on the bot. The relay cursor is advancing again; delivery receipts for the two specific old rows did not confirm, so those exact messages still need a live Telegram-side check.
+- Deployed with backups under `/opt/nanolika-bot/backups/`; Python syntax compilation passed.
+
+## 2026-10-28 · «Слишком много запросов сразу»: лимит одновременных запросов был 4
+
+Владелец спросил про ошибку «Слишком много запросов сразу. Подождите немного и повторите». В журнале релея — событие `budget.refused | too_many_in_flight` в 07:26:52 и один ответ 429 на `/v1/chat/completions`.
+
+Это не провайдер и не баланс: у релея есть **лимит одновременных запросов одного аккаунта** — `MAX_IN_FLIGHT`, по умолчанию **4** (`config.py:690`, проверка в `service.py:2631`). Лика (deepseek-harness) запускает больше четырёх запросов сразу — инструменты, параллельные шаги, — и пятый отбивается с `too_many_in_flight`. Приложение показывает это как «много запросов».
+
+Поставил `MAX_IN_FLIGHT=12` в `.env` и пересоздал релей; проверено: `settings.max_in_flight == 12`.
+
+Если 429 пойдут от самих провайдеров (polza/routerai любят бурсты), их релей перебирает по цепочке — 429 входит в `retryable()`.
+
+## 2026-10-28 · Telegram topic card buttons
+
+Removed the per-topic history card buttons for Archive and Chats. Earlier remains first in the inline keyboard, while Later remains on older pages. Telegram positions inline keyboards below message text, so “top” means the first and only action on the latest page. Bot backup: `/opt/nanolika-bot/backups/chat-state-sync-20261028T072118Z`; deployment completed and the container is running. Details: nanoLika/artifacts/chat-state-sync-2026-10-28/RESULTS.md.
+
+## 2026-10-28 · Картинка в чате: polza понимает только `input_image`
+
+Следующая ошибка Лики после 413: `chat 400 deepseek-flash: Модель "deepseek/deepseek-v4-flash" не имеет доступных провайдеров с поддержкой: input_image`. Сообщение сбивает с толку — «нет провайдеров» звучит как проблема баланса или роутинга, а на самом деле это **диалект polza**.
+
+Проверил прямыми запросами к каждому:
+- polza: `input_image` со строкой в `image_url` → **200**; стандартный `image_url` с объектом `{"url": ...}` → **400** и ровно это сообщение;
+- aitunnel, routerai: принимают оба формата.
+
+То есть приложение шлёт обычный OpenAI-формат `image_url`, polza его не понимает и отвечает «нет провайдеров с поддержкой: input_image» (у них внутри имя вида `input_image`).
+
+Исправлено в `provider_routing.py`: `_polza_message()` переводит `image_url` → `input_image` со строкой, и `_supplier_body("polza", …)` прогоняет через неё все сообщения. Деплой: файл живёт в `overrides/deepseek-routing-20261027/`, бэкап рядом. Проверено после фикса: polza с картинкой (тот же `deepseek/deepseek-v4-flash`) — **200**.
+
+Урок на будущее: у polza своя схема контента, и её сообщение об ошибке называет *свой* внутренний тип, а не стандартный. Смотреть на фактический запрос, а не на текст ошибки.
+
+## 2026-10-28 · Лика падала на тексте: 413 от прокси polza (лимит 1 МБ)
+
+Владелец: «она от текста падает, до картинок ещё даже дело не дошло». В журнале событий релея — четыре подряд `upstream.error: chat 413 deepseek-flash` от `deepseek-harness/0.2.0-rc.2`. То есть запрос доходил до облака, а 413 отдавал не провайдер, а **nginx прокси перед polza**: в `polza-proxy.conf` не было `client_max_body_size`, у nginx по умолчанию 1 МБ. Длинная переписка (инструменты, история) переваливала за мегабайт — прокси отвечал 413, релей показывал его как ошибку провайдера, приложение — «The model provider is having trouble» / `PI_AI_ERROR`.
+
+Исправлено: в `polza-proxy.conf` добавлен `client_max_body_size 20m` (столько же, сколько у Caddy `request_body max_size 20MB`), контейнер `polza-proxy` пересоздан. Проверено телом 7,5 МБ: было 413, стало 200.
+
+Заодно проверено, что сами провайдеры живы после пополнения: polza — 200 на `deepseek/deepseek-v4.1-flash-1017`, openrouter — 200. Балансы: polza 1000,61 ₽, openrouter ~986 ₽ в рублях, aitunnel 382 ₽; routerai 1,25 ₽ и proxyapi 40,82 ₽ ниже порога маршрутизации 90 ₽, поэтому в чат-цепочку не попадают.
+
+Урок: 413 от внутреннего прокси выглядит как ошибка провайдера и уводит в сторону. Смотреть `events.detail` в `cloud.db` — там видно и статус, и модель.
+
+## 2026-10-28 · Chat sync verification closeout
+
+The final redundant incremental TypeScript run was stopped after seven minutes of mounted-share reads with no diagnostics; it is not counted as passing. The preceding full main-selection typecheck passed, and the final offline guards passed all 28 desktop sync checks. Five cloud UI checks and relevant Python/runtime checks passed. Relay and bot are live; installed desktop host code still requires an app restart. See nanoLika/artifacts/chat-state-sync-2026-10-28/RESULTS.md for state and rollback.
+
+## 2026-10-28 · Final Main chat selection and offline sync verification
+
+The owner clarified that the 74-message Main chat, not the four-message namesake, is the active one. Its original cid and transcript now remain the account main. The short namesake is archived separately. The runtime's existing move operation and the desktop catalogue handler preserve both histories without merging. Live checks confirm three active chats, one topic per active chat, matching bot/account main ids, and unpaused sync; authenticated live history pagination returned two non-overlapping pages of eight messages.
+
+Added two offline guards: archive before a new chat's first upload is retained until it gets a cid, and a queued archive of a remotely deleted chat no longer blocks all catalogue pulls. A tombstone's local cloud mark prevents accidental republishing while still archiving its local copy. All 28 desktop sync checks, five cloud UI checks, fourteen topic assertions and runtime/history checks pass. Final runtime updates are installed on both desktop profiles with original backups retained; a desktop restart remains required. The preceding full main-selection typecheck passed; the last incremental check after the offline guards is running, no diagnostics yet (nanoLika artifact session 99431). No paid model calls were needed. Exact state and rollback paths remain in nanoLika/artifacts/chat-state-sync-2026-10-28/RESULTS.md.
+
+## 2026-10-28 · Shared chat state published, selected Main chat preserved
+
+The owner selected the 74-message Main chat, Исправление ошибок and one Лента. The four-message Main chat was archived separately. The selected existing conversation became the account main, with ids and transcripts preserved. Live relay and bot checks confirm exactly three active conversations, one native topic mapping per active conversation, matching account/bot main ids and unpaused sync with no error.
+
+Published relay archive/restore and stable catalogue/feed support. Published bot catalogue discovery, id-based topic binding, active/archive menus, paginated eight-message previews and reconnect protection for old unmapped local threads. Replaced the revoked bot catalogue service sign-in through the authenticated bot endpoint and encrypted vault; revoked the unused diagnostic session. Private Telegram topics cannot be closed/reopened by Bot API, so archive uses the shared menus and native name prefixes without deleting messages.
+
+Desktop runtime updates are installed on both found profiles with code backups. Cloud-off is now a local pause retaining the shared id/history, and a first message no longer silently enables a local chat's cloud. Archive changes retry after offline periods, restore follows the relay without feedback, and main selection follows the chosen existing session without combining transcripts. The apps were not force-quit: a desktop restart is still needed to activate the host code.
+
+Checks: 26 desktop sync checks, 5 cloud UI checks, 14 mocked Telegram topic assertions, history/runtime main-move and isolated relay integration checks passed; relevant Python Ruff checks passed. Initial full desktop typecheck passed after the narrowing repair; final incremental typecheck for the main-selection follow-up is still running, with no diagnostics at last check. Result, remaining activation/typecheck and exact backups: nanoLika/artifacts/chat-state-sync-2026-10-28/RESULTS.md. Critical traps: stale service auth paused catalogue sync independently of per-chat inference; private Telegram close/reopen methods are supergroup-only; source/share and deployed lazy sync differ; SMB listing prevented one copy before installed code was changed, so the final build was staged locally.
+
+## 2026-10-28 · Видео: перебор polza → aitunnel, и почему сборка не доезжала
+
+Владелец попросил доделать видео. Сделано, но по дороге выяснились две вещи, которые стоили времени.
+
+**Блокер №1 — баланс polza: 0,61 ₽.** Поэтому и картинки, и видео падали с 402. Проверил балансы всех: polza 0,61 ₽, routerai 1,25 ₽, **aitunnel 382 ₽**, openrouter ~$10, proxyapi отвечает 404 на баланс. То есть реально платить сейчас может aitunnel, а не polza.
+
+**Блокер №2 — сборка образа не доезжает до контейнера.** Живой релей грузит код не из пакета в образе, а из bind-монтирования `overrides/`:
+- `overrides/deepseek-routing-20261027/nanomuse_cloud/api.py` → `/srv/nanomuse-cloud/nanomuse_cloud/api.py`
+- `overrides/connection-state-20261027/nanomuse_cloud/db.py` → туда же.
+Поэтому `docker compose build` + `up -d` ничего не менял (файлы в контейнере оставались старыми, `docker cp` падал с «device or resource busy»). Править надо именно эти файлы в overrides. Бэкапы рядом: `.bak-<время>`.
+
+**Что умеют по видео (проверено запросами):** polza — `/api/v1/media` (таск), aitunnel — `POST /v1/videos` (202, `id`) и `GET /v1/videos/{id}` (status `pending`/`completed`, ссылка в `unsigned_urls[0]`, стоимость в `usage.cost_rub`). RouterAI видео требует держать 500 ₽ под клип — при балансе 1,25 ₽ это 402. Bothub видео на тарифе не открыто («not available on your plan»).
+
+**Код:**
+- `db.py`: колонка `video_tasks.provider` (+миграция), чтобы опрос знал, кто держит задачу;
+- `api.py`: `_provider_video_submit` принимает провайдера, у aitunnel свой путь и тело `{model, prompt, seconds}`; `_provider_video_poll` умеет aitunnel; опрос в маршруте и в фоновом закрытии берёт провайдера из задачи;
+- `_image_with_fallback` и видео-цепочка идут по каталогу, на 402/429/5xx — к следующему;
+- `catalog_routes.py`: `video_candidates` (polza, aitunnel);
+- `export.py`: в кандидаты теперь попадает и aitunnel (provider = aitunnel, id — его имя модели), в том числе без цены; у aitunnel заполняется `provider_model_id` (имя модели из payload).
+
+**Итоговые цепочки:** `clip`/`clip-mini`/`clip-pro` — polza → aitunnel; `image` — polza → bothub → routerai → aitunnel (текущий поставщик всегда первым).
+
+**Проверено:** aitunnel-видео seedance-2.0-mini 4 с — задача создалась, дошла до `completed`, ссылка получена, списано 64,80 ₽. Релей healthy, в логах ошибок нет.
+
+**Что осталось:** биллинг всё ещё считает по `spec.per_image`/`per_clip` из конфига, а не по `retail` из `user_catalog`; галочка «скрыть модель» пока только в браузере. И баланс polza надо пополнить — иначе первый же запрос каждый раз уходит в резерв.
+
+## 2026-10-28 · Релей: перебор поставщиков картинок включён, ключи Bothub и OpenRouter
+
+Владелец дал ключи Bothub и RouterAI, потом сообщил, что оплатил OpenRouter. Сделано.
+
+**Ключи.** Bothub (`BOTHUB_KEY`) добавлен в `/opt/nanomuse/cloud/.env`, права 600, в git не попал. RouterAI уже был (`ROUTERAI_KEY`, `PRICE_ROUTERAI_KEY`) — проверил, работает. OpenRouter — ключ `OPENROUTER_KEY` уже был, ходит через локальный прокси `172.19.0.1:9443`; баланс: пополнено $25, израсходовано $15, осталось ~$10.
+
+**Что умеют поставщики (проверено запросами 28.10):**
+- Bothub: `POST /openai/v1/images/generations`, ответ `b64_json`. Сгенерировал две картинки: gpt-image-2 (~1 ₽) и gemini-3.1-flash-image (~10,5 ₽). Ключ рабочий.
+- RouterAI: `POST /api/v1/images/generations` есть (400 на несуществующую модель).
+- AITUNNEL: `POST /v1/images/generations` есть.
+- OpenRouter и ProxyAPI: такого маршрута нет (404) — картинки они отдают только через чат, в перебор не годятся.
+
+**Код.** `cloud/nanomuse_cloud/catalog_routes.py` — читает `/srv/models/api/catalog.json` (mtime-кеш, рестарт не нужен), отдаёт кандидатов по возрастанию закупки; в перебор картинок пускает только polza/bothub/routerai/aitunnel. В `api.py` добавлены `_openai_image` (OpenAI-совместимый адаптер: b64_json или url) и `_image_with_fallback`: идёт по цепочке, на 402/429/5xx переходит к следующему, на 4xx содержания останавливается. Текущий поставщик модели остаётся ПЕРВЫМ — в каталоге у polza цена за токены, а не за картинку, и по ней он выглядел бы дороже, чем есть.
+
+Цепочки сейчас:
+- `image`: polza → bothub → routerai
+- `image-lite`: polza 2,90 → bothub 4,56 → routerai
+- `image-banana`: polza 3,00 → routerai → bothub
+- `image-seedream`: polza 4,00 → routerai 3,66 → bothub 4,13
+
+**Деплой.** В `docker-compose.yml` у relay добавлен том `./models:/srv/models:ro`, в `.env` — `MODELS_CATALOG=/srv/models/api/catalog.json` и `bothub` в `CLOUD_PROVIDERS`. Релей пересобран (`docker compose build relay && up -d`), каталог виден из контейнера: 709 моделей. Бэкапы на сервере: `nanomuse_cloud/api.py.bak-*`, `docker-compose.yml.bak-*`.
+
+Риск, который остался: `charge_image` по-прежнему берёт цену из конфига модели, а не из `user_catalog` — биллинг на новую базу не переведён. Это следующий шаг, вместе с видео (там пока только polza).
+
+## 2026-10-28 · Shared archive, cloud switch and Telegram history, implementation in progress
+
+The owner requested continuous agreement of desktop/Telegram chat state, preserving per-chat cloud-off and loading history in pages. Inspection of the actual shared desktop profile confirmed archive flags missing from the relay. Published relay sync/catalogue support and consolidated daily Feed metadata without deleting message text. Two already archived shared chats were reconciled; the final two active chat names are still requested, so other legacy chats were not guessed or mass-published as Telegram topics.
+
+Desktop source now queues offline archive changes, applies remote restore without echoing archive operations, and treats side-chat cloud-off as a local pause retaining the shared id/history. The main account chat stays shared; account deletion is separate. Telegram source has catalogue-driven topic discovery, archive close/reopen, separate active/archive lists, and bounded eight-message history cards with older cursors. Source/client methods and three-language UI text were updated. These desktop/bot changes are not installed yet.
+
+Checks: isolated relay integration passed; fourteen topic checks and history-page checks passed with mocked Telegram against bot dependencies; touched Python Ruff checks passed. Desktop sync has 24 passing assertions and one pre-existing C9 failure, independently reproduced against the before-change source. Full desktop typecheck is still running over slow SMB dependencies. Initial declaration build and redundant Python collection were cancelled after prolonged share reads. Rollback and next steps are recorded in nanoLika/artifacts/chat-state-sync-2026-10-28/RESULTS.md. Do not call this rollout complete: final build, installation, active-chat choice and live Telegram verification remain.
+
+## 2026-10-28 · Таблица переделана и релей: нашёлся блокер с ключами
+
+Владелец попросил сделать таблицу читабельной: во всю ширину, липкая шапка, отдельно «закупка вход/выход» и «клиенту вход/выход», галочка скрытия первым столбцом, серые строки для моделей, которые можно улучшить прямыми контрактами. И начинать релей.
+
+Сделано в `~/Dev/modelscope`:
+- шапка в две строки с группами «Закупка ₽» и «Клиенту ₽», липнет при прокрутке (с 1200px, когда таблица влезает без горизонтальной прокрутки);
+- колонки: ✓ · Модель · Вендор · Тип · Закупка у · закупка вход/выход · клиенту вход/выход · Маржа · Контекст · Предл. · Подключено;
+- первая колонка — галочка «показывать клиентам»: снял — строка гаснет, список скрытых живёт в localStorage, есть «скачать скрытые.json» и «показать все». У клиентов пока не скрывает: для этого нужен API на сервере, следующий шаг;
+- серые строки — 34 модели, где наша закупка идёт по прайсу вендора или выше. `official.py` берёт официальные цены из models.dev, `pricing.py` считает `direct_gain`, в ячейке метка «прямой» с подсказкой. Это и есть список для прямых контрактов;
+- `app.js` получил версию в адресе — иначе браузер держал старый скрипт после пересборки (из-за этого таблица один раз отрисовалась пустой);
+- класс `wide` уже был занят адаптивным текстом и на узком экране скрывал всю страницу — для широкой вёрстки теперь `full`.
+
+Релей: проверил, чем он может платить. В контейнере есть ключи polza, aitunnel, openrouter, proxyapi. **Нет bothub и routerai.** А в каталоге для главной картинки `image` (gemini-3.1-flash-image) второй по цене — как раз bothub, 10,56 ₽/карт. У остальных (openrouter, proxyapi, aitunnel) эта модель продаётся за токены через чат — другой адаптер и другая проверка. Для видео `clip-pro` единственный оплаченный посекундный канал — polza (routerai без ключа).
+
+То есть код перебора сам по себе не спасёт: нужен второй платящий канал. Варианты — ключ Bothub (дешевле всего, 10,56 ₽/карт.) или пополнение polza; для видео — ключ RouterAI. Пока это не решено, деплой перебора в живой релей не делал: поменяется ноль поведения, зато появится риск.
+
+Опубликовано, коммит `594f6f6`.
+
+## 2026-10-28 · Telegram and desktop chat synchronization, investigation
+
+Asked to share desktop conversations with Telegram, then clarified that history should load in pages instead of copying everything. Read-only inspection confirmed that the installed desktop and bot use the same account. The current account catalogue has nine live conversations; only three have a matching Telegram topic mapping. Automatic topic discovery excludes historical conversations and requires loaded user events, while the bot catalogue lazily loads bodies only for selected threads. This can prevent unmapped conversations from becoming topics. Existing topic mappings also contain repeated conversation ids; no topics were merged or removed.
+
+Proposed scope: shared catalogue, stable conversation-id mapping, recent history on demand and cursor-based older pages. Native Telegram Bot API has callback updates but no scroll update, so older history needs a button or a WebApp. No runtime, account settings or customer messages changed. Implementation remains pending the PLAN stage: inspect and change the relay history API, Telegram topic/history controls and their tests; preserve existing conversations and avoid matching by title alone.
+
+## 2026-10-28 · Витрина на сервере и каталог для релея
+
+Владелец решил: работаем только с новой таблицей («в той таблице больше утонем»), старую операторскую не трогаем, пока релей и биллинг не переведены. Попросил задеплоить таблицу с конечными ценами.
+
+Опубликовано на `https://cloud.nanolika.ru/phzhk6tnr6d0e2ac7j3ze8eose/`: таблица с колонками «Закупка», «Клиенту ₽», «Маржа»; страница «Наш каталог» — 690 моделей с закупкой, клиентской ценой и маржой.
+
+Чтобы релей мог переключаться между поставщиками, добавлено:
+- `offers.provider_model_id` — id, которым поставщик называет модель (`google/gemini-3.1-flash-image` у polza, `gemini-3.1-flash-image` у bothub). Без него релей не знает, что просить у конкретного поставщика. Заполняется при сборе.
+- `export.py` → `site/api/catalog.json`: `menu` (внутренние имена `image`, `image-banana`, `clip-pro` → слаг базы, 21 запись), `retail` (цена клиенту), `candidates` (поставщики по возрастанию закупки с id и ценой). 709 моделей, у 530 два и более кандидата.
+- Кандидаты в одной единице с ценой клиента идут первыми (`same_unit`): «10 ₽ за картинку» и «40 ₽ за 1M токенов» числом не сравнить, поэтому цены в других единицах остаются резервом, но не определяют порядок.
+- Устаревшие алиасы routerai с `~` пропускаются, если у поставщика есть канонический id.
+
+Проверено: `https://cloud.nanolika.ru/phzhk6tnr6d0e2ac7j3ze8eose/api/catalog.json` — 547 КБ, 200. Для `image` кандидаты: bothub 10,56 ₽/карт. (в той же единице), дальше polza, routerai, openrouter, proxyapi (у них цена за токены — резерв). Для `clip-pro` (seedance-2.5): bothub 18,17 / polza 18,90 / routerai 24,20 ₽/с.
+
+Дальше по плану: научить релей читать этот файл и перебирать кандидатов при 402/429/5xx, потом биллинг по `retail`. Старую страницу цен (`retail.json`) гасим только после сверки списаний.
+
+Коммиты `169bb7f`, `7688a2f`.
+
+## 2026-10-28 · Витрина: цена клиенту из закупки, 690 моделей
+
+Владелец переключил работу на таблицу моделей: «она более адекватная, будем из неё делать конечные цены для потребителей» — и попросил колонки выхода для клиентов, чтобы не уйти в минус.
+
+Сделан слой витрины (`pricing.py` + `user_catalog`), считается из закупки:
+- **закупка** — минимум среди прямых площадок (polza, routerai, bothub, proxyapi, openrouter, прямой DeepSeek). aitunnel в базовую цену не идёт: на закрытых моделях он дороже в 2,5 раза, а где дешевле (deepseek fp4) — другой продукт по качеству;
+- **наценка** — токены ×1,6, картинки ×1,5, видео ×1,45, речь ×1,5. Запас на эквайринг, поддержку и на то, что дешёвая площадка может отказать и запрос уйдёт к следующей;
+- **округление** — вверх до двух значащих цифр, чтобы округление не съедало маржу.
+
+Заполнено 690 моделей: chat 406, image 94, video 60, embedding 37, speech 37, transcription 26, решения 21, rerank 5, музыка 3, классификация 1. Маржа 45–75%, медиана ~60% — выше aitunnel (×2,48) мы не задираем.
+
+Примеры (закупка → клиенту): gpt-6.1-terra 43,12 → 69 ₽/1M (+60%), claude-sonnet-5.5 144,45 → 240 (+66%), gemini-3.1-flash-image 10,56 → 16 ₽/карт. (+52%), gemini-3.1-flash-lite-image 2,90 → 4,40 ₽/карт. (+52%), nano-banana-2.1 3 → 4,5 ₽/карт., gpt-image-2 1,92 → 2,9, seedance-2.0 12,83 → 19 ₽/с (+48%).
+
+Заодно у polza «запрос» для картинок теперь считается картинкой (₽/карт.), иначе в одной строке стояли «₽/запрос» и «₽/карт.».
+
+В таблице на главной — колонки «Клиенту ₽» и «Маржа»; на странице «Наш каталог» — закупка, у кого, клиентская цена, выход и маржа. Цифры предварительные, правятся в `user_catalog`.
+
+Отдельно: жалоба Лики «не дают картинок» — это про релей nanoMuse (псевдонимы меню `image`, `image-banana` → реальные id и перебор поставщиков при 402). К таблице отношения не имеет, работа отдельная.
+
+Коммит `169bb7f`, опубликовано.
+
+## 2026-10-28 · Где мы уже на дне, а где отдаём плечо: колонка «Закупка»
+
+Владелец спросил, как забрать те 2–2,5 плеча, которые берёт aitunnel, и попросил пометить модели, где дешевле уже не найдём, и проблемные, где нужны другие выходы. Посчитал по базе (729 моделей, 3496 предложений).
+
+**Плечо — это не закупка, а розница.** Сравнение «aitunnel против нашего минимума» по 219 моделям, где есть обе цены: aitunnel дороже в 217 случаях, медиана ×2,48, максимум ×9,95 (qwen3-5-9b: 1,61 против 16,00 ₽). То есть мы уже покупаем в 2,5 раза дешевле aitunnel. Забрать плечо можно не сменой поставщика, а ценой продажи: ставить розницу между своим закупом и aitunnel (например ×1,8) — маржа ~45% и всё ещё дешевле aitunnel. Полное плечо ×2,48 забирается только прямым договором с вендором: сейчас разницу между прайсом OpenAI/Anthropic и нашей ценой берут агрегаторы (Bothub ×0,88 прайса, Polza ×1,16, RouterAI ×1,30, OpenRouter ×1,00).
+
+**Открытые модели, где дешевле не найдём — 83.** Это модели, которые внутри aitunnel держат 3+ хоста (значит открытые веса), и наш минимум уже ниже любого из них: gpt-oss-20b (1,45 против 3,60), qwen3-5-9b (1,61 против 16,00), mistral-nemo (1,73 против 3,31), gpt-5-nano, glm-5.2, glm-5.3-flash, gpt-oss-120b, deepseek-v4-flash, gpt-6-luna, gemini-2.5-flash-lite. Для них рычага снизу нет — цена уже на дне рынка.
+
+**Где aitunnel дешевле — 2 модели.** deepseek-v4.1-flash (наш 5,71 против 1,86) и deepseek-v4.1-flash-1017 (11,54 против 3,64) — у aitunnel это OpenInference на fp4, то есть другой продукт по качеству. Выход: либо брать там, либо договариваться с OpenInference напрямую; на fp8 разница не такая.
+
+**Проблемные — 178 моделей с единственным источником цены** (метка «1» в новой колонке): bothub 69, routerai 42, polza 40, openrouter 24, proxyapi 3. Из них 41 картинка и 37 видео — там сравнивать не с чем вообще (aleph-2, hailuo-3, flux-3-video, avatar-iv, heygen-video-1 — только RouterAI; flux-2-pro, text-to-image, gemini-omni-1.1-flash — только Polza). Ещё 20 моделей без цены совсем (эмбеддинги GigaChat, flux-2-max/klein-4b, seed-audio, gpt-4o-transcribe-diarize).
+
+Для интерфейса добавлена колонка «Закупка»: зелёная метка — дешевле у прямых площадок, жёлтая — у aitunnel, «1» — других источников цены нет. Коммит `433c83c`, опубликовано.
+
+## 2026-10-28 · Проверка aitunnel: цифры верные, но это его розница, а не прайс провайдеров
+
+Владелец попросил проверить, не врёт ли aitunnel про цены его провайдеров. Проверял тремя способами.
+
+1. **Наши цифры против каталога aitunnel.** Сырой ответ `data/raw/aitunnel/gpt-6-1-terra.json` содержит ровно то, что в базе: `openai/flex` 100/500, `openai` 200/1000, `azure/eu` 240/1200, `openai/fast` (priority) 400/2000 ₽ за 1M. Расхождений нет — сборщик ничего не пересчитывает.
+
+2. **Прайс провайдера против aitunnel.** У Anthropic на anthropic.com/pricing: Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50 за 1M. По курсу ЦБ 80,53 ₽/$ это 322/1611, 161/805 и 8/40 ₽. Aitunnel на всех четырёх маршрутах (Azure, Google, Amazon Bedrock, Claude Platform on AWS) показывает одинаковые 800/4000 ₽ — это ×2,48 к прайсу Anthropic. У OpenAI `gpt-6.1-terra` официально $1/$5 (models.dev, раздел openai) = 80,53/402,65 ₽, у aitunnel — flex 100/500 (×1,24), обычный 200/1000 (×2,48), Azure 240/1200 (×2,98), fast 400/2000 (×4,97). Вывод: у закрытых моделей aitunnel ставит свою розничную цену с наценкой ×2,48 (flex ×1,24, priority ×4,97), а имя в строке — это маршрут, через который он отдаёт модель, а не тот, кто поставил цену.
+
+3. **Открытые модели — наоборот, честный пассаж.** У `glm-5.3` официально $1,4/$4,4 (Z.AI) = 112,74 ₽, а внутри aitunnel 49 разных хостов от 13,98 ₽ (Wafer fp4, ×0,12) до 560 ₽ (Alibaba prime, ×4,97) — там цена реально зависит от хоста и квантизации. У `deepseek-v4.1-flash-1017` от 3,64 ₽ (OpenInference fp4) до 90 ₽ (Fireworks us) при официальных 12,08 ₽.
+
+Для сравнения те же закрытые модели у остальных: OpenRouter ровно по прайсу (×1,00), RouterAI ×1,30, Polza ×1,16–1,45, Bothub ×0,88–0,90 (перепродажа flex-тарифа), ProxyAPI ×3,23.
+
+Что сделано: у метки `aitunnel` в панели теперь подсказка «цена aitunnel за маршрут OpenAI, а не прайс OpenAI» — чтобы строку нельзя было прочитать как цену самого провайдера. Коммит `05be4e9`, опубликовано.
+## 2026-10-28 · Прямой DeepSeek, история применённых тарифов и честная ошибка отсутствия маршрутов
+
+Повторный сбой Лики вызван новым карантином двух AI Tunnel Flash-маршрутов после расхождения общей каталожной цены и суммы поставщика. Прямой DeepSeek был подключён, но не участвовал в priced-routing. Добавлен его адаптер: авторизованный список моделей + официальный прайс USD/M, раздельные вход/кеш/выход, UTC peak/off-peak и проверенный календарь праздников КНР 2026. Совместимость enable_thinking/reasoning_effort переведена в параметры DeepSeek. Срок котировки ограничен проверенным календарём; неизвестные схемы/годы не угадываются. Для расширения календаря предусмотрен CLOUD_DEEPSEEK_HOLIDAYS_FILE.
+
+В ledger.extra.model_accounting.price_quote теперь сохраняется применённый снимок ставок, источника, курса, времени проверки и параметров маршрута. Общий provider-routing.json остаётся последним каталогом, не архивом. Стоимость из ответа поставщика и catalog_estimate различаются; прежние отсутствующие снимки не восстанавливаются задним числом. Пустая цепочка маршрутов возвращает 503/provider_routes_unavailable до начала потока, снимает резерв, не списывает за чат. Розничные цены, пороги тарифов и ключи не менялись.
+
+Проверено 76 тестов, обычный и потоковый реальный ответ DeepSeek через изолированный ASGI-релей с базой в памяти, отдельный видимый ответ с синтетической картинкой и инструментом, сохранение снимков, отсутствие списания при пустой цепочке. Новых lint-замечаний нет. В рабочем API после публикации две котировки DeepSeek, остаток проверен, ошибки каталога нет, relay healthy. Резервная копия: /opt/nanomuse/cloud/backups/deepseek-routing-20261027T220850Z. Отчёт: nanoLika/artifacts/deepseek-routing-2026-10-27/RESULTS.md.
+
+## 2026-10-28 · aitunnel — наша площадка, но цена у него не одна
+
+Владелец уточнил вопрос: не «нет цены RouterAI», а «нет цены aitunnel» у gpt-6.1-terra — и «то есть мы его рассматриваем как всех остальных поставщиков?». Разобрались: aitunnel собирается и это наша шестая площадка, но у него внутри несколько площадок-исполнителей, и цена у каждой своя. Для gpt-6.1-terra в каталоге aitunnel четыре предложения: OpenAI flex 100/500, OpenAI 200/1000, Azure 240/1200, OpenAI fast+priority 400/2000 ₽ за 1M (вход/выход). Одна цифра «цена aitunnel» тут была бы враньём — разброс в четыре раза.
+
+Раньше это выглядело как четыре чужие серые строки «OpenAI», «Azure» без единого слова aitunnel — отсюда и ощущение, что его нет. Сделано в `~/Dev/modelscope`:
+- aitunnel считается нашим: строки зелёные, с меткой «подключён»;
+- подпись aitunnel стоит первой в ячейке: `aitunnel OpenAI`, `aitunnel Azure`;
+- новая галочка «свернуть aitunnel» (включена по умолчанию): одна строка с лучшей ценой и пометкой «+3 площадки»; снял галочку — видны все площадки внутри aitunnel с ценами и uptime;
+- счётчик «у нас N поставщиков» считает площадки, а не строки: у gpt-6.1-terra шесть (Bothub, Polza.ai, OpenRouter, aitunnel, RouterAI, ProxyAPI);
+- галочка появляется только там, где у aitunnel больше одной площадки.
+
+Проверено: gpt-6.1-terra (6 площадок, aitunnel свёрнут в OpenAI +3), seedance-2.0 (4 площадки: Bothub 14,14 ₽/с, Polza от 12,82, RouterAI 15,83, aitunnel Seed без цены), aleph-2 (RouterAI 29,31 ₽/с, aitunnel Runway без цены).
+
+Опубликовано (729 моделей, md5 `app.js` совпадает), коммит `75f8308`.
+
+## 2026-10-27 · Проверка BotHub и двух подключений ProxyAPI
+
+Диагностика без изменений сервера и без генераций. Переданный ключ BotHub проверен только в памяти: /v1/models отвечает 200 и возвращает 486 моделей, контроль без ключа и с неверным ключом — 401. /auth/me и персональный /pricing/models для API_COMPLETIONS тоже отвечают 200. Получен структурированный тариф PRO/BASIC для deepseek-v4-flash-0731: вход 20,408559 ₽, выход 40,817118 ₽, чтение кеша 4,081712 ₽ за 1M. В settings нет подключения BotHub, отсутствуют адаптеры маршрутизации/баланса; старый HTML-парсер BotHub сознательно отключён как неточный. Публичный OpenAPI предоставляет нормальный источник цен с единицами CAPS/RUB/USD и режимом провайдера. Секрет не сохранялся в исходники/аргументы/отчёт/настройки.
+
+Два ProxyAPI — общий API и OpenAI API одного сервиса; константное сравнение подтвердило один и тот же ключ. Оба читают один /proxyapi/balance. Это один счёт с двумя маршрутами, остатки не складываются. Подробности без секретов: nanoLika/artifacts/bothub-check-2026-10-27/RESULTS.md.
+
+## 2026-10-27 · AI Tunnel: выбор внутреннего исполнителя по цене
+
+Устранён пропуск второго уровня маршрутизации: AI Tunnel теперь получает `provider.sort=price` и `require_parameters=true`, включая явно настроенный резерв и выключенный auto-routing. Сохраняется запрет известных 4-битных вариантов; неизвестная точность остаётся допустимой для закрытых моделей. Клиент не может подменить серверную политику; остальные поставщики не меняются. Это порядок «дешёвые сначала», а не гарантия цены общего каталога 10/32: фиксированный тариф требует конкретного endpoint, `only` и `allow_fallbacks=false`.
+
+Проверки: 51 тест общего набора прошёл, включая потоковые ответы и однократное списание; одно устаревшее ожидание списка точностей перепроверено свежим запуском пяти итоговых policy-тестов — все прошли. Отдельно проверена сериализация итогового запроса в контейнере. Два крошечных запроса непосредственно к поставщику приняты: текстовый 0731 — 0,01 ₽; с синтетической картинкой и инструментом v4.1 — 0,02 ₽, в последнем лимит 16 токенов ушёл на рассуждение, завершённый видимый ответ не проверен. Клиентские аккаунты релей за диагностику не списывал. Новых lint-замечаний нет. Выложен один модуль с резервной копией compose/исходника/SQLite: /opt/nanomuse/cloud/backups/aitunnel-provider-policy-20261027T212216Z. Подробности: nanoLika/artifacts/aitunnel-provider-policy-2026-10-27/RESULTS.md.
+
+## 2026-10-27 · В базе теперь шесть площадок: bothub, proxyapi и openrouter
+
+Владелец спросил, где остальные провайдеры: «где openrouter, где bothub, AITUNNEL, ProxyAPI, где от них цены». Проверка показала: в базе собирались только polza, routerai и прямой DeepSeek. aitunnel собирался (1275 предложений), но в панели выглядел как «Azure», «Seed», «OpenInference» — под именами площадок внутри него, своего имени нигде не было. openrouter, bothub и proxyapi не собирались вовсе.
+
+Что сделано в `~/Dev/modelscope`:
+- **bothub.chat** — 387 моделей. API под ключом (401), но каталог `/models` отдаёт серверный HTML с ценами в рублях: вход/выход за 1M токенов, видео «За секунду», картинки «За изображение»/«За генерацию», речь «За 1K символов», расшифровка «Аудио» (за минуту). Тип берём из модальности карточки (Текст/Видео/Изображения/Аудио/Эмбеддинги/Музыка) — она точнее цены; вендора bothub в слаг не кладёт, поэтому для новых моделей угадываем по семейству (flux → black-forest-labs, kling → kling, suno → suno и т.д.), иначе все 78 новинок свалились бы в «unknown».
+- **proxyapi.ru** — 443 модели со страницы `/models/browse`, цены за 1M токенов. API тоже под ключом (401), HTML открыт.
+- **openrouter.ai** — 386 моделей. Сам сайт блокирует российские адреса: 403 «Access denied by security policy» на любой User-Agent, и с этого Mac, и с VPS, и из настоящего Chrome (проверено), публичные CORS-прокси не помогли. Взяли зеркало `models.dev/api.json`, раздел `openrouter`: те же id и те же доллары за 1M, пересчёт по курсу ЦБ — как уже делаем для прямого DeepSeek. Это единственное место в базе, где цена не рублёвая с площадки, а пересчёт; в README записано.
+
+Интерфейс: у строк из aitunnel появилась серая метка `aitunnel` — теперь видно, что это его цены, а не пропавшая площадка. «Наши» теперь шесть: Polza, RouterAI, Bothub, ProxyAPI, OpenRouter, прямой DeepSeek. Счётчик в панели и колонка «Подключено» считают их все.
+
+Итого 729 моделей и 3496 предложений (было 624 и 2288): текст 424, картинки 97, видео 61, речь 41, эмбеддинги 40, расшифровка 27, решения 21, переранжирование 9, музыка 8, классификация 1. Появилось 78 моделей, которых у нас не было ни в одном каталоге: линейка Flux (dev/schnell/pro/kontext/fill/depth/redux), Kling 2.1–3.0 и motion control, LTX 2.x, Vidu Q3, PixVerse V6, Suno V5/V6, ElevenLabs voice cloning.
+
+Проверка на deepseek-v4.1-flash-1017 — шесть цен в одной панели: polza 11,54/17,13 · routerai 11,63/17,27 · deepseek 12,08/48,32 · openrouter 12,08/48,32 · bothub 16,17/64,68 · proxyapi 26,07/100,25 (вход/выход за 1M). Плюс 36 чужих площадок из aitunnel, у каждой метка.
+
+Заодно: вход на базу моделей и на страницу цен сделан по IP владельца `95.221.28.57` без пароля (Caddy `remote_ip`), остальным по-прежнему basic_auth. IP получен временным эндпоинтом `/my-ip`, который потом убран.
+
+Опубликовано на `https://cloud.nanolika.ru/phzhk6tnr6d0e2ac7j3ze8eose/` (729 моделей, 97 картинок, 61 видео, md5 `app.js` совпадает), коммит `4b699fe`.
+
+## 2026-10-27 · Диагностика PI_AI_ERROR: нет доступного маршрута модели
+
+Проверка без изменений runtime и без платных запросов. В relay два сбоя `No configured model provider answered (no routes)`: AI Tunnel v4.1 Flash и 1017 попали в ценовой карантин после фактических 31,79/23,72 ₽ вместо 15,89/15,81 ₽; остальные каталожные поставщики ниже рабочего порога остатка 90 ₽ / $1. Публичный API AI Tunnel продолжает отдавать 30/120 ₽ за 1M, хотя фактическая стоимость соответствует 60/240 и 45/180. На синтетическом запросе в живом маршрутизаторе подтверждено: текстовый запрос имеет запасные text-only маршруты, добавление изображения при наличии tools оставляет ноль. Тело сбойного запроса не перехватывалось. Карантин и финансовые правила не менялись. Отчёт: nanoLika/artifacts/provider-no-routes-2026-10-27/RESULTS.md.
+
+## 2026-10-27 · Telegram WebApp: вход в уже привязанный аккаунт
+
+Исправлен переход из marketing /webapp/: раньше он только проверял привязку и открывал чат без браузерной сессии. Добавлены same-origin вход `/v1/auth/telegram-webapp` и `/web/telegram.html`: строгая проверка URL-декодированной подписи Telegram, свежесть запуска 5 минут, поиск существующего аккаунта без регистрации/слияния, отзываемая сессия на 30 дней. Данные запуска передаются фрагментом и сразу убираются из адреса. Исправлена запись в read-only SDK initDataUnsafe; чат разрешён внутри Telegram Web, внешний SDK разрешён только странице входа.
+
+Проверено: 24 backend-теста, 5 браузерных сценариев; опубликованная страница внутри тестового родителя Telegram Web с настоящими заголовками и подставным ответом авторизации; совпадение публичных файлов, отказ 401 на неверную подпись и healthy relay. Реальный запуск из бота требует повторного открытия у владельца. Изменения выложены с резервными копиями compose/исходников/SQLite и двух файлов сайта. Подробности: nanoLika/artifacts/telegram-webapp-session-2026-10-27/RESULTS.md.
+
+## 2026-10-27 · Seedance есть у polza и routerai: видео и картинки не собирались, двойники слить
+
+Владелец спросил: «неужели seedance нет ни у одного из наших поставщиков?» — и приложил скрин с seedance без цен и с дублем DeepSeek. Оба наблюдения оказались правдой, и оба — про сборщик, а не про поставщиков.
+
+**Seedance есть.** У polza пять моделей (`bytedance/seedance-2.5`, `-2`, `-2-fast`, `-2-mini`, `-1.5-pro`), у routerai шесть с ценой в `pricing.seconds`. В базу они не попадали, потому что сборщики отбрасывали всё, что priced не за токены: у polza стоял фильтр `if not pricing.get("prompt_per_million"): continue`, у routerai — `if not pricing.get("prompt")`. Это вырезало 70 моделей polza и 78 routerai: все видео и почти все картинки наших поставщиков. В базе они были видны только через aitunnel — без цен, отсюда «прочерки» на скриншоте.
+
+**Дубль DeepSeek — алиас routerai.** routerai отдаёт и `deepseek/deepseek-v4.1-flash-1017` (38 предложений), и `~deepseek/deepseek-v4-flash-latest` с тем же именем «DeepSeek: DeepSeek V4.1 Flash 1017» и теми же ценами, но всего с 3 предложениями. Владелец кликнул вторую строку и решил, что нового ничего нет. `~` в id — пометка «устаревший алиас».
+
+Сделано в `~/Dev/modelscope`:
+- у цены появилась единица: `offers.price_unit` (`per_1m`, `per_second`, `per_video`, `per_image`, `per_minute`, `per_1m_chars`, `per_request`) и `offers.price_from` — цена «от» у ступенчатых тарифов. Цена не за токены лежит в `request_cost` и печатается с суффиксом: `2,57 ₽/с`, `от 5,25 ₽/ролик`, `4,19 ₽/карт.`;
+- сборщики принимают `video_per_second`, `per_request`, `stt_per_minute`, `tts_per_million_characters`, `tiers`, `seconds`, `image_output`, `request`. У polza из ступеней берётся самая дешёвая с пометкой «от» — иначе базовая ступень seedance 1.5 pro (135 ₽ за ролик) выдавалась бы за обычную цену, а 480p/4s без звука стоит 5,25;
+- `routerai.image_output` двоякое: у моделей с текстовым входом это цена за токен картинки (0,0018 ₽ → 1 788 ₽ за 1M), у recraft и riverflow — за изображение (8,37 ₽). Различаем по величине, порог 0,05 ₽;
+- ноль в `prompt`/`completion` у routerai теперь «не применимо», а не «бесплатно». Иначе у seedance цена за секунду перебивалась нулями и модель выглядела бесплатной;
+- `dedupe.py` сливает двойников по нормализованному имени, 23 пары в таблице `model_aliases`. Слияние вызывается из `refresh.py`, дальше сбор сразу кладёт предложения к основной модели;
+- слаги новых моделей — от полного пути: `qwen/image` → `qwen-image` (было `image`), `kling/v3` → `kling-v3`. Мусорные слаги (`image`, `v3`, `v2-6`, `veo3`, `2-5`, `2-6`) удалены и пересозданы;
+- в интерфейсе: колонка «Вход ₽» показывает `от 12,82 ₽/с`, `от 5,25 ₽/ролик`, `4,19 ₽/карт.`; панель для видео сравнивает по цене за секунду и пишет «✓ цена» вместо «✓ вход»; в карточке для видео и картинок заголовок «самая низкая цена».
+
+Сейчас в базе 624 модели и 2288 предложений (текст 388, картинки 65, видео 40, эмбеддинги 39, речь 30, расшифровка 27, решения 21, переранжирование 8, музыка 5, классификация 1). `deepseek-v4-flash-1017` — 40 предложений от 33 поставщиков, 4 наших. Seedance: `seedance-2.0` — polza от 12,82 ₽/с, routerai 15,82 ₽/с; `-fast` 10,46 / 9,49; `-mini` от 2,56 / 7,91; `2.5` 18,9 / 24,18; `1.5-pro` от 5,25 ₽/ролик / 5,42 ₽/с.
+
+Проверено в браузере: чип «видео» → 40 моделей с ценами `₽/с` и `₽/ролик`, чип «картинки» → 65, абсурдных `0,0015 ₽/карт.` не осталось (это была цена за токен картинки, теперь `₽/1M`), панель `seedance-2.0` — 3 предложения: Polza.ai от 12,82 ₽/с, RouterAI 15,82 ₽/с, Seed без цены. Консоль без ошибок.
+
+Опубликовано на `https://cloud.nanolika.ru/phzhk6tnr6d0e2ac7j3ze8eose/` (200, `Cache-Control: no-cache`, md5 `app.js` совпадает), коммит `731812f`. Владельцу: обновить страницу с Cmd+Shift+R — старую копию держал кеш браузера.
+
+## 2026-10-27 · «Все модели текстовые»: починен фильтр типа, типы кнопками, сортировка по числу предложений
+
+Владелец открыл базу и увидел только наших поставщиков и только текстовые модели. Проверка: на закрытом адресе лежит правильная сборка — 38 предложений по deepseek-v4.1-flash-1017 (2 наших), 41 модель «картинки», 30 «видео». Причина впечатления — в порядке выдачи: таблица сортировалась по алфавиту, а наверху как раз мелкие модели (Aiesa, Aion, aleph-2), у которых есть только polza/routerai и тип «текст». Плюс фильтр по типу был сломан: сравнивал слаг («image») с подписью («картинки») и не находил ничего.
+
+Сделано: по умолчанию список сортируется по числу предложений — первыми идут glm-5.3 (50), deepseek-v4.1-flash (42) и т.д., где чужие площадки видны сразу. Типы моделей — кнопками с числом (текст 406, картинки 41, эмбеддинги 39, видео 30, речь 30, расшифровка 24, решения 21, переранжирование 8, классификация 1), метки типов в таблице покрашены. Фильтр по типу теперь сравнивает слаг, а не подпись. В панели строка «у нас N поставщиков» считает поставщиков, а не варианты (у gemini-3.1-flash-image было «3 поставщика» при двух: polza с двумя вариантами), и если других площадок у модели нет — так и пишет.
+
+Заодно: в Caddy для /srv/models добавлен `Cache-Control: no-cache`. Раньше заголовков кеша не было, браузер мог держать старую копию страницы и показывать вчерашние данные.
+
+Отдельно про видео: у моделей вроде flux-3-video и aleph-2 в каталоге aitunnel цен нет вообще (только задержки p50 и политики) — в таблице у них прочерки, это не баг разметки. Цены на картинки есть там, где модель продаёт polza/routerai (gemini-3.1-flash-image: RouterAI 52,32 / 313,91).
+
+Проверено в браузере: чип «картинки» → 41 модель, чип «видео» → 30, панель gemini-3.1-flash-image (6 предложений, 3 подключённых, 3 Google без цен), мобильная ширина 390 px с прокруткой чипов.
+
+## 2026-10-27 · Все поставщики в панели, пометка «подключён» и перетаскиваемая высота
+
+Просили: у deepseek-v4.1-flash-1017 в таблице видно только двух наших поставщиков, а данных по ней 32 — показать всех, к кому можно подключиться, и визуально отделить подключённых от неподключённых; плюс сделать ресайз границы панели.
+
+Сделано в `~/Dev/modelscope`: панель и раньше показывала все 38 предложений, но без разделения. Теперь подключённые строки — зелёная полоса и метка «подключён», остальные — серая полоса и приглушённое имя. Если у чужой площадки вход ниже нашего лучшего, на строке жёлтая метка «ниже вход» с оговоркой в подсказке, а под названием модели — «вход ниже нашего: OpenInference 4,4 ₽ (выход 242 ₽) — не подключён». Метка намеренно про вход: у дешёвых по входу выход бывает в разы дороже, и «дешевле нашего» без уточнения вводило в заблуждение (первая версия так и делала — поймал на этом же примере).
+
+Счётчик в шапке: «38 предложений · 32 поставщика», на переключателе «только подключённые» — сколько их (2). Переключатель прячет чужие площадки. Колонка в таблице стала «Подключено» — «✓ 2 / 32»: подключённые из всех, по кому есть данные. Фильтры переименованы в «только подключённые» и «✓ 2+ подключённых», на странице поставщиков — колонка «Подключение» (3 из 89 «✓ подключён», остальные «не подключён»). Карточка модели получила те же метки.
+
+Ресайз: за верхнюю границу панели (мышь, палец, стрелки при фокусе), минимум 120 px, максимум — окно минус 120 px, высота запоминается в localStorage, двойной щелчок возвращает исходную (26% экрана, на телефоне 42%). Внутренние отступы страницы пересчитываются через переменную `--panel-h`.
+
+Находка, которая отвечает на исходный вопрос «у кого ещё дешевле»: по смешанной цене `(k·вход+выход)/(k+1)` при 1:1 и 3:1 ни одна чужая площадка не дешевле нашего лучшего ни в одной из 522 моделей; при 10:1 таких случаев один — kimi-k3 у relace (219,52 против 235,44 ₽/1M, на 7%). То есть список «к кому подключиться» интересен не ценой, а скорее доступностью модели, uptime и политиками.
+
+Ловушки: подпись варианта в select («1:3 (длинные ответы)») распирала контрол до 183 px и обрезала счётчик — оставил только числа; `span { display: none }` в мобильной шапке убивал подпись переключателя и пометку «вход ниже нашего» — прятать надо адресно; на телефоне название модели уехало в ноль, поэтому шапка панели там в две строки.
+
+Проверено в браузере: 38 строк, 2 зелёных, метка на OpenInference, «только подключённые» → 2 строки, модель без наших поставщиков показывает пояснение, перетаскивание 218 → 388 px с запоминанием, сброс двойным щелчком, ширина 390 px. Опубликовано на закрытом адресе.
+
+## 2026-10-27 · Однозначные состояния Telegram/MAX/компьютера и разрыв связи
+
+Просили: убрать противоречие «Подключить»/«подключено», показать доступные сведения о привязанном Telegram и компьютере, оставить только действие разрыва связи в подключённом состоянии.
+
+Сделано: окно всегда заново проверяет сервер; подключённое и неподключённое состояния имеют отдельные заголовки/содержимое/действия. Показаны сохранённые сведения привязки мессенджера и устройства, отличены офлайн и отсутствие привязки. На кнопках кабинета виден статус. Исправлен адаптер API, который превращал DELETE в POST. Для компьютера добавлен авторизованный DELETE /v1/link/devices/{id}; закрытая связь devices.key_hash записывается при подключении и позволяет отозвать именно вход компьютера, закрыть его сокет и убрать запись, не разлогинивая браузер. Чужие устройства, общие сессии и старые офлайн-привязки без известной сессии не отключаются с ложным успехом. Поле key_hash не экспортируется списками устройств.
+
+Проверено: 20 тестов привязок/отключения и ещё 2 интеграционные проверки HTTP DELETE и обычной связи двух устройств, всего 22. Браузерные сценарии на опубликованном JS с тестовыми ответами: Telegram, компьютер онлайн/офлайн, метаданные, DELETE, переход QR в подключённое состояние и отказ основному чату. JS/Python синтаксис проверен; Ruff без новых замечаний относительно исходных файлов. После выкладки релей healthy, миграция поля и новый метод присутствуют. Реальные привязки клиента, сессии и денежные остатки вручную не изменялись.
+
+Копия: /opt/nanomuse/cloud/backups/connection-state-20261027T185119Z/ содержит код, compose и согласованную закрытую SQLite-копию. Overlay: /opt/nanomuse/cloud/overrides/connection-state-20261027/nanomuse_cloud/. Протокол дописан в docs/hub.md, тесты в cloud/tests/test_device_disconnect.py; подробности в nanoLika/artifacts/connection-state-2026-10-27/RESULTS.md.
+
+Ловушки: старый DELETE /v1/devices/{id} лишь забывает офлайн-запись и не подходит для отзыва доступа; нельзя сопоставлять вход компьютера по названию. Добавление хеша в devices_for раскрыло бы его через админский экспорт, поэтому связь читается отдельно только внутри операции отключения. Старому офлайн-устройству без записанного входа потребуется один раз открыть приложение.
+
+## 2026-10-27 · Галочки выбора: где у нас два поставщика и кто из них дешевле
+
+Просили: отметить галочками модели, где у нас есть два поставщика (не в мире, а у нас), и среди этих поставщиков отметить тех, кто дешевле всех по входу и отдельно по выходу; если это один и тот же — тем лучше. Открытый вопрос владельца: как выбирать, когда вход дешевле у одного, а выход у другого.
+
+Сделано: в таблице моделей колонка «У нас» — число наших поставщиков (polza, routerai, deepseek-direct), `✓ 2` и больше значит «есть из чего выбрать». Таких моделей 310 из 600; фильтр `✓ 2+ наших` оставляет только их. В панели предложений галочки стоят на строках наших поставщиков: `✓ вход`, `✓ выход`, `✓ вход и выход`. Строка под названием модели говорит то же словами.
+
+Для расхождения добавлен переключатель соотношения `при 1:3 / 1:1 / 3:1 / 10:1` и цена миллиона смешанных токенов `(k·вход + выход)/(k+1)`: видно, с какого соотношения выбор переворачивается. На странице поставщиков колонка «У нас» помечает `✓ наш`.
+
+Главная находка: из 286 моделей, где у нас два поставщика с ценами, вход и выход дешевле у одного и того же в 285 случаях — polza и routerai перепродают одни и те же площадки с разной наценкой, поэтому вопрос «вход у одного, выход у другого» на практике почти не возникает. Единственное расхождение — `glm-4-6`: RouterAI 44,99/183,12 против Polza 45,69/182,76; Polza выигрывает только при очень длинных ответах (соотношение ниже 1:2).
+
+Проверено в браузере: метки на gpt-5-nano (Polza дешевле и по входу, и по выходу), расхождение на glm-4-6 с переключением соотношения, фильтр 310 из 600, мобильная ширина 390 px. Опубликовано на том же закрытом адресе.
+
+Ловушка: `.panel-ours` с nowrap уезжал за край на телефоне — проверять мобильную версию только через iframe 390 px (headless-Chrome игнорирует --window-size).
+
+## 2026-10-27 · Панель предложений: база моделей связана с базой поставщиков
+
+Просили: связать модели и поставщиков — при нажатии на модель показывать внизу экрана (четверть) все предложения по ней, чтобы посмотреть, как это выглядит, пока непонятно, как отбирать.
+
+Сделано в `~/Dev/modelscope`: главная страница стала двухуровневой. Сверху таблица моделей с поиском и фильтрами (вендор, поставщик, тип, «только у нас»), снизу фиксированная панель 26vh со всеми предложениями выбранной модели: поставщик, вариант, вход/выход/кэш, контекст, максимум вывода, uptime, p50, запросы за 30 минут, политики. Самая дешёвая по входу строка подсвечена, колонки панели сортируются, ↗ открывает карточку модели, имя поставщика ведёт на его строку в базе поставщиков. В обратную сторону: на странице поставщиков число моделей стало ссылкой на главную с включённым фильтром. Клавиши ↑ ↓ ходят по списку, Esc закрывает панель, состояние живёт в адресе (`index.html?provider=polza&model=gpt-5-nano`) — ссылкой можно делиться.
+
+Данные панели лежат в самой странице: 2150 предложений, 497 КБ, по сети ~60 КБ после gzip. Поэтому поиск и панель работают мгновенно и без сервера.
+
+Проверено в браузере: щелчок по строке, 6 предложений у gpt-5-nano (дешевле всего Polza 2,92 / 23,33 против 5 / 40 у aitunnel), переход по ссылке из базы поставщиков (343 модели у polza), клавиатура, Esc, мобильная ширина 390 px без горизонтального разползания страницы. Опубликовано на том же закрытом адресе.
+
+Ловушки: число в колонке «Предл.» считало поставщиков, а не предложения — у glm-5.3 их 39 против 50; теперь в колонке предложения, в подсказке — поставщики. Под панелью строка пряталась — scrollIntoView не знает про фиксированную панель и липкую шапку, прокрутка считается вручную. В headless-Chrome ширина окна не задаётся (`--window-size` игнорируется, layout 500 px), мобильную вёрстку проверял через iframe 390 px.
+
+Открыто: как отбирать модели в витрину — владелец ещё не решил, `user_catalog` пуст.
+
+## 2026-10-27 · Компактные таблицы моделей и расхода в кабинете
+
+Просили: привести кабинет к плотности и читаемости приложенных примеров, заменить крупные карточки моделей и истории таблицами.
+
+Сделано: добавлен account/compact.css с обычной системной типографикой и небольшими контролами. Модели в /app/models/ и окне выбора чата представлены строками таблицы; подробности раскрываются. История /app/usage/ теперь содержит таблицы по моделям и обращениям. Навигация кабинета получила ссылку на модели. Сохранены настройки, фильтры, избранное, сохранение, курсорная подгрузка, формы и проверки аккаунта. Учитываются только существующие данные; длительность и статус обращения не выдумывались. Финансовые расчёты и API не менялись.
+
+Проверено: браузерные сценарии поиска/выбора/сохранения/подробностей/избранного, обновление и подгрузка истории, кабинет на 390/768/1440 с тестовыми ответами API; JS без ошибок и без горизонтального переполнения страницы. 10 опубликованных файлов сверены по SHA-256. Скриншоты и подробный отчёт в проекте nanoLika: artifacts/cabinet-compact-2026-10-27/RESULTS.md. Локальные отличавшиеся исходники обновлены по затронутым функциям, посторонние изменения сохранены.
+
+Копия: /opt/nanomuse/cloud/backups/cabinet-compact-20261027T181944Z/. Overlay: /opt/nanomuse/cloud/overrides/cabinet-compact-20261027/nanomuse_cloud/. Релей пересоздан с постоянными mounts, /healthz 200.
+
+Ловушка: новый compact.css нельзя сразу смонтировать дочерним файлом в read-only web_client, если файл ещё отсутствует в исходном каталоге родительского mount. Первый запуск был отклонён Docker; добавление файла в родительский источник устранило ошибку. Публикация после этого продолжена. Также фактические файлы overlay расходились с локальными, поэтому базой выкладки послужил снимок контейнера.
+
+## 2026-10-27 · База моделей поставщиков и закрытый адрес на VPS
+
+Просили: базу всех моделей наших поставщиков и каталога aitunnel с ежедневной проверкой новинок и очень подробной страницей каждой модели, а опубликовать — закрытым путём как страницу цен `cfp64…`.
+
+Сделано: проект `~/Dev/modelscope`. Три слоя в SQLite (вендоры+модели, поставщики+предложения, витрина `user_catalog`) плюс история прогонов и изменений. Источники: aitunnel.ru (357 моделей, 1214 предложений — разбор RSC-payload страницы, не вёрстки), polza.ai (343), routerai.ru (500), прямой DeepSeek (4). Итого 600 моделей, 87 вендоров, 89 поставщиков, 2150 предложений, 886 отзывов, 1237 записей истории. Страницы статические: индекс с поиском и фильтрами, карточка модели, поставщики, изменения, витрина — 604 файла, 5,6 МБ.
+
+Публикация: `https://cloud.nanolika.ru/phzhk6tnr6d0e2ac7j3ze8eose/`, логин `operator`, пароль в `nanoLika/docs/access.txt`. В `cloud/Caddyfile` добавлен блок «База моделей» (`root /srv/models`), в compose — volume `./models:/srv/models:ro`; файлы в `/opt/nanomuse/cloud/models`. Без пароля 401, с паролем 200, страница цен `cfp64…` не тронута.
+
+Ежедневно в 06:30 через launchd `local.modelscope.refresh` → `daily.sh` (сбор, страницы, заливка). Проверено принудительным запуском: python 3.11.7, 91 с, 0 ошибок, страницы на сервере обновились.
+
+Ловушки: в zsh `status` — read-only переменная, код возврата не пробрасывался. Под launchd `python3` — 3.9 из CommandLineTools, а у python.org-сборки 3.11 без `Install Certificates.command` нет корневых сертификатов: в терминале это скрывает `SSL_CERT_FILE` из профиля, под launchd падало на `CERTIFICATE_VERIFY_FAILED`. Ещё: у aitunnel слаг вида `open-inference/fp4` — это поставщик + вариант, а не 226 поставщиков; прямой DeepSeek разведён с перепродажей aitunnel как `deepseek-direct`.
+
+Не вышло: openrouter.ai отдаёт 403 на любой User-Agent (блокировка по IP), его каталог виден через polza и routerai; bothub.chat не публикует цены в разметке; vsegpt считает «₽ за 1000 символов» — другая единица; neuroapi не отвечает. LiteLLM (4324 модели с ценами вендоров) отложен как справочник для обогащения.
+
+Открыто: витрина `user_catalog` пока пустая; пуш `modelscope` на GitHub не сделан (локально три коммита).
+
+## 2026-10-27 · Пустой кабинет и заметный вход в браузер
+
+Просили: заметную кнопку веб-чата рядом с Telegram/MAX на нескольких страницах и исправление настроек зарегистрированного аккаунта, где оставались только заголовок и «Обновить».
+
+Причина: account.js был новее HTML в действующем overlay; обработчик create-api-key падал на null до запуска load(). renderMe также ожидал отсутствующий paid-balance-note. Исправлены проверки необязательных элементов, пропуск списка ключей без соответствующей панели и поддержка существующей nm.key при отсутствии сессии веб-чата. Владелец проверяется через /v1/me до показа данных. Версия подключения скрипта обновлена.
+
+Проверено после выкладки: четыре браузерных сценария с опубликованным JS и тестовыми ответами API: web-сессия, legacy-сессия, отсутствие сессии, другой владелец. В первых двух работают данные, настройки и обновление; в остальных личные данные скрыты. Чистый браузер больше не получает JS-исключение и видит ссылку входа. Личный аккаунт владельца и операции записи не использовались.
+
+Также опубликованы кнопки «В браузере» в 13 группах каналов на 10 страницах сайта. Проверены 390/768/1440 и SHA-256 публичных файлов. Подробности: nanoLika/artifacts/browser-entry-account-2026-10-27/RESULTS.md.
+
+Копия кабинета: /opt/nanomuse/cloud/backups/cabinet-startup-20261027T174040Z/. Исправлены основной источник и действующий overlay, запись сохраняет inode подключённых файлов. Перезапуск не требовался. Ловушка: локальный index.html уже содержал новые элементы, а серверный overlay оставался старым; проверять только локальную разметку недостаточно.
+
+## 2026-10-27 · Выкладка порогового тарифа и названия тарифа в шапке сайта
+
+Просили: показать активный тариф рядом с почтой на сайте и перенести порог оплаченного остатка в денежную логику релея без объяснения порогов на витрине.
+
+Сделано: опубликованы существующие локальные browser_sessions.py и live_billing.py. db.py/service.py уже совпадали с сервером. Для live_billing добавлены постоянные mounts в обоих путях импорта. Связь устройств включена и для базовой Лики в PLANS. Другие изменения api.py не переносились. Сайт получил тариф в шапке, счётчик и узкие исправления условий offer/agent. Подробный отчёт: nanoLika/artifacts/site-sync-2026-10-27/RESULTS.md.
+
+Проверено: 14 тестов live_billing/browser_sessions прошли. Relay healthy после пересоздания, /healthz 200, работающий код содержит paid_balance_uy/account_plan, все три тарифа connect=true. Сайт проверен на 390/768/1440 с тестовым ответом аккаунта. Реальные платежи и ручные изменения клиентских остатков не выполнялись.
+
+Копия: /opt/nanomuse/cloud/backups/paid-balance-20261027T172348Z/ (модули, compose, согласованная SQLite-копия). Боевая оплата не включалась; платёж провайдера остаётся отдельной проверкой перед запуском.
+
+Ловушка: новая база и service сочетались со старым подтверждением live-платежа и site-session. Необходимо проверять работающие модули, оба пути импорта и пересоздавать контейнер после изменения mounts.
+
 ## 2026-10-27 — Проверка исправления маршрутизации инструментов на сервере
 
 **Выкладка:** коммит `ff158590` выложен в overlay `/opt/nanomuse/cloud/overrides/auto-routing-20261025/nanomuse_cloud/provider_routing.py`, relay перезапущен и стал healthy. После перезапуска выполнено штатное обновление каталогов и балансов. Живой API теперь помечает `tools` и `tool_choice` у AITUNNEL DeepSeek V4 Flash 0731, V4 Flash, V4.1 Flash и 1017; 0731 остаётся выбранным маршрутом. Ошибок обновления каталогов нет. Тестовый платный запрос к модели не отправлялся.
@@ -1419,7 +1981,7 @@ macOS ставила на панель строку **приложения** с 
 
 ## 2026-10-27 — Каталог моделей и быстрый список избранного
 
-## 2026-10-27"��y��y� Pricing and routing overlay deployment
+## 2026-10-27"��y��y� Pricing and routing overlay deployment
 
 - Source commit: `179ee939 fix(models): clarify provider routing and client prices`.
 - Applied the changes to the production overlays actually mounted by the relay: admin catalogue,
