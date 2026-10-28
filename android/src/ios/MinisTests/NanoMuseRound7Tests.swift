@@ -59,6 +59,22 @@ final class NanoMuseRound7Tests: XCTestCase {
         XCTAssertTrue(NanoMuseCloud.describe(busy!.cloudError).contains(NanoMuseProviderReach.duration(90)))
     }
 
+    func testInsufficientFundsKeepsThePriceAndTheBalance() {
+        let json = #"{"error":{"message":"This generation costs ₽10.26; the balance has ₽5.","type":"nanomuse_cloud","code":"insufficient_funds","required_rub":10.26,"balance_rub":5,"topup_url":"https://cloud.example/app"}}"#
+        let refusal = NanoMuseRelayRefusal.parse(status: 402, body: json)!
+        XCTAssertEqual(refusal.kind, .insufficientFunds)
+        XCTAssertEqual(refusal.requiredRub, 10.26)
+        XCTAssertEqual(refusal.balanceRub, 5)
+        XCTAssertEqual(refusal.topupURL, "https://cloud.example/app")
+        XCTAssertFalse(refusal.isAllowance)
+        XCTAssertTrue(NanoMuseCloud.describe(refusal.cloudError).contains("10.26"))
+        let back = NanoMuseRelayRefusal.fromCanonical(NanoMuseRelayRefusal.canonical(refusal))
+        XCTAssertEqual(back?.requiredRub, 10.26)
+        XCTAssertEqual(back?.balanceRub, 5)
+        // the URL is not stored; the card falls back to Settings after a reload
+        XCTAssertEqual(back?.topupURL, "")
+    }
+
     func testOnlyTheRelaysRepliesAreRefusals() {
         // a proxy's plain 413 and a bare 502 count only from the relay's host
         XCTAssertEqual(NanoMuseRelayRefusal.parse(status: 413, body: "Request too large", fromRelay: true)?.kind, .tooLarge)

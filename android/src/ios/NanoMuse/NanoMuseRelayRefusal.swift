@@ -23,6 +23,8 @@ enum NanoMuseRelayRefusal {
     enum Kind: String, Sendable {
         /// 429 `allowance_exhausted`, 402 `out_of_tokens`: the pool is spent — the ways-on card.
         case exhausted
+        /// 402 `insufficient_funds`: a priced generation (picture, clip, voice) costs more than the balance; the sentence carries the price and the balance.
+        case insufficientFunds = "insufficient_funds"
         /// 429 `allowance_exhausted` with `paused: true` (relay 0.22): paused by the operator, not spent — the same card, another lead.
         case allowancePaused = "allowance_paused"
         /// 429 `daily_cap`: today's share is spent — the same card, the day's heading.
@@ -66,13 +68,21 @@ enum NanoMuseRelayRefusal {
         var retryAfterS: Int? = nil
         /// Relay 0.22: one of the operator's switches, not use (`paused: true`).
         var paused: Bool = false
+        /// `insufficient_funds`: the exact price of the generation and the balance, in rubles.
+        var requiredRub: Double? = nil
+        var balanceRub: Double? = nil
+        /// `insufficient_funds`: where the relay sends the person to top up.
+        var topupURL: String = ""
 
         /// The allowance card is the answer (the pool spent, paused, or today's share spent).
         var isAllowance: Bool { kind == .exhausted || kind == .allowancePaused || kind == .dailyCap }
 
         /// The error `NanoMuseCloud.describe` turns into the sentence.
         var cloudError: NanoMuseCloudError {
-            NanoMuseCloudError(code: code, message: message, status: status, retryAfterS: retryAfterS, paused: paused)
+            NanoMuseCloudError(
+                code: code, message: message, status: status, retryAfterS: retryAfterS, paused: paused,
+                requiredRub: requiredRub, balanceRub: balanceRub, topupURL: topupURL
+            )
         }
     }
 
@@ -93,7 +103,7 @@ enum NanoMuseRelayRefusal {
 
     /// The codes the relay sends today; a body with one of these is the relay's even without the type.
     static let relayCodes: Set<String> = [
-        "allowance_exhausted", "out_of_tokens", "daily_cap", "too_large", "content_rejected", "bad_key",
+        "allowance_exhausted", "out_of_tokens", "insufficient_funds", "daily_cap", "too_large", "content_rejected", "bad_key",
         "account_deleted", "account_disabled", "not_invited", "signup_closed", "rate_limited",
         "too_many_in_flight", "provider_busy", "locked", "model_not_offered", "service_paused", "sync_paused",
         "hub_paused", "upstream",
@@ -121,6 +131,7 @@ enum NanoMuseRelayRefusal {
         switch code {
         case "allowance_exhausted": return paused ? .allowancePaused : .exhausted
         case "out_of_tokens": return .exhausted
+        case "insufficient_funds": return .insufficientFunds
         case "daily_cap": return .dailyCap
         case "content_rejected": return .contentRejected
         case "service_paused": return .servicePaused
@@ -131,6 +142,7 @@ enum NanoMuseRelayRefusal {
         if status == 413 || code == "too_large" { return .tooLarge }
         if status == 401 { return .signedOut }
         if status == 403 { return .disabled }
+        if status == 402 { return .insufficientFunds }
         if status == 429 { return .busy }
         if status == 404 && code == "model_not_offered" { return .model }
         if status >= 500 { return .relayDown }
@@ -170,7 +182,19 @@ enum NanoMuseRelayRefusal {
         }
         if isContentCheck { return Refusal(kind: .contentRejected, status: status, code: "content_rejected", message: message) }
         let relayCode = code ?? "http_\(status)"
-        return Refusal(kind: classify(status: status, code: relayCode, paused: paused), status: status, code: relayCode, message: message, retryAfterS: retry, paused: paused)
+        func number(_ value: Any?) -> Double? {
+            if let n = value as? NSNumber { return n.doubleValue }
+            if let s = value as? String { return Double(s) }
+            return nil
+        }
+        let required = number(err?["required_rub"])
+        let balance = number(err?["balance_rub"])
+        let topup = (err?["topup_url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return Refusal(
+            kind: classify(status: status, code: relayCode, paused: paused),
+            status: status, code: relayCode, message: message, retryAfterS: retry, paused: paused,
+            requiredRub: required, balanceRub: balance, topupURL: topup
+        )
     }
 
     /// The figures beside a `429 allowance_exhausted` (or `daily_cap`), when the relay sent them.
@@ -196,8 +220,17 @@ enum NanoMuseRelayRefusal {
     /// stores as the failed turn's error so the card survives a reload (the same line as Android).
     static func canonical(_ r: Refusal) -> String {
         let retry = r.retryAfterS.map(String.init) ?? ""
+        // The five-field line is the old shape; append the money fields only when there are any,
+        // so a line stored by an older relay still round-trips.
+        let money: String
+        if r.requiredRub != nil || r.balanceRub != nil {
+            money = ":" + (r.requiredRub.map { String($0) } ?? "") + ":" + (r.balanceRub.map { String($0) } ?? "")
+        } else {
+            money = ""
+        }
         return canonicalPrefix + r.kind.rawValue + ":" + String(r.status) + ":" + r.code + ":" + retry + ":" +
-            (r.paused ? "1" : "0") + "|" + r.message.replacingOccurrences(of: "\n", with: " ")
+            (r.paused ? "1" : "0") + money + "|" +
+            r.message.replacingOccurrences(of: "\n", with: " ")
     }
 
     /// The refusal behind a stored error line, or nil when it is not one of ours.
@@ -216,7 +249,12 @@ enum NanoMuseRelayRefusal {
         }
         let parts = head.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
         guard parts.count >= 5, let kind = Kind(rawValue: parts[0]) else { return nil }
-        return Refusal(kind: kind, status: Int(parts[1]) ?? 0, code: parts[2], message: message, retryAfterS: Int(parts[3]), paused: parts[4] == "1")
+        return Refusal(
+            kind: kind, status: Int(parts[1]) ?? 0, code: parts[2], message: message,
+            retryAfterS: Int(parts[3]), paused: parts[4] == "1",
+            requiredRub: parts.count >= 7 ? Double(parts[5]) : nil,
+            balanceRub: parts.count >= 7 ? Double(parts[6]) : nil
+        )
     }
 
     /// True when the stored error line is one of ours.

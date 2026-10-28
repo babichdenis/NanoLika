@@ -103,6 +103,11 @@ struct NanoMuseCloudError: LocalizedError, Sendable {
     var retryAfterS: Int? = nil
     /// Relay 0.22: the refusal is one of the operator's switches, not use (`paused: true` beside `allowance_exhausted`).
     var paused: Bool = false
+    /// `insufficient_funds`: the generation's price and the balance, in rubles.
+    var requiredRub: Double? = nil
+    var balanceRub: Double? = nil
+    /// `insufficient_funds`: where the relay sends the person to top up.
+    var topupURL: String = ""
 
     var errorDescription: String? { NanoMuseCloud.describe(self) }
 }
@@ -491,6 +496,10 @@ enum NanoMuseCloud {
             return AppLocalized("This account was deleted. Sign in again to start a new one.")
         case "out_of_tokens":
             return AppLocalized("The starter allowance is used up. Add a provider of your own to keep going.")
+        case "insufficient_funds":
+            // the relay's sentence carries the exact price and balance; keep it verbatim
+            let said = cloud.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            return said.isEmpty ? AppLocalized("nanoLika Cloud did not answer. Try again in a moment.") : said
         case "allowance_exhausted" where cloud.paused:
             // relay 0.22: the operator's switch, not use — the same card, another lead
             return AppLocalized("The free allowance is paused on this relay for now. It is not used up. Add a key of your own or sign in with a plan you already pay for, under Settings → nanoLika Cloud. Your sign-in, your devices and what is left stay as they are.")

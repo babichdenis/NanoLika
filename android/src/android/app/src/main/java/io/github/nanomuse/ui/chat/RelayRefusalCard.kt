@@ -1,5 +1,8 @@
 package io.github.nanomuse.ui.chat
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,6 +72,7 @@ fun RelayRefusalCard(refusal: RelayRefusal.Refusal, onRetry: () -> Unit, modifie
         RelayRefusal.Kind.TOO_LARGE -> Icons.Outlined.UnfoldLess to Color(0xFFE0772C)
         RelayRefusal.Kind.CONTENT_REJECTED -> Icons.Outlined.Block to Color(0xFFE0772C)
         RelayRefusal.Kind.SIGNED_OUT, RelayRefusal.Kind.DISABLED -> Icons.Outlined.VpnKey to MuseTones.action
+        RelayRefusal.Kind.INSUFFICIENT_FUNDS -> Icons.Outlined.VpnKey to Color(0xFFE0772C)
         RelayRefusal.Kind.BUSY -> Icons.Outlined.HourglassEmpty to Color(0xFF7C5CFF)
         RelayRefusal.Kind.SERVICE_PAUSED, RelayRefusal.Kind.SYNC_PAUSED, RelayRefusal.Kind.HUB_PAUSED -> Icons.Outlined.PauseCircle to Color(0xFF7C5CFF)
         else -> Icons.Outlined.CloudOff to Color(0xFFE0772C)
@@ -115,6 +119,10 @@ fun RelayRefusalCard(refusal: RelayRefusal.Refusal, onRetry: () -> Unit, modifie
                     RelayRefusal.Kind.DISABLED, RelayRefusal.Kind.MODEL -> {
                         Primary(stringResource(R.string.nm_refusal_open_settings)) { ChatLinkResolver.dispatchDeepLink(context, CLOUD_DEEP_LINK) }
                     }
+                    RelayRefusal.Kind.INSUFFICIENT_FUNDS -> {
+                        Primary(stringResource(R.string.nm_refusal_open_settings)) { openTopup(context, refusal) }
+                        Secondary(stringResource(R.string.nm_reach_try_again), onRetry)
+                    }
                     RelayRefusal.Kind.OTHER -> {
                         Primary(stringResource(R.string.nm_reach_try_again), onRetry)
                         Secondary(stringResource(R.string.nm_refusal_open_settings)) { ChatLinkResolver.dispatchDeepLink(context, CLOUD_DEEP_LINK) }
@@ -123,6 +131,17 @@ fun RelayRefusalCard(refusal: RelayRefusal.Refusal, onRetry: () -> Unit, modifie
                 }
             }
         }
+    }
+}
+
+/** The relay's own cabinet (`topup_url`), or Settings when an older relay sent none. */
+private fun openTopup(context: Context, refusal: RelayRefusal.Refusal) {
+    val url = refusal.topupUrl.trim()
+    if (url.isNotEmpty()) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { ChatLinkResolver.dispatchDeepLink(context, CLOUD_DEEP_LINK) }
+    } else {
+        ChatLinkResolver.dispatchDeepLink(context, CLOUD_DEEP_LINK)
     }
 }
 

@@ -125,6 +125,11 @@ object NanoMuseCloud {
         val status: Int = 0,
         val retryAfterS: Int? = null,
         val paused: Boolean = false,
+        /** `insufficient_funds`: the generation's price and the balance, in rubles. */
+        val requiredRub: Double? = null,
+        val balanceRub: Double? = null,
+        /** `insufficient_funds`: where the relay sends the person to top up. */
+        val topupUrl: String = "",
     ) : IOException(message)
 
     /** One line of the usage breakdown: a kind (chat, image, video, realtime) or a model. */
@@ -733,6 +738,10 @@ object NanoMuseCloud {
             "bad_key" -> context.getString(R.string.nm_cloud_err_bad_key)
             "account_deleted" -> context.getString(R.string.nm_cloud_err_account_deleted)
             "out_of_tokens" -> context.getString(R.string.nm_cloud_err_out_of_tokens)
+            // the relay's sentence carries the exact price and balance; a generic fallback
+            // when an older relay sent the code without them
+            "insufficient_funds" -> e.message?.takeIf { it.isNotBlank() && !it.startsWith("HTTP ") }
+                ?: context.getString(R.string.nm_cloud_err_generic)
             "daily_cap" -> context.getString(R.string.nm_cloud_err_daily_cap)
             // relay 0.22: the operator paused the free allowance — not used up, the same card, another lead
             "allowance_exhausted" -> if (e.paused) context.getString(R.string.nm_cloud_err_allowance_paused) else allowanceSentence(context)

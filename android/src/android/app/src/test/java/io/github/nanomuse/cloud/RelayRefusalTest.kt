@@ -21,6 +21,7 @@ class RelayRefusalTest {
             Triple(429, "allowance_exhausted", "") to RelayRefusal.Kind.EXHAUSTED,
             Triple(429, "allowance_exhausted", ""","paused":true,"reason":"allowance_paused"""") to RelayRefusal.Kind.ALLOWANCE_PAUSED,
             Triple(402, "out_of_tokens", "") to RelayRefusal.Kind.EXHAUSTED,
+            Triple(402, "insufficient_funds", "") to RelayRefusal.Kind.INSUFFICIENT_FUNDS,
             Triple(429, "daily_cap", "") to RelayRefusal.Kind.DAILY_CAP,
             Triple(413, "too_large", "") to RelayRefusal.Kind.TOO_LARGE,
             Triple(400, "content_rejected", "") to RelayRefusal.Kind.CONTENT_REJECTED,
@@ -67,6 +68,20 @@ class RelayRefusalTest {
         assertEquals("provider_busy", e.code)
         assertEquals(429, e.status)
         assertEquals(3, e.retryAfterS)
+    }
+
+    @Test fun `402 insufficient_funds keeps the price, the balance and the cabinet link`() {
+        val r = relay(
+            402, "insufficient_funds",
+            extra = ""","required_rub":10.26,"balance_rub":5,"topup_url":"https://cloud.example/app"""",
+        )
+        assertEquals(RelayRefusal.Kind.INSUFFICIENT_FUNDS, r.kind)
+        assertEquals(10.26, r.requiredRub!!, 0.001)
+        assertEquals(5.0, r.balanceRub!!, 0.001)
+        assertEquals("https://cloud.example/app", r.topupUrl)
+        assertFalse(r.isAllowance)
+        // the URL is not in the stored line: the card falls back to Settings after a reload
+        assertEquals(r.copy(topupUrl = ""), RelayRefusal.fromCanonical(RelayRefusal.canonical(r)))
     }
 
     @Test fun `a plain 413 from a proxy on the way to the relay is too large, another provider's 429 is not ours`() {

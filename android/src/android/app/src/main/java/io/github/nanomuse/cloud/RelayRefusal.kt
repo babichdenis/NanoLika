@@ -19,6 +19,9 @@ object RelayRefusal {
         /** 429 `allowance_exhausted`, 402 `out_of_tokens`: the pool is spent — the ways-on card. */
         EXHAUSTED("exhausted"),
 
+        /** 402 `insufficient_funds`: a priced generation (picture, clip, voice) costs more than the balance; the sentence carries the price and the balance. */
+        INSUFFICIENT_FUNDS("insufficient_funds"),
+
         /** 429 `allowance_exhausted` with `paused: true` (relay 0.22): the allowance paused by the operator, not spent — the same card, another lead. */
         ALLOWANCE_PAUSED("allowance_paused"),
 
@@ -81,13 +84,22 @@ object RelayRefusal {
         val retryAfterS: Int? = null,
         /** Relay 0.22: the refusal comes from one of the operator's switches, not from use (`paused: true`). */
         val paused: Boolean = false,
+        /** `insufficient_funds`: the exact price of the generation and the balance, in rubles. */
+        val requiredRub: Double? = null,
+        val balanceRub: Double? = null,
+        /** `insufficient_funds`: where the relay sends the person to top up. */
+        val topupUrl: String = "",
     ) {
         /** The allowance card is the answer (the pool spent, paused, or today's share spent). */
         val isAllowance: Boolean get() = kind == Kind.EXHAUSTED || kind == Kind.ALLOWANCE_PAUSED || kind == Kind.DAILY_CAP
 
         /** The [NanoMuseCloud.CloudException] [NanoMuseCloud.describe] turns into the sentence. */
         fun toException(): NanoMuseCloud.CloudException =
-            NanoMuseCloud.CloudException(code, message, status, retryAfterS = retryAfterS, paused = paused)
+            NanoMuseCloud.CloudException(
+                code, message, status,
+                retryAfterS = retryAfterS, paused = paused,
+                requiredRub = requiredRub, balanceRub = balanceRub, topupUrl = topupUrl,
+            )
     }
 
     /** The error type the relay stamps on every refusal (`docs/cloud.md` → Protocol). */
@@ -95,7 +107,7 @@ object RelayRefusal {
 
     /** The codes the relay sends today; a body with one of these is the relay's even without the type. */
     val RELAY_CODES: Set<String> = setOf(
-        "allowance_exhausted", "out_of_tokens", "daily_cap", "too_large", "content_rejected", "bad_key",
+        "allowance_exhausted", "out_of_tokens", "insufficient_funds", "daily_cap", "too_large", "content_rejected", "bad_key",
         "account_deleted", "account_disabled", "not_invited", "signup_closed", "rate_limited",
         "too_many_in_flight", "provider_busy", "locked", "model_not_offered", "service_paused", "sync_paused",
         "hub_paused", "upstream",
@@ -131,12 +143,14 @@ object RelayRefusal {
     fun classify(status: Int, code: String, paused: Boolean = false): Kind = when {
         code == "allowance_exhausted" && paused -> Kind.ALLOWANCE_PAUSED
         code == "allowance_exhausted" || code == "out_of_tokens" -> Kind.EXHAUSTED
+        code == "insufficient_funds" -> Kind.INSUFFICIENT_FUNDS
         code == "daily_cap" -> Kind.DAILY_CAP
         code == "content_rejected" -> Kind.CONTENT_REJECTED
         PAUSED_CODES[code] != null -> PAUSED_CODES.getValue(code)
         status == 413 || code == "too_large" -> Kind.TOO_LARGE
         status == 401 -> Kind.SIGNED_OUT
         status == 403 -> Kind.DISABLED
+        status == 402 -> Kind.INSUFFICIENT_FUNDS
         status == 429 -> Kind.BUSY
         status == 404 && code == "model_not_offered" -> Kind.MODEL
         status >= 500 -> Kind.RELAY_DOWN
@@ -176,7 +190,13 @@ object RelayRefusal {
             ?: ""
         if (contentCheck) return Refusal(Kind.CONTENT_REJECTED, status, "content_rejected", message)
         val relayCode = code ?: "http_$status"
-        return Refusal(classify(status, relayCode, paused), status, relayCode, message, retry, paused)
+        val required = if (err?.has("required_rub") == true) err?.optDouble("required_rub") else null
+        val balance = if (err?.has("balance_rub") == true) err?.optDouble("balance_rub") else null
+        val topup = err?.optString("topup_url")?.takeIf { it.isNotBlank() } ?: ""
+        return Refusal(
+            classify(status, relayCode, paused), status, relayCode, message, retry, paused,
+            requiredRub = required, balanceRub = balance, topupUrl = topup,
+        )
     }
 
     /**
@@ -184,9 +204,18 @@ object RelayRefusal {
      * stores as the failed turn's error so the card survives a reload, and what the chat reads
      * back with [fromCanonical].
      */
-    fun canonical(r: Refusal): String =
-        CANONICAL_PREFIX + r.kind.wire + ":" + r.status + ":" + r.code + ":" + (r.retryAfterS?.toString() ?: "") + ":" +
-            (if (r.paused) "1" else "0") + "|" + r.message.replace('\n', ' ')
+    fun canonical(r: Refusal): String {
+        // The five-field line is the old shape; the two money fields are appended only when
+        // there is something to say, so stored lines of every relay version still round-trip.
+        val money = if (r.requiredRub != null || r.balanceRub != null) {
+            ":" + (r.requiredRub?.toString() ?: "") + ":" + (r.balanceRub?.toString() ?: "")
+        } else {
+            ""
+        }
+        return CANONICAL_PREFIX + r.kind.wire + ":" + r.status + ":" + r.code + ":" +
+            (r.retryAfterS?.toString() ?: "") + ":" + (if (r.paused) "1" else "0") + money + "|" +
+            r.message.replace('\n', ' ')
+    }
 
     /** The refusal behind a stored error line, or null when it is not one of ours. */
     fun fromCanonical(text: String): Refusal? {
@@ -205,6 +234,8 @@ object RelayRefusal {
             message = message,
             retryAfterS = parts[3].toIntOrNull(),
             paused = parts[4] == "1",
+            requiredRub = if (parts.size >= 7) parts[5].toDoubleOrNull() else null,
+            balanceRub = if (parts.size >= 7) parts[6].toDoubleOrNull() else null,
         )
     }
 }

@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct NanoMuseRelayRefusalCard: View {
     let refusal: NanoMuseRelayRefusal.Refusal
@@ -57,6 +58,7 @@ struct NanoMuseRelayRefusalCard: View {
         case .tooLarge: return "arrow.down.right.and.arrow.up.left"
         case .contentRejected: return "hand.raised"
         case .signedOut, .disabled: return "key"
+        case .insufficientFunds: return "creditcard"
         case .busy: return "hourglass"
         case .servicePaused, .syncPaused, .hubPaused, .allowancePaused: return "pause.circle"
         case .exhausted, .dailyCap: return "gauge"
@@ -66,7 +68,7 @@ struct NanoMuseRelayRefusalCard: View {
 
     private var tint: Color {
         switch refusal.kind {
-        case .tooLarge, .contentRejected, .relayDown, .other, .model: return Color(red: 0.88, green: 0.47, blue: 0.17)
+        case .tooLarge, .contentRejected, .relayDown, .other, .model, .insufficientFunds: return Color(red: 0.88, green: 0.47, blue: 0.17)
         case .signedOut, .disabled: return NanoMuseTones.action
         case .busy, .servicePaused, .syncPaused, .hubPaused, .allowancePaused, .exhausted, .dailyCap: return Color(red: 0.49, green: 0.36, blue: 1.0)
         }
@@ -87,6 +89,9 @@ struct NanoMuseRelayRefusalCard: View {
                 secondary(AppLocalized("Try again"), onRetry)
             case .disabled, .model:
                 primary(AppLocalized("Open Settings")) { openSettings() }
+            case .insufficientFunds:
+                primary(AppLocalized("Open Settings")) { openTopup() }
+                secondary(AppLocalized("Try again"), onRetry)
             case .other:
                 primary(AppLocalized("Try again")) { onRetry?() }
                 secondary(AppLocalized("Open Settings")) { openSettings() }
@@ -109,6 +114,16 @@ struct NanoMuseRelayRefusalCard: View {
     private func secondary(_ label: String, _ action: (() -> Void)?) -> some View {
         if let action {
             Button(label, action: action).buttonStyle(.plain).font(.footnote).foregroundStyle(NanoMuseTones.action)
+        }
+    }
+
+    /// The relay's own cabinet (`topup_url`), or Settings when an older relay sent none.
+    private func openTopup() {
+        let raw = refusal.topupURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty, let url = URL(string: raw), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        } else {
+            openSettings()
         }
     }
 
