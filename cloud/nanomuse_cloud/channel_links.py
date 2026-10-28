@@ -32,7 +32,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from .browser_auth import browser_marker
+from .browser_auth import SESSION_COOKIE, browser_sign_in
 from .identifiers import BadIdentifier
 from .service import CHANNEL_CODE_TTL_S, Caller, Cloud, CloudError, chat_identity
 
@@ -220,7 +220,8 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
             raise CloudError(401, "invalid_init_data", "Reopen the Mini App from Telegram")
         result = await asyncio.to_thread(_telegram_session, cloud, validated["user"]["id"])
         response.headers["Cache-Control"] = "private, no-store"
-        browser_marker(response, cloud.s, api_key=result["api_key"])
+        caller = await asyncio.to_thread(cloud.authenticate, result["api_key"])
+        browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))
         return result
 
     @router.post("/v1/link/check-webapp")

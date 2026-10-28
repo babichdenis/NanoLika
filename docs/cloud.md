@@ -768,16 +768,26 @@ server does not bypass CSRF checks to make the failure disappear.
 
 ### Website identity and host-only browser session
 
-Successful email-code, password and OAuth responses set `__Host-nanolika_session` as a
-Secure, HttpOnly, SameSite=Lax host-only cookie. It holds the same web key, so revocation
-invalidates both representations. It never authorizes other API routes, which still
-require Bearer. The old public `nm_signed` cookie is only a presentation marker.
+Successful email-code, password, OAuth and Telegram WebApp responses set `__Host-nanolika_session` as a
+Secure, HttpOnly, SameSite=Lax host-only cookie. Its random opaque value is not an API
+key and cannot authorize Bearer routes. The server stores only its SHA-256 hash, linked
+to the original sign-in key. Key revocation, expiry, account disablement and deletion
+invalidate the cookie. Its fixed lifetime is at most 30 days and never exceeds the parent
+key expiry; identity checks do not extend it. Other API routes still require Bearer. The old public `nm_signed` cookie is only a presentation marker.
 
 `GET /v1/auth/site-session` returns only verified state and email/hint, never an API key.
 Responses are private/no-store; credentialed CORS is restricted to the explicit website
 origins. `POST /v1/auth/site-session/logout` requires an allowed Origin and JSON, revokes
 the key and closes its hub sockets. `POST /v1/auth/browser-session` requires an already
 valid Bearer and lets an old local-storage login establish its host-only cookie.
+
+For 30 days after the first installation of this session store on a database, a valid
+legacy cookie from a key created before that installation is exchanged on the identity
+GET for an opaque cookie. The migration deadline is stored once and survives restarts.
+A migrated cookie cannot outlive that deadline or its parent key. After the window, old
+key cookies are cleared; a browser with a valid local-storage Bearer can still establish
+a new opaque cookie through the explicit authenticated POST. OAuth logout revokes the
+opaque cookie only; site-session logout also revokes the original web sign-in key.
 
 The website checks the server first rather than relying on iframe localStorage. Its
 legacy bridge can still migrate a valid older login. Missing or partitioned iframe

@@ -8,11 +8,13 @@ from urllib.parse import urlsplit
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse
 
-from .browser_auth import SESSION_COOKIE, browser_marker
-from .service import Caller, CloudError
+from .browser_auth import SESSION_COOKIE, browser_marker, browser_sign_in
+from .browser_session_store import browser_store
+from .service import Caller
 
 
 def install(app, cloud, caller_dep) -> None:
+    store = browser_store(cloud)
     public = urlsplit(cloud.s.public_base)
     allowed = {"https://nanolika.ru", "https://www.nanolika.ru", "https://cloud.nanolika.ru", f"{public.scheme}://{public.netloc}"}
 
@@ -45,11 +47,12 @@ def install(app, cloud, caller_dep) -> None:
         token = request.cookies.get(SESSION_COOKIE, "")
         if not token:
             return response(request, {"state": "signed-out"})
-        try:
-            caller = await asyncio.to_thread(cloud.authenticate, token)
-        except CloudError as error:
-            if error.status != 401:
-                raise
+        caller = await asyncio.to_thread(store.caller, token)
+        migrated = False
+        if caller is None:
+            caller = await asyncio.to_thread(store.legacy_caller, token)
+            migrated = caller is not None
+        if caller is None:
             return browser_marker(response(request, {"state": "signed-out"}), cloud.s, signed_in=False)
         me = await asyncio.to_thread(cloud.me, caller)
         account = me.get("account", {})
@@ -62,17 +65,24 @@ def install(app, cloud, caller_dep) -> None:
                 "expires_at": int(plan.get("expires_at") or 0),
                 "active": bool(plan.get("active")),
             }
-        return response(
+        result = response(
             request,
             {"state": "signed-in", "email": account.get("email") or account.get("hint") or "", "plan": account_plan},
         )
+        if migrated:
+            return browser_sign_in(result, cloud, caller, legacy=True)
+        return result
 
     @app.post("/v1/auth/browser-session", include_in_schema=False)
     async def establish(request: Request, caller: Caller = Depends(caller_dep)):
         if not permitted(request):
             return response(request, {"error": {"code": "origin_denied"}}, 403)
-        token = request.headers.get("authorization", "")[7:].strip()
-        return browser_marker(response(request, {"ok": True}), cloud.s, api_key=token)
+        return browser_sign_in(
+            response(request, {"ok": True}),
+            cloud,
+            caller,
+            previous_token=request.cookies.get(SESSION_COOKIE, ""),
+        )
 
     @app.post("/v1/auth/site-session/logout", include_in_schema=False)
     async def logout(request: Request):
@@ -80,14 +90,13 @@ def install(app, cloud, caller_dep) -> None:
             return response(request, {"error": {"code": "origin_denied"}}, 403)
         token = request.cookies.get(SESSION_COOKIE, "")
         if token:
-            try:
-                caller = await asyncio.to_thread(cloud.authenticate, token)
-            except CloudError as error:
-                if error.status != 401:
-                    raise
-            else:
+            caller = await asyncio.to_thread(store.caller, token)
+            if caller is None:
+                caller = await asyncio.to_thread(store.legacy_caller, token)
+            if caller is not None:
                 await asyncio.to_thread(cloud.sign_out, caller)
                 hub = getattr(app.state, "hub", None)
                 if hub is not None:
                     await hub.drop_signed_out(caller.account_id)
+            await asyncio.to_thread(store.revoke, token)
         return browser_marker(response(request, {"state": "signed-out"}), cloud.s, signed_in=False)

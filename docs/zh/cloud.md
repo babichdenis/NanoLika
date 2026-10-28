@@ -199,3 +199,26 @@ Telegram 内销售数字服务的规则同样适用于 Mini App。
 
 启用云同步的对话共享归档状态。离线时的归档和恢复操作会保存，重新连接后重试。
 未提交的本地操作不会被旧目录覆盖。选择对话后才加载消息，更早的历史按页读取。
+
+
+## 网站身份与浏览器会话 {#website-identity-and-host-only-browser-session}
+
+邮箱验证码、密码、OAuth 和 Telegram WebApp 登录会设置
+`__Host-nanolika_session`。这是仅限当前主机的 Secure、HttpOnly、SameSite=Lax
+cookie。随机值不是 API key，也不能作为 Bearer 使用。服务器仅保存它的 SHA-256
+哈希，并关联原始登录 key。原始 key 被撤销、过期，或账号被停用、删除后，会话立即失效。
+会话固定期限不超过 30 天，也不超过原始 key 的有效期；身份查询不会延长期限。
+其他 API 仍要求 Bearer。`nm_signed` 仅用于界面显示，不证明身份。
+
+`GET /v1/auth/site-session` 只返回已验证的状态、邮箱提示和套餐信息，不返回 API key。
+响应为 private/no-store，带凭据的 CORS 只允许明确列出的网站来源。
+`POST /v1/auth/site-session/logout` 要求允许的 Origin 和 JSON，撤销原始登录 key
+并关闭对应 hub 连接。`POST /v1/auth/browser-session` 需要有效 Bearer，
+可将旧的本地存储登录转换为新的不透明 cookie。OAuth 的退出入口只撤销浏览器会话，
+不撤销原始 Bearer。
+
+在数据库首次启用新会话存储后的 30 天内，身份查询可以将有效的旧 key cookie
+换为不透明 cookie。只有迁移开始前创建的 key 符合条件。迁移截止时间写入数据库，
+重启不会延长。转换后的 cookie 不能超过迁移截止时间或原始 key 的有效期。
+窗口结束后清除旧 key cookie；仍有有效本地 Bearer 的浏览器可通过明确认证的 POST
+建立新会话，无需重新输入登录信息。

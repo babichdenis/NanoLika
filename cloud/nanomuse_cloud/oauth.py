@@ -34,7 +34,7 @@ import urllib.request
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from .browser_auth import browser_marker
+from .browser_auth import SESSION_COOKIE, browser_marker, browser_sign_in
 
 log = logging.getLogger("nanomuse_cloud.oauth")
 
@@ -346,7 +346,7 @@ def install_oauth(app, cloud, settings) -> None:
         response = RedirectResponse(target, status_code=302)
         response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")
-        browser_marker(response, settings, api_key=api_key)
+        browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))
         if created:
             welcome = getattr(cloud.sender, "send_first_login", None)
             if callable(welcome):
@@ -357,10 +357,13 @@ def install_oauth(app, cloud, settings) -> None:
         return response
 
     @app.get("/v1/auth/logout")
-    async def oauth_logout(next: str = ""):
+    async def oauth_logout(request: Request, next: str = ""):
         """Выход с витрины: снимает общую метку входа и уводит назад на сайт."""
         target = pick_next(next or "https://nanolika.ru/")
         response = RedirectResponse(target, status_code=302)
+        from .browser_session_store import browser_store
+
+        await asyncio.to_thread(browser_store(cloud).revoke, request.cookies.get(SESSION_COOKIE, ""))
         browser_marker(response, settings, signed_in=False)
         response.headers["Cache-Control"] = "no-store"
         response.delete_cookie("nm_oauth", path="/")

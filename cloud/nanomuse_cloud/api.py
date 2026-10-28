@@ -130,7 +130,7 @@ from starlette.requests import ClientDisconnect
 from . import __version__, catalog_routes, model_pricing
 from . import client as client_info
 from . import search as web_search
-from .browser_auth import browser_marker
+from .browser_auth import SESSION_COOKIE, browser_marker, browser_sign_in
 from .catalog import Catalog
 from .config import ModelSpec, Settings
 from .controls import ControlError
@@ -606,7 +606,9 @@ def create_app(
                     # Welcome mail is helpful, but must never undo a successful sign-in.
                     log.warning("first-login welcome mail failed: %s", type(exc).__name__)
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": created, **me}), settings, api_key=key)
+        return browser_sign_in(
+            JSONResponse({"api_key": key, "created": created, **me}), cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, "")
+        )
 
     @app.post("/v1/auth/login")
     async def auth_login(request: Request) -> dict:
@@ -622,7 +624,9 @@ def create_app(
         device = str(body.get("device", ""))[:80]
         key, caller = await asyncio.to_thread(cloud.login_password, ident, password, device, client_ip(request))
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": False, **me}), settings, api_key=key)
+        return browser_sign_in(
+            JSONResponse({"api_key": key, "created": False, **me}), cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, "")
+        )
 
     def bot_caller(request: Request) -> None:
         """The bot's own proof: one shared secret, and nothing a person could hold."""
