@@ -277,6 +277,9 @@ export type TimelineEvent =
   | AvatarEvent;
 
 export interface ThreadMeta {
+  sync_cid?: string;
+  local_only?: boolean;
+  archived?: boolean;
   id: string;
   title: string;
   created_at: string;
@@ -1450,6 +1453,7 @@ export type WsMessage =
   | { kind: "delta"; thread: string; id: string; text: string }
   | { kind: "stream_end"; thread: string; id: string; discard?: boolean }
   | { kind: "status"; status: Status }
+  | { kind: "threads"; threads: ThreadMeta[] }
   | { kind: "thread"; thread: ThreadMeta }
   | { kind: "thread_deleted"; thread: string }
   | { kind: "thread_cleared"; thread: string }

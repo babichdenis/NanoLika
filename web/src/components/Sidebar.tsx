@@ -1,3 +1,4 @@
+import { ChatScopeSelect, inChatScope, type ChatScope } from "./ChatScope";
 import { Bug, LayoutGrid, Lightbulb, Menu, MessageCircle, MonitorSmartphone, Newspaper, Search, SlidersHorizontal, SquareCheckBig, TerminalSquare, UserRound, Wrench, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { desktopBridge } from "../desktop";
@@ -32,6 +33,7 @@ export function Sidebar() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [chatScope, setChatScope] = useState<ChatScope>("active");
   const menuRef = useRef<HTMLDivElement>(null);
   const developer = useDeveloperTools();
   const { profile, status } = state;
@@ -65,9 +67,10 @@ export function Sidebar() {
   ];
 
   const q = query.trim().toLowerCase();
+  const scopedThreads = state.threads.filter((th) => inChatScope(th, chatScope));
   const threads = q
-    ? state.threads.filter((th) => th.id === "main" || (th.id === "main" ? t(th.title) : th.title).toLowerCase().includes(q) || (th.device_name ?? "").toLowerCase().includes(q))
-    : state.threads;
+    ? scopedThreads.filter((th) => th.id === "main" || (th.id === "main" ? t(th.title) : th.title).toLowerCase().includes(q) || (th.device_name ?? "").toLowerCase().includes(q))
+    : scopedThreads;
 
   const railButton = (active: boolean) =>
     cx(
@@ -194,6 +197,7 @@ export function Sidebar() {
               )}
             </label>
           </div>
+          <ChatScopeSelect value={chatScope} onChange={setChatScope} />
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
             <ThreadList threads={threads} active={state.activeThread} onPick={(id) => openThread(id)} compact grouped />
           </div>

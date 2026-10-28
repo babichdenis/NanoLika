@@ -1,3 +1,4 @@
+import { ChatArchiveButton, ChatScopeSelect, inChatScope, type ChatScope } from "./ChatScope";
 import { FileText, Home, MessageSquare, Monitor, MonitorSmartphone, Search, Settings, Smartphone, SquarePen, Terminal, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
@@ -18,6 +19,7 @@ export function ChatsDrawer() {
   const t = useT();
   const open = state.drawer;
   const [query, setQuery] = useState("");
+  const [chatScope, setChatScope] = useState<ChatScope>("active");
   const [confirm, setConfirm] = useState<string | null>(null);
   const panel = useRef<HTMLElement>(null);
   useFocusTrap(panel, open);
@@ -39,10 +41,10 @@ export function ChatsDrawer() {
   const side = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.threads
-      .filter((th) => th.id !== "main")
+      .filter((th) => th.id !== "main" && inChatScope(th, chatScope))
       .filter((th) => !q || (th.title || "").toLowerCase().includes(q))
       .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  }, [state.threads, query]);
+  }, [state.threads, query, chatScope]);
   const others: HubDevice[] = (state.hub?.devices ?? []).filter((d) => !d.this && d.kind !== "web");
   const othersOnline = others.filter((d) => d.online).length;
   const hubOn = state.hub?.state === "connected";
@@ -99,6 +101,7 @@ export function ChatsDrawer() {
         <div className="mt-3 px-5 pb-1">
           <span className="text-[14px] font-medium text-muted">{t("Side chats")}</span>
         </div>
+        <ChatScopeSelect value={chatScope} onChange={setChatScope} />
         {side.length === 0 && !query ? (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <MessageSquare size={28} className="mb-3 text-muted/70" />
@@ -217,6 +220,7 @@ function SideRow({
         {thread.busy && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400" />}
         <span className="shrink-0 text-[12px] text-muted">{relativeDay(thread.updated_at)}</span>
       </button>
+      <ChatArchiveButton thread={thread} />
       <button type="button" aria-label={t("Delete")} onClick={onAskDelete} className="p-1.5 text-muted/70 opacity-0 hover:text-rose-500 focus:opacity-100 group-hover:opacity-100">
         <Trash2 size={15} />
       </button>

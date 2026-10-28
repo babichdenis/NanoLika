@@ -244,6 +244,7 @@ export const api = {
   doneHold: (id: string) => request<HoldEvent>(`/api/holds/${encodeURIComponent(id)}/done`, json({})),
   health: () => request<{ ok: boolean; version: string; auth: boolean }>("/api/health"),
   threads: () => request<ThreadMeta[]>("/api/threads"),
+  archiveThread: (id: string, archived: boolean) => request<ThreadMeta>(`/api/threads/${id}/archive`, json({ archived })),
   createThread: (title: string) => request<ThreadMeta>("/api/threads", json({ title })),
   renameThread: (id: string, title: string) =>
     request<ThreadMeta>(`/api/threads/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),

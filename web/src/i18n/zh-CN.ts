@@ -4,6 +4,10 @@
  * Run `npm test` — the i18n test lists the strings that still lack a translation.
  */
 const zhCN: Record<string, string> = {
+  "Restore from archive": "从归档恢复",
+  "Archive": "归档",
+  "Local chats": "本机对话",
+  "Active chats": "活跃对话",
   // ── Shell, tabs, connection ───────────────────────────────────────────────────────
   Chat: "聊天",
   Feed: "动态",

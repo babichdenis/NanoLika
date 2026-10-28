@@ -306,7 +306,7 @@ function upsertThread(list: ThreadMeta[], meta: ThreadMeta): ThreadMeta[] {
   const idx = list.findIndex((t) => t.id === meta.id);
   if (idx >= 0) {
     const next = list.slice();
-    next[idx] = meta;
+    next[idx] = { ...next[idx], ...meta };
     return next;
   }
   return [...list, meta];
@@ -461,6 +461,8 @@ function applyWs(state: AppState, msg: WsMessage): AppState {
       const finished = state.status.state === "working" && overall.state === "idle";
       return { ...state, status: overall, streams, finishedAt: finished ? Date.now() : state.finishedAt };
     }
+    case "threads":
+      return { ...state, threads: msg.threads };
     case "thread":
       return { ...state, threads: upsertThread(state.threads, msg.thread) };
     case "thread_deleted": {

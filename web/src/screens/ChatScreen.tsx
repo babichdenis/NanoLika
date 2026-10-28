@@ -1,3 +1,4 @@
+import { ChatArchiveButton } from "../components/ChatScope";
 import { ArrowUp, ChevronDown, FileText, Loader2, Menu, MessageSquarePlus, Monitor, MonitorSmartphone, Moon, Phone, Plus, Smartphone, Table2, Trash2, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { api, fileUrl } from "../api";
@@ -1090,6 +1091,7 @@ export function ThreadList({
             <button type="button" aria-label={t("Clear")} onClick={() => void clear(th.id)} className={cx("p-2 text-muted hover:text-fg", compact && "opacity-0 group-hover:opacity-100 focus:opacity-100")}>
               <X size={16} />
             </button>
+            <ChatArchiveButton thread={th} />
             {th.id !== "main" && (
               <button
                 type="button"
