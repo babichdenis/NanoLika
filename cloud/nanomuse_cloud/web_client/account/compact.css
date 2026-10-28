@@ -46,6 +46,7 @@ body.account-compact{--canvas:#faf9f6;--surface:#fff;--fill:#f0f3ed;--hairline:#
 .compact-table .model-detail-row[hidden]{display:none}.compact-table .model-detail-row td{padding:16px 20px;background:#fafbf8;max-width:none;white-space:normal}
 .compact-table .model-group-row th{padding:10px 12px 6px;border-top:1px solid #e1e3dd;background:#f7f8f6;color:#737a72;font-weight:500;font-size:11px;letter-spacing:.03em;text-transform:uppercase;text-align:left}
 .compact-table .model-group-row:first-child th{border-top:0}
+.compact-table .mm-capability{color:#52694e;font-size:12px;white-space:nowrap}
 .account-compact .kind{padding:0;margin:22px 0;border:0}.account-compact .kind-title{font:600 14px/1.4 var(--brand-body);border:0;padding:8px 0;background:none;width:100%}.account-compact .kind-count{font-size:12px;font-weight:400;color:#7a8076}
 .account-compact .mm-row{display:table-row;border:0;border-radius:0;padding:0;background:none;box-shadow:none}.account-compact .mm-row>td{font-size:13px}
 .account-compact .mm-row .mm-name{display:block;font-size:13px;font-weight:500;margin:0}.account-compact .mm-vendor{font-size:11px;margin:2px 0 0;color:#858b82;max-width:300px}

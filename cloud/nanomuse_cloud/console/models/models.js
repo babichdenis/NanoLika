@@ -16,7 +16,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       allVendors: 'Все провайдеры', otherVendors: 'Другие', vendorFilter: 'Провайдер',
       chat: 'Переписка', code: 'Кодинг', image: 'Картинки', video: 'Видео', sound: 'Звук', music: 'Музыка',
       showMore: (n, total) => `Показать ещё ${n} из ${total}`, showAll: 'Показать все',
-      speech: 'Озвучка', transcribe: 'Распознавание',
+      speech: 'Озвучка', transcribe: 'Распознавание', capability: 'Умеет', drawImage: 'рисует', editImage: 'правит картинки', drawAndEdit: 'рисует и правит', textToVideo: 'текст → видео', firstFrame: 'первый кадр', textAndFrame: 'текст и кадр',
       loading: 'Загружаем список моделей…', error: 'Не удалось получить список моделей. Попробуйте ещё раз.',
       login: 'Войдите в nanoLika, чтобы увидеть свои модели.', expired: 'Вход больше не действует. Войдите заново.',
       vendor: (v) => `Провайдер ${v}`, more: 'Подробнее', less: 'Скрыть',
@@ -41,7 +41,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       allVendors: 'All providers', otherVendors: 'Other', vendorFilter: 'Provider',
       chat: 'Chat', code: 'Coding', image: 'Pictures', video: 'Clips', sound: 'Sound', music: 'Music',
       showMore: (n, total) => `Show ${n} more of ${total}`, showAll: 'Show all',
-      speech: 'Speech', transcribe: 'Transcription',
+      speech: 'Speech', transcribe: 'Transcription', capability: 'Does', drawImage: 'draws', editImage: 'edits pictures', drawAndEdit: 'draws and edits', textToVideo: 'text to video', firstFrame: 'first frame', textAndFrame: 'text and frame',
       loading: 'Loading the model list…', error: 'Could not load the model list. Please try again.',
       login: 'Sign in to nanoLika to see your models.', expired: 'Your sign-in expired. Please sign in again.',
       vendor: (v) => `Provider ${v}`, more: 'More', less: 'Hide',
@@ -66,7 +66,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       allVendors: '全部供应商', otherVendors: '其他', vendorFilter: '供应商',
       chat: '对话', code: '编程', image: '图片', video: '视频', sound: '语音', music: '音乐',
       showMore: (n, total) => `再显示 ${n} 个，共 ${total} 个`, showAll: '显示全部',
-      speech: '语音合成', transcribe: '语音识别',
+      speech: '语音合成', transcribe: '语音识别', capability: '能力', drawImage: '生成图片', editImage: '编辑图片', drawAndEdit: '生成与编辑', textToVideo: '文生视频', firstFrame: '首帧', textAndFrame: '文本与首帧',
       loading: '正在读取模型列表…', error: '无法读取模型列表，请重试。',
       login: '请登录 nanoLika 查看模型。', expired: '登录已失效，请重新登录。',
       vendor: (v) => `供应商 ${v}`, more: '详情', less: '收起',
@@ -189,7 +189,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     return wrap;
   }
 
-  function row(model, showVendor = true) {
+  function row(model, showVendor = true, spec = { kind: model.kind }) {
     const kind = model.kind;
     const on = draft.enabled[kind].has(model.id);
     const usable = model.available !== false;
@@ -261,7 +261,19 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const calc=document.createElement('details');calc.className='mm-calculator';const caption=h('summary','Параметры и расчёт');calc.append(caption);let calculated=false;calc.ontoggle=()=>{if(calc.open&&!calculated){calculated=true;calc.append(modelDetails(model,{api:async(path,options={})=>{const response=await fetch(path,{...options,cache:'no-store',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'}});if(!response.ok)throw new Error('quote');return response.json();}}));}};
     const star=h('button',(loaded.shelf?.favourites||[]).includes(model.id)?'★':'☆','chip');star.type='button';star.setAttribute('aria-label','В избранное: '+model.name);star.setAttribute('aria-pressed',String((loaded.shelf?.favourites||[]).includes(model.id)));star.onclick=()=>{const old=loaded.shelf?.favourites||[],next=old.includes(model.id)?old.filter(id=>id!==model.id):[...old,model.id];loaded.shelf.favourites=next;draw();favouriteWrites=favouriteWrites.catch(()=>{}).then(async()=>{const response=await fetch('/v1/me/models',{method:'PUT',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({enabled:{},favourites:next})});if(!response.ok)throw new Error('favourite');}).catch(()=>{el('status').textContent='Избранное не сохранилось. Обновите страницу.';});};
     const td=(...nodes)=>{const n=h('td');n.append(...nodes);return n;};
-    const priceCells=[0,1].map(i=>{const n=h('td',undefined,'numeric');const item=block.lines[i];n.append(h('strong',item?item[1]:'—'));if(item)n.append(h('small',item[0],'table-subtitle'));if(i===0&&block.note)n.append(h('small',block.note,'table-subtitle'));return n;});
+    const priceCell=(item,note=false)=>{const n=h('td',undefined,'numeric');n.append(h('strong',item?item[1]:'—'));if(item)n.append(h('small',item[0],'table-subtitle'));if(note&&block.note)n.append(h('small',block.note,'table-subtitle'));return n;};
+    const audioKind=(model.audio||{}).kind;
+    const mods=model.in||[], hasText=mods.includes('text'), hasImage=mods.includes('image');
+    const capability=spec.kind==='image'
+      ? (hasText&&hasImage?T.drawAndEdit:hasImage?T.editImage:T.drawImage)
+      : spec.kind==='video'
+        ? (hasText&&hasImage?T.textAndFrame:hasImage?T.firstFrame:T.textToVideo)
+        : spec.kind==='audio'
+          ? (audioKind==='speech'?T.speech:audioKind==='transcribe'?T.transcribe:audioKind==='music'?T.music:T.sound)
+          : '';
+    const priceCells=spec.kind==='chat'
+      ? [priceCell(block.lines[0],true),priceCell(block.lines[1])]
+      : [priceCell(block.lines[0],true),h('td',capability,'mm-capability')];
     const enabled=h('label',undefined,'table-toggle');enabled.append(box);box.setAttribute('role','switch');
     const detailRow=h('tr',undefined,'model-detail-row'),detailCell=h('td');detailCell.colSpan=7;detailRow.hidden=true;detailCell.append(details(model),calc);detailRow.append(detailCell);
     more.setAttribute('aria-expanded','false');more.onclick=()=>{detailRow.hidden=!detailRow.hidden;more.textContent=detailRow.hidden?T.more:T.less;more.setAttribute('aria-expanded',String(!detailRow.hidden));};
@@ -312,6 +324,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       const shown = shownCount[spec.key] || PAGE;
       const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
       const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное',''],en:['Model','Price','Output','Enabled','Default','Favourite',''],zh:['模型','价格','输出','启用','默认','收藏','']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite',''];
+      if (spec.kind !== 'chat') labels[2] = T.capability;
       for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
       const page = sorted.slice(0, shown);
       const byVendor = new Map();
@@ -330,7 +343,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
           groupRow.append(groupHead);
           tbody.append(groupRow);
         }
-        for (const model of models) tbody.append(row(model, vendorGroups.length === 1));
+        for (const model of models) tbody.append(row(model, vendorGroups.length === 1, spec));
       }
       if (sorted.length > shown) {
         const more = h('button', T.showMore(Math.min(PAGE, sorted.length - shown), sorted.length), 'chip mm-all');
