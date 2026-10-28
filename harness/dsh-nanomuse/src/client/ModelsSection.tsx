@@ -22,7 +22,8 @@ import { OWN_KEYS_SECTION } from './MuseSettings.tsx'
 export { MODELS_SECTION }
 
 export type Slot = 'chat' | 'hands' | 'image' | 'video'
-export const SLOTS: readonly Slot[] = ['chat', 'hands', 'image', 'video']
+/** Video generation is off for now: the slot type lives on, the UI lists no video row. */
+export const SLOTS: readonly Slot[] = ['chat', 'hands', 'image']
 
 export interface SlotView {
   provider: string

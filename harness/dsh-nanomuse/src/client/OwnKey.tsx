@@ -232,7 +232,8 @@ export function ChatGptRow({ t, view, onChanged }: { t: Translate; view: Provide
 // ---- the "Use it for" card ------------------------------------------------------------------------
 
 export type Slot = 'chat' | 'hands' | 'image' | 'video'
-const SLOTS: readonly Slot[] = ['chat', 'hands', 'image', 'video']
+/** Video generation is off for now: keep the type, list no video slot. */
+const SLOTS: readonly Slot[] = ['chat', 'hands', 'image']
 /** What a saved row could take and the model each slot would get (`POST /providers/save` → `offer`). */
 export type SlotOffer = Partial<Record<Slot, string>>
 

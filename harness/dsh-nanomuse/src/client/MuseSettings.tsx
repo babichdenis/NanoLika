@@ -38,7 +38,7 @@ export const CHANNELS_SECTION = 'nanomuse-channels'
 /** Settings → From your phone: the code that ties Telegram or MAX to the account (`src/client/PhoneLink.tsx`). */
 export const PHONE_SECTION = 'nanomuse-phone'
 export const HARNESS_SECTION = 'nanomuse-harness'
-/** Desk-B's Media page (image and video models), as registered in `index.ts`. */
+/** Desk-B's Media page (the picture models), as registered in `index.ts`. Video generation is off for now. */
 const MEDIA_SECTION = 'nanomuse-media'
 /** Settings → Models (0.1.41): the four slots, right after General. */
 const MODELS_SECTION = 'nanomuse-models'
@@ -87,7 +87,7 @@ function navIcon(id: string): ReactNode {
     case 'agent-presets': return h(IconSparkle, { size: 16 })
     case 'nanomuse-devices': return h(IconDevices, { size: 16 })
     case COMPUTER_SECTION: return h(IconHand, { size: 16 })
-    case MEDIA_SECTION: return h(IconVideo, { size: 16 })
+    case MEDIA_SECTION: return h(IconImage, { size: 16 })
     case 'nanomuse-connectors': return h(IconLink, { size: 16 })
     case 'nanomuse-files': return h(IconFolder, { size: 16 })
     case 'nanomuse-dictation': return h(IconMic, { size: 16 })
