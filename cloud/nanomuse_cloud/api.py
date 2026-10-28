@@ -130,7 +130,7 @@ from starlette.requests import ClientDisconnect
 from . import __version__, catalog_routes, model_pricing
 from . import client as client_info
 from . import search as web_search
-from .browser_auth import browser_marker
+from .browser_auth import SESSION_COOKIE, browser_marker, browser_sign_in
 from .catalog import Catalog
 from .config import ModelSpec, Settings
 from .controls import ControlError
@@ -606,7 +606,9 @@ def create_app(
                     # Welcome mail is helpful, but must never undo a successful sign-in.
                     log.warning("first-login welcome mail failed: %s", type(exc).__name__)
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": created, **me}), settings, api_key=key)
+        return browser_sign_in(
+            JSONResponse({"api_key": key, "created": created, **me}), cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, "")
+        )
 
     @app.post("/v1/auth/login")
     async def auth_login(request: Request) -> dict:
@@ -622,7 +624,9 @@ def create_app(
         device = str(body.get("device", ""))[:80]
         key, caller = await asyncio.to_thread(cloud.login_password, ident, password, device, client_ip(request))
         me = cloud.me(caller, client_place(request))
-        return browser_marker(JSONResponse({"api_key": key, "created": False, **me}), settings, api_key=key)
+        return browser_sign_in(
+            JSONResponse({"api_key": key, "created": False, **me}), cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, "")
+        )
 
     def bot_caller(request: Request) -> None:
         """The bot's own proof: one shared secret, and nothing a person could hold."""
@@ -3035,15 +3039,29 @@ def create_app(
     @app.middleware("http")
     async def web_client_headers(request: Request, call_next):
         response = await call_next(request)
-        if request.url.path == "/web" or request.url.path.startswith("/web/"):
+        path = request.url.path
+        if path == "/web" or path.startswith("/web/"):
             response.headers["Cache-Control"] = "no-cache"
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "no-referrer"
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                + ("script-src 'self' https://telegram.org; " if request.url.path == "/web/telegram.html" else "script-src 'self'; ")
+                + ("script-src 'self' https://telegram.org; " if path == "/web/telegram.html" else "script-src 'self'; ")
                 + "style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org"
             )
+        elif path == "/app" or path.startswith("/app/"):
+            # The console and the operator's page are never framed; scripts are files only,
+            # and the admin page is not cached (its token lives in sessionStorage).
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; "
+                "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+            )
+            if path == "/app/admin" or path.startswith("/app/admin/"):
+                response.headers["Cache-Control"] = "no-store"
         return response
 
     return app
