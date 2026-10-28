@@ -9,7 +9,7 @@ import pytest
 from test_accounts import auth, make
 from test_cloud import sign_up
 
-from nanomuse_cloud.payments import PLANS, cents, token
+from nanomuse_cloud.payments import cents, token
 from nanomuse_cloud.service import CloudError
 
 
@@ -150,7 +150,9 @@ async def test_getstate_reconciles_missing_webhook_and_topup_does_not_extend(mon
     headers = auth(user["api_key"])
     row = (
         await client.post(
-            "/v1/payments/orders", headers=headers, json={"plan": "lika-plus", "accept_terms": True, "idempotency_key": "idempotent_fixture_5"}
+            "/v1/payments/orders",
+            headers=headers,
+            json={"plan": "lika-plus", "accept_terms": True, "idempotency_key": "idempotent_fixture_5"},
         )
     ).json()
     bank[p.order(row["order_id"])["payment_id"]]["Status"] = "CONFIRMED"
@@ -196,11 +198,13 @@ async def test_production_terminal_cannot_be_enabled_by_accident(monkeypatch):
     assert (await client.get("/v1/payments/config")).status_code == 503
     await client.aclose()
 
+
 async def test_admin_sees_orders_and_needs_the_token(monkeypatch):
     """Оператор видит заказы кассы, но только со своим токеном."""
     app, client, user, p, calls, _ = await setup(monkeypatch)
     created = await client.post(
-        "/v1/payments/orders", headers=auth(user["api_key"]),
+        "/v1/payments/orders",
+        headers=auth(user["api_key"]),
         json={"plan": "lika", "accept_terms": True, "idempotency_key": "admin_list_fixture"},
     )
     assert created.status_code == 200, created.text
@@ -214,11 +218,13 @@ async def test_admin_sees_orders_and_needs_the_token(monkeypatch):
     assert any(o["order_id"] == order_id for o in body["orders"])
     assert all("identifier" not in o and "payment_url" not in o for o in body["orders"])
 
+
 async def test_demo_payment_cannot_grant_a_real_plan_from_the_admin_console(monkeypatch):
     """A test terminal must never mutate the real account's working tariff."""
     app, client, user, p, calls, _ = await setup(monkeypatch)
     created = await client.post(
-        "/v1/payments/orders", headers=auth(user["api_key"]),
+        "/v1/payments/orders",
+        headers=auth(user["api_key"]),
         json={"plan": "lika", "accept_terms": True, "idempotency_key": "admin_grant_fixture"},
     )
     order_id = created.json()["order_id"]
@@ -230,19 +236,28 @@ async def test_demo_payment_cannot_grant_a_real_plan_from_the_admin_console(monk
     assert granted.status_code == 409 and granted.json()["error"]["code"] == "payment_demo_isolated"
     assert p.cloud.plan_state(user["account"]["id"]) is None
 
+
 async def test_a_custom_topup_adds_test_balance_but_does_not_start_or_extend_a_tariff(monkeypatch):
     """A top-up is balance only; tariff choice and expiry are separate."""
     app, client, user, p, calls, _ = await setup(monkeypatch)
     keys = auth(user["api_key"])
     # первый платёж ниже среднего тарифа: права не выдаются
-    small = (await client.post("/v1/payments/orders", headers=keys, json={"plan": "lika", "accept_terms": True, "idempotency_key": "tier_small_fixture"})).json()
+    small = (
+        await client.post(
+            "/v1/payments/orders", headers=keys, json={"plan": "lika", "accept_terms": True, "idempotency_key": "tier_small_fixture"}
+        )
+    ).json()
     await client.post("/v1/payments/tbank/notify", json=notice(p, small))
     caller = p.cloud.authenticate(user["api_key"])
     first = p.wallet(caller)
     assert first["plan"] == "lika" and first["expires_at"] > 0
     expiry = first["expires_at"]
     # A plain top-up while the tariff is active adds funds but changes no entitlement.
-    second = (await client.post("/v1/payments/orders", headers=keys, json={"amount": "200", "accept_terms": True, "idempotency_key": "tier_topup_fixture"})).json()
+    second = (
+        await client.post(
+            "/v1/payments/orders", headers=keys, json={"amount": "200", "accept_terms": True, "idempotency_key": "tier_topup_fixture"}
+        )
+    ).json()
     await client.post("/v1/payments/tbank/notify", json=notice(p, second))
     wallet = p.wallet(caller)
     assert wallet["balance_kopecks"] == small["amount_kopecks"] + second["amount_kopecks"]

@@ -7,6 +7,7 @@
 
 Файл перечитывается по mtime: база обновляется раз в сутки, рестарт не нужен.
 """
+
 from __future__ import annotations
 
 import json
@@ -61,8 +62,7 @@ VIDEO_PROVIDERS = frozenset({"polza", "aitunnel"})
 
 
 def video_candidates(alias: str) -> list[dict]:
-    return [c for c in candidates(alias)
-            if c.get("provider") in VIDEO_PROVIDERS and c.get("model")]
+    return [c for c in candidates(alias) if c.get("provider") in VIDEO_PROVIDERS and c.get("model")]
 
 
 def retail(alias_or_slug: str) -> dict | None:
@@ -88,5 +88,4 @@ def image_candidates(alias: str) -> list[dict]:
     остальные — как резерв: polza, например, считает картинку по токенам и
     в каталоге стоит в ₽/1M. Порядок внутри уже задан экспортом.
     """
-    return [c for c in candidates(alias)
-            if c.get("provider") in IMAGE_PROVIDERS and c.get("model")]
+    return [c for c in candidates(alias) if c.get("provider") in IMAGE_PROVIDERS and c.get("model")]

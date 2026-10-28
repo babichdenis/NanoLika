@@ -31,8 +31,6 @@ good list in place, or none. ``CLOUD_CATALOG=0`` switches the whole thing off.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import asyncio
 import base64
 import json
@@ -41,6 +39,7 @@ import re
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 import httpx
@@ -343,6 +342,7 @@ async def probe_model(http: httpx.AsyncClient, base: str, key: str, model_id: st
     except ValueError:
         answer = ""
     return Probe(model_id=model_id, works=True, vision=bool(_SEEN_WORDS.search(answer)), checked_at=checked, note=answer.strip()[:60])
+
 
 _DESCRIPTIONS: dict[str, dict[str, str]] = {}
 _DESCRIPTIONS_AT = 0.0

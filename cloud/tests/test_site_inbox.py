@@ -4,6 +4,7 @@
 чата приходит с вопросом и ответом, а читать всё это можно только с админским
 паролем — иначе страница не должна отдавать ни строчки.
 """
+
 from __future__ import annotations
 
 from test_bot import client_of, stack
@@ -16,8 +17,12 @@ async def test_a_support_message_is_kept_with_its_topic_and_address():
     async with client_of(app) as client:
         sent = await client.post(
             "/v1/site/feedback",
-            json={"topic": "Оплата или пополнение", "email": "guest@example.test",
-                  "message": "Не пришло пополнение на 300 рублей.", "page": "/support.html"},
+            json={
+                "topic": "Оплата или пополнение",
+                "email": "guest@example.test",
+                "message": "Не пришло пополнение на 300 рублей.",
+                "page": "/support.html",
+            },
             headers={"X-Forwarded-For": "10.0.0.5, 172.18.0.1", "User-Agent": "TestBrowser/1.0"},
         )
         assert sent.status_code == 200
@@ -40,8 +45,14 @@ async def test_a_chat_copy_keeps_the_question_the_answer_and_its_own_clock():
     async with client_of(app) as client:
         sent = await client.post(
             "/v1/site/chat",
-            json={"question": "Чем поможет Лика?", "reply": "Разберёт почту и файлы.",
-                  "page": "/", "session": "s-42", "code": "ok", "at": 1_700_000_000},
+            json={
+                "question": "Чем поможет Лика?",
+                "reply": "Разберёт почту и файлы.",
+                "page": "/",
+                "session": "s-42",
+                "code": "ok",
+                "at": 1_700_000_000,
+            },
         )
         assert sent.status_code == 200
         row = cloud.db.site_messages(source="chat")[0]

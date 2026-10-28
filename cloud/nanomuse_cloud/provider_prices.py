@@ -16,6 +16,7 @@ JSON и показывает кнопку «Обновить данные».
   * routerai.ru   — рублёвый агрегатор, цена входа и выхода за 1M токенов;
   * api-docs.deepseek.com — официальный прайс DeepSeek в долларах.
 """
+
 from __future__ import annotations
 
 import concurrent.futures as cf
@@ -31,8 +32,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 TIMEOUT = 25
 CBR_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
 FALLBACK_USD_RUB = 90.0
@@ -52,8 +52,10 @@ UNIT_WORDS = [
 # ── сеть ────────────────────────────────────────────────────────────────
 def _ctx():
     import ssl
+
     try:
         import certifi
+
         return ssl.create_default_context(cafile=certifi.where())
     except Exception:  # noqa: BLE001
         try:
@@ -63,11 +65,14 @@ def _ctx():
 
 
 def get(url: str, timeout: int = TIMEOUT) -> str:
-    req = urllib.request.Request(url, headers={
-        "User-Agent": UA,
-        "Accept-Language": "ru,en;q=0.8",
-        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
-    })
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": UA,
+            "Accept-Language": "ru,en;q=0.8",
+            "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+        },
+    )
     kwargs = {"timeout": timeout}
     ctx = _ctx()
     if ctx is not None:
@@ -170,17 +175,19 @@ def fetch_deepseek() -> list[dict]:
             # базой считаем вне-пиковые цены (обычный тариф, как у перепродавцов);
             # пиковые идут отдельными строками, чтобы их не путать с базой
             suffix = ", пик" if mode == "peak" else ""
-            offers.append(dict(model=models[i], unit=f"1M токенов ({kind}{suffix})",
-                               price=val, currency="USD", meta=mode))
+            offers.append(dict(model=models[i], unit=f"1M токенов ({kind}{suffix})", price=val, currency="USD", meta=mode))
     return offers
 
 
 def _auth_get(url: str, key: str, timeout: int = 30) -> str:
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {key}",
-        "User-Agent": UA,
-        "Accept": "application/json",
-    })
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "User-Agent": UA,
+            "Accept": "application/json",
+        },
+    )
     kwargs = {"timeout": timeout}
     ctx = _ctx()
     if ctx is not None:
@@ -212,14 +219,12 @@ def fetch_routerai() -> list[dict]:
                 val = pricing.get(field)
                 if not isinstance(val, (int, float)) or val <= 0:
                     continue
-                if per_units.get(field) != "token":     # за запрос и т.п. — отдельно
+                if per_units.get(field) != "token":  # за запрос и т.п. — отдельно
                     continue
-                offers.append(dict(model=row.get("id", "?"), unit=unit,
-                                   price=round(val * 1_000_000, 4), currency="RUB"))
-            req_price = pricing.get("web_search")      # цена за ОДИН запрос, не за миллион
+                offers.append(dict(model=row.get("id", "?"), unit=unit, price=round(val * 1_000_000, 4), currency="RUB"))
+            req_price = pricing.get("web_search")  # цена за ОДИН запрос, не за миллион
             if isinstance(req_price, (int, float)) and req_price > 0:
-                offers.append(dict(model=row.get("id", "?"), unit="запрос",
-                                   price=round(req_price, 4), currency="RUB"))
+                offers.append(dict(model=row.get("id", "?"), unit="запрос", price=round(req_price, 4), currency="RUB"))
         return offers
     # без ключа — страница каталога
     body = get("https://routerai.ru/models")
@@ -232,15 +237,14 @@ def fetch_routerai() -> list[dict]:
             continue
         if not re.search(r"токены за 1M", ln, re.I):
             continue
-        m = PRICE.search(" ".join(lines[i: i + 2]))
+        m = PRICE.search(" ".join(lines[i : i + 2]))
         if not m:
             continue
         price = number(m.group(1))
         if price is None or price <= 0:
             continue
         kind = "вход" if "Входящ" in ln else "выход" if "Исходящ" in ln else "?"
-        offers.append(dict(model=model or "routerai", unit=f"1M токенов ({kind})",
-                           price=price, currency="RUB"))
+        offers.append(dict(model=model or "routerai", unit=f"1M токенов ({kind})", price=price, currency="RUB"))
     return offers
 
 
@@ -257,14 +261,17 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
     if limit:
         slugs = slugs[:limit]
 
-    rec_token = re.compile(
-        r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Запрос|Ответ)\s*/\s*1М", re.I)
+    rec_token = re.compile(r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Запрос|Ответ)\s*/\s*1М", re.I)
     rec_range = re.compile(
         r"от\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*до\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*/\s*"
-        r"(изобр|сек|видео|картин)", re.I)
+        r"(изобр|сек|видео|картин)",
+        re.I,
+    )
     rec_unit = re.compile(
         r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Изображение|Видео|Секунда|Минута|"
-        r"Символ|Запрос|1М символов)", re.I)
+        r"Символ|Запрос|1М символов)",
+        re.I,
+    )
 
     def one(slug: str) -> list[dict]:
         try:
@@ -277,22 +284,35 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
             price = number(m.group(1))
             if price:
                 kind = "вход" if m.group(2).lower() == "запрос" else "выход"
-                out.append(dict(model=slug, unit=f"1M токенов ({kind})",
-                                price=price, currency="RUB"))
+                out.append(dict(model=slug, unit=f"1M токенов ({kind})", price=price, currency="RUB"))
         for m in rec_range.finditer(flat):
             low, high = number(m.group(1)), number(m.group(2))
-            unit = ("секунда" if m.group(3).lower() == "сек" else
-                    "изображение" if m.group(3).lower().startswith(("изобр", "картин")) else "видео")
+            unit = (
+                "секунда"
+                if m.group(3).lower() == "сек"
+                else "изображение"
+                if m.group(3).lower().startswith(("изобр", "картин"))
+                else "видео"
+            )
             for price in (low, high):
                 if price:
                     out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
         for m in rec_unit.finditer(flat):
             price = number(m.group(1))
             raw = m.group(2).lower()
-            unit = ("изображение" if raw.startswith("изображ") else
-                    "видео" if raw == "видео" else "секунда" if raw == "секунда" else
-                    "минута" if raw == "минута" else
-                    "1M символов" if "символ" in raw else "запрос")
+            unit = (
+                "изображение"
+                if raw.startswith("изображ")
+                else "видео"
+                if raw == "видео"
+                else "секунда"
+                if raw == "секунда"
+                else "минута"
+                if raw == "минута"
+                else "1M символов"
+                if "символ" in raw
+                else "запрос"
+            )
             if price:
                 out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
         # «Запрос» на карточке — та же цена, что вход за 1M токенов: не дублируем
@@ -312,7 +332,6 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
         for rows in pool.map(one, slugs):
             offers.extend(rows)
     return offers
-
 
 
 def _money(line: str) -> float | None:
@@ -341,12 +360,11 @@ def fetch_proxyapi() -> list[dict]:
         low = text.lower()
         if not (low.startswith("ввод") or low.startswith("вывод") or low.startswith("изображени")):
             continue
-        tail = " ".join(lines[i: i + 3])
+        tail = " ".join(lines[i : i + 3])
         price = _money(tail)
         if price is None or "токен" not in tail.lower() and "изображени" not in low:
             continue
-        unit = ("1M токенов (вход)" if low.startswith("ввод") else
-                "1M токенов (выход)" if low.startswith("вывод") else "изображение")
+        unit = "1M токенов (вход)" if low.startswith("ввод") else "1M токенов (выход)" if low.startswith("вывод") else "изображение"
         offers.append(dict(model=model, unit=unit, price=price, currency="RUB"))
     # на странице есть дубли (карточка + сводка) и разные тарифы — берём самый дешёвый
     best: dict[tuple[str, str], dict] = {}
@@ -376,7 +394,7 @@ def fetch_bothub() -> list[dict]:
     for i, ln in enumerate(lines):
         m = label_re.match(ln.strip())
         if m:
-            price = _money(" ".join(lines[i: i + 3]))
+            price = _money(" ".join(lines[i : i + 3]))
             if price is not None:
                 pending.append((unit_of(m.group(1), m.group(2)), price))
             continue
@@ -427,9 +445,12 @@ def fetch_neuroapi() -> list[dict]:
 def fetch_openrouter() -> list[dict]:
     """OpenRouter USD quotes plus catalogue facts, including explicit free routes."""
     data = json.loads(get("https://openrouter.ai/api/v1/models", 60))
-    units = {"prompt": "1M токенов (вход)", "completion": "1M токенов (выход)",
-             "input_cache_read": "1M токенов (вход, кэш)",
-             "input_cache_write": "1M токенов (кэш-запись)"}
+    units = {
+        "prompt": "1M токенов (вход)",
+        "completion": "1M токенов (выход)",
+        "input_cache_read": "1M токенов (вход, кэш)",
+        "input_cache_write": "1M токенов (кэш-запись)",
+    }
     offers = []
     for row in data.get("data", []):
         pricing = row.get("pricing") or {}
@@ -442,14 +463,20 @@ def fetch_openrouter() -> list[dict]:
             if val < 0:
                 continue
             # Keep zero-priced offers in the catalogue as explicitly free.
-            offers.append(dict(model=row.get("id", "?"), unit=unit,
-                               price=round(val * 1_000_000, 4), currency="USD",
-                               free=val == 0,
-                               context_length=row.get("context_length") or 0,
-                               max_output=(row.get("top_provider") or {}).get("max_completion_tokens") or 0,
-                               input_modalities=(row.get("architecture") or {}).get("input_modalities") or [],
-                               output_modalities=(row.get("architecture") or {}).get("output_modalities") or [],
-                               supported_parameters=row.get("supported_parameters") or []))
+            offers.append(
+                dict(
+                    model=row.get("id", "?"),
+                    unit=unit,
+                    price=round(val * 1_000_000, 4),
+                    currency="USD",
+                    free=val == 0,
+                    context_length=row.get("context_length") or 0,
+                    max_output=(row.get("top_provider") or {}).get("max_completion_tokens") or 0,
+                    input_modalities=(row.get("architecture") or {}).get("input_modalities") or [],
+                    output_modalities=(row.get("architecture") or {}).get("output_modalities") or [],
+                    supported_parameters=row.get("supported_parameters") or [],
+                )
+            )
     return offers
 
 
@@ -481,7 +508,7 @@ ALIASES = {
 def model_key(provider: str, model: str) -> str:
     """Одно и то же имя у разных поставщиков → один ключ."""
     slug = model.strip().lower()
-    slug = re.sub(r"^[a-z0-9\-]+/", "", slug)          # фирменный префикс пути
+    slug = re.sub(r"^[a-z0-9\-]+/", "", slug)  # фирменный префикс пути
     slug = re.sub(r"\s+", "-", slug)
     slug = slug.replace("deepseek/", "")
     if slug in {"deepseek-v4.1-flash", "deepseek-v4.1-flash-1017"}:
@@ -504,8 +531,9 @@ def offer_exclusion(model: str) -> str:
     return ""
 
 
-def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, list[dict]]],
-          limit: int = 0, previous: dict | None = None) -> dict:
+def build(
+    rate: float, rate_source: str, results: dict[str, tuple[bool, str, list[dict]]], limit: int = 0, previous: dict | None = None
+) -> dict:
     models: dict[str, dict] = {}
     previous = previous or {}
     old_rows = previous.get("models") or []
@@ -517,16 +545,27 @@ def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, lis
         if name not in results:
             continue
         ok, note, offers = results[name]
-        providers.append(dict(name=name, url=url, ok=ok, note=note,
-                              offers=len(offers)))
+        providers.append(dict(name=name, url=url, ok=ok, note=note, offers=len(offers)))
         for off in offers:
             key = model_key(name, off["model"])
             rub = off["price"] if off["currency"] == "RUB" else off["price"] * rate
-            group = f"{key} · {off['unit']}"     # сравниваем только одинаковые единицы
-            entry = models.setdefault(group, dict(
-                key=key, name=display_model_name(key, off["model"]), unit=off["unit"], group=group, offers=[],
-                context_length=0, max_output=0, input_modalities=[], output_modalities=[],
-                supported_parameters=[], free=False))
+            group = f"{key} · {off['unit']}"  # сравниваем только одинаковые единицы
+            entry = models.setdefault(
+                group,
+                dict(
+                    key=key,
+                    name=display_model_name(key, off["model"]),
+                    unit=off["unit"],
+                    group=group,
+                    offers=[],
+                    context_length=0,
+                    max_output=0,
+                    input_modalities=[],
+                    output_modalities=[],
+                    supported_parameters=[],
+                    free=False,
+                ),
+            )
             if key != "deepseek-v4.1-flash" and (not entry["name"] or len(off["model"]) > len(entry["name"])):
                 entry["name"] = off["model"]
             entry["context_length"] = max(entry["context_length"], int(off.get("context_length") or 0))
@@ -537,12 +576,19 @@ def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, lis
             is_free = bool(off.get("free") or off["price"] == 0)
             exclusion = offer_exclusion(str(off["model"]))
             entry["free"] = entry["free"] or is_free
-            entry["offers"].append(dict(provider=name, unit=off["unit"],
-                                        rub=round(rub, 4),
-                                        price=off["price"], currency=off["currency"],
-                                        free=is_free, model=off["model"],
-                                        route_eligible=not exclusion,
-                                        exclusion_reason=exclusion))
+            entry["offers"].append(
+                dict(
+                    provider=name,
+                    unit=off["unit"],
+                    rub=round(rub, 4),
+                    price=off["price"],
+                    currency=off["currency"],
+                    free=is_free,
+                    model=off["model"],
+                    route_eligible=not exclusion,
+                    exclusion_reason=exclusion,
+                )
+            )
     rows = []
     for entry in models.values():
         if not entry["offers"]:
@@ -558,21 +604,33 @@ def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, lis
         except (AttributeError, TypeError, ValueError):
             first_seen_dt = datetime.now(UTC)
         recently_added = (datetime.now(UTC) - first_seen_dt).total_seconds() <= 14 * 86400
-        rows.append(dict(key=entry["key"], name=entry["name"], unit=entry["unit"],
-                         group=entry["group"],
-                         context_length=entry["context_length"], max_output=entry["max_output"],
-                         input_modalities=entry["input_modalities"], output_modalities=entry["output_modalities"],
-                         supported_parameters=entry["supported_parameters"], free=entry["free"],
-                         first_seen_at=first_seen,
-                         new_model=entry["key"] not in old_keys or (old_new.get(entry["key"], False) and recently_added),
-                         offers=sorted(entry["offers"], key=lambda o: o["rub"]),
-                         cheapest=cheapest["provider"] if eligible_offers else None,
-                         cheapest_rub=cheapest["rub"] if eligible_offers else None, spread=round(spread, 4)))
+        rows.append(
+            dict(
+                key=entry["key"],
+                name=entry["name"],
+                unit=entry["unit"],
+                group=entry["group"],
+                context_length=entry["context_length"],
+                max_output=entry["max_output"],
+                input_modalities=entry["input_modalities"],
+                output_modalities=entry["output_modalities"],
+                supported_parameters=entry["supported_parameters"],
+                free=entry["free"],
+                first_seen_at=first_seen,
+                new_model=entry["key"] not in old_keys or (old_new.get(entry["key"], False) and recently_added),
+                offers=sorted(entry["offers"], key=lambda o: o["rub"]),
+                cheapest=cheapest["provider"] if eligible_offers else None,
+                cheapest_rub=cheapest["rub"] if eligible_offers else None,
+                spread=round(spread, 4),
+            )
+        )
     rows.sort(key=lambda r: r["key"])
     new_models = sorted({r["key"] for r in rows if r["new_model"]})
     changed_keys = []
-    old_prices = {(r.get("key"), r.get("unit")): tuple(
-        (o.get("provider"), round(float(o.get("rub") or 0), 4)) for o in r.get("offers", [])) for r in old_rows}
+    old_prices = {
+        (r.get("key"), r.get("unit")): tuple((o.get("provider"), round(float(o.get("rub") or 0), 4)) for o in r.get("offers", []))
+        for r in old_rows
+    }
     for row in rows:
         key = (row["key"], row["unit"])
         current = tuple((o.get("provider"), round(float(o.get("rub") or 0), 4)) for o in row["offers"])
@@ -582,12 +640,19 @@ def build(rate: float, rate_source: str, results: dict[str, tuple[bool, str, lis
         row["price_changed"] = row["key"] in changed_keys
     if limit:
         rows = rows[:limit]
-    return dict(generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
-                usd_rub=rate, rate_source=rate_source,
-                providers=providers,
-                changes={"new_models": new_models, "changed_models": sorted(set(changed_keys)),
-                         "new_count": len(new_models), "changed_count": len(set(changed_keys))},
-                models=rows)
+    return dict(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        usd_rub=rate,
+        rate_source=rate_source,
+        providers=providers,
+        changes={
+            "new_models": new_models,
+            "changed_models": sorted(set(changed_keys)),
+            "new_count": len(new_models),
+            "changed_count": len(set(changed_keys)),
+        },
+        models=rows,
+    )
 
 
 # ── доступ из админки ───────────────────────────────────────────────────
@@ -601,8 +666,7 @@ def read_snapshot() -> dict:
     try:
         return json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
-        return {"generated_at": "", "usd_rub": FALLBACK_USD_RUB, "rate_source": "none",
-                "providers": [], "models": [], "pending": _RUNNING}
+        return {"generated_at": "", "usd_rub": FALLBACK_USD_RUB, "rate_source": "none", "providers": [], "models": [], "pending": _RUNNING}
 
 
 def refresh_now() -> dict:
@@ -615,8 +679,7 @@ def refresh_now() -> dict:
         try:
             offers = fn()
             ok = bool(offers)
-            note = (f"{len(offers)} предложений за {time.time() - t0:.0f} с"
-                    if offers else "страница прочитана, цен не нашлось")
+            note = f"{len(offers)} предложений за {time.time() - t0:.0f} с" if offers else "страница прочитана, цен не нашлось"
         except Exception as e:  # noqa: BLE001
             ok, note, offers = False, f"{type(e).__name__}: {e}"[:160], []
         results[name] = (ok, note, offers)

@@ -12,6 +12,7 @@ Prices come from the operator's own table (`console/providers/prices.json`, the 
 the providers page shows, refreshed by its timer). A model that table does not carry
 keeps exactly one place: the one the menu named, as before.
 """
+
 from __future__ import annotations
 
 import json

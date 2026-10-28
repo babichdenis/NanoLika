@@ -925,13 +925,16 @@ async def test_polza_video_upload_uses_polza_key_and_first_frame_format(monkeypa
     monkeypatch.setenv("POLZA_TEST_KEY", "sk-polza-test")
     up = fake_upstream()
     settings = Settings(
-        database=":memory:", secret="test-secret", admin_token="admin",
-        upstream_base="http://upstream/compat/v1", upstream_key="sk-upstream",
-        dashscope_base="http://upstream/ds/api/v1", public_base="http://cloud.test",
+        database=":memory:",
+        secret="test-secret",
+        admin_token="admin",
+        upstream_base="http://upstream/compat/v1",
+        upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1",
+        public_base="http://cloud.test",
         providers={"polza": ProviderSpec(base="http://api.polza.test", key_env="POLZA_TEST_KEY")},
         models=tuple(
-            dataclasses.replace(spec, provider="polza", upstream="seedance-2-mini")
-            if spec.id == "wan2.2-i2v-flash" else spec
+            dataclasses.replace(spec, provider="polza", upstream="seedance-2-mini") if spec.id == "wan2.2-i2v-flash" else spec
             for spec in Settings().models
         ),
     )
@@ -943,7 +946,8 @@ async def test_polza_video_upload_uses_polza_key_and_first_frame_format(monkeypa
         data = await sign_up(client, sender)
         headers = {"Authorization": f"Bearer {data['api_key']}"}
         await client.post(
-            "/v1/admin/grant", headers={"X-Admin-Token": "admin"},
+            "/v1/admin/grant",
+            headers={"X-Admin-Token": "admin"},
             json={"identifier": "13800138000", "tokens": 2_000_000},
         )
         model = "wan2.2-i2v-flash"
@@ -951,7 +955,9 @@ async def test_polza_video_upload_uses_polza_key_and_first_frame_format(monkeypa
         assert r.status_code == 200 and r.json()["data"]["upload_mode"] == "relay_storage"
 
         r = await client.post(
-            "/api/v1/uploads", headers=headers, data={"model": model},
+            "/api/v1/uploads",
+            headers=headers,
+            data={"model": model},
             files={"file": ("first-frame.png", PNG_1PX, "image/png")},
         )
         assert r.status_code == 200 and r.json()["data"]["url"] == "https://s3.polza.ai/first-frame.png"
@@ -959,7 +965,8 @@ async def test_polza_video_upload_uses_polza_key_and_first_frame_format(monkeypa
         assert upload_headers["authorization"] == "Bearer sk-polza-test"
 
         r = await client.post(
-            "/api/v1/services/aigc/video-generation/video-synthesis", headers=headers,
+            "/api/v1/services/aigc/video-generation/video-synthesis",
+            headers=headers,
             json={"model": model, "input": {"prompt": "a calm avatar", "img_url": r.json()["data"]["url"]}},
         )
         assert r.status_code == 200 and r.json()["output"]["task_id"] == "polza-task-1"
@@ -978,27 +985,39 @@ async def test_aitunnel_video_uses_native_duration_resolution_and_first_frame(mo
     from nanomuse_cloud import catalog_routes
 
     catalog_path = tmp_path / "aitunnel-video-catalog-test.json"
-    catalog_path.write_text(json.dumps({
-        "menu": {"wan2.2-i2v-flash": "wan-avatar"},
-        "models": {"wan-avatar": {"candidates": [
-            {"provider": "polza", "model": "seedance-2-mini"},
-            {"provider": "aitunnel", "model": "seedance-2.0-mini"},
-        ]}},
-    }), encoding="utf-8")
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "menu": {"wan2.2-i2v-flash": "wan-avatar"},
+                "models": {
+                    "wan-avatar": {
+                        "candidates": [
+                            {"provider": "polza", "model": "seedance-2-mini"},
+                            {"provider": "aitunnel", "model": "seedance-2.0-mini"},
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(catalog_routes, "PATH", catalog_path)
     monkeypatch.setattr(catalog_routes, "_cache", {"mtime": None, "data": {}})
     up = fake_upstream()
     settings = Settings(
-        database=":memory:", secret="test-secret", admin_token="admin",
-        upstream_base="http://upstream/compat/v1", upstream_key="sk-upstream",
-        dashscope_base="http://upstream/ds/api/v1", public_base="http://cloud.test",
+        database=":memory:",
+        secret="test-secret",
+        admin_token="admin",
+        upstream_base="http://upstream/compat/v1",
+        upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1",
+        public_base="http://cloud.test",
         providers={
             "aitunnel": ProviderSpec(base="http://upstream", key_env="AITUNNEL_TEST_KEY"),
             "polza": ProviderSpec(base="http://api.polza.test", key_env="POLZA_TEST_KEY"),
         },
         models=tuple(
-            dataclasses.replace(spec, provider="aitunnel", upstream="seedance-2.0-mini")
-            if spec.id == "wan2.2-i2v-flash" else spec
+            dataclasses.replace(spec, provider="aitunnel", upstream="seedance-2.0-mini") if spec.id == "wan2.2-i2v-flash" else spec
             for spec in Settings().models
         ),
     )
@@ -1010,22 +1029,28 @@ async def test_aitunnel_video_uses_native_duration_resolution_and_first_frame(mo
         data = await sign_up(client, sender)
         headers = {"Authorization": f"Bearer {data['api_key']}"}
         await client.post(
-            "/v1/admin/grant", headers={"X-Admin-Token": "admin"},
+            "/v1/admin/grant",
+            headers={"X-Admin-Token": "admin"},
             json={"identifier": "13800138000", "tokens": 2_000_000},
         )
         policy = await client.get(
-            "/api/v1/uploads", params={"action": "getPolicy", "model": "wan2.2-i2v-flash"}, headers=headers,
+            "/api/v1/uploads",
+            params={"action": "getPolicy", "model": "wan2.2-i2v-flash"},
+            headers=headers,
         )
         assert policy.status_code == 200
         assert policy.json()["data"]["upload_mode"] == "relay_storage"
         uploaded = await client.post(
-            "/api/v1/uploads", headers=headers, data={"model": "wan2.2-i2v-flash"},
+            "/api/v1/uploads",
+            headers=headers,
+            data={"model": "wan2.2-i2v-flash"},
             files={"file": ("first-frame.png", PNG_1PX, "image/png")},
         )
         assert uploaded.status_code == 200, uploaded.text
         frame_url = uploaded.json()["data"]["url"]
         response = await client.post(
-            "/api/v1/services/aigc/video-generation/video-synthesis", headers=headers,
+            "/api/v1/services/aigc/video-generation/video-synthesis",
+            headers=headers,
             json={
                 "model": "wan2.2-i2v-flash",
                 "input": {"prompt": "a calm avatar", "img_url": frame_url},
@@ -1041,11 +1066,13 @@ async def test_aitunnel_video_uses_native_duration_resolution_and_first_frame(mo
             "prompt": "a calm avatar",
             "duration": 5,
             "resolution": "720p",
-            "frame_images": [{
-                "type": "image_url",
-                "image_url": {"url": "https://s3.polza.ai/first-frame.png"},
-                "frame_type": "first_frame",
-            }],
+            "frame_images": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://s3.polza.ai/first-frame.png"},
+                    "frame_type": "first_frame",
+                }
+            ],
         }
         assert frame_url == "https://s3.polza.ai/first-frame.png"
     finally:

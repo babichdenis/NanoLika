@@ -176,18 +176,29 @@ def _model_kind(source: dict[str, Any]) -> str:
     """Primary task, separate from secondary capabilities such as writing code."""
     mode = str(source.get("mode") or "chat").strip().lower()
     direct = {
-        "image_generation": "image", "image_edit": "image", "video_generation": "video",
-        "audio_speech": "audio", "audio_transcription": "audio", "realtime": "audio",
-        "embedding": "embedding", "rerank": "rerank", "moderation": "safety",
+        "image_generation": "image",
+        "image_edit": "image",
+        "video_generation": "video",
+        "audio_speech": "audio",
+        "audio_transcription": "audio",
+        "realtime": "audio",
+        "embedding": "embedding",
+        "rerank": "rerank",
+        "moderation": "safety",
     }
     if mode in direct:
         return direct[mode]
     if mode in {"chat", "completion", "responses", "text_completion"}:
         dev = source.get("dev") if isinstance(source.get("dev"), dict) else {}
-        text = " ".join(str(value or "") for value in (
-            source.get("id"), source.get("name"), source.get("clean_name"),
-            dev.get("name"),
-        )).lower()
+        text = " ".join(
+            str(value or "")
+            for value in (
+                source.get("id"),
+                source.get("name"),
+                source.get("clean_name"),
+                dev.get("name"),
+            )
+        ).lower()
         # Do not label every chat model as a coding model just because it can write code.
         if re.search(r"(^|[\s/_-])(code|coder|coding|codex|codestral|starcoder)([\s/_-]|$)", text):
             return "code"
@@ -219,16 +230,23 @@ def _discovered(settings: Any, router: Any = None) -> dict[str, Any]:
     except OSError:
         data = {}
     labels = {
-        "text": "Текст", "code": "Код", "image": "Изображение", "video": "Видео",
-        "audio": "Аудио", "embedding": "Эмбеддинги", "rerank": "Ранжирование",
-        "safety": "Безопасность", "other": "Другое",
+        "text": "Текст",
+        "code": "Код",
+        "image": "Изображение",
+        "video": "Видео",
+        "audio": "Аудио",
+        "embedding": "Эмбеддинги",
+        "rerank": "Ранжирование",
+        "safety": "Безопасность",
+        "other": "Другое",
     }
     active: set[str] = set()
     for spec in settings.models:
         active.update(_model_keys(getattr(spec, "id", "")))
         active.update(_model_keys(getattr(spec, "upstream", "")))
     configured = {
-        str(name) for name, provider in (getattr(settings, "providers", {}) or {}).items()
+        str(name)
+        for name, provider in (getattr(settings, "providers", {}) or {}).items()
         if callable(getattr(provider, "key", None)) and provider.key()
     }
     live_index: dict[tuple[str, str], bool] = {}
@@ -250,9 +268,17 @@ def _discovered(settings: Any, router: Any = None) -> dict[str, Any]:
         model_id = str(source.get("id") or "").strip()
         if not model_id:
             continue
-        source_keys = set().union(*(_model_keys(value) for value in (
-            model_id, source.get("name"), source.get("ours_name"), source.get("clean_name"),
-        )))
+        source_keys = set().union(
+            *(
+                _model_keys(value)
+                for value in (
+                    model_id,
+                    source.get("name"),
+                    source.get("ours_name"),
+                    source.get("clean_name"),
+                )
+            )
+        )
         dev = source.get("dev") if isinstance(source.get("dev"), dict) else {}
         aa = source.get("aa") if isinstance(source.get("aa"), dict) else {}
         caps = source.get("caps") if isinstance(source.get("caps"), dict) else {}
@@ -262,52 +288,90 @@ def _discovered(settings: Any, router: Any = None) -> dict[str, Any]:
             for provider, quote in offers.items()
             if isinstance(quote, dict) and quote.get("rub") is not None
         ]
-        live_providers = sorted({
-            provider for provider in configured
-            if any(live_index.get((provider, key)) for key in source_keys)
-        })
+        live_providers = sorted({provider for provider in configured if any(live_index.get((provider, key)) for key in source_keys)})
         kind = _model_kind(source)
-        missing = [field for field, value in (
-            ("context", source.get("context")), ("max_output", source.get("max_output")),
-            ("description", dev.get("description")),
-            ("input_price", source.get("world_in_usd")), ("output_price", source.get("world_out_usd")),
-            ("quality", aa.get("intelligence")),
-            ("release_date", dev.get("released")),
-            ("modalities", source.get("modalities")),
-        ) if value in (None, "", 0, {}, [])]
-        rows.append({
-            "id": model_id,
-            "name": str(source.get("ours_name") or source.get("clean_name") or source.get("name") or model_id),
-            "kind": kind, "kind_label": labels[kind], "mode": str(source.get("mode") or "chat"),
-            "context": source.get("context") or 0, "max_output": source.get("max_output") or 0,
-            "description": str(dev.get("description") or "").strip(),
-            "source_provider": str(dev.get("provider") or source.get("provider") or ""),
-            "capabilities": [name for name, enabled in caps.items() if enabled and name in {
-                "code", "image", "audio_in", "audio_out", "video", "tools", "reasoning",
-                "pdf", "open_weights", "caching", "web_search", "structured",
-            }],
-            "modalities": source.get("modalities") or {"in": [], "out": []},
-            "quality": aa.get("intelligence"),
-            "released": dev.get("released"), "updated": dev.get("updated"),
-            "unit_usd": source.get("unit_usd"), "family": source.get("family") or "",
-            "offers": quote_rows, "live_providers": live_providers,
-            "in_menu": bool(source_keys & active), "deprecated": bool(source.get("deprecated")),
-            "free": bool(source.get("free")), "missing": missing,
-            "world_in_usd": source.get("world_in_usd"), "world_out_usd": source.get("world_out_usd"),
-        })
+        missing = [
+            field
+            for field, value in (
+                ("context", source.get("context")),
+                ("max_output", source.get("max_output")),
+                ("description", dev.get("description")),
+                ("input_price", source.get("world_in_usd")),
+                ("output_price", source.get("world_out_usd")),
+                ("quality", aa.get("intelligence")),
+                ("release_date", dev.get("released")),
+                ("modalities", source.get("modalities")),
+            )
+            if value in (None, "", 0, {}, [])
+        ]
+        rows.append(
+            {
+                "id": model_id,
+                "name": str(source.get("ours_name") or source.get("clean_name") or source.get("name") or model_id),
+                "kind": kind,
+                "kind_label": labels[kind],
+                "mode": str(source.get("mode") or "chat"),
+                "context": source.get("context") or 0,
+                "max_output": source.get("max_output") or 0,
+                "description": str(dev.get("description") or "").strip(),
+                "source_provider": str(dev.get("provider") or source.get("provider") or ""),
+                "capabilities": [
+                    name
+                    for name, enabled in caps.items()
+                    if enabled
+                    and name
+                    in {
+                        "code",
+                        "image",
+                        "audio_in",
+                        "audio_out",
+                        "video",
+                        "tools",
+                        "reasoning",
+                        "pdf",
+                        "open_weights",
+                        "caching",
+                        "web_search",
+                        "structured",
+                    }
+                ],
+                "modalities": source.get("modalities") or {"in": [], "out": []},
+                "quality": aa.get("intelligence"),
+                "released": dev.get("released"),
+                "updated": dev.get("updated"),
+                "unit_usd": source.get("unit_usd"),
+                "family": source.get("family") or "",
+                "offers": quote_rows,
+                "live_providers": live_providers,
+                "in_menu": bool(source_keys & active),
+                "deprecated": bool(source.get("deprecated")),
+                "free": bool(source.get("free")),
+                "missing": missing,
+                "world_in_usd": source.get("world_in_usd"),
+                "world_out_usd": source.get("world_out_usd"),
+            }
+        )
     rows.sort(key=lambda row: (row["kind"], row["name"].casefold(), row["id"].casefold()))
     counts = {kind: sum(row["kind"] == kind for row in rows) for kind in labels}
     return {
-        "models": rows, "count": len(rows), "counts": counts,
+        "models": rows,
+        "count": len(rows),
+        "counts": counts,
         "with_quote_snapshot": sum(bool(row["offers"]) for row in rows),
         "in_live_provider_catalog": sum(bool(row["live_providers"]) for row in rows),
         "in_menu": sum(row["in_menu"] for row in rows),
         "generated_at": data.get("generated_at"),
-        "provider_catalog_checked_at": int(max(
-            [float(getattr(router, "refreshed", 0) or 0)]
-            + [float(getattr(offer, "updated", 0) or 0)
-               for offers in (getattr(router, "offers", {}) or {}).values() for offer in offers]
-        )) or None,
+        "provider_catalog_checked_at": int(
+            max(
+                [float(getattr(router, "refreshed", 0) or 0)]
+                + [
+                    float(getattr(offer, "updated", 0) or 0)
+                    for offers in (getattr(router, "offers", {}) or {}).values()
+                    for offer in offers
+                ]
+            )
+        )
+        or None,
     }
 
 
@@ -338,10 +402,7 @@ def _sell_hint(spec: Any) -> str:
 def _providers(settings: Any, prices: dict) -> dict:
     """Provider IDs from three layers; a source name is not a routing integration."""
     provider_specs = getattr(settings, "providers", {}) or {}
-    configured = {
-        str(name) for name, provider in provider_specs.items()
-        if callable(getattr(provider, "key", None)) and provider.key()
-    }
+    configured = {str(name) for name, provider in provider_specs.items() if callable(getattr(provider, "key", None)) and provider.key()}
     connected = sorted(configured)
     snapshot: list[dict] = []
     for entry in prices.get("providers") or []:
@@ -380,16 +441,27 @@ def _providers(settings: Any, prices: dict) -> dict:
             row["median_in"] = round(values[len(values) // 2], 2)
             row["models_priced"] = len(values)
     known_names = (
-        "routerai", "polza", "aitunnel", "proxyapi", "proxyapi-openai",
-        "bothub", "neuroapi", "openrouter", "own", "deepseek",
+        "routerai",
+        "polza",
+        "aitunnel",
+        "proxyapi",
+        "proxyapi-openai",
+        "bothub",
+        "neuroapi",
+        "openrouter",
+        "own",
+        "deepseek",
     )
     market_names = {str(row.get("name") or "") for row in snapshot}
-    known = [{
-        "name": name,
-        "key_configured": name in configured,
-        "routing_supported": name in ROUTING_CATALOG_PROVIDERS,
-        "snapshot_present": name in market_names,
-    } for name in known_names]
+    known = [
+        {
+            "name": name,
+            "key_configured": name in configured,
+            "routing_supported": name in ROUTING_CATALOG_PROVIDERS,
+            "snapshot_present": name in market_names,
+        }
+        for name in known_names
+    ]
     return {
         "connected": connected,
         "known": known,
@@ -480,7 +552,9 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 routes = router.routes(spec, body, "", {})
                 selected_route = routes[0] if routes else None
                 all_quotes = router.routes(spec, body, "", {}, include_all=True)
-                info_route = selected_route or next((candidate for candidate in all_quotes if candidate.offer and candidate.routing_eligible), None)
+                info_route = selected_route or next(
+                    (candidate for candidate in all_quotes if candidate.offer and candidate.routing_eligible), None
+                )
                 if info_route and info_route.offer:
                     row["context"] = row["context"] or info_route.offer.context
                     row["max_output"] = row["max_output"] or info_route.offer.output_limit
@@ -491,19 +565,39 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 for route in all_quotes:
                     if route.offer is not None:
                         offer = route.offer
-                        offers.append({"provider": route.provider, "model": offer.model,
-                                       "input_rub": offer.input_rub, "output_rub": offer.output_rub,
-                                       "cached_rub": offer.cached_rub, "updated": offer.updated,
-                                       "endpoint": offer.endpoint,
-                                       "estimated_rub": offer.estimate(1000, 512),
-                                       "context_length": offer.context,
-                                       "max_output": offer.output_limit,
-                                       "input_modalities": list(offer.modalities),
-                                       "output_modalities": list(offer.output_modalities),
-                                       "supported_parameters": list(offer.parameters),
-                                       "eligible": route.routing_eligible and any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes),
-                                       "exclusion_reason": route.exclusion_reason or ("за пределами диапазона переключения" if route.routing_eligible and not any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes) else ""),
-                                       "selected": bool(selected_route and route.provider == selected_route.provider and route.body.get("model") == selected_route.body.get("model"))})
+                        offers.append(
+                            {
+                                "provider": route.provider,
+                                "model": offer.model,
+                                "input_rub": offer.input_rub,
+                                "output_rub": offer.output_rub,
+                                "cached_rub": offer.cached_rub,
+                                "updated": offer.updated,
+                                "endpoint": offer.endpoint,
+                                "estimated_rub": offer.estimate(1000, 512),
+                                "context_length": offer.context,
+                                "max_output": offer.output_limit,
+                                "input_modalities": list(offer.modalities),
+                                "output_modalities": list(offer.output_modalities),
+                                "supported_parameters": list(offer.parameters),
+                                "eligible": route.routing_eligible
+                                and any(r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes),
+                                "exclusion_reason": route.exclusion_reason
+                                or (
+                                    "за пределами диапазона переключения"
+                                    if route.routing_eligible
+                                    and not any(
+                                        r.provider == route.provider and r.body.get("model") == route.body.get("model") for r in routes
+                                    )
+                                    else ""
+                                ),
+                                "selected": bool(
+                                    selected_route
+                                    and route.provider == selected_route.provider
+                                    and route.body.get("model") == selected_route.body.get("model")
+                                ),
+                            }
+                        )
                 row["routing"] = {
                     "offers": offers,
                     "selected": selected_route.provider if selected_route and selected_route.offer else None,
@@ -526,7 +620,8 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             with cloud.db._lock:
                 entries = cloud.db._conn.execute(
                     "SELECT model,ts,prompt_tokens,completion_tokens,extra FROM ledger "
-                    "WHERE kind='chat' AND ts>=? ORDER BY id DESC LIMIT 3000", (int(time.time()) - 7 * 86400,)
+                    "WHERE kind='chat' AND ts>=? ORDER BY id DESC LIMIT 3000",
+                    (int(time.time()) - 7 * 86400,),
                 ).fetchall()
             for entry in entries:
                 try:
@@ -535,9 +630,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     continue
                 if not meta.get("provider") or entry["model"] in actuals:
                     continue
-                actuals[entry["model"]] = {"provider": meta["provider"], "at": entry["ts"],
-                    "cost_rub": meta.get("provider_cost_rub"), "basis": meta.get("provider_cost_basis"),
-                    "input_tokens": entry["prompt_tokens"], "output_tokens": entry["completion_tokens"]}
+                actuals[entry["model"]] = {
+                    "provider": meta["provider"],
+                    "at": entry["ts"],
+                    "cost_rub": meta.get("provider_cost_rub"),
+                    "basis": meta.get("provider_cost_basis"),
+                    "input_tokens": entry["prompt_tokens"],
+                    "output_tokens": entry["completion_tokens"],
+                }
         for row in models:
             row["last_request"] = actuals.get(row["id"])
         if cloud is not None:
@@ -547,7 +647,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 row["commerce"] = commerce
                 rates = commerce["rates_rub"]
                 row["sell"].update(rub_in=rates["input"], rub_out=rates["output"], rub_cached_in=rates["cached_input"])
-                row["below_cost"] = any(row["cost"].get("rub_" + side) and rates[field] * (100 - max_discount_pct) / 100 < row["cost"]["rub_" + side] for side, field in (("in", "input"), ("out", "output"))) if spec.kind == "chat" else commerce["source"] == "legacy_cost"
+                row["below_cost"] = (
+                    any(
+                        row["cost"].get("rub_" + side) and rates[field] * (100 - max_discount_pct) / 100 < row["cost"]["rub_" + side]
+                        for side, field in (("in", "input"), ("out", "output"))
+                    )
+                    if spec.kind == "chat"
+                    else commerce["source"] == "legacy_cost"
+                )
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]

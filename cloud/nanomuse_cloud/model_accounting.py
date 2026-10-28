@@ -16,8 +16,12 @@ KINDS = "('chat','image','video','realtime')"
 
 
 def capture_metadata(
-    headers: Any, obj: Any = None, *, provider: str = "",
-    usd_rub: float = 0, usd_fee_pct: float = 0,
+    headers: Any,
+    obj: Any = None,
+    *,
+    provider: str = "",
+    usd_rub: float = 0,
+    usd_fee_pct: float = 0,
 ) -> dict:
     meta = {}
     gateway_id = headers.get("x-oneapi-request-id", "")

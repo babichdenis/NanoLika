@@ -30,7 +30,7 @@ import json
 import re
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,9 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = ROOT / "cloud" / "nanomuse_cloud" / "console" / "providers" / "prices.json"
 TARGET = ROOT / "cloud" / "nanomuse_cloud" / "console" / "prices" / "catalog.json"
 
-LITELLM_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
-)
+LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 AA_URL = "https://artificialanalysis.ai/leaderboards/models"
 #: models.dev — каталог от команды opencode: 232 провайдера, ~9000 моделей, у каждой тип
 #: (chat/image/video/speech/embedding), модальности, контекст, цены и open_weights. Это
@@ -153,14 +151,15 @@ def models_dev() -> dict[str, dict[str, Any]]:
                 "limit": model.get("limit") or {},
                 "cost": model.get("cost") or {},
             }
-            keys = [k for k in slug_variants(model_id) + slug_variants(card["name"])
-                    if any(ch.isalpha() for ch in k)]
+            keys = [k for k in slug_variants(model_id) + slug_variants(card["name"]) if any(ch.isalpha() for ch in k)]
             for key in keys:
                 existing = out.get(key)
                 # запись с ценой и контекстом полезнее пустой
-                if existing is None or (
-                    not existing["cost"] and card["cost"]
-                ) or (not existing["limit"].get("context") and card["limit"].get("context")):
+                if (
+                    existing is None
+                    or (not existing["cost"] and card["cost"])
+                    or (not existing["limit"].get("context") and card["limit"].get("context"))
+                ):
                     out[key] = card
     return out
 
@@ -212,7 +211,7 @@ def slug_variants(name: str) -> list[str]:
     # «doubao-seedance-2-5-260628» → «seedance-2-5», «seedance 2.5» → «seedance-2.5»
     joined = "-".join(parts[-2:]) if len(parts) >= 2 else text
     push(joined)
-    push(re.sub(r"-\d{6,}$", "", joined))          # даты вида 260628
+    push(re.sub(r"-\d{6,}$", "", joined))  # даты вида 260628
     push(re.sub(r"\b(\d)-(\d)\b", r"\1.\2", joined))  # seedance-2-5 → seedance-2.5
     # «wan/2.5» → «wan-2-5»: продавцы пишут семейство и версию через слэш. Только когда
     # частей ровно две - иначе склейка плодит десятки ложных ключей и дублей в каталоге.
@@ -261,9 +260,7 @@ def capabilities(row: dict[str, Any]) -> dict[str, bool]:
         "reasoning": bool(row.get("supports_reasoning") or row.get("thinking_always_on")),
         "open_weights": False,  # заполняется из artificialanalysis
         "caching": bool(row.get("supports_prompt_caching")),
-        "structured": bool(
-            row.get("supports_response_schema") or row.get("supports_native_structured_output")
-        ),
+        "structured": bool(row.get("supports_response_schema") or row.get("supports_native_structured_output")),
         "computer_use": bool(row.get("supports_computer_use")),
         "web_search": bool(row.get("supports_web_search")),
     }
@@ -272,13 +269,39 @@ def capabilities(row: dict[str, Any]) -> dict[str, bool]:
 #: Слова, которые в имени модели — шум для выпадающего списка: провайдер и «preview».
 #: Как писать бренды в списке моделей, чтобы они не превращались в «Gpt» и «Glm».
 BRANDS = {
-    "gpt": "GPT", "glm": "GLM", "oss": "OSS", "v": "V", "ai": "AI", "api": "API",
-    "claude": "Claude", "gemini": "Gemini", "grok": "Grok", "kimi": "Kimi", "qwen": "Qwen",
-    "deepseek": "DeepSeek", "llama": "Llama", "mistral": "Mistral", "gemma": "Gemma",
-    "whisper": "Whisper", "llm": "LLM", "moe": "MoE", "pro": "Pro", "mini": "Mini",
-    "max": "Max", "flash": "Flash", "lite": "Lite", "turbo": "Turbo", "ultra": "Ultra",
-    "plus": "Plus", "reasoning": "Reasoning", "chat": "Chat", "coder": "Coder",
-    "instruct": "Instruct", "nano": "Nano", "vision": "Vision", "omni": "Omni",
+    "gpt": "GPT",
+    "glm": "GLM",
+    "oss": "OSS",
+    "v": "V",
+    "ai": "AI",
+    "api": "API",
+    "claude": "Claude",
+    "gemini": "Gemini",
+    "grok": "Grok",
+    "kimi": "Kimi",
+    "qwen": "Qwen",
+    "deepseek": "DeepSeek",
+    "llama": "Llama",
+    "mistral": "Mistral",
+    "gemma": "Gemma",
+    "whisper": "Whisper",
+    "llm": "LLM",
+    "moe": "MoE",
+    "pro": "Pro",
+    "mini": "Mini",
+    "max": "Max",
+    "flash": "Flash",
+    "lite": "Lite",
+    "turbo": "Turbo",
+    "ultra": "Ultra",
+    "plus": "Plus",
+    "reasoning": "Reasoning",
+    "chat": "Chat",
+    "coder": "Coder",
+    "instruct": "Instruct",
+    "nano": "Nano",
+    "vision": "Vision",
+    "omni": "Omni",
 }
 
 NAME_NOISE = re.compile(
@@ -298,10 +321,10 @@ def clean_name(raw: str, vendor: str = "") -> str:
     text = str(raw or "").strip()
     if not text:
         return ""
-    text = text.split(":")[0]                     # bedrock-артефакты
+    text = text.split(":")[0]  # bedrock-артефакты
     parts = [p for p in text.split("/") if p]
     if parts:
-        text = parts[-1]                          # без продавца
+        text = parts[-1]  # без продавца
     text = re.sub(r"[_]+", " ", text)
     text = re.sub(r"\s{2,}", " ", text)
     # дефисы между словами — в пробелы, но версии (4.7, v4.1) не трогаем
@@ -581,7 +604,6 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     for model in aa:
         for key in slug_variants(model.get("slug") or model.get("name") or ""):
             aa_by_slug.setdefault(key, model)
-    aa_by_name = aa_by_slug
 
     lit_by_slug: dict[str, tuple[str, dict[str, Any]]] = {}
     for key, row in litellm.items():
@@ -652,9 +674,7 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
                     our_slug = variant
                     break
             if card is None:
-                card = _empty_card(
-                    our_slug, entry.get("name") or our_slug, mode=_mode_of(entry.get("unit"))
-                )
+                card = _empty_card(our_slug, entry.get("name") or our_slug, mode=_mode_of(entry.get("unit")))
                 models[our_slug] = card
             prices = {}
             for offer in entry.get("offers") or []:
@@ -676,12 +696,7 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     for card in rows:
         finalize_caps(card)
         # имя для выбора: человеческое из models.dev/Artificial Analysis, иначе из id
-        human = (
-            (card.get("dev") or {}).get("name")
-            or (card.get("aa") or {}).get("name")
-            or card.get("ours_name")
-            or ""
-        )
+        human = (card.get("dev") or {}).get("name") or (card.get("aa") or {}).get("name") or card.get("ours_name") or ""
         card["clean_name"] = clean_name(human or card.get("name") or card["id"])
         card["free"] = is_free(card)
         card.setdefault("ours", {})
@@ -699,7 +714,7 @@ def build(snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         card["band"] = _band(card)
     rows.sort(key=lambda c: (not c["available_here"], -(c.get("aa", {}).get("intelligence") or 0)))
     return {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sources": {
             "litellm": LITELLM_URL,
             "artificialanalysis": AA_URL,

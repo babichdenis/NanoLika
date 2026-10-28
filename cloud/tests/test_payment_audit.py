@@ -127,11 +127,21 @@ async def test_counter_details_are_fetched_only_by_the_server_and_capped():
                     "ok": True,
                     "retention_days": 30,
                     "visits_total": 1,
-                    "recent": [{
-                        "id": 7, "visitor": "abc123", "at": 1772000000, "page": "/pricing.html",
-                        "source": "telegram", "medium": "messenger", "campaign": "launch",
-                        "ref": "t.me", "ip": "203.0.113.8", "ua": "Telegram Android", "new": True,
-                    }],
+                    "recent": [
+                        {
+                            "id": 7,
+                            "visitor": "abc123",
+                            "at": 1772000000,
+                            "page": "/pricing.html",
+                            "source": "telegram",
+                            "medium": "messenger",
+                            "campaign": "launch",
+                            "ref": "t.me",
+                            "ip": "203.0.113.8",
+                            "ua": "Telegram Android",
+                            "new": True,
+                        }
+                    ],
                     "key": "must-not-escape",
                 },
             )

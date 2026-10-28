@@ -35,9 +35,7 @@ DROP_SUFFIXES = (".pyc", ".pyi", ".dist-info")
 
 
 def host_platform() -> str:
-    machine = {"x86_64": "x64", "AMD64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get(
-        platform.machine(), "x64"
-    )
+    machine = {"x86_64": "x64", "AMD64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine(), "x64")
     return f"{sys.platform}-{machine}"
 
 
@@ -83,9 +81,7 @@ def prune(folder: Path) -> None:
     for path in list(folder.rglob("*")):
         if path.is_dir() and path.name in DROP_DIRS:
             shutil.rmtree(path, ignore_errors=True)
-        elif path.is_file() and (
-            path.suffix in (".pyc", ".pyi") or path.name.endswith(DROP_SUFFIXES)
-        ):
+        elif path.is_file() and (path.suffix in (".pyc", ".pyi") or path.name.endswith(DROP_SUFFIXES)):
             path.unlink(missing_ok=True)
 
 

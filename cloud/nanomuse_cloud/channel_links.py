@@ -50,8 +50,7 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, An
     try:
         if re.search(r"%(?![0-9a-fA-F]{2})", init_data):
             return None
-        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True,
-                          errors="strict", max_num_fields=32)
+        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True, errors="strict", max_num_fields=32)
         params = dict(pairs)
         if len(params) != len(pairs):
             return None
@@ -81,14 +80,14 @@ def _telegram_session(cloud: Cloud, user_id: int) -> dict:
     # The database lock also protects alias unlinking. No nested transaction is needed.
     with cloud.db._lock:
         alias = cloud._chat_alias("telegram", ident)
-        account = (cloud.db.account(str(alias["account_id"])) if alias is not None
-                   else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key)))
+        account = (
+            cloud.db.account(str(alias["account_id"])) if alias is not None else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key))
+        )
         if account is None:
             raise CloudError(409, "telegram_not_linked", "Link Telegram to your account first")
         if account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
-        key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp",
-                                       expires_at=int(time.time()) + 30 * 86400)
+        key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
@@ -262,7 +261,7 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
                 "identifier": link_info.get("identifier", ""),
                 "label": link_info.get("label", ""),
                 "linked_at": link_info.get("linked_at"),
-                "own_account": link_info.get("own", False)
+                "own_account": link_info.get("own", False),
             }
         except BadIdentifier as e:
             raise CloudError(400, "bad_identifier", "Invalid chat id") from e

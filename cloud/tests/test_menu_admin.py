@@ -8,32 +8,39 @@ from nanomuse_cloud.menu_admin import _market
 
 def test_flash_aliases_merge_and_input_output_prices_stay_distinct(tmp_path, monkeypatch):
     path = tmp_path / "prices.json"
-    path.write_text(json.dumps({"models": [
-        {
-            "key": "deepseek-v4.1-flash",
-            "name": "deepseek/deepseek-v4.1-flash",
-            "unit": "1M токенов (вход)",
-            "offers": [
-                {"provider": "Polza", "unit": "1M токенов (вход)", "rub": 6},
-                {"provider": "Polza", "unit": "1M токенов (выход)", "rub": 2},
-            ],
-        },
-        {
-            "key": "deepseek-v4.1-flash-1017",
-            "name": "deepseek/deepseek-v4.1-flash-1017",
-            "unit": "1M токенов (вход)",
-            "offers": [
-                {
-                    "provider": "RouterAI",
-                    "unit": "1M токенов (вход)",
-                    "rub": 5,
-                    "route_eligible": False,
-                    "exclusion_reason": "устаревший фильтр ревизии",
-                },
-                {"provider": "RouterAI", "unit": "1M токенов (выход)", "rub": 10},
-            ],
-        },
-    ]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "key": "deepseek-v4.1-flash",
+                        "name": "deepseek/deepseek-v4.1-flash",
+                        "unit": "1M токенов (вход)",
+                        "offers": [
+                            {"provider": "Polza", "unit": "1M токенов (вход)", "rub": 6},
+                            {"provider": "Polza", "unit": "1M токенов (выход)", "rub": 2},
+                        ],
+                    },
+                    {
+                        "key": "deepseek-v4.1-flash-1017",
+                        "name": "deepseek/deepseek-v4.1-flash-1017",
+                        "unit": "1M токенов (вход)",
+                        "offers": [
+                            {
+                                "provider": "RouterAI",
+                                "unit": "1M токенов (вход)",
+                                "rub": 5,
+                                "route_eligible": False,
+                                "exclusion_reason": "устаревший фильтр ревизии",
+                            },
+                            {"provider": "RouterAI", "unit": "1M токенов (выход)", "rub": 10},
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("PROVIDER_PRICES_JSON", str(path))
 
     rows = _market()
@@ -52,23 +59,33 @@ def test_new_models_are_not_enabled_by_default(tmp_path, monkeypatch):
     from nanomuse_cloud.menu_admin import install
 
     path = tmp_path / "prices.json"
-    path.write_text(json.dumps({"models": [{
-        "key": "qwen-next",
-        "name": "Qwen Next",
-        "unit": "1M токенов (вход)",
-        "new_model": True,
-        "offers": [{"provider": "OpenRouter", "unit": "1M токенов (вход)", "rub": 1}],
-    }]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "key": "qwen-next",
+                        "name": "Qwen Next",
+                        "unit": "1M токенов (вход)",
+                        "new_model": True,
+                        "offers": [{"provider": "OpenRouter", "unit": "1M токенов (вход)", "rub": 1}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("PROVIDER_PRICES_JSON", str(path))
     monkeypatch.setenv("MENU_SELECTION", str(tmp_path / "menu-selection.json"))
 
     class RouteApp:
         handlers = {}
+
         def get(self, *_args, **_kwargs):
-            return lambda fn: (self.handlers.__setitem__(("GET", _args[0]), fn) or fn)
+            return lambda fn: self.handlers.__setitem__(("GET", _args[0]), fn) or fn
 
         def put(self, *_args, **_kwargs):
-            return lambda fn: (self.handlers.__setitem__(("PUT", _args[0]), fn) or fn)
+            return lambda fn: self.handlers.__setitem__(("PUT", _args[0]), fn) or fn
 
     settings = type("Settings", (), {"database": ":memory:", "models": [], "providers": {}})()
     app = RouteApp()

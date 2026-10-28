@@ -146,9 +146,7 @@ def test_endpoint(origin, content, raw_kind, expected):
     # Build the launch inside the test: a module-level `signed()` is collected when the
     # suite starts and is already older than the five-minute window by the time a long
     # suite reaches this test.
-    raw = "invalid" if raw_kind == "invalid" else signed(
-        **({"user": '{"id":654321}'} if raw_kind == "other" else {})
-    )
+    raw = "invalid" if raw_kind == "invalid" else signed(**({"user": '{"id":654321}'} if raw_kind == "other" else {}))
     c, caller, _ = cloud_fixture()
     app = FastAPI()
 

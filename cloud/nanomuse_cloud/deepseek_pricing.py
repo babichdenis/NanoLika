@@ -40,14 +40,8 @@ def holiday_dates(year: int) -> list[str]:
                 raise ValueError("DeepSeek holiday calendar date is invalid")
         return sorted(set(values))
     if year != 2026:
-        raise ValueError(
-            "DeepSeek holiday calendar year is unverified; update the calendar"
-        )
-    return [
-        f"2026-{month:02d}-{day:02d}"
-        for month, first, last in HOLIDAY_RANGES_2026
-        for day in range(first, last + 1)
-    ]
+        raise ValueError("DeepSeek holiday calendar year is unverified; update the calendar")
+    return [f"2026-{month:02d}-{day:02d}" for month, first, last in HOLIDAY_RANGES_2026 for day in range(first, last + 1)]
 
 
 def catalog(page: str, models: dict, at: float, usd_rub: float) -> dict:
@@ -84,11 +78,7 @@ def catalog(page: str, models: dict, at: float, usd_rub: float) -> dict:
         money = [re.fullmatch(r"\$([0-9]+(?:\.[0-9]+)?)", cell) for cell in cells]
         values = [float(m.group(1)) for m in money if m]
         key = (section, period)
-        if (
-            len(values) != len(ids)
-            or key in prices
-            or any(not math.isfinite(v) or v <= 0 for v in values)
-        ):
+        if len(values) != len(ids) or key in prices or any(not math.isfinite(v) or v <= 0 for v in values):
             raise ValueError("DeepSeek token pricing table is incomplete")
         prices[key] = values
     if len(prices) != 6:
@@ -103,24 +93,14 @@ def catalog(page: str, models: dict, at: float, usd_rub: float) -> dict:
             continue
         index = ids.index(model_id)
         rates = {
-            period: {
-                kind: prices[kind, period][index] * usd_rub
-                for kind in ["input", "output", "cache"]
-            }
-            for period in ["off", "peak"]
+            period: {kind: prices[kind, period][index] * usd_rub for kind in ["input", "output", "cache"]} for period in ["off", "peak"]
         }
         off, peak = rates["off"], rates["peak"]
         if any(peak[k] < off[k] for k in off):
             raise ValueError("DeepSeek peak price is below off-peak")
         context, output = model.get("context_window"), model.get("max_output_tokens")
         inputs = model.get("input_modalities")
-        if (
-            type(context) is not int
-            or type(output) is not int
-            or context <= 0
-            or output <= 0
-            or not isinstance(inputs, list)
-        ):
+        if type(context) is not int or type(output) is not int or context <= 0 or output <= 0 or not isinstance(inputs, list):
             raise ValueError("DeepSeek model capabilities are missing")
         base = {
             "input_rub": off["input"],

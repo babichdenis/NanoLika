@@ -59,6 +59,8 @@ def cny_to_rub(path: pathlib.Path) -> float:
     if rub_per_usd <= 0 or usd_cny <= 0:
         raise SystemExit("в .env нет рабочих RUB_PER_USD и USD_CNY: считать нечем")
     return round(rub_per_usd / usd_cny * (1 + fee / 100), 4)
+
+
 CACHED_SHARE = 0.1
 
 

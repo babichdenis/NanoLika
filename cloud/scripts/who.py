@@ -8,11 +8,12 @@
     python3 scripts/who.py            # за сутки, все пути
     python3 scripts/who.py 6 /app/    # за 6 часов, только админка
 """
+
 import collections
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 HOURS = float(sys.argv[1]) if len(sys.argv) > 1 else 24.0
 ONLY = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -24,10 +25,8 @@ raw = subprocess.run(
     text=True,
 ).stdout
 
-people = collections.defaultdict(
-    lambda: {"hits": 0, "pages": collections.Counter(), "from": collections.Counter(), "last": 0.0, "ua": ""}
-)
-now = datetime.now(timezone.utc).timestamp()
+people = collections.defaultdict(lambda: {"hits": 0, "pages": collections.Counter(), "from": collections.Counter(), "last": 0.0, "ua": ""})
+now = datetime.now(UTC).timestamp()
 for line in raw.splitlines():
     try:
         rec = json.loads(line)

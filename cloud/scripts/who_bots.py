@@ -9,6 +9,7 @@ whether the sender is on the operator's own list.
     python3 scripts/who_bots.py 24         # only the last 24 hours
     python3 scripts/who_bots.py 24 max     # only one channel
 """
+
 from __future__ import annotations
 
 import json
@@ -52,11 +53,7 @@ def main(argv: list[str]) -> int:
         print(f"обращений пока нет: {path} пуст или не найден")
         return 0
     since = time.time() - hours * 3600 if hours > 0 else 0
-    picked = [
-        r
-        for r in rows
-        if float(r.get("ts") or 0) >= since and (not channel or str(r.get("channel")) == channel)
-    ]
+    picked = [r for r in rows if float(r.get("ts") or 0) >= since and (not channel or str(r.get("channel")) == channel)]
     if not picked:
         print(f"за {hours:g} ч обращений нет")
         return 0

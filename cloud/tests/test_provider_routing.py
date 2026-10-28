@@ -74,9 +74,9 @@ def test_flash_revision_joins_family_and_routes_by_lowest_live_quote(monkeypatch
     assert identity("deepseek-v4.1-flash") == identity("deepseek/deepseek-v4.1-flash-1017")
     assert [route.provider for route in candidates] == ["openrouter", "routerai"]
     assert candidates[0].body["model"].endswith("1017")
-    assert all(route.routing_eligible for route in r.routes(
-        spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True
-    ))
+    assert all(
+        route.routing_eligible for route in r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
+    )
 
 
 def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monkeypatch):
@@ -93,7 +93,9 @@ def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monke
     text_routes = r.routes(spec, text_body, "https://configured.example/v1/chat/completions", {})
 
     assert [route.body["model"] for route in text_routes] == [
-        "deepseek-v4-flash-0731", "deepseek-v4-flash", "deepseek-v4.1-flash-1017",
+        "deepseek-v4-flash-0731",
+        "deepseek-v4-flash",
+        "deepseek-v4.1-flash-1017",
     ]
     image_body = {
         **text_body,
@@ -106,9 +108,7 @@ def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monke
 
 def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monkeypatch):
     r = setup_router(monkeypatch)
-    spec = ModelSpec(
-        "flash", "DeepSeek V4.1 Flash", "deepseek/deepseek-v4.1-flash-1017", provider="openrouter"
-    )
+    spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek/deepseek-v4.1-flash-1017", provider="openrouter")
     r.offers = {
         "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4.1-flash-1017")],
     }
@@ -118,7 +118,6 @@ def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monk
 
     assert candidates and candidates[0].provider == "openrouter"
     assert identity(candidates[0].body["model"]) == identity("deepseek-v4.1-flash")
-
 
 
 def test_provider_402_quarantine_survives_router_restart(tmp_path, monkeypatch):
@@ -223,9 +222,7 @@ def test_openrouter_conversion_uses_fixed_base_rate(monkeypatch):
 def test_flash_model_prices_merge_floating_and_dated_ids():
     from nanomuse_cloud.provider_prices import model_key
 
-    assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == model_key(
-        "openrouter", "deepseek/deepseek-v4.1-flash-1017"
-    )
+    assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == model_key("openrouter", "deepseek/deepseek-v4.1-flash-1017")
     assert model_key("openrouter", "deepseek/deepseek-v4.1-flash") == "deepseek-v4.1-flash"
 
 
@@ -293,14 +290,18 @@ def test_provider_ids_and_parameters_are_adapted(monkeypatch):
 
 def test_aitunnel_flash_tool_support_is_restored_from_model_documentation(monkeypatch):
     r = setup_router(monkeypatch)
-    at_offers = r.parse("aitunnel", {
-        "deepseek-v4-flash-0731": {
-            "prompt_cost": 10,
-            "completion_cost": 32,
-            "context_length": 1_048_576,
-            "max_output": 943_718,
+    at_offers = r.parse(
+        "aitunnel",
+        {
+            "deepseek-v4-flash-0731": {
+                "prompt_cost": 10,
+                "completion_cost": 32,
+                "context_length": 1_048_576,
+                "max_output": 943_718,
+            },
         },
-    }, time.time())
+        time.time(),
+    )
     r.offers = {
         "aitunnel": at_offers,
         "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4-flash")],
@@ -644,8 +645,11 @@ def test_successful_balance_refresh_reenables_cheapest_provider_after_top_up(mon
     }
     r.provider_blocked_until["openrouter"] = time.time() + 300
     r.balances["openrouter"] = {
-        "amount": 0, "currency": "USD", "rub_estimate": 0,
-        "checked": time.time(), "error": "HTTP 402",
+        "amount": 0,
+        "currency": "USD",
+        "rub_estimate": 0,
+        "checked": time.time(),
+        "error": "HTTP 402",
     }
 
     def handle(request):
@@ -664,7 +668,6 @@ def test_successful_balance_refresh_reenables_cheapest_provider_after_top_up(mon
     spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek-v4.1-flash")
     body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 16}
     assert r.routes(spec, body, "https://configured.example", {})[0].provider == "openrouter"
-
 
 
 def test_proxy_public_catalog_uses_numeric_breakdown_not_from_label(monkeypatch):
@@ -770,7 +773,8 @@ def test_aitunnel_selects_cheapest_compatible_internal_provider(monkeypatch):
     spec = ModelSpec("flash", "Flash", "deepseek-flash")
     selected = r.routes(spec, original, "https://own.example/chat/completions", {})[0]
     assert selected.body["provider"] == {
-        "sort": "price", "require_parameters": True,
+        "sort": "price",
+        "require_parameters": True,
         "quantizations": ["int8", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"],
     }
     assert original["provider"] == {"sort": "latency"}

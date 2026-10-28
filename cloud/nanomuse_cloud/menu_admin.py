@@ -13,6 +13,7 @@
 Ничего не решает за оператора: по умолчанию «на витрине» стоит всё, что прошло
 отсев мусора, а дальше он снимает галочки сам.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,22 +64,25 @@ def _market() -> list[dict]:
             key = "deepseek-v4.1-flash"
         display_name = "DeepSeek V4.1 Flash" if key == "deepseek-v4.1-flash" else name
         unit = str(model.get("unit") or model.get("group") or "")
-        row = by_name.setdefault(key, {
-            "key": key,
-            "name": display_name,
-            "slug": slug(display_name),
-            "unit": UNIT_NAMES.get(unit_key(unit), unit),
-            "offers": [],
-            "cheapest_rub": None,
-            "context_length": 0,
-            "max_output": 0,
-            "input_modalities": [],
-            "output_modalities": [],
-            "supported_parameters": [],
-            "free": False,
-            "new_model": bool(model.get("new_model")),
-            "price_changed": bool(model.get("price_changed")),
-        })
+        row = by_name.setdefault(
+            key,
+            {
+                "key": key,
+                "name": display_name,
+                "slug": slug(display_name),
+                "unit": UNIT_NAMES.get(unit_key(unit), unit),
+                "offers": [],
+                "cheapest_rub": None,
+                "context_length": 0,
+                "max_output": 0,
+                "input_modalities": [],
+                "output_modalities": [],
+                "supported_parameters": [],
+                "free": False,
+                "new_model": bool(model.get("new_model")),
+                "price_changed": bool(model.get("price_changed")),
+            },
+        )
         row["context_length"] = max(row["context_length"], int(model.get("context_length") or 0))
         row["max_output"] = max(row["max_output"], int(model.get("max_output") or 0))
         row["input_modalities"] = sorted(set(row["input_modalities"]) | set(model.get("input_modalities") or []))
@@ -96,22 +100,25 @@ def _market() -> list[dict]:
             route_eligible = not excluded_by_id
             offer_unit = str(offer.get("unit") or unit)
             low_unit = offer_unit.lower()
-            direction = "input" if any(word in low_unit for word in ("вход", "input", "prompt")) else (
-                "output" if any(word in low_unit for word in ("выход", "output", "completion")) else ""
+            direction = (
+                "input"
+                if any(word in low_unit for word in ("вход", "input", "prompt"))
+                else ("output" if any(word in low_unit for word in ("выход", "output", "completion")) else "")
             )
-            row["offers"].append({
-                "provider": offer.get("provider"),
-                "rub": float(rub) if rub not in (None, "") else None,
-                "unit": offer_unit,
-                "direction": direction,
-                "model": offer_model,
-                "free": bool(offer.get("free") or offer_model.endswith(":free")),
-                "route_eligible": route_eligible,
-                "exclusion_reason": (
-                    "free-предложение поставщика, не использовать в платном автопереключении"
-                    if offer_model.endswith(":free") else ""
-                ),
-            })
+            row["offers"].append(
+                {
+                    "provider": offer.get("provider"),
+                    "rub": float(rub) if rub not in (None, "") else None,
+                    "unit": offer_unit,
+                    "direction": direction,
+                    "model": offer_model,
+                    "free": bool(offer.get("free") or offer_model.endswith(":free")),
+                    "route_eligible": route_eligible,
+                    "exclusion_reason": (
+                        "free-предложение поставщика, не использовать в платном автопереключении" if offer_model.endswith(":free") else ""
+                    ),
+                }
+            )
             if not route_eligible or rub in (None, "") or unit_key(offer_unit) != unit_key(row["unit"]) or direction == "output":
                 continue
             if row["cheapest_rub"] is None or float(rub) < row["cheapest_rub"]:

@@ -94,8 +94,7 @@ class LiveBilling:
         account = c.execute("SELECT paid_balance_uy FROM accounts WHERE id=?", (row["account_id"],)).fetchone()
         paid_balance = max(0, int(account["paid_balance_uy"] or 0)) + units if account else units
         eligible = [
-            plan for plan in self.cloud.plan_menu()
-            if plan["price_rub"] > 0 and self.cloud.s.rub_to_uy(plan["price_rub"]) <= paid_balance
+            plan for plan in self.cloud.plan_menu() if plan["price_rub"] > 0 and self.cloud.s.rub_to_uy(plan["price_rub"]) <= paid_balance
         ]
         threshold_plan = max(eligible, key=lambda plan: plan["price_rub"], default=None)
         active = bool(previous and int(previous.get("expires_at", 0)) > at)

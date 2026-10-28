@@ -10,6 +10,7 @@ per yuan, the same rate every other price in the menu was measured with.
 
     python scripts/build_menu.py --out /tmp/menu.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,14 +24,39 @@ HERE = Path(__file__).resolve().parent.parent
 DATA = HERE / "data"
 
 VENDORS = {
-    "openai": "OpenAI", "google": "Google", "anthropic": "Anthropic", "deepseek": "DeepSeek",
-    "moonshotai": "Moonshot", "qwen": "Qwen", "bytedance": "Bytedance", "bytedance-seed": "Bytedance",
-    "mistralai": "Mistral", "meta-llama": "Meta", "x-ai": "xAI", "alibaba": "Alibaba",
-    "minimax": "MiniMax", "z-ai": "Z.ai", "nvidia": "NVIDIA", "cohere": "Cohere",
-    "amazon": "Amazon", "microsoft": "Microsoft", "ai21": "AI21", "perplexity": "Perplexity",
-    "upstage": "Upstage", "suno": "Suno", "elevenlabs": "ElevenLabs", "kwaipilot": "Kuaishou",
-    "baidu": "Baidu", "zhipu": "Zhipu", "01-ai": "01.AI", "nousresearch": "Nous", "aion-labs": "Aion",
-    "anthracite-org": "Anthracite", "anthropic*": "Anthropic", "relace": "Relace", "inception": "Inception",
+    "openai": "OpenAI",
+    "google": "Google",
+    "anthropic": "Anthropic",
+    "deepseek": "DeepSeek",
+    "moonshotai": "Moonshot",
+    "qwen": "Qwen",
+    "bytedance": "Bytedance",
+    "bytedance-seed": "Bytedance",
+    "mistralai": "Mistral",
+    "meta-llama": "Meta",
+    "x-ai": "xAI",
+    "alibaba": "Alibaba",
+    "minimax": "MiniMax",
+    "z-ai": "Z.ai",
+    "nvidia": "NVIDIA",
+    "cohere": "Cohere",
+    "amazon": "Amazon",
+    "microsoft": "Microsoft",
+    "ai21": "AI21",
+    "perplexity": "Perplexity",
+    "upstage": "Upstage",
+    "suno": "Suno",
+    "elevenlabs": "ElevenLabs",
+    "kwaipilot": "Kuaishou",
+    "baidu": "Baidu",
+    "zhipu": "Zhipu",
+    "01-ai": "01.AI",
+    "nousresearch": "Nous",
+    "aion-labs": "Aion",
+    "anthracite-org": "Anthracite",
+    "anthropic*": "Anthropic",
+    "relace": "Relace",
+    "inception": "Inception",
 }
 # что не модель для разговора и не картинка/видео/звук — в меню не идёт
 SKIP_WORDS = ("embed", "rerank", "moderation", "classif", "guard", "whisper", "tts", "asr", "image", "video")

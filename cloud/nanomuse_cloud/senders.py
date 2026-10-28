@@ -159,8 +159,7 @@ class WebhookMailSender:
                 title="Ваш код для входа",
                 paragraphs=[
                     "Здравствуйте! Введите этот код в nanoLika — и вы на месте.",
-                    "Код одноразовый: никому его не пересылайте. Если вы не просили код, просто "
-                    "удалите письмо — без него никто не войдёт.",
+                    "Код одноразовый: никому его не пересылайте. Если вы не просили код, просто удалите письмо — без него никто не войдёт.",
                 ],
                 code=code,
                 minutes=minutes,
@@ -172,7 +171,9 @@ class WebhookMailSender:
     def send_first_login(self, ident: Identifier) -> None:
         if ident.channel == "email":
             webhook_send(
-                self.s, ident.value, "nanoLika · рады знакомству",
+                self.s,
+                ident.value,
+                "nanoLika · рады знакомству",
                 "Добро пожаловать в nanoLika!\n\n"
                 "Рады, что вы с нами. Начните с небольшой понятной просьбы — например, "
                 "попросите Лику помочь с письмом или найти нужную информацию.\n"
@@ -188,7 +189,7 @@ class WebhookMailSender:
                         "страницу, разобрать документ. Доступы вы выбираете сами, а важные "
                         "действия Лика спрашивает перед тем, как сделать.",
                     ],
-                                    action_label="Идеи для первой просьбы",
+                    action_label="Идеи для первой просьбы",
                     action_url="https://nanolika.ru/tips.html",
                 ),
             )
@@ -325,6 +326,7 @@ def code_mail_text(code: str, minutes: int) -> str:
         "nanoLika · https://nanolika.ru/"
     )
 
+
 def _brand_email_html(
     *,
     preheader: str,
@@ -402,8 +404,8 @@ def compose_customer_notice_mail(
         plain += f"\n\n{action_label}: {action_url}"
     plain += (
         "\n\nnanoLika · https://nanolika.ru/ · можно ответить на это письмо\n"
-        if reply_allowed else
-        "\n\nnanoLika · https://nanolika.ru/ · автоматическое письмо\n"
+        if reply_allowed
+        else "\n\nnanoLika · https://nanolika.ru/ · автоматическое письмо\n"
     )
     msg.set_content(plain)
     msg.add_alternative(
@@ -415,8 +417,8 @@ def compose_customer_notice_mail(
             action_url=action_url,
             safety_note=(
                 "Ответьте на это письмо, если захотите уточнить детали."
-                if reply_allowed else
-                "Это автоматическое письмо nanoLika. Если оно не относится к вам, проигнорируйте его."
+                if reply_allowed
+                else "Это автоматическое письмо nanoLika. Если оно не относится к вам, проигнорируйте его."
             ),
         ),
         subtype="html",
@@ -453,52 +455,80 @@ def compose_code_mail(sender: str, to: str, code: str, minutes: int) -> EmailMes
 def compose_first_login_mail(sender: str, to: str) -> EmailMessage:
     "A short welcome for a newly created email account."
     return compose_customer_notice_mail(
-        sender, to, "рады знакомству", "Добро пожаловать в nanoLika!",
-        ["Рады, что вы с нами. Начните с небольшой понятной просьбы — например, попросите Лику помочь с письмом или найти нужную информацию.",
-         "Вы сами выбираете доступы и подтверждаете важные действия."],
-        action_label="Идеи для первой просьбы", action_url="https://nanolika.ru/tips.html",
+        sender,
+        to,
+        "рады знакомству",
+        "Добро пожаловать в nanoLika!",
+        [
+            "Рады, что вы с нами. Начните с небольшой понятной просьбы — например, попросите Лику помочь с письмом или найти нужную информацию.",
+            "Вы сами выбираете доступы и подтверждаете важные действия.",
+        ],
+        action_label="Идеи для первой просьбы",
+        action_url="https://nanolika.ru/tips.html",
     )
 
 
 def compose_topup_thanks_mail(sender: str, to: str, amount: str, *, receipt_note: str = "") -> EmailMessage:
     "Template for a confirmed live top-up; never sent for the isolated DEMO wallet."
-    paragraphs = [f"Пополнение на {amount} ₽ подтверждено. Спасибо, что выбрали nanoLika!",
-                  "Баланс можно посмотреть в приложении или в веб-версии."]
+    paragraphs = [
+        f"Пополнение на {amount} ₽ подтверждено. Спасибо, что выбрали nanoLika!",
+        "Баланс можно посмотреть в приложении или в веб-версии.",
+    ]
     if receipt_note:
         paragraphs.append(receipt_note)
     return compose_customer_notice_mail(
-        sender, to, "пополнение подтверждено", "Спасибо за пополнение!",
-        paragraphs, action_label="Открыть nanoLika", action_url="https://cloud.nanolika.ru/web/",
+        sender,
+        to,
+        "пополнение подтверждено",
+        "Спасибо за пополнение!",
+        paragraphs,
+        action_label="Открыть nanoLika",
+        action_url="https://cloud.nanolika.ru/web/",
     )
 
 
 def compose_password_changed_mail(sender: str, to: str) -> EmailMessage:
     "Security notice template; the password itself is never included."
     return compose_customer_notice_mail(
-        sender, to, "пароль изменён", "Пароль nanoLika изменён",
-        ["Если это сделали вы, ничего делать не нужно.",
-         "Если вы не меняли пароль, напишите нам: hello@nanolika.ru."],
-        action_label="Связаться с поддержкой", action_url="https://nanolika.ru/support.html",
+        sender,
+        to,
+        "пароль изменён",
+        "Пароль nanoLika изменён",
+        ["Если это сделали вы, ничего делать не нужно.", "Если вы не меняли пароль, напишите нам: hello@nanolika.ru."],
+        action_label="Связаться с поддержкой",
+        action_url="https://nanolika.ru/support.html",
     )
 
 
 def compose_payment_failed_mail(sender: str, to: str) -> EmailMessage:
     "Template for a bank-confirmed unsuccessful payment; no charge claim before status check."
     return compose_customer_notice_mail(
-        sender, to, "оплата не завершилась", "Не получилось завершить оплату",
-        ["Банк не подтвердил операцию. Перед новой попыткой проверьте статус заказа в nanoLika.",
-         "Если сумма списалась, а баланс не изменился, напишите в поддержку и укажите время и сумму. Данные карты присылать не нужно."],
-        action_label="Написать в поддержку", action_url="https://nanolika.ru/support.html",
+        sender,
+        to,
+        "оплата не завершилась",
+        "Не получилось завершить оплату",
+        [
+            "Банк не подтвердил операцию. Перед новой попыткой проверьте статус заказа в nanoLika.",
+            "Если сумма списалась, а баланс не изменился, напишите в поддержку и укажите время и сумму. Данные карты присылать не нужно.",
+        ],
+        action_label="Написать в поддержку",
+        action_url="https://nanolika.ru/support.html",
     )
 
 
 def compose_refund_notice_mail(sender: str, to: str, amount: str) -> EmailMessage:
     "Template for a bank-confirmed refund; the caller must supply the reconciled amount."
     return compose_customer_notice_mail(
-        sender, to, "возврат подтверждён", "Возврат подтверждён",
-        [f"Банк подтвердил возврат на {amount} ₽. Срок зачисления зависит от банка получателя.",
-         "Если у вас остались вопросы, напишите в поддержку."],
-        action_label="Написать в поддержку", action_url="https://nanolika.ru/support.html",
+        sender,
+        to,
+        "возврат подтверждён",
+        "Возврат подтверждён",
+        [
+            f"Банк подтвердил возврат на {amount} ₽. Срок зачисления зависит от банка получателя.",
+            "Если у вас остались вопросы, напишите в поддержку.",
+        ],
+        action_label="Написать в поддержку",
+        action_url="https://nanolika.ru/support.html",
     )
 
 
@@ -513,7 +543,10 @@ def compose_support_received_mail(sender: str, to: str, ticket_ref: str = "") ->
 def compose_support_reply_mail(sender: str, to: str, reply: str, *, topic: str = "ваш вопрос") -> EmailMessage:
     "A human support reply that keeps the reply path open."
     msg = compose_customer_notice_mail(
-        sender, to, "ответ поддержки", "Мы разобрались с вашим вопросом",
+        sender,
+        to,
+        "ответ поддержки",
+        "Мы разобрались с вашим вопросом",
         [f"По теме «{topic}»:", reply],
         reply_allowed=True,
     )

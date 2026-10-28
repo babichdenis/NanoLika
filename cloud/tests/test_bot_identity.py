@@ -12,9 +12,10 @@ account's chat because its row says which messenger the person saw.
 from __future__ import annotations
 
 import pytest
+from test_bot import BOT, CHAT, client_of, sign_in_with_email, stack
+
 from nanomuse_cloud.identifiers import telegram
 from nanomuse_cloud.service import CloudError, chat_identity, chat_surface
-from test_bot import BOT, CHAT, client_of, sign_in_with_email, stack
 
 BOT_HEADERS = {"X-Bot-Token": BOT}
 

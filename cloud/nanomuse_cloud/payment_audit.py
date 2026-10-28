@@ -70,9 +70,7 @@ class SiteCounter:
                 }
                 details = urlsplit(self.details_url)
                 if details.scheme == "https" and details.hostname and not details.username and not details.password:
-                    async with httpx.AsyncClient(
-                        transport=self.transport, timeout=5, trust_env=False, follow_redirects=False
-                    ) as client:
+                    async with httpx.AsyncClient(transport=self.transport, timeout=5, trust_env=False, follow_redirects=False) as client:
                         headers = {"X-Counter-Key": self.details_key} if self.details_key else {}
                         async with client.stream("GET", self.details_url, headers=headers) as response:
                             response.raise_for_status()
@@ -87,20 +85,22 @@ class SiteCounter:
                         for row in details_data.get("recent", [])[-2000:]:
                             if not isinstance(row, dict):
                                 continue
-                            visits.append({
-                                "id": number(row.get("id", 0)),
-                                "visitor": str(row.get("visitor", ""))[:32],
-                                "at": number(row.get("at", 0)),
-                                "page": str(row.get("page", ""))[:160],
-                                "source": str(row.get("source", ""))[:100],
-                                "medium": str(row.get("medium", ""))[:100],
-                                "campaign": str(row.get("campaign", ""))[:100],
-                                "content": str(row.get("content", ""))[:100],
-                                "ref": str(row.get("ref", ""))[:120],
-                                "ip": str(row.get("ip", ""))[:60],
-                                "ua": str(row.get("ua", ""))[:240],
-                                "new": bool(row.get("new", False)),
-                            })
+                            visits.append(
+                                {
+                                    "id": number(row.get("id", 0)),
+                                    "visitor": str(row.get("visitor", ""))[:32],
+                                    "at": number(row.get("at", 0)),
+                                    "page": str(row.get("page", ""))[:160],
+                                    "source": str(row.get("source", ""))[:100],
+                                    "medium": str(row.get("medium", ""))[:100],
+                                    "campaign": str(row.get("campaign", ""))[:100],
+                                    "content": str(row.get("content", ""))[:100],
+                                    "ref": str(row.get("ref", ""))[:120],
+                                    "ip": str(row.get("ip", ""))[:60],
+                                    "ua": str(row.get("ua", ""))[:240],
+                                    "new": bool(row.get("new", False)),
+                                }
+                            )
                         out["visits"] = visits
                         out["visits_total"] = number(details_data.get("visits_total", len(visits)))
                         out["retention_days"] = number(details_data.get("retention_days", 0))

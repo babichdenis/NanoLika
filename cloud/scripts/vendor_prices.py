@@ -121,8 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     empty = sum(v["total"] - v["filled"] for v in data["vendors"])
     if empty:
         print(
-            f"не заполнено: {empty}. Страницы вендоров за капчей/JS — цифру вписать руками "
-            "в cloud/scripts/vendor_prices.py, с датой.",
+            f"не заполнено: {empty}. Страницы вендоров за капчей/JS — цифру вписать руками в cloud/scripts/vendor_prices.py, с датой.",
             file=sys.stderr,
         )
     return 0

@@ -49,12 +49,14 @@ ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitun
 # AITUNNEL's model-list schema does not return supported_parameters, even when
 # the individual model page documents function calling. Keep this allowlist
 # explicit: support varies by model, so do not infer it for the whole provider.
-AITUNNEL_TOOL_MODELS = frozenset({
-    "deepseek-v4-flash",
-    "deepseek-v4-flash-0731",
-    "deepseek-v4.1-flash",
-    "deepseek-v4.1-flash-1017",
-})
+AITUNNEL_TOOL_MODELS = frozenset(
+    {
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-0731",
+        "deepseek-v4.1-flash",
+        "deepseek-v4.1-flash-1017",
+    }
+)
 
 
 def identity(model: str) -> str:
@@ -233,16 +235,12 @@ class ProviderRouter:
                     self.offers.setdefault(offer.provider, []).append(offer)
                 balances = raw.get("balances", {})
                 if isinstance(balances, dict):
-                    self.balances = {
-                        str(name): value for name, value in balances.items() if isinstance(value, dict)
-                    }
+                    self.balances = {str(name): value for name, value in balances.items() if isinstance(value, dict)}
                 blocked = raw.get("provider_blocked_until", {})
                 if isinstance(blocked, dict):
                     now = time.time()
                     self.provider_blocked_until = {
-                        str(name): until
-                        for name, value in blocked.items()
-                        if (until := number(value)) is not None and until > now
+                        str(name): until for name, value in blocked.items() if (until := number(value)) is not None and until > now
                     }
             except (OSError, ValueError, TypeError, KeyError):
                 pass
@@ -432,11 +430,7 @@ class ProviderRouter:
                             break
                     entry["available"] = bool(data.get("is_available"))
                     entry["cny"] = next(
-                        (
-                            number(i.get("total_balance"))
-                            for i in infos
-                            if str(i.get("currency")).upper() == "CNY"
-                        ),
+                        (number(i.get("total_balance")) for i in infos if str(i.get("currency")).upper() == "CNY"),
                         None,
                     )
                 elif name == "openrouter":
@@ -504,9 +498,7 @@ class ProviderRouter:
             "max_age_seconds": self.max_age,
             "errors": dict(self.errors),
             "balances": dict(self.balances),
-            "provider_blocked_until": {
-                name: until for name, until in self.provider_blocked_until.items() if until > time.time()
-            },
+            "provider_blocked_until": {name: until for name, until in self.provider_blocked_until.items() if until > time.time()},
             "providers": {name: len(rows) for name, rows in self.offers.items()},
         }
         if include_offers:
@@ -619,11 +611,7 @@ class ProviderRouter:
                 fixed = replace(offer, input_rub=inp, output_rub=out, cached_rub=cache, overrides=())
                 estimated_cost = fixed.estimate(prompt, expected)
                 available_rub = number(balance.get("rub_estimate"))
-                balance_is_fresh = (
-                    balance.get("error") is None
-                    and available_rub is not None
-                    and now - balance.get("checked", 0) < 300
-                )
+                balance_is_fresh = balance.get("error") is None and available_rub is not None and now - balance.get("checked", 0) < 300
                 if balance_is_fresh and available_rub < estimated_cost:
                     if not include_all:
                         continue
@@ -650,17 +638,16 @@ class ProviderRouter:
         routes = [item[2] for item in candidates]
         # Only the explicitly configured route is allowed as an unpriced last resort.
         # Never send the model to arbitrary known providers or a different model version.
-        has_quote = any(
-            identity(o.canonical_model or o.model) == wanted
-            for offers in self.offers.values() for o in offers
-        )
+        has_quote = any(identity(o.canonical_model or o.model) == wanted for offers in self.offers.values() for o in offers)
         balance = self.balances.get(configured.provider, {})
         blocked = self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300
         if (
             (not has_quote or self.allow_unpriced)
             and (configured.provider != "deepseek" or self.allow_unpriced)
             and not blocked
-            and not any(r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes)
+            and not any(
+                r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes
+            )
         ):
             routes.append(configured)
         return routes
@@ -671,10 +658,17 @@ class ProviderRouter:
             provider=route.provider or "configured_upstream",
             routed_model=route.body["model"],
             routing_price_updated=route.offer.updated if route.offer else None,
-            price_quote=(dict(asdict(route.offer), token_rate_unit="RUB per 1M tokens",
-                              request_rate_unit="RUB per request", provider_options=route.body.get("provider"),
-                              usd_funding_fee_pct=self.usd_fee if route.provider == "openrouter" else 0)
-                         if route.offer else None),
+            price_quote=(
+                dict(
+                    asdict(route.offer),
+                    token_rate_unit="RUB per 1M tokens",
+                    request_rate_unit="RUB per request",
+                    provider_options=route.body.get("provider"),
+                    usd_funding_fee_pct=self.usd_fee if route.provider == "openrouter" else 0,
+                )
+                if route.offer
+                else None
+            ),
         )
         actual = number(meta.get("provider_cost_rub"))
         if actual is not None:
@@ -701,7 +695,11 @@ class ProviderRouter:
                 result["provider_price_quarantined_until"] = int(until)
                 log.error(
                     "provider price mismatch: provider=%s model=%s expected_rub=%.8f actual_rub=%.8f ratio=%.3f",
-                    route.provider, route.body["model"], expected, actual, ratio,
+                    route.provider,
+                    route.body["model"],
+                    expected,
+                    actual,
+                    ratio,
                 )
                 last_alert = self.price_alerted.get(key, 0)
                 if time.time() - last_alert >= self.quarantine_seconds:
@@ -724,7 +722,8 @@ class ProviderRouter:
         }
         log.error(
             "provider disabled after HTTP 402: provider=%s disabled_until=%s",
-            route.provider, int(until),
+            route.provider,
+            int(until),
         )
         self.persist()
 

@@ -113,7 +113,9 @@ async def test_prices_answers_with_a_working_rate(market):
     assert body["count"]["models"] == len(body["models"]) > 0
     assert body["count"]["chat"] > 0
     assert [(plan["id"], plan["discount_pct"]) for plan in body["plan_discounts"]] == [
-        ("lika", 10), ("lika-plus", 20), ("team", 30),
+        ("lika", 10),
+        ("lika-plus", 20),
+        ("team", 30),
     ]
 
 
@@ -225,22 +227,35 @@ def test_the_shipped_retail_file_is_the_compact_form():
 
 def test_master_catalog_keeps_reference_rows_and_separates_route_evidence(tmp_path, monkeypatch):
     path = tmp_path / "catalog.json"
-    path.write_text(json.dumps({
-        "generated_at": "2026-10-27T00:00:00Z",
-        "models": [
-            {"id": "deepseek-chat", "name": "DeepSeek Chat", "mode": "chat", "ours": {"polza": {"rub": 1}}, "dev": {"provider": "deepseek", "description": "General assistant"}},
-            {"id": "deepseek-coder-v2", "name": "DeepSeek Coder V2", "mode": "chat", "ours": {}, "dev": {"provider": "deepseek"}},
-            {"id": "image-live", "name": "Image Live", "mode": "image_generation", "ours": {}, "deprecated": False},
-            {"id": "old-model", "name": "Old Model", "mode": "chat", "deprecated": True},
-        ],
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-10-27T00:00:00Z",
+                "models": [
+                    {
+                        "id": "deepseek-chat",
+                        "name": "DeepSeek Chat",
+                        "mode": "chat",
+                        "ours": {"polza": {"rub": 1}},
+                        "dev": {"provider": "deepseek", "description": "General assistant"},
+                    },
+                    {"id": "deepseek-coder-v2", "name": "DeepSeek Coder V2", "mode": "chat", "ours": {}, "dev": {"provider": "deepseek"}},
+                    {"id": "image-live", "name": "Image Live", "mode": "image_generation", "ours": {}, "deprecated": False},
+                    {"id": "old-model", "name": "Old Model", "mode": "chat", "deprecated": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv("MODEL_CATALOG_PATH", str(path))
     _catalog_snapshot.cache_clear()
     settings = SimpleNamespace(
         models=[SimpleNamespace(id="deepseek-chat", upstream="deepseek-chat")],
         providers={"polza": SimpleNamespace(key=lambda: "configured-secret")},
     )
-    router = SimpleNamespace(offers={"polza": [SimpleNamespace(model="deepseek/deepseek-chat", canonical_model="", updated=time.time())]}, refreshed=time.time())
+    router = SimpleNamespace(
+        offers={"polza": [SimpleNamespace(model="deepseek/deepseek-chat", canonical_model="", updated=time.time())]}, refreshed=time.time()
+    )
     result = _discovered(settings, router)
     models = {row["id"]: row for row in result["models"]}
     assert result["count"] == 4

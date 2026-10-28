@@ -85,11 +85,7 @@ def mcp_entry(path: Path) -> dict[str, Any]:
         "url": f"{PUBLIC_BASE}/mcp/{path.name}",
         "bytes": path.stat().st_size,
         # описание сервера целиком: рантайм заводит его из этого же json
-        "server": {
-            k: v
-            for k, v in data.items()
-            if k in ("name", "command", "args", "url", "risk", "egress", "reads_private_data")
-        },
+        "server": {k: v for k, v in data.items() if k in ("name", "command", "args", "url", "risk", "egress", "reads_private_data")},
         "install": "mcp",
     }
 

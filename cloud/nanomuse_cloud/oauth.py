@@ -294,7 +294,11 @@ def install_oauth(app, cloud, settings) -> None:
         state = provider_state(provider)
         if not state["enabled"]:
             return JSONResponse({"error": {"code": "provider_off", "provider": provider}}, status_code=503)
-        log.info("oauth %s start mobile=%s", provider, any(word in request.headers.get("user-agent", "").lower() for word in ("mobile", "android", "iphone")))
+        log.info(
+            "oauth %s start mobile=%s",
+            provider,
+            any(word in request.headers.get("user-agent", "").lower() for word in ("mobile", "android", "iphone")),
+        )
         nonce = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48) if provider == "google" else ""
         target = authorize_url(provider, redirect_uri(provider), nonce, verifier)
@@ -322,7 +326,14 @@ def install_oauth(app, cloud, settings) -> None:
         data = read_state(request.cookies.get("nm_oauth", ""), settings.hmac_key, provider, state)
         nxt = pick_next(data.get("next", "") if data else "")
         if error or not code or data is None:
-            log.warning("oauth %s callback refused: denied=%s code_present=%s cookie_present=%s state_valid=%s", provider, bool(error), bool(code), bool(request.cookies.get("nm_oauth")), data is not None)
+            log.warning(
+                "oauth %s callback refused: denied=%s code_present=%s cookie_present=%s state_valid=%s",
+                provider,
+                bool(error),
+                bool(code),
+                bool(request.cookies.get("nm_oauth")),
+                data is not None,
+            )
             return _back(nxt, "denied" if error else "state")
         try:
             profile = await asyncio.to_thread(fetch_profile, provider, code, redirect_uri(provider), data.get("verifier", ""))

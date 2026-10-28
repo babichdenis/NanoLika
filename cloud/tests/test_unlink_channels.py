@@ -228,9 +228,7 @@ async def test_a_second_chat_of_the_same_messenger_can_still_leave():
     app, cloud = stack()
     async with client_of(app) as client:
         # the account begins in this chat, and has no alias row of its own
-        first = await client.post(
-            "/v1/bot/signin", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS
-        )
+        first = await client.post("/v1/bot/signin", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS)
         assert first.status_code == 200, first.text
         key = first.json()["api_key"]
         assert first.json()["created"] is True
@@ -240,16 +238,12 @@ async def test_a_second_chat_of_the_same_messenger_can_still_leave():
         assert (await link_chat(client, "222000222", code)).status_code == 200
 
         # the chat that made the account cannot leave
-        refused = await client.post(
-            "/v1/bot/unlink", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS
-        )
+        refused = await client.post("/v1/bot/unlink", json={"chat_id": "111000111", "channel": "telegram"}, headers=BOT_HEADERS)
         assert refused.status_code == 200, refused.text
         assert refused.json()["reason"] == "channel_is_the_account"
 
         # the second one can
-        let_go = await client.post(
-            "/v1/bot/unlink", json={"chat_id": "222000222", "channel": "telegram"}, headers=BOT_HEADERS
-        )
+        let_go = await client.post("/v1/bot/unlink", json={"chat_id": "222000222", "channel": "telegram"}, headers=BOT_HEADERS)
         assert let_go.status_code == 200, let_go.text
         assert let_go.json()["unlinked"] is True
         # and the account is untouched

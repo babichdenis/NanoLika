@@ -123,9 +123,7 @@ def test_capture_cost_validation_and_gateway_id():
         "provider_cost_rub": 0.00115,
     }
 
-    openrouter = capture_metadata(
-        {}, {"usage": {"cost": 0.5}}, provider="openrouter", usd_rub=90, usd_fee_pct=5.5
-    )
+    openrouter = capture_metadata({}, {"usage": {"cost": 0.5}}, provider="openrouter", usd_rub=90, usd_fee_pct=5.5)
     assert openrouter["provider_cost_usd"] == 0.5
     assert round(openrouter["provider_cost_rub"], 3) == 47.475
 

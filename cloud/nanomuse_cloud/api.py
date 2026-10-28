@@ -421,6 +421,7 @@ def create_app(
 
     # CORS for WebApp (nanolika.ru) and cloud subdomain
     from starlette.middleware.cors import CORSMiddleware
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -533,8 +534,10 @@ def create_app(
         if caller.via == "user":
             path = request.url.path
             inference = request.method == "POST" and (
-                path == "/v1/chat/completions" or path.startswith("/v1/images/")
-                or path.startswith("/v1/audio/") or path.startswith("/v1/videos/")
+                path == "/v1/chat/completions"
+                or path.startswith("/v1/images/")
+                or path.startswith("/v1/audio/")
+                or path.startswith("/v1/videos/")
             )
             model_list = request.method == "GET" and path == "/v1/models"
             if not (inference or model_list):
@@ -1129,11 +1132,7 @@ def create_app(
             return out
         entries = await catalog.get(app.state.http, settings.upstream_base, settings.upstream_key)
         menu = {m["id"] for m in out["data"]}
-        hidden = {
-            identity(name)
-            for spec in settings.models if not cloud.model_visible(spec)
-            for name in (spec.id, spec.upstream)
-        }
+        hidden = {identity(name) for spec in settings.models if not cloud.model_visible(spec) for name in (spec.id, spec.upstream)}
         added = 0
         for e in entries:
             if e.id in menu or identity(e.id) in hidden:
@@ -1292,7 +1291,9 @@ def create_app(
         if not chain:
             cloud.settle(caller, request_id)
             cloud.note(caller.account_id, "upstream.no_routes", f"No eligible provider route for {spec.id}")
-            raise CloudError(503, "provider_routes_unavailable", "No eligible provider is available for this model. Try another model or retry later.")
+            raise CloudError(
+                503, "provider_routes_unavailable", "No eligible provider is available for this model. Try another model or retry later."
+            )
         fallback_prompt_tokens = math.ceil(prompt_chars(body.get("messages") or []) / 3)
         # For an account that opted in, the turn is kept once it is answered (service.keep_sample)
         # with the platform and language hints from the headers and, since 0.10, the address
@@ -1333,13 +1334,17 @@ def create_app(
                 text = _reply_text(obj)
                 if usage is None:
                     usage = Usage(fallback_prompt_tokens, estimate_tokens(text))
-                meta = capture_metadata(r.headers, obj, provider=selected.provider,
-                                        usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
+                meta = capture_metadata(r.headers, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
                 meta = router.accounting(selected, meta, usage.prompt, usage.completion, usage.cached)
                 router.schedule_price_alert(http, meta)
                 charged = cloud.charge_chat(
-                    caller, spec, usage.prompt, usage.completion, request_id,
-                    cached_tokens=usage.cached, provider_cost_rub=meta.get("provider_cost_rub"),
+                    caller,
+                    spec,
+                    usage.prompt,
+                    usage.completion,
+                    request_id,
+                    cached_tokens=usage.cached,
+                    provider_cost_rub=meta.get("provider_cost_rub"),
                     routing_meta=meta,
                 )
                 record_metadata(cloud, caller.account_id, request_id, meta)
@@ -1367,7 +1372,9 @@ def create_app(
             selected = None
             try:
                 r, selected = await request_chat(http, chain, stream=True, on_failure=router.note_failure)
-                accounting_meta.update(capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee))
+                accounting_meta.update(
+                    capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
+                )
                 if r.status_code >= 400:
                     raw = await r.aread()
                     cloud.note(
@@ -1395,7 +1402,11 @@ def create_app(
                                     yield f"data: {dumps(obj)}\n\n".encode()
                                     yield b"data: [DONE]\n\n"
                                     return
-                                accounting_meta.update(capture_metadata({}, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee))
+                                accounting_meta.update(
+                                    capture_metadata(
+                                        {}, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee
+                                    )
+                                )
                                 u = usage_from_json(obj)
                                 if u is not None:
                                     usage = u
@@ -1438,8 +1449,13 @@ def create_app(
                         accounting_meta = router.accounting(selected, accounting_meta, usage.prompt, usage.completion, usage.cached)
                         router.schedule_price_alert(http, accounting_meta)
                         cloud.charge_chat(
-                            caller, spec, usage.prompt, usage.completion, request_id,
-                            cached_tokens=usage.cached, provider_cost_rub=accounting_meta.get("provider_cost_rub"),
+                            caller,
+                            spec,
+                            usage.prompt,
+                            usage.completion,
+                            request_id,
+                            cached_tokens=usage.cached,
+                            provider_cost_rub=accounting_meta.get("provider_cost_rub"),
                             routing_meta=accounting_meta,
                         )
                         record_metadata(cloud, caller.account_id, request_id, accounting_meta)
@@ -1537,11 +1553,9 @@ def create_app(
         if not base or not key:
             raise CloudError(500, "misconfigured", "Провайдер картинок не настроен")
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-        payload = dumps({"model": model, "prompt": prompt,
-                         "size": size.replace("*", "x"), "n": 1})
+        payload = dumps({"model": model, "prompt": prompt, "size": size.replace("*", "x"), "n": 1})
         # у Bothub база уже кончается на /v1, у RouterAI и AITUNNEL — нет
-        path = "/images/generations" if base.rstrip("/").endswith("/v1") \
-            else "/v1/images/generations"
+        path = "/images/generations" if base.rstrip("/").endswith("/v1") else "/v1/images/generations"
         try:
             r = await http.post(base + path, headers=headers, content=payload)
         except httpx.HTTPError as e:
@@ -1549,10 +1563,10 @@ def create_app(
         if r.status_code >= 400:
             log.warning("%s image HTTP %s: %s", model, r.status_code, r.text[:300])
             if r.status_code == 400 and content_check_refusal(r.content):
-                raise CloudError(400, "content_rejected",
-                                 "Провайдер отклонил запрос по содержанию; попробуйте другие слова")
-            raise CloudError(r.status_code if r.status_code in (402, 429) else 502,
-                             "upstream", f"Провайдер картинок отказал ({r.status_code})")
+                raise CloudError(400, "content_rejected", "Провайдер отклонил запрос по содержанию; попробуйте другие слова")
+            raise CloudError(
+                r.status_code if r.status_code in (402, 429) else 502, "upstream", f"Провайдер картинок отказал ({r.status_code})"
+            )
         try:
             item = (r.json().get("data") or [])[0]
         except (ValueError, IndexError, TypeError) as e:
@@ -1615,8 +1629,7 @@ def create_app(
         provider, base, key = settings.route(spec)
         if provider:
             return await _polza_image(base, key, spec.upstream, prompt, size)
-        return await _dashscope_image(spec.upstream, [{"text": prompt}],
-                                      params or {"size": size, "watermark": False})
+        return await _dashscope_image(spec.upstream, [{"text": prompt}], params or {"size": size, "watermark": False})
 
     async def _polza_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
         """One picture from Polza, waited out: submit, poll the task, fetch the file."""
@@ -1696,7 +1709,11 @@ def create_app(
             params["prompt_extend"] = False
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
-            caller, minimum=spec.per_image, cost_uy=model_pricing.amount(cloud, spec, {"size": size.replace("*", "x")}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
+            caller,
+            minimum=spec.per_image,
+            cost_uy=model_pricing.amount(cloud, spec, {"size": size.replace("*", "x")}, caller)["sale_uy"],
+            request_id=request_id,
+            place=client_place(request),
         )
         try:
             png = await _image_with_fallback(spec, prompt, size, params)
@@ -1896,7 +1913,11 @@ def create_app(
         provider, base, key = settings.route(spec)
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
-            caller, minimum=spec.per_minute, cost_uy=model_pricing.amount(cloud, spec, {"seconds": 60}, caller)["sale_uy"], request_id=request_id, place=client_place(request)
+            caller,
+            minimum=spec.per_minute,
+            cost_uy=model_pricing.amount(cloud, spec, {"seconds": 60}, caller)["sale_uy"],
+            request_id=request_id,
+            place=client_place(request),
         )
         try:
             if not provider:
@@ -2006,11 +2027,13 @@ def create_app(
             if image_url:
                 if urlsplit(image_url).scheme != "https":
                     raise CloudError(400, "bad_request", "AITUNNEL needs a public HTTPS first-frame URL")
-                payload["frame_images"] = [{
-                    "type": "image_url",
-                    "image_url": {"url": image_url},
-                    "frame_type": "first_frame",
-                }]
+                payload["frame_images"] = [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_url},
+                        "frame_type": "first_frame",
+                    }
+                ]
             return payload
         video_input = _provider_clip_input(body, spec)
         incoming = body.get("input") if isinstance(body.get("input"), dict) else {}
@@ -2019,9 +2042,9 @@ def create_app(
             video_input["images"] = [{"type": "url", "data": image_url}]
         return {"model": model, "input": video_input}
 
-    async def _provider_video_submit(provider: str, base: str, key: str, spec: ModelSpec,
-                                     body: dict, caller, request, probe: bool,
-                                     model: str = ""):
+    async def _provider_video_submit(
+        provider: str, base: str, key: str, spec: ModelSpec, body: dict, caller, request, probe: bool, model: str = ""
+    ):
         """Поставить клип у провайдера и ответить так, будто это DashScope."""
         if probe:
             # проба (пустой запрос) не должна стоить денег: 400 значит «такая модель есть»
@@ -2030,7 +2053,15 @@ def create_app(
             raise CloudError(500, "misconfigured", "The model names a provider the relay cannot reach")
         clip_cost = spec.video_cost_uy(_clip_seconds(body, spec), _clip_resolution(body))
         request_id = uuid.uuid4().hex[:16]
-        cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
+        cloud.check_budget(
+            caller,
+            minimum=spec.per_clip,
+            cost_uy=model_pricing.amount(
+                cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller
+            )["sale_uy"],
+            request_id=request_id,
+            place=client_place(request),
+        )
         try:
             payload = dumps(_video_payload(provider, model or spec.upstream, spec, body))
             headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
@@ -2049,14 +2080,23 @@ def create_app(
             task_id = str(task_json.get("id") or task_json.get("requestId") or "")
             if not task_id:
                 raise CloudError(502, "upstream", "The video provider sent no task")
-            cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=False, sale_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], provider=provider)
+            cloud.db.insert_video_task(
+                task_id,
+                caller.account_id,
+                spec.id,
+                cost_uy=clip_cost,
+                probe=False,
+                sale_uy=model_pricing.amount(
+                    cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller
+                )["sale_uy"],
+                provider=provider,
+            )
             log.info("polza video task %s for %s: %s", task_id[:14], caller.account_id[:8], spec.id)
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(content={"output": {"task_id": task_id, "task_status": "PENDING"}})
 
-    AITUNNEL_STATUS = {"completed": "SUCCEEDED", "succeeded": "SUCCEEDED",
-                       "failed": "FAILED", "cancelled": "CANCELED"}
+    AITUNNEL_STATUS = {"completed": "SUCCEEDED", "succeeded": "SUCCEEDED", "failed": "FAILED", "cancelled": "CANCELED"}
 
     def _video_frame_storage(spec: ModelSpec) -> tuple[str, str, str] | None:
         """Use Polza's temporary public storage for frames shared by provider fallbacks."""
@@ -2075,8 +2115,7 @@ def create_app(
         task_id = str(task["task_id"])
         if provider == "aitunnel":
             try:
-                r = await http.get(f"{base}/v1/videos/{task_id}",
-                                   headers={"Authorization": f"Bearer {key}"})
+                r = await http.get(f"{base}/v1/videos/{task_id}", headers={"Authorization": f"Bearer {key}"})
             except httpx.HTTPError as e:
                 raise CloudError(502, "upstream", "The video provider did not answer") from e
             if r.status_code >= 400:
@@ -2092,14 +2131,18 @@ def create_app(
                 if urls:
                     output["video_url"] = str(urls[0])
                 else:
-                    output = {"task_id": task_id, "task_status": "FAILED",
-                              "code": "NoFile", "message": "The provider sent no file"}
+                    output = {"task_id": task_id, "task_status": "FAILED", "code": "NoFile", "message": "The provider sent no file"}
             elif status in ("FAILED", "CANCELED"):
                 output["message"] = str(data.get("error") or "the provider could not make this clip")[:300]
             charged = cloud.settle_video_task(task, output["task_status"])
             if charged is not None:
-                log.info("aitunnel video task %s done for %s: %s, charged %d",
-                         task_id[:14], str(task["account_id"])[:8], output["task_status"], charged)
+                log.info(
+                    "aitunnel video task %s done for %s: %s, charged %d",
+                    task_id[:14],
+                    str(task["account_id"])[:8],
+                    output["task_status"],
+                    charged,
+                )
             return JSONResponse(content={"output": output})
         try:
             r = await http.get(f"{base}/v1/media/{task_id}", headers={"Authorization": f"Bearer {key}"})
@@ -2147,8 +2190,7 @@ def create_app(
         provider, provider_base, provider_key = settings.route(spec)
         if provider:
             if not body.get("input"):
-                return await _provider_video_submit(provider, provider_base, provider_key,
-                                                    spec, body, caller, request, True)
+                return await _provider_video_submit(provider, provider_base, provider_key, spec, body, caller, request, True)
             order = [(provider, provider_base, provider_key, spec.upstream)]
             for cand in catalog_routes.video_candidates(spec.id):
                 entry = settings.providers.get(str(cand.get("provider")))
@@ -2158,8 +2200,7 @@ def create_app(
             last: CloudError | None = None
             for name, base, key, model in order:
                 try:
-                    return await _provider_video_submit(name, base, key, spec, body,
-                                                        caller, request, False, model)
+                    return await _provider_video_submit(name, base, key, spec, body, caller, request, False, model)
                 except CloudError as error:
                     if error.status in (402, 429, 500, 502, 503):
                         log.warning("видео: %s отказал (%s), пробую следующего", name, error.status)
@@ -2176,7 +2217,15 @@ def create_app(
         headers = upstream_headers()  # before the hold, as for chat: no key, nothing held
         request_id = uuid.uuid4().hex[:16]
         if not probe:
-            cloud.check_budget(caller, minimum=spec.per_clip, cost_uy=model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"], request_id=request_id, place=client_place(request))
+            cloud.check_budget(
+                caller,
+                minimum=spec.per_clip,
+                cost_uy=model_pricing.amount(
+                    cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller
+                )["sale_uy"],
+                request_id=request_id,
+                place=client_place(request),
+            )
         body["model"] = spec.upstream
         headers["X-DashScope-Async"] = "enable"
         if request.headers.get("x-dashscope-ossresourceresolve"):
@@ -2193,7 +2242,18 @@ def create_app(
                 except (ValueError, KeyError, TypeError):
                     task_id = ""
                 if task_id:
-                    cloud.db.insert_video_task(task_id, caller.account_id, spec.id, cost_uy=clip_cost, probe=probe, sale_uy=0 if probe else model_pricing.amount(cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller)["sale_uy"])
+                    cloud.db.insert_video_task(
+                        task_id,
+                        caller.account_id,
+                        spec.id,
+                        cost_uy=clip_cost,
+                        probe=probe,
+                        sale_uy=0
+                        if probe
+                        else model_pricing.amount(
+                            cloud, spec, {"seconds": _clip_seconds(body, spec), "resolution": _clip_resolution(body) or "480P"}, caller
+                        )["sale_uy"],
+                    )
                     log.info("video task %s for %s: %s%s", task_id[:12], caller.account_id[:8], spec.id, " (probe)" if probe else "")
             else:
                 log.warning("dashscope video HTTP %s: %s", r.status_code, r.text[:300])

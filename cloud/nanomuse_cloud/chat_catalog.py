@@ -48,7 +48,9 @@ class ChatCatalog:
     @staticmethod
     def _is_feed_title(value: str) -> bool:
         title = value.strip().casefold()
-        return title in {"лента", "feed", "动态"} or any(title.startswith(prefix) for prefix in ("feed ·", "feed •", "feed —", "feed -", "feed (", "динамика ·", "动态 ·", "лента ·"))
+        return title in {"лента", "feed", "动态"} or any(
+            title.startswith(prefix) for prefix in ("feed ·", "feed •", "feed —", "feed -", "feed (", "динамика ·", "动态 ·", "лента ·")
+        )
 
     def _fold_daily_feed(self, c: Any, account: str) -> None:
         rows = c.execute(
@@ -58,7 +60,11 @@ class ChatCatalog:
         feeds = [row for row in rows if self._is_feed_title(str(row["title"] or ""))]
         if not feeds or (len(feeds) == 1 and str(feeds[0]["title"]) == "Лента"):
             return
-        canonical = next((row for row in feeds if str(row["title"]).strip().casefold() == "лента" and not bool(row["archived"])), None) or next((row for row in feeds if not bool(row["archived"])), None) or next((row for row in feeds if str(row["title"]).strip().casefold() == "лента"), feeds[0])
+        canonical = (
+            next((row for row in feeds if str(row["title"]).strip().casefold() == "лента" and not bool(row["archived"])), None)
+            or next((row for row in feeds if not bool(row["archived"])), None)
+            or next((row for row in feeds if str(row["title"]).strip().casefold() == "лента"), feeds[0])
+        )
         canonical_cid = str(canonical["cid"])
         max_updated = max(int(row["updated_at"]) for row in feeds)
         for row in feeds:

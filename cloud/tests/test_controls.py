@@ -302,19 +302,27 @@ async def test_a_notify_rule_crossed_by_a_sign_in_mails_off_the_request_path():
     assert cloud.controls.flush_notices() == 0 and cloud.rules_tick() == []
 
 
-def test_deferred_notices_are_queued_then_flushed_in_order():
+def test_deferred_notices_are_queued_then_flushed_in_order(monkeypatch):
     sent: list = []
     settings = Settings(database=":memory:", secret="test-secret", admin_email="ops@example.com", smtp_from="relay@example.com")
     db = Database(":memory:")
     ctl = Controls(db, settings, mailer=sent.append)
     ctl.add_rule({"threshold": 2, "action": "notify"}, actor="ops")
     ctl.add_rule({"threshold": 3, "action": "notify"}, actor="ops")
+    worker_done = threading.Event()
+    flush = ctl.flush_notices
+
+    def flush_and_finish():
+        try:
+            return flush()
+        finally:
+            worker_done.set()
+
+    monkeypatch.setattr(ctl, "flush_notices", flush_and_finish)
     assert len(ctl.evaluate(3, defer_mail=True)) == 2 and sent == []
     assert ctl.flush_notices_later() is True
-    for _ in range(100):
-        if len(sent) == 2:
-            break
-        time.sleep(0.02)
+    # The mailer runs before the final audit write; wait for the whole worker before close.
+    assert worker_done.wait(10), "the notice worker did not finish"
     assert [m["Subject"].endswith(f"3 accounts: rule #{i} fired") for i, m in enumerate(sent, 1)] == [True, True]
     assert ctl.flush_notices() == 0 and ctl.flush_notices_later() is False
     db.close()
