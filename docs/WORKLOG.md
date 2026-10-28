@@ -1,5 +1,12 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Keep bundled avatar copies aligned
+
+The full runtime audit found five canonical WebP resources stale in the web and desktop packages. Add an avatar-only mode to the existing brand generator, skip the absent retired demo directory, copy the canonical artwork and regenerate content revisions. Rebuild the committed web app so its packaged copies match too. The internal dragon identifier and personal studio avatars stay intact.
+
+Validation: all four brand-asset tests and 40 resource subtests passed; web lint, types, 129 tests and production build passed. A separate committed-source desktop snapshot is being verified before installation. No account data or custom avatars were copied into verification snapshots. Trap: the full brand generator also renders unrelated icons and references a retired demo, so a narrow resource-copy mode is needed for this task.
+
+
 ## 2026-10-29: Refresh device capabilities and distinguish app presence
 
 The audit found stale GUI capabilities after tool changes and device presence being read as messenger availability. Recompute the small capability inventory on access; describe device presence as app control only, with server history and Telegram/MAX delivery independent of an offline computer. Add a live tool/settings regression and update the hub contract in both languages. Packaging tests now emulate DMG conversion and stub Finder/sync instead of invoking the host UI. Regenerated CAPABILITIES.md for the earlier office copy punctuation fix.

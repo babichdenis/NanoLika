@@ -1,6 +1,7 @@
 """Bundled Lika resources stay consistent across client packages."""
 
 import hashlib
+import importlib.util
 import unittest
 from pathlib import Path
 
@@ -49,3 +50,32 @@ class BrandAssetsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_avatar_only_generator_skips_rendering_and_retired_demo(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location("sync_brand_test", ROOT / "scripts/sync-brand.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(module, "BRAND", tmp_path / "assets/brand")
+
+    def no_render(_):
+        raise AssertionError("avatar-only sync must not render marks or icons")
+
+    monkeypatch.setattr(module, "render_jobs", no_render)
+    source = tmp_path / "assets/brand/avatar"
+    source.mkdir(parents=True)
+    (source / "idle.webp").write_bytes(b"canonical-avatar")
+    destinations = (
+        "web/public/avatars/dragon-idle.webp",
+        "harness/dsh-nanomuse/assets/dragon-idle.webp",
+        "android/src/ios/NanoMuse/Resources/dragon-idle.webp",
+        "android/src/android/app/src/main/res/drawable-nodpi/nm_avatar_idle.webp",
+    )
+    for dest in destinations:
+        (tmp_path / dest).parent.mkdir(parents=True, exist_ok=True)
+    module.main(avatars_only=True)
+    for dest in destinations:
+        assert (tmp_path / dest).read_bytes() == b"canonical-avatar"
+    assert not (tmp_path / "demo").exists()

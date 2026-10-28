@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import re
 import shutil
@@ -14,8 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BRAND = ROOT / "assets" / "brand"
 
 
-def main() -> None:
+def main(avatars_only: bool = False) -> None:
     """Keep all packaged copies in step with the canonical brand sources."""
+    if avatars_only:
+        sync_avatars()
+        return
     spec = importlib.util.spec_from_file_location("icons", ROOT / "scripts/gen-android-icons.py")
     assert spec is not None and spec.loader is not None
     icons = importlib.util.module_from_spec(spec)
@@ -82,6 +86,11 @@ def main() -> None:
         text = p.read_text()
         text = re.sub(r"M(?:50\.02 79\.14|49 71)[^']+", d, text)
         p.write_text(text)
+    sync_avatars()
+
+
+def sync_avatars() -> None:
+    """Copy existing canonical artwork only, without rendering unrelated resources."""
     avatar = BRAND / "avatar"
     for mood in ["idle", "working", "waiting", "happy", "error"]:
         for ext in ["webp", "mp4"]:
@@ -98,11 +107,16 @@ def main() -> None:
             dest = res / ("raw" if ext == "mp4" else "drawable-nodpi")
             name = "nm_motion" if ext == "mp4" else "nm_avatar"
             shutil.copyfile(source, dest / f"{name}_{mood}.{ext}")
-    if (avatar / "idle.webp").exists():
-        shutil.copyfile(
-            avatar / "idle.webp", ROOT / "demo/mobilegym/apps/NanoLika/res/dragon-idle.webp"
-        )
+    demo_idle = ROOT / "demo/mobilegym/apps/NanoLika/res/dragon-idle.webp"
+    if (avatar / "idle.webp").exists() and demo_idle.parent.is_dir():
+        shutil.copyfile(avatar / "idle.webp", demo_idle)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--avatars-only",
+        action="store_true",
+        help="Copy existing avatar resources without rendering marks or icons",
+    )
+    main(avatars_only=parser.parse_args().avatars_only)
