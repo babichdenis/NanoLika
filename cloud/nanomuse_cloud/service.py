@@ -2309,14 +2309,23 @@ class Cloud:
         rate in rubles where one is set, the provider's price in yuan always, and for a
         picture or a clip the tokens of the grant one costs). Beside it, the account's shelf."""
         shelf = self.shelf(caller.account_id, caller)
+        terms = self.plan_terms(caller.account_id)
         models = []
-        for spec in self.visible_models(caller):
+        # The cabinet shows the whole menu, including models this tariff does not open:
+        # a locked row is a fair "this is what a bigger plan gives", while the direct
+        # call stays refused by `model_for`. The app's pickers still read only what the
+        # tariff allows (`/v1/models` → `visible_models`).
+        for spec in self.s.public_models:
+            if not self.model_visible(spec):
+                continue
+            allowed = self.plan_allows(caller, spec, terms)
             models.append(
                 {
                     "id": spec.id,
                     "name": spec.name,
                     "vendor": spec.vendor,
                     "available": spec.available,
+                    "plan_locked": not allowed,
                     "unit": _unit(spec),
                     "kind": spec.kind,
                     "for": list(spec.lanes),

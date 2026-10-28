@@ -248,23 +248,31 @@ def _plans() -> str:
     )
 
 
-def test_a_low_tariff_hides_an_expensive_chat_model_and_a_higher_one_opens_it():
+def test_a_low_tariff_shows_an_expensive_chat_model_locked_and_a_higher_one_opens_it():
     client, cloud, sender = stack(plans_json=_plans())
     key, me = sign_up(client, sender)
     account_id = me["account"]["id"]
     headers = {"Authorization": f"Bearer {key}"}
 
-    free = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
-    assert "qwen3.8-flash" in free
-    assert "deepseek-v4.1-flash" not in free  # sell_out ₽1040 > the low plan's ₽300 cap
+    # The cabinet shows the whole menu; the expensive model is a locked preview, while
+    # the app's own picker (`/v1/models`) stays limited to what the tariff opens.
+    free = {m["id"]: m for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "qwen3.8-flash" in free and not free["qwen3.8-flash"]["plan_locked"]
+    # sell_out ₽1040 > the low plan's ₽300 cap
+    assert "deepseek-v4.1-flash" in free and free["deepseek-v4.1-flash"]["plan_locked"]
+    app_menu = {m["id"] for m in client.get("/v1/models", headers=headers).json()["data"]}
+    assert "deepseek-v4.1-flash" not in app_menu
+    with pytest.raises(CloudError) as refused:
+        cloud.model_for("deepseek-v4.1-flash", "chat", cloud.authenticate(key))
+    assert refused.value.code == "plan_model"
 
     cloud.plan_buy(account_id, "lika")
-    low = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
-    assert "deepseek-v4.1-flash" not in low
+    low = {m["id"]: m for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "deepseek-v4.1-flash" in low and low["deepseek-v4.1-flash"]["plan_locked"]
 
     cloud.plan_buy(account_id, "lika-plus")
-    high = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
-    assert "deepseek-v4.1-flash" in high
+    high = {m["id"]: m for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "deepseek-v4.1-flash" in high and not high["deepseek-v4.1-flash"]["plan_locked"]
 
 
 def test_a_video_model_stays_open_on_an_active_tariff_and_checks_the_clip_price():

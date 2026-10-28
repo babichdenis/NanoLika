@@ -14,6 +14,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа, возможности и предварительный расчёт доступны у каждой модели.',
       search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные',
       allVendors: 'Все провайдеры', otherVendors: 'Другие', vendorFilter: 'Провайдер',
+      planLocked: 'на другом тарифе', planNote: (n) => `На старших тарифах доступно ещё ${n}.`, upgrade: 'Тарифы →',
       chat: 'Переписка', code: 'Кодинг', image: 'Картинки', video: 'Видео', sound: 'Звук', music: 'Музыка',
       showMore: (n, total) => `Показать ещё ${n} из ${total}`, showAll: 'Показать все',
       speech: 'Озвучка', transcribe: 'Распознавание', capability: 'Умеет', drawImage: 'рисует', editImage: 'правит картинки', drawAndEdit: 'рисует и правит', textToVideo: 'текст → видео', firstFrame: 'первый кадр', textAndFrame: 'текст и кадр',
@@ -39,6 +40,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices, model capabilities and estimates are shown before generation.',
       search: 'Search models', all: 'All models', mine: 'My picks',
       allVendors: 'All providers', otherVendors: 'Other', vendorFilter: 'Provider',
+      planLocked: 'on a higher plan', planNote: (n) => `${n} models open on higher plans.`, upgrade: 'Plans →',
       chat: 'Chat', code: 'Coding', image: 'Pictures', video: 'Clips', sound: 'Sound', music: 'Music',
       showMore: (n, total) => `Show ${n} more of ${total}`, showAll: 'Show all',
       speech: 'Speech', transcribe: 'Transcription', capability: 'Does', drawImage: 'draws', editImage: 'edits pictures', drawAndEdit: 'draws and edits', textToVideo: 'text to video', firstFrame: 'first frame', textAndFrame: 'text and frame',
@@ -64,6 +66,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。单次生成的费用与供应商成本直接写在各自一行。',
       search: '快速搜索模型', all: '全部模型', mine: '已选',
       allVendors: '全部供应商', otherVendors: '其他', vendorFilter: '供应商',
+      planLocked: '更高套餐', planNote: (n) => `${n} 个模型需要更高套餐。`, upgrade: '套餐 →',
       chat: '对话', code: '编程', image: '图片', video: '视频', sound: '语音', music: '音乐',
       showMore: (n, total) => `再显示 ${n} 个，共 ${total} 个`, showAll: '显示全部',
       speech: '语音合成', transcribe: '语音识别', capability: '能力', drawImage: '生成图片', editImage: '编辑图片', drawAndEdit: '生成与编辑', textToVideo: '文生视频', firstFrame: '首帧', textAndFrame: '文本与首帧',
@@ -191,8 +194,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
 
   function row(model, showVendor = true, spec = { kind: model.kind }) {
     const kind = model.kind;
-    const on = draft.enabled[kind].has(model.id);
-    const usable = model.available !== false;
+    const on = !model.plan_locked && draft.enabled[kind].has(model.id);
+    const usable = model.available !== false && !model.plan_locked;
     const line = h('tr', undefined, `mm-row${usable ? '' : ' mm-row-off'}${on ? ' mm-row-on' : ''}`);
 
     const box = h('input');
@@ -216,7 +219,8 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const title = h('label', model.name, 'mm-name');
     title.htmlFor = box.id;
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
-    if (!usable) title.append(h('em', T.soon, 'tag tag-wait'));
+    if (model.plan_locked) title.append(h('em', T.planLocked, 'tag tag-lock'));
+    if (!usable && !model.plan_locked) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
     if (model.vendor && showVendor) names.append(h('div', T.vendor(model.vendor), 'mm-vendor'));
 
@@ -292,7 +296,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
       else if (vendorFilter && model.vendor !== vendorFilter) return false;
       if(contextMin && Number(model.context_length||0)<contextMin)return false;
       if(section==='favourites')return (loaded.shelf?.favourites||[]).includes(model.id);
-      if (section === 'mine') return SHELF_KINDS.some((k) => draft.enabled[k].has(model.id));
+      if (section === 'mine') return !model.plan_locked && SHELF_KINDS.some((k) => draft.enabled[k].has(model.id));
       if (section === 'code') return isCoding(model);
       if (!spec) return true;
       if (spec.sub) return model.kind === 'audio' && (model.audio || {}).kind === spec.sub;
@@ -368,7 +372,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
     const chips = [
       ['all', T.all, all.length],
       ['favourites', '★ Избранное', (loaded.shelf?.favourites||[]).length],
-      ['mine', T.mine, all.filter((m) => SHELF_KINDS.some((k) => draft.enabled[k].has(m.id))).length],
+      ['mine', T.mine, all.filter((m) => !m.plan_locked && SHELF_KINDS.some((k) => draft.enabled[k].has(m.id))).length],
       ['code', T.code, all.filter(isCoding).length],
       ...SECTIONS.map((spec) => [spec.key, T[spec.title], ofKind(spec)]),
     ];
@@ -383,6 +387,14 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
         draw();
       };
       holder.append(chip);
+    }
+    const locked = all.filter((m) => m.plan_locked).length;
+    if (locked) {
+      const note = h('p', T.planNote(locked), 'fine plan-note');
+      const link = h('a', T.upgrade, 'mm-link');
+      link.href = '../';
+      note.append(' ', link);
+      holder.append(note);
     }
   }
 
