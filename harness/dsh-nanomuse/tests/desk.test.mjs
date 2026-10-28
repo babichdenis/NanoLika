@@ -225,10 +225,22 @@ test('the chat and hands defaults follow the relay\'s `for`, with the 0.1.34 nam
   assert.equal(pickHandsModel(models)?.id, 'qwen3.8-27b')
   assert.equal(pickChatModel([{ id: 'old', kind: 'chat', recommended: true, inputModalities: ['text'] }])?.id, 'old')
   assert.equal(pickHandsModel([{ id: 'old', kind: 'chat', recommended: true, inputModalities: ['text'] }]), undefined)
-  assert.equal(takesImages({ id: 'deepseek-v4', inputModalities: ['text', 'image'] }), false)
-  assert.equal(takesImages({ id: 'deepseek-v4.1-flash', inputModalities: ['text'] }), true)
-  assert.equal(takesImages({ id: 'deepseek-ocr', inputModalities: [] }), true)
-  assert.equal(takesImages({ id: 'qwen3-vl', inputModalities: ['text', 'image'] }), true)
+})
+
+test('explicit image modalities win over model names; older relays use the name fallback', () => {
+  const cases = [
+    [{ id: 'deepseek-v4', inputModalities: ['text', 'image'] }, true],
+    [{ id: 'deepseek-v4.1-flash', inputModalities: ['text'] }, false],
+    [{ id: 'deepseek-flash', inputModalities: ['text', 'image'] }, true],
+    [{ id: 'qwen3-vl', inputModalities: ['text', 'image'] }, true],
+    [{ id: 'qwen3-vl', inputModalities: ['text'] }, false],
+    [{ id: 'deepseek-ocr', inputModalities: [] }, true],
+    [{ id: 'deepseek-v4.1-flash' }, true],
+    [{ id: 'deepseek-vision' }, true],
+    [{ id: 'deepseek-v4' }, false],
+    [{ id: 'unknown' }, false],
+  ]
+  for (const [model, expected] of cases) assert.equal(takesImages(model), expected, JSON.stringify(model))
 })
 
 test('the provider row carries the image budget of a request through the relay (413 too_large): 5 MiB of base64 images, 2 Mpx a picture, the per-image byte cap left to dsh', async () => {
