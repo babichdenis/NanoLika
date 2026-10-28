@@ -147,7 +147,7 @@ export interface LiveTurn {
 export interface Live {
   turnOutcomes?: TurnOutcome[]
   conversationNavigation?: { id: string; cid: string; sessionId: string; expires: number } | null
-  cloud: { signedIn: boolean; hint: string }
+  cloud: { signedIn: boolean; hint: string; baseURL: string }
   /** The last thing the agent put beside the conversation (`preview_show`); null after a close. */
   preview?: LivePreview | null
   /** The turns running now, with their step count against the budget (src/turn-budget.ts). */
@@ -231,7 +231,7 @@ export interface LiveOwnClip {
 export const DEFAULT_PROFILE: LiveProfile = { rev: 0, name: 'Лика', avatar: 'dragon', emoji: '', color: '', description: '', style: '', faceId: '', plain: false, connectors: [] }
 
 const INITIAL: Live = {
-  cloud: { signedIn: false, hint: '' },
+  cloud: { signedIn: false, hint: '', baseURL: '' },
   profile: DEFAULT_PROFILE,
   hub: { connected: false, deviceId: '', deviceName: '', remoteControl: false, trusted: [], asks: [], devices: [] },
   hands: { calls: [], steps: 0, run: null },

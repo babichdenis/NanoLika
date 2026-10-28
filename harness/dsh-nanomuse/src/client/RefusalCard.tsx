@@ -21,6 +21,7 @@ import { providerFailureKind, refusalCard, refusalKindOf, type RefusalKind } fro
 import { type AccountSheet } from './AccountPage.tsx'
 import { allowanceInfo, AllowanceWays } from './AllowanceWays.tsx'
 import { call, muted, row, type Translate, failureText } from './api.ts'
+import { openLink } from './bridge.ts'
 import { settingsBus } from './bus.ts'
 import { focusComposer } from './composer.ts'
 import { IconRefresh } from './icons.tsx'
@@ -132,7 +133,8 @@ export function makeTurnError(t: Translate, deps: RefusalDeps) {
     const ref = useRef<HTMLDivElement>(null)
     const [busy, setBusy] = useState(false)
     const [cloudError, setCloudError] = useState<string | undefined>()
-    const signedIn = useLive().cloud.signedIn
+    const cloud = useLive().cloud
+    const signedIn = cloud.signedIn
     const retry = () => {
       const text = turnText(ref.current, data.turn)
       if (!sessionId || !text) {
@@ -157,6 +159,13 @@ export function makeTurnError(t: Translate, deps: RefusalDeps) {
         .finally(() => setBusy(false))
     }
     const openSettings = () => { settingsBus.openSection?.(ACCOUNT_SECTION) }
+    // The relay's `topup_url` is its own `/app`; the account page is where the balance is
+    // topped up and the plan is bought. Fall back to Settings when the base is unknown.
+    const openTopup = () => {
+      const base = (cloud.baseURL || '').replace(/\/+$/, '')
+      if (base) openLink(`${base}/app`)
+      else openSettings()
+    }
     const button = (label: string, onClick: () => void, primary = false, icon?: ReactNode) =>
       h('button', { type: 'button', className: `nm-pill nm-pill-sm${primary ? '' : ' nm-pill-ghost'}`, disabled: busy, onClick }, icon ?? null, label)
     const actionsOf = (actions: ReturnType<typeof refusalCard>['actions']): ReactNode[] =>
@@ -171,7 +180,7 @@ export function makeTurnError(t: Translate, deps: RefusalDeps) {
           case 'sign-in':
             return button(t('rfSignIn'), openSettings, true)
           case 'topup':
-            return button(t('rfTopUp'), openSettings, true)
+            return button(t('rfTopUp'), openTopup, true)
           case 'settings':
             return button(t('rfSettings'), openSettings)
           case 'models':

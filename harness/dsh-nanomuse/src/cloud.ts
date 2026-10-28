@@ -297,7 +297,7 @@ export interface LiveState {
   preview?: PreviewShow | null
   /** The turns running now, with their step count against the budget. */
   turns?: TurnView[]
-  cloud: { signedIn: boolean; hint: string }
+  cloud: { signedIn: boolean; hint: string; baseURL: string }
   profile: Profile
   hub: HubState
   /**
@@ -2433,7 +2433,7 @@ export default class NanomuseCloud extends Service {
   live(): LiveState {
     const account = this.state.account
     return {
-      cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '' },
+      cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '', baseURL: this.config.baseURL },
       conversationNavigation: this.conversationNavigation.request,
       preview: this.previewShow,
       turns: this.turnBudget?.views() ?? [],
