@@ -188,6 +188,29 @@ async def test_polling_brings_messages_in(tg: FakeTelegram):
     await ch.stop()
 
 
+async def test_a_video_message_is_downloaded(tg: FakeTelegram):
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    tg.push(
+        {
+            "update_id": 1,
+            "message": {
+                "message_id": 7,
+                "from": {"id": 1001, "first_name": "Ann"},
+                "chat": {"id": 1001, "type": "private"},
+                "video": {"file_id": "v1", "file_name": "clip.mp4"},
+            },
+        }
+    )
+    await until(lambda: bus.inbound_msgs)
+    msg = bus.inbound_msgs[0]
+    assert not msg.text
+    assert [f.name for f in msg.files] == ["clip.mp4"]
+    assert msg.files[0].kind == "video" and msg.files[0].data == b"file-bytes"
+    await ch.stop()
+
+
 async def test_replies_stream_by_editing_and_buttons_decide(tg: FakeTelegram):
     bus = Bus()
     ch = channel(tg)
@@ -253,8 +276,26 @@ async def test_files_out_and_verify(tg: FakeTelegram, tmp_path):  # noqa: ANN001
     photo.write_bytes(b"png")
     doc = tmp_path / "notes.txt"
     doc.write_text("n", "utf-8")
-    await ch.send("1001", "", files=[str(photo), str(doc), str(tmp_path / "missing.bin")])
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"mp4")
+    gif = tmp_path / "anim.gif"
+    gif.write_bytes(b"gif")
+    audio = tmp_path / "voice.mp3"
+    audio.write_bytes(b"mp3")
+    await ch.send(
+        "1001",
+        "",
+        files=[
+            str(photo),
+            str(doc),
+            str(clip),
+            str(gif),
+            str(audio),
+            str(tmp_path / "missing.bin"),
+        ],
+    )
     assert tg.of("sendPhoto") and tg.of("sendDocument")
+    assert tg.of("sendVideo") and tg.of("sendAnimation") and tg.of("sendAudio")
     await ch.stop()
     # verify without a running channel opens and closes its own client
     assert await channel(tg).verify() == "@muse_bot"

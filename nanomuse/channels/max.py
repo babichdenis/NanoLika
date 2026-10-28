@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import mimetypes
 import re
 import ssl
 from collections import deque
@@ -17,12 +18,62 @@ import httpx
 from fastapi import HTTPException, Request
 
 from nanomuse.channels.approval_choices import choices
-from nanomuse.channels.base import Channel, ChannelBus, Field, InboundMessage, json_object
+from nanomuse.channels.base import (
+    Channel,
+    ChannelBus,
+    Field,
+    InboundFile,
+    InboundMessage,
+    json_object,
+)
 from nanomuse.channels.link_code import ChatLink, answer_code, as_code
 from nanomuse.logger import logger
 
 API = "https://platform-api2.max.ru"
 MAX_BODY_BYTES = 256 * 1024
+# MAX's own ceilings: an image is 50 MB, a video 250 MB, audio 256 MB, other files 4 GB.
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".tiff", ".bmp", ".heic"}
+_VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".webm"}
+_AUDIO_SUFFIXES = {".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".flac"}
+_IMAGE_MAX = 50 * 1024 * 1024
+_VIDEO_MAX = 250 * 1024 * 1024
+_AUDIO_MAX = 256 * 1024 * 1024
+
+
+def _attachment_type(path: Path) -> str:
+    """What MAX calls this file: an image, a video, audio, or just a file.
+
+    A file over a media type's ceiling is sent as a file instead, which MAX accepts up
+    to 4 GB; it will not play inline, but it arrives.
+    """
+    suffix = path.suffix.lower()
+    size = path.stat().st_size
+    if suffix in _IMAGE_SUFFIXES and size <= _IMAGE_MAX:
+        return "image"
+    if suffix in _VIDEO_SUFFIXES and size <= _VIDEO_MAX:
+        return "video"
+    if suffix in _AUDIO_SUFFIXES and size <= _AUDIO_MAX:
+        return "audio"
+    return "file"
+
+
+def _uploaded_token(data: dict[str, Any]) -> str:
+    """The token an upload answered with: top-level, or under `photos` for an image."""
+    token = data.get("token")
+    if isinstance(token, str) and token:
+        return token
+    photos = data.get("photos")
+    if isinstance(photos, dict):
+        for group in photos.values():
+            if not isinstance(group, dict):
+                continue
+            token = group.get("token")
+            if isinstance(token, str) and token:
+                return token
+            ids = group.get("photoIds")
+            if isinstance(ids, dict) and isinstance(ids.get("token"), str):
+                return ids["token"]
+    return ""
 
 
 class MaxError(RuntimeError):
@@ -47,6 +98,9 @@ class MaxChannel(Channel):
         super().__init__(settings)
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
+        # Media goes to signed CDN/upload hosts: a client without the bot token keeps
+        # the credential out of those requests.
+        self._media_http: httpx.AsyncClient | None = None
         self._seen: set[str] = set()
         self._order: deque[str] = deque()
         self._streams: dict[str, str] = {}
@@ -55,8 +109,9 @@ class MaxChannel(Channel):
         # the relay's linking calls (link_code.py), made on the first code a chat sends
         self._chat_link: ChatLink | None = None
         self._link_tasks: set[asyncio.Task[Any]] = set()
+        self._media_tasks: set[asyncio.Task[Any]] = set()
 
-    def _make_http(self) -> httpx.AsyncClient:
+    def _ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context()
         ca = str(
             self.settings.get("ca_file")
@@ -64,11 +119,22 @@ class MaxChannel(Channel):
         ).strip()
         if ca:
             ctx.load_verify_locations(ca)
+        return ctx
+
+    def _make_http(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             base_url=API,
             headers={"Authorization": str(self.settings.get("bot_token") or "")},
-            verify=ctx,
+            verify=self._ssl_context(),
             timeout=20,
+            transport=self._transport,
+            follow_redirects=False,
+        )
+
+    def _make_media_http(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            verify=self._ssl_context(),
+            timeout=300,
             transport=self._transport,
             follow_redirects=False,
         )
@@ -117,6 +183,7 @@ class MaxChannel(Channel):
             raise MaxError("MAX webhook secret must contain 32 to 256 URL-safe characters")
         await super().start(bus)
         self._http = self._make_http()
+        self._media_http = self._make_media_http()
         try:
             name = await self.verify()
             subscriptions = await self._call("GET", "/subscriptions")
@@ -142,10 +209,15 @@ class MaxChannel(Channel):
         # a code still being handed to the relay would answer into a closed connection
         tasks += list(self._link_tasks)
         self._link_tasks.clear()
+        tasks += list(self._media_tasks)
+        self._media_tasks.clear()
         for task in tasks:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        if self._media_http is not None:
+            await self._media_http.aclose()
+            self._media_http = None
         if self._http is not None:
             await self._http.aclose()
             self._http = None
@@ -213,24 +285,123 @@ class MaxChannel(Channel):
         sender = str(user.get("user_id") or "")
         mid = str(body.get("mid") or "")
         text = str(body.get("text") or "").strip()
+        if not chat or not sender or not mid or self._duplicate("message:" + mid):
+            return
+        attachments = body.get("attachments")
+        if isinstance(attachments, list) and attachments:
+            # The webhook must answer before a clip is downloaded; the file join the
+            # message when the bytes are here. A test without a loop takes the text only.
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                task = loop.create_task(self._deliver_media(chat, sender, user, body, text, mid))
+                self._media_tasks.add(task)
+                task.add_done_callback(self._media_tasks.discard)
+                return
+        self._deliver(chat, sender, user, text, [], mid)
+
+    async def _deliver_media(
+        self,
+        chat: str,
+        sender: str,
+        user: dict[str, Any],
+        body: dict[str, Any],
+        text: str,
+        mid: str,
+    ) -> None:
+        files = await self._attachments(body)
+        if text or files:
+            self._deliver(chat, sender, user, text, files, mid)
+
+    def _deliver(
+        self,
+        chat: str,
+        sender: str,
+        user: dict[str, Any],
+        text: str,
+        files: list[InboundFile],
+        mid: str,
+    ) -> None:
         try:
             from .touches import note as _note
 
             _note("max", sender, chat, text)
         except Exception:
             pass
-        if chat and sender and mid and text and not self._duplicate("message:" + mid):
-            inbound = InboundMessage(
-                channel=self.name,
-                chat_id=chat,
-                sender_id=sender,
-                sender_name=str(user.get("name") or ""),
-                text=text,
-                message_id=mid,
-            )
-            if self._link_first(inbound):
-                return
+        inbound = InboundMessage(
+            channel=self.name,
+            chat_id=chat,
+            sender_id=sender,
+            sender_name=str(user.get("name") or ""),
+            text=text,
+            files=files,
+            message_id=mid,
+        )
+        if self._link_first(inbound):
+            return
+        if self.bus is not None:
             self.bus.inbound(inbound)
+
+    async def _attachments(self, body: dict[str, Any]) -> list[InboundFile]:
+        """The pictures, clips, voice and documents of one message, fetched into memory.
+
+        MAX gives an image, an audio file and a document a direct `url`; a video's
+        `url` is a page, so its token is exchanged for the mp4 links with
+        `GET /videos/{token}`. A file that cannot be read is left out, not fatal:
+        the words of the message still reach the agent.
+        """
+        out: list[InboundFile] = []
+        items = body.get("attachments")
+        if not isinstance(items, list):
+            return out
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("type") or "")
+            payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+            if kind == "image":
+                url = str(payload.get("url") or "")
+                name = f"photo-{payload.get('photo_id') or 'max'}.jpg"
+                got = await self._download_url(url, name, "image")
+            elif kind == "video":
+                token = str(payload.get("token") or "")
+                url = str(payload.get("url") or "")
+                if not url and token:
+                    details = await self._call("GET", f"/videos/{token}")
+                    urls = details.get("urls") if isinstance(details.get("urls"), dict) else {}
+                    for key in ("mp4_1080", "mp4_720", "mp4_480", "mp4_360", "mp4_240"):
+                        if isinstance(urls.get(key), str) and urls[key]:
+                            url = urls[key]
+                            break
+                name = f"video-{token or 'max'}.mp4"
+                got = await self._download_url(url, name, "video")
+            elif kind == "audio":
+                url = str(payload.get("url") or "")
+                token = str(payload.get("token") or "max")
+                name = f"audio-{token}.mp3"
+                got = await self._download_url(url, name, "audio")
+            elif kind == "file":
+                url = str(payload.get("url") or "")
+                name = str(item.get("filename") or "file")
+                got = await self._download_url(url, name, "file")
+            else:
+                continue
+            if got is not None:
+                out.append(got)
+        return out
+
+    async def _download_url(self, url: str, name: str, kind: str) -> InboundFile | None:
+        if not url or self._media_http is None:
+            return None
+        try:
+            response = await self._media_http.get(url, timeout=120)
+        except httpx.HTTPError:
+            return None
+        if response.status_code >= 400 or not response.content:
+            return None
+        return InboundFile(name=name, data=response.content, kind=kind)
 
     def _link(self) -> ChatLink:
         """The relay's two linking calls, with the settings the sign-in door already uses
@@ -310,8 +481,6 @@ class MaxChannel(Channel):
             await asyncio.sleep(4.5)
 
     async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
-        if files:
-            raise MaxError("MAX file delivery is not enabled")
         last = ""
         for start in range(0, len(text), 4000):
             result = await self._call(
@@ -321,7 +490,65 @@ class MaxChannel(Channel):
                 json={"text": text[start : start + 4000]},
             )
             last = str(((result.get("message") or {}).get("body") or {}).get("mid") or "")
+        for item in files or []:
+            path = Path(item)
+            if not path.is_file():
+                continue
+            last = await self._send_file(chat_id, path) or last
         return last
+
+    async def _send_file(self, chat_id: str, path: Path) -> str:
+        """Upload one file and send it as an attachment of its own message.
+
+        MAX takes a token per file (`POST /uploads`), then `POST /messages` with that
+        token; a file cannot share a message with an image or a video, so each goes
+        alone. A just-uploaded file is sometimes not processed yet: the answer is
+        `attachment.not.ready`, and the same token is retried with a growing pause.
+        """
+        if self._http is None or self._media_http is None:
+            raise MaxError("MAX is not connected")
+        kind = _attachment_type(path)
+        upload = await self._call("POST", "/uploads", params={"type": kind})
+        url = str(upload.get("url") or "")
+        if not url:
+            raise MaxError("MAX did not return an upload URL")
+        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        try:
+            with path.open("rb") as fh:
+                response = await self._media_http.post(
+                    url, files={"data": (path.name, fh, mime)}, timeout=300
+                )
+            if response.status_code in (401, 403):
+                # MAX's image upload has been seen to ask for the token; the media
+                # client deliberately does not carry it, so retry with it only now.
+                with path.open("rb") as fh:
+                    response = await self._http.post(
+                        url, files={"data": (path.name, fh, mime)}, timeout=300
+                    )
+        except httpx.HTTPError:
+            raise MaxError("MAX upload failed") from None
+        data = json_object(response)
+        if response.status_code >= 400:
+            raise MaxError(f"MAX upload failed (HTTP {response.status_code})")
+        token = str(upload.get("token") or "") or _uploaded_token(data)
+        if not token:
+            raise MaxError("MAX did not return an attachment token")
+        attachment = {"type": kind, "payload": {"token": token}}
+        for delay in (0.0, 1.0, 2.0, 4.0):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                response = await self._http.post(
+                    "/messages", params={"chat_id": chat_id}, json={"attachments": [attachment]}
+                )
+            except httpx.HTTPError:
+                raise MaxError("MAX connection failed") from None
+            data = json_object(response)
+            if response.status_code < 400:
+                return str(((data.get("message") or {}).get("body") or {}).get("mid") or "")
+            if str(data.get("code") or "") != "attachment.not.ready":
+                raise MaxError(f"MAX request failed (HTTP {response.status_code})")
+        raise MaxError("MAX attachment was not ready")
 
     async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
         if not text.strip():

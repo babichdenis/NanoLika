@@ -3,6 +3,7 @@
 import asyncio
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,8 @@ class Bus:
 class Tests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.calls = []
+        self.not_ready = 0
+        self.require_upload_auth = False
 
         def api(r):
             self.calls.append(r)
@@ -41,6 +44,27 @@ class Tests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(200, json={"is_bot": True, "username": "fixture"})
             if r.url.path == "/subscriptions":
                 return httpx.Response(200, json={"subscriptions": [], "success": True})
+            if r.url.path == "/uploads":
+                kind = r.url.params.get("type") or "file"
+                body = {"url": f"https://upload.invalid/{kind}"}
+                if kind != "image":
+                    body["token"] = f"token-{kind}"
+                return httpx.Response(200, json=body)
+            if r.url.host == "upload.invalid":
+                if self.require_upload_auth and r.headers.get("authorization") != "fixture-token":
+                    return httpx.Response(401, json={"code": "unauthorized"})
+                if r.url.path == "/image":
+                    return httpx.Response(
+                        200, json={"photos": {"photoIds": {"token": "image-token"}}}
+                    )
+                return httpx.Response(200, text="<retval>1</retval>")
+            if r.url.host == "cdn.invalid":
+                return httpx.Response(200, content=b"file-bytes")
+            if r.url.path.startswith("/videos/"):
+                return httpx.Response(200, json={"urls": {"mp4_480": "https://cdn.invalid/v.mp4"}})
+            if r.url.path == "/messages" and b"attachments" in r.content and self.not_ready:
+                self.not_ready -= 1
+                return httpx.Response(400, json={"code": "attachment.not.ready"})
             return httpx.Response(200, json={"message": {"body": {"mid": "fixture-message"}}})
 
         self.ch = m.MaxChannel(
@@ -144,13 +168,76 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.bus.actions), 1)
         self.assertEqual(self.bus.actions[0][:3], ("max", "19", "17"))
 
-    async def test_stream_and_file_limit(self):
+    async def test_stream_and_files_go_as_attachments(self):
         await self.ch.stream("19", "s", "hello", done=False)
         await self.ch.stream("19", "s", "hello world", done=True)
         self.assertEqual(self.calls[-1].method, "PUT")
         self.assertEqual(self.ch._streams, {})
-        with self.assertRaises(m.MaxError):
-            await self.ch.send("19", "file", files=["fixture"])
+        with tempfile.TemporaryDirectory() as folder:
+            png = Path(folder) / "face.png"
+            png.write_bytes(b"png")
+            clip = Path(folder) / "clip.mp4"
+            clip.write_bytes(b"mp4")
+            await self.ch.send("19", "caption", files=[str(png), str(clip)])
+        uploads = [r for r in self.calls if r.url.path == "/uploads"]
+        self.assertEqual([r.url.params.get("type") for r in uploads], ["image", "video"])
+        files = [r for r in self.calls if r.url.host == "upload.invalid"]
+        self.assertTrue(files)
+        self.assertTrue(all("authorization" not in r.headers for r in files))
+        sent = [
+            json.loads(r.content)
+            for r in self.calls
+            if r.url.path == "/messages" and r.method == "POST"
+        ]
+        self.assertEqual(sent[-3], {"text": "caption"})
+        self.assertEqual(sent[-2]["attachments"][0]["type"], "image")
+        self.assertEqual(sent[-2]["attachments"][0]["payload"]["token"], "image-token")
+        self.assertEqual(sent[-1]["attachments"][0]["type"], "video")
+        self.assertEqual(sent[-1]["attachments"][0]["payload"]["token"], "token-video")
+
+    async def test_incoming_media_is_downloaded(self):
+        update = self.update()
+        update["message"]["body"] = {
+            "mid": "media-mid",
+            "text": "",
+            "attachments": [
+                {"type": "image", "payload": {"photo_id": 5, "url": "https://cdn.invalid/i.jpg"}},
+                {"type": "video", "payload": {"token": "video-token"}},
+                {
+                    "type": "file",
+                    "filename": "doc.pdf",
+                    "size": 9,
+                    "payload": {"url": "https://cdn.invalid/doc.pdf"},
+                },
+            ],
+        }
+        self.assertEqual((await self.post(update)).status_code, 200)
+        await asyncio.sleep(0.05)
+        msg = self.bus.messages[0]
+        self.assertEqual(
+            [f.name for f in msg.files], ["photo-5.jpg", "video-video-token.mp4", "doc.pdf"]
+        )
+        self.assertEqual([f.kind for f in msg.files], ["image", "video", "file"])
+        self.assertTrue(all(f.data == b"file-bytes" for f in msg.files))
+
+    async def test_upload_retries_with_the_token_when_the_cdn_asks(self):
+        self.require_upload_auth = True
+        with tempfile.TemporaryDirectory() as folder:
+            png = Path(folder) / "face.png"
+            png.write_bytes(b"png")
+            await self.ch.send("19", "", files=[str(png)])
+        uploads = [r for r in self.calls if r.url.host == "upload.invalid"]
+        self.assertEqual(len(uploads), 2)
+        self.assertNotIn("authorization", uploads[0].headers)
+        self.assertEqual(uploads[1].headers.get("authorization"), "fixture-token")
+
+    async def test_attachment_not_ready_is_retried(self):
+        self.not_ready = 1
+        with tempfile.TemporaryDirectory() as folder:
+            png = Path(folder) / "face.png"
+            png.write_bytes(b"png")
+            await self.ch.send("19", "", files=[str(png)])
+        self.assertEqual(self.not_ready, 0)
 
     async def test_authentication_error_does_not_leak_token(self):
         def reject(r):

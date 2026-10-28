@@ -45,7 +45,13 @@ _BUTTONS = {
 }
 POLL_TIMEOUT_S = 50
 TEXT_LIMIT = 4000  # Telegram allows 4096 per message
-_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+_ANIMATION_SUFFIXES = {".gif"}
+_VIDEO_SUFFIXES = {".mp4", ".m4v", ".mov", ".webm"}
+_AUDIO_SUFFIXES = {".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".flac"}
+# The cloud Bot API takes uploads up to 50 MB; larger files go as documents, which
+# share the same ceiling, so there is nothing better to fall back to there.
+_FILE_MAX = 50 * 1024 * 1024
 
 # NanoLika's colour, the sage of nanolika.ru. The Bot API cannot paint a bubble or a line of
 # text (the client draws both), so the honest mark of a line written on another device is a
@@ -241,6 +247,27 @@ class TelegramChannel(Channel):
         if isinstance(document, dict):
             item = await self._download(
                 document.get("file_id"), str(document.get("file_name") or "file"), "file"
+            )
+            if item:
+                files.append(item)
+        video = message.get("video")
+        if isinstance(video, dict):
+            item = await self._download(
+                video.get("file_id"), str(video.get("file_name") or "video.mp4"), "video"
+            )
+            if item:
+                files.append(item)
+        note = message.get("video_note")
+        if isinstance(note, dict):
+            item = await self._download(note.get("file_id"), "video-note.mp4", "video")
+            if item:
+                files.append(item)
+        animation = message.get("animation")
+        if isinstance(animation, dict):
+            item = await self._download(
+                animation.get("file_id"),
+                str(animation.get("file_name") or "animation.gif"),
+                "image",
             )
             if item:
                 files.append(item)
@@ -484,13 +511,28 @@ class TelegramChannel(Channel):
         return str(result.get("message_id") or "")
 
     async def _send_file(self, chat_id: str, path: Path) -> None:
+        """A file from the agent: a picture, a clip that plays in the chat, a voice take,
+        or a document. Telegram's own players are used where the type has one; anything
+        else goes as a document, which still downloads."""
         if self._http is None:
             raise TelegramError("Not connected.")
-        is_image = path.suffix.lower() in _IMAGE_SUFFIXES and path.stat().st_size < 10_000_000
-        method, field_name = ("sendPhoto", "photo") if is_image else ("sendDocument", "document")
+        suffix = path.suffix.lower()
+        size = path.stat().st_size
+        method, field_name = "sendDocument", "document"
+        extra: dict[str, Any] = {}
+        if suffix in _ANIMATION_SUFFIXES and size < _FILE_MAX:
+            method, field_name = "sendAnimation", "animation"
+        elif suffix in _IMAGE_SUFFIXES and size < 10_000_000:
+            method, field_name = "sendPhoto", "photo"
+        elif suffix in _VIDEO_SUFFIXES and size < _FILE_MAX:
+            method, field_name = "sendVideo", "video"
+            extra["supports_streaming"] = "true"
+        elif suffix in _AUDIO_SUFFIXES and size < _FILE_MAX:
+            method, field_name = "sendAudio", "audio"
+            extra["title"] = path.stem[:64]
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         physical, topic = split_chat(chat_id)
-        destination: dict[str, Any] = {"chat_id": physical}
+        destination: dict[str, Any] = {"chat_id": physical, **extra}
         if topic:
             destination["message_thread_id"] = topic
         with path.open("rb") as fh:
