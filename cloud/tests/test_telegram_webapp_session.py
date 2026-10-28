@@ -127,22 +127,28 @@ def test_disabled_refused():
 
 
 @pytest.mark.parametrize(
-    "origin,content,raw,expected",
+    "origin,content,raw_kind,expected",
     [
-        ("https://cloud.example.test", "application/json", signed(), 200),
-        ("https://evil.example", "application/json", signed(), 403),
-        ("", "application/json", signed(), 403),
-        ("https://cloud.example.test", "text/plain", signed(), 415),
+        ("https://cloud.example.test", "application/json", "valid", 200),
+        ("https://evil.example", "application/json", "valid", 403),
+        ("", "application/json", "valid", 403),
+        ("https://cloud.example.test", "text/plain", "valid", 415),
         ("https://cloud.example.test", "application/json", "invalid", 401),
         (
             "https://cloud.example.test",
             "application/json",
-            signed(user='{"id":654321}'),
+            "other",
             409,
         ),
     ],
 )
-def test_endpoint(origin, content, raw, expected):
+def test_endpoint(origin, content, raw_kind, expected):
+    # Build the launch inside the test: a module-level `signed()` is collected when the
+    # suite starts and is already older than the five-minute window by the time a long
+    # suite reaches this test.
+    raw = "invalid" if raw_kind == "invalid" else signed(
+        **({"user": '{"id":654321}'} if raw_kind == "other" else {})
+    )
     c, caller, _ = cloud_fixture()
     app = FastAPI()
 
