@@ -804,10 +804,12 @@ class Settings:
     # Free grants do not count toward a threshold. Spending reduces the paid portion. Money
     # is not removed to buy a tariff and ordinary top-ups during an active term do not extend it.
     plans_json: str = field(default_factory=lambda: _env("PLANS", DEFAULT_PLANS))
-    # A clip is made against a provider that wants a deposit held for it, so a video model
-    # opens only when the account's *paid* balance (never a free grant) covers this much.
-    # A plan may override it with `video_min_paid_rub`; 0 turns the rule off.
+    # A clip is made against a provider that wants a deposit held for it. 590 ₽ is the
+    # entry price of the lowest paid tariff: it opens video for that tariff's month, and
+    # spending a few rubles afterwards must not close it again. While a tariff is active,
+    # only the provider's own 500 ₽ reserve has to stay on the paid balance.
     video_min_paid_rub: float = field(default_factory=lambda: float(_env("VIDEO_MIN_PAID_RUB", "590")))
+    video_reserve_rub: float = field(default_factory=lambda: float(_env("VIDEO_RESERVE_RUB", "500")))
     # An active tariff is the monthly service key for the cross-device hub. Paid balance
     # thresholds are evaluated after confirmed top-ups; no automatic charge is made at expiry.
     # A member is exempt.

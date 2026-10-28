@@ -276,7 +276,16 @@ def test_a_video_model_opens_only_when_paid_money_covers_the_provider_deposit():
 
     with pytest.raises(CloudError) as refused:
         cloud.model_for("wan2.2-i2v-flash", "video", caller)
-    assert refused.value.code == "video_deposit"
+    assert refused.value.code == "video_reserve"
+
+    # A tariff month opened at ₽590 must not close video after a ₽10 spend: the
+    # provider's ₽500 reserve is still covered.
+    with cloud.db.tx() as conn:
+        conn.execute(
+            "UPDATE accounts SET paid_balance_uy=? WHERE id=?",
+            (cloud.s.rub_to_uy(580), account_id),
+        )
+    assert cloud.model_for("wan2.2-i2v-flash", "video", caller).id == "wan2.2-i2v-flash"
 
     with cloud.db.tx() as conn:
         conn.execute(

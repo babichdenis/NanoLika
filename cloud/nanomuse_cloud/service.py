@@ -1409,6 +1409,14 @@ class Cloud:
                             else self.s.video_min_paid_rub
                         ),
                     ),
+                    "video_reserve_rub": max(
+                        0.0,
+                        float(
+                            row.get("video_reserve_rub")
+                            if row.get("video_reserve_rub") is not None
+                            else self.s.video_reserve_rub
+                        ),
+                    ),
                     "models": [
                         str(mid) for mid in (row.get("models") if isinstance(row.get("models"), list) else [])
                         if isinstance(mid, str) and mid
@@ -1444,6 +1452,11 @@ class Cloud:
                 terms.get("video_min_paid_rub")
                 if terms.get("video_min_paid_rub") is not None
                 else self.s.video_min_paid_rub
+            ),
+            "video_reserve_rub": float(
+                terms.get("video_reserve_rub")
+                if terms.get("video_reserve_rub") is not None
+                else self.s.video_reserve_rub
             ),
             "models": list(terms.get("models") or []),
             "exclude": list(terms.get("exclude") or []),
@@ -2587,6 +2600,7 @@ class Cloud:
                     "max_chat_out_rub": 0.0,
                     "max_video_tokens": 0,
                     "video_min_paid_rub": self.s.video_min_paid_rub,
+                    "video_reserve_rub": self.s.video_reserve_rub,
                     "models": [],
                     "exclude": [],
                 }
@@ -2619,9 +2633,17 @@ class Cloud:
             cap_tokens = int(terms.get("max_video_tokens") or 0)
             if cap_tokens > 0 and spec.per_clip > cap_tokens:
                 return False
-            min_paid = float(terms.get("video_min_paid_rub") or 0)
-            if min_paid > 0 and self.s.rub_per_usd > 0 and float(terms.get("paid_rub") or 0) < min_paid:
-                return False
+            paid = float(terms.get("paid_rub") or 0)
+            if terms.get("active"):
+                # The tariff already paid for the month; spending inside it must not close
+                # video. Only the provider's reserve has to stay on the paid balance.
+                reserve = float(terms.get("video_reserve_rub") or 0)
+                if reserve > 0 and self.s.rub_per_usd > 0 and paid < reserve:
+                    return False
+            else:
+                min_paid = float(terms.get("video_min_paid_rub") or 0)
+                if min_paid > 0 and self.s.rub_per_usd > 0 and paid < min_paid:
+                    return False
         return True
 
     def any_model(self, caller: Caller | None) -> bool:
@@ -2638,13 +2660,23 @@ class Cloud:
                 raise CloudError(404, "model_not_offered", f"{model_id!r} is not on the menu")
             if not self.plan_allows(caller, m):
                 terms = self.plan_terms(caller.account_id) if caller is not None else {}
-                min_paid = float(terms.get("video_min_paid_rub") or 0)
-                if m.kind == "video" and min_paid > 0 and self.s.rub_per_usd > 0:
-                    raise CloudError(
-                        402,
-                        "video_deposit",
-                        f"Video models open when the paid balance reaches ₽{min_paid:g}; top up first",
-                    )
+                if m.kind == "video":
+                    if terms.get("active"):
+                        reserve = float(terms.get("video_reserve_rub") or 0)
+                        if reserve > 0 and self.s.rub_per_usd > 0:
+                            raise CloudError(
+                                402,
+                                "video_reserve",
+                                f"Keep ₽{reserve:g} of paid balance for the clip; top up first",
+                            )
+                    else:
+                        min_paid = float(terms.get("video_min_paid_rub") or 0)
+                        if min_paid > 0 and self.s.rub_per_usd > 0:
+                            raise CloudError(
+                                402,
+                                "video_deposit",
+                                f"Video models open with an active tariff (₽{min_paid:g}); top up first",
+                            )
                 raise CloudError(404, "plan_model", f"{model_id!r} is not open on this account's tariff")
             return m
         if m is None and self.any_model(caller):
