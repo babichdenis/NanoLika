@@ -361,6 +361,9 @@ device with no recorded sign-in also returns 409; opening its app once records
 the binding. Credential hashes stay inside the relay and are never returned
 by the devices API. `DELETE /v1/devices/{id}` retains its older, separate meaning
 of forgetting an offline device.
+It returns `409 device_online` for a live device and leaves its socket and sign-in
+untouched. Removing an offline catalogue entry does not revoke its key, so that
+device may reconnect. Use the account cabinet disconnect route to revoke access.
 
 
 ## Telegram Mini App sign-in
