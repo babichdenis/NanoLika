@@ -1396,6 +1396,27 @@ class Cloud:
                     "connect": bool(row.get("connect")),
                     "days": max(1, int(row.get("days") or 30)),
                     "opens_at_paid_balance_rub": float(row.get("price_rub") or 0),
+                    # What a tariff may open. A missing cap is no cap; `models` is an
+                    # allowlist and `exclude` a denylist, both empty by default so an
+                    # operator's old PLANS keeps every model exactly as it was.
+                    "max_chat_out_rub": max(0.0, float(row.get("max_chat_out_rub") or 0)),
+                    "max_video_tokens": max(0, int(row.get("max_video_tokens") or 0)),
+                    "video_min_paid_rub": max(
+                        0.0,
+                        float(
+                            row.get("video_min_paid_rub")
+                            if row.get("video_min_paid_rub") is not None
+                            else self.s.video_min_paid_rub
+                        ),
+                    ),
+                    "models": [
+                        str(mid) for mid in (row.get("models") if isinstance(row.get("models"), list) else [])
+                        if isinstance(mid, str) and mid
+                    ],
+                    "exclude": [
+                        str(mid) for mid in (row.get("exclude") if isinstance(row.get("exclude"), list) else [])
+                        if isinstance(mid, str) and mid
+                    ],
                 }
             )
         return menu
@@ -1406,6 +1427,7 @@ class Cloud:
         if row is None:
             return None
         expires_at = int(row["expires_at"])
+        terms = next((p for p in self.plan_menu() if p["id"] == str(row["plan"])), {})
         return {
             "id": str(row["plan"]),
             "name": str(row["name"]),
@@ -1416,6 +1438,15 @@ class Cloud:
             "started_at": int(row["started_at"]),
             "expires_at": expires_at,
             "active": expires_at > self.clock(),
+            "max_chat_out_rub": float(terms.get("max_chat_out_rub") or 0),
+            "max_video_tokens": int(terms.get("max_video_tokens") or 0),
+            "video_min_paid_rub": float(
+                terms.get("video_min_paid_rub")
+                if terms.get("video_min_paid_rub") is not None
+                else self.s.video_min_paid_rub
+            ),
+            "models": list(terms.get("models") or []),
+            "exclude": list(terms.get("exclude") or []),
         }
 
     def plan_buy(self, account_id: str, plan_id: str, actor: str = "console", note: str = "") -> dict[str, Any]:
@@ -2140,12 +2171,13 @@ class Cloud:
 
     # -- 0.28: the model shelf ----------------------------------------------------------------
 
-    def _menu_by_kind(self) -> dict[str, list[ModelSpec]]:
+    def _menu_by_kind(self, caller: Caller | None = None) -> dict[str, list[ModelSpec]]:
         """The menu's models that a shelf can hold, per kind, in menu order."""
         out: dict[str, list[ModelSpec]] = {kind: [] for kind in SHELF_KINDS}
         for spec in self.s.models:
-            if spec.listed and spec.kind in out:
-                out[spec.kind].append(spec)
+            if spec.listed and spec.kind in out and self.model_visible(spec):
+                if caller is None or self.plan_allows(caller, spec):
+                    out[spec.kind].append(spec)
         return out
 
     def _stored_shelf(self, account_id: str) -> dict[str, Any]:
@@ -2159,13 +2191,13 @@ class Cloud:
             return {}
         return body if isinstance(body, dict) else {}
 
-    def shelf(self, account_id: str) -> dict[str, Any]:
+    def shelf(self, account_id: str, caller: Caller | None = None) -> dict[str, Any]:
         """What the account keeps in sight: `enabled` (kind → model ids) and `default`
         (kind → one of them). Without a stored shelf the answer is the menu's models marked
         `default_on`: a dear premium model stays on the menu but off a fresh shelf. A kind
         whose every model is off by default falls back to all of them, so no shelf is empty,
         and every account from before 0.28 keeps working exactly as it did."""
-        by_kind = self._menu_by_kind()
+        by_kind = self._menu_by_kind(caller)
         enabled: dict[str, list[str]] = {}
         for kind, rows in by_kind.items():
             fresh = [spec.id for spec in rows if getattr(spec, "default_on", True)]
@@ -2197,7 +2229,7 @@ class Cloud:
                 default.pop(kind, None)
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
-        return {"enabled": enabled, "default": default, "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models()}]}
+        return {"enabled": enabled, "default": default, "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models(caller)}]}
 
     def catalogue_public(self) -> dict[str, Any]:
         """The menu for anyone, key or not: what each model is for and what an account pays
@@ -2235,11 +2267,9 @@ class Cloud:
         serves, what it can take in and give back, and what it costs the account (the sale
         rate in rubles where one is set, the provider's price in yuan always, and for a
         picture or a clip the tokens of the grant one costs). Beside it, the account's shelf."""
-        shelf = self.shelf(caller.account_id)
+        shelf = self.shelf(caller.account_id, caller)
         models = []
-        for spec in self.s.models:
-            if not self.model_visible(spec):
-                continue
+        for spec in self.visible_models(caller):
             models.append(
                 {
                     "id": spec.id,
@@ -2287,8 +2317,8 @@ class Cloud:
         raw = data.get("enabled", {})
         if not isinstance(raw, dict):
             raise CloudError(400, "bad_request", "enabled maps a kind to a list of model ids")
-        by_kind = self._menu_by_kind()
-        stored = self.shelf(caller.account_id)
+        by_kind = self._menu_by_kind(caller)
+        stored = self.shelf(caller.account_id, caller)
         enabled: dict[str, list[str]] = {kind: list(ids) for kind, ids in stored["enabled"].items()}
         for kind, ids in raw.items():
             if kind not in by_kind:
@@ -2327,12 +2357,12 @@ class Cloud:
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
         favourites = data.get("favourites", stored.get("favourites", []))
-        known_ids = {m.id for m in self.visible_models()}
+        known_ids = {m.id for m in self.visible_models(caller)}
         if not isinstance(favourites, list) or len(favourites) > 500 or any(not isinstance(mid, str) or mid not in known_ids for mid in favourites):
             raise CloudError(400, "bad_model", "Invalid favourites")
         body = {"enabled": {kind: ids for kind, ids in enabled.items()}, "default": default, "favourites": list(dict.fromkeys(favourites))}
         self.db.put_shelf(caller.account_id, json.dumps(body, ensure_ascii=False))
-        return self.shelf(caller.account_id)
+        return self.shelf(caller.account_id, caller)
 
     def me(self, caller: Caller, place: Place | None = None) -> dict:
         t = now()
@@ -2457,7 +2487,7 @@ class Cloud:
                 "bonus_available": False,
                 "bonus_at": caller.contribute_bonus_at,
             },
-            "models": [m.to_public() for m in self.visible_models()],
+            "models": [m.to_public() for m in self.visible_models(caller)],
             "base_url": self.s.public_base,
             "recent": [self._ledger_row(r) for r in self.db.recent_ledger(caller.account_id)],
             # 0.18: when the app may ask for a star (the same object as GET /v1/nudges), so a
@@ -2527,6 +2557,65 @@ class Cloud:
 
     # -- budget -------------------------------------------------------------------------
 
+    def paid_balance_rub(self, account_id: str) -> float:
+        """The unspent part of what the person actually paid, in rubles.
+
+        The free grant is deliberately not counted: a video provider holds a deposit
+        against a clip, and a grant the operator gave away cannot fund that deposit.
+        """
+        account = self.db.account(account_id)
+        paid_uy = int(account["paid_balance_uy"] or 0) if account is not None else 0
+        return self.s.cny_to_rub(self.s.uy_to_cny(paid_uy))
+
+    def plan_terms(self, account_id: str) -> dict[str, Any]:
+        """The model terms in force: the active tariff's, or the lowest tariff's for a
+        free/expired account. The first menu row is the operator's own floor."""
+        plan = self.plan_state(account_id)
+        if plan is not None and plan.get("active"):
+            return plan
+        menu = self.plan_menu()
+        if menu:
+            return {**menu[0], "id": "free", "active": False}
+        return {
+            "id": "free",
+            "active": False,
+            "max_chat_out_rub": 0.0,
+            "max_video_tokens": 0,
+            "video_min_paid_rub": self.s.video_min_paid_rub,
+            "models": [],
+            "exclude": [],
+        }
+
+    def plan_allows(self, caller: Caller | None, spec: ModelSpec) -> bool:
+        """Whether this account's tariff opens `spec`.
+
+        `models` is an allowlist, `exclude` a denylist; an empty list is no restriction.
+        A chat model over the tariff's output-price cap stays closed. A video model over
+        the tariff's clip-token cap stays closed, and every video model stays closed
+        until the paid balance can cover the provider's deposit.
+        """
+        if caller is None:
+            return True
+        terms = self.plan_terms(caller.account_id)
+        allowed = terms.get("models") or []
+        if allowed and spec.id not in allowed:
+            return False
+        if spec.id in (terms.get("exclude") or []):
+            return False
+        cap_rub = float(terms.get("max_chat_out_rub") or 0)
+        if spec.kind == "chat" and cap_rub > 0:
+            price = float(spec.sell_out or self.s.cny_to_rub(spec.price_out))
+            if price > cap_rub:
+                return False
+        if spec.kind == "video":
+            cap_tokens = int(terms.get("max_video_tokens") or 0)
+            if cap_tokens > 0 and spec.per_clip > cap_tokens:
+                return False
+            min_paid = float(terms.get("video_min_paid_rub") or 0)
+            if min_paid > 0 and self.s.rub_per_usd > 0 and self.paid_balance_rub(caller.account_id) < min_paid:
+                return False
+        return True
+
     def any_model(self, caller: Caller | None) -> bool:
         """May this caller name any model of the provider's, not only the menu's?"""
         return bool(caller is not None and caller.member and self.s.any_model_members)
@@ -2537,12 +2626,24 @@ class Cloud:
         for a member, with any_model_members on, any id shaped like one besides."""
         m = self.s.model(model_id)
         if m is not None and m.kind == kind:
+            if not self.model_visible(m):
+                raise CloudError(404, "model_not_offered", f"{model_id!r} is not on the menu")
+            if not self.plan_allows(caller, m):
+                terms = self.plan_terms(caller.account_id) if caller is not None else {}
+                min_paid = float(terms.get("video_min_paid_rub") or 0)
+                if m.kind == "video" and min_paid > 0 and self.s.rub_per_usd > 0:
+                    raise CloudError(
+                        402,
+                        "video_deposit",
+                        f"Video models open when the paid balance reaches ₽{min_paid:g}; top up first",
+                    )
+                raise CloudError(404, "plan_model", f"{model_id!r} is not open on this account's tariff")
             return m
         if m is None and self.any_model(caller):
             unlisted = self.s.unlisted_model(model_id, kind)
-            if unlisted is not None:
+            if unlisted is not None and self.plan_allows(caller, unlisted):
                 return unlisted
-        offered = ", ".join(x.id for x in self.s.public_models if x.kind == kind)
+        offered = ", ".join(x.id for x in self.visible_models(caller) if x.kind == kind)
         if m is not None:
             raise CloudError(404, "model_not_offered", f"{model_id!r} is a {m.kind} model, not a {kind} one; choose one of: {offered}")
         more = ", or any model of the provider's by its id" if self.any_model(caller) else ""
@@ -2553,8 +2654,12 @@ class Cloud:
         choices = saved[0] if saved and isinstance(saved[0], dict) else {}
         return bool(choices.get(spec.id, spec.listed)) and bool(spec.available)
 
-    def visible_models(self) -> list[ModelSpec]:
-        return [m for m in self.s.public_models if self.model_visible(m)]
+    def visible_models(self, caller: Caller | None = None) -> list[ModelSpec]:
+        """The menu: globally visible, and for a signed-in caller, open on the tariff."""
+        return [
+            m for m in self.s.public_models
+            if self.model_visible(m) and (caller is None or self.plan_allows(caller, m))
+        ]
 
     def set_model_visibility(self, model_id: str, visible: bool) -> None:
         with self.db.tx() as conn:
@@ -2581,7 +2686,7 @@ class Cloud:
         """The menu, and whether this account may name a model beyond it."""
         return {
             "object": "list",
-            "data": [self.public_model(m, caller) for m in self.visible_models()],
+            "data": [self.public_model(m, caller) for m in self.visible_models(caller)],
             "nanomuse": {"any_model": self.any_model(caller)},
         }
 

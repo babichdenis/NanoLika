@@ -788,6 +788,9 @@ class Settings:
     # and neither does the members list, since a chat has no address to list.
     bot_signin_token: str = field(default_factory=lambda: _env("BOT_SIGNIN_TOKEN"))
     bot_signup_open: bool = field(default_factory=lambda: _env("BOT_SIGNUP_OPEN", "1") not in ("0", "false", "no"))
+    # Telegram bot token for WebApp initData validation (HMAC-SHA256 of init_data)
+    # Get from @BotFather. Different from BOT_SIGNIN_TOKEN (shared secret for bot→relay).
+    telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN"))
     # How long a one-time code lives that ties a second identifier to an account: the chat
     # makes it (`POST /v1/bot/link-code`), the app types it beside its own sign-in code, and
     # both then are one account. 0 = linking switched off.
@@ -801,6 +804,10 @@ class Settings:
     # Free grants do not count toward a threshold. Spending reduces the paid portion. Money
     # is not removed to buy a tariff and ordinary top-ups during an active term do not extend it.
     plans_json: str = field(default_factory=lambda: _env("PLANS", DEFAULT_PLANS))
+    # A clip is made against a provider that wants a deposit held for it, so a video model
+    # opens only when the account's *paid* balance (never a free grant) covers this much.
+    # A plan may override it with `video_min_paid_rub`; 0 turns the rule off.
+    video_min_paid_rub: float = field(default_factory=lambda: float(_env("VIDEO_MIN_PAID_RUB", "590")))
     # An active tariff is the monthly service key for the cross-device hub. Paid balance
     # thresholds are evaluated after confirmed top-ups; no automatic charge is made at expiry.
     # A member is exempt.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -219,3 +221,66 @@ def test_the_admin_card_shows_the_tariff_and_the_connection():
     assert after["plan"]["expires_at"] > 0
     assert after["connect"]["allowed"] is True
     assert after["connect"]["plan"]["id"] == "lika-plus"
+
+
+def _plans() -> str:
+    return json.dumps(
+        [
+            {
+                "id": "lika",
+                "name": "Лика",
+                "price_rub": 590,
+                "discount_pct": 10,
+                "connect": True,
+                "max_chat_out_rub": 300,
+                "max_video_tokens": 300_000,
+                "video_min_paid_rub": 590,
+            },
+            {
+                "id": "lika-plus",
+                "name": "Лика+",
+                "price_rub": 1490,
+                "discount_pct": 20,
+                "connect": True,
+                "video_min_paid_rub": 590,
+            },
+        ]
+    )
+
+
+def test_a_low_tariff_hides_an_expensive_chat_model_and_a_higher_one_opens_it():
+    client, cloud, sender = stack(plans_json=_plans())
+    key, me = sign_up(client, sender)
+    account_id = me["account"]["id"]
+    headers = {"Authorization": f"Bearer {key}"}
+
+    free = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "qwen3.8-flash" in free
+    assert "deepseek-v4.1-flash" not in free  # sell_out ₽1040 > the low plan's ₽300 cap
+
+    cloud.plan_buy(account_id, "lika")
+    low = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "deepseek-v4.1-flash" not in low
+
+    cloud.plan_buy(account_id, "lika-plus")
+    high = {m["id"] for m in client.get("/v1/me/models", headers=headers).json()["models"]}
+    assert "deepseek-v4.1-flash" in high
+
+
+def test_a_video_model_opens_only_when_paid_money_covers_the_provider_deposit():
+    client, cloud, sender = stack(plans_json=_plans())
+    key, me = sign_up(client, sender)
+    account_id = me["account"]["id"]
+    cloud.plan_buy(account_id, "lika")
+    caller = cloud.authenticate(key)
+
+    with pytest.raises(CloudError) as refused:
+        cloud.model_for("wan2.2-i2v-flash", "video", caller)
+    assert refused.value.code == "video_deposit"
+
+    with cloud.db.tx() as conn:
+        conn.execute(
+            "UPDATE accounts SET paid_balance_uy=? WHERE id=?",
+            (cloud.s.rub_to_uy(590), account_id),
+        )
+    assert cloud.model_for("wan2.2-i2v-flash", "video", caller).id == "wan2.2-i2v-flash"
