@@ -362,6 +362,8 @@ export interface SyncSessions {
   forgetAll?(): Promise<void>
   /** Model-facing context for the session's next step (`agent.inject`): what the other devices said; never shown as the person's words. */
   inject(sessionId: string, text: string): Promise<void>
+  /** Persisted remote turns, replayed before a shared task after reconnect. */
+  remote?(sessionId: string): RemoteLine[]
 }
 
 /**
@@ -511,6 +513,7 @@ export interface SyncState {
   /** "Also sync side chats" (C9), per device, off by default: off → only the main conversation goes up and comes down. */
   sideChats: boolean
   /** The cloud on each chat (C11), where it stands per session; absent = local. */
+  pendingArchives?: Record<string, boolean>
   clouds: Record<string, CloudMark>
   /** dsh session id → conversation id. */
   cids: Record<string, string>
@@ -527,6 +530,7 @@ export interface SyncState {
   /** Rows deleted elsewhere after they were appended here: a log forgets nothing, the browser half hides them. */
   hidden: string[]
   /** Sessions whose conversation was deleted elsewhere: the browser half archives them (the host has no archive) and reports back. */
+  toRestore?: string[]
   toArchive: string[]
   /** 0.1.36 kept the other devices' chats as mirrors; a state that still has them is migrated (`migrate`). */
   mirrors?: Record<string, unknown>
@@ -580,7 +584,7 @@ export function migrate(state: SyncState | undefined): SyncState {
  * longer the main chat here.
  */
 export function forAccount(state: SyncState, accountId: string): SyncState {
-  const next: SyncState = { ...state, accountId, cursor: 0, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
+  const next: SyncState = { ...state, accountId, cursor: 0, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {} }
   const mainOwner = state.owners[state.mainSession]
   if (mainOwner && mainOwner !== accountId) next.mainSession = ''
   return next
@@ -631,6 +635,7 @@ export interface SyncView {
   /** mids of rows deleted elsewhere: hidden in the transcript. */
   hidden: string[]
   /** Sessions whose conversation was deleted elsewhere: to be archived by the browser half. */
+  toRestore?: string[]
   toArchive: string[]
 }
 
@@ -693,13 +698,23 @@ export class SyncEngine {
 
   async resolveCid(cid: string, loadHistory = false): Promise<string | undefined> {
     const account = this.state.accountId
-    await this.pullQuietly()
+    if (!(await this.active())) return undefined
+    // A task cannot use a cached catalogue after a failed refresh.
+    await this.pull()
     if (account !== this.state.accountId) return undefined
     if (!this.catalogueIds.has(cid)) return undefined
     const sessionId = this.sessionOf(cid)
+    if (!sessionId || this.syncPaused(sessionId) || this.state.conversations[cid]?.archived) return undefined
     if (sessionId && loadHistory) {
       this.preparingSessions.add(sessionId)
-      try { await this.pull() } finally { this.preparingSessions.delete(sessionId) }
+      try {
+        await this.pull()
+        if (account !== this.state.accountId || this.syncPaused(sessionId) || this.state.conversations[cid]?.archived || this.sessionOf(cid) !== sessionId) return undefined
+        // Rebuild model-facing context from the persisted shared rows, including turns
+        // received before a restart or a previously failed background injection.
+        const lines = this.options.sessions.remote?.(sessionId) ?? []
+        if (lines.length) await this.options.sessions.inject(sessionId, meanwhileNote(lines))
+      } finally { this.preparingSessions.delete(sessionId) }
     }
     return sessionId
   }
@@ -735,10 +750,11 @@ export class SyncEngine {
       relay: this.relayState,
       rev: this.rev,
       mainSession: this.state.mainSession,
-      sessions: Object.keys(this.state.cids).filter((sid) => this.owns(sid)),
+      sessions: Object.keys(this.state.cids).filter((sid) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
       foreign: this.foreign(),
       hidden: [...this.state.hidden],
-      toArchive: [...this.state.toArchive],
+      toArchive: this.state.toArchive.filter(sid => this.state.clouds[sid] !== 'local' || !this.state.cids[sid]),
+      toRestore: Object.entries(this.state.cids).filter(([sid, cid]) => this.owns(sid) && this.state.clouds[sid] !== 'local' && this.state.conversations[cid]?.archived === false && !(sid in (this.state.pendingArchives ?? {}))).map(([sid]) => sid),
     }
   }
 
@@ -883,13 +899,49 @@ export class SyncEngine {
   /** Archive a shared chat without deleting its transcript; local chat state remains on the host. */
   async setArchived(sessionId: string, archived: boolean): Promise<void> {
     const cid = this.state.cids[sessionId]
-    const token = await this.options.token()
-    if (!cid || !token || !this.state.enabled || !this.signedIn) return
-    await this.options.relay.setArchived(token, cid, archived)
-    const known = this.state.conversations[cid]
+    if (!this.state.accountId || !this.syncs(sessionId)) return
+    this.state.pendingArchives ??= {}
+    this.state.pendingArchives[sessionId] = archived
+    const known = cid ? this.state.conversations[cid] : undefined
     if (known) known.archived = archived
+    this.state.toArchive = this.state.toArchive.filter(id => id !== sessionId)
     await this.save()
     this.changed()
+    try { await this.flushArchives() } catch (error) { this.noteError(error) }
+  }
+
+  private archiveFlushing: Promise<void> | undefined
+
+  private flushArchives(): Promise<void> {
+    if (this.archiveFlushing) return this.archiveFlushing
+    this.archiveFlushing = this.flushArchiveBatch().finally(() => { this.archiveFlushing = undefined })
+    return this.archiveFlushing
+  }
+
+  private async flushArchiveBatch(): Promise<void> {
+    if (!this.state.enabled || !this.signedIn) return
+    const token = await this.options.token()
+    if (!token) return
+    const account = this.state.accountId
+    for (const [sid, archived] of Object.entries(this.state.pendingArchives ?? {})) {
+      if (this.state.accountId !== account) return
+      const cid = this.state.cids[sid]
+      if (!cid || !this.owns(sid) || this.state.clouds[sid] === 'local') continue
+      try {
+        await this.options.relay.setArchived(token, cid, archived)
+      } catch (error) {
+        if (error instanceof RelayError && error.status === 404 && this.state.accountId === account && this.state.cids[sid] === cid) {
+          delete this.state.pendingArchives?.[sid]
+          await this.save()
+          continue
+        }
+        throw error
+      }
+      if (this.state.accountId === account && this.state.pendingArchives?.[sid] === archived) {
+        delete this.state.pendingArchives[sid]
+        await this.save()
+      }
+    }
   }
 
   /** The browser half archived the sessions whose conversations were deleted elsewhere. */
@@ -953,20 +1005,16 @@ export class SyncEngine {
     return this.view()
   }
 
-  /**
-   * 0.29/0.30: put a cloud on one chat, or take it off (C11). On: the chat goes up after a fresh
-   * pull of the account's side turns and keeps syncing. Off: its conversation leaves the account
-   * (the relay deletes it, so the messengers and the browser stop showing the chat), what was said
-   * here stays as a local chat. Two chats answer `{ok: false, reason}` instead of pretending: the
-   * main chat, which is the account's own conversation and always in the cloud, and one that came
-   * by sync, which may only be deleted from the account whole (`deleteConversation`). A person
-   * signed out, or with the sync switched off, gets `not-synced-account`.
-   */
+  /** Pause this computer's exchange without deleting the shared conversation or its mapping. */
   async setSynced(sessionId: string, on: boolean): Promise<SyncedOutcome> {
     const refusal = this.cloudRefusal(sessionId)
     if (refusal) return { ...this.view(), ok: false, reason: refusal }
-    if (on) this.state.clouds[sessionId] = 'device'
-    else await this.cloudOff(sessionId)
+    this.state.clouds[sessionId] = on ? 'device' : 'local'
+    if (!on) {
+      this.dirty.delete(sessionId)
+      delete this.state.pendingArchives?.[sessionId]
+      this.state.toArchive = this.state.toArchive.filter(id => id !== sessionId)
+    }
     await this.save()
     if (on) void this.pullTail().then(() => this.pushAllSoon())
     this.changed()
@@ -990,29 +1038,16 @@ export class SyncEngine {
     return { ...this.view(), ok: true }
   }
 
-  /**
-   * Why this chat's cloud is not the person's to change here (C11), or nothing when it is. Both the
-   * switch and the delete ask this: the main chat first, then whether anything may sync at all on
-   * this computer, then the chat that came from the cloud.
-   */
+  /** The account's main chat stays shared; other chats can pause locally. */
   private cloudRefusal(sessionId: string): CloudRefusal | undefined {
     if (!sessionId) return 'unknown-session'
     if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return 'main'
     if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return 'not-synced-account'
-    if (this.state.clouds[sessionId] === 'sync') return 'synced-from-cloud'
-    const cid = this.state.cids[sessionId]
-    const known = cid ? this.state.conversations[cid] : undefined
-    // a conversation whose mark was never written (a state from before C11): the account holds the
-    // chat and another device or a messenger made it, so it may not be made local silently
-    if (known && known.device && known.device !== this.options.deviceId()) return 'synced-from-cloud'
+
     return undefined
   }
 
-  /**
-   * The cloud comes off a chat (C11): its conversation is deleted in the account, since the other
-   * devices and the messengers see only what the relay holds, and the mark reads `local` so that a
-   * later turn here does not put it back up. The chat itself stays, with everything said in it.
-   */
+  /** Explicit account deletion is separate from pausing this computer's sync. */
   private async cloudOff(sessionId: string): Promise<void> {
     const cid = this.state.cids[sessionId]
     if (cid && sessionId !== this.state.mainSession) {
@@ -1119,13 +1154,7 @@ export class SyncEngine {
 
   /** The person sent a message in a session here: it goes up now (C8), not when the turn ends. */
   messageSent(sessionId: string): void {
-    if (!this.syncs(sessionId)) {
-      if (!this.signedIn || !this.state.accountId || !this.state.enabled || this.state.sideChats || this.state.clouds[sessionId] === 'local' || this.state.cids[sessionId] || !this.owns(sessionId)) return
-      this.state.clouds[sessionId] = 'device'
-      this.adopt(sessionId)
-      void this.save()
-      this.changed()
-    }
+    if (!this.syncs(sessionId)) return
     this.dirty.add(sessionId)
     this.presence.set(sessionId, true)
     this.pushSoon(Math.min(SEND_DELAY_MS, this.options.pushDelayMs ?? PUSH_DELAY_MS))
@@ -1376,6 +1405,8 @@ export class SyncEngine {
     return this.pull(true).catch(() => 0)
   }
 
+  private syncPaused(sessionId: string): boolean { return this.state.clouds[sessionId] === 'local' }
+
   private async pullCatalogue(token: string): Promise<number | undefined> {
     if (this.catalogSupported === false) return undefined
     const account = this.state.accountId
@@ -1397,6 +1428,15 @@ export class SyncEngine {
     let changed = this.catalogueSignature !== JSON.stringify(data)
     this.catalogueSignature = JSON.stringify(data)
     for (const c of data.conversations) { await this.applyConversation(c); this.unread.set(c.cid, c.unread || 0) }
+    const main = data.conversations.find(c => c.kind === 'main' && !c.deleted)
+    const mainSession = main ? this.sessionOf(main.cid) : undefined
+    if (mainSession && mainSession !== this.state.mainSession) {
+      this.state.mainSession = mainSession
+      for (const [sid, cid] of Object.entries(this.state.cids)) {
+        if (sid !== mainSession && this.state.conversations[cid]?.archived && this.state.clouds[sid] !== 'local' && !this.state.toArchive.includes(sid)) this.state.toArchive.push(sid)
+      }
+      changed = true
+    }
     let applied = 0
     const notes = new Map<string, RemoteLine[]>()
     const visible = this.refreshSelections()
@@ -1404,10 +1444,10 @@ export class SyncEngine {
     visible.forEach(id => this.selectedSessions.add(id))
     for (const sessionId of new Set([...this.selectedSessions, ...this.preparingSessions])) {
       const cid = this.cidOf(sessionId)
-      if (!this.owns(sessionId) || !cid || !ids.has(cid)) continue
+      if (!this.owns(sessionId) || !cid || !ids.has(cid) || this.state.clouds[sessionId] === 'local') continue
       for (let round = 0; round < 50; round++) {
         const page = await this.options.relay.chatMessages(token, cid, this.messageCursors.get(cid) ?? 0)
-        if (account !== this.state.accountId || (page.account_id && page.account_id !== account) || (!this.selectedSessions.has(sessionId) && !this.preparingSessions.has(sessionId))) break
+        if (account !== this.state.accountId || (page.account_id && page.account_id !== account) || this.syncPaused(sessionId) || (!this.selectedSessions.has(sessionId) && !this.preparingSessions.has(sessionId))) break
         for (const m of page.messages) { await this.applyMessage(m, notes); applied++ }
         this.messageCursors.set(cid, page.cursor)
         if (!page.more) {
@@ -1433,6 +1473,7 @@ export class SyncEngine {
     if (!(await this.active())) return 0
     const token = await this.options.token()
     if (!token) return 0
+    await this.flushArchives()
     const lazy = await this.pullCatalogue(token)
     if (lazy !== undefined) return lazy
     let applied = 0
@@ -1471,6 +1512,8 @@ export class SyncEngine {
 
   private async applyConversation(c: WireConversation): Promise<void> {
     let sessionId = this.sessionOf(c.cid)
+    if (sessionId && this.state.clouds[sessionId] === 'local') return
+    if (sessionId && sessionId in (this.state.pendingArchives ?? {})) c = { ...c, archived: this.state.pendingArchives![sessionId] === true }
     if (c.deleted) {
       delete this.state.conversations[c.cid]
       if (sessionId) {
@@ -1478,13 +1521,14 @@ export class SyncEngine {
         delete this.state.cids[sessionId]
         delete this.state.titles[sessionId]
         // the chat is gone from the account, so what stays here is a local chat (C11)
-        delete this.state.clouds[sessionId]
+        this.state.clouds[sessionId] = 'local'
         if (sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
       }
       return
     }
     // side chats off (C9): a side conversation from elsewhere is not a chat here, and one that was stays as it is
     if (c.kind === 'side' && !this.state.sideChats && this.catalogSupported !== true) return
+    if (c.archived === false && sessionId) this.state.toArchive = this.state.toArchive.filter(id => id !== sessionId)
     const known = this.state.conversations[c.cid]
     this.state.conversations[c.cid] = {
       kind: c.kind,
@@ -1535,17 +1579,11 @@ export class SyncEngine {
     this.noteCloud(sessionId, c.device)
   }
 
-  /**
-   * A conversation that arrives is a chat in the cloud here too (C11), whether another device, a
-   * messenger or the account itself made it: its turns go up from now on without the person doing
-   * anything, and it cannot be turned local, only deleted from the account. Two exceptions: the main
-   * chat, in the cloud whatever this says, and a conversation this device pushed itself, which came
-   * up because the person turned the cloud on or used the older "Also sync side chats" switch.
-   */
+  /** Mark a shared chat as syncing, preserving an explicit local pause. */
   private noteCloud(sessionId: string, from: string): void {
     if (!sessionId || sessionId === this.state.mainSession) return
     const mark = this.state.clouds[sessionId]
-    if (mark === 'device' || mark === 'sync') return
+    if (mark === 'device' || mark === 'sync' || mark === 'local') return
     if (from && from === this.options.deviceId()) return
     this.state.clouds[sessionId] = 'sync'
   }
@@ -1566,6 +1604,8 @@ export class SyncEngine {
   }
 
   private async applyMessage(m: WireMessage, notes: Map<string, RemoteLine[]>): Promise<void> {
+    const mappedSession = this.sessionOf(m.cid)
+    if (mappedSession && this.state.clouds[mappedSession] === 'local') return
     if (m.deleted) {
       const kept = this.state.pulled[m.mid]
       if (kept) {

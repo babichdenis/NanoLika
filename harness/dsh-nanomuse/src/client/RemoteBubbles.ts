@@ -20,6 +20,7 @@
  */
 import { call, type Translate } from './api.ts'
 import { subscribeLive } from './live.ts'
+import { bindRemoteSession, remoteFlowItem } from './remote-layout.ts'
 
 const DONE = 'data-nm-remote'
 const KEY = 'data-nm-remote-key'
@@ -80,16 +81,7 @@ function bubble(t: Translate, row: RemoteRow): HTMLElement {
 
 /** The element the chat lays out: the row itself, or the turn-process group it sits in. */
 function flowItem(node: HTMLElement, content: HTMLElement): HTMLElement {
-  let item = node
-  while (
-    item.parentElement &&
-    item.parentElement !== content &&
-    !item.parentElement.hasAttribute('data-chat-flow') &&
-    item.parentElement.hasAttribute('data-chat-group-key')
-  ) {
-    item = item.parentElement
-  }
-  return item
+  return remoteFlowItem(node, content)
 }
 
 function placeBefore(target: HTMLElement, node: HTMLElement): void {
@@ -153,7 +145,7 @@ export function renderRemoteBubbles(t: Translate): () => void {
     for (const line of remote.lines) if (line.before) knownPrompts.add(line.before)
     let firstUnseenPrompt: HTMLElement | undefined
     for (const [k, node] of rows) {
-      if (k.startsWith('13:input-message') && !knownPrompts.has(k)) {
+      if (k.startsWith('13:input-message') && ['user', 'steering'].includes(node.getAttribute('data-chat-flow-kind') ?? '') && !knownPrompts.has(k)) {
         firstUnseenPrompt ??= node
       }
     }
@@ -243,13 +235,14 @@ export function renderRemoteBubbles(t: Translate): () => void {
     for (const content of document.querySelectorAll<HTMLElement>('[data-conversation-content][data-conversation-session]')) {
       const sessionId = content.getAttribute('data-conversation-session') ?? ''
       if (!sessionId) continue
+      bindRemoteSession(content, sessionId)
       const remote = cache.get(sessionId)
       if (!remote) {
         fetchFor(sessionId)
         continue
       }
       // nothing from elsewhere in this chat: its rows are not read at all
-      if (remote.lines.length === 0) continue
+      if (remote.lines.length === 0 && !content.querySelector('.nm-remote')) continue
       dress(sessionId, content, remote)
     }
   }
@@ -267,7 +260,7 @@ export function renderRemoteBubbles(t: Translate): () => void {
   const observer = new MutationObserver((records) => {
     if (records.some((m) => !ours(m))) schedule()
   })
-  observer.observe(document.body, { childList: true, subtree: true })
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-conversation-session'] })
   const selectionVisibility = () => {
     if (document.visibilityState === 'hidden') { selection = '[]'; void call('sync/open', { sessionIds: [], reader }).catch(() => undefined) }
     else schedule()

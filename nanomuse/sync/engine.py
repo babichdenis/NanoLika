@@ -110,6 +110,7 @@ def _iso(unix: int | float | None) -> str:
 class ConversationSync:
     def __init__(self, svc: MuseService):
         self.svc = svc
+        self._catalog_started_at = time.time()
         self.path = svc.data_dir / "sync.json"
         self.state: dict[str, Any] = {
             "account_id": "",
@@ -127,6 +128,9 @@ class ConversationSync:
         }
         self._load()
         self.client = SyncClient(svc.hub.cloud)
+        from nanomuse.sync.catalog import LazyCatalog
+
+        self.catalog = LazyCatalog(self)
         self._push_task: asyncio.Task[None] | None = None
         self._pull_task: asyncio.Task[int] | None = None
         self._timer: asyncio.Task[None] | None = None
@@ -160,6 +164,11 @@ class ConversationSync:
             for key in ("account_id", "cursor", "enabled", "side_chats"):
                 if key in data:
                     self.state[key] = data[key]
+            cursors = data.get("message_cursors", {})
+            if isinstance(cursors, dict):
+                self.state["message_cursors"] = {
+                    str(k): v for k, v in cursors.items() if type(v) is int and v >= 0
+                }
             for key in ("cids", "titles", "owners", "mains"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = {str(k): str(v) for k, v in data[key].items()}
@@ -182,7 +191,7 @@ class ConversationSync:
 
     @property
     def side_chats(self) -> bool:
-        return bool(self.state.get("side_chats", False))
+        return bool(self.state.get("catalog_mode") or self.state.get("side_chats", False))
 
     @property
     def scope(self) -> str:
@@ -247,6 +256,13 @@ class ConversationSync:
             return False
         if not self._mine(thread):
             return False
+        if (
+            self.state.get("catalog_mode")
+            and not self.cid_of(thread.id)
+            and thread.id != MAIN_THREAD
+            and _unix(thread.created_at) < self._catalog_started_at
+        ):
+            return False
         return self.side_chats or thread.id == MAIN_THREAD
 
     def _cid_for(self, thread: Thread) -> str:
@@ -269,6 +285,9 @@ class ConversationSync:
             "last_pull_at": self.last_pull_at,
             "last_push_at": self.last_push_at,
             "error": self.last_error,
+            "unread": {
+                tid: self.catalog.unread.get(cid, 0) for tid, cid in self.state["cids"].items()
+            },
             "working": self.working_view(),
         }
 
@@ -822,8 +841,100 @@ class ConversationSync:
                 self._note_error(exc)
                 raise
 
+    async def hydrate_thread(
+        self,
+        thread: Thread,
+        cid: str,
+        *,
+        remote_task: bool = False,
+        current_user_text: str = "",
+    ) -> int:
+        """Replace the agent's text context with the relay's canonical transcript.
+
+        Channels such as Telegram can receive a turn while this runtime has been offline.
+        An incremental pull only fills rows after the saved cursor, which is not enough if
+        an earlier pull was incomplete or the local session was restored from an older copy.
+        Push any completed local turn first, then read every retained row for this cid before
+        letting the agent answer. The relay stores the shared user/final-assistant transcript;
+        local tool traces and attachment bytes are deliberately not part of that contract.
+        """
+        if not cid or not self._mine(thread):
+            return 0
+        if remote_task and not thread.remote_from:
+            return 0
+        if not remote_task and not self._eligible(thread):
+            return 0
+        if not self.active:
+            raise CloudError(409, "sync_unavailable", "Cloud conversation sync is not active")
+        if thread.busy:
+            raise CloudError(409, "conversation_busy", "The conversation is already answering")
+        await self.push()
+        async with self._lock:
+            if not self.active:
+                raise CloudError(409, "sync_unavailable", "Cloud conversation sync is not active")
+            if not remote_task and self.cid_of(thread.id) != cid:
+                return 0
+            if thread.busy:
+                raise CloudError(409, "conversation_busy", "The conversation is already answering")
+            self.client.cloud.api_key = self.svc.hub._key()
+            rows: list[dict[str, Any]] = []
+            before = 0
+            for _page in range(MAX_ROUNDS):
+                page = await self.client.messages(cid, before=before, limit=500)
+                current = [m for m in page.get("messages") or [] if isinstance(m, dict)]
+                if not current:
+                    break
+                rows = current + rows
+                if not page.get("has_older"):
+                    break
+                first_seq = int(current[0].get("seq") or 0)
+                if first_seq <= 0 or first_seq == before:
+                    break
+                before = first_seq
+
+            history: list[Message] = []
+            for row in rows:
+                if row.get("deleted"):
+                    continue
+                role = str(row.get("role") or "")
+                if role not in ("user", "assistant"):
+                    continue
+                text = str(row.get("text") or "")
+                attachments = row.get("attachments")
+                if role == "user" and isinstance(attachments, list) and attachments:
+                    labels = [
+                        f"- {str(item.get('name') or 'file')} ({int(item.get('size') or 0)} bytes)"
+                        for item in attachments
+                        if isinstance(item, dict)
+                    ]
+                    if labels:
+                        text = f"{text}\n\n[Attached files]\n" + "\n".join(labels)
+                message = Message.user(text) if role == "user" else Message.assistant(text)
+                message.meta["mid"] = str(row.get("mid") or "")
+                history.append(message)
+            # The channel manager may have pushed the inbound message to the shared
+            # transcript before handing it to this device. `svc.send()` will add it to
+            # the task thread, so remove only that final canonical user row to avoid
+            # giving the model the same turn twice.
+            if (
+                remote_task
+                and current_user_text
+                and history
+                and history[-1].role == "user"
+                and history[-1].content.strip() == current_user_text.strip()
+            ):
+                history.pop()
+            thread.agent.messages = history
+            thread.agent._save_session()
+            return len(history)
+
     async def _pull_locked(self) -> int:
         self.client.cloud.api_key = self.svc.hub._key()
+        lazy = await self.catalog.pull()
+        if lazy is not None:
+            self.last_pull_at = now_iso()
+            self.last_error = ""
+            return lazy
         applied = 0
         # C9: a fresh device (cursor 0) asks for the tail of its scope, not the whole store;
         # side chats just turned on ask once more from zero, for everything, as a tail too
@@ -898,6 +1009,24 @@ class ConversationSync:
             return
         title = str(row.get("title") or "").strip()
         if kind == "main":
+            old_main_cid = self.cid_of(MAIN_THREAD)
+            if (
+                thread is not None
+                and thread.id != MAIN_THREAD
+                and old_main_cid
+                and old_main_cid != cid
+            ):
+                restore = thread.id
+                archived = self.svc.rehome_main(self.account_id, restore, keep=True)
+                for key in ("cids", "titles", "owners"):
+                    old = self.state[key].pop(MAIN_THREAD, None)
+                    if archived is not None and old is not None:
+                        self.state[key][archived.id] = old
+                    restored = self.state[key].pop(restore, None)
+                    if restored is not None:
+                        self.state[key][MAIN_THREAD] = restored
+                self._save()
+                thread = self.svc.threads.get(MAIN_THREAD)
             main = self.svc.threads.get(MAIN_THREAD)
             if main is None:
                 # one memory for every chat (channels.shared_thread): the chat apps have not
@@ -926,7 +1055,7 @@ class ConversationSync:
                 self.svc.rename_thread(thread.id, title)
             return
         device = str(row.get("device") or "")
-        if device and device == self.svc.hub.device_id:
+        if device and device == self.svc.hub.device_id and not self.state.get("catalog_mode"):
             # ours, but the mapping was lost (a reset): no second copy
             return
         created = self.svc.create_thread(title or "Side chat")
@@ -963,12 +1092,17 @@ class ConversationSync:
                     {"kind": "event_removed", "thread": thread.id, "id": existing["id"]}
                 )
             return
-        if existing is not None:
-            return
         device = str(row.get("device") or "")
         if device and device == self.svc.hub.device_id:
             # the echo of our own push (or a row of ours the timeline no longer holds):
             # never a second bubble (C8)
+            return
+        if existing is not None:
+            # The transcript may already contain this remote message even though its channel
+            # delivery was interrupted. Re-publish it; per-channel delivery receipts prevent
+            # duplicates and let failed sends retry on the next pull.
+            if existing.get("synced") and existing.get("via_device"):
+                self.svc.bus.publish({"kind": "event", "event": existing})
             return
         role = str(row.get("role") or "")
         if role not in ("user", "assistant"):
@@ -979,6 +1113,7 @@ class ConversationSync:
             "text": text,
             "mid": mid,
             "synced": True,
+            "quiet": bool(row.get("quiet")),
             "ts": _iso(row.get("created_at")),
         }
         if device:

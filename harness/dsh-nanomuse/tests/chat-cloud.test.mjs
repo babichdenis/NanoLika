@@ -54,7 +54,7 @@ test('the menu item of each: cloud on, cloud off, delete whole, or nothing for t
   assert.deepEqual(cloud.cloudItem(t, 'local'), { action: 'on', label: 'chSync' })
   assert.deepEqual(cloud.cloudItem(t, 'device'), { action: 'off', label: 'chUnsync' })
   // a chat from the cloud: the one thing the host allows is deleting it from the account whole
-  assert.deepEqual(cloud.cloudItem(t, 'sync'), { action: 'delete', label: 'chCloudDelete', hint: 'chCloudDeleteWhy' })
+  assert.deepEqual(cloud.cloudItem(t, 'sync'), { action: 'off', label: 'chUnsync' })
   // the main chat: the item stays, inert, and says why
   assert.deepEqual(cloud.cloudItem(t, 'main'), { action: 'none', label: 'chUnsync', hint: 'chCloudMain' })
 })

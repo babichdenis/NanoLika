@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import re
 import time
 from collections.abc import Coroutine
@@ -41,6 +42,7 @@ from nanomuse.channels.telegram import TelegramChannel
 from nanomuse.channels.telegram_topics import physical_chat
 from nanomuse.channels.wecom import WeComChannel
 from nanomuse.channels.welcome import send_welcome_art
+from nanomuse.cloud import CloudError
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
 from nanomuse.schema import Message
@@ -402,6 +404,7 @@ class ChannelManager(ChannelBus):
                 sender_name=msg.sender_name,
                 chat_id=physical_chat(msg.channel, msg.chat_id),
             )
+        msg = self.picker.topics.resume(msg)
         if await self.picker.topics.inbound(msg):
             return
         if await self.menu.inbound(msg):
@@ -459,6 +462,8 @@ class ChannelManager(ChannelBus):
                 )
                 return
             thread_id = origin_thread
+            if not await self._hydrate_shared_thread(thread_id, msg):
+                return
             await self._echo_selected_user(thread_id, msg, requested)
             await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "computer_started"))
             self._spawn(
@@ -469,7 +474,7 @@ class ChannelManager(ChannelBus):
                     device,
                     fallback=False,
                     shared_cid=self.svc.sync.cid_of(thread_id)
-                    if self.picker.selected(msg.channel, msg.chat_id) == thread_id
+                    if self.svc.sync.active and self.svc.sync._eligible(self.svc.threads[thread_id])
                     else "",
                 )
             )
@@ -517,9 +522,11 @@ class ChannelManager(ChannelBus):
         if msg.is_group and msg.sender_name and text:
             text = f"{msg.sender_name}: {text}"
         thread_id = origin_thread
+        if not await self._hydrate_shared_thread(thread_id, msg):
+            return
         await self._echo_selected_user(thread_id, msg, text)
         self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
-        device = getattr(self.svc.hub, "primary", lambda: None)() if text and (not paths) else None
+        device = await self._shared_execution_device(thread_id) if text and not paths else None
         if device is not None:
             self._spawn(
                 self._serve_from_device(
@@ -528,7 +535,7 @@ class ChannelManager(ChannelBus):
                     text,
                     device,
                     shared_cid=self.svc.sync.cid_of(thread_id)
-                    if self.picker.selected(msg.channel, msg.chat_id) == thread_id
+                    if self.svc.sync.active and self.svc.sync._eligible(self.svc.threads[thread_id])
                     else "",
                 )
             )
@@ -538,17 +545,126 @@ class ChannelManager(ChannelBus):
         cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
         if cloud_key == "!":
             return
+        self._shared_runtime_context(thread_id)
+        send_options: dict[str, Any] = {
+            "files": paths or None,
+            "language": self.menu.language(msg),
+        }
+        # Most linked chats use the bot's configured account and need no per-chat key.
+        # Keep that path compatible with older installed MuseService versions, whose
+        # send() predates once_key/once_model. A chat that actually has its own Cloud
+        # account still requires those parameters so its turn is billed to the right owner.
+        if cloud_key:
+            send_options["once_key"] = cloud_key
+            send_options["once_model"] = cloud_model
         try:
-            self.svc.send(
-                thread_id,
-                text,
-                files=paths or None,
-                once_key=cloud_key,
-                once_model=cloud_model,
-                language=self.menu.language(msg),
-            )
+            self.svc.send(thread_id, text, **send_options)
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
+
+    async def _shared_execution_device(self, thread_id: str) -> dict[str, Any] | None:
+        """Continue on the computer holding this chat's tool state when it is available.
+
+        The server remains the history owner. An unavailable computer never prevents
+        ordinary conversation on the server, and a capability probe starts no model turn.
+        """
+        hub = self.svc.hub
+        primary = getattr(hub, "primary", lambda: None)()
+        thread = self.svc.threads.get(thread_id)
+        sync = self.svc.sync
+        if thread is None or not sync.active or not sync._eligible(thread):
+            return primary
+        cid = sync.cid_of(thread_id)
+        if not cid:
+            return primary
+        devices = {
+            str(d.get("id") or ""): d
+            for d in hub.others()
+            if d.get("online")
+            and d.get("kind") == "computer"
+            and any(
+                action in (d.get("actions") or [])
+                for action in ("shared_chat", "chat.open_desktop")
+            )
+        }
+        preferred = [str(primary.get("id") or "")] if primary else []
+        preferred.extend(
+            str(event.get("via_device") or "")
+            for event in reversed(thread.timeline.events)
+            if event.get("type") == "assistant"
+        )
+        preferred.append(str(getattr(thread, "origin_device", "") or ""))
+        for device_id in dict.fromkeys(preferred):
+            device = devices.get(device_id)
+            if device is None:
+                continue
+            try:
+                result = await hub.call(device_id, "shared_chat", {"cid": cid}, timeout=12)
+            except (HubError, CloudError, TimeoutError):
+                continue
+            if result.get("cid") == cid and result.get("sessionId"):
+                # Early desktop builds implemented the handshake but omitted its marker
+                # from hello. Trust the successful CID-specific probe, not a version guess.
+                return {
+                    **device,
+                    "actions": list(set(device.get("actions") or []) | {"shared_chat"}),
+                }
+        return None
+
+    def _shared_runtime_context(self, thread_id: str) -> None:
+        """Describe server execution honestly when the desktop cannot continue the turn."""
+        thread = self.svc.threads.get(thread_id)
+        if thread is None or thread.busy or not self.svc.sync.active:
+            return
+        if not self.svc.sync.cid_of(thread_id) or not self.svc.sync._eligible(thread):
+            return
+        computers = [
+            {"name": d.get("name") or "computer", "online": bool(d.get("online"))}
+            for d in self.svc.hub.others()
+            if d.get("kind") == "computer"
+        ]
+        thread.agent.messages.append(
+            Message(
+                role="system",
+                content=(
+                    "Continue this same server-owned conversation using its shared history. "
+                    "This turn runs on the server, not in the computer's existing agent session. "
+                    "Computer status (quoted data): "
+                    + json.dumps(computers, ensure_ascii=False)
+                    + ". "
+                    "When a computer is offline, continue ordinary discussion, but say honestly "
+                    "that its current files, processes and local task state cannot be checked. "
+                    "Do not infer that a job stopped just because you cannot see it. "
+                    "For status questions use the known job id or process from this history; "
+                    "do not scan unrelated files or devices to reconstruct missing context, "
+                    "and never restart a generation or paid job merely to check progress. "
+                    "If the required identifier or access is missing, explain what cannot be verified."
+                ),
+            )
+        )
+
+    async def _hydrate_shared_thread(self, thread_id: str, msg: InboundMessage) -> bool:
+        """Refresh an eligible shared chat before any channel starts a model turn."""
+        sync = self.svc.sync
+        thread = self.svc.threads.get(thread_id)
+        cid = sync.cid_of(thread_id)
+        if thread is None or not sync.active or not cid or not sync._eligible(thread):
+            return True
+        try:
+            await sync.hydrate_thread(thread, cid)
+        except CloudError as exc:
+            logger.warning("{} cloud history refresh failed ({})", msg.channel, exc.code)
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "I could not refresh this conversation from the cloud. Please try again in a moment.",
+                    "我暂时无法从云端刷新这段对话，请稍后再试。",
+                    "Не удалось обновить историю из облака. Попробуйте ещё раз чуть позже.",
+                ),
+            )
+            return False
+        return True
 
     def _thread_for(self, msg: InboundMessage) -> str:
         selected = self.picker.selected(msg.channel, msg.chat_id)

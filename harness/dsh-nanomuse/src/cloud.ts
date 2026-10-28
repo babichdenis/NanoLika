@@ -912,6 +912,7 @@ export default class NanomuseCloud extends Service {
             await ctx.sessionController.rename({ sessionId: sessionId as SessionId, title })
           },
           keep: async (sessionId, line) => kept.add(sessionId, line),
+          remote: (sessionId) => kept.linesOf(sessionId),
           forget: async (sessionId, mid) => kept.remove(sessionId, mid),
           // another account signed in (C10): the last account's turns from elsewhere go; its mapping stays
           forgetAll: async () => {
@@ -3531,7 +3532,7 @@ export default class NanomuseCloud extends Service {
   private actions(): string[] {
     const out = [...ACTIONS, ...REMOTE_ACTIONS]
     if (this.tasks) out.push('approve', 'task', 'stop')
-    if (this.sync) out.push('chat.open_desktop')
+    if (this.sync) out.push('chat.open_desktop', 'shared_chat')
     out.push(...CODING_ACTIONS)
     return out
   }

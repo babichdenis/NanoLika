@@ -227,6 +227,23 @@ class FakeSyncRelay:
             raise CloudError(404, "no_conversation", "none")
         self.working_calls.append({"cid": cid, "working": working, "device": device})
 
+    async def messages(
+        self, cid: str, after: int = 0, before: int = 0, limit: int = 100
+    ) -> dict[str, Any]:
+        self._check("messages")
+        rows = sorted(
+            (m for m in self.msgs.values() if m["cid"] == cid and not m["deleted"]),
+            key=lambda m: m["seq"],
+        )
+        if before:
+            rows = [m for m in rows if m["seq"] < before]
+        elif after:
+            rows = [m for m in rows if m["seq"] > after]
+        older = len(rows) > limit
+        if older:
+            rows = rows[-limit:]
+        return {"messages": [dict(m) for m in rows], "has_older": older}
+
     async def push(
         self, device: str, conversations: list[dict[str, Any]], messages: list[dict[str, Any]]
     ) -> dict[str, Any]:
@@ -375,6 +392,75 @@ def test_a_finished_turn_is_pushed_as_the_main_conversation(synced) -> None:
     client.delete(f"/api/threads/{side['id']}")
     wait_for(lambda: relay.convs[cid]["deleted"])
     assert service.sync.cid_of(side["id"]) is None
+
+
+def test_channel_context_is_rebuilt_from_the_relay_transcript(synced) -> None:
+    client, service, _, relay = synced
+    side = client.post("/api/threads", json={"title": "Telegram topic"}).json()
+    thread = service.threads[side["id"]]
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(thread.id)
+    assert cid is not None
+    relay.add_message(cid, "user", "Earlier question")
+    relay.add_message(cid, "assistant", "Earlier answer")
+    relay.add_message(cid, "user", "Latest question")
+    thread.agent.messages = [service.threads[thread.id].agent.user_message("stale local copy")]
+
+    count = client.portal.call(service.sync.hydrate_thread, thread, cid)  # type: ignore[union-attr]
+
+    assert count == 3
+    assert [m.content for m in thread.agent.messages] == [
+        "Earlier question",
+        "Earlier answer",
+        "Latest question",
+    ]
+    assert all(m.meta.get("mid") for m in thread.agent.messages)
+
+
+def test_web_send_hydrates_a_stale_shared_conversation_before_the_model(synced) -> None:
+    client, service, llm, relay = synced
+    llm.script.append(LLMResponse(content="Follow-up answer", finish_reason="stop"))
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    assert cid is not None
+    relay.add_message(cid, "user", "Question from another device")
+    relay.add_message(cid, "assistant", "Answer from another device")
+    service.threads[MAIN_THREAD].agent.messages = []
+
+    response = client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "Continue"})
+
+    assert response.status_code == 200
+    wait_for(lambda: bool(llm.calls))
+    seen = [m.content for m in llm.calls[-1]["messages"] if m.role.value in ("user", "assistant")]
+    assert seen == ["Question from another device", "Answer from another device", "Continue"]
+
+
+def test_remote_device_task_hydrates_shared_history_without_duplicating_current_user(
+    synced,
+) -> None:
+    client, service, _llm, relay = synced
+    thread = service.create_thread("Task from MAX")
+    thread.remote_from = {"device": "bot-server", "conversation": "main"}
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    assert cid is not None
+    relay.add_message(cid, "user", "Earlier question")
+    relay.add_message(cid, "assistant", "Earlier answer")
+    relay.add_message(cid, "user", "Current message")
+
+    from functools import partial
+
+    client.portal.call(
+        partial(
+            service.sync.hydrate_thread,
+            thread,
+            cid,
+            remote_task=True,
+            current_user_text="Current message",
+        )
+    )
+
+    assert [m.content for m in thread.agent.messages] == ["Earlier question", "Earlier answer"]
 
 
 def test_the_second_main_adopts_the_accounts_id(synced) -> None:

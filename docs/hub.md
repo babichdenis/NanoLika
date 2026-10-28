@@ -343,3 +343,21 @@ MAX approval delivery accepts the channel manager language argument. A blocked a
 ## Optional messenger permission operation
 
 New desktop runtimes accept `channel_permissions {conversation, channel, mode}` from an authenticated paired account peer after the remote-control permission check. `channel` is `telegram` or `max`, `conversation` must use the corresponding `channel-<channel>-` namespace, and `mode` is `read-only`, `workspace-write` or `full-access`. The reply contains `{mode, conversation}` only after the session preset service accepts it. Sessions are resolved by both peer and conversation. Unsupported presets and older clients fail explicitly. Older clients can still process ordinary tasks with their existing app settings when no messenger preset is selected. See [Messenger menu](messenger-menu.md).
+
+
+### Shared conversation continuation from messengers
+
+A desktop advertising `shared_chat` accepts a read-only `shared_chat {cid}` probe.
+It returns the existing `{cid, sessionId}` only after a successful cloud refresh,
+for the current account and an active conversation whose cloud switch is enabled.
+Early builds advertising `chat.open_desktop` may also be probed; a successful
+CID-specific response negotiates the missing capability for that request.
+
+For a shared messenger chat, the runtime prefers its known origin computer or a
+computer recorded in its assistant turns, rather than choosing an unrelated device.
+A task then uses the same CID and desktop session, with persisted remote turns
+replayed as model context. A busy session is not replaced by a second server turn.
+If that computer is offline, the server continues the shared history and tells the
+model that current local files/processes cannot be verified. Checking progress must
+not restart a paid generation or reconstruct a task by scanning unrelated files.
+The desktop pulls the accumulated turns when it reconnects.

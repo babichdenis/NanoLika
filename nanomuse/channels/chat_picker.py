@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -12,12 +14,15 @@ from typing import Any
 import httpx
 
 from nanomuse.channels.store import _Watched
-from nanomuse.channels.telegram_topics import TelegramTopics, split_chat
+from nanomuse.channels.telegram_topics import TelegramTopics, normalize_name, split_chat
 from nanomuse.cloud import CloudError
 from nanomuse.logger import logger
 
 COPY = {
     "en": {
+        "restore": "Restore from archive",
+        "archive": "Archive",
+        "active": "Active chats",
         "history": "Recent messages",
         "empty_history": "There are no messages here yet.",
         "continue_here": "Write here to continue this chat.",
@@ -39,6 +44,9 @@ COPY = {
         "untitled": "New chat",
     },
     "zh": {
+        "restore": "恢复对话",
+        "archive": "归档",
+        "active": "当前对话",
         "history": "最近消息",
         "empty_history": "此对话还没有消息。",
         "continue_here": "直接发送消息即可继续此对话。",
@@ -60,6 +68,9 @@ COPY = {
         "untitled": "新对话",
     },
     "ru": {
+        "restore": "Вернуть из архива",
+        "archive": "Архив",
+        "active": "Активные чаты",
         "history": "Последние сообщения",
         "empty_history": "В этой беседе пока нет сообщений.",
         "continue_here": "Пишите здесь, чтобы продолжить эту беседу.",
@@ -83,6 +94,56 @@ COPY = {
 }
 
 
+def format_feed_json(text: str) -> str | None:
+    """Turn the Feed's structured JSON reply into readable Markdown for Telegram."""
+    source = str(text or "").strip()
+    if source.startswith("```"):
+        source = re.sub(r"^```(?:json)?\s*|\s*```$", "", source, flags=re.IGNORECASE).strip()
+    try:
+        posts = json.loads(source)
+    except (json.JSONDecodeError, TypeError):
+        # Some model replies escape Markdown punctuation inside JSON strings, which is not
+        # a JSON escape. Remove only those invalid escapes, then parse the array again.
+        candidate = source
+        start, end = candidate.find("["), candidate.rfind("]")
+        if start >= 0 and end > start:
+            candidate = candidate[start : end + 1]
+        candidate = re.sub(r'\\(?!["\\/bfnrtu])', "", candidate)
+        try:
+            posts = json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    if not isinstance(posts, list) or not 1 <= len(posts) <= 40:
+        return None
+    if not all(
+        isinstance(post, dict)
+        and isinstance(post.get("title"), str)
+        and isinstance(post.get("body"), str)
+        and isinstance(post.get("area"), str)
+        for post in posts
+    ):
+        return None
+
+    labels = {"news": "Новости", "research": "Исследование"}
+    cards = []
+    for post in posts:
+        title = " ".join(post["title"].split())
+        body = post["body"].strip()
+        emoji = str(post.get("emoji") or "📰").strip()
+        area = labels.get(post["area"].casefold(), post["area"].strip())
+        lines = [f"**{emoji} {title}**", f"_{area}_"]
+        if body:
+            lines.append(body)
+        image = str(post.get("image") or "").strip()
+        if image.startswith("https://"):
+            lines.append(f"[Изображение]({image})")
+        prompt = " ".join(str(post.get("prompt") or "").split())
+        if prompt:
+            lines.append(f"💡 **Идея:** {prompt}")
+        cards.append("\n\n".join(lines))
+    return "\n\n──────────\n\n".join(cards)
+
+
 class ChatPicker:
     def __init__(self, manager: Any):
         self.m = manager
@@ -92,6 +153,46 @@ class ChatPicker:
         self.remote_threads: set[str] = set()
         self.deferred: dict[str, dict[str, dict]] = {}
         self.expected: dict[tuple[str, str, str, str, str], float] = {}
+        self._install_feed_renderer()
+
+    def _install_feed_renderer(self) -> None:
+        """Format only messages sent into a mapped Telegram Feed topic."""
+        channel_type = self.m.types.get("telegram")
+        original = getattr(channel_type, "send", None)
+        if original is None or getattr(original, "_nanolika_feed_renderer", False):
+            return
+        picker = self
+
+        async def send(
+            channel: Any, chat_id: str, text: str, *, files: list[str] | None = None
+        ) -> str:
+            physical, topic_id = split_chat(chat_id)
+            if topic_id and picker.is_feed_destination(physical, topic_id):
+                text = format_feed_json(text) or text
+            return await original(channel, chat_id, text, files=files)
+
+        send._nanolika_feed_renderer = True  # type: ignore[attr-defined]
+        channel_type.send = send
+
+    def is_feed_destination(self, physical_chat: str, topic_id: int) -> bool:
+        account = self.m.svc.sync.account_id
+        for row in self.topics.file.load().values():
+            if (
+                isinstance(row, dict)
+                and row.get("account") == account
+                and row.get("chat") == physical_chat
+                and int(row.get("topic") or 0) == topic_id
+                and not row.get("archived")
+                and self.topics._valid(row)
+            ):
+                name = normalize_name(str(row.get("name") or "")).casefold()
+                return name == "лента" or name == "feed"
+        return False
+
+    @staticmethod
+    def is_feed_thread(thread: Any) -> bool:
+        title = normalize_name(str(getattr(thread, "title", "") or "")).casefold()
+        return title == "лента" or title == "feed" or title.startswith("feed ·")
 
     @staticmethod
     def reader(channel: str, chat: str) -> str:
@@ -177,6 +278,9 @@ class ChatPicker:
             for sender, entry in self.m.pairing.approved(channel).items():
                 chat = str(entry.get("chat_id") or sender)
                 if self.selected(channel, chat) == thread:
+                    # Shared chats deliver into their native topics, never the general topic.
+                    if channel == "telegram" and self.topics.enabled(channel):
+                        continue
                     result.append((channel, chat))
         result.extend(self.topics.targets(thread))
         return list({self.topics.redirect(thread, channel, chat) for channel, chat in result})
@@ -222,7 +326,7 @@ class ChatPicker:
                     await client.close()
         return bool(self.m.svc.sync.active)
 
-    async def show(self, msg: Any, page: int = 0) -> None:
+    async def show(self, msg: Any, page: int = 0, archived: bool = False) -> None:
         c = COPY.get(self.m.menu.language(msg), COPY["ru"])
         try:
             if not await self.available(msg):
@@ -233,7 +337,11 @@ class ChatPicker:
                 raise ValueError("catalog unavailable")
             reader = self.reader(msg.channel, msg.chat_id)
             listing = await self._cloud_read(engine.client.catalog, reader)
-            entries = listing.get("conversations", [])
+            entries = [
+                row
+                for row in listing.get("conversations", [])
+                if bool(row.get("archived")) == archived
+            ]
             current = self.selected(msg.channel, msg.chat_id)
             general_topic = self.topics.enabled(msg.channel) and not split_chat(msg.chat_id)[1]
             if general_topic:
@@ -245,7 +353,11 @@ class ChatPicker:
             if cid and through:
                 await self._cloud_read(engine.client.read, cid, reader, through)
                 listing = await self._cloud_read(engine.client.catalog, reader)
-                entries = listing.get("conversations", [])
+                entries = [
+                    row
+                    for row in listing.get("conversations", [])
+                    if bool(row.get("archived")) == archived
+                ]
             title = self.m.svc.threads.get(current)
             text = (
                 c["choose"]
@@ -267,10 +379,19 @@ class ChatPicker:
             if not entries:
                 text += "\n" + c["empty"]
             nav = []
+            page_action = "chat:archive:" if archived else "chat:page:"
+            rows.append(
+                [
+                    (
+                        c["active"] if archived else c["archive"],
+                        self.m.menu.ticket(msg, "chats" if archived else "chat:archive:0"),
+                    )
+                ]
+            )
             if page:
-                nav.append((c["previous"], self.m.menu.ticket(msg, "chat:page:" + str(page - 1))))
+                nav.append((c["previous"], self.m.menu.ticket(msg, page_action + str(page - 1))))
             if (page + 1) * 8 < len(entries):
-                nav.append((c["more"], self.m.menu.ticket(msg, "chat:page:" + str(page + 1))))
+                nav.append((c["more"], self.m.menu.ticket(msg, page_action + str(page + 1))))
             if nav:
                 rows.append(nav)
             rows.extend(
@@ -291,31 +412,42 @@ class ChatPicker:
                 msg, c["unavailable"], [[(c["back"], self.m.menu.ticket(msg, "home"))]]
             )
 
-    async def preview(self, msg: Any, thread: Any) -> None:
+    async def preview(self, msg: Any, thread: Any, before: int = 0) -> None:
         c = COPY.get(self.m.menu.language(msg), COPY["ru"])
-        events = [
-            event
-            for event in thread.timeline.events
-            if event.get("type") in {"user", "assistant"} and str(event.get("text") or "").strip()
-        ]
-        events = events[-8:]
-        text = c["opened"] + ": " + thread.title[:120]
-        if events:
-            text += "\n\n" + c["history"] + "\n"
-            for event in events:
-                role = c["you"] if event["type"] == "user" else c["lika"]
-                body = str(event["text"]).strip()
-                if len(body.encode("utf-16-le")) > 700:
-                    body = body.encode("utf-16-le")[:700].decode("utf-16-le", errors="ignore") + "…"
-                text += "\n" + role + ": " + body + "\n"
-        else:
-            text += "\n\n" + c["empty_history"]
-        text += "\n" + c["continue_here"]
-        rows = [[(c["chats"], self.m.menu.ticket(msg, "chats"))]]
+        engine = self.m.svc.sync
+        account = engine.account_id
+        cid = engine.cid_of(thread.id)
+        if not cid or not engine._mine(thread):
+            raise ValueError("chat unavailable")
+        page = await engine.client.messages(cid, before=before, limit=8)
+        if account != engine.account_id or (
+            page.get("account_id") and page["account_id"] != account
+        ):
+            raise ValueError("account changed")
+        text = c["history"] + ": " + thread.title[:100] + "\n"
+        messages = page.get("messages", [])
+        for message in messages:
+            role = c["you"] if message["role"] == "user" else c["lika"]
+            body = str(message.get("text") or "").strip()
+            if message["role"] == "assistant" and self.is_feed_thread(thread):
+                body = format_feed_json(body) or body
+            short = body.encode("utf-16-le")[:600].decode("utf-16-le", errors="ignore")
+            text += "\n" + role + ": " + short + ("…" if short != body else "") + "\n"
+        if not messages:
+            text += c["empty_history"]
+        rows = []
+        if page.get("has_older") and messages:
+            cursor = int(messages[0]["seq"])
+            rows.append([(c["earlier"], self.m.menu.ticket(msg, f"chat:history:{cid}:{cursor}"))])
+        if before:
+            rows.append([(c["later"], self.m.menu.ticket(msg, f"chat:history:{cid}:0"))])
         await self.m.menu.send(msg, text, rows)
 
     async def perform(self, msg: Any, action: str) -> None:
         c = COPY.get(self.m.menu.language(msg), COPY["ru"])
+        if action.startswith("chat:archive:"):
+            await self.show(msg, int(action.rsplit(":", 1)[-1]), archived=True)
+            return
         if action == "chats" or action.startswith("chat:page:"):
             page = int(action.rsplit(":", 1)[-1]) if action.startswith("chat:page:") else 0
             await self.show(msg, page)
@@ -327,6 +459,14 @@ class ChatPicker:
             await self._cloud_read(engine.pull)
             if not engine.catalog.supported:
                 raise ValueError("catalog unavailable")
+            if action.startswith("chat:mark:"):
+                _, _, mark, cid = action.split(":", 3)
+                if mark not in {"0", "1"} or cid not in engine.catalog.rows:
+                    raise ValueError("chat unavailable")
+                await engine.client.set_archived(cid, mark == "1")
+                await engine.pull()
+                await self.show(msg)
+                return
             if action.startswith("chat:open:"):
                 from nanomuse.channels.conversation_open import open_conversation
                 from nanomuse.channels.menu import COPY as MENU_COPY
@@ -355,7 +495,7 @@ class ChatPicker:
                 thread = engine.thread_of(engine.cid_of(selected)) if selected else None
                 if thread is None or not engine._mine(thread):
                     raise ValueError("chat unavailable")
-                await self.preview(msg, thread)
+                await self.preview(msg, thread, before=max(0, int(_page_text)))
                 return
             if action == "chat:new":
                 thread = self.m.svc.create_thread(c["untitled"])

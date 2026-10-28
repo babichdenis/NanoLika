@@ -140,6 +140,13 @@ class HubService:
     async def start(self) -> None:
         """Join the hub when the account is signed in and the hub is on."""
         await self._seed_from_env()
+        if self.signed_in:
+            # A restart keeps the Cloud key and account data, but the sync engine's
+            # cursor file may have been recreated or restored independently. Reattach
+            # the persisted account so pulls resume without requiring another sign-in.
+            account_id = str((self.data.get("cloud") or {}).get("account_id") or "")
+            if account_id:
+                self.svc.sync.account_changed(account_id)
         if self.signed_in and self._model_has_no_key():
             # signed in, yet the model is still the bare default with no key (an account
             # from before sign-in set the model, a config reset): the relay is the model,
@@ -934,6 +941,18 @@ class HubService:
         if thread.busy or thread.device:
             await call.fail("busy", "this conversation is already busy")
             return
+        sync_cid = str(call.args.get("sync_cid") or "").strip()
+        if sync_cid:
+            try:
+                await self.svc.sync.hydrate_thread(
+                    thread,
+                    sync_cid,
+                    remote_task=True,
+                    current_user_text=text,
+                )
+            except CloudError as exc:
+                await call.fail("history_unavailable", exc.describe())
+                return
         self._incoming[call.id] = thread.id
         queue = self.svc.bus.subscribe()
         try:

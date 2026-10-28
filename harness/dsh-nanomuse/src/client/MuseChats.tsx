@@ -43,6 +43,7 @@ interface SyncList {
   sessions: Set<string>
   /** Sessions of another account than the one signed in (C10): not listed, not searched; empty when signed out. */
   foreign: Set<string>
+  toRestore?: string[]
   toArchive: string[]
   /**
    * Chats whose cloud the person turned on here (C11). A chat that came from the cloud is not here
@@ -58,8 +59,8 @@ export function useSyncList(): SyncList {
   const [list, setList] = useState<SyncList>(NO_SYNC)
   useEffect(() => {
     let alive = true
-    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; foreign?: string[]; toArchive?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
-      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], synced: new Set(v.synced ?? []) }) })
+    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
+      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
       .catch(() => undefined)
     return () => { alive = false }
   }, [rev])
@@ -98,6 +99,7 @@ export interface ChatActions {
   openSession(id: string): void
   startSession(): void
   archiveSession(id: string): Promise<void>
+  setArchiveFromSync?(id: string, archived: boolean): Promise<void>
   pinSession(id: string): Promise<void>
   unpinSession(id: string): Promise<void>
   renameSession(id: string, title: string): Promise<void>
@@ -298,20 +300,20 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   const pinnedSet = new Set(pinned)
   const sync = useSyncList()
   const previousArchived = useRef<Set<string> | null>(null)
+  const applyingArchive = useRef(new Map<string, boolean>())
   useEffect(() => {
     const next = new Set(archived)
     const previous = previousArchived.current
     previousArchived.current = next
     if (!previous) return
-    const restored = [...previous].filter((id) => !next.has(id) && sync.sessions.has(id))
-    if (restored.length) void Promise.all(restored.map((sessionId) => call('sync/archive', { sessionId, archived: false }).catch(() => undefined)))
-  }, [archived, sync.sessions])
-  const archiveMigrated = useRef(new Set<string>())
-  useEffect(() => {
-    for (const sessionId of archived) {
-      if (!sync.sessions.has(sessionId) || archiveMigrated.current.has(sessionId)) continue
-      archiveMigrated.current.add(sessionId)
-      void call('sync/archive', { sessionId, archived: true }).catch(() => archiveMigrated.current.delete(sessionId))
+    for (const id of new Set([...previous, ...next])) {
+      if (previous.has(id) === next.has(id)) continue
+      const target = next.has(id)
+      if (applyingArchive.current.get(id) === target) {
+        applyingArchive.current.delete(id)
+        continue
+      }
+      if (sync.sessions.has(id)) void call('sync/archive', { sessionId: id, archived: target }).catch(() => undefined)
     }
   }, [archived, sync.sessions])
   // the rooms' running batches (the feed being written) are the agent's work, not chats of the person's
@@ -349,11 +351,19 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     const due = sync.toArchive.filter((id) => !archiving.current.has(id))
     if (due.length === 0) return
     for (const id of due) archiving.current.add(id)
-    void Promise.all(due.map((id) => (archivedSet.has(id) || !state.byId[id] ? Promise.resolve() : actions.archiveSession(id).catch(() => undefined))))
+    void Promise.all(due.map((id) => (archivedSet.has(id) || !state.byId[id] ? Promise.resolve() : (async () => { applyingArchive.current.set(id, true); try { await (actions.setArchiveFromSync?.(id, true) ?? actions.archiveSession(id)) } catch (error) { applyingArchive.current.delete(id); throw error } })())))
       .then(() => call('sync/archived', { sessionIds: due }))
       .catch(() => undefined)
       .finally(() => { for (const id of due) archiving.current.delete(id) })
   }, [sync.toArchive])
+  useEffect(() => {
+    if (!actions.setArchiveFromSync) return
+    for (const id of sync.toRestore ?? []) {
+      if (!archivedSet.has(id) || applyingArchive.current.has(id)) continue
+      applyingArchive.current.set(id, false)
+      void actions.setArchiveFromSync(id, false).catch(() => applyingArchive.current.delete(id))
+    }
+  }, [sync.toRestore, archived])
 
   const main = visible.find((s) => s.id === mainId)
   const q = query.trim().toLowerCase()

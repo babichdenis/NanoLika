@@ -37,6 +37,31 @@ class SyncClient:
             query += f"&tail={int(tail)}"
         return await self.cloud._request("GET", f"/v1/sync/changes?{query}")
 
+    async def catalog(self, client: str, device: str = "") -> dict[str, Any]:
+        from urllib.parse import urlencode
+
+        return await self.cloud._request(
+            "GET", "/v1/sync/catalog?" + urlencode({"client": client, "device": device})
+        )
+
+    async def messages(
+        self, cid: str, after: int = 0, before: int = 0, limit: int = 100
+    ) -> dict[str, Any]:
+        return await self.cloud._request(
+            "GET",
+            f"/v1/sync/conversations/{cid}/messages?after={int(after)}&before={int(before)}&limit={int(limit)}",
+        )
+
+    async def read(self, cid: str, client: str, through: int) -> dict[str, Any]:
+        return await self.cloud._request(
+            "POST", f"/v1/sync/conversations/{cid}/read", {"client": client, "through_seq": through}
+        )
+
+    async def set_archived(self, cid: str, archived: bool) -> dict[str, Any]:
+        return await self.cloud._request(
+            "POST", f"/v1/sync/conversations/{cid}/archive", {"archived": archived}
+        )
+
     async def working(self, cid: str, working: bool, device: str) -> None:
         """Presence (C9): a turn started (``True``) or ended (``False``) on that conversation
         here. The relay tells the account's other devices; 204, nothing to read."""

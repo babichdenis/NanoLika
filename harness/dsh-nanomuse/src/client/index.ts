@@ -93,6 +93,7 @@ interface WorkspaceNavigation {
   openSession(target: string): void
   openWorkspace(workspaceId: string): Promise<void>
   archiveSession(sessionId: string, options?: { stopActivity?: boolean }): Promise<void>
+  unarchiveSession(sessionId: string): Promise<void>
   pinSession(sessionId: string): Promise<void>
   unpinSession(sessionId: string): Promise<void>
   pickDirectory(): Promise<string | null>
@@ -377,6 +378,7 @@ export function apply(ctx: ClientContext): void {
     openSession: (id) => { workspaces.openSession(id) },
     startSession: () => { workspaces.startSession() },
     archiveSession: async (id) => { await workspaces.archiveSession(id, { stopActivity: true }); await call('sync/archive', { sessionId: id, archived: true }).catch(() => undefined) },
+    setArchiveFromSync: (id, archived) => archived ? workspaces.archiveSession(id, { stopActivity: true }) : workspaces.unarchiveSession(id),
     pinSession: (id) => workspaces.pinSession(id),
     unpinSession: (id) => workspaces.unpinSession(id),
     renameSession,

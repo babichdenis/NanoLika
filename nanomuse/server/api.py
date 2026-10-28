@@ -622,6 +622,9 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     async def send_message(thread_id: str, body: SendBody) -> dict[str, Any]:
         thread = _thread_or_404(thread_id)
         try:
+            cid = svc.sync.cid_of(thread.id)
+            if svc.sync.active and cid and svc.sync._eligible(thread):
+                await svc.sync.hydrate_thread(thread, cid)
             event = svc.send(
                 thread.id, body.text, files=body.files, language=body.language, via=body.via
             )
@@ -2103,8 +2106,13 @@ async def _handle_ws_message(
                 logger.debug("device result for no pending request: {}", data.get("id"))
         elif kind == "send":
             files = data.get("files")
+            thread_id = str(data.get("thread") or MAIN_THREAD)
+            thread = svc.threads.get(thread_id)
+            cid = svc.sync.cid_of(thread_id)
+            if thread is not None and svc.sync.active and cid and svc.sync._eligible(thread):
+                await svc.sync.hydrate_thread(thread, cid)
             svc.send(
-                str(data.get("thread") or MAIN_THREAD),
+                thread_id,
                 str(data.get("text", ""))[:20_000],
                 files=[str(f) for f in files][:10] if isinstance(files, list) else None,
                 language=str(data.get("language") or "")[:20],

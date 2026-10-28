@@ -284,3 +284,31 @@ async def test_a_conversation_the_bot_began_gets_no_topic(world: World):
     await world.topics.discover()
     assert world.topic_calls("createForumTopic") == []
     assert world.topics.file.load() == {}
+
+
+async def test_catalogue_creates_topics_without_transcript_and_reconciles_archive(world: World):
+    thread = world.thread("Shared chat")
+    sync = world.manager.svc.sync
+    sync.cid_of = lambda tid: "shared-cid" if tid == thread.id else ""
+    sync.catalog = SimpleNamespace(supported=True, rows={"shared-cid": {"archived": False}})
+    assert thread.timeline.events == []
+    await world.topics.discover()
+    assert len(world.topic_calls("createForumTopic")) == 1
+    await world.topics.discover()
+    assert len(world.topic_calls("createForumTopic")) == 1
+    sync.catalog.rows["shared-cid"]["archived"] = True
+    await world.topics.discover()
+    assert len([call for call in world.topic_calls("editForumTopic") if call["name"].startswith("Архив")]) == 1
+    await world.topics.discover()
+    assert len([call for call in world.topic_calls("editForumTopic") if call["name"].startswith("Архив")]) == 1
+    sync.catalog.rows["shared-cid"]["archived"] = False
+    await world.topics.discover()
+    assert world.topic_calls("editForumTopic")[-1]["name"] == "Shared chat"
+
+
+async def test_equal_titles_do_not_merge_different_conversations(world: World):
+    first = world.thread("Same title")
+    second = world.thread("Same title")
+    await world.topics.open(inbound("first"), first)
+    await world.topics.open(inbound("second"), second)
+    assert len(world.topic_calls("createForumTopic")) == 2

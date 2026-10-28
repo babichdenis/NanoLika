@@ -766,6 +766,37 @@ def test_plain_model_reply_has_typing_without_tool_calls(chan):
     assert fake.typing_calls.index(("chat1", True)) < fake.typing_calls.index(("chat1", False))
 
 
+def test_linked_chat_works_with_a_runtime_before_per_chat_cloud_keys(chan):
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    llm.script.append(LLMResponse(content="The linked chat still works."))
+    current_send = service.send
+
+    def legacy_send(
+        thread_id: str,
+        text: str,
+        source: str = "user",
+        label: str = "",
+        files: list[str] | None = None,
+        language: str = "",
+        via: str = "",
+    ) -> dict[str, Any]:
+        return current_send(
+            thread_id,
+            text,
+            source=source,
+            label=label,
+            files=files,
+            language=language,
+            via=via,
+        )
+
+    service.send = legacy_send  # type: ignore[method-assign]
+    fake.bus.inbound(dm("please answer"))
+
+    wait_for(lambda: any("The linked chat still works." in t for t in fake.texts()))
+
+
 def test_scoped_approval_is_bound_to_card_chat_and_offered_options(chan):
     import asyncio
 

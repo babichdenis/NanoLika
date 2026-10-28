@@ -40,25 +40,31 @@ def topic_chat(chat: str, topic: Any) -> str:
 
 COPY = {
     "en": {
+        "archive_prefix": "Archive · ",
         "continued": "Chat “{title}” continues.",
         "open": "Open the topic “{title}” in Telegram to continue.",
         "choose": "Choose a chat or create a topic in Telegram to continue.",
         "new": "New chat",
         "failed": "Could not open the topic. Open the chat list and try again.",
+        "history_failed": "Could not refresh the cloud conversation. This message was not sent to the model. Please try again later.",
     },
     "zh": {
+        "archive_prefix": "归档 · ",
         "continued": "继续对话「{title}」。",
         "open": "请在 Telegram 中打开「{title}」话题继续。",
         "choose": "请选择对话或在 Telegram 中新建话题。",
         "new": "新对话",
         "failed": "无法打开话题，请重新打开对话列表后重试。",
+        "history_failed": "无法从云端更新对话记录。这条消息尚未发送给模型，请稍后重试。",
     },
     "ru": {
+        "archive_prefix": "Архив · ",
         "continued": "Чат «{title}» продолжается.",
         "open": "Откройте тему «{title}» в Telegram, чтобы продолжить.",
         "choose": "Выберите беседу или создайте тему в Telegram, чтобы продолжить.",
         "new": "Новый чат",
         "failed": "Не удалось открыть тему. Откройте список бесед и попробуйте снова.",
+        "history_failed": "Не удалось обновить историю из облака. Сообщение не отправлено модели. Попробуйте позже.",
     },
 }
 
@@ -159,6 +165,9 @@ class TelegramTopics:
         self.auto_file = _Watched(
             Path(self.m.svc.data_dir) / "channels" / "telegram-auto-topics.json"
         )
+        self.last_file = _Watched(
+            Path(self.m.svc.data_dir) / "channels" / "telegram-last-topic.json"
+        )
         self._started = time.time()
         self._auto_since()
         self._lock = asyncio.Lock()
@@ -202,6 +211,138 @@ class TelegramTopics:
         return result
 
     async def discover(self) -> None:
+        """Reconcile topic state from the account catalogue without loading all transcripts."""
+        if not self.enabled() or not self.m.store.config("telegram").enabled:
+            return
+        sync = self.m.svc.sync
+        account = sync.account_id
+        catalog = getattr(sync, "catalog", None)
+        if not account:
+            return
+        if not catalog or catalog.supported is not True:
+            await self._discover_legacy()
+            return
+        # Retain old topics and their messages, but close topics whose account chat was retired.
+        for key, row in list(self.file.load().items()):
+            if not isinstance(row, dict) or not self._valid(row) or not row.get("cid"):
+                continue
+            if (
+                row["cid"] in catalog.rows
+                or row.get("archived")
+                or float(row.get("retry_after") or 0) > time.time()
+            ):
+                continue
+            try:
+                msg = InboundMessage(
+                    channel="telegram", chat_id=row["chat"], sender_id=row["owner"]
+                )
+                await self.m.channels["telegram"]._call(
+                    "editForumTopic",
+                    {
+                        "chat_id": row["chat"],
+                        "message_thread_id": row["topic"],
+                        "name": (
+                            self.copy(msg)["archive_prefix"] + normalize_name(row.get("name") or "")
+                        )[:100],
+                    },
+                )
+            except Exception as exc:
+                if "topic_not_modified" not in str(exc).lower():
+                    rows = dict(self.file.load())
+                    rows[key] = {**row, "retry_after": time.time() + 600}
+                    self.file.save(rows)
+                    continue
+            if account != sync.account_id:
+                return
+            rows = dict(self.file.load())
+            rows[key] = {**row, "archived": True}
+            self.file.save(rows)
+        for cid, conversation in list(catalog.rows.items()):
+            if account != sync.account_id:
+                return
+            archived = bool(conversation.get("archived"))
+            matches = [
+                (key, row)
+                for key, row in self.file.load().items()
+                if isinstance(row, dict) and self._valid(row) and row.get("cid") == cid
+            ]
+            target = next(
+                (
+                    t
+                    for t in self.m.svc.threads.values()
+                    if sync._mine(t) and sync.cid_of(t.id) == cid
+                ),
+                None,
+            )
+            for key, row in matches:
+                if target is not None and row.get("thread") != target.id:
+                    row = {**row, "thread": target.id}
+                    rows = dict(self.file.load())
+                    rows[key] = row
+                    self.file.save(rows)
+                    self.p.bind(
+                        InboundMessage(
+                            channel="telegram",
+                            chat_id=topic_chat(row["chat"], row["topic"]),
+                            sender_id=row["owner"],
+                        ),
+                        target.id,
+                    )
+                if bool(row.get("archived")) == archived:
+                    continue
+                msg = InboundMessage(
+                    channel="telegram", chat_id=row["chat"], sender_id=row["owner"]
+                )
+                name = normalize_name(str(conversation.get("title") or row.get("name") or ""))
+                if archived:
+                    name = self.copy(msg)["archive_prefix"] + name
+                try:
+                    await self.m.channels["telegram"]._call(
+                        "editForumTopic",
+                        {
+                            "chat_id": row["chat"],
+                            "message_thread_id": row["topic"],
+                            "name": name[:100],
+                        },
+                    )
+                except Exception as exc:
+                    if "topic_not_modified" not in str(exc).lower():
+                        logger.warning(
+                            "telegram: topic archive update failed ({})", type(exc).__name__
+                        )
+                        continue
+                if account != sync.account_id:
+                    return
+                rows = dict(self.file.load())
+                rows[key] = {**row, "archived": archived}
+                self.file.save(rows)
+            if archived or matches:
+                continue
+            thread = next(
+                (
+                    t
+                    for t in self.m.svc.threads.values()
+                    if sync._mine(t) and sync.cid_of(t.id) == cid
+                ),
+                None,
+            )
+            if thread is None:
+                continue
+            for owner, pair in self.m.pairing.approved("telegram").items():
+                chat = str(pair.get("chat_id") or owner)
+                if chat != owner:
+                    continue
+                msg = InboundMessage(channel="telegram", chat_id=chat, sender_id=owner)
+                if not self.m.menu.private_owner(msg):
+                    continue
+                try:
+                    await self.open(msg, thread, announce=False)
+                except Exception as exc:
+                    logger.warning(
+                        "telegram: catalogue topic creation failed ({})", type(exc).__name__
+                    )
+
+    async def _discover_legacy(self) -> None:
         """Initial catalogue pulls are quiet; only new chats may seed a native topic."""
         for tid in self.new_threads():
             thread = self.m.svc.threads.get(tid)
@@ -328,13 +469,68 @@ class TelegramTopics:
             return str(approved.get("chat_id") or owner) == row.get("chat")
         return owner in self.m.store.config("telegram").allow_from and owner == row.get("chat")
 
+    def _active_row(self, row: dict) -> bool:
+        if row.get("archived") or not self._valid(row):
+            return False
+        catalog = getattr(self.m.svc.sync, "catalog", None)
+        if catalog and catalog.supported is True and row.get("cid"):
+            conversation = catalog.rows.get(row["cid"])
+            return bool(
+                conversation
+                and not conversation.get("archived")
+                and not conversation.get("deleted")
+            )
+        return True
+
+    def remember(self, msg: Any) -> None:
+        """Remember the person's selection, never a background discovery or delivery."""
+        chat, topic = split_chat(msg.chat_id)
+        if not topic or msg.is_group or not self.m.menu.private_owner(msg):
+            return
+        account = self.m.svc.sync.account_id
+        row = self.file.load().get(self._key(account, chat, topic))
+        if not isinstance(row, dict) or not self._active_row(row):
+            return
+        data = dict(self.last_file.load())
+        data[self._key(account, chat, 0)] = {"topic": topic, "owner": msg.sender_id}
+        self.last_file.save(data)
+
+    def resume(self, msg: Any) -> Any:
+        """A plain message without a topic continues the last explicitly selected topic.
+
+        Telegram does not notify bots when a client opens/closes a topic. The latest
+        message or explicit selection is the last topic the bot can actually know.
+        """
+        if not self.enabled(msg.channel) or msg.is_group or split_chat(msg.chat_id)[1]:
+            return msg
+        if msg.text.strip().startswith("/") or (not msg.text.strip() and not msg.files):
+            return msg
+        if not self.m.menu.private_owner(msg):
+            return msg
+        account = self.m.svc.sync.account_id
+        chat = split_chat(msg.chat_id)[0]
+        last = self.last_file.load().get(self._key(account, chat, 0), {})
+        if not isinstance(last, dict) or last.get("owner") != msg.sender_id:
+            return msg
+        topic = int(last.get("topic") or 0)
+        row = self.file.load().get(self._key(account, chat, topic))
+        if not topic or not isinstance(row, dict) or not self._active_row(row):
+            return msg
+        return replace(msg, chat_id=topic_chat(chat, topic))
+
     def targets(self, thread: str) -> list[tuple[str, str]]:
         if not self.enabled() or not self.m.store.config("telegram").enabled:
             return []
+        thread_cid = self.m.svc.sync.cid_of(thread)
         return [
             ("telegram", topic_chat(row["chat"], row["topic"]))
             for row in self.file.load().values()
-            if isinstance(row, dict) and row.get("thread") == thread and self._valid(row)
+            if isinstance(row, dict)
+            and self._active_row(row)
+            # Local thread ids can change when an account is restored on this runtime.
+            # The relay conversation id is stable, so keep its Telegram topic attached.
+            and (row.get("thread") == thread or (bool(thread_cid) and row.get("cid") == thread_cid))
+            and (not row.get("cid") or row.get("cid") == thread_cid)
         ]
 
     def redirect(self, thread: str, channel: str, chat: str) -> tuple[str, str]:
@@ -413,7 +609,18 @@ class TelegramTopics:
                 await self.m.menu.send(msg, self.copy(msg)["failed"], [])
                 return True
             thread = self.m.svc.threads.get(str(row.get("thread") or "")) if row else None
+            lookup = getattr(self.m.svc.sync, "thread_of", None)
+            if row and row.get("cid") and lookup is not None:
+                thread = lookup(row["cid"])
             if row and thread is None:
+                await self.m.menu.send(msg, self.copy(msg)["failed"], [])
+                return True
+            if (
+                row
+                and thread is not None
+                and row.get("cid")
+                and row["cid"] != self.m.svc.sync.cid_of(thread.id)
+            ):
                 await self.m.menu.send(msg, self.copy(msg)["failed"], [])
                 return True
             if thread is None:
@@ -437,6 +644,8 @@ class TelegramTopics:
                     await self.m.menu.send(msg, self.copy(msg)["failed"], [])
                     return True
                 self.p.bind(msg, thread.id)
+            if msg.text.strip() or msg.files:
+                self.remember(msg)
             if not msg.text.strip() and not msg.files:
                 if msg.chat_name and msg.chat_name != thread.title:
                     self.m.svc.rename_thread(thread.id, msg.chat_name[:100])
@@ -459,6 +668,8 @@ class TelegramTopics:
                     not isinstance(row, dict)
                     or not self._valid(row)
                     or row.get("thread") != thread_id
+                    or (row.get("cid") and row.get("cid") != self.m.svc.sync.cid_of(thread_id))
+                    or row.get("archived")
                     or row.get("name") == name
                 ):
                     continue
@@ -527,13 +738,14 @@ class TelegramTopics:
                     and self._valid(r)
                     and r.get("chat") == chat
                     and (
-                        r.get("thread") == thread.id
-                        or (r.get("cid") and r.get("cid") == self.m.svc.sync.cid_of(thread.id))
+                        (r.get("cid") == self.m.svc.sync.cid_of(thread.id))
+                        if self.m.svc.sync.cid_of(thread.id)
+                        else r.get("thread") == thread.id
                     )
                 ),
                 None,
             )
-            if existing is None:
+            if existing is None and name == "Лента" and not self.m.svc.sync.cid_of(thread.id):
                 # a topic that already carries this name is the same topic: "Feed" is one
                 # place, whatever day the model wrote into the title
                 existing = next(
@@ -549,16 +761,7 @@ class TelegramTopics:
                 )
             if existing:
                 topic = int(existing["topic"])
-                try:
-                    await channel._call(
-                        "reopenForumTopic", {"chat_id": chat, "message_thread_id": topic}
-                    )
-                except Exception as exc:
-                    if (
-                        "topic_not_modified" not in str(exc).lower()
-                        and "topic is not closed" not in str(exc).lower()
-                    ):
-                        raise
+                # Native private-chat topics are already open; reopenForumTopic is supergroup-only.
                 current()
             else:
                 created = await channel._call(
@@ -577,7 +780,7 @@ class TelegramTopics:
                 existing = self.file.load()[self._key(self.m.svc.sync.account_id, chat, topic)]
             current()
             destination = topic_chat(chat, topic)
-            self._put(msg, topic, thread)
+            self._put(msg, topic, thread, archived=False)
             history = list(thread.timeline.events)
             async with self._holding(destination, account):
                 if existing.get("name") != name:
@@ -593,43 +796,7 @@ class TelegramTopics:
                     )
                     current()
                     self._put(msg, topic, thread, name=name)
-                # Seed a small, clearly labelled history once, oldest first. Never replay tools/files.
-                if not existing.get("seeded"):
-                    seeded = list(existing.get("seeded_mids") or [])
-                    recent = [
-                        e
-                        for e in history
-                        if e.get("type") in {"user", "assistant"}
-                        and str(e.get("text") or "").strip()
-                    ][-8:]
-                    for event in recent:
-                        fingerprint = str(
-                            event.get("mid")
-                            or event.get("id")
-                            or hashlib.sha256(
-                                (str(event.get("ts")) + str(event.get("text"))).encode()
-                            ).hexdigest()
-                        )
-                        if fingerprint in seeded:
-                            continue
-                        role = {
-                            "en": ("You", "Lika"),
-                            "zh": ("你", "Lika"),
-                            "ru": ("Вы", "Лика"),
-                        }.get(self.m.menu.language(msg), ("Вы", "Лика"))[
-                            event["type"] == "assistant"
-                        ]
-                        text = str(event["text"]).strip()
-                        body = text.encode("utf-16-le")[:6000].decode("utf-16-le", errors="ignore")
-                        if body != text:
-                            body += "…"
-                        current()
-                        await channel.send(destination, role + ":\n" + body)
-                        current()
-                        seeded.append(fingerprint)
-                        self._put(msg, topic, thread, seeded_mids=seeded)
-                        await asyncio.sleep(1.05)
-                    self._put(msg, topic, thread, seeded=True)
+                self._put(msg, topic, thread, seeded=True)
                 current()
                 for event in history:
                     mid = str(event.get("mid") or "")
@@ -641,6 +808,11 @@ class TelegramTopics:
                 await channel.send(destination, c["continued"].format(title=name))
         current()
         self.p.bind(replace(msg, chat_id=destination), thread.id, fresh=fresh)
+        if announce:
+            self.remember(replace(msg, chat_id=destination))
+        preview = getattr(self.p, "preview", None)
+        if preview is not None:
+            await preview(replace(msg, chat_id=destination), thread)
         # A bot cannot force the Telegram client's active view to change.
         if announce and split_chat(msg.chat_id)[1] != topic:
             await self.m.menu.send(msg, c["open"].format(title=thread.title), [])

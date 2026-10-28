@@ -815,3 +815,22 @@ or device synchronization. Revoke a key immediately if it may have been exposed.
 ## Archived shared conversations
 
 Shared conversation metadata has an account-wide archived flag. POST /v1/sync/conversations/{cid}/archive with {"archived": true|false} moves a chat into or out of the archive without deleting its messages; the change appears in sync catalog and change pages. The web client provides archive and restore controls. Dated daily Feed conversations are consolidated into one Лента row on catalog refresh, with their messages retained in sequence.
+
+
+### Telegram topics and desktop continuation
+
+Shared messages render beside the outer desktop turn, outside collapsed tool groups.
+Switching sessions clears remote bubbles from the reused conversation element.
+Incoming model context rows are not treated as the user's native prompts.
+
+Telegram delivers each shared conversation to its active native topic, not also to
+a stale general-chat selection. Canonical archived/deleted conversations are excluded
+even when an earlier Telegram rename failed. The last topic explicitly selected or
+written into is stored per account, owner and physical chat, and is revalidated before
+routing a topicless message. Background discovery cannot change this selection.
+The Bot API cannot force the Telegram client to reopen a particular screen; the
+persisted selection controls routing, not the client's navigation.
+
+Per-chat cloud-off continues to block shared desktop task resolution. With cloud
+sync enabled, the server retains conversation continuity while the computer is off;
+its local project files and processes remain on that computer.

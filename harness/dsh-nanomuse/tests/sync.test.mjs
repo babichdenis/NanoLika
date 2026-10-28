@@ -929,6 +929,14 @@ function lazyRelay() {
   relay.fetch = async (url, init = {}) => {
     const u = new URL(url)
     if (u.pathname === '/v1/sync/catalog') return reply({ complete: true, cursor: relay.seq, deleted: [...relay.convs.values()].filter(c => c.deleted), conversations: [...relay.convs.values()].filter(c => !c.deleted).map(c => ({ ...c, unread: [...relay.msgs.values()].filter(m => m.cid === c.cid && m.seq > (seen.get(c.cid) || 0)).length })) })
+    const archive = u.pathname.match(/^\/v1\/sync\/conversations\/([^/]+)\/archive$/)
+    if (archive) {
+      if (relay.archiveOffline) throw new Error('offline')
+      if (!relay.convs.has(archive[1]) || relay.convs.get(archive[1]).deleted) return new Response(JSON.stringify({ error: { code: 'no_conversation', message: 'deleted' } }), { status: 404 })
+      relay.convs.get(archive[1]).archived = JSON.parse(init.body).archived
+      relay.seq++
+      return reply({})
+    }
     const match = u.pathname.match(/^\/v1\/sync\/conversations\/([^/]+)\/(messages|read)$/)
     if (match?.[2] === 'messages') {
       const cid = match[1], after = Number(u.searchParams.get('after') || 0)
@@ -1034,7 +1042,7 @@ test('C11: the main chat is in the cloud and cannot be taken out, and the answer
   assert.equal(e.state.clouds['s-side'], undefined)
 })
 
-test('C11: a chat that came from the cloud cannot be made local, only deleted from the account', async (t) => {
+test('C11: a cloud chat can pause sync without deleting shared history', async (t) => {
   const relay = lazyRelay()
   relay.add('tg-1', 'side', 'From Telegram', 'telegram-bot', 'Telegram')
   relay.say('tg-1', 'user', 'a word from the messenger', 'telegram-bot', 'Telegram')
@@ -1048,12 +1056,12 @@ test('C11: a chat that came from the cloud cannot be made local, only deleted fr
   assert.equal(e.state.clouds[sid], 'sync')
   assert.ok(e.view().sessions.includes(sid))
   assert.deepEqual(e.view().synced, [])
-  // the switch is refused both ways; the account's copy and the mapping stay
-  for (const on of [false, true]) {
-    const out = await e.setSynced(sid, on)
-    assert.equal(out.ok, false)
-    assert.equal(out.reason, 'synced-from-cloud')
-  }
+  assert.equal((await e.setSynced(sid, false)).ok, true)
+  assert.equal(e.state.clouds[sid], 'local')
+  assert.ok(!e.view().sessions.includes(sid))
+  await e.pull()
+  assert.equal(e.state.clouds[sid], 'local')
+  assert.equal((await e.setSynced(sid, true)).ok, true)
   assert.equal(relay.convs.get('tg-1').deleted, false)
   assert.equal(e.state.cids[sid], 'tg-1')
   assert.ok(!relay.calls.some((c) => c.startsWith('DELETE /v1/sync/conversations/')))
@@ -1101,9 +1109,9 @@ test('C11: a chat made here is local, and its cloud goes on and off again', asyn
   const off = await e.setSynced('s-side', false)
   assert.equal(off.ok, true)
   assert.deepEqual(off.synced, [])
-  assert.ok(relay.calls.includes(`DELETE /v1/sync/conversations/${cid}`))
-  assert.equal(relay.convs.get(cid).deleted, true)
-  assert.equal(e.state.cids['s-side'], undefined)
+  assert.ok(!relay.calls.includes(`DELETE /v1/sync/conversations/${cid}`))
+  assert.equal(relay.convs.get(cid).deleted, false)
+  assert.equal(e.state.cids['s-side'], cid)
   assert.equal(e.state.clouds['s-side'], 'local')
   assert.equal(saved().clouds['s-side'], 'local')
   assert.ok(sessions.rows.has('s-side'))
@@ -1113,11 +1121,11 @@ test('C11: a chat made here is local, and its cloud goes on and off again', asyn
   e.turnEnded('s-side')
   await tick(50)
   assert.ok(![...relay.msgs.values()].some((m) => m.text === 'side answer'))
-  assert.equal(e.state.cids['s-side'], undefined)
+  assert.equal(e.state.cids['s-side'], cid)
   // on again after all of that: the chat goes back up under a conversation of its own
   assert.equal((await e.setSynced('s-side', true)).ok, true)
   await until(() => [...relay.msgs.values()].some((m) => m.text === 'side answer'))
-  assert.notEqual(e.state.cids['s-side'], cid)
+  assert.equal(e.state.cids['s-side'], cid)
 })
 
 test('C11: a chat made in a messenger is in the cloud from the moment it arrives, with no switch touched', async (t) => {
@@ -1160,7 +1168,7 @@ test('C11: a chat created here stays local with the messenger chat beside it, an
   await tick(40)
   assert.ok(![...relay.msgs.values()].some((m) => m.text === 'mine answered'))
   assert.equal(e.state.clouds[theirs], 'sync')
-  assert.equal((await e.setSynced(theirs, false)).reason, 'synced-from-cloud')
+  assert.equal((await e.setSynced(theirs, false)).ok, true)
 
   // the host hands the answer to the browser half: `{ok: false, reason}` comes from the engine, and
   // the route sends it as it is instead of a plain view that looks like success
@@ -1169,4 +1177,130 @@ test('C11: a chat created here stays local with the messenger chat beside it, an
   assert.match(host, /route === '\/sync\/delete-conversation'[\s\S]{0,600}send\(res, 200, await sync\.deleteConversation\(String\(body\.sessionId \?\? ''\)\)\)/)
   const engineText = readFileSync(new URL('../src/sync.ts', import.meta.url), 'utf8')
   assert.match(engineText, /export type CloudRefusal = 'main' \| 'synced-from-cloud' \| 'not-synced-account' \| 'unknown-session'/)
+})
+
+
+test('archive changes survive offline, retry on pull and restore across devices', async (t) => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('archive-chat', 'side', 'Shared chat')
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.accountChanged('acct-1')
+  await until(() => Object.keys(e.state.cids).length === 1)
+  const sid = Object.keys(e.state.cids)[0]
+  relay.archiveOffline = true
+  await e.setArchived(sid, true)
+  assert.equal(e.state.pendingArchives[sid], true)
+  assert.equal(e.state.conversations['archive-chat'].archived, true)
+  relay.archiveOffline = false
+  await e.pull()
+  assert.equal(relay.convs.get('archive-chat').archived, true)
+  assert.equal(e.state.pendingArchives[sid], undefined)
+  relay.convs.get('archive-chat').archived = false
+  await e.pull()
+  assert.ok(e.view().toRestore.includes(sid))
+  assert.equal((await e.setSynced(sid, false)).ok, true)
+  await e.setArchived(sid, true)
+  assert.equal(relay.convs.get('archive-chat').archived, false)
+  relay.convs.get('archive-chat').title = 'Remote rename while off'
+  relay.say('archive-chat', 'user', 'remote while off')
+  await e.selectSessions([sid])
+  await e.pull()
+  assert.equal(e.state.clouds[sid], 'local')
+  assert.equal(sessions.remote(sid).length, 0)
+  assert.ok(!e.view().toRestore.includes(sid))
+})
+
+
+test('changing the account main keeps both conversation ids and archives the former main', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('old-main', 'main', 'Short main')
+  relay.add('chosen-main', 'side', 'Main chat')
+  const { engine: e } = engine(relay, sessions, { sideChats: false })
+  await e.pull()
+  const old = e.sessionOf('old-main'), chosen = e.sessionOf('chosen-main')
+  assert.equal(e.state.mainSession, old)
+  relay.convs.get('old-main').kind = 'side'
+  relay.convs.get('old-main').archived = true
+  relay.convs.get('chosen-main').kind = 'main'
+  relay.seq++
+  await e.pull()
+  assert.equal(e.state.mainSession, chosen)
+  assert.equal(e.cidOf(old), 'old-main')
+  assert.equal(e.cidOf(chosen), 'chosen-main')
+  assert.ok(e.view().toArchive.includes(old))
+  e.stop()
+})
+
+
+test('an offline archive of a deleted chat does not block the remaining catalogue', async (t) => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('gone-chat', 'side', 'Gone')
+  relay.add('kept-chat', 'side', 'Kept')
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.accountChanged('acct-1')
+  await until(() => Object.keys(e.state.cids).length === 2)
+  const sid = e.sessionOf('gone-chat')
+  relay.archiveOffline = true
+  await e.setArchived(sid, true)
+  relay.tombstone('gone-chat')
+  relay.convs.get('kept-chat').title = 'Still syncing'
+  relay.archiveOffline = false
+  await e.pull()
+  assert.equal(e.state.pendingArchives[sid], undefined)
+  assert.equal(e.state.cids[sid], undefined)
+  assert.equal(e.state.conversations['kept-chat'].title, 'Still syncing')
+})
+
+test('archive requested before the first upload is retained until the chat has an id', async (t) => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  sessions.add('fresh', 'Fresh', [{ id: 'fresh-user', role: 'user', text: 'first', at: 1738000000000 }])
+  const { engine: e } = engineOf(t, relay, sessions, { sideChats: false })
+  await e.accountChanged('acct-1')
+  await e.setSynced('fresh', true)
+  await e.setArchived('fresh', true)
+  await until(() => Boolean(e.cidOf('fresh')))
+  await e.pull()
+  assert.equal(relay.convs.get(e.cidOf('fresh')).archived, true)
+})
+
+
+test('shared task resolution rejects stale history while offline and catches up in the same session after reconnect', async (t) => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('shared-chat', 'side', 'Shared')
+  sessions.api.remote = sessions.remote
+  relay.say('shared-chat', 'assistant', 'desktop result')
+  let offline = false
+  const fetch = relay.fetch
+  relay.fetch = async (...args) => { if (offline) throw new TypeError('offline'); return fetch(...args) }
+  const { engine: e } = engineOf(t, relay, sessions)
+  const sid = await e.resolveCid('shared-chat', true)
+  assert.equal(sessions.remote(sid).length, 1)
+  offline = true
+  relay.say('shared-chat', 'user', 'question sent while the computer is off')
+  relay.say('shared-chat', 'assistant', 'server reply while the computer is off')
+  await assert.rejects(e.resolveCid('shared-chat', true), /offline/)
+  offline = false
+  assert.equal(await e.resolveCid('shared-chat', true), sid)
+  assert.deepEqual(sessions.remote(sid).map(row => row.text), ['desktop result', 'question sent while the computer is off', 'server reply while the computer is off'])
+  assert.equal(sessions.rows.size, 1)
+  assert.ok(sessions.injected.at(-1)[1].includes('server reply while the computer is off'))
+})
+
+test('shared task resolution respects the per-chat cloud pause and archive', async (t) => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('account-main', 'main', 'Main')
+  relay.add('shared-chat', 'side', 'Shared')
+  const { engine: e } = engineOf(t, relay, sessions)
+  await e.accountChanged('acct-1')
+  const sid = await e.resolveCid('shared-chat', true)
+  assert.ok(sid)
+  assert.equal((await e.setSynced(sid, false)).ok, true)
+  relay.say('shared-chat', 'assistant', 'kept on the server')
+  assert.equal(await e.resolveCid('shared-chat', true), undefined)
+  assert.equal(sessions.remote(sid).length, 0)
+  assert.equal((await e.setSynced(sid, true)).ok, true)
+  assert.equal(await e.resolveCid('shared-chat', true), sid)
+  assert.equal(sessions.remote(sid).length, 1)
+  relay.convs.get('shared-chat').archived = true
+  assert.equal(await e.resolveCid('shared-chat', true), undefined)
 })

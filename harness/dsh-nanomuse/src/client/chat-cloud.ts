@@ -1,10 +1,6 @@
-/**
- * The cloud on one chat (C11), apart from the row that draws it: which of the four a chat is, what
- * its menu item does, and what to say when the host refuses. The main chat is the account's own
- * conversation and stays in the cloud; a chat whose cloud the person turned on here can be taken
- * off again; a chat that came from the cloud, from another device or a messenger may only be
- * deleted from the account whole, the copy here staying as a local chat; the rest are on this
- * computer alone.
+/** The per-chat cloud switch pauses exchange on this computer. Shared history and its
+ * identifier remain in the account; explicit account deletion is a separate action.
+ * The main account conversation stays shared.
  */
 import type { Translate } from './api.ts'
 import type { Words } from './locales.ts'
@@ -43,7 +39,7 @@ export interface CloudItem {
   hint?: string | undefined
 }
 
-/** The menu item of a chat's cloud: the main chat has none to press, a synced one is deleted whole. */
+/** Main stays shared; either kind of side chat can pause locally. */
 export function cloudItem(t: Translate, cloud: ChatCloud): CloudItem {
   switch (cloud) {
     case 'main':
@@ -51,7 +47,7 @@ export function cloudItem(t: Translate, cloud: ChatCloud): CloudItem {
     case 'device':
       return { action: 'off', label: t('chUnsync') }
     case 'sync':
-      return { action: 'delete', label: t('chCloudDelete'), hint: t('chCloudDeleteWhy') }
+      return { action: 'off', label: t('chUnsync') }
     case 'local':
       return { action: 'on', label: t('chSync') }
   }
