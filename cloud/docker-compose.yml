@@ -27,6 +27,10 @@ services:
       CLOUD_DOMAIN: ${CLOUD_DOMAIN:-localhost}
       # where Let's Encrypt writes about an expiring certificate; empty is allowed
       ACME_EMAIL: ${ACME_EMAIL:-}
+    # OPERATOR_IP, OPERATOR_PASSWORD_HASH and MODELS_PASSWORD_HASH come from here;
+    # the public Caddyfile only has locked defaults, never the operator's address.
+    env_file:
+      - .env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # the desktop's installers and update feeds (scripts/publish-updates.mjs writes them)

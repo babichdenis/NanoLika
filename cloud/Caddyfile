@@ -28,9 +28,9 @@
 	# this box serving the page itself. Nothing here depends on another server.
 	@ops_page path /cfp64ns5jgh4er8uxhis3t5t /cfp64ns5jgh4er8uxhis3t5t/*
 	handle_path /cfp64ns5jgh4er8uxhis3t5t/* {
-		@need_auth not remote_ip 95.221.28.57
+		@need_auth not remote_ip {$OPERATOR_IP:203.0.113.10}
 		basic_auth @need_auth {
-			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
+			operator {$OPERATOR_PASSWORD_HASH:$2a$14$RO6KnWepxCx9UzQ6chZFyuYJA2Pgk9/xaC/ZEOyBP.mnOF0.KjGFK}
 		}
 		# the encyclopedia of models sits under the same address but is not the prices page:
 		# its files are served from /app/models, everything else goes to /app/prices
@@ -40,9 +40,9 @@
 		reverse_proxy relay:8787
 	}
 	handle /cfp64ns5jgh4er8uxhis3t5t {
-		@need_auth not remote_ip 95.221.28.57
+		@need_auth not remote_ip {$OPERATOR_IP:203.0.113.10}
 		basic_auth @need_auth {
-			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
+			operator {$OPERATOR_PASSWORD_HASH:$2a$14$RO6KnWepxCx9UzQ6chZFyuYJA2Pgk9/xaC/ZEOyBP.mnOF0.KjGFK}
 		}
 		redir * /cfp64ns5jgh4er8uxhis3t5t/ 308
 	}
@@ -50,9 +50,9 @@
 	# адрес, чтобы не мешать странице цен и не зависеть от relay.
 	@models_db path /phzhk6tnr6d0e2ac7j3ze8eose /phzhk6tnr6d0e2ac7j3ze8eose/*
 	handle_path /phzhk6tnr6d0e2ac7j3ze8eose/* {
-		@need_auth not remote_ip 95.221.28.57
+		@need_auth not remote_ip {$OPERATOR_IP:203.0.113.10}
 		basic_auth @need_auth {
-			operator $2a$14$LCuXh31MUu6YdbveyN0yn.SZecZ.dcCvuLyzwmoCerevR0NqnDDrG
+			operator {$MODELS_PASSWORD_HASH:$2a$14$RO6KnWepxCx9UzQ6chZFyuYJA2Pgk9/xaC/ZEOyBP.mnOF0.KjGFK}
 		}
 		root * /srv/models
 		file_server
@@ -63,17 +63,17 @@
 		}
 	}
 	handle /phzhk6tnr6d0e2ac7j3ze8eose {
-		@need_auth not remote_ip 95.221.28.57
+		@need_auth not remote_ip {$OPERATOR_IP:203.0.113.10}
 		basic_auth @need_auth {
-			operator $2a$14$LCuXh31MUu6YdbveyN0yn.SZecZ.dcCvuLyzwmoCerevR0NqnDDrG
+			operator {$MODELS_PASSWORD_HASH:$2a$14$RO6KnWepxCx9UzQ6chZFyuYJA2Pgk9/xaC/ZEOyBP.mnOF0.KjGFK}
 		}
 		redir * /phzhk6tnr6d0e2ac7j3ze8eose/ 308
 	}
 	@ops_numbers path /v1/admin/prices
 	handle @ops_numbers {
-		@need_auth not remote_ip 95.221.28.57
+		@need_auth not remote_ip {$OPERATOR_IP:203.0.113.10}
 		basic_auth @need_auth {
-			operator $2a$14$YcdIgoFyhahtDuB1bJ.GR.a6wjIozJMn8Nl8QxNrPqnDv5pBUwmvC
+			operator {$OPERATOR_PASSWORD_HASH:$2a$14$RO6KnWepxCx9UzQ6chZFyuYJA2Pgk9/xaC/ZEOyBP.mnOF0.KjGFK}
 		}
 		reverse_proxy relay:8787
 	}
