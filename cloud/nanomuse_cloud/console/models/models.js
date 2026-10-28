@@ -162,6 +162,7 @@ import {modelDetails} from '/web/model-detail.js?v=20261026-catalogue';
   let needle = ''; // что в поиске
   let vendorFilter = readPref('nm.models.vendor', ''); // один провайдер или все
   let sortMode = readPref('nm.models.sort', 'recommended'); // как расставлены строки
+  if (!['recommended', 'price', 'context', 'name'].includes(sortMode)) sortMode = 'recommended';
   let shownCount = {}; // сколько строк раздела уже показано
   let collapsedKinds = new Set(); // разделы можно свернуть, не меняя выбранные модели
   const PAGE = 40; // столько строк ждёт человека, остальное по кнопке: 384 модели разом браузер не любит
