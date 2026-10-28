@@ -366,7 +366,7 @@ def split_quiet(text: str) -> tuple[bool, str]:
     """``("[quiet] all set", …)`` → ``(True, "all set")``. Anything else → ``(False, text)``."""
     stripped = text.lstrip()
     if stripped[: len(QUIET_MARKER)].lower() == QUIET_MARKER:
-        return True, stripped[len(QUIET_MARKER) :].lstrip(" :,--\n")
+        return True, stripped[len(QUIET_MARKER) :].lstrip(" :,-\n")
     return False, text
 
 

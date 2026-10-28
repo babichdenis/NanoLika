@@ -1,13 +1,13 @@
 """Cloud identity, archive and device-only history are separate properties."""
-from types import SimpleNamespace
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from nanomuse.server.service import ConversationSync
 from nanomuse.channels.manager import ChannelManager
 from nanomuse.cloud import CloudError
+from nanomuse.server.service import ConversationSync
 
 
 def thread(tid):
