@@ -12,7 +12,7 @@ import { Avatar } from './Avatar.tsx'
 import { settingsBus } from './bus.ts'
 import { useLive, type LiveHub } from './live.ts'
 import { DEVICES_PANEL } from './panels.ts'
-import { OWN_KEYS_SECTION, PHONE_SECTION } from './MuseSettings.tsx'
+import { CHANNELS_SECTION, OWN_KEYS_SECTION } from './MuseSettings.tsx'
 import { DataRows } from './Memory.tsx'
 import { NetworkRows } from './Network.tsx'
 import { OwnKeyPanel } from './OwnKey.tsx'
@@ -223,10 +223,10 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' | 'keys'
         h('h3', { style: heading }, t('devicesTitle')),
         h('div', { style: muted }, t('devicesSummary', { n: (live.streaming ? live.hub : status.hub).devices.filter((d) => d.kind !== 'web').length }), ' ',
           h(Button, { variant: 'ghost', size: 'sm', onClick: () => { settingsBus.openSection?.(DEVICES_PANEL) } }, t('devicesOpen'))),
-        // The phone link: a one-time code that ties Telegram or MAX to this account (PhoneLink.tsx).
+        // The messenger link: a one-time code that ties Telegram or MAX to this account (PhoneLink.tsx).
         h('h3', { style: heading }, t('plTitle')),
         h('div', { style: muted }, t('plSummary'), ' ',
-          h(Button, { variant: 'ghost', size: 'sm', onClick: () => { settingsBus.openSection?.(PHONE_SECTION) } }, t('plOpen'))),
+          h(Button, { variant: 'ghost', size: 'sm', onClick: () => { settingsBus.openSection?.(CHANNELS_SECTION) } }, t('plOpen'))),
         // Data controls: the one switch over what the relay keeps, the shape of Muse's own.
         h('h3', { style: heading }, t('dataTitle')),
         h(SyncControls, { t }),

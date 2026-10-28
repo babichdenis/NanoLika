@@ -74,7 +74,9 @@ export function makeMediaSection(t: Translate) {
       if (!window.confirm(t('mdRestoreConfirm'))) return
       setBusy('restore')
       setError('')
-      void call('profile', { avatar: 'dragon' })
+      // `plain: false` too: "no picture at all" is kept per computer and survives a pull,
+      // so a reset that leaves it on would change nothing on screen
+      void call('profile', { avatar: 'dragon', plain: false, description: '', style: '' })
         .then(() => reload())
         .catch((err: unknown) => setError(failureText(t, err)))
         .finally(() => setBusy(null))

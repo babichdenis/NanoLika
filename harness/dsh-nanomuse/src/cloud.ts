@@ -2576,7 +2576,7 @@ export default class NanomuseCloud extends Service {
    * `profile` frame and pull). A drawn face keeps its pictures when only the
    * name moves.
    */
-  writeProfile(patch: { name?: string; avatar?: 'dragon' | 'emoji'; emoji?: string; color?: string; plain?: boolean }): Promise<Profile> {
+  writeProfile(patch: { name?: string; avatar?: 'dragon' | 'emoji'; emoji?: string; color?: string; plain?: boolean; description?: string; style?: string }): Promise<Profile> {
     return this.serialize(async () => {
       const token = await this.token()
       const current = this.profile.current()
@@ -2587,8 +2587,9 @@ export default class NanomuseCloud extends Service {
         avatar,
         emoji: avatar === 'emoji' ? (patch.emoji ?? current.emoji ?? '').slice(0, 16) || '✨' : '',
         color: avatar === 'emoji' ? (patch.color ?? current.color) || '#0064d4' : '',
-        style: current.style,
-        description: current.description,
+        // a restored default clears the drawing's hint too, or the studio keeps offering the old one
+        style: patch.style ?? current.style,
+        description: patch.description ?? current.description,
       }
       // «Без образа» is this computer's alone: it never travels to the account, and the profile
       // is written here so a later pull keeps it (the account's own look stays as it was)
@@ -3867,6 +3868,8 @@ export default class NanomuseCloud extends Service {
         if (typeof body.emoji === 'string') patch.emoji = body.emoji
         if (typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color)) patch.color = body.color
         if (typeof body.plain === 'boolean') patch.plain = body.plain
+        if (typeof body.description === 'string') patch.description = body.description
+        if (typeof body.style === 'string') patch.style = body.style
         return send(res, 200, await this.writeProfile(patch))
       }
       if (req.method === 'POST' && route === '/refresh') return send(res, 200, await this.refresh())

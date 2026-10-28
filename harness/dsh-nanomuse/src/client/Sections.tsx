@@ -8,7 +8,7 @@
  */
 import { useAppInfo, versionLine } from './About.tsx'
 import { createElement as h, Fragment, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call, type LinkChannel, type Translate } from './api.ts'
+import { call, type Translate } from './api.ts'
 import { acceleratorOf, bridge, gatedPermissions, keyLabel, openLink, type DesktopPrefs, type PermissionKind } from './bridge.ts'
 import { RelaunchNotice } from './Onboarding.tsx'
 import { BlackScreenNotice, DisplayRows, HandsTryRows, RuntimeRow, type ScreenshotResult } from './HandsCheck.tsx'
@@ -16,6 +16,7 @@ import { usePermissions } from './permissions.ts'
 import { settingsBus } from './bus.ts'
 import { IconBug, IconCheck, IconChevronRight, IconFile, IconHeart, IconLink, IconList, IconPlay, IconScale, IconShield } from './icons.tsx'
 import { useLive } from './live.ts'
+import { PhoneLink } from './PhoneLink.tsx'
 import { openStar } from './AccountPage.tsx'
 import { DOCS_URL, ISSUES_URL, REPO_URL } from './panels.ts'
 import { setPrefs, usePrefs } from './prefs.ts'
@@ -324,40 +325,20 @@ export function makeStorageSection(t: Translate, loadFolders: () => Promise<Fold
 }
 
 /**
- * Message channels: the ways to reach the agent. This window, the invite link, the other
- * devices on the account — and the messenger chats the account has actually linked.
- *
- * Those chats used to be described by a fixed sentence ("no third-party messengers"), which
- * was wrong twice over: it said nothing about Telegram and MAX, and it went on saying it to a
- * person who had already connected one. The list now comes from the relay, the same source the
- * Phone section uses, so the page cannot claim less than the account holds.
+ * Messengers: the one page for reaching the agent from a chat app. The Telegram and MAX link
+ * (the buttons, the code, the QR, the chats already tied to the account, each with its way off)
+ * sits first, because that is what a person opens this page for; below it the ways that are not
+ * a messenger — this window, the invite link, the other devices. «From your phone» used to be a
+ * second page beside this one and said the same things twice; it lives here now.
  */
 export function makeChannelsSection(t: Translate, openSection: (id: string) => void, devicesSection: string) {
   return function ChannelsSection(): ReactNode {
     const live = useLive()
     const others = live.hub.devices.filter((d) => d.kind !== 'web')
     const b = bridge()
-    const [chats, setChats] = useState<LinkChannel[]>([])
-    const [known, setKnown] = useState(false)
-    // Ask the relay while the account is signed in; a failure leaves `known` false, and the page
-    // then says it could not check rather than that there is nothing — silence is not "none".
-    useEffect(() => {
-      if (!live.cloud.signedIn) { setChats([]); setKnown(false); return }
-      let active = true
-      const refresh = async () => {
-        try {
-          const body = await call<{ channels?: LinkChannel[] }>('link/channels')
-          if (!active) return
-          setChats(Array.isArray(body.channels) ? body.channels : [])
-          setKnown(true)
-        } catch { if (active) setKnown(false) }
-      }
-      void refresh()
-      const poll = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh() }, 5000)
-      return () => { active = false; window.clearInterval(poll) }
-    }, [live.cloud.signedIn])
     return h('div', { className: 'nm-section' },
       h('p', null, t('mcLead')),
+      h(PhoneLink, { t }),
       h('h2', null, t('mcConnected')),
       h('div', { className: 'nm-card' },
         h('div', { className: 'nm-row' },
@@ -373,20 +354,7 @@ export function makeChannelsSection(t: Translate, openSection: (id: string) => v
             h('span', { className: 'nm-row-sub nm-wrap' }, live.cloud.signedIn ? t('mcInviteSub') : t('mcInviteOut'))),
           h('span', { className: live.cloud.signedIn ? 'nm-state nm-state-on' : 'nm-state' }, live.cloud.signedIn ? t('cnOn') : t('cnOff'))),
         h(LinkRow, { icon: h(IconLink, { size: 18 }), title: t('mcDevices'), sub: others.length ? t('mcDevicesSub', { n: others.length }) : t('mcDevicesNone'), onClick: () => openSection(devicesSection) })),
-      h('h2', null, t('mcOthers')),
-      h('div', { className: 'nm-card' },
-        chats.length
-          ? chats.map((c) => h('div', { key: c.channel + c.identifier, className: 'nm-row' },
-              h('span', { className: 'nm-row-icon' }, h(IconLink, { size: 18 })),
-              h('div', { className: 'nm-row-main' },
-                h('span', { className: 'nm-row-title' }, c.channel === 'telegram' ? 'Telegram' : c.channel === 'max' ? 'MAX' : c.channel),
-                h('span', { className: 'nm-row-sub nm-wrap' }, c.identifier || c.label || '')),
-              h('span', { className: 'nm-state nm-state-on' }, t('plOn'))))
-          : h('div', { className: 'nm-row' },
-              h('div', { className: 'nm-row-main' },
-                h('span', { className: 'nm-row-title' }, known ? t('mcNoThirdParty') : t('mcChatsUnknown')),
-                h('span', { className: 'nm-row-sub nm-wrap' }, known ? t('mcNoThirdPartySub') : t('mcChatsUnknownSub'))))),
-      chats.length ? h('p', { className: 'nm-fine' }, t('mcChatsHint')) : null,
       h('p', { className: 'nm-fine' }, t('mcFine')))
   }
 }
+

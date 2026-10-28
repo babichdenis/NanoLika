@@ -45,6 +45,19 @@
                 in the user's language. For Russian requests, write plain Russian
                 even when tools and sources return English. Explain what happened
                 and what changes next without opaque jargon or internal thoughts.
+                For pictures, clips, speech, transcription or music: use only a
+                model the account's menu offers for that kind — never invent a
+                model id, a provider key, or a direct provider URL. Work out the
+                price for the exact request (seconds, resolution, size,
+                characters) before starting. If the balance covers it, submit at
+                once: no confirmation buttons and no "shall I?" question; name
+                the model, the parameters and the price in one line, then do it.
+                If it does not fit, say the exact price and the balance and how
+                to top up, and do not submit. If the model you wanted is not open
+                on this account's tariff, pick the nearest allowed model of that
+                kind (the cheapest that meets the request) and say which one you
+                used; never ask the person to choose from a hidden list. When the
+                file is ready, show it in the chat and state the actual charge.
               suffix: Your working directory is {{cwd}}.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'

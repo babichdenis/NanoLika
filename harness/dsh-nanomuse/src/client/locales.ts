@@ -367,7 +367,7 @@ export const en = {
   navLegal: 'Legal',
   navWallet: 'Wallet',
   navStorage: 'Secure storage',
-  navChannels: 'Message channels',
+  navChannels: 'Messengers',
   navHarness: 'Harness',
   gnAccount: 'NanoLika account',
   gnAccountSub: '{hint} · sign-in, devices, data',
@@ -533,9 +533,9 @@ export const en = {
   mcChatsHint: 'To write to Lika from these chats, just write there. To unlink one, use Phone.',
   mcNoThirdPartySub: 'NanoLika does not read your chats in WhatsApp, Telegram or WeChat, and never sends there on its own. To write to Lika from Telegram or MAX, connect the bot under Phone.',
   mcFine: 'Want one? Say so in Help & support.',
-  // Settings → From your phone: the one-time code that ties Telegram or MAX to the account
+  // The Telegram/MAX link is the first block of Settings → Messengers (navPhone is gone)
   navPhone: 'From your phone',
-  plTitle: 'From your phone',
+  plTitle: 'Telegram and MAX',
   plSummary: 'Connect Telegram or MAX with a QR code.',
   plOpen: 'Open',
   plLead: 'Choose a messenger. Scan the QR code with your phone, or open the bot using the button. No code entry is needed.',
@@ -1946,7 +1946,7 @@ export const zh: typeof en = {
   navLegal: '法律信息',
   navWallet: '钱包',
   navStorage: '安全存储',
-  navChannels: '消息渠道',
+  navChannels: '消息应用',
   navHarness: 'Harness',
   gnAccount: 'NanoLika 账户',
   gnAccountSub: '{hint} · 登录、设备、数据',
@@ -2114,7 +2114,7 @@ export const zh: typeof en = {
   mcFine: '想要哪一个？在「帮助与支持」里告诉我们。',
   // Settings → From your phone: the one-time code that ties Telegram or MAX to the account
   navPhone: '从手机使用',
-  plTitle: '从手机使用',
+  plTitle: 'Telegram 和 MAX',
   plSummary: '用二维码连接 Telegram 或 MAX。',
   plOpen: '打开',
   plLead: '选择聊天平台。用手机扫描二维码或点击按钮打开机器人，无需输入验证码。',
@@ -3677,7 +3677,7 @@ export const ru: typeof en = {
   mcFine: 'Хотите такой? Напишите в «Помощь и поддержка».',
   // Settings → From your phone: the one-time code that ties Telegram or MAX to the account
   navPhone: 'С телефона',
-  plTitle: 'С телефона',
+  plTitle: 'Telegram и MAX',
   plSummary: 'Подключите Telegram или MAX по QR-коду.',
   plOpen: 'Открыть',
   plLead: 'Выберите мессенджер. Отсканируйте QR-код телефоном или откройте бота кнопкой. Вводить код не нужно.',
