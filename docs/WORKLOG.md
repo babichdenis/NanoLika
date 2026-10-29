@@ -2360,3 +2360,18 @@ parent traversal, an outside absolute path and a symlink escape. Ruff check, for
 `git diff --check` passed. The repository's ignored `.venv` still points to a removed Python 3.11;
 checks ran from an isolated Python 3.13 environment and a temporary source snapshot while the
 network share was disconnected.
+
+## 2026-10-29 · Isolation audit I2: route durable memory by customer
+
+Added a memory-store router with a separate SQLite database for each trusted Cloud account.
+The existing memory database remains the installation scope and is not copied into accounts.
+New Cloud-owned threads share durable customer memory across sessions; legacy ownerless threads
+remain session-private once an account is signed in. Telegram/MAX private senders use the relay
+account identity after sign-in and otherwise get messenger-specific memory. Group messages use
+a group scope and never inherit a member's private account memory. Memory API, Hub calls,
+search, scheduled maintenance, feed context and profile facts run in the selected scope.
+
+Validation: the full related runtime set passed (174 passed, 1 skipped), then the final scope,
+channel and server set passed (78 passed, 1 skipped). Ruff check/format, `git diff --check` and
+mypy across 163 source files passed. Commit `8a72a442`. No production deployment or migration of
+legacy memory was made.
