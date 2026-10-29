@@ -1939,85 +1939,34 @@
         "Cabinets: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile. The check refreshes itself; “Refresh” below re-reads prices too.",
         "后台：polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile。检查会自动更新；下面的“刷新”也会重读价格。")));
   }
-  /** Цены поставщиков и кошельки: одна таблица, у кого на каждую модель дешевле. */
+  /** «Поставщики» — только кошельки: у кого сколько денег и можно ли тратить. */
   function providersView() {
-    return [balancesPanel(), legacyProvidersSnapshotView()];
-  }
-  function legacyProvidersSnapshotView() {
-    const title = L3("Цены поставщиков", "Provider prices", "供应商价格");
-    const pv = need("providers");
-    if (!pv) return loadingPanel(title);
-    if (pv._error) return failedPanel(title, "providers", pv._error);
-    const q = (params.get("pq") || "").toLowerCase();
-    const all = pv.models || [];
-    const rows = all.filter((m) => !q || (m.key || "").includes(q) ||
-      (m.name || "").toLowerCase().includes(q) || (m.cheapest || "").includes(q))
-      // сначала то, что продают несколько поставщиков: там и есть выбор
-      .sort((a, b) => ((b.offers || []).length - (a.offers || []).length) ||
-        String(a.key).localeCompare(String(b.key)));
-    const provs = pv.providers || [];
-    const cur = (n) => (n == null ? "" : fmt(Math.round(n * 100) / 100));
-    const refresh = async (e) => {
-      const b = e.currentTarget;
-      b.disabled = true;
-      b.textContent = L3("Собираю…", "Collecting…", "采集中…");
-      try { await api("POST", "/v1/admin/provider-prices/refresh", {}); } catch (err) { alert(err.message); }
-      const was = pv.generated_at;
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
-        forget("providers");
-        let v = null;
-        try { v = await api("GET", "/v1/admin/provider-prices"); } catch (_) { v = null; }
-        if (v && v.generated_at && v.generated_at !== was) break;
-      }
-      forget("providers");
-      draw();
-    };
-    return panel([title, h("span", { class: "fine" },
-        ` · ${L3("собрано", "collected", "采集于")} ${(pv.generated_at || "—").slice(0, 16).replace("T", " ")} UTC`)],
-      h("div", { class: "kpis", style: "padding:12px 16px 4px" },
-        kpi(L3("Моделей в сравнении", "Models compared", "对比模型"), fmt(all.length)),
-        kpi(L3("Поставщиков", "Providers", "供应商"), `${fmt(provs.filter((x) => x.ok).length)}/${fmt(provs.length)}`),
-        kpi(L3("Курс доллара", "Dollar rate", "美元汇率"), fmt(pv.usd_rub),
-            pv.rate_source === "cbr" ? L3("ЦБ РФ", "Central Bank", "央行") : "")),
-      h("div", { class: "fine", style: "padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
-        h("span", { class: "search" }, h("input", { type: "search", "data-focus": "providers-q",
-          placeholder: L3("Модель или поставщик…", "Model or provider…", "模型或供应商…"),
-          value: params.get("pq") || "", oninput: (e) => setParams({ pq: e.target.value }) })),
-        h("button", { class: "btn quiet sm", onclick: refresh }, L3("Обновить данные", "Refresh", "刷新")),
-        ...provs.flatMap((x) => [h("b", { title: x.note || "" }, x.name), x.ok ? "✓ " : "× "])),
-      rows.length ? h("div", { class: "ledger sticky", style: "max-height:620px;overflow:auto" }, h("table", {},
-        h("thead", {}, h("tr", {},
-          h("th", {}, L3("Модель", "Model", "模型")),
-          h("th", {}, L3("Единица", "Unit", "单位")),
-          h("th", { class: "num" }, L3("Дешевле, ₽", "Cheapest, ₽", "最低价 ₽")),
-          h("th", {}, L3("У кого", "Where", "供应商")),
-          h("th", { class: "num hide-sm" }, L3("Разброс, ₽", "Spread, ₽", "差价 ₽")),
-          h("th", { class: "hide-sm" }, L3("Все предложения", "All offers", "全部报价")))),
-        h("tbody", {}, ...rows.slice(0, 500).map((m) => h("tr", {},
-          h("td", {}, m.name || m.key),
-          h("td", { class: "fine" }, m.unit || ""),
-          h("td", { class: "num" }, cur(m.cheapest_rub)),
-          h("td", {}, h("b", {}, m.cheapest || "")),
-          h("td", { class: "num hide-sm" }, m.spread ? cur(m.spread) : ""),
-          h("td", { class: "hide-sm fine" },
-            (m.offers || []).map((o) => `${o.provider} ${cur(o.rub)}`).join(" · ")))))))
-      : h("div", { class: "empty" }, L3("Ничего не нашлось.", "Nothing found.", "没有找到。")),
-      h("div", { class: "pad fine" },
-        L3("Доллары пересчитаны по курсу ЦБ. Цены за 1M токенов и за штуку генерации не сравниваются между собой — единица указана в третьем столбце. Новый поставщик добавляется функцией в provider_prices.py.",
-           "Dollars are converted at the Central Bank rate. Per-1M-token and per-generation prices are not comparable —\
- the unit is in its own column. A new provider is a function in provider_prices.py.",
-           "美元按央行汇率换算。按 1M token 与按次的价格不可直接比较，单位在第 3 列。新增供应商只需在 provider_prices.py 里加函数。")));
+    return [balancesPanel()];
   }
 
-  // «Модели» это каталог под ключом. Страницы цен здесь нет нарочно: её адрес отвечает
-  // «не найдено» в публичном домене, и читают её через туннель к релею (0.30)
-  function modelsView() {
-    const cv = need("catalog");
-    if (!cv) return [balancesPanel(), loadingPanel(T.catalog)];
-    if (cv._error) return [balancesPanel(), failedPanel(T.catalog, "catalog", cv._error)];
-    return [balancesPanel(), catalogPanel(cv)];
+  /** «Модели»: список моделей (одна модель — одна строка) и связанная с ним
+      нижняя таблица поставщиков выбранной модели. Сами таблицы и перегородка —
+      в models-table.js; здесь только панель и монтирование. */
+  let MODELS_MOD = null;
+  function mountModels() {
+    const el = document.getElementById("mt-root");
+    if (!el) return;
+    const run = (mod) => mod.mount(el, { api, params });
+    if (MODELS_MOD) return run(MODELS_MOD);
+    import("./models-table.js").then((mod) => { MODELS_MOD = mod; run(mod); },
+      (e) => { el.replaceChildren(h("div", { class: "empty" }, `Таблица не загрузилась: ${e.message}`)); });
   }
+
+  function modelsView() {
+    setTimeout(mountModels, 0);
+    const panels = [h("div", { class: "panel mt-panel" }, h("div", { id: "mt-root" }))];
+    const cv = need("catalog");
+    if (!cv) panels.push(loadingPanel(T.catalog));
+    else if (cv._error) panels.push(failedPanel(T.catalog, "catalog", cv._error));
+    else panels.push(catalogPanel(cv));
+    return panels;
+  }
+
   function healthView() {
     const hv = need("health");
     if (!hv) return loadingPanel(T.nav.health);

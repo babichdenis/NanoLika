@@ -29,7 +29,7 @@ from typing import Any
 from fastapi import Depends, HTTPException
 
 from . import model_pricing
-from .provider_routing import ROUTING_CATALOG_PROVIDERS
+from .provider_routing import ROUTING_CATALOG_PROVIDERS, identity
 
 PROVIDERS_DIR = Path(__file__).resolve().parent / "console" / "providers"
 
@@ -529,6 +529,83 @@ def _retail() -> dict:
     }
 
 
+def _slug_keys(*values: Any) -> set[str]:
+    """Варианты одного имени модели: `vendor/model`, `model`, с пробелами и точками."""
+    out: set[str] = set()
+    for value in values:
+        if not value:
+            continue
+        slug = str(value).strip().lower().rsplit("/", 1)[-1]
+        for variant in {slug, re.sub(r"\s+", "-", slug), identity(slug)}:
+            if variant:
+                out.add(variant)
+    return out
+
+
+def _extra_offers(prices: dict, connected: set[str]) -> dict[str, dict[str, dict]]:
+    """Предложения поставщиков без адаптера маршрутизации — сейчас это Bothub.
+
+    Релей не умеет отправлять туда запросы, поэтому в `router.routes()` их нет.
+    Но прайс у поставщика настоящий (`/api/v2/pricing/models`, уже по нашему
+    тарифу), и в таблице его надо видеть рядом с остальными: сравнение
+    поставщиков и маржа считаются по нему так же, только без автопереключения.
+    """
+    wanted = {name for name in connected if name not in ROUTING_CATALOG_PROVIDERS}
+    if not wanted:
+        return {}
+    index: dict[str, dict[str, dict]] = {}
+    for row in prices.get("models") or []:
+        key = str(row.get("key") or "")
+        if not key:
+            continue
+        for offer in row.get("offers") or []:
+            provider = str(offer.get("provider") or "")
+            if provider not in wanted:
+                continue
+            unit = str(row.get("unit") or "")
+            field = {
+                "1M токенов (вход)": "input_rub",
+                "1M токенов (выход)": "output_rub",
+                "1M токенов (вход, кэш)": "cached_rub",
+            }.get(unit)
+            if field is None:
+                continue
+            try:
+                price = float(offer.get("rub"))
+            except (TypeError, ValueError):
+                continue
+            if price <= 0:
+                continue
+            entry = index.setdefault(key, {}).setdefault(
+                provider,
+                {
+                    "provider": provider,
+                    "model": str(offer.get("model") or ""),
+                    "context_length": int(row.get("context_length") or 0),
+                    "max_output": int(row.get("max_output") or 0),
+                    "input_modalities": list(row.get("input_modalities") or []),
+                    "output_modalities": list(row.get("output_modalities") or []),
+                    "supported_parameters": list(row.get("supported_parameters") or []),
+                    "updated": prices.get("generated_at"),
+                },
+            )
+            entry[field] = price
+    result: dict[str, dict[str, dict]] = {}
+    for key, providers in index.items():
+        ready = {}
+        for provider, entry in providers.items():
+            if entry.get("input_rub") is None or entry.get("output_rub") is None:
+                continue
+            entry["estimated_rub"] = round((entry["input_rub"] * 1000 + entry["output_rub"] * 512) / 1_000_000, 6)
+            entry["eligible"] = False
+            entry["selected"] = False
+            entry["exclusion_reason"] = "нет адаптера маршрутизации: цена только для сверки"
+            ready[provider] = entry
+        if ready:
+            result[key] = ready
+    return result
+
+
 def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, router: Any = None) -> None:
     """Включает страницу цен в релей."""
 
@@ -542,6 +619,12 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             for row in (cloud.plan_menu() if cloud is not None and callable(getattr(cloud, "plan_menu", None)) else [])
         ]
         max_discount_pct = max((int(row["discount_pct"]) for row in plan_discounts), default=0)
+        configured = {
+            str(name)
+            for name, provider in (getattr(settings, "providers", {}) or {}).items()
+            if callable(getattr(provider, "key", None)) and provider.key()
+        }
+        extra = _extra_offers(prices, configured)
         if router is not None:
             for row, spec in zip(models, settings.models, strict=True):
                 if cloud is not None:
@@ -598,6 +681,13 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                                 ),
                             }
                         )
+                # Bothub и подобные: цена есть, адаптера маршрутизации нет.
+                # Матчим по имени модели у всех, кто уже дал котировку, и по upstream.
+                for key in _slug_keys(spec.upstream, spec.id, *(item["model"] for item in offers)):
+                    for provider, snapshot_offer in (extra.get(key) or {}).items():
+                        if any(item["provider"] == provider for item in offers):
+                            continue
+                        offers.append(dict(snapshot_offer))
                 row["routing"] = {
                     "offers": offers,
                     "selected": selected_route.provider if selected_route and selected_route.offer else None,

@@ -1,5 +1,5 @@
 /* The operator's page, in the phone's design language. Builds on ../app.css. */
-.admin { min-height: 100%; padding: 22px clamp(14px, 3vw, 40px) 56px; max-width: 1420px; margin: 0 auto; }
+.admin { min-height: 100%; padding: 22px clamp(14px, 3vw, 40px) 56px; max-width: none; margin: 0 auto; }
 /* 0.14: a side nav and one view at a time */
 .admin .shell { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 18px; align-items: start; }
 .admin nav.side { position: sticky; top: 14px; display: flex; flex-direction: column; gap: 2px; }
@@ -286,3 +286,91 @@ html[data-theme="dark"] .admin { --ink-3:#aeb7a2; }
 /* страница «Поставщики»: шапка таблицы остаётся на месте при прокрутке */
 .admin .panel .ledger.sticky thead th { position: sticky; top: 0; z-index: 2;
   background: var(--surface); box-shadow: 0 1px 0 var(--line, var(--fill)); }
+
+/* админка резиновая: тянется на всю ширину, таблицы прокручиваются, а не выпирают */
+.admin .view, .admin .panel, .admin .ledger { min-width: 0; }
+.admin .ledger { overflow-x: auto; }
+.admin .cols3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.admin .kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.admin .grid2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+/* «Модели»: строка модели раскрывает поставщиков под собой */
+.admin tr.tap > td:first-child { white-space: nowrap; }
+.admin .chev { display: inline-block; width: 14px; color: var(--ink-3); font-size: 11px; }
+.admin tr.open > td { background: var(--fill); }
+.admin tr.offers-row { cursor: default; }
+.admin tr.offers-row > td { padding: 2px 14px 10px 28px; background: var(--fill); }
+.admin .offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 18px; padding: 2px 0; }
+.admin .offer { display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 10px; align-items: baseline; font-size: 12.5px; padding: 4px 0; border-top: 1px dashed var(--hairline); }
+.admin .offer:first-child { border-top: 0; }
+.admin .offer .who-p { font-weight: 600; }
+
+/* «Модели»: сверху список моделей, снизу связанные поставщики, между ними перегородка.
+   Данные и поведение — models-table.js; здесь только вид. */
+.admin .mt-panel { padding: 0; overflow: hidden; }
+.admin .mt { display: flex; flex-direction: column; height: calc(100vh - 175px); min-height: 520px; }
+.admin .mt-pane { display: flex; flex-direction: column; min-height: 0; }
+.admin .mt-pane-top { flex: 0 0 58%; }
+.admin .mt-pane-bottom { flex: 1 1 auto; border-top: 1px solid var(--hairline); }
+.admin .mt-top { display: grid; gap: 8px; padding: 10px 14px 6px; }
+.admin .mt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.admin .mt #mt-q { flex: 1 1 220px; min-width: 150px; margin: 0; padding: 6px 10px; border: 0; border-radius: 10px;
+  background: var(--fill); color: var(--ink); font: inherit; font-size: 13px; outline: none; }
+.admin .mt #mt-q:focus { box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.25); }
+.admin .mt .field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+.admin .mt select { max-width: 190px; margin: 0; padding: 6px 26px 6px 10px; border: 0; border-radius: 10px;
+  background-color: var(--fill); color: var(--ink); font: inherit; font-size: 12.5px; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9da4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-position: right 7px center; background-size: 14px; }
+.admin .mt .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.admin .mt .switch input { margin: 0; }
+.admin .mt .chip { padding: 5px 11px; border: 0; border-radius: 999px; background: var(--fill); color: var(--ink-2);
+  font: inherit; font-size: 12px; cursor: pointer; }
+.admin .mt .chip.on { background: var(--action); color: #fff; }
+.admin .mt .chip b { margin-left: 5px; font-weight: 600; opacity: .75; }
+.admin .mt .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin .mt .mt-count { margin-left: auto; white-space: nowrap; }
+.admin .mt #mt-note { margin: 0; min-height: 0; color: var(--warn); }
+.admin .mt #mt-note:empty { display: none; }
+.admin .mt-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.admin .mt table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin .mt th, .admin .mt td { padding: 7px 10px; border-bottom: 1px solid var(--hairline); text-align: left; white-space: nowrap; }
+.admin .mt th { position: sticky; top: 0; z-index: 2; background: var(--surface); color: var(--ink-3); font-size: 11.5px; font-weight: 500; }
+.admin .mt .num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin .mt tbody tr { cursor: pointer; }
+.admin .mt tbody tr:hover td { background: var(--fill); }
+.admin .mt tbody tr.mt-active td { background: rgba(10, 102, 228, 0.07); }
+.admin .mt tbody tr.mt-active td:first-child { box-shadow: inset 3px 0 0 var(--action); }
+.admin .mt th.mt-pick, .admin .mt td.mt-pick-cell { width: 96px; }
+.admin .mt .mt-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+.admin .mt .mt-check input { margin: 0; }
+.admin .mt .mt-model-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.admin .mt .mt-name { font-weight: 600; }
+.admin .mt .mt-code { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--ink-3); }
+.admin .mt .mt-kind { color: var(--ink-3); font-size: 12px; }
+.admin .mt tr.mt-off .mt-name { color: var(--ink-3); font-weight: 500; }
+.admin .mt .mt-best b { font-weight: 600; }
+.admin .mt .mt-best .fine { color: var(--ink-3); }
+.admin .mt-splitter { position: relative; flex: 0 0 12px; display: grid; place-items: center; cursor: row-resize;
+  background: var(--fill); border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); touch-action: none; }
+.admin .mt-splitter span { width: 44px; height: 3px; border-radius: 999px; background: rgba(0, 0, 0, 0.18); }
+.admin .mt-splitter:hover span, .admin .mt-splitter:focus-visible span { background: var(--action); }
+.admin .mt-splitter:focus-visible { outline: none; }
+body.mt-resizing { cursor: row-resize; user-select: none; }
+.admin .mt-linked-head { display: flex; align-items: baseline; gap: 10px; padding: 9px 14px 5px; }
+.admin .mt-linked-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.admin .mt-linked-head .fine { color: var(--ink-3); }
+.admin .mt-provider { font-weight: 600; }
+.admin .mt tr.mt-cheap .mt-provider { color: var(--action); }
+.admin .mt tr.mt-serving td { background: rgba(52, 199, 89, 0.08); }
+.admin .mt-status { font-size: 11.5px; color: var(--ink-3); }
+.admin .mt-status.is-ready { color: var(--action); }
+.admin .mt-status.is-serving { color: var(--ok); font-weight: 600; }
+@media (max-width: 800px) {
+  .admin .mt { height: calc(100vh - 140px); }
+  .admin .mt .mt-model-cell { max-width: 200px; }
+}
+.admin .mt-pane[hidden], .admin .mt-splitter[hidden] { display: none; }
+.admin .mt.mt-single .mt-pane-top { flex: 1 1 auto; }
+.admin .mt th small { display: block; margin-top: 1px; font-size: 10px; font-weight: 400; color: var(--ink-3); opacity: .85; }
+.admin .mt td.mt-status { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }

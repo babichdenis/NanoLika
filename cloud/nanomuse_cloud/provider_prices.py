@@ -14,6 +14,7 @@ JSON и показывает кнопку «Обновить данные».
 Источники по умолчанию:
   * polza.ai      — каталог в рублях, цена карточки модели (за картинку/видео/1M);
   * routerai.ru   — рублёвый агрегатор, цена входа и выхода за 1M токенов;
+  * bothub.chat   — цены API-ключа (`/api/v2/pricing/models`) в рублях, уже по нашему тарифу;
   * api-docs.deepseek.com — официальный прайс DeepSeek в долларах.
 """
 
@@ -375,9 +376,61 @@ def fetch_proxyapi() -> list[dict]:
     return list(best.values())
 
 
+BOTHUB_API = "https://bothub.chat/api/v2/pricing/models"
+
+# Единицы Bothub → единицы этой таблицы. Ключ берём вместе с единицей: у картинок
+# и видео key совпадает с unit, у текста key говорит, вход это или выход.
+BOTHUB_UNITS = {
+    ("per_1m_tokens", "input"): "1M токенов (вход)",
+    ("per_1m_tokens", "cache_read"): "1M токенов (вход, кэш)",
+    ("per_1m_tokens", "cache_write"): "1M токенов (кэш-запись)",
+    ("per_1m_tokens", "cache_write_1h"): "1M токенов (кэш-запись)",
+    ("per_1m_tokens", "output"): "1M токенов (выход)",
+    ("per_1m_tokens", "input_image"): "1M токенов (вход, картинка)",
+    ("per_1m_tokens", "output_image"): "1M токенов (выход, картинка)",
+    ("per_1k_tokens", "input"): "1000 токенов (вход)",
+    ("per_1k_tokens", "cache_read"): "1000 токенов (вход, кэш)",
+    ("per_1k_tokens", "output"): "1000 токенов (выход)",
+    ("per_1k_chars", None): "1000 символов",
+    ("per_image", None): "изображение",
+    ("per_second", None): "секунда",
+    ("per_minute", None): "минута",
+}
+
+
 def fetch_bothub() -> list[dict]:
-    """bothub.chat — рубли; в карточке «Ввод (за 1M токенов) 156,46 ₽»,
-    а название модели стоит сразу после блока цен."""
+    """bothub.chat — рубли по тарифу нашего API-ключа.
+
+    Страница bothub.chat/models показывает акцию и не совпадает с тем, что
+    списывают с ключа. Авторитетный источник — `/api/v2/pricing/models`:
+    в поле `rub` уже цена для нашего тарифа (PREMIUM, 200 ₽ за 1M Caps).
+    Без ключа остаётся разбор страницы.
+    """
+    key = os.environ.get("BOTHUB_KEY", "").strip()
+    if not key:
+        return _fetch_bothub_page()
+    data = json.loads(_auth_get(BOTHUB_API, key))
+    offers = []
+    for model in data.get("models") or []:
+        name = model.get("label") or model.get("id")
+        if not name:
+            continue
+        for price in model.get("prices") or []:
+            unit = BOTHUB_UNITS.get((price.get("unit"), price.get("key")))
+            if unit is None:
+                unit = BOTHUB_UNITS.get((price.get("unit"), None))
+            if unit is None:
+                continue
+            rub = price.get("rub")
+            if not isinstance(rub, (int, float)) or rub <= 0:
+                continue
+            offers.append(dict(model=str(name), unit=unit, price=round(float(rub), 4), currency="RUB"))
+    return offers
+
+
+def _fetch_bothub_page() -> list[dict]:
+    """Запасной путь без ключа: рубли из карточки «Ввод (за 1M токенов) 156,46 ₽»,
+    название модели стоит сразу после блока цен."""
     lines = text_of(get("https://bothub.chat/models")).splitlines()
     offers, pending = [], []
     label_re = re.compile(r"^(Ввод|Вывод|Картинка-промпт)\s*\(([^)]{1,24})\)$", re.I)
@@ -728,8 +781,9 @@ def install_provider_prices(app, admin_dep) -> None:
 
 # Черновые поставщики: парсеры написаны, но сверка цен показывает систематические
 # ошибки привязки модели к цене (карточка съезжает), поэтому по умолчанию выключены.
-# Включить для отладки: PRICE_DRAFT_PROVIDERS=1
-DRAFT = {"bothub", "proxyapi", "neuroapi"}
+# Bothub сюда больше не входит: с ключом цены берутся из API, а не из вёрстки.
+# Включить остальных для отладки: PRICE_DRAFT_PROVIDERS=1
+DRAFT = {"proxyapi", "neuroapi"}
 
 
 def active_fetchers() -> dict:
