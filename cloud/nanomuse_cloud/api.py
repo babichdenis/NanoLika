@@ -3038,6 +3038,11 @@ def create_app(
     @app.get("/v1/admin/provider-routing", dependencies=[Depends(admin_dep)])
     async def provider_routing_status() -> dict:
         return router.status(include_offers=True)
+    @app.get("/v1/admin/provider-balances", dependencies=[Depends(admin_dep)])
+    async def provider_balances_status() -> dict:
+        """The provider wallets and the floor each route is judged by; no offers, cheap."""
+        return router.status(include_offers=False)
+
 
     @app.post("/v1/admin/provider-routing/refresh", dependencies=[Depends(admin_dep)])
     async def provider_routing_refresh() -> dict:

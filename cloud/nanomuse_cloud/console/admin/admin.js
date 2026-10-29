@@ -634,8 +634,9 @@
     readiness: () => "/v1/admin/payments/readiness",
     siteCounter: () => "/v1/admin/site-counter",
     providers: () => "/v1/admin/provider-prices",
+    balances: () => "/v1/admin/provider-balances",
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances"]);
   const CACHE = new Map();
   const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}${key === "payments" ? ":" + SOURCES.payments(days) : ""}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
@@ -1890,10 +1891,52 @@
   function dataView() { const dv = need("data"); return [!dv ? loadingPanel(T.data(days)) : dv._error ? failedPanel(T.data(days), "data", dv._error) : dataPanel(dv), syncPanel()]; }
   function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
   function trafficView() { return siteTrafficView(); }
-  /** Цены поставщиков: одна таблица, у кого на каждую модель дешевле. */
+  /** Кошельки поставщиков над таблицей цен: видно, на что ещё хватит маршрута. */
+  function balancesPanel() {
+    const title = L3("Балансы поставщиков", "Provider balances", "供应商余额");
+    const bv = need("balances");
+    if (!bv) return loadingPanel(title);
+    if (bv._error) return failedPanel(title, "balances", bv._error);
+    const names = {
+      aitunnel: "AITUNNEL", polza: "Polza", proxyapi: "ProxyAPI",
+      "proxyapi-openai": "ProxyAPI OpenAI", routerai: "RouterAI",
+      deepseek: "DeepSeek", openrouter: "OpenRouter", bothub: "Bothub",
+    };
+    const money = (e) => e.amount == null ? "—" : `${e.currency === "USD" ? "$" : "₽"}${fmt(Math.round(Number(e.amount) * 100) / 100)}`;
+    const state = (e) => {
+      if (e.error) return h("span", { class: "bad" }, e.error);
+      if (e.disabled_until) return L3("приостановлен", "paused", "已暂停");
+      const floor = e.currency === "USD" ? bv.minimum_balance_usd : bv.minimum_balance_rub;
+      if (Number.isFinite(Number(floor)) && Number(e.amount) <= Number(floor)) return h("span", { class: "warn" }, L3("ниже порога", "below the floor", "低于阈值"));
+      return h("span", { class: "ok" }, L3("можно тратить", "can spend", "可使用"));
+    };
+    const rows = Object.entries(bv.balances || {}).sort((a, b) => (Number(b[1].rub_estimate ?? b[1].amount) || 0) - (Number(a[1].rub_estimate ?? a[1].amount) || 0));
+    return panel([title, h("span", { class: "fine" }, ` · ${L3("порог", "floor", "阈值")} ${fmt(bv.minimum_balance_rub)} ₽`)],
+      h("div", { class: "fine", style: "padding:10px 16px 0" },
+        L3("Остатки кошельков поставщиков; долларовые отдельно от рублёвых. Ошибка проверки не означает ноль. Порог — ниже него маршрут не выбирается.",
+          "Provider wallets; dollars apart from rubles. A failed check is not zero. A route below the floor is not chosen.",
+          "供应商钱包；美元与卢布分开。检查失败不等于归零。低于阈值时不会选择该路由。")),
+      rows.length ? h("div", { class: "ledger", style: "margin:10px 16px" }, h("table", {},
+        h("thead", {}, h("tr", {},
+          h("th", {}, L3("Поставщик", "Provider", "供应商")),
+          h("th", { class: "num" }, L3("Доступно", "Available", "可用")),
+          h("th", { class: "num hide-sm" }, L3("Оценка, ₽", "Rubles", "卢布")),
+          h("th", { class: "hide-sm" }, L3("Проверено", "Checked", "检查于")),
+          h("th", {}, L3("Состояние", "State", "状态")))),
+        h("tbody", {}, ...rows.map(([id, e]) => h("tr", {},
+          h("td", {}, names[id] || id),
+          h("td", { class: "num" }, money(e)),
+          h("td", { class: "num hide-sm" }, e.rub_estimate == null ? "" : `${fmt(Math.round(Number(e.rub_estimate) * 100) / 100)} ₽`),
+          h("td", { class: "hide-sm fine" }, when(e.checked)),
+          h("td", {}, state(e)))))))
+        : h("div", { class: "empty" }, L3("Балансы ещё не проверялись.", "Balances have not been checked yet.", "尚未检查余额。")),
+      h("p", { class: "foot" }, L3("Кабинеты: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru. Проверка обновляется сама; кнопка «Обновить данные» ниже перечитывает и цены.",
+        "Cabinets: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru. The check refreshes itself; “Refresh” below re-reads prices too.",
+        "后台：polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru。检查会自动更新；下面的“刷新”也会重读价格。")));
+  }
+  /** Цены поставщиков и кошельки: одна таблица, у кого на каждую модель дешевле. */
   function providersView() {
-    window.location.replace("/app/prices/");
-    return loadingPanel(T.nav.providers);
+    return [balancesPanel(), legacyProvidersSnapshotView()];
   }
   function legacyProvidersSnapshotView() {
     const title = L3("Цены поставщиков", "Provider prices", "供应商价格");
