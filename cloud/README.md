@@ -33,11 +33,15 @@ its base URL.
   up by HMAC-SHA256 hash, shown as a display hint (`138****8000`,
   `so***@example.com`), and kept AES-GCM-encrypted under a key derived from
   `CLOUD_SECRET` so the operator's page can tell accounts apart; the database
-  file on its own reveals none of them. Message content is forwarded, never
-  written to disk. The database holds: hashed and encrypted identifier, key
-  hashes, the keyed hash of a code still waiting to be used (six digits, so
-  hashing it plainly would be a table an attacker could work through), video
-  task ids, token counts per request, and the profile below.
+  file on its own reveals none of them. Message content is forwarded and is
+  written to the relay's SQLite file only when the account itself turns on
+  *Data controls → Help improve the models* (kept turns) or *Conversation
+  sync* (the text of synced chats); both switches delete what they stored when
+  turned off, and deleting the account removes it too. With both off, no
+  message text is stored. The database otherwise holds: hashed and encrypted
+  identifier, key hashes, the keyed hash of a code still waiting to be used
+  (six digits, so hashing it plainly would be a table an attacker could work
+  through), video task ids, token counts per request, and the profile below.
 - **One look on every device.** `GET` / `PUT` / `DELETE /v1/me/profile` keep
   the agent's name and face for the account — the dragon, an emoji on a colour,
   or a face drawn in the avatar studio with its five small stills (WebP, 200 KB
