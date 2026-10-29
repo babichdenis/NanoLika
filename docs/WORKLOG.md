@@ -1,3 +1,22 @@
+## 2026-10-29 · MAX QR reaches the relay; the v7 clip reaches the chat
+
+The MAX QR still did not tie the chat to the account after the webhook fix. The bot log
+showed the missing link: `bot_started` arrived with its one-use payload (`payload present`),
+but the relay had no used code and no MAX alias. The MAX channel had no `cloud_url` or
+`cloud_bot_token` of its own — only Telegram's config carried the relay address and the
+shared bot secret — so `ChatLink.configured()` was false and the bot answered the scan with
+"connect later" instead of asking the relay. MAX now borrows those two account-wide settings
+from `[channels.telegram]` when it has none, with a test for the fallback. Deployed to the
+bot and restarted; backup `/opt/nanolika-bot/backups/max-link-shared-20261029T170500Z`.
+A fresh QR is needed because the code from the failed scan has lapsed.
+
+The video path itself worked: after the v7 `present`, the desktop uploaded the clip to S3
+and the presigned link was inserted into the main conversation; the bot's delivery receipts
+advanced at the same minute and the owner confirmed the clip arrived. The S3 link stays in
+the shared transcript, so the other devices see the same file.
+
+Validation: ruff clean; the new test compiles. Commit `cd24f376`.
+
 ## 2026-10-29 · A QR link ends when its chat arrives, and only its chat counts
 
 The owner scanned a MAX QR and saw the connection appear and vanish; the panel also showed a
