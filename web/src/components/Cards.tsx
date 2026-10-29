@@ -816,7 +816,7 @@ export function ArtifactCard({ event, onOpen }: { event: ArtifactEvent; onOpen: 
           preview ? "w-[300px]" : "",
         )}
       >
-        {preview && <ArtifactPreview path={event.path} kind={kind} />}
+        {preview && <ArtifactPreview path={event.path} kind={kind} threadId={event.thread} />}
         <div className="flex items-center gap-3 px-4 py-3">
           {!preview && (
             <div className="rounded-2xl bg-accent/12 p-2.5 text-accent">
@@ -836,15 +836,15 @@ export function ArtifactCard({ event, onOpen }: { event: ArtifactEvent; onOpen: 
 }
 
 /** A small, non-interactive look at a page or picture the agent made — the file itself opens on tap. */
-function ArtifactPreview({ path, kind }: { path: string; kind: "html" | "image" }) {
+function ArtifactPreview({ path, kind, threadId }: { path: string; kind: "html" | "image"; threadId: string }) {
   if (kind === "image") {
-    return <img src={fileUrl(path)} alt="" loading="lazy" className="h-40 w-full object-cover" />;
+    return <img src={fileUrl(path, false, threadId)} alt="" loading="lazy" className="h-40 w-full object-cover" />;
   }
   return (
     <div className="pointer-events-none relative h-40 w-full overflow-hidden bg-white">
       <iframe
         title={path}
-        src={fileUrl(path)}
+        src={fileUrl(path, false, threadId)}
         sandbox=""
         tabIndex={-1}
         loading="lazy"

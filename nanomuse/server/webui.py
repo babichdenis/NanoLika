@@ -22,6 +22,7 @@ from nanomuse.schema import ToolCall, ToolResult
 from nanomuse.server.events import MAIN_THREAD, EventBus, Timeline, new_id, now_iso
 from nanomuse.tools.browser import BrowserFrame
 from nanomuse.ui import ApprovalDecision, ApprovalRequest
+from nanomuse.workspace_context import active_workspace
 
 current_thread: contextvars.ContextVar[str] = contextvars.ContextVar(
     "nanomuse_thread", default=MAIN_THREAD
@@ -285,7 +286,7 @@ class WebUI:
     def _scan_workspace(self) -> dict[str, float] | None:
         """Relative path → mtime for every visible file, or None when the workspace is
         too big to diff cheaply (then only the files tool announces artifacts)."""
-        ws = self.workspace
+        ws = active_workspace(self.workspace) if self.workspace is not None else None
         if ws is None or not ws.is_dir():
             return None
         out: dict[str, float] = {}
@@ -483,9 +484,10 @@ class WebUI:
             args = call.arguments if isinstance(call.arguments, dict) else {}
             path = str(args.get("path") or "")
             if args.get("action") in ("write", "append") and path:
-                if self.workspace is not None and Path(path).is_absolute():
+                workspace = active_workspace(self.workspace) if self.workspace is not None else None
+                if workspace is not None and Path(path).is_absolute():
                     try:
-                        path = Path(path).resolve().relative_to(self.workspace.resolve()).as_posix()
+                        path = Path(path).resolve().relative_to(workspace.resolve()).as_posix()
                     except ValueError:
                         return
                 self._announce_artifact(thread, path, str(args["action"]))

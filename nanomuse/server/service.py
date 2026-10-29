@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import mimetypes
 import re
@@ -66,6 +67,7 @@ from nanomuse.tools.coding_tool import CodingAgents
 from nanomuse.tools.reminder_tools import Reminders
 from nanomuse.tools.trigger_tools import Triggers
 from nanomuse.triggers import MailWatcher, Trigger, matches
+from nanomuse.workspace_context import active_context, thread_path, workspace_context
 
 IDEAS_PROMPT = """You are {name}, the user's personal agent. Based on what you know about them, propose {n} concrete, genuinely useful things you could do for them right now. Prefer tasks you can actually complete with your tools (research, comparisons, planning, drafting, tracking, reminders, organising files, advancing their goals).
 
@@ -1128,12 +1130,23 @@ class MuseService:
         menu recommended, and that account pays for the turn."""
         text = text.strip()
         language = language.strip()
-        attachments = [self.attachment(path) for path in files or []]
+        thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
+        owner = self.sync.owner_of(thread_id)
+        turn_scope = (
+            account_scope(owner)
+            if owner
+            else customer_scope or self.memory_scope_for_thread(thread)
+        )
+        if customer_scope and not owner and thread.customer_scope != customer_scope:
+            thread.customer_scope = customer_scope
+            self._save_index()
+        attachments = [
+            self.attachment(path, thread_id=thread_id, customer_scope=turn_scope)
+            for path in files or []
+        ]
         if not text and not attachments:
             raise ValueError("empty message")
         once = self.cloud_once(once_key, once_model) if (via == "cloud" or once_key) else None
-        thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
-        turn_scope = customer_scope or self.memory_scope_for_thread(thread)
         thread.updated_at = now_iso()
         if language:
             # remembered on the conversation: a chat addressed to another device passes it on
@@ -1282,12 +1295,33 @@ class MuseService:
         return create_llm(merged, data_dir=self.settings.data_dir), model
 
     # ------------------------------------------------------------------ attachments
-    def attachment(self, rel: str) -> Attachment:
-        """An attachment record for a file in the workspace (the path as the app has it)."""
-        target = self.resolve_workspace_path(rel)
+    def attachment(
+        self,
+        rel: str,
+        thread_id: str = "",
+        customer_scope: str = "",
+    ) -> Attachment:
+        """A file attached to a message, addressed by its conversation-owned path."""
+        thread = self.threads.get(thread_id) if thread_id else None
+        scope = customer_scope or (
+            self.memory_scope_for_thread(thread) if thread is not None else "installation"
+        )
+        target = self.resolve_workspace_path(rel, thread_id=thread_id, customer_scope=scope)
         if not target.is_file():
             raise ValueError(f"no such file: {rel}")
-        path = target.relative_to(self.workspace()).as_posix()
+        context = active_context()
+        if context is not None and target.is_relative_to(context.session):
+            path = thread_path(context.thread_id, target.relative_to(context.session).as_posix())
+        elif thread_id and target.is_relative_to(self.workspace_for_thread(thread_id, scope)):
+            session = self.workspace_for_thread(thread_id, scope)
+            path = thread_path(thread_id, target.relative_to(session).as_posix())
+        elif thread_id and (library := self.library_for_scope(scope)):
+            if target.is_relative_to(library):
+                path = target.relative_to(library).as_posix()
+            else:
+                path = target.relative_to(self.workspace()).as_posix()
+        else:
+            path = target.relative_to(self.workspace()).as_posix()
         return Attachment(
             path=path,
             name=target.name,
@@ -1296,9 +1330,14 @@ class MuseService:
             mime=mimetypes.guess_type(target.name)[0] or "",
         )
 
-    def save_upload(self, name: str, data: bytes) -> Attachment:
-        """A file from the phone into ``attachments/<date>/`` in the workspace, under a
-        safe version of its name (a second file with the same name gets a suffix)."""
+    def save_upload(
+        self,
+        name: str,
+        data: bytes,
+        thread_id: str = MAIN_THREAD,
+        customer_scope: str = "",
+    ) -> Attachment:
+        """Save an incoming file inside one conversation, never in the shared library."""
         limit = self.settings.server.max_upload_mb * 1024 * 1024
         if len(data) > limit:
             raise ValueError(f"file is larger than {self.settings.server.max_upload_mb} MB")
@@ -1306,7 +1345,16 @@ class MuseService:
             r"[^\w.\- ()\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]+", "_", Path(name).name
         ).strip(" ._")
         safe = safe[:120] or "file"
-        folder = self.workspace() / "attachments" / datetime.now().strftime("%Y-%m-%d")
+        thread = self.threads.get(thread_id)
+        scope = customer_scope or (
+            self.memory_scope_for_thread(thread) if thread is not None else "installation"
+        )
+        owner = self.sync.owner_of(thread_id)
+        if thread is not None and not thread.customer_scope:
+            thread.customer_scope = account_scope(owner) if owner else scope
+            self._save_index()
+        root = self.workspace_for_thread(thread_id, scope)
+        folder = root / "attachments" / datetime.now().strftime("%Y-%m-%d")
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / safe
         stem, suffix = target.stem, target.suffix
@@ -1315,7 +1363,11 @@ class MuseService:
             target = folder / f"{stem} ({n}){suffix}"
             n += 1
         target.write_bytes(data)
-        return self.attachment(target.relative_to(self.workspace()).as_posix())
+        return self.attachment(
+            thread_path(thread_id, target.relative_to(root).as_posix()),
+            thread_id=thread_id,
+            customer_scope=scope,
+        )
 
     def _ensure_worker(self, thread: Thread) -> None:
         if thread.worker is None or thread.worker.done():
@@ -1350,15 +1402,20 @@ class MuseService:
                     )
                 try:
                     purpose = thread.purposes.pop(text, None)
-                    # the first conversation speaks to the person's turns in its own chat;
-                    # a background run (a goal pass, a routine) never hears it
-                    thread.agent.prompt_addendum = (
-                        None if purpose else self._firstrun_addendum_for(thread.id)
-                    )
-                    self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
-                    with memory_scope(
-                        incoming.customer_scope or self.memory_scope_for_thread(thread)
+                    turn_scope = incoming.customer_scope or self.memory_scope_for_thread(thread)
+                    with (
+                        memory_scope(turn_scope),
+                        self.workspace_context_for_thread(thread, turn_scope),
                     ):
+                        self.workspace_for_thread(thread.id, turn_scope).mkdir(
+                            parents=True, exist_ok=True
+                        )
+                        # the first conversation speaks to the person's turns in its own chat;
+                        # a background run (a goal pass, a routine) never hears it
+                        thread.agent.prompt_addendum = (
+                            None if purpose else self._firstrun_addendum_for(thread.id)
+                        )
+                        self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
                         final = await thread.agent.run(
                             text,
                             purpose=purpose,
@@ -2519,15 +2576,161 @@ class MuseService:
     def workspace(self) -> Path:
         return self.settings.agent.workspace.resolve()
 
-    def resolve_workspace_path(self, rel: str) -> Path:
+    @staticmethod
+    def _workspace_key(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    def workspace_for_thread(self, thread_id: str, customer_scope: str = "") -> Path:
+        """A durable workspace for one thread, partitioned under its trusted customer."""
+        thread = self.threads.get(thread_id)
+        owner = self.sync.owner_of(thread_id)
+        if thread is not None and thread.customer_scope:
+            # A later sign-in can narrow an ownerless chat's memory scope. Keep its already
+            # assigned files in place; changing who owns its transcript must not orphan uploads.
+            scope = thread.customer_scope
+        elif owner:
+            scope = account_scope(owner)
+        else:
+            scope = customer_scope or (
+                self.memory_scope_for_thread(thread) if thread is not None else "installation"
+            )
+        return (
+            self.settings.data_dir
+            / "workspaces"
+            / self._workspace_key(scope)
+            / "threads"
+            / self._workspace_key(thread_id)
+        ).resolve()
+
+    def library_for_scope(self, customer_scope: str) -> Path | None:
+        """The installation's existing workspace or one account's new shared library."""
+        if customer_scope == "installation":
+            return self.workspace()
+        if customer_scope.startswith("account:"):
+            return (
+                self.settings.data_dir
+                / "workspaces"
+                / self._workspace_key(customer_scope)
+                / "library"
+            ).resolve()
+        # Old ownerless cloud conversations are deliberately private and cannot borrow the
+        # installation library or a new account's files without a trusted owner mapping.
+        return None
+
+    def workspace_context_for_thread(self, thread: Thread, customer_scope: str = ""):
+        scope = customer_scope or self.memory_scope_for_thread(thread)
+        session = self.workspace_for_thread(thread.id, scope)
+        library = self.library_for_scope(scope)
+        shared = [*([library] if library is not None else []), *self.settings.agent.extra_roots]
+        legacy_attachments: set[str] = set()
+        for event in thread.timeline.events:
+            for item in event.get("files") or []:
+                path = item.get("path") if isinstance(item, dict) else ""
+                if isinstance(path, str) and path.startswith("attachments/"):
+                    legacy_attachments.add(path)
+        if legacy_attachments and library != self.workspace():
+            # Old timelines refer to uploads in the pre-I1 workspace. Expose only paths
+            # explicitly referenced by this conversation; Files applies that allowlist.
+            shared.append(self.workspace())
+        return workspace_context(
+            thread.id,
+            session,
+            [Path(root) for root in shared],
+            legacy_attachments,
+        )
+
+    def resolve_workspace_path(
+        self,
+        rel: str,
+        thread_id: str = "",
+        customer_scope: str = "",
+    ) -> Path:
+        """Resolve a library path or a namespaced path owned by one thread."""
+        parts = Path(rel).parts
+        context = active_context()
+        if len(parts) >= 3 and parts[0] == "threads":
+            owner_thread = parts[1]
+            if thread_id and thread_id != owner_thread:
+                raise PermissionError("file belongs to a different conversation")
+            thread = self.threads.get(owner_thread)
+            if thread is None:
+                raise FileNotFoundError("no such conversation")
+            scope = customer_scope or (
+                self.memory_scope_for_thread(thread) if thread is not None else "installation"
+            )
+            ws = self.workspace_for_thread(owner_thread, scope)
+            target = (ws / Path(*parts[2:])).resolve()
+        elif thread_id:
+            thread = self.threads.get(thread_id)
+            scope = customer_scope or (
+                self.memory_scope_for_thread(thread) if thread is not None else "installation"
+            )
+            ws = self.workspace_for_thread(thread_id, scope)
+            target = (ws / rel).resolve()
+            if not target.exists():
+                library = self.library_for_scope(scope)
+                candidates = [library] if library is not None else []
+                if rel.startswith("attachments/") and self._legacy_attachment_belongs_to(
+                    thread, rel
+                ):
+                    candidates.append(self.workspace())
+                for library_root in candidates:
+                    candidate = (library_root / rel).resolve()
+                    if candidate == library_root or library_root in candidate.parents:
+                        relative = candidate.relative_to(library_root).as_posix()
+                        if relative.startswith(
+                            "attachments/"
+                        ) and not self._legacy_attachment_belongs_to(thread, relative):
+                            raise PermissionError(
+                                "legacy attachment is private to another conversation"
+                            )
+                        if relative == "threads" or relative.startswith("threads/"):
+                            raise PermissionError("conversation workspaces are private")
+                        target, ws = candidate, library_root
+        elif context is not None:
+            ws = context.session
+            target = (ws / rel).resolve()
+        else:
+            ws = self.workspace()
+            target = (ws / rel).resolve()
+        if target != ws and ws not in target.parents:
+            raise PermissionError("path outside the conversation workspace")
+        return target
+
+    def resolve_thread_file(self, thread_id: str, rel: str) -> Path:
+        """Resolve a plain path against a thread workspace, for the file preview API."""
+        if thread_id not in self.threads:
+            raise FileNotFoundError("no such conversation")
+        return self.resolve_workspace_path(rel, thread_id=thread_id)
+
+    @staticmethod
+    def _legacy_attachment_belongs_to(thread: Thread | None, relative: str) -> bool:
+        if thread is None:
+            return False
+        for event in thread.timeline.events:
+            for item in event.get("files") or []:
+                if isinstance(item, dict) and item.get("path") == relative:
+                    return True
+        return False
+
+    def resolve_library_path(self, rel: str) -> Path:
         ws = self.workspace()
         target = (ws / rel).resolve()
         if target != ws and ws not in target.parents:
             raise PermissionError("path outside the workspace")
         return target
 
-    def list_files(self, limit: int = 200) -> list[dict[str, Any]]:
-        ws = self.workspace()
+    def list_files(self, limit: int = 200, thread_id: str = "") -> list[dict[str, Any]]:
+        if thread_id:
+            thread = self.threads.get(thread_id)
+            if thread is None:
+                raise ValueError("no such thread")
+            scope = self.memory_scope_for_thread(thread)
+            ws = self.workspace_for_thread(thread_id, scope)
+            prefix = f"threads/{thread_id}/"
+        else:
+            ws = self.workspace()
+            prefix = ""
         out: list[dict[str, Any]] = []
         if not ws.exists():
             return out
@@ -2540,7 +2743,7 @@ class MuseService:
                 continue
             out.append(
                 {
-                    "path": p.relative_to(ws).as_posix(),
+                    "path": prefix + p.relative_to(ws).as_posix(),
                     "name": p.name,
                     "size": st.st_size,
                     "modified": datetime.fromtimestamp(st.st_mtime, UTC).isoformat(

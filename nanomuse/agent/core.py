@@ -26,6 +26,7 @@ from nanomuse.sentinel import AuditLog, Sentinel
 from nanomuse.skills import SkillLibrary
 from nanomuse.tools.base import ToolCollection
 from nanomuse.ui import UI
+from nanomuse.workspace_context import active_file_path
 
 
 class Incoming:
@@ -131,8 +132,11 @@ class MuseAgent:
         if any(a.kind != "image" for a in files):
             note += "\nRead them with `files` action=read."
         content = f"{text}\n\n{note}" if text.strip() else note
-        workspace = Path(self.settings.agent.workspace).expanduser()
-        images = [str(workspace / a.path) for a in files if a.kind == "image"]
+        images = [
+            str(active_file_path(a.path, Path(self.settings.agent.workspace).expanduser()))
+            for a in files
+            if a.kind == "image"
+        ]
         return Message.user(content, images=images or None)
 
     # ------------------------------------------------------------------ prompt

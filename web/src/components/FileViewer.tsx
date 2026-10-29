@@ -13,7 +13,7 @@ import { useFocusTrap } from "./useFocusTrap";
  * so an artifact's script runs in an opaque origin: it cannot read the access token or
  * call the API. Images and PDFs load by URL (the server does not run them).
  */
-export function FileViewer({ path, onClose }: { path: string | null; onClose: () => void }) {
+export function FileViewer({ path, threadId = "", onClose }: { path: string | null; threadId?: string; onClose: () => void }) {
   const t = useT();
   const root = useRef<HTMLDivElement>(null);
   useFocusTrap(root, !!path);
@@ -39,7 +39,7 @@ export function FileViewer({ path, onClose }: { path: string | null; onClose: ()
         </div>
         {kind !== "html" && (
           <a
-            href={fileUrl(path)}
+            href={fileUrl(path, false, threadId)}
             target="_blank"
             rel="noreferrer noopener"
             aria-label={t("Open in a new tab")}
@@ -48,61 +48,61 @@ export function FileViewer({ path, onClose }: { path: string | null; onClose: ()
             <ExternalLink size={19} />
           </a>
         )}
-        <a href={fileUrl(path, true)} aria-label={t("Download")} className="p-2 rounded-full text-muted hover:bg-surface-2">
+        <a href={fileUrl(path, true, threadId)} aria-label={t("Download")} className="p-2 rounded-full text-muted hover:bg-surface-2">
           <Download size={19} />
         </a>
       </header>
       <div className="min-h-0 flex-1 overflow-auto">
-        <Body path={path} kind={kind} />
+        <Body path={path} kind={kind} threadId={threadId} />
       </div>
     </div>
   );
 }
 
-function Body({ path, kind }: { path: string; kind: ReturnType<typeof fileKind> }) {
+function Body({ path, kind, threadId }: { path: string; kind: ReturnType<typeof fileKind>; threadId: string }) {
   const t = useT();
   if (kind === "image") {
     return (
       <div className="flex h-full items-center justify-center p-3">
-        <img src={fileUrl(path)} alt={path} className="max-h-full max-w-full rounded-2xl object-contain" />
+        <img src={fileUrl(path, false, threadId)} alt={path} className="max-h-full max-w-full rounded-2xl object-contain" />
       </div>
     );
   }
   if (kind === "pdf") {
-    return <iframe title={path} src={fileUrl(path)} className="h-full w-full bg-white" />;
+    return <iframe title={path} src={fileUrl(path, false, threadId)} className="h-full w-full bg-white" />;
   }
-  if (kind === "html") return <HtmlBody path={path} />;
-  if (kind === "event") return <EventBody path={path} />;
-  if (kind === "text" || kind === "code" || kind === "data") return <TextBody path={path} kind={kind} />;
+  if (kind === "html") return <HtmlBody path={path} threadId={threadId} />;
+  if (kind === "event") return <EventBody path={path} threadId={threadId} />;
+  if (kind === "text" || kind === "code" || kind === "data") return <TextBody path={path} kind={kind} threadId={threadId} />;
   return (
     <div className="p-8 text-center text-muted text-[14px]">
       {t("No preview for this file type.")}{" "}
-      <a href={fileUrl(path, true)} className="text-accent font-medium">
+      <a href={fileUrl(path, true, threadId)} className="text-accent font-medium">
         {t("Download it")}
       </a>
     </div>
   );
 }
 
-function useFileText(path: string): { text: string | null; error: string | null } {
+function useFileText(path: string, threadId: string): { text: string | null; error: string | null } {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     setText(null);
     setError(null);
-    api.fileText(path)
+    api.fileText(path, threadId)
       .then((t) => alive && setText(t))
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
-  }, [path]);
+  }, [path, threadId]);
   return { text, error };
 }
 
-function HtmlBody({ path }: { path: string }) {
-  const { text, error } = useFileText(path);
+function HtmlBody({ path, threadId }: { path: string; threadId: string }) {
+  const { text, error } = useFileText(path, threadId);
   if (error) return <Failed error={error} />;
   if (text === null) return <Loading />;
   return (
@@ -117,9 +117,9 @@ function HtmlBody({ path }: { path: string }) {
 }
 
 /** An .ics the agent drafted: the event as a card, and the file to add it with a tap. */
-function EventBody({ path }: { path: string }) {
+function EventBody({ path, threadId }: { path: string; threadId: string }) {
   const t = useT();
-  const { text, error } = useFileText(path);
+  const { text, error } = useFileText(path, threadId);
   if (error) return <Failed error={error} />;
   if (text === null) return <Loading />;
   const events = parseIcs(text);
@@ -145,7 +145,7 @@ function EventBody({ path }: { path: string }) {
           {ev.description && <div className="mt-4 whitespace-pre-wrap text-[14px] leading-relaxed">{ev.description}</div>}
         </div>
       ))}
-      <a href={fileUrl(path, true)} download className="flex items-center justify-center gap-2 rounded-2xl bg-accent text-accent-fg px-4 py-3 text-[15px] font-medium">
+      <a href={fileUrl(path, true, threadId)} download className="flex items-center justify-center gap-2 rounded-2xl bg-accent text-accent-fg px-4 py-3 text-[15px] font-medium">
         <CalendarPlus size={18} /> {t("Add to calendar")}
       </a>
       <p className="text-center text-[12.5px] text-muted">{t("Opens in your calendar app, which asks before it saves anything.")}</p>
@@ -221,8 +221,8 @@ function eventWhen(ev: IcsEvent): string {
   return sameDay ? `${day(ev.start)} ${time(ev.start)}–${time(ev.end)}` : `${day(ev.start)} ${time(ev.start)} – ${day(ev.end)} ${time(ev.end)}`;
 }
 
-function TextBody({ path, kind }: { path: string; kind: "text" | "code" | "data" }) {
-  const { text, error } = useFileText(path);
+function TextBody({ path, kind, threadId }: { path: string; kind: "text" | "code" | "data"; threadId: string }) {
+  const { text, error } = useFileText(path, threadId);
   if (error) return <Failed error={error} />;
   if (text === null) return <Loading />;
   if (kind === "text" && /\.md$/i.test(path)) {

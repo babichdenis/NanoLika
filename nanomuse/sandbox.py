@@ -34,6 +34,7 @@ from pathlib import Path
 from nanomuse.config import SandboxSettings
 from nanomuse.logger import logger
 from nanomuse.runtime import on_device
+from nanomuse.workspace_context import active_context
 
 # Programs whose job is the network. A command running one of these gets the network
 # and counts as egress for the Sentinel; everything else runs without.
@@ -317,7 +318,12 @@ class Sandbox:
         # lives outside /usr — often under the hidden home; only those directories come in
         for prefix in interpreter_roots():
             args += ["--ro-bind-try", str(prefix), str(prefix)]
-        roots = [self.workspace, *self.extra_roots, *self.shared]
+        context = active_context()
+        roots = (
+            [context.session, *self.shared]
+            if context is not None
+            else [self.workspace, *self.extra_roots, *self.shared]
+        )
         for root in roots:
             args += ["--bind-try", str(root), str(root)]
         # The data dir (vault, sessions, pairing, tokens, audit) must not exist inside the
@@ -336,7 +342,10 @@ class Sandbox:
             for root in roots:
                 if root.is_relative_to(data_dir):
                     args += ["--bind-try", str(root), str(root)]
-        for root in [*self.ro_roots, *self.shared_ro]:
+        readonly_roots = [*self.ro_roots, *self.shared_ro]
+        if context is not None:
+            readonly_roots.extend([*context.shared, *self.extra_roots])
+        for root in readonly_roots:
             under_mask = bool(visible and data_dir and root.is_relative_to(data_dir))
             if root.is_dir() and (under_mask or not any(root.is_relative_to(r) for r in roots)):
                 args += ["--ro-bind-try", str(root), str(root)]

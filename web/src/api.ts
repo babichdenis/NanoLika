@@ -100,10 +100,11 @@ export function setToken(token: string): void {
 /** A workspace file for an `<img>`, `<video>`, `<iframe>` or a download link: signed with
  *  the token rather than carrying it (ticket.ts) — the link opens this path for a few hours
  *  and nothing else, should it end up in a log. */
-export function fileUrl(path: string, download = false): string {
+export function fileUrl(path: string, download = false, threadId = ""): string {
   const token = getToken();
   const params = token ? signedParams(token, `/api/files/${path}`) : new URLSearchParams();
   if (download) params.set("download", "1");
+  if (threadId && !path.startsWith("threads/")) params.set("thread_id", threadId);
   const q = params.toString();
   return `/api/files/${path.split("/").map(encodeURIComponent).join("/")}${q ? `?${q}` : ""}`;
 }
@@ -260,8 +261,8 @@ export const api = {
   send: (thread: string, text: string, files: string[] = [], language = "", via = "") =>
     request<{ event: TimelineEvent; thread: ThreadMeta }>(`/api/threads/${thread}/send`, json(via ? { text, files, language, via } : { text, files, language })),
   /** A file to attach: the bytes as the body, the name in the query. */
-  upload: (file: File) =>
-    request<AttachmentInfo>(`/api/files/upload?name=${encodeURIComponent(file.name || "photo.jpg")}`, {
+  upload: (file: File, threadId = "main") =>
+    request<AttachmentInfo>(`/api/files/upload?name=${encodeURIComponent(file.name || "photo.jpg")}&thread_id=${encodeURIComponent(threadId)}`, {
       method: "POST",
       headers: { "Content-Type": file.type || "application/octet-stream" },
       body: file,
@@ -310,13 +311,14 @@ export const api = {
     request<Trigger>("/api/triggers", { method: "POST", body: JSON.stringify(body) }),
   fireTrigger: (id: string) => request<Trigger>(`/api/triggers/${id}/fire`, { method: "POST" }),
   cancelTrigger: (id: string) => request<Trigger>(`/api/triggers/${id}`, { method: "DELETE" }),
-  files: (limit = 300) => request<FileInfo[]>(`/api/files?limit=${limit}`),
+  files: (limit = 300, threadId = "") => request<FileInfo[]>(`/api/files?limit=${limit}${threadId ? `&thread_id=${encodeURIComponent(threadId)}` : ""}`),
   /** Raw contents of a workspace file, fetched with the token in a header (never in a URL). */
-  fileText: async (path: string): Promise<string> => {
+  fileText: async (path: string, threadId = ""): Promise<string> => {
     const headers: Record<string, string> = {};
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`/api/files/${path.split("/").map(encodeURIComponent).join("/")}`, { headers });
+    const query = threadId && !path.startsWith("threads/") ? `?thread_id=${encodeURIComponent(threadId)}` : "";
+    const res = await fetch(`/api/files/${path.split("/").map(encodeURIComponent).join("/")}${query}`, { headers });
     if (res.status === 401) throw new AuthError();
     if (!res.ok) throw new Error(failureDetail(res.status, await res.json().catch(() => undefined)));
     return res.text();

@@ -363,11 +363,13 @@ class PlaywrightBackend(BrowserBackend):
         self._page.on("download", self._on_download)
 
     def _on_download(self, download: Any) -> None:
+        downloads_dir = self.downloads_dir
+
         async def save() -> None:
             try:
-                self.downloads_dir.mkdir(parents=True, exist_ok=True)
+                downloads_dir.mkdir(parents=True, exist_ok=True)
                 name = Path(download.suggested_filename or "download").name or "download"
-                await download.save_as(str(self.downloads_dir / name))
+                await download.save_as(str(downloads_dir / name))
                 logger.info("browser: downloaded {} into the workspace", name)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("browser: download failed: {}", exc)

@@ -29,6 +29,12 @@ from typing import Any
 
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
+from nanomuse.workspace_context import (
+    active_context,
+    active_shared_roots,
+    active_workspace,
+    namespaced_session_path,
+)
 
 #: how long one document may take; a 300-page deck with pictures on a slow laptop is
 #: minutes, a hang is forever
@@ -393,13 +399,56 @@ def has_vba_project(path: Path) -> bool:
 
 # --------------------------------------------------------------------------- the tools
 def resolve_inside(
-    workspace: Path, extra_roots: list[Path], raw: str, must_exist: bool = True
+    workspace: Path,
+    extra_roots: list[Path],
+    raw: str,
+    must_exist: bool = True,
+    *,
+    write: bool = False,
 ) -> Path:
     """The path, made absolute inside the workspace or one of its extra roots."""
+    context = active_context()
+    workspace = active_workspace(workspace)
+    if context is not None:
+        namespaced = namespaced_session_path(raw, context.thread_id, workspace)
+        if namespaced is not None:
+            if must_exist and not namespaced.exists():
+                raise FileNotFoundError(f"'{raw}' does not exist")
+            return namespaced
+        if raw in context.legacy_attachments:
+            for root in active_shared_roots([*extra_roots]):
+                legacy = (root / raw).resolve()
+                if legacy.is_file() and root in legacy.parents:
+                    if write:
+                        raise PermissionError("legacy attachments are read-only")
+                    return legacy
     candidate = Path(os.path.expanduser((raw or "").strip()))
     if not candidate.is_absolute():
         candidate = workspace / candidate
     resolved = candidate.resolve()
+    if context is not None:
+        if resolved == workspace or workspace in resolved.parents:
+            if write or resolved.exists():
+                if must_exist and not resolved.exists():
+                    raise FileNotFoundError(f"'{raw}' does not exist")
+                return resolved
+        shared_roots = active_shared_roots([*extra_roots])
+        for root in shared_roots:
+            if resolved == root or root in resolved.parents:
+                relative = resolved.relative_to(root).as_posix() if resolved != root else ""
+                if write:
+                    raise PermissionError("the shared client library and extra roots are read-only")
+                if relative == "threads" or relative.startswith("threads/"):
+                    raise PermissionError("conversation workspaces are private")
+                if relative == "attachments" or relative.startswith("attachments/"):
+                    if relative not in context.legacy_attachments:
+                        raise PermissionError(
+                            "legacy attachments are private to their conversation"
+                        )
+                if must_exist and not resolved.exists():
+                    raise FileNotFoundError(f"'{raw}' does not exist")
+                return resolved
+        raise PermissionError(f"path '{raw}' is outside this conversation workspace")
     roots = [workspace.resolve(), *[r.resolve() for r in extra_roots]]
     if not any(resolved == r or r in resolved.parents for r in roots):
         raise PermissionError(
@@ -440,14 +489,16 @@ class OfficeConvert(BaseTool):
     workspace: Path = Path(".")
     extra_roots: list[Path] = []
 
-    def _resolve(self, raw: str, must_exist: bool = True) -> Path:
-        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist)
+    def _resolve(self, raw: str, must_exist: bool = True, *, write: bool = False) -> Path:
+        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=write)
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         target = str(args.get("path") or "")
         to = str(args.get("to") or "pdf")
         try:
-            inside = self.workspace.resolve() in self._resolve(target, must_exist=False).parents
+            inside = (
+                active_workspace(self.workspace) in self._resolve(target, must_exist=False).parents
+            )
         except Exception:  # noqa: BLE001 - a path that cannot be resolved triggers a prompt
             inside = False
         return CallAssessment(
@@ -471,7 +522,14 @@ class OfficeConvert(BaseTool):
         target = (to or "pdf").strip().lower().lstrip(".")
         if not target.isalnum():
             return ToolResult.fail(f"'{to}' is not a format")
-        dst = self._resolve(out, must_exist=False) if out.strip() else src.with_suffix("." + target)
+        if out.strip():
+            dst = self._resolve(out, must_exist=False, write=True)
+        elif active_context() is not None and not src.is_relative_to(
+            active_workspace(self.workspace)
+        ):
+            dst = active_workspace(self.workspace) / (src.stem + "." + target)
+        else:
+            dst = src.with_suffix("." + target)
         if dst == src:
             return ToolResult.fail("the target is the file itself; give another `to` or `out`")
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -540,8 +598,8 @@ class OfficeVba(BaseTool):
     workspace: Path = Path(".")
     extra_roots: list[Path] = []
 
-    def _resolve(self, raw: str, must_exist: bool = True) -> Path:
-        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist)
+    def _resolve(self, raw: str, must_exist: bool = True, *, write: bool = False) -> Path:
+        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=write)
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         target = str(args.get("path") or "")
@@ -575,11 +633,19 @@ class OfficeVba(BaseTool):
         where = "workbook" if where == "workbook" else "module"
         macro_suffix = MACRO_SUFFIX[family]
         if out.strip():
-            dst = self._resolve(out, must_exist=False)
+            dst = self._resolve(out, must_exist=False, write=True)
+        elif active_context() is not None and not src.is_relative_to(
+            active_workspace(self.workspace)
+        ):
+            dst = active_workspace(self.workspace) / (src.stem + macro_suffix)
         elif src.suffix.lower() == macro_suffix:
             dst = src  # their macro-enabled file: the macro goes into it
         else:
             dst = src.with_suffix(macro_suffix)
+        if active_context() is not None and not dst.is_relative_to(
+            active_workspace(self.workspace)
+        ):
+            return ToolResult.fail("the shared client library is read-only")
         dst.parent.mkdir(parents=True, exist_ok=True)
 
         if not com_available():

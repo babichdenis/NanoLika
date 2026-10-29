@@ -111,8 +111,8 @@ export interface AppState {
   feedVersion: number;
   /** ISO time of the newest Feed item you have looked at. */
   feedSeenAt: string;
-  /** Path of the workspace file open in the viewer, if any. */
-  viewer: string | null;
+  /** Path and owning conversation of the workspace file open in the viewer. */
+  viewer: { path: string; threadId: string } | null;
   /** Text to put in the chat composer next time it shows (e.g. "/weekly-review "). */
   draft: string | null;
   /** attachments handed over from outside (the phone's share sheet), already uploaded */
@@ -181,7 +181,7 @@ type Action =
   | { type: "tab"; tab: Tab }
   | { type: "drawer"; open: boolean }
   | { type: "feedSeen"; at: string }
-  | { type: "viewer"; path: string | null }
+  | { type: "viewer"; path: string | null; threadId?: string }
   | { type: "draft"; text: string | null }
   | { type: "draftFiles"; files: AttachmentInfo[] | null }
   | { type: "onboardingDismissed" }
@@ -378,7 +378,10 @@ function reducer(state: AppState, action: Action): AppState {
       writeStorage(FEED_SEEN_KEY, action.at);
       return { ...state, feedSeenAt: action.at };
     case "viewer":
-      return { ...state, viewer: action.path };
+      return {
+        ...state,
+        viewer: action.path ? { path: action.path, threadId: action.threadId ?? "" } : null,
+      };
     case "draft":
       return { ...state, draft: action.text };
     case "draftFiles":
@@ -589,7 +592,7 @@ interface StoreValue {
   setDrawer: (open: boolean) => void;
   openThread: (thread: string) => void;
   markFeedSeen: (at: string) => void;
-  openFile: (path: string | null) => void;
+  openFile: (path: string | null, threadId?: string) => void;
   /** Put text in the chat composer and switch to the chat (a skill's "Use", for one). */
   draft: (text: string | null) => void;
   draftFiles: (files: AttachmentInfo[] | null) => void;
@@ -831,7 +834,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDrawer: (open) => dispatch({ type: "drawer", open }),
       openThread: (thread) => dispatch({ type: "activeThread", thread }),
       markFeedSeen: (at) => dispatch({ type: "feedSeen", at }),
-      openFile: (path) => dispatch({ type: "viewer", path }),
+      openFile: (path, threadId) => dispatch({ type: "viewer", path, threadId }),
       draftFiles: (files) => dispatch({ type: "draftFiles", files }),
       draft: (text) => {
         dispatch({ type: "draft", text });

@@ -19,6 +19,7 @@ from nanomuse.bot_projects import (
 from nanomuse.cloud import CLOUD_KEY
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
+from nanomuse.workspace_context import active_workspace
 
 
 class BotProjects(BaseTool):
@@ -77,7 +78,7 @@ class BotProjects(BaseTool):
         if action == "guide":
             source = Path(__file__).resolve().parents[1] / "skills/builtin/bot-projects/SKILL.md"
             return ToolResult(output=source.read_text())
-        root = self.workspace.resolve()
+        root = active_workspace(self.workspace)
         project = (root / path).resolve()
         if (
             not path

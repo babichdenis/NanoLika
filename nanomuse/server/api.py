@@ -20,7 +20,8 @@
     GET  /api/upcoming                    next background pass and the goals in line
     POST /api/tick                        run the scheduler's pass now (the phone's alarm)
     GET  /api/calendar (?days&refresh=1)  today's and tomorrow's events from the calendar feeds
-    GET  /api/files  GET /api/files/{path}  POST /api/files/upload?name=  (body: the bytes)
+    GET  /api/files[?thread_id=]  GET /api/files/{path}[?thread_id=]
+    POST /api/files/upload?thread_id=&name=  (body: the bytes)
     GET|PUT /api/settings
     GET  /api/connections                 model, email, browser, MCP servers, vault names
     PUT  /api/connections/llm|embeddings|email|browser|calendar   POST /api/connections/llm|embeddings|email|calendar/test
@@ -1933,16 +1934,21 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         return svc.upcoming()
 
     @app.get("/api/files", dependencies=dep)
-    async def list_files(limit: int = Query(200, ge=1, le=2000)) -> list[dict[str, Any]]:
-        return svc.list_files(limit)
+    async def list_files(
+        limit: int = Query(200, ge=1, le=2000), thread_id: str = ""
+    ) -> list[dict[str, Any]]:
+        try:
+            return svc.list_files(limit, thread_id=thread_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.post("/api/files/upload", dependencies=dep)
     async def upload_file(
-        request: Request, name: str = Query(..., min_length=1, max_length=255)
+        request: Request,
+        name: str = Query(..., min_length=1, max_length=255),
+        thread_id: str = MAIN_THREAD,
     ) -> dict[str, Any]:
-        """A file to attach to a message: the bytes as the request body (no multipart),
-        the file name in ``name``. Lands in ``attachments/<date>/`` in the workspace;
-        the reply is what to put in ``files`` when sending."""
+        """A file to attach to one conversation; the reply is used in ``files`` when sending."""
         limit = svc.settings.server.max_upload_mb * 1024 * 1024
         declared = request.headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > limit:
@@ -1961,16 +1967,26 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         if total == 0:
             raise HTTPException(400, "empty file")
         try:
-            return svc.save_upload(name, b"".join(chunks)).model_dump()
+            thread = _thread_or_404(thread_id)
+            scope = svc.memory_scope_for_thread(thread)
+            return svc.save_upload(
+                name, b"".join(chunks), thread_id=thread_id, customer_scope=scope
+            ).model_dump()
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/files/{path:path}", dependencies=dep_or_signed)
-    async def get_file(path: str, download: bool = False) -> Response:
+    async def get_file(path: str, download: bool = False, thread_id: str = "") -> Response:
         try:
-            target = svc.resolve_workspace_path(path)
+            target = (
+                svc.resolve_thread_file(thread_id, path)
+                if thread_id
+                else svc.resolve_workspace_path(path)
+            )
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
         if not target.is_file():
             raise HTTPException(404, "no such file")
         media, _ = mimetypes.guess_type(str(target))

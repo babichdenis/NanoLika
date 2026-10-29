@@ -39,6 +39,7 @@ from nanomuse.tools.browser_backends import (
     profile_named,
 )
 from nanomuse.tools.web import _is_private_host, host_of
+from nanomuse.workspace_context import active_workspace
 
 # the default (desktop) viewport; the frame the user sees is whatever the backend's profile is
 VIEWPORT = PROFILES["desktop"].viewport
@@ -376,6 +377,8 @@ class Browser(BaseTool):
             except RuntimeError as exc:
                 return ToolResult.fail(str(exc))
             try:
+                if isinstance(backend, PlaywrightBackend):
+                    backend.downloads_dir = active_workspace(self.workspace) / "downloads"
                 if action == "fetch":
                     return await self._fetch(backend, url, method, body)
                 if action == "profile":
@@ -457,7 +460,7 @@ class Browser(BaseTool):
             await self._frame(backend, "Waited for the page")
             return await self._state(backend, brief=True)
         if action == "screenshot":
-            shots = self.workspace / "screenshots"
+            shots = active_workspace(self.workspace) / "screenshots"
             shots.mkdir(parents=True, exist_ok=True)
             path = shots / f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"
             path.write_bytes(await backend.screenshot(85))

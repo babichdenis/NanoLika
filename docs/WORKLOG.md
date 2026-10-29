@@ -2402,3 +2402,22 @@ Validation: the full related runtime set passed (174 passed, 1 skipped), then th
 channel and server set passed (78 passed, 1 skipped). Ruff check/format, `git diff --check` and
 mypy across 163 source files passed. Commit `8a72a442`. No production deployment or migration of
 legacy memory was made.
+
+## 2026-10-29 · Isolation audit I1: separate conversation workspaces
+
+Uploads and tool-generated files now live in a durable workspace scoped to the conversation.
+Attachment paths include the thread ID and are resolved by the file API and web viewer; the
+composer uploads to its selected thread. Files and Office tools resolve against the active
+workspace, shell/Python run from it, and bubblewrap binds the active session writable while
+shared library and extra roots stay read-only. Screenshots, device transfers and browser
+downloads also use the active workspace. The installation workspace remains the shared
+library for installation-scoped chats; account-scoped chats receive their own library.
+
+Existing history is unchanged. A legacy attachment can still be opened only from a thread
+whose timeline references that exact path; unowned files were not migrated or reassigned.
+The web client was rebuilt into `nanomuse/server/static`.
+
+Validation: 191 related runtime tests passed, 4 skipped; all 129 web tests passed with lint
+and TypeScript checks; the production web build completed; Ruff, formatting, `git diff --check`
+and mypy across 164 source files passed. Shell/Python remain governed by Sentinel; without
+bubblewrap they retain their existing sensitive approval gate. Not deployed.

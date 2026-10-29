@@ -501,7 +501,7 @@ def test_files_in_and_out(chan, settings: Settings):
         )
     )
     wait_for(lambda: any("Got your picture" in t for t in fake.texts()))
-    saved = list((settings.agent.workspace / "attachments").rglob("*.png"))
+    saved = list((settings.data_dir / "workspaces").rglob("*.png"))
     assert saved and saved[0].read_bytes() == b"\x89PNG fake"
     # an artifact the run produced goes out with the reply
     (settings.agent.workspace / "out.txt").write_text("hello", "utf-8")

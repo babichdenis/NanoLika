@@ -470,7 +470,7 @@ def test_upload_and_send_with_attachments(settings: Settings):
     app = create_app(settings, service)
     with TestClient(app) as client:
         client.headers["Authorization"] = "Bearer secret-token"
-        # a picture with an awkward name lands under attachments/<date>/ with a safe name
+        # a picture with an awkward name lands in this thread's attachments folder
         r = client.post(
             "/api/files/upload?name=../../IMG 0042 (final).JPG",
             content=jpeg_bytes(20, 20),
@@ -483,8 +483,20 @@ def test_upload_and_send_with_attachments(settings: Settings):
             and pic["name"] == "IMG 0042 (final).JPG"
             and pic["mime"] == "image/jpeg"
         )
-        assert pic["path"].startswith("attachments/") and pic["path"].count("/") == 2
-        assert (settings.agent.workspace / pic["path"]).is_file()
+        assert pic["path"].startswith("threads/main/attachments/")
+        session = service.workspace_for_thread("main")
+        assert service.workspace_for_thread("main", "session:main") == session
+        relative = pic["path"].removeprefix("threads/main/")
+        assert (session / relative).is_file()
+        other = client.post("/api/threads", json={"title": "Other"}).json()
+        other_id = other["id"]
+        other_pic = client.post(
+            f"/api/files/upload?thread_id={other_id}&name=IMG%200042%20(final).JPG",
+            content=jpeg_bytes(20, 20),
+        ).json()
+        assert other_pic["path"].startswith(f"threads/{other_id}/attachments/")
+        assert service.workspace_for_thread(other_id) != session
+        assert client.get(f"/api/files/{pic['path']}?thread_id={other_id}").status_code == 403
         # the same name again gets a suffix
         again = client.post(
             "/api/files/upload?name=IMG 0042 (final).JPG", content=jpeg_bytes(20, 20)
@@ -521,7 +533,7 @@ def test_upload_and_send_with_attachments(settings: Settings):
         wait_for(lambda: events_of(client, kind="assistant"))
         sent = llm.calls[0]["messages"][-1]
         assert sent.content.startswith("[Attached files]") and "租房合同.pdf (PDF" in sent.content
-        assert sent.images == [str(settings.agent.workspace.resolve() / pic["path"])]
+        assert sent.images == [str(session / relative)]
         # the timeline keeps the attachments for the bubble
         user = events_of(client, kind="user")[0]
         assert len(user["files"]) == 2

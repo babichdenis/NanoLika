@@ -13,6 +13,7 @@ from nanomuse.config import SandboxSettings, Settings
 from nanomuse.sandbox import Sandbox, interpreter_roots, needs_network
 from nanomuse.schema import RiskLevel
 from nanomuse.tools.shell import PythonExecute, Shell, programs_of
+from nanomuse.workspace_context import workspace_context
 
 
 def test_needs_network_by_program_or_url():
@@ -81,6 +82,28 @@ def test_wrap_builds_the_box(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.chdir(tmp_path)
     relative = box.wrap(["/bin/true"], network=True, cwd=Path("ws"))
     assert relative[relative.index("--chdir") + 1] == str(ws)
+
+
+def test_scoped_box_writes_only_to_the_active_conversation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr("nanomuse.sandbox.shutil.which", lambda _name: "/usr/bin/bwrap")
+    monkeypatch.setattr("nanomuse.sandbox.platform.system", lambda: "Linux")
+    session = tmp_path / "session-a"
+    library = tmp_path / "library"
+    extra = tmp_path / "external"
+    for root in (session, library, extra):
+        root.mkdir()
+    box = Sandbox(
+        SandboxSettings(), workspace=tmp_path / "legacy", extra_roots=[extra], probe=False
+    )
+    with workspace_context("thread-a", session, [library, extra]):
+        joined = " ".join(box.wrap(["/bin/true"], network=False, cwd=session))
+    assert f"--bind-try {session} {session}" in joined
+    assert f"--ro-bind-try {library} {library}" in joined
+    assert f"--ro-bind-try {extra} {extra}" in joined
+    assert f"--bind-try {library} {library}" not in joined
+    assert f"--bind-try {extra} {extra}" not in joined
 
 
 def test_data_dir_outside_the_roots_needs_no_mask(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

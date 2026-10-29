@@ -14,6 +14,12 @@ from typing import Any
 
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, short_json
+from nanomuse.workspace_context import (
+    active_context,
+    active_shared_roots,
+    active_workspace,
+    namespaced_session_path,
+)
 
 MAX_READ_CHARS = 60_000
 
@@ -74,7 +80,7 @@ class Files(BaseTool):
         "Work with files in the workspace. Actions: "
         "`read` (path; PDFs come back as text, page by page), `write` (path, content – overwrites), `append` (path, content), "
         "`list` (path, optional), `search` (pattern glob such as '**/*.md'). "
-        "Paths are relative to the workspace unless they start with '/' or '~'."
+        "Paths are relative to this conversation. Use `shared/…` to read the client library; it is read-only."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -92,24 +98,75 @@ class Files(BaseTool):
     extra_roots: list[Path] = []
 
     # ------------------------------------------------------------------ helpers
-    def _resolve(self, path: str | None, must_exist: bool = False) -> Path:
+    def _resolve(self, path: str | None, must_exist: bool = False, *, write: bool = False) -> Path:
         raw = (path or ".").strip()
+        context = active_context()
+        workspace = active_workspace(self.workspace)
+        if context is not None:
+            namespaced = namespaced_session_path(raw, context.thread_id, workspace)
+            if namespaced is not None:
+                if write and not self._inside_workspace(namespaced):
+                    raise PermissionError("writes are limited to this conversation workspace")
+                if must_exist and not namespaced.exists():
+                    raise FileNotFoundError(f"'{raw}' does not exist")
+                return namespaced
+            if raw in context.legacy_attachments:
+                for root in active_shared_roots():
+                    legacy = (root / raw).resolve()
+                    if legacy.is_file() and root in legacy.parents:
+                        return self._validate_shared(legacy, root, raw, must_exist, write)
+            if raw == "shared" or raw.startswith("shared/"):
+                if not context.shared:
+                    raise FileNotFoundError("the shared client library is not available")
+                relative = raw.removeprefix("shared").lstrip("/")
+                raw = relative or "."
+                candidate = (context.shared[0] / raw).resolve()
+                return self._validate_shared(candidate, context.shared[0], raw, must_exist, write)
         candidate = Path(os.path.expanduser(raw))
         if not candidate.is_absolute():
-            candidate = self.workspace / candidate
+            candidate = workspace / candidate
         resolved = candidate.resolve()
-        roots = [self.workspace.resolve(), *[r.resolve() for r in self.extra_roots]]
+        if context is not None:
+            if resolved == workspace or workspace in resolved.parents:
+                if write or resolved.exists():
+                    if must_exist and not resolved.exists():
+                        raise FileNotFoundError(f"'{raw}' does not exist")
+                    return resolved
+                if must_exist:
+                    raise FileNotFoundError(f"'{raw}' does not exist")
+            for root in active_shared_roots([*context.shared, *self.extra_roots]):
+                if resolved == root or root in resolved.parents:
+                    return self._validate_shared(resolved, root, raw, must_exist, write)
+            raise PermissionError(
+                f"path '{raw}' is outside this conversation workspace and the shared library"
+            )
+        roots = [workspace.resolve(), *[r.resolve() for r in self.extra_roots]]
         if not any(resolved == r or r in resolved.parents for r in roots):
             raise PermissionError(
-                f"path '{raw}' is outside the workspace ({self.workspace}). "
+                f"path '{raw}' is outside the workspace ({workspace}). "
                 "Ask the user to add it to agent.extra_roots if access is really needed."
             )
         if must_exist and not resolved.exists():
             raise FileNotFoundError(f"'{raw}' does not exist")
         return resolved
 
+    @staticmethod
+    def _validate_shared(path: Path, root: Path, raw: str, must_exist: bool, write: bool) -> Path:
+        relative = path.relative_to(root).as_posix() if path != root else ""
+        context = active_context()
+        if write:
+            raise PermissionError("the shared client library and extra roots are read-only")
+        if relative == "threads" or relative.startswith("threads/"):
+            raise PermissionError("conversation workspaces are private")
+        if relative == "attachments" or relative.startswith("attachments/"):
+            if context is None or relative not in context.legacy_attachments:
+                raise PermissionError("legacy attachments are private to their conversation")
+        if must_exist and not path.exists():
+            raise FileNotFoundError(f"'{raw}' does not exist")
+        return path
+
     def _inside_workspace(self, path: Path) -> bool:
-        ws = self.workspace.resolve()
+        ws = active_workspace(self.workspace)
         return path == ws or ws in path.parents
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
@@ -121,7 +178,7 @@ class Files(BaseTool):
             else f"files.search {args.get('pattern', '')}"
         )
         try:
-            resolved = self._resolve(path)
+            resolved = self._resolve(path, write=action in ("write", "append"))
             inside = self._inside_workspace(resolved)
         except Exception:  # noqa: BLE001 - reported at execution time
             inside = False  # a path that cannot be resolved does not get the workspace's trust
@@ -170,11 +227,11 @@ class Files(BaseTool):
                 if content is None:
                     return ToolResult.fail("`content` is required")
                 content, fixed = unescape_flat(content)
-                target = self._resolve(path)
+                target = self._resolve(path, write=True)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with target.open("a" if action == "append" else "w", encoding="utf-8") as fh:
                     fh.write(content)
-                rel = os.path.relpath(target, self.workspace)
+                rel = os.path.relpath(target, active_workspace(self.workspace))
                 note = " (the content had escaped newlines; written as lines)" if fixed else ""
                 return ToolResult(
                     output=f"{'Appended' if action == 'append' else 'Wrote'} {len(content)} chars "
@@ -186,6 +243,9 @@ class Files(BaseTool):
                     return ToolResult(output=f"{target.name} ({target.stat().st_size} bytes)")
                 entries = sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
                 lines = [f"{'[dir] ' if p.is_dir() else ''}{p.name}" for p in entries[:500]]
+                context = active_context()
+                if context is not None and target == active_workspace(self.workspace):
+                    lines.insert(0, "[dir] shared")
                 return ToolResult(output="\n".join(lines) or "(empty directory)")
             if action == "search":
                 if not pattern:
@@ -193,18 +253,52 @@ class Files(BaseTool):
                 root = self._resolve(path)
                 # matches are named relative to the workspace when the root is in it, and
                 # as absolute paths under an extra root (relative_to raised there before)
-                ws = self.workspace.resolve()
+                ws = active_workspace(self.workspace)
                 in_ws = root == ws or ws in root.parents
+                shared_root = next(
+                    (
+                        r
+                        for r in active_shared_roots([*self.extra_roots])
+                        if root == r or r in root.parents
+                    ),
+                    None,
+                )
                 glob = str(pattern)
 
                 def _walk() -> tuple[list[str], str]:
                     # a walk of tens of thousands of entries stays off the event loop
                     matches: list[str] = []
                     scanned = 0
+                    context = active_context()
                     for p in root.rglob("*"):
                         scanned += 1
+                        if context is not None:
+                            if p.is_relative_to(ws) and "threads" in p.relative_to(ws).parts:
+                                continue
+                            if shared_root is not None and p.is_relative_to(shared_root):
+                                rel_shared = p.relative_to(shared_root).as_posix()
+                                if rel_shared == "threads" or rel_shared.startswith("threads/"):
+                                    continue
+                                if rel_shared == "attachments" or rel_shared.startswith(
+                                    "attachments/"
+                                ):
+                                    if rel_shared not in context.legacy_attachments:
+                                        continue
                         if p.is_file() and fnmatch.fnmatch(p.relative_to(root).as_posix(), glob):
-                            matches.append(p.relative_to(ws).as_posix() if in_ws else str(p))
+                            if in_ws:
+                                matches.append(p.relative_to(ws).as_posix())
+                            elif (
+                                context is not None
+                                and shared_root is not None
+                                and root.is_relative_to(shared_root)
+                            ):
+                                matches.append(
+                                    "shared/" + p.relative_to(shared_root).as_posix()
+                                    if context.shared and shared_root == context.shared[0]
+                                    else str(p)
+                                )
+                            else:
+                                matches.append(str(p))
                         if len(matches) >= 200:
                             break
                         if scanned >= SEARCH_MAX_ENTRIES:

@@ -32,6 +32,7 @@ from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, int_arg
 from nanomuse.tools.shell import _DANGEROUS, programs_of
 from nanomuse.ui import ApprovalRequest
+from nanomuse.workspace_context import active_workspace
 
 if TYPE_CHECKING:
     from nanomuse.hub.service import HubService
@@ -259,7 +260,8 @@ class DeviceGet(_DeviceTool):
         d = self._device(device)
         r = await self._call(d, "file.get", {"path": path}, timeout=300)
         name = re.sub(r"[/\\]", "_", str(r.get("name") or Path(path).name or "file"))
-        folder = self.workspace / "from-devices" / _slug(str(d["name"]))
+        workspace = active_workspace(self.workspace)
+        folder = workspace / "from-devices" / _slug(str(d["name"]))
         folder.mkdir(parents=True, exist_ok=True)
         dest = folder / name
         i = 1
@@ -271,7 +273,7 @@ class DeviceGet(_DeviceTool):
         except (ValueError, OSError) as exc:
             return ToolResult.fail(f"could not save {name}: {exc}")
         mime = str(r.get("mime") or "")
-        rel = dest.relative_to(self.workspace).as_posix()
+        rel = dest.relative_to(workspace).as_posix()
         return ToolResult(
             output=_json({"device": d["name"], "saved_to": rel, "bytes": r.get("bytes")}),
             images=[str(dest)] if mime.startswith("image/") else None,
@@ -319,9 +321,10 @@ class DevicePut(_DeviceTool):
         **_: Any,
     ) -> ToolResult:
         d = self._device(device)
-        local = (self.workspace / local_path).resolve()
+        workspace = active_workspace(self.workspace)
+        local = (workspace / local_path).resolve()
         try:
-            local.relative_to(self.workspace.resolve())
+            local.relative_to(workspace.resolve())
         except ValueError:
             return ToolResult.fail("local_path must be inside the workspace")
         if not local.is_file():
@@ -392,7 +395,8 @@ class DeviceScreen(_DeviceTool):
             return ToolResult.fail(f"{d['name']} sent no picture")
         mime = str(r.get("mime") or "image/jpeg")
         ext = "png" if "png" in mime else "jpg"
-        folder = self.workspace / "screenshots"
+        workspace = active_workspace(self.workspace)
+        folder = workspace / "screenshots"
         folder.mkdir(parents=True, exist_ok=True)
         dest = folder / f"{_slug(str(d['name']))}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.{ext}"
         try:
@@ -402,7 +406,7 @@ class DeviceScreen(_DeviceTool):
         size = f"{r.get('width')}×{r.get('height')}" if r.get("width") else ""
         return ToolResult(
             output=f"{d['name']}'s screen{' (' + size + ')' if size else ''}: "
-            f"{dest.relative_to(self.workspace).as_posix()}",
+            f"{dest.relative_to(workspace).as_posix()}",
             images=[str(dest)],
         )
 
@@ -540,7 +544,7 @@ class Delegate(_DeviceTool):
     def _save_image(self, name: str, body: dict[str, Any]) -> Path | None:
         mime = str(body.get("mime") or "image/jpeg")
         ext = "png" if "png" in mime else "jpg"
-        folder = self.workspace / "from-devices" / _slug(name)
+        folder = active_workspace(self.workspace) / "from-devices" / _slug(name)
         folder.mkdir(parents=True, exist_ok=True)
         dest = folder / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.{ext}"
         try:

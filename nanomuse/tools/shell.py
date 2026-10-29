@@ -28,6 +28,7 @@ from typing import Any
 from nanomuse.sandbox import Sandbox, needs_network
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, number_arg
+from nanomuse.workspace_context import active_workspace
 
 _SECRET_ENV = re.compile(
     r"(KEY|TOKEN|SECRET|PASSW|PASSPHRASE|CREDENTIAL|_AUTH|AUTH_|COOKIE|SESSION)", re.IGNORECASE
@@ -370,12 +371,13 @@ class Shell(BaseTool):
         if not command.strip():
             return ToolResult.fail("empty command")
         timeout = number_arg(timeout, 60, 1.0, 600.0)
-        self.workspace.mkdir(parents=True, exist_ok=True)
+        workspace = active_workspace(self.workspace)
+        workspace.mkdir(parents=True, exist_ok=True)
         env, grant = bridge_env(self.bridge, self.name, timeout)
         try:
             return await _run(
                 command,
-                self.workspace,
+                workspace,
                 timeout,
                 shell=True,
                 sandbox=self.sandbox,
@@ -419,7 +421,7 @@ class PythonExecute(BaseTool):
         rest of the computer."""
         code = str(args.get("code", ""))
         first = code.strip().splitlines()[0][:100] if code.strip() else ""
-        reach = code_reach(code, self.workspace)
+        reach = code_reach(code, active_workspace(self.workspace))
         boxed = self.sandbox is not None and self.sandbox.active
         summary = f"python_execute: {first} ({len(code)} chars)"
         if not boxed:
@@ -439,23 +441,24 @@ class PythonExecute(BaseTool):
         if not code.strip():
             return ToolResult.fail("empty code")
         timeout = number_arg(timeout, 60, 1.0, 600.0)
-        self.workspace.mkdir(parents=True, exist_ok=True)
+        workspace = active_workspace(self.workspace)
+        workspace.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             "w",
             suffix=".py",
             prefix="nanomuse_",
-            dir=self.workspace,
+            dir=workspace,
             delete=False,
             encoding="utf-8",
         ) as fh:
             fh.write(code)
             script = Path(fh.name)
-        reach = code_reach(code, self.workspace)
+        reach = code_reach(code, workspace)
         env, grant = bridge_env(self.bridge, self.name, timeout)
         try:
             return await _run(
                 [sys.executable, str(script)],
-                self.workspace,
+                workspace,
                 timeout,
                 shell=False,
                 sandbox=self.sandbox,

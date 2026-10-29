@@ -513,13 +513,7 @@ class ChannelManager(ChannelBus):
             return
         if not delivered or not selected or selected == delivered:
             self._questions.pop(key, None)
-        paths: list[str] = []
-        for item in msg.files:
-            try:
-                paths.append(self.svc.save_upload(item.name, item.data).path)
-            except ValueError as exc:
-                await self._send(msg.channel, msg.chat_id, _short(exc))
-        if not text and (not paths):
+        if not text and not msg.files:
             return
         if msg.is_group and msg.sender_name and text:
             text = f"{msg.sender_name}: {text}"
@@ -528,7 +522,7 @@ class ChannelManager(ChannelBus):
             return
         await self._echo_selected_user(thread_id, msg, text)
         self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
-        device = await self._shared_execution_device(thread_id) if text and not paths else None
+        device = await self._shared_execution_device(thread_id) if text and not msg.files else None
         if device is not None:
             self._spawn(
                 self._serve_from_device(
@@ -549,12 +543,28 @@ class ChannelManager(ChannelBus):
             return
         self._shared_runtime_context(thread_id)
         linked_owner = self.svc.sync.owner_of(thread_id) if not msg.is_group else ""
+        customer_scope = (
+            account_scope(linked_owner) if linked_owner else self.customer_scope_for(msg)
+        )
+        paths: list[str] = []
+        for item in msg.files:
+            try:
+                paths.append(
+                    self.svc.save_upload(
+                        item.name,
+                        item.data,
+                        thread_id=thread_id,
+                        customer_scope=customer_scope,
+                    ).path
+                )
+            except ValueError as exc:
+                await self._send(msg.channel, msg.chat_id, _short(exc))
+        if not text and not paths:
+            return
         send_options: dict[str, Any] = {
             "files": paths or None,
             "language": self.menu.language(msg),
-            "customer_scope": account_scope(linked_owner)
-            if linked_owner
-            else self.customer_scope_for(msg),
+            "customer_scope": customer_scope,
         }
         # Most linked chats use the bot's configured account and need no per-chat key.
         # Keep that path compatible with older installed MuseService versions, whose
@@ -564,6 +574,13 @@ class ChannelManager(ChannelBus):
             send_options["once_key"] = cloud_key
             send_options["once_model"] = cloud_model
         try:
+            self.svc.send(thread_id, text, **send_options)
+        except TypeError as exc:
+            # A linked runtime can be older than the account-scoped workspace API. Preserve
+            # that compatibility when it only lacks this new optional argument.
+            if "unexpected keyword argument 'customer_scope'" not in str(exc):
+                raise
+            send_options.pop("customer_scope", None)
             self.svc.send(thread_id, text, **send_options)
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))

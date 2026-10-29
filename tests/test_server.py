@@ -1577,7 +1577,7 @@ def test_files_are_scoped_to_workspace(server, settings: Settings):
 
 
 def test_any_tool_that_writes_a_file_yields_one_artifact_card(server, settings: Settings):
-    client, _, llm = server
+    client, service, llm = server
     # python_execute is auto-allowed in the test settings; it writes a page, then rewrites it
     code = "open('report.html','w').write('<h1>{}</h1>')"
     llm.script.extend(
@@ -1598,7 +1598,7 @@ def test_any_tool_that_writes_a_file_yields_one_artifact_card(server, settings: 
         ("notes.md", "write"),
     ]
     assert cards[0]["updated_ts"]
-    assert (settings.agent.workspace / "report.html").read_text() == "<h1>v2</h1>"
+    assert (service.workspace_for_thread("main") / "report.html").read_text() == "<h1>v2</h1>"
     assert client.get("/api/feed").json() == []  # your own request is not "while you were away"
 
 

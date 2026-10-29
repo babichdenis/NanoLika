@@ -279,14 +279,14 @@ export function ChatScreen() {
               onDecide={(approved, scope) =>
                 decide(ev.id, approved, scope).catch((e: Error) => toast(e.message || t("Could not send decision")))
               }
-              onOpenFile={openFile}
+              onOpenFile={(path) => openFile(path, ev.thread)}
               onOpenBrowser={setBrowserView}
               files={files}
               onCloudRetry={cloudRetryFor(i)}
             />
           ))}
           {stream && stream.text && (
-            <AssistantBubble text={stream.text} streaming files={files} onOpenFile={openFile} />
+            <AssistantBubble text={stream.text} streaming files={files} onOpenFile={(path) => openFile(path, activeThread)} />
           )}
           <LiveReply stream={stream} name={name} />
           {(thread?.busy || status.state !== "idle") && !stream?.text && status.state !== "waiting" && (
@@ -317,6 +317,7 @@ export function ChatScreen() {
       <AllowanceHeadsUp />
       <Composer
         name={name}
+        threadId={activeThread}
         busy={!!thread?.busy && pendingApprovals === 0}
         waiting={events.some((e) => e.type === "question" && e.status === "pending")}
         onSend={(text, files) =>
@@ -450,7 +451,7 @@ function UserBubble({ event, onOpenFile }: { event: UserEvent; onOpenFile: (path
               aria-label={f.name}
               className={cx("overflow-hidden rounded-2xl border border-border/60 bg-surface-2 shadow-sm active:scale-[0.98] transition", pictures.length === 1 ? "max-h-64 max-w-[240px]" : "h-28 w-28")}
             >
-              <img src={fileUrl(f.path)} alt={f.name} loading="lazy" className={cx("object-cover", pictures.length === 1 ? "max-h-64 w-auto max-w-full" : "h-full w-full")} />
+              <img src={fileUrl(f.path, false, event.thread)} alt={f.name} loading="lazy" className={cx("object-cover", pictures.length === 1 ? "max-h-64 w-auto max-w-full" : "h-full w-full")} />
             </button>
           ))}
         </div>
@@ -702,11 +703,13 @@ function EmptyChat({ name, device, onSend }: { name: string; device?: string; on
 
 function Composer({
   name,
+  threadId,
   busy,
   waiting,
   onSend,
 }: {
   name: string;
+  threadId: string;
   busy: boolean;
   waiting: boolean;
   onSend: (text: string, files: string[]) => Promise<void>;
@@ -779,7 +782,7 @@ function Composer({
     }));
     setPending((cur) => [...cur, ...items]);
     for (const item of items) {
-      api.upload(item.file)
+      api.upload(item.file, threadId)
         .then((info) => setPending((cur) => cur.map((p) => (p.key === item.key ? { ...p, info } : p))))
         .catch((e: Error) => {
           const why = e.message ? localDetail(e.message) : t("Upload failed");

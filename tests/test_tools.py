@@ -13,6 +13,7 @@ from nanomuse.tools import Files, PythonExecute, Shell, Terminate
 from nanomuse.tools.email_tool import scrub_email_secrets
 from nanomuse.tools.shell import code_reach, scrubbed_env
 from nanomuse.tools.web import fetch_public, host_of, html_to_markdown
+from nanomuse.workspace_context import workspace_context
 
 
 async def test_files_workspace_scoping(tmp_path: Path):
@@ -45,6 +46,54 @@ async def test_files_workspace_scoping(tmp_path: Path):
     (tmp_path / "docs" / "x.md").write_text("x")
     r = await outside.execute(action="search", path=str(tmp_path / "docs"), pattern="*.md")
     assert r.ok and r.output == str(tmp_path / "docs" / "x.md")
+
+
+async def test_files_are_isolated_per_conversation_with_a_shared_read_only_library(
+    tmp_path: Path,
+):
+    library = tmp_path / "library"
+    session_a = tmp_path / "session-a"
+    session_b = tmp_path / "session-b"
+    for path in (library, session_a, session_b):
+        path.mkdir()
+    (library / "guide.md").write_text("client preferences")
+    (library / "attachments" / "2026-01-01").mkdir(parents=True)
+    (library / "attachments" / "2026-01-01" / "private.png").write_bytes(b"legacy")
+    files = Files(workspace=tmp_path / "fallback")
+
+    with workspace_context(
+        "thread-a",
+        session_a,
+        [library],
+        legacy_attachments={"attachments/2026-01-01/private.png"},
+    ):
+        assert (await files.execute(action="write", path="result.txt", content="A only")).ok
+        assert (await files.execute(action="read", path="shared/guide.md")).output == (
+            "client preferences"
+        )
+        assert (
+            await files.execute(action="read", path="shared/attachments/2026-01-01/private.png")
+        ).output == "legacy"
+        assert (
+            await files.execute(action="read", path="attachments/2026-01-01/private.png")
+        ).output == "legacy"
+        assert (
+            await files.execute(action="write", path="shared/guide.md", content="changed")
+        ).error
+        assert (await files.execute(action="read", path="threads/thread-b/result.txt")).error
+
+    with workspace_context("thread-b", session_b, [library]):
+        assert (await files.execute(action="read", path="result.txt")).error
+        assert (await files.execute(action="read", path="shared/guide.md")).output == (
+            "client preferences"
+        )
+        assert (
+            await files.execute(action="read", path="shared/attachments/2026-01-01/private.png")
+        ).error
+
+    assert (session_a / "result.txt").read_text() == "A only"
+    assert not (session_b / "result.txt").exists()
+    assert (library / "guide.md").read_text() == "client preferences"
 
 
 async def test_files_read_truncates_without_loading_the_whole_file(tmp_path: Path):

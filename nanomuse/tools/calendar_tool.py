@@ -11,6 +11,7 @@ from typing import Any
 from nanomuse.calendar import CalendarFeeds, make_ics
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, int_arg
+from nanomuse.workspace_context import active_workspace
 
 
 def _parse_day(value: str | None, today: date) -> date:
@@ -186,11 +187,12 @@ class Calendar(BaseTool):
             location=html.unescape(str(args.get("location") or "")),
             description=html.unescape(str(args.get("notes") or "")),
         )
-        folder = self.workspace / "calendar"
+        workspace = active_workspace(self.workspace)
+        folder = workspace / "calendar"
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{start:%Y-%m-%d}-{_slug(title)}.ics"
         path.write_text(ics, encoding="utf-8")
-        rel = path.relative_to(self.workspace).as_posix()
+        rel = path.relative_to(workspace).as_posix()
         when = f"{start:%a %Y-%m-%d}" if all_day else f"{start:%a %Y-%m-%d %H:%M}–{end:%H:%M}"
         return ToolResult(
             output=f"Drafted “{title}” ({when}) as {rel}. The user adds it to their calendar by "

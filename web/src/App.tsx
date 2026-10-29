@@ -201,7 +201,7 @@ export default function App() {
         </nav>
       </div>
       <ChatsDrawer />
-      <FileViewer path={state.viewer} onClose={() => openFile(null)} />
+      <FileViewer path={state.viewer?.path ?? null} threadId={state.viewer?.threadId} onClose={() => openFile(null)} />
       {firstSteps}
       {state.toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[70] flex justify-center px-4">
