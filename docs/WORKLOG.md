@@ -1,5 +1,16 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Verify and install the completed audit fixes
+
+The final runtime source at 071a8cad passed the complete non-live suite: 1071 tests and 73 subtests, with five environment skips and one live test deselected (413.24 seconds). Mypy passed for 162 source files and runtime Ruff check/format passed. The web passed lint, types, 129 tests and its production build; the isolated committed-source desktop plugin passed build, types and 425 tests. Canonical avatar resources passed four tests and 40 resource subtests.
+
+Built the final runtime on the installed Mac with native hands, browser and Office dependencies. The packaged health/SPA/workspace and actual MCP initialize/tools-list checks passed with empty test data and no provider calls. Required sync modules are in PYZ; the embedded code of all eight follow-up modules matches the verified source. Installed the plugin and final runtime only after an idle gate, backed up the whole application, preserved signing metadata and verified the ad-hoc signature. Final application backup: `~/.nanolika/backups/audit-runtime-final-20261029T064518Z`. After launch the MCP process is running, work is idle, sync is enabled/unpaused with no error and the previous cursor intact. Personal history, credentials and studio avatars were not replaced.
+
+On the bot, deploy only four narrow patches to existing overrides: MAX readiness/configured-type checks and explicit app-control presence scope. Preserve unrelated live routing, media and synchronization code. Backup: `/opt/nanolika-bot/backups/audit-bot-guards-20261029T064144Z`. Before restart the bot was idle with no working turn or pending approval. Afterwards health returned 200 and installed-module probes confirmed a 503 before MAX acknowledgment/dedup when its bus is absent, plus the presence scope and prompt. Cloud/chat health and the browser client returned 200. Web static files retain old hashed chunks for already open pages.
+
+The audit distinguishes completed source, installed files and remaining work. Owner-paused pricing, sync defaults and expired-plan decisions remain untouched; three cloud tests reflect those decisions. The broader CSP rollout still requires compatibility review for generated srcdoc panels. Refactoring and retention recommendations are not claimed as completed. Traps: a session cookie can expire during a full application backup, so each local check regenerates it; an incomplete code-only snapshot needs the tracked phone/hook fixtures before running the desktop suite.
+
+
 ## 2026-10-29: Validate optional channel payloads and MAX readiness
 
 The full type check reported 30 errors across eight runtime files. Narrow repeated JSON mapping lookups once, preserve optional text during history hydration, use the schema role and an empty shared-id sentinel, and keep optional store inventory duck-typed. MAX now rejects webhooks with the existing 503 response until its bus is ready, before acknowledgment or deduplication; direct updates without a bus return safely. A wrong channel registry entry is also treated as unconfigured.
