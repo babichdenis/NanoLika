@@ -369,7 +369,6 @@ class SyncEngine(
             return true
         }
         if (known != null) return false // ours, or seen before: never a second row for one mid
-        if (m.device == deviceId) return false // our own echo under a mid this phone no longer maps
         if (m.role != "user" && m.role != "assistant") return false
         val conv = store.conversationByCid(m.cid) ?: return false
         if (conv.deleted || !conv.mine()) return false

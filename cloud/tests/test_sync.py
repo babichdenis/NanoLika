@@ -148,10 +148,10 @@ async def test_known_mids_are_idempotent_and_tombstones_propagate():
     first = {"device": "d1", "conversations": [conv(cid)], "messages": [msg(mid, cid, text="first")]}
     r = await client.post("/v1/sync/changes", json=first, headers=auth(key))
     assert r.json()["accepted"] == 2 and r.json()["cursor"] == 2
-    # the same again, with a different text: left alone, nothing accepted, nothing rejected
+    # the same again, with a different text: left alone, and said so by name
     first["messages"][0]["text"] = "changed"
     r = await client.post("/v1/sync/changes", json=first, headers=auth(key))
-    assert r.json() == {"cursor": 2, "accepted": 0, "rejected": []}
+    assert r.json() == {"cursor": 2, "accepted": 0, "rejected": [{"mid": mid, "reason": "known_mid"}]}
     out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
     assert out["messages"][0]["text"] == "first"
     # an edit: a new mid plus a tombstone for the old one
@@ -288,14 +288,19 @@ async def test_retention_drops_the_oldest_conversations_messages():
         store.push(account_id, "a", [], [msg(uid(), mid_conv, created_at=2000 + i) for i in range(2)])
         assert store.state(account_id)["counts"]["messages"] == 5
         store.push(account_id, "a", [], [msg(uid(), new, created_at=3000)])
+        all_msgs = store.changes(account_id, 0, 1000)["messages"]
+        active = [m for m in all_msgs if not m["deleted"]]
         by_cid: dict[str, int] = {}
-        for m in store.changes(account_id, 0, 1000)["messages"]:
+        for m in active:
             by_cid[m["cid"]] = by_cid.get(m["cid"], 0) + 1
         assert old not in by_cid and by_cid[mid_conv] == 2 and by_cid[new] == 1
-        # one conversation holding it all: its oldest messages go
+        assert any(m["cid"] == old and m["deleted"] for m in all_msgs)
+        # one conversation holding it all: its oldest messages become tombstones
         store.push(account_id, "a", [], [msg(uid(), new, created_at=3001 + i) for i in range(6)])
-        msgs = [m for m in store.changes(account_id, 0, 1000)["messages"] if m["cid"] == new]
+        all_msgs = store.changes(account_id, 0, 1000)["messages"]
+        msgs = [m for m in all_msgs if m["cid"] == new and not m["deleted"]]
         assert len(msgs) == 5 and min(m["created_at"] for m in msgs) == 3002
+        assert any(m["cid"] == new and m["deleted"] for m in all_msgs)
     finally:
         sync_mod.LIMITS.update(saved)
 
@@ -452,7 +457,7 @@ async def test_scope_main_delivers_the_main_conversation_only():
         headers=auth(key),
     )
     r = await client.get("/v1/sync/changes?scope=main", headers=auth(key))
-    assert r.status_code == 200 and r.json() == {"cursor": 2, "more": False, "conversations": [], "messages": []}
+    assert r.status_code == 200 and r.json() == {"cursor": 0, "more": False, "conversations": [], "messages": []}
     main, m1 = uid(), uid()
     await client.post(
         "/v1/sync/changes",
@@ -506,7 +511,7 @@ async def test_tail_is_the_newest_messages_with_their_conversations():
     # within the main scope: the main's newest two and its row
     out = (await client.get("/v1/sync/changes?since=0&tail=2&scope=main", headers=auth(key))).json()
     assert [m["mid"] for m in out["messages"]] == [mids[2][1], mids[4][1]]
-    assert [c["cid"] for c in out["conversations"]] == [main] and out["skipped"] == 1 and out["cursor"] == 10
+    assert [c["cid"] for c in out["conversations"]] == [main] and out["skipped"] == 1 and out["cursor"] == 8
     # a tail larger than the store is the store; a tail with a cursor is an ordinary pull
     out = (await client.get("/v1/sync/changes?since=0&tail=500", headers=auth(key))).json()
     assert len(out["messages"]) == 7 and out["skipped"] == 0
@@ -815,3 +820,22 @@ async def test_an_unlimited_account_has_no_conversation_cap():
         assert store.push(account_id, "a", [conv(third)], [])["accepted"] == 1
     finally:
         sync_mod.LIMITS.update(saved)
+
+
+async def test_main_only_cursor_does_not_skip_side_rows_when_the_scope_widens():
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    main, side, mmid, smid = uid(), uid(), uid(), uid()
+    await client.post(
+        "/v1/sync/changes",
+        json={
+            "device": "phone",
+            "conversations": [conv(main, "main", "Main"), conv(side, "side", "Side")],
+            "messages": [msg(mmid, main), msg(smid, side, text="side note")],
+        },
+        headers=auth(key),
+    )
+    only_main = (await client.get("/v1/sync/changes?scope=main", headers=auth(key))).json()
+    assert [m["mid"] for m in only_main["messages"]] == [mmid]
+    widened = (await client.get(f"/v1/sync/changes?scope=all&since={only_main['cursor']}", headers=auth(key))).json()
+    assert [m["mid"] for m in widened["messages"]] == [smid]

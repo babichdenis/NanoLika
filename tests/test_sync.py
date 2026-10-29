@@ -830,11 +830,11 @@ def test_the_echo_of_our_own_push_is_never_a_second_bubble(synced) -> None:
         client.post("/api/sync/pull")
     evs = [e for e in _events(client, MAIN_THREAD) if e["type"] in ("user", "assistant")]
     assert [e["text"] for e in evs] == ["echo question", "echo answer"]
-    # the mapping lost (a reset, a trimmed timeline): a row from this device is still not
-    # added again — the relay says who wrote it
+    # a reinstall: the timeline is empty, the device id is the same, and the relay still has
+    # our rows. They must come back, exactly once, deduped by mid rather than device.
+    service.threads[MAIN_THREAD].timeline.events.clear()
     service.sync.state["cursor"] = 0
-    for e in service.threads[MAIN_THREAD].timeline.events:
-        e.pop("mid", None)
+    service.sync.state["cursors"] = {"main": 0, "all": 0}
     client.post("/api/sync/pull")
     evs = [e for e in _events(client, MAIN_THREAD) if e["type"] in ("user", "assistant")]
     assert [e["text"] for e in evs] == ["echo question", "echo answer"]
@@ -845,6 +845,7 @@ def test_sync_state_survives_a_restart(settings: Settings, tmp_path: Path) -> No
     service = MuseService(settings, llm=MockLLM([]))
     service.sync.state["cids"][MAIN_THREAD] = "abc"
     service.sync.state["cursor"] = 7
+    service.sync.state["cursors"] = {"main": 7, "all": 7}
     service.sync._save()
     again = MuseService(settings, llm=MockLLM([]))
     assert again.sync.cid_of(MAIN_THREAD) == "abc" and again.sync.cursor == 7
@@ -1088,6 +1089,7 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     # B signs in: cursor 0, presence gone, A's hidden, a fresh main chat
     service.sync.working["x"] = {"thread": MAIN_THREAD, "cid": "x", "device": "d", "at": 1}
     service.sync.state["cursor"] = 99
+    service.sync.state["cursors"] = {"main": 99, "all": 99}
     pushes = len(relay.pushes)
     pulls = len(relay.pulls)
     relay.switch_account("acct-B")
@@ -1183,3 +1185,28 @@ def test_the_first_sign_in_keeps_the_main_chat_and_a_new_account_relogs_the_hub(
     assert service.hub.view()["devices"] == [] and service.hub.chat_models == []
     assert service.sync.account_id == "acct-B"
     assert "before sign-in" not in [e["text"] for e in _events(client, MAIN_THREAD)]
+
+
+def test_own_rows_are_applied_when_the_ledger_is_lost(synced) -> None:
+    """A reinstall keeps the same device id but no sync.json: its own rows from the relay
+    must come back; the old device filter hid them forever. Dedupe is by mid, not device."""
+    client, service, llm, relay = synced
+    wait_for(lambda: any(c["kind"] == "main" for c in relay.convs.values()))
+    cid = relay_main(relay)
+    service.sync.state["cids"][MAIN_THREAD] = cid
+    mid = str(uuid.uuid4())
+    client.portal.call(
+        service.sync._apply_message,
+        {
+            "mid": mid,
+            "cid": cid,
+            "device": "pc-self",
+            "device_name": "Desk",
+            "role": "user",
+            "text": "restored from the relay",
+            "created_at": 1738000050,
+            "deleted": False,
+        },
+    )
+    events = _events(client, MAIN_THREAD)
+    assert any(e.get("mid") == mid and e.get("text") == "restored from the relay" for e in events)

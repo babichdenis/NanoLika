@@ -130,3 +130,71 @@ async def test_daily_feed_conversations_fold_into_one_lenta_without_losing_messa
     page = (await client.get(f"/v1/sync/conversations/{feeds[0]['cid']}/messages", headers=a)).json()
     assert {m["text"] for m in page["messages"]} == {"First note", "Second note"}
     assert feeds[0]["cid"] in {feed1, feed2}
+
+
+async def test_catalog_is_read_only_and_does_not_move_the_cursor():
+    app, client, a, _, _, _ = await setup()
+    store = app.state.sync
+    account = app.state.cloud.authenticate(a["Authorization"].split(" ", 1)[1]).account_id
+    before = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
+    with store.db.tx() as c:
+        seq_before = store._cursor(c, account)
+        rows_before = c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=?", (account,)).fetchone()[0]
+    after = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
+    with store.db.tx() as c:
+        seq_after = store._cursor(c, account)
+        rows_after = c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=?", (account,)).fetchone()[0]
+    assert before["cursor"] == after["cursor"] == seq_before == seq_after
+    assert rows_before == rows_after
+    assert [row["cid"] for row in before["conversations"]] == [row["cid"] for row in after["conversations"]]
+
+
+async def test_fold_moves_messages_with_a_new_seq_and_tombstones_the_source():
+    app, client, a, _, _, _ = await setup()
+    store = app.state.sync
+    feed1, feed2 = uid(), uid()
+    saved = store._fold_daily_feed
+    store._fold_daily_feed = lambda c, account_id: 0
+    try:
+        await client.post(
+            "/v1/sync/changes",
+            headers=a,
+            json={
+                "device": "computer",
+                "conversations": [
+                    conv(feed1, title="Feed · sunday, 25 october 2026"),
+                    conv(feed2, title="Feed · monday, 26 october 2026"),
+                ],
+                "messages": [msg(uid(), feed1, text="First note"), msg(uid(), feed2, text="Second note")],
+            },
+        )
+    finally:
+        store._fold_daily_feed = saved
+    before = (await client.get("/v1/sync/changes?since=0", headers=a)).json()
+    old_cursor = before["cursor"]
+    before_seq = {m["text"]: m["seq"] for m in before["messages"] if m["text"] in {"First note", "Second note"}}
+    assert store.fold_all_feeds() == 1
+    after = (await client.get("/v1/sync/changes?since=0", headers=a)).json()
+    canonical = next(c["cid"] for c in after["conversations"] if c["title"] == "Лента" and not c["deleted"])
+    moved = [m for m in after["messages"] if m["text"] in before_seq and m["cid"] == canonical and not m["deleted"]]
+    assert len(moved) == 2
+    changed = [m for m in moved if m["seq"] != before_seq[m["text"]]]
+    assert len(changed) == 1 and changed[0]["seq"] > old_cursor
+    assert any(c["cid"] in {feed1, feed2} and c["deleted"] for c in after["conversations"])
+
+
+async def test_fold_ignores_unrelated_titles():
+    _, client, a, _, _, _ = await setup()
+    first, second = uid(), uid()
+    await client.post(
+        "/v1/sync/changes",
+        headers=a,
+        json={
+            "device": "computer",
+            "conversations": [conv(first, title="Лента новостей"), conv(second, title="Feed на завтра")],
+            "messages": [msg(uid(), first, text="One"), msg(uid(), second, text="Two")],
+        },
+    )
+    data = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
+    assert len([c for c in data["conversations"] if c["title"] in {"Лента новостей", "Feed на завтра"}]) == 2
+    assert not any(c["title"] == "Лента" for c in data["conversations"])

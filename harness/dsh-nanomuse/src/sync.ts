@@ -507,6 +507,8 @@ export interface SyncState {
   /** The last signed-in account (`/v1/me` → `account.id`, opaque); kept through a sign-out so a change is known (C10). */
   accountId: string
   cursor: number
+  /** Per-scope cursors: a main-only pull must not move the all-scope cursor. */
+  cursors?: { main: number; all: number }
   enabled: boolean
   /** The session that is the main chat here: the account's one main conversation. */
   mainSession: string
@@ -537,7 +539,7 @@ export interface SyncState {
 }
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
+  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
 }
 
 /**
@@ -553,6 +555,7 @@ export function emptyState(): SyncState {
 export function migrate(state: SyncState | undefined): SyncState {
   if (!state) return emptyState()
   const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, clouds: { ...(state.clouds ?? {}) }, owners: { ...(state.owners ?? {}) } }
+  next.cursors = state.cursors ?? { main: 0, all: next.sideChats ? state.cursor : 0 }
   // 0.29's `synced` map under this state's own key, dropped once it has been read
   const legacy = (next as unknown as { synced?: Record<string, boolean> }).synced
   if (legacy && typeof legacy === 'object') {
@@ -584,7 +587,7 @@ export function migrate(state: SyncState | undefined): SyncState {
  * longer the main chat here.
  */
 export function forAccount(state: SyncState, accountId: string): SyncState {
-  const next: SyncState = { ...state, accountId, cursor: 0, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {} }
+  const next: SyncState = { ...state, accountId, cursor: 0, cursors: { main: 0, all: 0 }, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {} }
   const mainOwner = state.owners[state.mainSession]
   if (mainOwner && mainOwner !== accountId) next.mainSession = ''
   return next
@@ -1480,9 +1483,10 @@ export class SyncEngine {
     // what the other devices added to conversations living in sessions here: context for the model, per session
     const notes = new Map<string, RemoteLine[]>()
     const scope = this.state.sideChats || Object.entries(this.state.clouds).some(([sid, mark]) => mark !== 'local' && sid !== this.state.mainSession) ? 'all' : 'main'
+    const cursors = this.state.cursors ?? { main: 0, all: this.state.cursor }
     for (let page = 0; page < 50; page++) {
       // the first pull after sign-in asks for the newest 300 of the scope (C9): the chat shows before the history
-      const since = tail ? 0 : this.state.cursor
+      const since = tail ? 0 : (cursors[scope] ?? this.state.cursor)
       const out = await this.options.relay.changes(token, since, PAGE, scope, since === 0 ? TAIL : 0)
       // The page's conversations first, then its messages, each in seq order: a rename puts
       // a conversation's seq above its messages, and the relay sends every message's
@@ -1495,7 +1499,9 @@ export class SyncEngine {
         await this.applyMessage(m, notes)
         applied += 1
       }
-      this.state.cursor = Math.max(this.state.cursor, out.cursor)
+      cursors[scope] = Math.max(cursors[scope] ?? 0, out.cursor)
+      this.state.cursors = cursors
+      this.state.cursor = Math.max(cursors.main ?? 0, cursors.all ?? 0)
       await this.save()
       if (!out.more || tail) break
     }
@@ -1614,9 +1620,11 @@ export class SyncEngine {
       }
       return
     }
-    // once is enough: a row kept here already, or our own words coming back
+    // once is enough: a row kept here already, pulled or pushed by this device, is not
+    // appended twice. The mid, not the device, is the identity: after a reinstall the
+    // same device must get its own rows back.
     if (this.state.pulled[m.mid]) return
-    if (m.device === this.options.deviceId()) return
+    if (Object.values(this.state.mids).includes(m.mid)) return
     const sessionId = this.sessionOf(m.cid)
     // side chats off (C9): an explicitly side conversation stays where it was written. If
     // its cached metadata was cleared, the existing mapping still proves that this is the

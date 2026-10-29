@@ -115,6 +115,7 @@ class ConversationSync:
         self.state: dict[str, Any] = {
             "account_id": "",
             "cursor": 0,
+            "cursors": {"main": 0, "all": 0},
             "enabled": bool(svc.settings.cloud.sync),
             # C9: this device's side chats too (and the other devices'); off = main only
             "side_chats": bool(svc.settings.sync.side_chats),
@@ -164,6 +165,19 @@ class ConversationSync:
             for key in ("account_id", "cursor", "enabled", "side_chats", "catalog_mode"):
                 if key in data:
                     self.state[key] = data[key]
+            loaded = data.get("cursors")
+            if isinstance(loaded, dict):
+                self.state["cursors"] = {
+                    scope: int(loaded.get(scope) or 0) for scope in ("main", "all")
+                }
+            else:
+                old = int(data.get("cursor") or 0)
+                self.state["cursors"] = {
+                    "main": 0,
+                    "all": old
+                    if self.state.get("side_chats") or self.state.get("catalog_mode")
+                    else 0,
+                }
             for key in ("conversation_marks", "local_archives"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = data[key]
@@ -202,7 +216,17 @@ class ConversationSync:
 
     @property
     def cursor(self) -> int:
+        cursors = self.state.get("cursors")
+        if isinstance(cursors, dict):
+            return int(cursors.get(self.scope) or 0)
         return int(self.state.get("cursor") or 0)
+
+    def _set_cursor(self, value: int) -> None:
+        """Keep the cursor of the scope being pulled, and the scalar for older state/UI."""
+        value = max(0, int(value))
+        self.state["cursor"] = value
+        cursors = self.state.setdefault("cursors", {"main": 0, "all": 0})
+        cursors[self.scope] = value
 
     @property
     def active(self) -> bool:
@@ -366,7 +390,7 @@ class ConversationSync:
         self.last_error = ""
         previous = self.account_id
         if account_id and account_id != previous:
-            self.state.update(account_id=account_id, cursor=0)
+            self.state.update(account_id=account_id, cursor=0, cursors={"main": 0, "all": 0})
             self.working.clear()
             self._save()
             self._rehome_main(previous, account_id)
@@ -501,7 +525,9 @@ class ConversationSync:
             return None
         self.client.cloud.api_key = self.svc.hub._key()
         out = await self.client.wipe()
-        self.state["cursor"] = int(out.get("cursor") or self.cursor)
+        value = int(out.get("cursor") or self.cursor)
+        self.state["cursor"] = value
+        self.state["cursors"] = {"main": value, "all": value}
         self._save()
         return out
 
@@ -1005,7 +1031,7 @@ class ConversationSync:
                     applied += 1
             finally:
                 self._applying = False
-            self.state["cursor"] = max(self.cursor, int(out.get("cursor") or 0))
+            self._set_cursor(max(self.cursor, int(out.get("cursor") or 0)))
             self._save()
             if not out.get("more"):
                 break
@@ -1128,10 +1154,6 @@ class ConversationSync:
                 )
             return
         device = str(row.get("device") or "")
-        if device and device == self.svc.hub.device_id:
-            # the echo of our own push (or a row of ours the timeline no longer holds):
-            # never a second bubble (C8)
-            return
         if existing is not None:
             # The transcript may already contain this remote message even though its channel
             # delivery was interrupted. Re-publish it; per-channel delivery receipts prevent
@@ -1151,7 +1173,7 @@ class ConversationSync:
             "quiet": bool(row.get("quiet")),
             "ts": _iso(row.get("created_at")),
         }
-        if device:
+        if device and device != self.svc.hub.device_id:
             event["via_device"] = device
             event["via_device_name"] = str(row.get("device_name") or "")
         if role == "assistant":

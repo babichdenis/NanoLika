@@ -259,16 +259,15 @@ class SyncStore:
 
     def changes(self, account_id: str, since: int = 0, limit: int = DEFAULT_PAGE, scope: str = "all", tail: int = 0) -> dict:
         """Everything with a seq after `since`, in seq order, at most `limit` rows; `more`
-        says there is another page, and `cursor` is where to continue (the account's counter
-        when this was the last page).
+        says there is another page, and `cursor` is the `seq` of the last row actually handed
+        out (the values in between may belong to another scope and are not skipped).
 
         `scope="main"` (0.20) narrows it to the account's main conversation — its row, its
-        messages, its tombstone; with no main yet the page is empty and `cursor` the
-        account's counter. `tail=K` (with `since=0` only) is the first pull of a fresh
+        messages, its tombstone; with no main yet the page is empty and `cursor` stays at `since`. `tail=K` (with `since=0` only) is the first pull of a fresh
         device: the newest K messages of the scope in seq order plus the rows of the
         conversations they belong to (and the main conversation's row whatever its messages,
-        0.25), `cursor` at the account's counter, `more` false and `skipped` saying how many
-        older messages stayed on the relay."""
+        0.25), `cursor` at the newest handed-out row, `more` false and `skipped` saying how
+        many older messages stayed on the relay."""
         since = max(0, int(since))
         limit = max(1, min(int(limit), MAX_PAGE))
         if scope not in SCOPES:
@@ -295,7 +294,7 @@ class SyncStore:
                 skipped = max(0, int(total) - len(msgs))
                 rows: list[tuple[int, str, sqlite3.Row]] = [(int(r["seq"]), "m", r) for r in msgs]
                 more = False
-                cursor = self._cursor(c, account_id)
+                cursor = max((int(r["seq"]) for r in msgs), default=since)
             else:
                 convs = c.execute(
                     f"SELECT * FROM sync_conversations WHERE account_id=? AND seq>?{conv_scope} ORDER BY seq LIMIT ?",
@@ -309,7 +308,7 @@ class SyncStore:
                 rows.sort(key=lambda x: x[0])
                 more = len(rows) > limit
                 rows = rows[:limit]
-                cursor = rows[-1][0] if more and rows else self._cursor(c, account_id)
+                cursor = rows[-1][0] if rows else since
             conversations = [r for _, k, r in rows if k == "c"]
             # A rename gives a conversation a seq above its messages, so a device starting
             # from zero would meet the messages first. Every message's conversation rides
@@ -335,6 +334,8 @@ class SyncStore:
                 ).fetchone()
                 if main is not None and str(main["cid"]) not in have:
                     conversations.append(main)
+                # the tail hands out conversation rows too; the cursor follows the last of them
+                cursor = max([cursor, *[int(r["seq"]) for r in conversations]], default=since)
         out = {
             "cursor": cursor,
             "more": more,
@@ -472,7 +473,14 @@ class SyncStore:
                         seq = self._next_seq(c, account_id)
                         c.execute(
                             "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, seq=? WHERE account_id=? AND cid=?",
-                            (title if title_changed else row["title"], max(updated_at, int(row["updated_at"])), 1 if next_archived else 0, seq, account_id, cid),
+                            (
+                                title if title_changed else row["title"],
+                                max(updated_at, int(row["updated_at"])),
+                                1 if next_archived else 0,
+                                seq,
+                                account_id,
+                                cid,
+                            ),
                         )
                         accepted += 1
             touched_cids: set[str] = set()
@@ -500,6 +508,8 @@ class SyncStore:
                             (t, seq, account_id, mid),
                         )
                         accepted += 1
+                    else:
+                        rejected.append({"mid": mid, "reason": "known_mid"})
                     continue
                 conv = c.execute("SELECT deleted FROM sync_conversations WHERE account_id=? AND cid=?", (account_id, cid)).fetchone()
                 if conv is None:
@@ -534,10 +544,17 @@ class SyncStore:
                 )
                 touched_cids.add(cid)
                 accepted += 1
+            pruned = 0
             if touched_cids:
-                self._retain(c, account_id, touched_cids)
+                pruned = self._retain(c, account_id, touched_cids, t)
+            folded = self._fold_daily_feed(c, account_id)
             cursor = self._cursor(c, account_id)
-        return {"cursor": cursor, "accepted": accepted, "rejected": rejected}
+        out = {"cursor": cursor, "accepted": accepted, "rejected": rejected}
+        if pruned:
+            out["pruned"] = {"messages": pruned}
+        if folded:
+            out["folded"] = folded
+        return out
 
     def _tombstone(self, c: sqlite3.Connection, account_id: str, cid: str, t: int) -> int:
         """The conversation marked deleted (title gone) with a new seq; its texts removed at once."""
@@ -586,13 +603,94 @@ class SyncStore:
                 self._tombstone(c, account_id, cid_ok, now())
             return {"cursor": self._cursor(c, account_id), "deleted": True}
 
-    def _retain(self, c: sqlite3.Connection, account_id: str, keep: set[str]) -> None:
+    @staticmethod
+    def _is_feed_title(value: str) -> bool:
+        title = value.strip().casefold()
+        return title in {"лента", "feed", "动态"} or any(
+            title.startswith(prefix) for prefix in ("feed ·", "feed •", "feed —", "feed -", "feed (", "динамика ·", "动态 ·", "лента ·")
+        )
+
+    def _fold_daily_feed(self, c: sqlite3.Connection, account_id: str) -> int:
+        """One *Лента* for an account: moved messages get a new seq, the source chat gets a
+        tombstone, and the canonical chat is updated last. Never called from GET."""
+        rows = c.execute(
+            "SELECT * FROM sync_conversations WHERE account_id=? AND deleted=0 AND kind='side' ORDER BY updated_at DESC, created_at DESC, cid",
+            (account_id,),
+        ).fetchall()
+        feeds = [row for row in rows if self._is_feed_title(str(row["title"] or ""))]
+        if not feeds or (len(feeds) == 1 and str(feeds[0]["title"]) == "Лента"):
+            return 0
+        canonical = (
+            next((row for row in feeds if str(row["title"]).strip().casefold() == "лента" and not bool(row["archived"])), None)
+            or next((row for row in feeds if not bool(row["archived"])), None)
+            or next((row for row in feeds if str(row["title"]).strip().casefold() == "лента"), feeds[0])
+        )
+        canonical_cid = str(canonical["cid"])
+        max_updated = max(int(row["updated_at"]) for row in feeds)
+        moved = 0
+        for row in feeds:
+            cid = str(row["cid"])
+            if cid == canonical_cid:
+                continue
+            messages = c.execute(
+                "SELECT mid FROM sync_messages WHERE account_id=? AND cid=? AND deleted=0 ORDER BY seq",
+                (account_id, cid),
+            ).fetchall()
+            for message in messages:
+                seq = self._next_seq(c, account_id)
+                c.execute(
+                    "UPDATE sync_messages SET cid=?, seq=? WHERE account_id=? AND mid=?",
+                    (canonical_cid, seq, account_id, str(message["mid"])),
+                )
+                moved += 1
+            c.execute("DELETE FROM sync_read_marks WHERE account_id=? AND cid=?", (account_id, cid))
+            self._tombstone(c, account_id, cid, now())
+        seq = self._next_seq(c, account_id)
+        c.execute(
+            "UPDATE sync_conversations SET title='Лента', updated_at=?, seq=? WHERE account_id=? AND cid=?",
+            (max_updated, seq, account_id, canonical_cid),
+        )
+        return moved
+
+    def fold_all_feeds(self, limit: int = 200) -> int:
+        """Background backstop for accounts that already had more than one *Лента* before
+        the push-time fold. It only reads titles, then folds with the same routine."""
+        with self.db.tx() as c:
+            rows = c.execute("SELECT account_id, title FROM sync_conversations WHERE deleted=0 AND kind='side'").fetchall()
+            counts: dict[str, int] = {}
+            for row in rows:
+                if self._is_feed_title(str(row["title"] or "")):
+                    counts[str(row["account_id"])] = counts.get(str(row["account_id"]), 0) + 1
+            moved = 0
+            for account_id in [account for account, count in counts.items() if count > 1][: max(1, int(limit))]:
+                moved += self._fold_daily_feed(c, account_id)
+            return moved
+
+    def _retain(self, c: sqlite3.Connection, account_id: str, keep: set[str], t: int) -> int:
         """Over the message limit: the oldest conversations' messages go first (the ones not
-        written in this request); when one conversation holds it all, its oldest messages go."""
+        written in this request); when one conversation holds it all, its oldest messages go.
+        Each one becomes a tombstone with its own seq, so an offline device learns about it."""
         limit = LIMITS["messages"]
         count = int(c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=? AND deleted=0", (account_id,)).fetchone()[0])
         if count <= limit:
-            return
+            return 0
+        pruned = 0
+
+        def bury(cid: str, how_many: int | None = None) -> int:
+            rows = c.execute(
+                "SELECT mid FROM sync_messages WHERE account_id=? AND cid=? AND deleted=0 ORDER BY seq"
+                + (" LIMIT ?" if how_many is not None else ""),
+                (account_id, cid, *((how_many,) if how_many is not None else ())),
+            ).fetchall()
+            for row in rows:
+                seq = self._next_seq(c, account_id)
+                c.execute(
+                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', seq=? "
+                    "WHERE account_id=? AND mid=?",
+                    (t, seq, account_id, str(row["mid"])),
+                )
+            return len(rows)
+
         rows = c.execute(
             """SELECT sc.cid, COUNT(sm.mid) AS n FROM sync_conversations sc
                JOIN sync_messages sm ON sm.account_id=sc.account_id AND sm.cid=sc.cid AND sm.deleted=0
@@ -601,18 +699,29 @@ class SyncStore:
         ).fetchall()
         for r in rows:
             if count <= limit:
-                return
+                return pruned
             if str(r["cid"]) in keep:
                 continue
-            c.execute("DELETE FROM sync_messages WHERE account_id=? AND cid=? AND deleted=0", (account_id, r["cid"]))
-            count -= int(r["n"])
+            removed = bury(str(r["cid"]))
+            count -= removed
+            pruned += removed
         if count > limit:
             # only the conversations written just now are left: trim their oldest messages
-            c.execute(
-                """DELETE FROM sync_messages WHERE account_id=? AND deleted=0 AND rowid IN (
-                     SELECT rowid FROM sync_messages WHERE account_id=? AND deleted=0 ORDER BY created_at, seq LIMIT ?)""",
-                (account_id, account_id, count - limit),
-            )
+            removed = 0
+            rows = c.execute(
+                "SELECT cid, mid FROM sync_messages WHERE account_id=? AND deleted=0 ORDER BY seq LIMIT ?",
+                (account_id, count - limit),
+            ).fetchall()
+            for row in rows:
+                seq = self._next_seq(c, account_id)
+                c.execute(
+                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', seq=? "
+                    "WHERE account_id=? AND mid=?",
+                    (t, seq, account_id, str(row["mid"])),
+                )
+                removed += 1
+            pruned += removed
+        return pruned
 
     @staticmethod
     def _sweep(c: sqlite3.Connection, t: int) -> None:

@@ -859,7 +859,6 @@ final class NanoMuseSync: ObservableObject {
     /// One page. Returns true when something changed locally.
     private func apply(changes reply: [String: Any]) async -> Bool {
         var changed = false
-        let me = NanoMuseHub.shared.deviceId
         // C10: the account's main joins the shell's main chat only when that chat is this
         // account's business — never another account's conversation still pinned to the tab
         let mainId = ownMainSessionId()
@@ -945,8 +944,8 @@ final class NanoMuseSync: ObservableObject {
                 changed = true
                 continue
             }
-            // Our own texts are here already (or were deleted here, which the push says): the echo.
-            if (record["device"] as? String) == me { store.entries[sessionId]?.knownMids.insert(mid); continue }
+            // A row already here (ours, or another device's) is not appended twice; a row
+            // missing after a reinstall is restored by mid like any other.
             if store.entries[sessionId]?.knownMids.contains(mid) == true || store.deferred.contains(where: { $0.mid == mid }) { continue }
             if presentBySession[sessionId] == nil {
                 presentBySession[sessionId] = Set(await ChatStore.shared.loadMessages(sessionId: sessionId).map { $0.id.lowercased() })

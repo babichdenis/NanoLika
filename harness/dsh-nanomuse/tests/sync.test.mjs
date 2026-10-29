@@ -1304,3 +1304,19 @@ test('shared task resolution respects the per-chat cloud pause and archive', asy
   relay.convs.get('shared-chat').archived = true
   assert.equal(await e.resolveCid('shared-chat', true), undefined)
 })
+
+test('a fresh install restores its own rows by mid, not by device', async () => {
+  const relay = fakeRelay()
+  relay.add('c-main', 'main', 'Desk main', 'pc-1', 'Desk')
+  relay.say('c-main', 'user', 'lost and found', 'pc-1', 'Desk')
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Desk main', [])
+  const { engine: e } = engine(relay, sessions)
+  await e.setMain('s-main')
+  await e.accountChanged('acct-1')
+  await e.applyConversation(relay.convs.get('c-main'))
+  const mid = [...relay.msgs.keys()][0]
+  await e.applyMessage(relay.msgs.get(mid), new Map())
+  assert.equal(sessions.appended.filter(([, line]) => line.text === 'lost and found').length, 1)
+  e.stop()
+})

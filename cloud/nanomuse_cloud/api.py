@@ -387,6 +387,19 @@ def create_app(
 
     router = ProviderRouter(settings)
 
+    async def _feed_loop() -> None:
+        """A quiet backstop for *Лента* chats that existed before push-time folding. The
+        catalogue GET is read-only now, so this is the only periodic writer besides push."""
+        while True:
+            await asyncio.sleep(300)
+            store = getattr(getattr(app, "state", None), "sync", None)
+            if store is None:
+                continue
+            try:
+                await asyncio.to_thread(store.fold_all_feeds)
+            except Exception:
+                log.exception("sync feed fold")
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         geo.ensure()
@@ -396,14 +409,16 @@ def create_app(
         routing_task = asyncio.create_task(router.run(http), name="provider-prices")
         rules_task = asyncio.create_task(_rules_loop(), name="control-rules")
         video_task = asyncio.create_task(_video_loop(), name="video-settle")
+        feed_task = asyncio.create_task(_feed_loop(), name="sync-feed-fold")
         try:
             yield
         finally:
             routing_task.cancel()
             rules_task.cancel()
             video_task.cancel()
-            # waited for, so neither cancellation lands after the database is closed
-            await asyncio.gather(routing_task, rules_task, video_task, return_exceptions=True)
+            feed_task.cancel()
+            # waited for, so none of the cancellations lands after the database is closed
+            await asyncio.gather(routing_task, rules_task, video_task, feed_task, return_exceptions=True)
             await collector.stop()
             await http.aclose()
 
