@@ -375,3 +375,69 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt th small { display: block; margin-top: 1px; font-size: 10px; font-weight: 400; color: var(--ink-3); opacity: .85; }
 .admin .mt td.mt-status { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .admin .mt .mt-alias { margin-left: 4px; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+.admin .mt .sp { flex: 1 1 auto; }
+.admin .mt th { padding: 6px 8px 5px; vertical-align: top; }
+.admin .mt th .mt-sort { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; font-size: 11.5px; font-weight: 500; text-align: left; white-space: nowrap; cursor: pointer; }
+.admin .mt th.num .mt-sort { text-align: right; }
+.admin .mt th .mt-sort:hover { color: var(--ink); }
+.admin .mt th .mt-sort .dir { color: var(--action); }
+.admin .mt th .mt-col { width: 100%; min-width: 56px; margin-top: 3px; padding: 3px 6px; border: 0; border-radius: 7px;
+  background: var(--fill); color: var(--ink); font: inherit; font-size: 11px; }
+.admin .mt th .mt-col:focus { outline: none; box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.22); }
+.admin .mt td.mt-low { color: var(--warn); font-weight: 600; }
+.admin .mt #mt-models { table-layout: fixed; min-width: 1108px; }
+.admin .mt #mt-models th.mt-pick { width: 92px; }
+.admin .mt #mt-models th.mt-model { width: 230px; }
+.admin .mt #mt-models th:nth-child(3) { width: 70px; }
+.admin .mt #mt-models th:nth-child(4) { width: 78px; }
+.admin .mt #mt-models th:nth-child(5) { width: 120px; }
+.admin .mt #mt-models th:nth-child(6) { width: 120px; }
+.admin .mt #mt-models th:nth-child(7) { width: 84px; }
+.admin .mt #mt-models th:nth-child(8) { width: 88px; }
+.admin .mt #mt-models th:nth-child(9) { width: 130px; }
+.admin .mt #mt-models th:nth-child(10) { width: 96px; }
+.admin .mt #mt-models td.mt-model-cell { max-width: none; }
+.admin .mt #mt-models td.mt-model-cell .mt-name { display: inline; }
+/* шапка: поле-фильтр и маленькая кнопка сортировки рядом */
+.admin .mt th { padding: 6px 7px 5px; }
+.admin .mt th .mt-th { display: flex; align-items: center; gap: 3px; }
+.admin .mt th .mt-col { flex: 1 1 auto; min-width: 0; margin: 0; padding: 3px 6px; border: 0; border-radius: 7px;
+  background: var(--fill); color: var(--ink); font: inherit; font-size: 11px; }
+.admin .mt th .mt-col::placeholder { color: var(--ink-3); opacity: 1; }
+.admin .mt th .mt-col:focus { outline: none; box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.22); }
+.admin .mt th .mt-sort { flex: 0 0 18px; width: 18px; height: 20px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink-3); font-size: 12px; line-height: 1; cursor: pointer; }
+.admin .mt th .mt-sort:hover { background: var(--fill); color: var(--ink); }
+.admin .mt th .mt-sort.on { color: var(--action); font-weight: 700; }
+.admin .mt th small { margin-top: 2px; padding-left: 6px; }
+.admin .mt #mt-models { min-width: 1144px; }
+.admin .mt #mt-models th.mt-pick { width: 96px; }
+.admin .mt #mt-models th.mt-model { width: 240px; }
+.admin .mt #mt-models th:nth-child(3) { width: 64px; }
+.admin .mt #mt-models th:nth-child(4) { width: 72px; }
+.admin .mt #mt-models th:nth-child(5) { width: 128px; }
+.admin .mt #mt-models th:nth-child(6) { width: 128px; }
+.admin .mt #mt-models th:nth-child(7) { width: 92px; }
+.admin .mt #mt-models th:nth-child(8) { width: 96px; }
+.admin .mt #mt-models th:nth-child(9) { width: 132px; }
+.admin .mt #mt-models th:nth-child(10) { width: 96px; }
+.admin .mt #mt-models td { overflow: hidden; text-overflow: ellipsis; }
+.admin .mt th .mt-col { font-size: 10.5px; padding: 3px 5px; }
+.admin .mt #mt-models th.mt-pick { width: 104px; }
+.admin .mt #mt-models th.mt-model { width: 220px; }
+.admin .mt #mt-models th:nth-child(3) { width: 62px; }
+.admin .mt #mt-models th:nth-child(4) { width: 92px; }
+.admin .mt #mt-models th:nth-child(5) { width: 124px; }
+.admin .mt #mt-models th:nth-child(6) { width: 124px; }
+.admin .mt #mt-models th:nth-child(7) { width: 104px; }
+.admin .mt #mt-models th:nth-child(8) { width: 108px; }
+.admin .mt #mt-models th:nth-child(9) { width: 130px; }
+.admin .mt #mt-models th:nth-child(10) { width: 96px; }
+.admin .mt #mt-models { min-width: 1164px; }
+.admin .mt th .mt-col { font-size: 10px; padding: 2px 4px; }
+.admin .mt #mt-models th.mt-pick { width: 112px; }
+.admin .mt #mt-models th.mt-model { width: 212px; }
+.admin .mt #mt-models th:nth-child(7) { width: 112px; }
+.admin .mt #mt-models th:nth-child(8) { width: 116px; }
+.admin .mt #mt-models { min-width: 1180px; }

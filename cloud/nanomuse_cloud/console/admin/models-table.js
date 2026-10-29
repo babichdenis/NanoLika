@@ -16,12 +16,13 @@ let loading = false;
 let error = "";
 
 const state = {
-  q: "",
   group: "all",
   visibility: "all", // all | visible | hidden
   provider: "",
   sellOnly: false,
-  sort: "name", // name | cost | client | offers
+  sort: "name",
+  dir: "asc",
+  cols: {},   // фильтры колонок: ключ колонки → строка
   sel: "",
 };
 
@@ -134,7 +135,10 @@ function bestOffer(offers) {
 
 /** Одна строка — одно название: закреплённая версия и её latest-алиас склеиваются. */
 function groupKeyOf(model) {
-  return `${String(model.name || model.id).trim().toLowerCase()}|${groupOf(model)}`;
+  // дефисы и подчёркивания считаем пробелами: «GigaChat-3-Pro» и «GigaChat 3 Pro»
+  // это одна модель, а не две строки
+  const name = String(model.name || model.id).trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+  return `${name}|${groupOf(model)}`;
 }
 
 function modelRank(model) {
@@ -186,31 +190,126 @@ function hasSell(model) {
   return Boolean(sell.rub_in || sell.rub_out || sell.hint);
 }
 
-// ── фильтры ───────────────────────────────────────────────────────────────────
+// ── колонки, фильтры и сортировка ────────────────────────────────────────────
+
+const COLUMNS = [
+  { key: "listed", label: "Показывать", cls: "mt-pick", numeric: false },
+  { key: "name", label: "Модель", cls: "mt-model", numeric: false },
+  { key: "kind", label: "Тип", numeric: false },
+  { key: "context", label: "Контекст", numeric: true },
+  { key: "purchase", label: "Закупка", sub: "вход / выход", numeric: true },
+  { key: "client", label: "Клиенту", sub: "вход / выход", numeric: true },
+  { key: "markupIn", label: "Наценка вход", numeric: true },
+  { key: "markupOut", label: "Наценка выход", numeric: true },
+  { key: "best", label: "Дешевле всех", numeric: true },
+  { key: "offers", label: "Предложений", numeric: true },
+];
+
+const SORT_KEYS = new Set(COLUMNS.map((column) => column.key));
+const OLD_SORT = { cost: "purchase", client: "client", offers: "offers", name: "name" };
+
+function parseNumber(text) {
+  let value = String(text).trim().toLowerCase().replace(/\s+/g, "").replace(",", ".");
+  let factor = 1;
+  if (value.endsWith("k") || value.endsWith("к")) { factor = 1000; value = value.slice(0, -1); }
+  else if (value.endsWith("m") || value.endsWith("м")) { factor = 1_000_000; value = value.slice(0, -1); }
+  const number = Number(value);
+  return Number.isFinite(number) ? number * factor : null;
+}
+
+function ratioText(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "—";
+  return "×" + fmt(number, 2);
+}
+
+function columnText(group, key) {
+  const model = group.primary;
+  switch (key) {
+    case "listed": return group.listed ? "Видна" : "Скрыта";
+    case "name": return `${group.name} ${group.models.map((item) => item.id).join(" ")}`;
+    case "kind": return groupLabel(group.group);
+    case "context": return ctxText(model.context);
+    case "purchase": return purchaseText(model);
+    case "client": return clientText(model);
+    case "markupIn": return ratioText(model.ratio?.in);
+    case "markupOut": return ratioText(model.ratio?.out);
+    case "best": {
+      const best = bestOffer(group.offers);
+      return best ? `${fmt(best.input_rub)} ₽ ${providerLabel(best.provider)}` : "—";
+    }
+    case "offers": return String(group.offers.length);
+    default: return "";
+  }
+}
+
+function columnNumber(group, key) {
+  const model = group.primary;
+  switch (key) {
+    case "context": return Number(model.context) || null;
+    case "purchase": {
+      const cost = model.cost || {};
+      return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? null;
+    }
+    case "client": return Number(model.sell?.rub_in) || null;
+    case "markupIn": return Number(model.ratio?.in) > 0 ? Number(model.ratio.in) : null;
+    case "markupOut": return Number(model.ratio?.out) > 0 ? Number(model.ratio.out) : null;
+    case "best": {
+      const best = bestOffer(group.offers);
+      return best ? Number(best.input_rub) : null;
+    }
+    case "offers": return group.offers.length;
+    default: return null;
+  }
+}
+
+/** Фильтр колонки: слово — подстрока; число — «не меньше»; можно >, <, =, >=, <=. */
+function matchesColumn(group, key, raw) {
+  const query = String(raw || "").trim();
+  if (!query) return true;
+  const column = COLUMNS.find((item) => item.key === key);
+  const found = query.match(/^(>=|<=|>|<|≥|≤|=)\s*(.+)$/);
+  const number = columnNumber(group, key);
+  if (found) {
+    const target = parseNumber(found[2]);
+    if (target === null || number === null) return false;
+    const op = found[1] === "≥" ? ">=" : found[1] === "≤" ? "<=" : found[1];
+    if (op === ">") return number > target;
+    if (op === "<") return number < target;
+    if (op === ">=") return number >= target;
+    if (op === "<=") return number <= target;
+    return number === target;
+  }
+  if (column && column.numeric) {
+    const target = parseNumber(query);
+    if (target !== null && number !== null) return number >= target;
+  }
+  return columnText(group, key).toLowerCase().includes(query.toLowerCase());
+}
 
 function readFilters() {
   const p = CTX && CTX.params;
   if (!p) return;
-  state.q = p.get("q") || "";
   const group = p.get("g") || "all";
   state.group = GROUPS.some(([key]) => key === group) ? group : "all";
   const vis = p.get("vis") || "all";
   state.visibility = ["all", "visible", "hidden"].includes(vis) ? vis : "all";
   state.provider = p.get("p") || "";
   state.sellOnly = p.get("sell") === "1";
-  const sort = p.get("s") || "name";
-  state.sort = ["name", "cost", "client", "offers"].includes(sort) ? sort : "name";
+  const sort = OLD_SORT[p.get("s")] || p.get("s") || "name";
+  state.sort = SORT_KEYS.has(sort) ? sort : "name";
+  state.dir = p.get("d") === "desc" ? "desc" : "asc";
   state.sel = p.get("sel") || "";
 }
 
 function saveFilters() {
   const p = new URLSearchParams();
-  if (state.q) p.set("q", state.q);
   if (state.group !== "all") p.set("g", state.group);
   if (state.visibility !== "all") p.set("vis", state.visibility);
   if (state.provider) p.set("p", state.provider);
   if (state.sellOnly) p.set("sell", "1");
   if (state.sort !== "name") p.set("s", state.sort);
+  if (state.dir === "desc") p.set("d", "desc");
   if (state.sel) p.set("sel", state.sel);
   const query = p.toString();
   try {
@@ -219,21 +318,30 @@ function saveFilters() {
 }
 
 function visibleGroups() {
-  const q = state.q.trim().toLowerCase();
   let rows = allGroups().filter((group) => {
     if (state.group !== "all" && group.group !== state.group) return false;
     if (state.visibility === "visible" && !group.listed) return false;
     if (state.visibility === "hidden" && group.listed) return false;
     if (state.sellOnly && !group.models.some(hasSell)) return false;
     if (state.provider && !group.offers.some((offer) => offer.provider === state.provider)) return false;
-    if (!q) return true;
-    return group.models.some((model) => `${model.name || ""} ${model.id || ""}`.toLowerCase().includes(q));
+    for (const [key, value] of Object.entries(state.cols)) {
+      if (value && !matchesColumn(group, key, value)) return false;
+    }
+    return true;
   });
-  const byName = (a, b) => String(a.name).localeCompare(String(b.name), "ru");
-  if (state.sort === "cost") rows = rows.sort((a, b) => (a.primary.cost?.rub_in ?? Infinity) - (b.primary.cost?.rub_in ?? Infinity) || byName(a, b));
-  else if (state.sort === "client") rows = rows.sort((a, b) => (a.primary.sell?.rub_in || Infinity) - (b.primary.sell?.rub_in || Infinity) || byName(a, b));
-  else if (state.sort === "offers") rows = rows.sort((a, b) => b.offers.length - a.offers.length || byName(a, b));
-  else rows = rows.sort(byName);
+  const dir = state.dir === "desc" ? -1 : 1;
+  rows.sort((a, b) => {
+    let left = null, right = null;
+    if (state.sort === "name") { left = a.name.toLowerCase(); right = b.name.toLowerCase(); }
+    else if (state.sort === "kind") { left = groupLabel(a.group); right = groupLabel(b.group); }
+    else if (state.sort === "listed") { left = a.listed ? 1 : 0; right = b.listed ? 1 : 0; }
+    else { left = columnNumber(a, state.sort); right = columnNumber(b, state.sort); }
+    if (left === null && right === null) return a.name.localeCompare(b.name, "ru");
+    if (left === null) return 1;
+    if (right === null) return -1;
+    const cmp = typeof left === "string" ? left.localeCompare(right, "ru") : left - right;
+    return cmp * dir || a.name.localeCompare(b.name, "ru");
+  });
   return rows;
 }
 
@@ -244,8 +352,10 @@ const TEMPLATE = `
   <div class="mt-pane mt-pane-top" id="mt-top-pane">
     <div class="mt-top">
       <div class="mt-toolbar">
-        <input id="mt-q" type="search" placeholder="Модель или id" autocomplete="off" />
         <div class="chips" id="mt-groups" role="group" aria-label="Тип модели"></div>
+        <span class="sp"></span>
+        <label class="switch"><input id="mt-sell" type="checkbox" /> только с ценой клиенту</label>
+        <span class="fine mt-count" id="mt-count"></span>
       </div>
       <div class="mt-toolbar">
         <label class="field">поставщик
@@ -258,33 +368,14 @@ const TEMPLATE = `
             <option value="hidden">скрытые</option>
           </select>
         </label>
-        <label class="field">сортировка
-          <select id="mt-sort">
-            <option value="name">по названию</option>
-            <option value="cost">по закупке</option>
-            <option value="client">по цене клиенту</option>
-            <option value="offers">по числу предложений</option>
-          </select>
-        </label>
-        <label class="switch"><input id="mt-sell" type="checkbox" /> только с ценой клиенту</label>
-        <button class="chip" id="mt-refresh" type="button">Обновить</button>
-        <span class="fine mt-count" id="mt-count"></span>
+        <button class="chip" id="mt-refresh" type="button">Обновить цены</button>
       </div>
       <p class="fine" id="mt-note"></p>
     </div>
     <div class="mt-wrap">
       <table id="mt-models">
         <thead>
-          <tr>
-            <th class="mt-pick">Показывать</th>
-            <th class="mt-model">Модель</th>
-            <th>Тип</th>
-            <th class="num">Контекст</th>
-            <th class="num">Закупка<small>вход / выход</small></th>
-            <th class="num">Клиенту<small>вход / выход</small></th>
-            <th>Дешевле всех</th>
-            <th class="num">Предложений</th>
-          </tr>
+          <tr></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -407,10 +498,23 @@ function drawModels(rows) {
     if (group.models.length > 1) name.append(el("span", "mt-alias", ` +${group.models.length - 1}`));
     tr.append(name);
 
-    tr.append(el("td", "mt-kind", groupLabel(group.group)));
-    tr.append(el("td", "num", ctxText(model.context)));
-    tr.append(el("td", "num", purchaseText(model)));
-    tr.append(el("td", "num", clientText(model)));
+    const textCell = (cls, text) => {
+      const cell = el("td", cls, text);
+      cell.title = text;
+      return cell;
+    };
+    tr.append(textCell("mt-kind", groupLabel(group.group)));
+    tr.append(textCell("num", ctxText(model.context)));
+    tr.append(textCell("num", purchaseText(model)));
+    tr.append(textCell("num", clientText(model)));
+    const markupCell = (value) => {
+      const cell = el("td", "num", ratioText(value));
+      const number = Number(value);
+      if (Number.isFinite(number) && number > 0 && number < 1.5) cell.classList.add("mt-low");
+      return cell;
+    };
+    tr.append(markupCell(model.ratio?.in));
+    tr.append(markupCell(model.ratio?.out));
 
     const bestCell = el("td", "mt-best");
     if (best) {
@@ -515,21 +619,55 @@ function setNote(text) {
 }
 
 function syncControls() {
-  const q = $("mt-q");
-  if (q) q.value = state.q;
   const vis = $("mt-vis");
   if (vis) vis.value = state.visibility;
-  const sort = $("mt-sort");
-  if (sort) sort.value = state.sort;
   const sell = $("mt-sell");
   if (sell) sell.checked = state.sellOnly;
   drawProviderFilter();
 }
 
+/** Шапка: кнопка сортировки и поле-фильтр в каждой колонке. */
+function drawHead() {
+  const row = ROOT.querySelector("#mt-models thead tr");
+  if (!row) return;
+  row.replaceChildren();
+  for (const column of COLUMNS) {
+    const th = el("th", column.cls || "");
+    const line = el("div", "mt-th");
+    const input = el("input", "mt-col");
+    input.type = "text";
+    input.placeholder = column.label;
+    input.value = state.cols[column.key] || "";
+    input.setAttribute("aria-label", "Фильтр: " + column.label);
+    input.oninput = () => { state.cols[column.key] = input.value; drawBody(); };
+    const button = el("button", "mt-sort" + (state.sort === column.key ? " on" : ""));
+    button.type = "button";
+    button.title = "Сортировать: " + column.label;
+    button.textContent = state.sort === column.key ? (state.dir === "desc" ? "↓" : "↑") : "↕";
+    button.onclick = () => {
+      if (state.sort === column.key) state.dir = state.dir === "asc" ? "desc" : "asc";
+      else { state.sort = column.key; state.dir = column.numeric ? "desc" : "asc"; }
+      draw();
+    };
+    line.append(input, button);
+    th.append(line);
+    if (column.sub) th.append(el("small", "", column.sub));
+    row.append(th);
+  }
+}
+
+function drawBody() {
+  const rows = visibleGroups();
+  drawCounts(rows);
+  drawModels(rows);
+  drawOffers();
+}
+
 function draw() {
   saveFilters();
-  const rows = visibleGroups();
+  drawHead();
   drawGroups();
+  const rows = visibleGroups();
   drawCounts(rows);
   drawModels(rows);
   drawOffers();
@@ -589,14 +727,10 @@ async function refreshPrices() {
 }
 
 function wire() {
-  const q = $("mt-q");
-  if (q) q.oninput = () => { state.q = q.value; draw(); };
   const prov = $("mt-provider");
   if (prov) prov.onchange = () => { state.provider = prov.value; draw(); };
   const vis = $("mt-vis");
   if (vis) vis.onchange = () => { state.visibility = vis.value; draw(); };
-  const sort = $("mt-sort");
-  if (sort) sort.onchange = () => { state.sort = sort.value; draw(); };
   const sell = $("mt-sell");
   if (sell) sell.onchange = () => { state.sellOnly = sell.checked; draw(); };
   const refresh = $("mt-refresh");
