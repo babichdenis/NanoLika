@@ -2315,3 +2315,13 @@ and task state are unchanged.
 Validation: all 28 `tests/test_hub.py` tests, all 129 web tests, TypeScript typecheck, web
 production build, Ruff and formatting passed. The bundle reports its existing large main-chunk
 warning; the build completed successfully.
+
+## 2026-10-29 · Isolation audit I10: minimize hub `info` by default
+
+Hub `info` now returns public device details by default. The local account name, home and
+working directories, hostname, shell and Python version are included only when remote control
+is enabled and that device has a standing `remote_control` grant. This does not change the
+account's existing `notify` contract or yet confine file operations to configured roots.
+
+Validation: the two focused hub tests passed; Ruff and formatting passed. The remaining I10
+file-root work is not included in this change.

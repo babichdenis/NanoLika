@@ -61,6 +61,7 @@ def wait_for(pred: Callable[[], Any], timeout: float = 8.0, interval: float = 0.
 def test_info_and_shell(tmp_path: Path) -> None:
     info = actions.info(("task",))
     assert info["kind"] == "computer" and "task" in info["actions"] and info["runtime"]
+    assert {"user", "home", "cwd", "hostname", "shell", "python"}.isdisjoint(info)
     r = actions.run("shell", {"command": "echo hi; echo err 1>&2; exit 3", "cwd": str(tmp_path)})
     assert r["stdout"].strip() == "hi" and r["stderr"].strip() == "err" and r["exit_code"] == 3
     slow = actions.run("shell", {"command": "sleep 5", "timeout": 1})
@@ -857,6 +858,7 @@ def test_remote_control_off_refuses_everything_but_info(hub_server) -> None:
     relay.call_runtime("info", {}, "i1")
     res = relay.next_frame("result")
     assert res["ok"] is True and res["body"]["kind"] == "computer"
+    assert {"user", "home", "cwd", "hostname", "shell", "python"}.isdisjoint(res["body"])
     client.put("/api/hub", json={"remote_control": True})
     relay.call_runtime("shell", {"command": "echo hi"}, "s2")
     # with remote control on, the person at this computer still agrees first: a card here,
@@ -878,6 +880,10 @@ def test_remote_control_off_refuses_everything_but_info(hub_server) -> None:
     assert res["ok"] is True and res["body"]["stdout"].strip() == "again"
     grants = client.get("/api/activity").json()["grants"]
     assert any(g["tool"] == "remote_control" and g["target"] == "phone-1" for g in grants)
+    relay.call_runtime("info", {}, "i2")
+    res = relay.next_frame("result")
+    assert res["ok"] is True and res["body"]["user"] and res["body"]["home"]
+    assert res["body"]["hostname"] and res["body"]["cwd"]
     client.delete("/api/approvals/grants/remote_control:phone-1")
     relay.call_runtime("files", {"path": "."}, "f1")
     card = wait_for(lambda: client.get("/api/state").json()["pending_approvals"])[0]

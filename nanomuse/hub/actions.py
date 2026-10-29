@@ -56,21 +56,31 @@ def shell_name() -> str:
     return os.environ.get("SHELL", "/bin/sh")
 
 
-def info(extra_actions: tuple[str, ...] = ()) -> dict[str, Any]:
-    return {
-        "name": socket.gethostname(),
+def info(
+    extra_actions: tuple[str, ...] = (),
+    *,
+    name: str = "",
+    include_private: bool = False,
+) -> dict[str, Any]:
+    result = {
+        "name": name or socket.gethostname(),
         "kind": "computer",
         "os": platform.system(),
         "os_version": platform.release(),
         "arch": platform.machine(),
-        "user": getpass.getuser(),
-        "home": str(Path.home()),
-        "cwd": os.getcwd(),
-        "shell": shell_name(),
-        "python": platform.python_version(),
         "runtime": __version__,
         "actions": [*ACTIONS, *extra_actions],
     }
+    if include_private:
+        result.update(
+            user=getpass.getuser(),
+            home=str(Path.home()),
+            cwd=os.getcwd(),
+            hostname=socket.gethostname(),
+            shell=shell_name(),
+            python=platform.python_version(),
+        )
+    return result
 
 
 def _text(b: bytes) -> str:

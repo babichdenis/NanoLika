@@ -109,7 +109,10 @@ lets every device of the account run things there without the card. Nobody there
 hears `not_allowed` when the card expires. `info` and `notify` never ask; a
 `task` runs under the device's own Sentinel, whose cards travel back to the
 caller as before. A device may `approve` only cards of its own runs that were
-sent to it, never the card asking whether it may run something.
+sent to it, never the card asking whether it may run something. The `info` reply
+shows the public device name, operating system and runtime without asking; local
+username, home and working paths, hostname, shell and Python version appear only
+while remote control is on and that caller has a standing `remote_control` grant.
 
 Shared memory is a separate choice: *Share memory with my devices* (`[hub] memory_sharing`, on by default) lets the account's signed-in devices use
 `memory.add`, `memory.search` and `memory.forget` on this device's memory store.

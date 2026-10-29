@@ -730,7 +730,18 @@ class HubService:
             )
             return
         if call.action == "info":
-            await call.result(actions.info(self._extra_actions()))
+            key = grant_key(REMOTE_CONTROL_TOOL, call.sender_id)
+            include_private = bool(
+                self.settings.hub.remote_control
+                and self.svc.app.sentinel.grants.match(key) is not None
+            )
+            await call.result(
+                actions.info(
+                    self._extra_actions(),
+                    name=self.device_name,
+                    include_private=include_private,
+                )
+            )
             return
         if call.action == "task":
             await self._task(call)
