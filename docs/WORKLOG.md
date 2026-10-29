@@ -1,3 +1,28 @@
+## 2026-10-29 · A QR link ends when its chat arrives, and only its chat counts
+
+The owner scanned a MAX QR and saw the connection appear and vanish; the panel also showed a
+Telegram row that had nothing to do with the code on screen. The desktop and web "connected"
+checks treated any chat of that messenger as the result of the QR: the account's own Telegram
+chat made the Telegram tab look connected the moment it was opened, and switching tabs looked
+like a link appearing and disappearing. Both now take a snapshot of the rows before the code is
+made and accept only a row that was not there — a second chat of the same messenger included.
+When it arrives, the card with the QR is removed at once (2 s poll; 1.2 s on the page), a short
+"connected" line names the messenger, and the linked list shows the chat. The copy now says
+three minutes, which is the relay's `CHANNEL_START_TTL_S`; it had said ten.
+
+The link was already single-use on the relay: the first chat spends the code, and a second chat
+gets `link_wrong` (test `test_start_link_connects_the_same_account_once`, both messengers). The
+mail letter ("К вашему аккаунту nanoLika подключён чат в MAX…") already existed and is wired to
+`link_channel`; a new test covers the MAX wording. The MAX bot now logs `bot_started` with
+whether a deep-link payload arrived — never the secret — so a scan that lost its payload is
+visible in the log. Live web assets and the bot's `max.py` were deployed with backups; the
+desktop plugin was rebuilt and the app restarted.
+
+Validation: plugin 432/432, cloud 647 passed with the same three owner-approved on-hold failures,
+ruff clean. Backups: `~/.nanolika/backups/connect-ui-20261029T163600Z`,
+`/opt/nanomuse/cloud/backups/connect-20261029T163500Z`,
+`/opt/nanolika-bot/backups/max-login-20261029T163500Z`. Commit `231034e6`.
+
 ## 2026-10-29 · Stop adding NanoLika to Login Items automatically
 
 The owner reported repeated NanoLika entries in macOS Login Items and asked to remove
