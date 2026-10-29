@@ -1,3 +1,18 @@
+## 2026-10-29 · Redact vault secrets before model context and delivery
+
+Closed audit item I9 in runtime code. Recalled memories and older session messages/tool
+arguments are redacted before a provider sees them. Provider deltas are buffered by the
+longest vault value so a secret split across chunks is never streamed; assistant text and
+reasoning are redacted before session history, timeline and audit storage. Channel egress
+also applies the vault redactor as a final guard, including edited live replies and messages
+delivered from sync. Existing memory records remain intact; assistant copies saved to thread
+history are masked so they cannot leak on a later turn.
+
+Validation: 92 tests passed across Sentinel, agent, vault and channel manager, including
+split-delta masking and outbound channel delivery. Ruff check, formatting and clean-cache
+mypy for the three changed runtime modules passed. A first mypy run with the existing cache
+hit an internal error. No deployment was made.
+
 ## 2026-10-29 · Isolation boundary mapped before I1/I2 changes
 
 Revised the isolation audit's initial per-thread proposal to preserve the owner's requirement:
@@ -35,6 +50,45 @@ Commit `df9f1c03` records the change. The full desktop suite could not be evalua
 Node 22+ and unrelated bundled tests import `zstdDecompressSync`); Android unit tests could not
 configure because no Android SDK is installed. No production relay was deployed. The isolation
 audit in Downloads records the status. Other conversation-sync changes remain outside this commit.
+
+## 2026-10-29 · Sync stage 2: lease, presence per device, delivery claim, 304 catalog, incremental hydrate
+
+Closed the second sync stage from `NanoLika-sync-razbor.md`: S1, S2, S12, S8, S10 and S13.
+The relay now keeps one turn lease per conversation (`sync_leases`, take/renew/release) and
+one delivery claim per synced message and channel chat (`sync_deliveries`); presence is keyed
+by `(account, cid, device)` so two devices no longer overwrite each other. The lease is
+non-blocking for old clients: only `take: true` gets `409 conversation_busy`, everyone else
+gets the holder and goes on. The runtime takes the lease in `_worker`, renews every 40 s,
+waits up to 90 s for another device and then asks for the chat outright; channels pass the
+same worker, so they do not answer in parallel either. A claim older than 60 s is taken over.
+
+The web catalogue now carries an ETag and answers `304`; the web tab keeps a permanent
+`/v1/hub` socket and refreshes once per burst of `sync` frames instead of polling every three
+seconds, with a 30 s fallback only while the socket is down. `hydrate_thread` reads a chat
+whole once per process and then only rows after `message_cursors[cid]`, through a canonical
+in-memory transcript. Renames are stamped with the relay's own time, so a lagging clock no
+longer loses a title, and re-sending the same title does not move `seq`.
+
+Committed `ec8acbf2` (relay, runtime, dsh, web, tests), `f5055ee5` (web socket/version, docs)
+and `5ea6bd27` (rename tests). Checks: cloud `test_sync.py` + `test_chat_catalog.py` 39 passed;
+full cloud 645 passed, 3 owner on-hold (hub 2, pricing 1); runtime full 1076 passed, 6 skipped,
+73 subtests; web chat-cloud 11/11; dsh sync 31/31; Ruff/format and diff-check clean.
+
+Live relay: narrow patches over the existing overrides, backup
+`/opt/nanomuse/cloud/backups/sync-stage2-20261029T121500Z`; `cloud-relay-1` restarted, health
+200, both new tables present. Web serves `app.js?v=20261029-syncsp`, the hub-backed
+`chat-sync.js` and SW cache `...20261029e`. Rebuilt the runtime from the committed worktree
+(PyInstaller, native hands kept) and installed it after an idle gate; backup
+`~/.nanolika/backups/sync-stage2-20261029T123500Z`, ad-hoc signature verified, embedded
+`sync.engine`/`service`/`channels.manager` contain the new lease/claim/hydrate code. Rebuilt
+and installed the dsh plugin in both desktop copies (backup
+`~/.nanolika/backups/sync-stage2-plugin-20261029T123800Z`); app restarted and dsh ready.
+
+Not touched: `sync_enabled`, media discounts, hub behaviour on an expired tariff. Open: S9
+(web writes to the account's main chat) needs the owner's choice; S14 (same text from two
+devices) waits for a client-wide `duplicate` handling. Trap: another session was editing
+hub/isolation files in the same worktree; only the sync files were staged, and the runtime
+was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
 ## 2026-10-29 · Isolation audit: preserve client experience, separate session state
 
