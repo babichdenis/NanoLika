@@ -878,6 +878,7 @@ export default class NanomuseCloud extends Service {
       // here, their turns kept in the host's own store for the transcript and handed to the model as context.
       const kept = new RemoteStore(statePath('sync-remote.json'), (error) => this.ctx.logger.warn('nanomuse cloud: remote turns not saved: %s', message(error)))
       this.kept = kept
+      const promotedSessions = new Set<string>()
       const sync = new SyncEngine({
         relay: new SyncRelay(this.config.baseURL),
         sessions: {
@@ -914,6 +915,36 @@ export default class NanomuseCloud extends Service {
             await ctx.sessionController.rename({ sessionId: sessionId as SessionId, title })
           },
           keep: async (sessionId, line) => kept.add(sessionId, line),
+          promote: async (sessionId, line, title) => {
+            if (!line.text.trim() || promotedSessions.has(sessionId)) return false
+            promotedSessions.add(sessionId)
+            const signal = new AbortController().signal
+            const inspection = await ctx.sessionController
+              .inspect(sessionId as SessionId, signal)
+              .catch(() => undefined)
+            if (inspection?.events.some((event) => event.type === 'user/message')) return false
+            try {
+              await ctx.sessionController.prompt(
+                {
+                  requestId: line.mid as never,
+                  sessionId: sessionId as SessionId,
+                  mode: 'queue',
+                  content: [{ type: 'text', text: line.text }],
+                },
+                signal,
+              )
+              // The prompt opens a turn, which is what the harness lists a chat by. The
+              // answer is not needed: stop it, then put the chat's own name back (the title
+              // generator may have replaced it with "Untitled" before the abort).
+              ctx.sessionController.cancel({ sessionId: sessionId as SessionId })
+              if (title) await ctx.sessionController.rename({ sessionId: sessionId as SessionId, title }).catch(() => undefined)
+            } catch {
+              // a failed promotion must not eat the line: the caller keeps it as a remote row
+            }
+            // false: the line still goes to the remote store; the prompt was only to make
+            // the session non-blank, not to consume the message
+            return false
+          },
           remote: (sessionId) => kept.linesOf(sessionId),
           forget: async (sessionId, mid) => kept.remove(sessionId, mid),
           // another account signed in (C10): the last account's turns from elsewhere go; its mapping stays

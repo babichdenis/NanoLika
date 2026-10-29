@@ -60,10 +60,17 @@ export function useSyncList(): SyncList {
   const [list, setList] = useState<SyncList>(NO_SYNC)
   useEffect(() => {
     let alive = true
-    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
-      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
-      .catch(() => undefined)
-    return () => { alive = false }
+    const load = () => {
+      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
+        .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
+        .catch(() => undefined)
+    }
+    void load()
+    // A conversation that arrives from a messenger is put in the cloud after this column has
+    // mounted; the revision is not always the frame that tells the browser, so read the view
+    // again on a slow tick. Nothing else in the column depends on a second of delay.
+    const timer = window.setInterval(load, 5000)
+    return () => { alive = false; window.clearInterval(timer) }
   }, [rev])
   return list
 }
@@ -324,8 +331,8 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   // harness's session list does not carry the still-empty session yet: the row is built from
   // the sync view, so the MAX chat cannot be invisible on the computer while the web sees it.
   const syncedOnly = [...sync.sessions]
-    .filter((id) => !state.byId[id] && !sync.foreign.has(id) && !archivedSet.has(id))
-    .map((id): ChatSummary => ({ id, displayTitle: sync.titles[id] || t('chBlank'), running: false, retainedBy: {}, blank: false, updatedAt: Date.now() }))
+    .filter((id) => (!state.ids.includes(id) || !state.byId[id]) && !sync.foreign.has(id) && !archivedSet.has(id))
+    .map((id): ChatSummary => state.byId[id] ?? ({ id, displayTitle: sync.titles[id] || t('chBlank'), running: false, retainedBy: {}, blank: false, updatedAt: Date.now() }))
   const allById: Record<string, ChatSummary> = { ...state.byId, ...Object.fromEntries(syncedOnly.map((row) => [row.id, row])) }
   const visible = [...state.ids, ...syncedOnly.map((row) => row.id)]
     .map((id) => allById[id])

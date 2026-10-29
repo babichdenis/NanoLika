@@ -360,6 +360,12 @@ export interface SyncSessions {
   forget(sessionId: string, mid: string): Promise<void>
   /** Every kept turn dropped (C10: another account signed in). */
   forgetAll?(): Promise<void>
+  /**
+   * Put the first remote user line into an empty session as a real prompt, then stop its
+   * turn. The harness lists a chat only after a prompt; a synced conversation must not wait
+   * for the person to open a row that the column is hiding.
+   */
+  promote?(sessionId: string, line: RemoteLine, title: string): Promise<boolean>
   /** Model-facing context for the session's next step (`agent.inject`): what the other devices said; never shown as the person's words. */
   inject(sessionId: string, text: string): Promise<void>
   /** Persisted remote turns, replayed before a shared task after reconnect. */
@@ -1704,6 +1710,13 @@ export class SyncEngine {
     if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
     const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
+    if (m.role === 'user' && this.options.sessions.promote) {
+      const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
+      if (promoted) {
+        this.state.pulled[m.mid] = sessionId
+        return
+      }
+    }
     try {
       await this.options.sessions.keep(sessionId, line)
       this.state.pulled[m.mid] = sessionId
