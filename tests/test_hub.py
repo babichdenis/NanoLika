@@ -568,7 +568,10 @@ def hub_server(
 
             raise CloudError(400, "bad_code", "wrong code")
         self.api_key = "test-key"
-        return {"api_key": "test-key", "account": {"hint": "s***@example.com", "channel": "email"}}
+        return {
+            "api_key": "test-key",
+            "account": {"id": "acct-test", "hint": "s***@example.com", "channel": "email"},
+        }
 
     async def fake_models(self: CloudClient) -> list[dict[str, Any]]:
         return [{"id": "qwen3.8-27b"}, {"id": "other"}]

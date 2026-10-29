@@ -2477,7 +2477,7 @@ can continue the shared conversation when the desktop is off, but the relay itse
 the agent and local computer files/processes cannot be checked offline.
 
 Validation: targeted Hub, agent prompt and shared-execution tests passed (9 tests); the broader
-Hub/agent/shared-execution set passed 61 tests with one unrelated shared-memory test excluded.
-The unfiltered run exposed that test failing because its expected account-scoped memory row was
-missing; it is outside these edits and remains for separate investigation. Ruff/format and mypy
-over 164 source files passed. No deployment was performed.
+Hub/agent/shared-execution set passed all 62 tests. The initial run found the test relay's fake
+verification response omitted the account ID required by the real API; the fixture now includes
+it, and the account-memory test passes. Ruff/format and mypy over 164 source files passed. No
+deployment was performed.
