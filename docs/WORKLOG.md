@@ -1,3 +1,29 @@
+## 2026-10-29 · Each messenger has its own door; the computer gets the MAX chat
+
+A chat started in MAX appeared in Telegram and the web but not on the computer. Two separate
+rules were missing. First, `TelegramTopics` created a topic for every account conversation,
+including MAX-born ones, and `ChatPicker.targets` delivered every synced event to every
+selected chat and topic; so a MAX conversation was copied into Telegram. Second, the MAX
+thread on the bot still carried a selection for a deleted side conversation (`t_01d93d2d`),
+so its synced messages had no destination; and the desktop had the MAX conversation in its
+catalogue but had never pulled a page, leaving a blank session the chat list did not show.
+
+Added `channels/origin.py` (`telegram`, `max`, `account`) and used it in three places: the
+Telegram topic creator/opener/targets, the `/chats` listing (each messenger shows its own
+chats and the account's, not the other messenger's), and synced delivery (a MAX conversation
+goes to MAX, the web and the computer; a Telegram one to Telegram, the web and the computer;
+account chats go to both). The existing MAX topic 273107 was renamed "Архив · MAX · nanoLika"
+and closed in the bot's state. A chat with a dead selection now falls back to its own thread
+and remembers it, instead of silently losing every synced reply. The desktop sync pulls the
+first page of a messenger conversation that arrives with no cursor, so the MAX chat is a chat
+with a transcript on the computer, not a blank row.
+
+Validation: plugin 433/433 (including a new MAX-chat pull test), origin tests, ruff clean.
+The MAX session `session-8ffd963f` now has `messageCursors[653f7121]=2703` and a 2.1 KB
+transcript. Backups: `/opt/nanolika-bot/backups/chat-origin-20261029T181500Z`,
+`chat-select-20261029T182500Z`, `max-topic-archive-20261029T180500Z`;
+`~/.nanolika/backups/chat-origin-ui-20261029T175500Z`. Commit `2fbb2ab0`.
+
 ## 2026-10-29 · MAX QR reaches the relay; the v7 clip reaches the chat
 
 The MAX QR still did not tie the chat to the account after the webhook fix. The bot log
