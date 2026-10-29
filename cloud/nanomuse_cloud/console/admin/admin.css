@@ -441,3 +441,7 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt #mt-models th:nth-child(7) { width: 112px; }
 .admin .mt #mt-models th:nth-child(8) { width: 116px; }
 .admin .mt #mt-models { min-width: 1180px; }
+.admin .mt .mt-bulk { gap: 8px; }
+.admin .mt .mt-bulk #mt-k { width: 72px; margin: 0; padding: 4px 8px; border: 0; border-radius: 9px; background: var(--fill);
+  color: var(--ink); font: inherit; font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.admin .mt .chip:disabled { opacity: .5; cursor: default; }

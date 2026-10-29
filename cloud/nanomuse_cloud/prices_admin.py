@@ -642,6 +642,26 @@ def _compact(payload: dict) -> dict:
     }
 
 
+# Поля прайса, которые можно пересчитать пачкой: ключ API → поле в rates_rub.
+_BULK_RATE_FIELDS = ("input", "output", "cached_input", "image", "image_2k", "image_input", "second", "speech", "minute")
+
+
+def _bulk_rates(item: dict, multiplier: float) -> dict:
+    rates = {}
+    for key in _BULK_RATE_FIELDS:
+        value = item.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number <= 0:
+            continue
+        rates[key] = round(number * multiplier, 6)
+    return rates
+
+
 def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, router: Any = None) -> None:
     """Включает страницу цен в релей."""
 
@@ -809,6 +829,79 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         _CACHE["compact"] = _compact(payload)
         _CACHE["at"] = now
         return _CACHE["compact"] if compact else payload
+
+    @app.post("/v1/admin/prices/bulk/pricing", dependencies=[Depends(admin_dep)])
+    async def bulk_pricing(body: dict) -> dict:
+        """Пачка: цена клиенту = базовая ставка × множитель.
+
+        Клиент присылает то, что видит в таблице (закупку выбранного маршрута),
+        сервер только умножает и пишет перекрытия model_retail_prices. Так массовая
+        правка не зависит от того, какие маршруты выбраны в момент нажатия.
+        """
+        if cloud is None:
+            raise HTTPException(503, "Model pricing storage is unavailable")
+        try:
+            multiplier = float(body.get("multiplier"))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "multiplier must be a number")
+        if not 0.1 <= multiplier <= 20:
+            raise HTTPException(422, "multiplier must be between 0.1 and 20")
+        items = body.get("items")
+        if not isinstance(items, list) or not items:
+            raise HTTPException(422, "items is empty")
+        dry_run = bool(body.get("dry_run"))
+        updated, failed, preview = 0, [], []
+        for item in items[:2000]:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "")
+            spec = settings.model(model_id) if model_id else None
+            if spec is None:
+                failed.append({"id": model_id, "error": "unknown model"})
+                continue
+            rates = _bulk_rates(item, multiplier)
+            if not rates:
+                failed.append({"id": model_id, "error": "no base rates"})
+                continue
+            if dry_run:
+                preview.append({"id": model_id, "rates_rub": rates})
+                updated += 1
+                continue
+            revision = model_pricing.policy(cloud, spec)["revision"]
+            try:
+                model_pricing.save(cloud, spec, {"revision": revision, "rates_rub": rates})
+                updated += 1
+            except Exception as error:  # noqa: BLE001
+                failed.append({"id": model_id, "error": str(error)[:160]})
+        if not dry_run:
+            _CACHE["at"] = 0.0
+        return {"updated": updated, "total": len(items), "failed": failed[:20], "preview": preview[:10]}
+
+    @app.post("/v1/admin/prices/bulk/visibility", dependencies=[Depends(admin_dep)])
+    async def bulk_visibility(body: dict) -> dict:
+        """Показать или скрыть пачку моделей: одна запись в аудит на всю пачку."""
+        if cloud is None:
+            raise HTTPException(503, "Model visibility storage is unavailable")
+        visible = body.get("visible")
+        if not isinstance(visible, bool):
+            raise HTTPException(422, "visible must be a boolean")
+        ids = body.get("ids")
+        if not isinstance(ids, list) or not ids:
+            raise HTTPException(422, "ids is empty")
+        updated, failed = 0, []
+        for model_id in ids[:2000]:
+            spec = settings.model(str(model_id)) if model_id else None
+            if spec is None:
+                failed.append(str(model_id))
+                continue
+            if visible and not spec.available:
+                failed.append(str(model_id))
+                continue
+            cloud.set_model_visibility(spec.id, visible)
+            updated += 1
+        cloud.note("", "model.visibility.bulk", f"{updated} моделей: {'показать' if visible else 'скрыть'}")
+        _CACHE["at"] = 0.0
+        return {"updated": updated, "total": len(ids), "failed": failed[:20]}
 
     @app.put("/v1/admin/prices/models/{model_id}/pricing", dependencies=[Depends(admin_dep)])
     async def save_model_price(model_id: str, body: dict) -> dict:

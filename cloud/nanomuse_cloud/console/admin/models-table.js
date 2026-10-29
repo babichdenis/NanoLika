@@ -20,6 +20,7 @@ const state = {
   visibility: "all", // all | visible | hidden
   provider: "",
   sellOnly: false,
+  ours: false,   // только российские модели (GigaChat, Yandex, Alice…)
   sort: "name",
   dir: "asc",
   cols: {},   // фильтры колонок: ключ колонки → строка
@@ -185,6 +186,13 @@ function allGroups() {
   return groups;
 }
 
+/** Наши российские модели: id начинается с вендора, а не с западного агрегатора. */
+const RU_VENDOR = /^(sber|gigachat|yandex|alice|tbank|tinkoff|mts|vk|beeline)[-_]/i;
+
+function isOurs(group) {
+  return group.models.some((model) => RU_VENDOR.test(String(model.id || "")));
+}
+
 function hasSell(model) {
   const sell = model.sell || {};
   return Boolean(sell.rub_in || sell.rub_out || sell.hint);
@@ -293,6 +301,7 @@ function readFilters() {
   state.visibility = ["all", "visible", "hidden"].includes(vis) ? vis : "all";
   state.provider = p.get("p") || "";
   state.sellOnly = p.get("sell") === "1";
+  state.ours = p.get("ru") === "1";
   const sort = OLD_SORT[p.get("s")] || p.get("s") || "name";
   state.sort = SORT_KEYS.has(sort) ? sort : "name";
   state.dir = p.get("d") === "desc" ? "desc" : "asc";
@@ -305,6 +314,7 @@ function saveFilters() {
   if (state.visibility !== "all") p.set("vis", state.visibility);
   if (state.provider) p.set("p", state.provider);
   if (state.sellOnly) p.set("sell", "1");
+  if (state.ours) p.set("ru", "1");
   if (state.sort !== "name") p.set("s", state.sort);
   if (state.dir === "desc") p.set("d", "desc");
   if (state.sel) p.set("sel", state.sel);
@@ -320,6 +330,7 @@ function visibleGroups() {
     if (state.visibility === "visible" && !group.listed) return false;
     if (state.visibility === "hidden" && group.listed) return false;
     if (state.sellOnly && !group.models.some(hasSell)) return false;
+    if (state.ours && !isOurs(group)) return false;
     if (state.provider && !group.offers.some((offer) => offer.provider === state.provider)) return false;
     for (const [key, value] of Object.entries(state.cols)) {
       if (value && !matchesColumn(group, key, value)) return false;
@@ -366,6 +377,15 @@ const TEMPLATE = `
           </select>
         </label>
         <button class="chip" id="mt-refresh" type="button">Обновить цены</button>
+      </div>
+      <div class="mt-toolbar mt-bulk">
+        <label class="field">наценка ×
+          <input id="mt-k" type="number" min="0.1" max="20" step="0.05" value="1.3" />
+        </label>
+        <button class="chip" id="mt-apply-k" type="button">Поставить цену</button>
+        <span class="sp"></span>
+        <button class="chip" id="mt-show" type="button">Показать</button>
+        <button class="chip" id="mt-hide" type="button">Скрыть</button>
       </div>
       <p class="fine" id="mt-note"></p>
     </div>
@@ -421,6 +441,12 @@ function drawGroups() {
     button.onclick = () => { state.group = key; draw(); };
     box.append(button);
   }
+  const ours = el("button", "chip mt-ours" + (state.ours ? " on" : ""));
+  ours.type = "button";
+  ours.append(el("span", "", "наши"), el("b", "", String(groups.filter(isOurs).length)));
+  ours.title = "Только российские модели: GigaChat, Yandex, Alice и другие";
+  ours.onclick = () => { state.ours = !state.ours; draw(); };
+  box.append(ours);
 }
 
 function drawProviderFilter() {
@@ -608,6 +634,100 @@ function drawOffers() {
 function drawCounts(rows) {
   const count = $("mt-count");
   if (count) count.textContent = `показано ${rows.length} из ${allGroups().length}`;
+  const models = rows.reduce((sum, group) => sum + group.models.length, 0);
+  const apply = $("mt-apply-k");
+  if (apply) {
+    apply.textContent = `Поставить цену (${rows.length})`;
+    apply.title = `Закупка × множитель для ${models} моделей в отфильтрованных строках`;
+  }
+  const show = $("mt-show");
+  if (show) show.textContent = `Показать (${rows.length})`;
+  const hide = $("mt-hide");
+  if (hide) hide.textContent = `Скрыть (${rows.length})`;
+}
+
+function bulkIds(rows) {
+  const ids = [];
+  for (const group of rows) for (const model of group.models) ids.push(model.id);
+  return ids;
+}
+
+/** Показать или скрыть все модели в отфильтрованных строках. */
+async function bulkVisibility(visible) {
+  const rows = visibleGroups();
+  if (!rows.length) return;
+  const ids = bulkIds(rows);
+  const verb = visible ? "Показать" : "Скрыть";
+  const done = visible ? "Показано" : "Скрыто";
+  if (!confirm(`${verb} ${rows.length} строк (${ids.length} моделей)?`)) return;
+  const button = $(visible ? "mt-show" : "mt-hide");
+  if (button) button.disabled = true;
+  try {
+    const result = await API("POST", "/v1/admin/prices/bulk/visibility", { ids, visible });
+    for (const group of rows) {
+      for (const model of group.models) model.listed = visible;
+      group.listed = visible;
+    }
+    draw();
+    setNote(`${done}: ${result.updated} из ${result.total}.`);
+  } catch (e) {
+    setNote(`Не удалось: ${e.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+/** Цена клиенту = закупка × множитель для всех текстовых моделей в фильтре. */
+async function bulkPricing() {
+  const rows = visibleGroups().filter((group) => group.group === "text" || group.group === "code");
+  if (!rows.length) {
+    setNote("В фильтре нет текстовых моделей.");
+    return;
+  }
+  const input = $("mt-k");
+  const multiplier = Number(input && input.value);
+  if (!Number.isFinite(multiplier) || multiplier < 0.1 || multiplier > 20) {
+    setNote("Множитель должен быть от 0.1 до 20.");
+    return;
+  }
+  const items = [];
+  for (const group of rows) {
+    for (const model of group.models) {
+      const cost = model.cost || {};
+      const item = { id: model.id };
+      if (cost.rub_in) item.input = cost.rub_in;
+      if (cost.rub_out) item.output = cost.rub_out;
+      if (cost.rub_in) item.cached_input = cost.rub_in * 0.1;
+      if (item.input || item.output) items.push(item);
+    }
+  }
+  if (!items.length) {
+    setNote("У моделей в фильтре нет закупки — умножать нечего.");
+    return;
+  }
+  const sample = rows.slice(0, 3).map((group) => {
+    const model = group.primary;
+    const cost = model.cost || {};
+    const oldIn = model.sell && model.sell.rub_in ? fmt(model.sell.rub_in) : "—";
+    const oldOut = model.sell && model.sell.rub_out ? fmt(model.sell.rub_out) : "—";
+    const newIn = cost.rub_in ? fmt(cost.rub_in * multiplier) : "—";
+    const newOut = cost.rub_out ? fmt(cost.rub_out * multiplier) : "—";
+    return `• ${group.name}: ${oldIn} / ${oldOut} → ${newIn} / ${newOut}`;
+  }).join("\n");
+  if (!confirm(`Поставить цену клиенту = закупка × ${multiplier} для ${rows.length} строк (${items.length} моделей)?\n\n${sample}\n\nПрайс изменится сразу.`)) return;
+  const button = $("mt-apply-k");
+  if (button) button.disabled = true;
+  setNote("Записываем цены…");
+  try {
+    const result = await API("POST", "/v1/admin/prices/bulk/pricing", { multiplier, items });
+    await load(true);
+    const failed = (result.failed || []).length;
+    setNote(`Цены обновлены: ${result.updated} из ${result.total}${failed ? `, не удалось: ${failed}` : ""}.`);
+  } catch (e) {
+    setNote(`Не удалось: ${e.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function setNote(text) {
@@ -733,6 +853,12 @@ function wire() {
   if (sell) sell.onchange = () => { state.sellOnly = sell.checked; draw(); };
   const refresh = $("mt-refresh");
   if (refresh) refresh.onclick = refreshPrices;
+  const apply = $("mt-apply-k");
+  if (apply) apply.onclick = bulkPricing;
+  const show = $("mt-show");
+  if (show) show.onclick = () => bulkVisibility(true);
+  const hide = $("mt-hide");
+  if (hide) hide.onclick = () => bulkVisibility(false);
 }
 
 // ── перегородка между таблицами ───────────────────────────────────────────────
