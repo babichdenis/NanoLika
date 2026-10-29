@@ -6,7 +6,7 @@ import {text,locales} from './i18n.js';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
 import {installComposerControls} from './composer-controls.js?v=20261029-fav';
-import {installModelSheet} from './model-sheet.js?v=20261029-fav';
+import {installModelSheet} from './model-sheet.js?v=20261029-pill';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 const $=id=>document.getElementById(id);const sessionKey='nl.web.session.v1';
 const local={get(key){try{return localStorage.getItem(key);}catch{return null;}},set(key,value){try{localStorage.setItem(key,value);}catch{notice(t('storageBlocked'));}},remove(key){try{localStorage.removeItem(key);}catch{}}};
