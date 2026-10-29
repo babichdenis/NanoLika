@@ -158,5 +158,53 @@ class CredentialVault:
                 text = re.sub(rf"(?<![\w.+-]){re.escape(secret)}(?![\w.+-])", mark, text)
         return text
 
+    def redact_stream(self) -> SecretRedactingStream:
+        """Return a streaming redactor that catches secrets split across deltas."""
+        return SecretRedactingStream(self)
 
-__all__ = ["CredentialVault", "VaultError", "PLACEHOLDER_RE"]
+
+class SecretRedactingStream:
+    """Redact provider deltas without releasing a secret split across chunk boundaries."""
+
+    def __init__(self, vault: CredentialVault):
+        self.vault = vault
+        self.pending = ""
+        self.closed = False
+
+    def push(self, text: str) -> str:
+        if self.closed:
+            raise RuntimeError("redacting stream is already finished")
+        if not text:
+            return ""
+        self.pending += text
+        secrets = [value for value in self.vault._load().values() if len(value) >= 3]
+        if not secrets:
+            out, self.pending = self.pending, ""
+            return out
+
+        # Keep the longest value plus its token-boundary context. If a full match straddles
+        # the safe boundary, retain it whole; otherwise its leading characters could escape
+        # before a later delta completes the match.
+        hold = max(map(len, secrets)) + 2
+        safe_until = max(0, len(self.pending) - hold)
+        if safe_until:
+            for secret in secrets:
+                pos = self.pending.find(secret)
+                while pos >= 0:
+                    end = pos + len(secret)
+                    if pos < safe_until < end:
+                        safe_until = pos
+                    pos = self.pending.find(secret, pos + 1)
+
+        ready, self.pending = self.pending[:safe_until], self.pending[safe_until:]
+        return self.vault.redact(ready)
+
+    def finish(self) -> str:
+        if self.closed:
+            return ""
+        self.closed = True
+        ready, self.pending = self.pending, ""
+        return self.vault.redact(ready)
+
+
+__all__ = ["CredentialVault", "SecretRedactingStream", "VaultError", "PLACEHOLDER_RE"]

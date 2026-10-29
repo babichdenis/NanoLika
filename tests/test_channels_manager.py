@@ -3,6 +3,7 @@ scripted model: pairing, allowlist, group policy, replies, approvals by word, de
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Iterator
@@ -126,6 +127,16 @@ def pair(client: TestClient, fake: FakeChannel, sender: str = "u1", chat: str = 
     assert client.post(f"/api/channels/pairing/{code}/approve").status_code == 200
     wait_for(lambda: len(fake.sent) > n)
     return code
+
+
+def test_channel_send_redacts_vault_values(chan):
+    _, service, _, manager, fake = chan
+    secret = "ghp_SuperSecretToken123"
+    service.app.vault.set("GITHUB_TOKEN", secret)
+    asyncio.run_coroutine_threadsafe(
+        manager._send("fake", "chat1", f"Here is {secret}."), manager._loop
+    ).result(timeout=5)
+    assert fake.sent[-1][1] == "Here is [REDACTED:GITHUB_TOKEN]."
 
 
 def test_thread_ids_are_file_safe():

@@ -71,6 +71,17 @@ def test_redact_leaves_one_and_two_letter_values_alone(tmp_path: Path):
     assert vault.redact("code 123 sent") == "code [REDACTED:PIN] sent"
 
 
+def test_stream_redactor_holds_and_masks_secrets_split_across_deltas(tmp_path: Path):
+    vault = CredentialVault(tmp_path / "v.enc", tmp_path / "v.key")
+    secret = "ghp_SuperSecretToken123"
+    vault.set("GITHUB_TOKEN", secret)
+    redactor = vault.redact_stream()
+    chunks = ["Found ", secret[:7], secret[7:16], secret[16:] + " in memory"]
+    output = "".join(redactor.push(chunk) for chunk in chunks) + redactor.finish()
+    assert secret not in output
+    assert output == "Found [REDACTED:GITHUB_TOKEN] in memory"
+
+
 def test_wrong_key_is_reported(tmp_path: Path):
     vault = CredentialVault(tmp_path / "v.enc", tmp_path / "k1.key")
     vault.set("A", "value-123456")

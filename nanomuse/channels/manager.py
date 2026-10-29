@@ -794,6 +794,10 @@ class ChannelManager(ChannelBus):
         )
 
     # ------------------------------------------------------------------ outbound helpers
+    def _redact_outbound(self, text: str) -> str:
+        vault = getattr(self.svc.app, "vault", None)
+        return vault.redact(text) if vault is not None else text
+
     async def _send(
         self, channel: str, chat_id: str, text: str, files: list[str] | None = None
     ) -> None:
@@ -801,6 +805,7 @@ class ChannelManager(ChannelBus):
         if ch is None or not (text.strip() or files):
             return
         try:
+            text = self._redact_outbound(text)
             await ch.send(chat_id, text, files=files)
         except Exception as exc:  # noqa: BLE001 — a vendor refusal; the app shows it
             logger.warning("channel {}: send to {} failed: {}", channel, chat_id, exc)
@@ -840,6 +845,7 @@ class ChannelManager(ChannelBus):
         if live is None or channel is None or not channel.supports_edit:
             return
         content = live.text or (f"_{live.status}_" if live.status else "")
+        content = self._redact_outbound(content)
         if not content.strip() or content == live.shown:
             return
         live.sent_at = time.monotonic()
@@ -863,6 +869,7 @@ class ChannelManager(ChannelBus):
         route = (live.channel, live.chat_id) if live is not None else self.routes.get(thread)
         if route is None:
             return
+        text = self._redact_outbound(text)
         channel = self.channels.get(route[0])
         if channel is None:
             return
@@ -1721,7 +1728,7 @@ class ChannelManager(ChannelBus):
                 ):
                     break
                 try:
-                    await self.channels[channel].send(chat, body)
+                    await self.channels[channel].send(chat, self._redact_outbound(body))
                 except asyncio.CancelledError:
                     raise
                 except Exception:

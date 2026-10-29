@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -316,13 +317,43 @@ class MuseAgent:
         when an embedding endpoint is set up (that is the awaited part)."""
         if self.memory is None or not self.settings.memory.enabled:
             return None
+        vault = self.sentinel.vault
         try:
-            return await self.memory.relevant_async(
+            items = await self.memory.relevant_async(
                 user_input, limit=self.settings.memory.max_inject
             )
         except Exception as exc:  # noqa: BLE001 — recall must never stop a turn
             logger.warning("recall failed ({}); using the keyword ranking", exc)
-            return self.memory.relevant(user_input, limit=self.settings.memory.max_inject)
+            items = self.memory.relevant(user_input, limit=self.settings.memory.max_inject)
+        if vault:
+            try:
+                return [replace(item, content=vault.redact(item.content)) for item in items]
+            except Exception as exc:  # noqa: BLE001 — never send unredacted memories to a model
+                logger.warning("memory redaction failed ({}); omitting recalled memory", exc)
+                return None
+        return items
+
+    def _redact(self, text: str | None) -> str | None:
+        vault = self.sentinel.vault
+        return vault.redact(text) if vault is not None and text else text
+
+    def _stream_delta(self) -> tuple[Callable[[str], None], Callable[[], None]]:
+        vault = self.sentinel.vault
+        if vault is None:
+            return self.ui.on_text_delta, lambda: None
+        redactor = vault.redact_stream()
+
+        def push(text: str) -> None:
+            safe = redactor.push(text)
+            if safe:
+                self.ui.on_text_delta(safe)
+
+        def finish() -> None:
+            safe = redactor.finish()
+            if safe:
+                self.ui.on_text_delta(safe)
+
+        return push, finish
 
     def language_rule(self, user_input: str) -> str:
         """The `## Language` paragraph of the system prompt. A reply language set under
@@ -453,7 +484,16 @@ class MuseAgent:
                 while 0 < cutoff < len(msgs) and msgs[cutoff].role == Role.TOOL:
                     cutoff -= 1
             window = list(msgs[cutoff:])
-        return keep_newest_images(window, self.settings.agent.max_context_images)
+        clean: list[Message] = []
+        for message in keep_newest_images(window, self.settings.agent.max_context_images):
+            copy = message.model_copy(deep=True)
+            copy.content = self._redact(copy.content)
+            copy.reasoning = self._redact(copy.reasoning)
+            if copy.tool_calls:
+                for call in copy.tool_calls:
+                    call.function.arguments = self._redact(call.function.arguments) or "{}"
+            clean.append(copy)
+        return clean
 
     # ------------------------------------------------------------------ stuck detection
     def _is_stuck(self) -> bool:
@@ -513,9 +553,9 @@ class MuseAgent:
                     latest = self.messages[-1].content or ""
                     system_prompt = self.build_system_prompt(latest, await self.recall_for(latest))
                 context = [Message.system(system_prompt), *self.context_messages()]
-                response = await self.llm.ask(
-                    context, tools=tool_params, on_delta=self.ui.on_text_delta
-                )
+                on_delta, finish_stream = self._stream_delta()
+                response = await self.llm.ask(context, tools=tool_params, on_delta=on_delta)
+                finish_stream()
                 if (
                     response.finish_reason == "length"
                     and not response.content
@@ -524,12 +564,14 @@ class MuseAgent:
                     # the model thought until the budget ran out (reasoning models do on a
                     # hard step): the same call once more, with room to think and answer
                     logger.info("reply cut off before it began; asking again with more room")
+                    on_delta, finish_stream = self._stream_delta()
                     response = await self.llm.ask(
                         context,
                         tools=tool_params,
-                        on_delta=self.ui.on_text_delta,
+                        on_delta=on_delta,
                         max_tokens=self.llm.roomier_max_tokens(),
                     )
+                    finish_stream()
                 if self.llm.vision_available is False and not self._told_no_vision:
                     if any(m.images for m in self.messages if m.role == Role.USER):
                         self._told_no_vision = True
@@ -538,21 +580,30 @@ class MuseAgent:
                             "it by name only. It stays in the workspace; a model with vision "
                             "(Settings → Connections) would see it."
                         )
-                assistant = response.to_message()
+                assistant = response.to_message().model_copy(deep=True)
+                assistant.content = self._redact(assistant.content)
+                assistant.reasoning = self._redact(assistant.reasoning)
+                if assistant.tool_calls:
+                    for tool_call in assistant.tool_calls:
+                        tool_call.function.arguments = (
+                            self._redact(tool_call.function.arguments) or "{}"
+                        )
                 assistant.meta.update({"step": step, "usage": response.usage})
                 self.messages.append(assistant)
-                self.ui.on_assistant_message(response.content, response.reasoning)
+                content = self._redact(response.content)
+                reasoning = self._redact(response.reasoning)
+                self.ui.on_assistant_message(content, reasoning)
                 self.audit.record(
                     "assistant_message",
                     step=step,
-                    content=response.content or "",
+                    content=content or "",
                     tool_calls=[tc.function.name for tc in response.tool_calls],
                     usage=response.usage,
                 )
 
                 if not response.tool_calls:
-                    if response.content:
-                        final = response.content
+                    if content:
+                        final = content
                         break
                     empty_replies += 1
                     if empty_replies >= 2:
@@ -580,14 +631,16 @@ class MuseAgent:
                         except Exception as exc:  # noqa: BLE001
                             # the gate's assess will fail the same way, as a tool result
                             summary = f"{call.name}: bad arguments ({type(exc).__name__})"
-                    self.ui.on_tool_call(call, summary)
+                    ui_call = call.model_copy(deep=True)
+                    ui_call.function.arguments = self._redact(ui_call.function.arguments) or "{}"
+                    self.ui.on_tool_call(ui_call, self._redact(summary) or "")
                     if tool is None:
                         result = ToolResult.fail(
                             f"unknown tool '{call.name}'. Available tools: {', '.join(t.name for t in self.tools)}"
                         )
                     else:
                         result = await self.sentinel.guard(call, tool)
-                    self.ui.on_tool_result(call, result)
+                    self.ui.on_tool_result(ui_call, result)
                     self.messages.append(Message.tool(result.for_model(), call.id, call.name))
                     if result.images:
                         pictures.extend(result.images)
@@ -616,10 +669,21 @@ class MuseAgent:
                 # Step budget exhausted: ask for a wrap-up without tools.
                 self.messages.append(Message.user(prompts.MAX_STEPS_PROMPT))
                 context = [Message.system(system_prompt), *self.context_messages()]
-                response = await self.llm.ask(context, tools=None, on_delta=self.ui.on_text_delta)
-                self.messages.append(response.to_message())
-                self.ui.on_assistant_message(response.content, response.reasoning)
-                final = response.content or "(step limit reached)"
+                on_delta, finish_stream = self._stream_delta()
+                response = await self.llm.ask(context, tools=None, on_delta=on_delta)
+                finish_stream()
+                assistant = response.to_message().model_copy(deep=True)
+                assistant.content = self._redact(assistant.content)
+                assistant.reasoning = self._redact(assistant.reasoning)
+                if assistant.tool_calls:
+                    for tool_call in assistant.tool_calls:
+                        tool_call.function.arguments = (
+                            self._redact(tool_call.function.arguments) or "{}"
+                        )
+                self.messages.append(assistant)
+                content = self._redact(response.content)
+                self.ui.on_assistant_message(content, self._redact(response.reasoning))
+                final = content or "(step limit reached)"
             self.state = AgentState.FINISHED
         except Exception:
             self.state = AgentState.ERROR

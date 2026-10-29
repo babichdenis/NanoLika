@@ -15,6 +15,7 @@ from nanomuse.sentinel import AuditLog, Sentinel
 from nanomuse.tools import Goals, Remember, Terminate, ToolCollection
 from nanomuse.tools.base import BaseTool
 from nanomuse.ui import HeadlessUI
+from nanomuse.vault import CredentialVault
 
 
 class Adder(BaseTool):
@@ -27,6 +28,15 @@ class Adder(BaseTool):
 
     async def execute(self, a: float = 0, b: float = 0, **_: Any) -> ToolResult:
         return ToolResult(output=str(a + b))
+
+
+class StreamingUI(HeadlessUI):
+    def __init__(self):
+        super().__init__()
+        self.deltas: list[str] = []
+
+    def on_text_delta(self, text: str) -> None:
+        self.deltas.append(text)
 
 
 def tc(name: str, **args: Any) -> ToolCall:
@@ -69,6 +79,28 @@ async def test_plain_answer_ends_turn(settings: Settings):
     agent, llm, *_ = make_agent(settings, [LLMResponse(content="Just an answer")])
     assert await agent.run("hi") == "Just an answer"
     assert len(llm.calls) == 1
+
+
+async def test_memories_and_legacy_history_are_redacted_before_model_and_reply(settings: Settings):
+    secret = "ghp_SuperSecretToken123"
+    answer = f"I found {secret} in the saved note."
+    ui = StreamingUI()
+    agent, llm, _, memory, _ = make_agent(settings, [LLMResponse(content=answer)], ui=ui)
+    vault = CredentialVault(settings.vault_file, settings.vault_key_file)
+    vault.set("GITHUB_TOKEN", secret)
+    agent.sentinel.vault = vault
+    memory.add(f"The personal token is {secret}.", category="personal")
+    agent.messages.append(Message.user(f"Older message included {secret}."))
+
+    final = await agent.run("What did I save?")
+
+    assert all(secret not in (message.content or "") for message in llm.calls[0]["messages"])
+    assert "[REDACTED:GITHUB_TOKEN]" in llm.calls[0]["messages"][0].content
+    assert secret not in final
+    assert final == "I found [REDACTED:GITHUB_TOKEN] in the saved note."
+    assert secret not in "".join(ui.deltas)
+    assert "[REDACTED:GITHUB_TOKEN]" in "".join(ui.deltas)
+    assert all(secret not in str(payload) for _, payload in ui.events)
 
 
 async def test_unknown_tool_reports_error(settings: Settings):
