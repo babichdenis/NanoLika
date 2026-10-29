@@ -1,3 +1,13 @@
+## 2026-10-29 · A synced chat is a row even before the harness lists its session
+
+The MAX chat still did not appear in the desktop column after the first pull: the cloud
+conversation and its remote transcript were there, but the harness session was still
+`blank` (no local turn), and the list the column reads did not carry it. The sync view now
+also carries the titles of synced sessions, and the column builds a row for a synced
+session the harness has not listed yet — title from the sync view, cloud mark, the usual
+menu. Opening it gives the remote transcript; the conversation is not a second empty chat.
+Commit `141caa07`.
+
 ## 2026-10-29 · Each messenger has its own door; the computer gets the MAX chat
 
 A chat started in MAX appeared in Telegram and the web but not on the computer. Two separate
