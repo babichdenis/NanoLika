@@ -280,10 +280,7 @@ function matchesColumn(group, key, raw) {
     if (op === "<=") return number <= target;
     return number === target;
   }
-  if (column && column.numeric) {
-    const target = parseNumber(query);
-    if (target !== null && number !== null) return number >= target;
-  }
+  // без знака — обычный поиск по тексту: «128» найдёт «128K», «=128» — ровно 128
   return columnText(group, key).toLowerCase().includes(query.toLowerCase());
 }
 
@@ -639,6 +636,7 @@ function drawHead() {
     input.placeholder = column.label;
     input.value = state.cols[column.key] || "";
     input.setAttribute("aria-label", "Фильтр: " + column.label);
+    input.title = "Слово — поиск по тексту; >5, <2, =1, >=100 — сравнение чисел";
     input.oninput = () => { state.cols[column.key] = input.value; drawBody(); };
     const button = el("button", "mt-sort" + (state.sort === column.key ? " on" : ""));
     button.type = "button";
