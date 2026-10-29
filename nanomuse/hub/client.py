@@ -13,6 +13,7 @@ import contextlib
 import json
 import platform
 import ssl
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -392,12 +393,21 @@ class HubClient:
         """Ask device ``to`` to carry out ``action``; the result body, or :class:`HubError`.
         ``on_event`` gets every progress frame (tool steps, approvals, images) meanwhile."""
         call_id = uuid.uuid4().hex[:16]
+        nonce = uuid.uuid4().hex
         loop = asyncio.get_running_loop()
         p = _Pending(done=loop.create_future(), on_event=on_event)
         self._pending[call_id] = p
         try:
             await self._send(
-                {"type": "call", "id": call_id, "to": to, "action": action, "args": args or {}}
+                {
+                    "type": "call",
+                    "id": call_id,
+                    "to": to,
+                    "action": action,
+                    "args": args or {},
+                    "sent_at": int(time.time()),
+                    "nonce": nonce,
+                }
             )
             try:
                 frame = await asyncio.wait_for(p.done, timeout)

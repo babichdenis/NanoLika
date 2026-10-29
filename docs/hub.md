@@ -172,11 +172,11 @@ the key in `hello` instead).
 ← welcome  {device_id, devices:[…], server:{version,frame_limit,time}}
 ← devices  {devices:[{id,name,kind,os,version,actions[],online,last_seen,controllable,ip}]}
 
-→ call     {id, to, action, args}
+→ call     {id, to, action, args, sent_at?, nonce?}
 ← call     {id, from:{id,name,kind}, action, args}          (delivered to the target)
 → event    {id, body}          ← event  {id, from, body}    progress, approvals, images
 → result   {id, ok, body | error, message}                  ← result (to the caller)
-← error    {code, message, id?}   device_offline · not_controllable · self_call · unknown_call · timeout
+← error    {code, message, id?}   device_offline · not_controllable · self_call · unknown_call · duplicate_call_id · stale_call · timeout
                                   too_large · rate_limited · bad_frame · device_online · bad_key · bad_device
 
 → devices  {}        → rename {name}        → forget {device_id}        → ping  ← pong
@@ -232,7 +232,11 @@ so one stalled phone cannot hold the computer calling it. A `call` nobody
 answers within 15 minutes fails with `timeout` to its caller (the relay checks
 when a call or a `ping` arrives, so a caller that pings hears it within a
 minute of the deadline); `forget` of a device that is connected right now is
-refused with `device_online`.
+refused with `device_online`. New callers include `sent_at` (Unix seconds) and a fresh random
+`nonce`; a timestamp more than five minutes from the relay clock is rejected with `stale_call`.
+A call id and nonce can each be used once per account; reuse within 24 hours is rejected with
+`duplicate_call_id` and is not forwarded to the target again. Older clients may omit both fields;
+the relay uses the call id as the nonce and still records it across restarts.
 
 Device ids are per installation (`phone-…`, `pc-…`); names are for people and
 can be changed on the device. A `web` device is never a target and is not

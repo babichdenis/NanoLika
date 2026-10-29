@@ -264,7 +264,7 @@ export class HubClient {
         reject(new HubError('timeout', `${action}: the device did not answer within ${Math.round(timeoutMs / 1000)}s`))
       }, timeoutMs)
       this.pending.set(id, entry)
-      this.send({ type: 'call', id, to, action, args })
+      this.send({ type: 'call', id, to, action, args, sent_at: Math.floor(Date.now() / 1000), nonce: crypto.randomUUID() })
     })
   }
 

@@ -327,7 +327,16 @@ class HubClient(
             }, "hub-events").apply { isDaemon = true; start() }
         }
         try {
-            send(JSONObject().put("type", "call").put("id", id).put("to", to).put("action", action).put("args", args))
+            send(
+                JSONObject()
+                    .put("type", "call")
+                    .put("id", id)
+                    .put("to", to)
+                    .put("action", action)
+                    .put("args", args)
+                    .put("sent_at", System.currentTimeMillis() / 1000L)
+                    .put("nonce", UUID.randomUUID().toString().replace("-", ""))
+            )
             if (!p.done.await(timeoutMs, TimeUnit.MILLISECONDS)) throw HubException("timeout", "no answer from the device within ${timeoutMs / 1000} s")
         } finally {
             pending.remove(id)

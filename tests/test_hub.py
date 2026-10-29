@@ -424,6 +424,8 @@ def test_client_connects_calls_and_answers(relay: FakeRelay) -> None:
         # a call out, to the fake phone
         body = await client.call("phone-1", "shell", {"command": "ls"})
         assert body["stdout"].startswith("phone ran: ls")
+        outbound = await asyncio.to_thread(relay.next_frame, "call")
+        assert isinstance(outbound["sent_at"], int) and len(outbound["nonce"]) >= 16
         # a call in, from the fake phone
         await asyncio.to_thread(relay.call_runtime, "shell", {"command": "echo hi"})
         ev = await asyncio.to_thread(relay.next_frame, "event")

@@ -95,6 +95,8 @@ test('a call resolves with the result body, sees events, and fails on an error f
   assert.equal(sent.type, 'call')
   assert.equal(sent.to, 'phone-1')
   assert.equal(sent.action, 'task')
+  assert.equal(typeof sent.sent_at, 'number')
+  assert.equal(typeof sent.nonce, 'string')
   s.push({ type: 'event', id: sent.id, body: { stage: 'tool', name: 'screen' } })
   s.push({ type: 'result', id: sent.id, ok: true, body: { text: 'done' } })
   assert.deepEqual(await p, { text: 'done' })

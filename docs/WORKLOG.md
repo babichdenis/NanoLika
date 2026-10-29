@@ -1,3 +1,20 @@
+## 2026-10-29 · Hub replay protection survives relay restarts
+
+Closed audit item I14 at the relay boundary. Cloud now persists used call IDs and nonces per
+account in SQLite, rejects reused values for 24 hours, and rejects new-format calls whose
+Unix timestamp is over five minutes out of sync. Python, desktop, Android and iOS callers
+send a timestamp and fresh nonce; older clients remain supported with call-ID deduplication.
+Receipts cascade when an account is deleted. Schema creation and migration run in one DB
+transaction. This prevents accidental or captured-frame replay from dispatching the same
+device action again after a restart.
+
+Validation: cloud Hub suite 17/17, runtime Hub suite 27/27, desktop Hub suite 12/12, desktop
+TypeScript check, package build, Python Ruff check/format, and iOS Swift syntax parse passed.
+Commit `df9f1c03` records the change. The full desktop suite could not be evaluated under installed Node 20 (the package requires
+Node 22+ and unrelated bundled tests import `zstdDecompressSync`); Android unit tests could not
+configure because no Android SDK is installed. No production relay was deployed. The isolation
+audit in Downloads records the status. Other conversation-sync changes remain outside this commit.
+
 ## 2026-10-29 · Isolation audit: preserve client experience, separate session state
 
 The owner asked to close the findings in `~/Downloads/NanoLika-isolation-razbor.md`. The

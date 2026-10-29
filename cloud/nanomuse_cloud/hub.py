@@ -9,7 +9,7 @@ command's approval, which is decided on the device that would carry it out.
 Frames are JSON text. From a device:
 
     {"type":"hello", "key": "nm_…"?, "device": {"id","name","kind","os","version","actions":[…]}}
-    {"type":"call",   "id","to","action","args"}         ask another device to do something
+    {"type":"call",   "id","to","action","args","sent_at"?,"nonce"?}  ask another device to do something
     {"type":"result", "id","ok", "body" | "error","message"}   the answer to a call received
     {"type":"event",  "id","body"}                        progress on a call still running
     {"type":"devices"}  {"type":"rename","name"}  {"type":"forget","device_id"}  {"type":"ping"}
@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import re
 import time
 import uuid
@@ -55,6 +56,8 @@ log = logging.getLogger("nanomuse_cloud.hub")
 KINDS = ("phone", "computer", "web")
 HELLO_TIMEOUT_S = 15
 CALL_TTL_S = 15 * 60
+CALL_ID_TTL_S = 24 * 60 * 60
+CALL_CLOCK_SKEW_S = 5 * 60
 _ID = re.compile(r"^[A-Za-z0-9._:-]{4,80}$")
 
 # What one socket may send: frames and bytes per second, sustained, with twice that as a
@@ -207,6 +210,22 @@ class Hub:
         self.online: dict[str, dict[str, Connection]] = {}
         # keyed (account, call id): ids are the callers' own and only unique within an account
         self.pending: dict[tuple[str, str], Pending] = {}
+        self._memory_call_ids: dict[tuple[str, str], int] = {}
+        # Persist call receipts so a replay cannot start the action again after a relay restart.
+        if self.db is not None:
+            with self.db.tx() as c:
+                c.execute(
+                    "CREATE TABLE IF NOT EXISTS hub_call_ids ("
+                    "account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, "
+                    "call_id TEXT NOT NULL, nonce TEXT NOT NULL DEFAULT '', seen_at INTEGER NOT NULL, "
+                    "PRIMARY KEY (account_id, call_id))"
+                )
+                c.execute("CREATE INDEX IF NOT EXISTS hub_call_ids_seen ON hub_call_ids(seen_at)")
+                columns = {row[1] for row in c.execute("PRAGMA table_info(hub_call_ids)")}
+                if "nonce" not in columns:
+                    c.execute("ALTER TABLE hub_call_ids ADD COLUMN nonce TEXT NOT NULL DEFAULT ''")
+                    c.execute("UPDATE hub_call_ids SET nonce=call_id WHERE nonce=''")
+                c.execute("CREATE UNIQUE INDEX IF NOT EXISTS hub_call_ids_nonce ON hub_call_ids(account_id, nonce)")
         # for the operator's self-check: frames dropped and sockets closed for flooding, ever
         self.dropped_total = 0
         self.flood_closes = 0
@@ -334,16 +353,27 @@ class Hub:
             raise CloudError(409, "device_session_unknown", "Open the app once to identify its sign-in before disconnecting it")
         shared = any(c.device_id != device_id and c.key_hash == key_hash for c in live.values())
         with self.db.tx() as c:
-            shared = shared or c.execute("SELECT 1 FROM devices WHERE account_id=? AND id<>? AND key_hash=? LIMIT 1", (caller.account_id, device_id, key_hash)).fetchone() is not None
+            shared = (
+                shared
+                or c.execute(
+                    "SELECT 1 FROM devices WHERE account_id=? AND id<>? AND key_hash=? LIMIT 1", (caller.account_id, device_id, key_hash)
+                ).fetchone()
+                is not None
+            )
         if key_hash == caller.key_hash or shared:
-            raise CloudError(409, "device_shared_session", "This sign-in is shared; sign out in the computer app to keep other devices signed in")
+            raise CloudError(
+                409, "device_shared_session", "This sign-in is shared; sign out in the computer app to keep other devices signed in"
+            )
         with self.db.tx() as c:
             # Ownership is checked again in the write transaction. Never infer a session
             # from a device name or expose the credential hash in the devices API.
             key = c.execute("SELECT 1 FROM api_keys WHERE account_id=? AND key_hash=?", (caller.account_id, key_hash)).fetchone()
             if key is None:
                 raise CloudError(409, "device_session_unknown", "The device sign-in is not available")
-            c.execute("UPDATE api_keys SET revoked_at=? WHERE account_id=? AND key_hash=? AND revoked_at IS NULL", (now(), caller.account_id, key_hash))
+            c.execute(
+                "UPDATE api_keys SET revoked_at=? WHERE account_id=? AND key_hash=? AND revoked_at IS NULL",
+                (now(), caller.account_id, key_hash),
+            )
             c.execute("DELETE FROM devices WHERE account_id=? AND id=?", (caller.account_id, device_id))
         self.db.add_event(caller.account_id, "device.disconnected", device_id[:96])
         await self.drop_signed_out(caller.account_id)
@@ -407,7 +437,9 @@ class Hub:
                 await self._close(ws, 4001, e.code)
                 return
         if caller.via == "user":
-            await ws.send_text(json.dumps({"type": "error", "code": "api_key_scope", "message": "Personal API keys cannot connect devices"}))
+            await ws.send_text(
+                json.dumps({"type": "error", "code": "api_key_scope", "message": "Personal API keys cannot connect devices"})
+            )
             await self._close(ws, 4001, "api_key_scope")
             return
         # Device sync is included for every account; tariffs change model discounts, not connectivity.
@@ -510,7 +542,16 @@ class Hub:
             await self._fail_pending_for(old)
             await self._close(old.ws, 4003, "replaced by a newer connection")
         if conn.kind != "web":
-            self.db.upsert_device(conn.account_id, conn.device_id, conn.name, conn.kind, conn.os, conn.version, json.dumps(conn.actions), key_hash=conn.key_hash)
+            self.db.upsert_device(
+                conn.account_id,
+                conn.device_id,
+                conn.name,
+                conn.kind,
+                conn.os,
+                conn.version,
+                json.dumps(conn.actions),
+                key_hash=conn.key_hash,
+            )
         # the id and the account masked like every other line; the device's name is the
         # person's own words and stays out of the log
         log.info("hub: %s %s connected; account %s has %d online", conn.kind, conn.device_id[:12], conn.account_id[:8], len(account))
@@ -577,7 +618,16 @@ class Hub:
             if name:
                 conn.name = name
                 if conn.kind != "web":
-                    self.db.upsert_device(conn.account_id, conn.device_id, name, conn.kind, conn.os, conn.version, json.dumps(conn.actions), key_hash=conn.key_hash)
+                    self.db.upsert_device(
+                        conn.account_id,
+                        conn.device_id,
+                        name,
+                        conn.kind,
+                        conn.os,
+                        conn.version,
+                        json.dumps(conn.actions),
+                        key_hash=conn.key_hash,
+                    )
                 await self.broadcast_devices(conn.account_id)
         elif kind == "forget":
             try:
@@ -593,9 +643,35 @@ class Hub:
         call_id = str(frame.get("id") or "")
         to = str(frame.get("to") or "")
         action = str(frame.get("action") or "")
-        if not call_id or not to or not action:
+        if not call_id or len(call_id) > 80 or not to or not action:
             await conn.send({"type": "error", "id": call_id, "code": "bad_frame", "message": "call needs id, to and action"})
             return
+        sent_at = frame.get("sent_at")
+        nonce_value = frame.get("nonce")
+        if (sent_at is None) != (nonce_value is None):
+            await conn.send({"type": "error", "id": call_id, "code": "bad_frame", "message": "sent_at and nonce must be sent together"})
+            return
+        if nonce_value is not None and (not isinstance(nonce_value, str) or not nonce_value or len(nonce_value) > 80):
+            await conn.send({"type": "error", "id": call_id, "code": "bad_frame", "message": "call nonce is invalid"})
+            return
+        nonce = nonce_value or call_id
+        if sent_at is not None:
+            current = now()
+            if (
+                isinstance(sent_at, bool)
+                or not isinstance(sent_at, (int, float))
+                or (isinstance(sent_at, float) and not math.isfinite(sent_at))
+                or abs(current - sent_at) > CALL_CLOCK_SKEW_S
+            ):
+                await conn.send(
+                    {
+                        "type": "error",
+                        "id": call_id,
+                        "code": "stale_call",
+                        "message": "The call timestamp is too old or out of sync",
+                    }
+                )
+                return
         target = self.online.get(conn.account_id, {}).get(to)
         if target is None or target.closed:
             await conn.send({"type": "error", "id": call_id, "code": "device_offline", "message": "That device is not connected"})
@@ -609,9 +685,41 @@ class Hub:
             await conn.send({"type": "error", "id": call_id, "code": "self_call", "message": "That is this device"})
             return
         await self._sweep()
-        self.pending[(conn.account_id, call_id)] = Pending(call_id=call_id, caller=conn.device_id, target=to, account_id=conn.account_id)
+        key = (conn.account_id, call_id)
+        if not self._claim_call_id(conn.account_id, call_id, nonce):
+            await conn.send(
+                {
+                    "type": "error",
+                    "id": call_id,
+                    "code": "duplicate_call_id",
+                    "message": "That call id was already used",
+                }
+            )
+            return
+        self.pending[key] = Pending(call_id=call_id, caller=conn.device_id, target=to, account_id=conn.account_id)
         args = frame.get("args") if isinstance(frame.get("args"), dict) else {}
         await target.send({"type": "call", "id": call_id, "from": conn.brief(), "action": action, "args": args})
+
+    def _claim_call_id(self, account_id: str, call_id: str, nonce: str = "") -> bool:
+        """Atomically reserve an id across relay instances and restarts for the replay window."""
+        current = now()
+        nonce = nonce or call_id
+        if self.db is None:  # lightweight in-memory Hub fixtures do not route real calls
+            key = (account_id, call_id)
+            cutoff = current - CALL_ID_TTL_S
+            self._memory_call_ids = {seen: started for seen, started in self._memory_call_ids.items() if started >= cutoff}
+            nonce_key = (account_id, "nonce:" + nonce)
+            if key in self._memory_call_ids or nonce_key in self._memory_call_ids:
+                return False
+            self._memory_call_ids[key] = current
+            self._memory_call_ids[nonce_key] = current
+            return True
+        with self.db.tx() as c:
+            inserted = c.execute(
+                "INSERT OR IGNORE INTO hub_call_ids(account_id, call_id, nonce, seen_at) VALUES(?, ?, ?, ?)",
+                (account_id, call_id, nonce, current),
+            )
+            return inserted.rowcount == 1
 
     async def _answer(self, conn: Connection, frame: dict) -> None:
         call_id = str(frame.get("id") or "")
@@ -633,13 +741,17 @@ class Hub:
 
     async def _sweep(self) -> None:
         """Calls nobody answered in time are dropped, and the caller hears so instead of waiting for its own clock."""
-        cutoff = now() - CALL_TTL_S
+        current = now()
+        cutoff = current - CALL_TTL_S
         for key, p in list(self.pending.items()):
             if p.started < cutoff:
                 del self.pending[key]
                 caller = self.online.get(p.account_id, {}).get(p.caller)
                 if caller:
                     await caller.send({"type": "error", "id": p.call_id, "code": "timeout", "message": "the device did not answer in time"})
+        if self.db is not None:
+            with self.db.tx() as c:
+                c.execute("DELETE FROM hub_call_ids WHERE seen_at < ?", (current - CALL_ID_TTL_S,))
 
 
 def _loads(raw: str):

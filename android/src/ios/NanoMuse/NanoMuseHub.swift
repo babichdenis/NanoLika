@@ -388,7 +388,15 @@ final class NanoMuseHub: ObservableObject {
                 cont.resume(with: result.mapError { $0 as Error })
             }
             if let onEvent { eventHandlers[id] = onEvent }
-            send(["type": "call", "id": id, "to": to, "action": action, "args": args])
+            send([
+                "type": "call",
+                "id": id,
+                "to": to,
+                "action": action,
+                "args": args,
+                "sent_at": Date().timeIntervalSince1970,
+                "nonce": UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")
+            ])
             // The timer ends with the answer, so a long timeout does not keep the hub alive for nothing.
             timer = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))

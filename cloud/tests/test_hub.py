@@ -15,7 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 from nanomuse_cloud.api import create_app
 from nanomuse_cloud.config import Settings
 from nanomuse_cloud.db import Database
-from nanomuse_cloud.hub import SEND_QUEUE_FRAMES, Connection
+from nanomuse_cloud.hub import SEND_QUEUE_FRAMES, Connection, Hub
 from nanomuse_cloud.senders import LogSender
 from nanomuse_cloud.service import Cloud
 
@@ -74,7 +74,17 @@ def test_two_devices_route_calls_and_results(client):
         assert pc_row["actions"] == ["info", "shell", "screen"] and pc_row["controllable"] is True
 
         # phone → pc: a call, progress, then the result; each lands on the right side.
-        phone.send_json({"type": "call", "id": "c1", "to": "pc-1", "action": "shell", "args": {"command": "uname"}})
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "c1",
+                "to": "pc-1",
+                "action": "shell",
+                "args": {"command": "uname"},
+                "sent_at": int(time.time()),
+                "nonce": "nonce-c1",
+            }
+        )
         call = pc.receive_json()
         assert call == {
             "type": "call",
@@ -83,6 +93,24 @@ def test_two_devices_route_calls_and_results(client):
             "action": "shell",
             "args": {"command": "uname"},
         }
+        # A repeated id cannot replace or repeat the live operation.
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "c1",
+                "to": "pc-1",
+                "action": "shell",
+                "args": {"command": "rm -rf /"},
+            }
+        )
+        duplicate = phone.receive_json()
+        assert duplicate == {
+            "type": "error",
+            "id": "c1",
+            "code": "duplicate_call_id",
+            "message": "That call id was already used",
+        }
+        assert len(client.app.state.hub.pending) == 1
         pc.send_json({"type": "event", "id": "c1", "body": {"stage": "running"}})
         ev = phone.receive_json()
         assert ev["type"] == "event" and ev["body"] == {"stage": "running"} and ev["from"]["id"] == "pc-1"
@@ -100,6 +128,67 @@ def test_two_devices_route_calls_and_results(client):
         phone.send_json({"type": "result", "id": "c2", "ok": False, "error": "denied", "message": "no"})
         r2 = pc.receive_json()
         assert r2["ok"] is False and r2["error"] == "denied"
+
+        # Completed IDs remain reserved so an old frame cannot run again.
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "c2",
+                "to": "pc-1",
+                "action": "shell",
+                "args": {"command": "uname"},
+            }
+        )
+        duplicate_done = phone.receive_json()
+        assert duplicate_done["code"] == "duplicate_call_id" and duplicate_done["id"] == "c2"
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "new-call-id",
+                "to": "pc-1",
+                "action": "shell",
+                "args": {"command": "uname"},
+                "sent_at": int(time.time()),
+                "nonce": "nonce-c1",
+            }
+        )
+        assert phone.receive_json()["code"] == "duplicate_call_id"
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "old-call-id",
+                "to": "pc-1",
+                "action": "shell",
+                "args": {"command": "uname"},
+                "sent_at": int(time.time()) - 600,
+                "nonce": "stale-nonce",
+            }
+        )
+        assert phone.receive_json()["code"] == "stale_call"
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "huge-timestamp",
+                "to": "pc-1",
+                "action": "shell",
+                "sent_at": 10**1000,
+                "nonce": "huge-timestamp-nonce",
+            }
+        )
+        assert phone.receive_json()["code"] == "stale_call"
+        phone.send_json(
+            {
+                "type": "call",
+                "id": "partial-metadata",
+                "to": "pc-1",
+                "action": "shell",
+                "sent_at": int(time.time()),
+            }
+        )
+        assert phone.receive_json()["code"] == "bad_frame"
+        restarted = Hub(client.app.state.cloud)
+        account = client.app.state.cloud.authenticate(key)
+        assert not restarted._claim_call_id(account.account_id, "c1", "nonce-c1")
 
         # Calling yourself, or a device that is not there.
         pc.send_json({"type": "call", "id": "c3", "to": "pc-1", "action": "info", "args": {}})
