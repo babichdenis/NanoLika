@@ -90,6 +90,10 @@ class FakeSyncRelay:
         self.pushes: list[dict[str, Any]] = []
         self.pulls: list[dict[str, Any]] = []
         self.working_calls: list[dict[str, Any]] = []
+        self.message_calls: list[dict[str, Any]] = []
+        self.lease_calls: list[dict[str, Any]] = []
+        self.leases: dict[str, dict[str, Any]] = {}
+        self.claims: dict[tuple[str, str, str], tuple[str, float]] = {}
         self.calls: list[str] = []
         self.fail: CloudError | None = None
         self.fail_working: CloudError | None = None
@@ -227,10 +231,72 @@ class FakeSyncRelay:
             raise CloudError(404, "no_conversation", "none")
         self.working_calls.append({"cid": cid, "working": working, "device": device})
 
+    async def lease(
+        self,
+        cid: str,
+        device: str,
+        turn: str,
+        ttl: int = 120,
+        force: bool = False,
+        take: bool = True,
+    ) -> dict[str, Any]:
+        self._check("lease")
+        if cid not in self.convs:
+            raise CloudError(404, "no_conversation", "none")
+        holder = self.leases.get(cid)
+        if holder is not None and holder["device"] != device and not force:
+            if not take:
+                return {"ok": False, "holder": dict(holder)}
+            raise CloudError(409, "conversation_busy", "busy", {"holder": dict(holder)})
+        holder = {
+            "device": device,
+            "name": self.names.get(device, ""),
+            "turn": turn,
+            "expires_at": int(time.time()) + ttl,
+        }
+        self.leases[cid] = holder
+        self.lease_calls.append({"cid": cid, "device": device, "turn": turn, "force": force})
+        return {"ok": True, "holder": dict(holder)}
+
+    async def renew_lease(self, cid: str, device: str, turn: str, ttl: int = 120) -> dict[str, Any]:
+        self._check("renew_lease")
+        holder = self.leases.get(cid)
+        if holder is None:
+            raise CloudError(409, "lease_lost", "lost")
+        if holder["device"] != device or holder["turn"] != turn:
+            raise CloudError(409, "conversation_busy", "busy", {"holder": dict(holder)})
+        holder["expires_at"] = int(time.time()) + ttl
+        return {"ok": True, "holder": dict(holder)}
+
+    async def release_lease(self, cid: str, device: str, turn: str) -> None:
+        self._check("release_lease")
+        holder = self.leases.get(cid)
+        if holder is not None and holder["device"] == device and holder["turn"] == turn:
+            del self.leases[cid]
+
+    async def claim_delivery(
+        self, mid: str, channel: str, chat: str, device: str
+    ) -> dict[str, Any]:
+        self._check("claim_delivery")
+        key = (mid, channel, chat)
+        held = self.claims.get(key)
+        if held is not None and held[0] != device and held[1] > time.time() - 60:
+            raise CloudError(409, "delivery_claimed", "claimed", {"holder": {"device": held[0]}})
+        self.claims[key] = (device, time.time())
+        return {"ok": True, "device": device}
+
+    async def release_delivery(self, mid: str, channel: str, chat: str, device: str) -> None:
+        self._check("release_delivery")
+        key = (mid, channel, chat)
+        held = self.claims.get(key)
+        if held is not None and held[0] == device:
+            del self.claims[key]
+
     async def messages(
         self, cid: str, after: int = 0, before: int = 0, limit: int = 100
     ) -> dict[str, Any]:
         self._check("messages")
+        self.message_calls.append({"cid": cid, "after": after, "before": before})
         rows = sorted(
             (m for m in self.msgs.values() if m["cid"] == cid and not m["deleted"]),
             key=lambda m: m["seq"],
@@ -242,7 +308,12 @@ class FakeSyncRelay:
         older = len(rows) > limit
         if older:
             rows = rows[-limit:]
-        return {"messages": [dict(m) for m in rows], "has_older": older}
+        return {
+            "messages": [dict(m) for m in rows],
+            "has_older": older,
+            "cursor": int(rows[-1]["seq"]) if older else self.seq,
+            "through_seq": self.seq,
+        }
 
     async def push(
         self, device: str, conversations: list[dict[str, Any]], messages: list[dict[str, Any]]
@@ -1087,7 +1158,7 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     assert _titles(client) == {"Main chat", "A side", "Nobody's"}
 
     # B signs in: cursor 0, presence gone, A's hidden, a fresh main chat
-    service.sync.working["x"] = {"thread": MAIN_THREAD, "cid": "x", "device": "d", "at": 1}
+    service.sync.working[("x", "d")] = {"thread": MAIN_THREAD, "cid": "x", "device": "d", "at": 1}
     service.sync.state["cursor"] = 99
     service.sync.state["cursors"] = {"main": 99, "all": 99}
     pushes = len(relay.pushes)
@@ -1210,3 +1281,90 @@ def test_own_rows_are_applied_when_the_ledger_is_lost(synced) -> None:
     )
     events = _events(client, MAIN_THREAD)
     assert any(e.get("mid") == mid and e.get("text") == "restored from the relay" for e in events)
+
+
+def test_a_turn_takes_the_relay_lease_and_lets_it_go(synced) -> None:
+    client, service, llm, relay = synced
+    llm.script.append(LLMResponse(content="Answer", finish_reason="stop"))
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    assert cid is not None
+
+    client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "hello"})
+
+    wait_for(lambda: bool(relay.lease_calls))
+    call = relay.lease_calls[0]
+    assert call["cid"] == cid and call["device"] == "pc-self"
+    assert call["turn"].startswith("t_") and call["force"] is False
+    wait_for(lambda: not relay.leases)  # released when the turn ended, not left to expire
+
+
+def test_another_devices_lease_makes_the_turn_wait_then_ask_for_the_chat(
+    synced, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, service, llm, relay = synced
+    monkeypatch.setattr("nanomuse.server.service.LEASE_WAIT_S", 0.2)
+    monkeypatch.setattr("nanomuse.server.service.LEASE_RETRY_S", 0.03)
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    assert cid is not None
+    relay.leases[cid] = {
+        "device": "phone-1",
+        "name": "Pixel 8",
+        "turn": "turn-phone",
+        "expires_at": int(time.time()) + 120,
+    }
+    llm.script.append(LLMResponse(content="Answer from the desk", finish_reason="stop"))
+
+    client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "are you there?"})
+
+    wait_for(lambda: any(c["force"] for c in relay.lease_calls))
+    wait_for(lambda: any(e["type"] == "assistant" for e in _events(client, MAIN_THREAD)))
+    assert relay.lease_calls[-1]["device"] == "pc-self" and relay.lease_calls[-1]["force"] is True
+    wait_for(lambda: not relay.leases)  # the forced lease is let go too
+    notices = [e for e in _events(client, MAIN_THREAD) if e["type"] == "notice"]
+    assert any(n.get("code") == "conversation_busy" and "Pixel 8" in n["text"] for n in notices)
+
+
+def test_channel_delivery_asks_the_relay_who_sends(synced) -> None:
+    client, service, _llm, relay = synced
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    assert cid is not None
+    mid = relay.add_message(cid, "assistant", "reply from the phone", device="phone-1")
+    relay.claims[(mid, "telegram", "42")] = ("phone-1", time.time())
+
+    claim = service.channels._claim_synced_delivery
+    # another machine already sends this reply to this chat: this machine stays quiet
+    assert client.portal.call(claim, mid, "telegram", "42") is False
+    # another channel chat is a separate claim
+    assert client.portal.call(claim, mid, "telegram", "99") is True
+    assert relay.claims[(mid, "telegram", "99")][0] == "pc-self"
+
+
+def test_only_the_first_hydration_reads_the_whole_chat(synced) -> None:
+    client, service, _, relay = synced
+    side = client.post("/api/threads", json={"title": "Telegram topic"}).json()
+    thread = service.threads[side["id"]]
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(thread.id)
+    assert cid is not None
+    for n in range(3):
+        relay.add_message(cid, "user", f"question {n}")
+        relay.add_message(cid, "assistant", f"answer {n}")
+
+    first = client.portal.call(service.sync.hydrate_thread, thread, cid)  # type: ignore[union-attr]
+    assert first == 6
+    assert [(call["after"], call["before"]) for call in relay.message_calls] == [(0, 0)]
+    assert service.sync.state["message_cursors"][cid] == relay.seq
+
+    relay.message_calls.clear()
+    relay.add_message(cid, "user", "new question")
+    second = client.portal.call(service.sync.hydrate_thread, thread, cid)  # type: ignore[union-attr]
+
+    assert second == 7
+    assert relay.message_calls and relay.message_calls[0]["after"] > 0
+    assert all(call["before"] == 0 for call in relay.message_calls), (
+        "no backward paging after the first read"
+    )
+    assert [m.content for m in thread.agent.messages][-1] == "new question"

@@ -69,6 +69,61 @@ class SyncClient:
             "POST", "/v1/sync/working", {"cid": cid, "working": bool(working), "device": device}
         )
 
+    async def lease(
+        self,
+        cid: str,
+        device: str,
+        turn: str,
+        ttl: int = 120,
+        force: bool = False,
+        take: bool = True,
+    ) -> dict[str, Any]:
+        """Take the chat's turn lease; with `take` another device's live lease is 409 and
+        carries the holder, without it the reply says `ok: false`. Old relays have no
+        route: the caller treats 404 as "no lease" and goes on."""
+        return await self.cloud._request(
+            "POST",
+            "/v1/sync/lease",
+            {
+                "cid": cid,
+                "device": device,
+                "turn": turn,
+                "ttl": int(ttl),
+                "force": bool(force),
+                "take": bool(take),
+            },
+        )
+
+    async def renew_lease(self, cid: str, device: str, turn: str, ttl: int = 120) -> dict[str, Any]:
+        return await self.cloud._request(
+            "POST",
+            "/v1/sync/lease/renew",
+            {"cid": cid, "device": device, "turn": turn, "ttl": int(ttl)},
+        )
+
+    async def release_lease(self, cid: str, device: str, turn: str) -> None:
+        await self.cloud._request(
+            "DELETE", "/v1/sync/lease", {"cid": cid, "device": device, "turn": turn}
+        )
+
+    async def claim_delivery(
+        self, mid: str, channel: str, chat: str, device: str
+    ) -> dict[str, Any]:
+        """One machine may deliver one synced message to one channel chat; 409 means another
+        machine is doing it. A 404 on an old relay means the relay cannot arbitrate."""
+        return await self.cloud._request(
+            "POST",
+            "/v1/sync/delivery/claim",
+            {"mid": mid, "channel": channel, "chat": chat, "device": device},
+        )
+
+    async def release_delivery(self, mid: str, channel: str, chat: str, device: str) -> None:
+        await self.cloud._request(
+            "DELETE",
+            "/v1/sync/delivery/claim",
+            {"mid": mid, "channel": channel, "chat": chat, "device": device},
+        )
+
     async def push(
         self, device: str, conversations: list[dict[str, Any]], messages: list[dict[str, Any]]
     ) -> dict[str, Any]:

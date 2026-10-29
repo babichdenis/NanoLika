@@ -82,6 +82,9 @@ PAGE = 500
 TAIL = 300
 # a `working: true` without a `false` stands this long (the device may have lost its network)
 WORKING_TTL_S = 10 * 60
+# a turn lease: long enough for a slow model, short enough for a dead device to recover
+LEASE_TTL_S = 120
+LEASE_RENEW_S = 40
 # how many POSTs one push may make before it lets go (a brand-new device with a long history)
 MAX_ROUNDS = 50
 
@@ -141,7 +144,10 @@ class ConversationSync:
         self._stopped = False
         # presence (C9): cid → {thread, device, device_name, at} for the other devices' turns
         # under way; a frame says so, a reply or ten minutes clears it
-        self.working: dict[str, dict[str, Any]] = {}
+        self.working: dict[tuple[str, str], dict[str, Any]] = {}
+        # the relay's canonical transcript per hydrated cid (S13): the first hydration reads
+        # the whole chat, later ones ask only for rows after `message_cursors[cid]`
+        self._canonical: dict[str, list[Message]] = {}
         # a one-off pull from zero waiting its turn (side chats just turned on)
         self._pull_from_zero = False
         # a 401 from the relay: nothing more until the next sign-in
@@ -345,8 +351,8 @@ class ConversationSync:
         """The other devices' turns under way (C9): ``[{thread, cid, device, device_name,
         at}]``, ``at`` in Unix seconds, entries older than ten minutes dropped."""
         cutoff = int(time.time()) - WORKING_TTL_S
-        for cid in [c for c, w in self.working.items() if int(w.get("at") or 0) < cutoff]:
-            del self.working[cid]
+        for key in [k for k, w in self.working.items() if int(w.get("at") or 0) < cutoff]:
+            del self.working[key]
         return [dict(w) for w in self.working.values()]
 
     # ------------------------------------------------------------------ lifecycle
@@ -392,6 +398,7 @@ class ConversationSync:
         if account_id and account_id != previous:
             self.state.update(account_id=account_id, cursor=0, cursors={"main": 0, "all": 0})
             self.working.clear()
+            self._canonical.clear()
             self._save()
             self._rehome_main(previous, account_id)
             if previous:
@@ -575,6 +582,68 @@ class ConversationSync:
         except Exception as exc:  # noqa: BLE001 — presence is a hint, never worth a retry
             logger.debug("sync: working={} not delivered: {}", working, exc)
 
+    # ------------------------------------------------------------------ turn lease (C12)
+    async def take_turn_lease(
+        self, thread: Thread, turn: str, force: bool = False
+    ) -> tuple[str, dict[str, Any]]:
+        """Ask the relay for the chat's turn lease before a run that answers it.
+
+        ``("held", holder)`` when this device may run, ``("busy", holder)`` when another
+        device is answering, ``("none", {})`` when there is no lease to be had: sync is off,
+        the chat is not synced, the relay is old (404) or cannot be reached. A turn is never
+        lost to a network error: only an explicit ``conversation_busy`` stops it."""
+        if not self.active:
+            return "none", {}
+        cid = self.cid_of(thread.id)
+        if not cid or not self._eligible(thread):
+            return "none", {}
+        self.client.cloud.api_key = self.svc.hub._key()
+        try:
+            out = await self.client.lease(
+                cid, self.svc.hub.device_id, turn, LEASE_TTL_S, force=force
+            )
+        except CloudError as exc:
+            if exc.code == "conversation_busy":
+                return "busy", dict(exc.extra.get("holder") or {})
+            logger.debug("sync: turn lease not taken ({}); the turn runs unguarded", exc)
+            return "none", {}
+        if not out.get("ok"):
+            return "busy", dict(out.get("holder") or {})
+        return "held", dict(out.get("holder") or {})
+
+    async def renew_turn_lease(self, cid: str, turn: str) -> bool:
+        """Keep the lease alive while the model works. True while it may go on: an old
+        relay (404) or a network hiccup is not a reason to stop a turn; a taken-over lease
+        is."""
+        if not self.active:
+            return True
+        self.client.cloud.api_key = self.svc.hub._key()
+        try:
+            await self.client.renew_lease(cid, self.svc.hub.device_id, turn, LEASE_TTL_S)
+        except CloudError as exc:
+            if exc.code in {"conversation_busy", "lease_lost"}:
+                logger.info("sync: the turn lease was taken over by another device")
+                return False
+            return exc.status != 404
+        return True
+
+    def drop_turn_lease(self, cid: str, turn: str) -> None:
+        """The turn is over: let the chat go, off the turn's path. Expiry is the fallback."""
+        if not self.active or self._stopped:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._keep(loop.create_task(self._release_turn_lease(cid, turn), name="sync-lease-release"))
+
+    async def _release_turn_lease(self, cid: str, turn: str) -> None:
+        self.client.cloud.api_key = self.svc.hub._key()
+        try:
+            await self.client.release_lease(cid, self.svc.hub.device_id, turn)
+        except Exception as exc:  # noqa: BLE001 — expiry is the fallback, never a turn's fate
+            logger.debug("sync: turn lease not released: {}", exc)
+
     def thread_changed(self, thread: Thread) -> None:
         """Created or renamed: push now (a rename is one small request)."""
         if self.active and self._eligible(thread):
@@ -582,13 +651,15 @@ class ConversationSync:
 
     def thread_deleted(self, thread_id: str) -> None:
         cid = self.state["cids"].pop(thread_id, None)
+        if cid:
+            self._forget_canonical(cid)
         self.state["titles"].pop(thread_id, None)
         owner = self.state["owners"].pop(thread_id, None)
         if owner and self.state["mains"].get(owner) == thread_id:
             del self.state["mains"][owner]
         self._save()
-        for c in [c for c, w in self.working.items() if w.get("thread") == thread_id]:
-            del self.working[c]
+        for key in [k for k, w in self.working.items() if w.get("thread") == thread_id]:
+            del self.working[key]
         # a side chat with side chats off: nothing of it moves any more, its copy elsewhere stays
         if (
             cid
@@ -623,8 +694,9 @@ class ConversationSync:
             return
         device = str(frame.get("from") or "")
         at = int(frame.get("at") or time.time())
+        key = (cid, device)
         if frame.get("working"):
-            self.working[cid] = {
+            self.working[key] = {
                 "thread": thread.id,
                 "cid": cid,
                 "device": device,
@@ -632,11 +704,8 @@ class ConversationSync:
                 "at": at,
             }
         else:
-            current = self.working.get(cid)
-            # another device's `true` stands: the one that finished is not the one working
-            if current is None or (device and current.get("device") != device):
+            if self.working.pop(key, None) is None:
                 return
-            del self.working[cid]
         self.svc.bus.publish(
             {
                 "kind": "working",
@@ -650,9 +719,8 @@ class ConversationSync:
         )
 
     def _clear_working(self, cid: str, device: str) -> None:
-        """The reply from that device arrived: its line goes."""
-        current = self.working.get(cid)
-        if current is None or current.get("device") != device:
+        """The reply from that device arrived: its line goes; another device's stays."""
+        if self.working.pop((cid, device), None) is None:
             return
         self._apply_working({"cid": cid, "from": device, "working": False, "at": time.time()})
 
@@ -893,6 +961,49 @@ class ConversationSync:
                 self._note_error(exc)
                 raise
 
+    def _relay_message(self, row: dict[str, Any]) -> Message | None:
+        """One relay row as the agent's history message; attachment names only, no bytes."""
+        role = str(row.get("role") or "")
+        if role not in ("user", "assistant"):
+            return None
+        text = str(row.get("text") or "")
+        attachments = row.get("attachments")
+        if role == "user" and isinstance(attachments, list) and attachments:
+            labels = [
+                f"- {str(item.get('name') or 'file')} ({int(item.get('size') or 0)} bytes)"
+                for item in attachments
+                if isinstance(item, dict)
+            ]
+            if labels:
+                text = f"{text}\n\n[Attached files]\n" + "\n".join(labels)
+        message = Message.user(text) if role == "user" else Message.assistant(text)
+        message.meta["mid"] = str(row.get("mid") or "")
+        return message
+
+    def _cache_relay_message(self, cid: str, row: dict[str, Any]) -> None:
+        """Keep the hydrated transcript current when a pull applies a row (S13)."""
+        cached = self._canonical.get(cid)
+        if cached is None:
+            return
+        mid = str(row.get("mid") or "")
+        if not mid:
+            return
+        if row.get("deleted"):
+            cached[:] = [m for m in cached if m.meta.get("mid") != mid]
+            return
+        message = self._relay_message(row)
+        if message is None:
+            return
+        for i, old in enumerate(cached):
+            if old.meta.get("mid") == mid:
+                if old.content != message.content:
+                    cached[i] = message
+                return
+        cached.append(message)
+
+    def _forget_canonical(self, cid: str) -> None:
+        self._canonical.pop(cid, None)
+
     async def hydrate_thread(
         self,
         thread: Thread,
@@ -938,41 +1049,50 @@ class ConversationSync:
             if thread.busy:
                 raise CloudError(409, "conversation_busy", "The conversation is already answering")
             self.client.cloud.api_key = self.svc.hub._key()
-            rows: list[dict[str, Any]] = []
-            before = 0
-            for _page in range(MAX_ROUNDS):
-                page = await self.client.messages(cid, before=before, limit=500)
-                current = [m for m in page.get("messages") or [] if isinstance(m, dict)]
-                if not current:
-                    break
-                rows = current + rows
-                if not page.get("has_older"):
-                    break
-                first_seq = int(current[0].get("seq") or 0)
-                if first_seq <= 0 or first_seq == before:
-                    break
-                before = first_seq
+            cursors = self.state.setdefault("message_cursors", {})
+            cached = self._canonical.get(cid)
+            since = int(cursors.get(cid) or 0)
+            # The whole chat once; after that only the rows that arrived since the cursor
+            # (S13). A restored local session with no cache still gets the full read.
+            incremental = cached is not None and since > 0
+            if incremental:
+                for _page in range(MAX_ROUNDS):
+                    page = await self.client.messages(cid, after=since, limit=500)
+                    current = [m for m in page.get("messages") or [] if isinstance(m, dict)]
+                    for row in current:
+                        self._cache_relay_message(cid, row)
+                    since = int(page.get("cursor") or since)
+                    if not page.get("more") or not current:
+                        break
+                cursors[cid] = since
+            else:
+                rows: list[dict[str, Any]] = []
+                before = 0
+                through = 0
+                for _page in range(MAX_ROUNDS):
+                    page = await self.client.messages(cid, before=before, limit=500)
+                    through = max(through, int(page.get("through_seq") or 0))
+                    current = [m for m in page.get("messages") or [] if isinstance(m, dict)]
+                    if not current:
+                        break
+                    rows = current + rows
+                    if not page.get("has_older"):
+                        break
+                    first_seq = int(current[0].get("seq") or 0)
+                    if first_seq <= 0 or first_seq == before:
+                        break
+                    before = first_seq
+                cached = []
+                for row in rows:
+                    if row.get("deleted"):
+                        continue
+                    message = self._relay_message(row)
+                    if message is not None:
+                        cached.append(message)
+                self._canonical[cid] = cached
+                cursors[cid] = through
 
-            history: list[Message] = []
-            for row in rows:
-                if row.get("deleted"):
-                    continue
-                role = str(row.get("role") or "")
-                if role not in ("user", "assistant"):
-                    continue
-                text = str(row.get("text") or "")
-                attachments = row.get("attachments")
-                if role == "user" and isinstance(attachments, list) and attachments:
-                    labels = [
-                        f"- {str(item.get('name') or 'file')} ({int(item.get('size') or 0)} bytes)"
-                        for item in attachments
-                        if isinstance(item, dict)
-                    ]
-                    if labels:
-                        text = f"{text}\n\n[Attached files]\n" + "\n".join(labels)
-                message = Message.user(text) if role == "user" else Message.assistant(text)
-                message.meta["mid"] = str(row.get("mid") or "")
-                history.append(message)
+            history: list[Message] = list(cached or [])
             # The channel manager may have pushed the inbound message to the shared
             # transcript before handing it to this device. `svc.send()` will add it to
             # the task thread, so remove only that final canonical user row to avoid
@@ -987,6 +1107,7 @@ class ConversationSync:
                 history.pop()
             thread.agent.messages = history
             thread.agent._save_session()
+            self._save()
             return len(history)
 
     async def _pull_locked(self) -> int:
@@ -1145,6 +1266,7 @@ class ConversationSync:
         thread = self.thread_of(cid)
         if thread is None or not self._eligible(thread):
             return
+        self._cache_relay_message(cid, row)
         existing = self._find_event(thread, mid)
         if row.get("deleted"):
             if existing is not None:

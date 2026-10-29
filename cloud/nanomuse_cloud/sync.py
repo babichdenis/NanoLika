@@ -52,6 +52,12 @@ MAX_TAIL = 500
 # how long a device's `working: true` stands without a `working: false` (the device may
 # have lost its network mid-turn; the readers' line goes away on its own)
 WORKING_TTL_S = 10 * 60
+# a turn lease: long enough for a slow model, short enough to recover from a dead device
+LEASE_TTL_S = 120
+LEASE_MIN_TTL_S = 30
+LEASE_MAX_TTL_S = 600
+# a delivery claim is short: a dead machine must not block the retry for long
+DELIVERY_CLAIM_S = 60
 _ID = re.compile(r"^[a-z0-9][a-z0-9._:-]{3,63}$")
 
 
@@ -161,26 +167,24 @@ class Presence:
 
     def __init__(self, clock=time.time):
         self.clock = clock
-        self._live: dict[tuple[str, str], dict] = {}
+        # (account, cid, device) → one turn; two devices may work on one chat at once
+        self._live: dict[tuple[str, str, str], dict] = {}
 
     def set(self, account_id: str, cid: str, device: str, device_name: str, working: bool) -> dict:
         """Record the change; returns the frame body the hub sends (without `type`)."""
         at = int(self.clock())
-        key = (account_id, cid)
+        key = (account_id, cid, device)
         if working:
             self._live[key] = {"cid": cid, "from": device, "device_name": device_name, "at": at}
         else:
-            cur = self._live.get(key)
-            # another device's `true` stands: the one that finished is not the one working
-            if cur is not None and cur["from"] == device:
-                del self._live[key]
+            self._live.pop(key, None)
         return {"cid": cid, "from": device, "device_name": device_name, "working": working, "at": at}
 
     def working(self, account_id: str) -> list[dict]:
-        """The unexpired entries of one account, oldest first."""
+        """The unexpired entries of one account, oldest first — one per device."""
         self._sweep()
-        out = [dict(v) for (acc, _), v in self._live.items() if acc == account_id]
-        out.sort(key=lambda v: v["at"])
+        out = [dict(v) for (acc, _, _), v in self._live.items() if acc == account_id]
+        out.sort(key=lambda v: (v["at"], v["from"]))
         return out
 
     def forget(self, account_id: str) -> None:
@@ -225,6 +229,7 @@ class SyncStore:
             "counts": {"conversations": int(convs), "messages": int(msgs)},
             "limits": dict(LIMITS),
             "working": self.presence.working(account_id),
+            "leases": self._leases(c, account_id),
         }
 
     def state(self, account_id: str) -> dict:
@@ -243,6 +248,7 @@ class SyncStore:
     def _wipe(self, c: sqlite3.Connection, account_id: str) -> None:
         c.execute("DELETE FROM sync_messages WHERE account_id=?", (account_id,))
         c.execute("DELETE FROM sync_conversations WHERE account_id=?", (account_id,))
+        c.execute("DELETE FROM sync_leases WHERE account_id=?", (account_id,))
         self.presence.forget(account_id)
 
     def wipe(self, account_id: str) -> dict:
@@ -345,6 +351,151 @@ class SyncStore:
         if skipped is not None:
             out["skipped"] = skipped
         return out
+
+    def _leases(self, c: sqlite3.Connection, account_id: str) -> list[dict]:
+        t = now()
+        c.execute("DELETE FROM sync_leases WHERE account_id=? AND expires_at<=?", (account_id, t))
+        rows = c.execute(
+            "SELECT cid, device, device_name, turn, taken_at, expires_at FROM sync_leases WHERE account_id=? ORDER BY taken_at",
+            (account_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _lease_holder(self, row: sqlite3.Row | None) -> dict | None:
+        if row is None:
+            return None
+        return {
+            "device": str(row["device"]),
+            "name": str(row["device_name"]),
+            "turn": str(row["turn"]),
+            "expires_at": int(row["expires_at"]),
+        }
+
+    def take_lease(
+        self,
+        account_id: str,
+        cid: str,
+        device: str,
+        turn: str,
+        ttl: int = LEASE_TTL_S,
+        force: bool = False,
+        take: bool = False,
+    ) -> dict:
+        """Take the chat's turn lease. A live lease of another device is 409 for a caller
+        that opts in with `take=True` (the only mode that blocks); everyone else gets the
+        holder and goes on, so a client that never asks is never stopped. `force=True`
+        replaces the holder, and the old device learns on its next renew. Same device may
+        replace its own turn (a restarted client)."""
+        cid_ok = valid_id(cid)
+        if cid_ok is None:
+            raise CloudError(400, "bad_cid", "That is not a conversation id")
+        turn = str(turn or "").strip()[:80]
+        if not turn:
+            raise CloudError(400, "bad_turn", "A turn id is required")
+        device = str(device or "").strip()[:80]
+        if not device:
+            raise CloudError(400, "bad_device", "A device id is required")
+        ttl = max(LEASE_MIN_TTL_S, min(int(ttl or LEASE_TTL_S), LEASE_MAX_TTL_S))
+        with self.db.tx() as c:
+            if not self._enabled(c, account_id):
+                raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            conv = c.execute("SELECT deleted FROM sync_conversations WHERE account_id=? AND cid=?", (account_id, cid_ok)).fetchone()
+            if conv is None or conv["deleted"]:
+                raise CloudError(404, "no_conversation", "No synced conversation with that id")
+            t = now()
+            row = c.execute("SELECT * FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid_ok)).fetchone()
+            if row is not None and int(row["expires_at"]) <= t:
+                c.execute("DELETE FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid_ok))
+                row = None
+            if row is not None and not force and str(row["device"]) != device:
+                holder = self._lease_holder(row)
+                if take:
+                    raise CloudError(409, "conversation_busy", "Another device is answering in this chat", {"holder": holder})
+                return {"ok": False, "holder": holder}
+            name = self._device_names(c, account_id).get(device, "")
+            c.execute(
+                "INSERT INTO sync_leases(account_id, cid, device, device_name, turn, taken_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?) ON CONFLICT(account_id, cid) DO UPDATE SET "
+                "device=excluded.device, device_name=excluded.device_name, turn=excluded.turn, "
+                "taken_at=excluded.taken_at, expires_at=excluded.expires_at",
+                (account_id, cid_ok, device, name, turn, t, t + ttl),
+            )
+            return {"ok": True, "holder": {"device": device, "name": name, "turn": turn, "expires_at": t + ttl}}
+
+    def renew_lease(self, account_id: str, cid: str, device: str, turn: str, ttl: int = LEASE_TTL_S) -> dict:
+        cid_ok = valid_id(cid)
+        if cid_ok is None:
+            raise CloudError(400, "bad_cid", "That is not a conversation id")
+        device = str(device or "").strip()[:80]
+        turn = str(turn or "").strip()[:80]
+        ttl = max(LEASE_MIN_TTL_S, min(int(ttl or LEASE_TTL_S), LEASE_MAX_TTL_S))
+        with self.db.tx() as c:
+            if not self._enabled(c, account_id):
+                raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            t = now()
+            row = c.execute("SELECT * FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid_ok)).fetchone()
+            if row is None or int(row["expires_at"]) <= t:
+                if row is not None:
+                    c.execute("DELETE FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid_ok))
+                raise CloudError(409, "lease_lost", "The turn lease is no longer held", {"holder": self._lease_holder(row)})
+            if str(row["device"]) != device or str(row["turn"]) != turn:
+                raise CloudError(409, "conversation_busy", "Another device is answering in this chat", {"holder": self._lease_holder(row)})
+            c.execute("UPDATE sync_leases SET expires_at=? WHERE account_id=? AND cid=?", (t + ttl, account_id, cid_ok))
+            return {"ok": True, "holder": {"device": device, "name": str(row["device_name"]), "turn": turn, "expires_at": t + ttl}}
+
+    def release_lease(self, account_id: str, cid: str, device: str, turn: str) -> None:
+        cid_ok = valid_id(cid)
+        if cid_ok is None:
+            raise CloudError(400, "bad_cid", "That is not a conversation id")
+        with self.db.tx() as c:
+            c.execute(
+                "DELETE FROM sync_leases WHERE account_id=? AND cid=? AND device=? AND turn=?",
+                (account_id, cid_ok, str(device or "").strip()[:80], str(turn or "").strip()[:80]),
+            )
+
+    def claim_delivery(self, account_id: str, mid: str, channel: str, chat: str, device: str) -> dict:
+        """One machine may send one synced message to one channel chat. 409 hands back the
+        holder; a claim older than a minute is treated as a dead machine and taken over."""
+        mid_ok = valid_id(mid)
+        if mid_ok is None:
+            raise CloudError(400, "bad_mid", "That is not a message id")
+        channel = str(channel or "")[:40]
+        chat = str(chat or "")[:120]
+        device = str(device or "").strip()[:80]
+        if not channel or not chat or not device:
+            raise CloudError(400, "bad_delivery", "channel, chat and device are required")
+        t = now()
+        with self.db.tx() as c:
+            if not self._enabled(c, account_id):
+                raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            made = c.execute(
+                "INSERT OR IGNORE INTO sync_deliveries(account_id, mid, channel, chat, device, claimed_at) VALUES (?,?,?,?,?,?)",
+                (account_id, mid_ok, channel, chat, device, t),
+            ).rowcount
+            if made == 1:
+                return {"ok": True, "device": device}
+            row = c.execute(
+                "SELECT device, claimed_at FROM sync_deliveries WHERE account_id=? AND mid=? AND channel=? AND chat=?",
+                (account_id, mid_ok, channel, chat),
+            ).fetchone()
+            if row is not None and (str(row["device"]) == device or int(row["claimed_at"]) <= t - DELIVERY_CLAIM_S):
+                c.execute(
+                    "UPDATE sync_deliveries SET device=?, claimed_at=? WHERE account_id=? AND mid=? AND channel=? AND chat=?",
+                    (device, t, account_id, mid_ok, channel, chat),
+                )
+                return {"ok": True, "device": device}
+            holder = {"device": str(row["device"])} if row is not None else {}
+            raise CloudError(409, "delivery_claimed", "This message is being delivered by another machine", {"holder": holder})
+
+    def release_delivery(self, account_id: str, mid: str, channel: str, chat: str, device: str) -> None:
+        mid_ok = valid_id(mid)
+        if mid_ok is None:
+            raise CloudError(400, "bad_mid", "That is not a message id")
+        with self.db.tx() as c:
+            c.execute(
+                "DELETE FROM sync_deliveries WHERE account_id=? AND mid=? AND channel=? AND chat=? AND device=?",
+                (account_id, mid_ok, str(channel or "")[:40], str(chat or "")[:120], str(device or "").strip()[:80]),
+            )
 
     def set_working(self, account_id: str, cid: str, device: str, working: bool) -> dict:
         """`POST /v1/sync/working`: presence for one conversation. Returns the frame body the
@@ -468,14 +619,17 @@ class SyncStore:
                     accepted += 1
                 else:
                     next_archived = archived if "archived" in conv else bool(row["archived"])
-                    title_changed = updated_at >= int(row["updated_at"]) and (title != row["title"] or updated_at != int(row["updated_at"]))
+                    # A rename is a fact, not a clock comparison (S10): the relay stamps it
+                    # with its own time, so a device whose clock lags can still rename. A
+                    # timestamp that did not move is not a change, however new the push is.
+                    title_changed = bool(title) and title != str(row["title"])
                     if title_changed or next_archived != bool(row["archived"]):
                         seq = self._next_seq(c, account_id)
                         c.execute(
                             "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, seq=? WHERE account_id=? AND cid=?",
                             (
                                 title if title_changed else row["title"],
-                                max(updated_at, int(row["updated_at"])),
+                                t,
                                 1 if next_archived else 0,
                                 seq,
                                 account_id,
@@ -564,6 +718,7 @@ class SyncStore:
             (t, t, seq, account_id, cid),
         )
         c.execute("DELETE FROM sync_messages WHERE account_id=? AND cid=?", (account_id, cid))
+        c.execute("DELETE FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid))
         return seq
 
     def set_archived(self, account_id: str, cid: str, archived: bool) -> dict:

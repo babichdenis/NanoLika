@@ -238,6 +238,33 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
     account_id    TEXT PRIMARY KEY REFERENCES accounts(id),
     seq           INTEGER NOT NULL DEFAULT 0  -- one counter per account; cursor = its value
 );
+-- 0.30: who is answering in a conversation right now. One lease per account chat,
+-- taken by a client that opts in; expires on its own when a device loses the network.
+CREATE TABLE IF NOT EXISTS sync_leases (
+    account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    cid           TEXT NOT NULL,
+    device        TEXT NOT NULL,
+    device_name   TEXT NOT NULL DEFAULT '',
+    turn          TEXT NOT NULL,
+    taken_at      INTEGER NOT NULL,
+    expires_at    INTEGER NOT NULL,
+    PRIMARY KEY (account_id, cid),
+    FOREIGN KEY (account_id, cid) REFERENCES sync_conversations(account_id, cid) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS sync_leases_expiry ON sync_leases(expires_at);
+-- 0.30: one relay-wide claim per message and channel target, so two machines with the
+-- same bot cannot deliver the same synced reply twice. The local receipt stays a cache.
+CREATE TABLE IF NOT EXISTS sync_deliveries (
+    account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    mid           TEXT NOT NULL,
+    channel       TEXT NOT NULL,
+    chat          TEXT NOT NULL,
+    device        TEXT NOT NULL,
+    claimed_at    INTEGER NOT NULL,
+    PRIMARY KEY (account_id, mid, channel, chat),
+    FOREIGN KEY (account_id, mid) REFERENCES sync_messages(account_id, mid) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS sync_deliveries_age ON sync_deliveries(claimed_at);
 -- 0.22: one number per UTC day, metric and key — the GitHub snapshots the collector takes
 -- (stars, forks, watchers, downloads per asset), the relay's own daily counters (API calls
 -- by group, accounts active by any call, errors by code, sync volume). Counters survive a
@@ -1368,8 +1395,7 @@ class Database:
             cur = c.execute(
                 "INSERT INTO site_messages(at, source, page, ip, ua, email, topic, body, reply, session, code) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (at or now(), source, page[:200], ip[:60], ua[:300], email[:254], topic[:80],
-                 body, reply, session[:80], code[:40]),
+                (at or now(), source, page[:200], ip[:60], ua[:300], email[:254], topic[:80], body, reply, session[:80], code[:40]),
             )
             return int(cur.lastrowid or 0)
 
@@ -2477,7 +2503,9 @@ class Database:
 
     # -- devices (the hub) ---------------------------------------------------------
 
-    def upsert_device(self, account_id: str, device_id: str, name: str, kind: str, os: str, version: str, actions: str, key_hash: str = "") -> None:
+    def upsert_device(
+        self, account_id: str, device_id: str, name: str, kind: str, os: str, version: str, actions: str, key_hash: str = ""
+    ) -> None:
         t = now()
         ip = _client.current().ip
         with self.tx() as c:

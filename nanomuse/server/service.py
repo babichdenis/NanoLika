@@ -9,6 +9,7 @@ user can fire off several requests without waiting for the last one to finish.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import mimetypes
 import re
@@ -58,6 +59,7 @@ from nanomuse.server.providers import ChatGPTSignIn, Providers
 from nanomuse.server.push import PushService
 from nanomuse.server.webui import WebUI, current_thread
 from nanomuse.sync import ConversationSync, parse_mention, system_note
+from nanomuse.sync.engine import LEASE_RENEW_S
 from nanomuse.tools.browser import Browser
 from nanomuse.tools.coding_tool import CodingAgents
 from nanomuse.tools.reminder_tools import Reminders
@@ -99,6 +101,11 @@ IDEA_AREAS = (
     "files",
     "fun",
 )
+
+# a turn waits this long for another device's lease before it asks for the chat outright;
+# the holder is told, and a dead device's lease expires in two minutes by itself
+LEASE_WAIT_S = 90
+LEASE_RETRY_S = 3.0
 
 FEED_PROMPT = """You are {name}, the user's personal agent, writing their personal feed: a few short posts made just for them, to read when they open the app. Think of a thoughtful friend who knows what they care about: a nudge on a goal, something worth knowing about a topic they follow, a small plan for the day, a question worth thinking about, a summary of something you noticed. Be specific to this person; never generic filler.
 
@@ -1264,6 +1271,11 @@ class MuseService:
                 item = thread.inbox.get_nowait()
                 incoming = item if isinstance(item, Incoming) else Incoming(item)
                 text = incoming.text
+                # One device answers a chat at a time (S1). The relay's lease is taken
+                # before the run; another device's live lease makes this turn wait, and
+                # after LEASE_WAIT_S this device asks for the chat outright. An old relay
+                # or a network error means no lease and the turn runs as before.
+                lease_cid, lease_turn = await self._lease_turn(thread)
                 thread.busy = True
                 thread.agent.inbox = thread.inbox
                 if incoming.llm is not None:
@@ -1274,6 +1286,11 @@ class MuseService:
                 # No sentence of its own: each client words the pause between steps
                 # itself ("On it: <the request>") in its language.
                 self.ui.set_status("working", "", thread.id)
+                lease_task: asyncio.Task[None] | None = None
+                if lease_cid:
+                    lease_task = asyncio.create_task(
+                        self._keep_turn_lease(lease_cid, lease_turn), name="sync-lease"
+                    )
                 try:
                     purpose = thread.purposes.pop(text, None)
                     # the first conversation speaks to the person's turns in its own chat;
@@ -1302,6 +1319,12 @@ class MuseService:
                     if thread.agent.state.value == "error":
                         thread.agent.state = thread.agent.state.__class__.IDLE
                 finally:
+                    if lease_task is not None:
+                        lease_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await lease_task
+                    if lease_cid:
+                        self.sync.drop_turn_lease(lease_cid, lease_turn)
                     self.ui.end_run(thread.id)
                     thread.agent.inbox = None
                     self._release_llm(thread)
@@ -1311,6 +1334,63 @@ class MuseService:
                     self.bus.publish({"kind": "thread", "thread": thread.meta()})
         finally:
             current_thread.reset(token)
+
+    async def _lease_turn(self, thread: Thread) -> tuple[str, str]:
+        """``(cid, turn)`` when this turn holds the chat's relay lease; ``("", "")`` when
+        there is no lease to take (sync off, chat not synced, old relay, network). While
+        another device holds it, the person here is told once and the turn waits — then
+        asks for the chat outright, because the person sent a message on *this* device."""
+        sync = self.sync
+        cid = sync.cid_of(thread.id)
+        if not sync.active or not cid or not sync._eligible(thread):
+            return "", ""
+        turn = "t_" + uuid.uuid4().hex[:12]
+        told = False
+        deadline = time.monotonic() + LEASE_WAIT_S
+        while True:
+            state, holder = await sync.take_turn_lease(thread, turn)
+            if state == "held":
+                return cid, turn
+            if state == "none":
+                return "", ""
+            name = str(holder.get("name") or holder.get("device") or "")
+            if not told:
+                told = True
+                self.ui.emit(
+                    {
+                        "type": "notice",
+                        "level": "info",
+                        "code": "conversation_busy",
+                        "thread": thread.id,
+                        "text": (
+                            f"{name or 'Another device'} is answering in this chat; "
+                            "I'll wait for it to finish."
+                        ),
+                    }
+                )
+            if time.monotonic() >= deadline:
+                state, holder = await sync.take_turn_lease(thread, turn, force=True)
+                if state == "held":
+                    self.ui.emit(
+                        {
+                            "type": "notice",
+                            "level": "info",
+                            "code": "conversation_busy",
+                            "thread": thread.id,
+                            "text": "Answering from this device now.",
+                        }
+                    )
+                    return cid, turn
+                if state == "none":
+                    return "", ""
+            await asyncio.sleep(LEASE_RETRY_S)
+
+    async def _keep_turn_lease(self, cid: str, turn: str) -> None:
+        """Renew while the model works; a taken-over lease ends the renewals, not the answer."""
+        while True:
+            await asyncio.sleep(LEASE_RENEW_S)
+            if not await self.sync.renew_turn_lease(cid, turn):
+                return
 
     def _release_llm(self, thread: Thread) -> None:
         """A run ended: the thread goes back to the configured model client. The client the

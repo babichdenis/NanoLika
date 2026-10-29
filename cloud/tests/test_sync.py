@@ -59,6 +59,7 @@ async def test_state_is_on_by_default_and_round_trips_changes():
         "counts": {"conversations": 0, "messages": 0},
         "limits": LIMITS,
         "working": [],
+        "leases": [],
         "paused": False,  # 0.22: the operator's sync switch
     }
 
@@ -608,16 +609,20 @@ async def test_working_is_presence_kept_ten_minutes_in_memory():
     assert len(st["working"]) == 1
     w = st["working"][0]
     assert w["cid"] == main and w["from"] == "pc-1" and w["device_name"] == "Desk" and isinstance(w["at"], int)
-    # another device's `false` does not clear the desk's `true`; the desk's own does
-    await client.post("/v1/sync/working", json={"cid": main, "working": False, "device": "phone-1"}, headers=auth(key))
-    assert len((await client.get("/v1/sync/state", headers=auth(key))).json()["working"]) == 1
-    r = await client.post("/v1/sync/working", json={"cid": main, "working": False}, headers={**auth(key), "X-Nanomuse-Device": "pc-1"})
+    # two devices may work on one chat; one's `false` leaves the other's line
+    await client.post("/v1/sync/working", json={"cid": main, "working": True, "device": "phone-1"}, headers=auth(key))
+    working = (await client.get("/v1/sync/state", headers=auth(key))).json()["working"]
+    assert [(w["from"], w["device_name"]) for w in working] == [("pc-1", "Desk"), ("phone-1", "")]
+    await client.post("/v1/sync/working", json={"cid": main, "working": False, "device": "pc-1"}, headers=auth(key))
+    working = (await client.get("/v1/sync/state", headers=auth(key))).json()["working"]
+    assert [w["from"] for w in working] == ["phone-1"]
+    r = await client.post("/v1/sync/working", json={"cid": main, "working": False}, headers={**auth(key), "X-Nanomuse-Device": "phone-1"})
     assert r.status_code == 204
     assert (await client.get("/v1/sync/state", headers=auth(key))).json()["working"] == []
     # expiry: ten minutes without a `false` and the entry is gone
     store = app.state.sync
     store.presence.set(account_id, main, "pc-1", "Desk", True)
-    store.presence._live[(account_id, main)]["at"] -= 601
+    store.presence._live[(account_id, main, "pc-1")]["at"] -= 601
     assert (await client.get("/v1/sync/state", headers=auth(key))).json()["working"] == []
     # nothing of it in the database
     with cloud.db.tx() as c:
@@ -839,3 +844,174 @@ async def test_main_only_cursor_does_not_skip_side_rows_when_the_scope_widens():
     assert [m["mid"] for m in only_main["messages"]] == [mmid]
     widened = (await client.get(f"/v1/sync/changes?scope=all&since={only_main['cursor']}", headers=auth(key))).json()
     assert [m["mid"] for m in widened["messages"]] == [smid]
+
+
+async def test_a_turn_lease_is_exclusive_expires_and_can_be_forced():
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    account_id = cloud.authenticate(key).account_id
+    cloud.db.upsert_device(account_id, "pc-1", "Desk", "computer", "Linux", "0.1", "[]")
+    cloud.db.upsert_device(account_id, "phone-1", "Pixel", "phone", "Android", "0.1", "[]")
+    cid = uid()
+    await client.post("/v1/sync/changes", json={"device": "pc-1", "conversations": [conv(cid, "main", "Main")]}, headers=auth(key))
+    taken = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "pc-1", "turn": "turn-a", "ttl": 120, "take": True},
+        headers=auth(key),
+    )
+    assert taken.status_code == 200 and taken.json()["holder"]["name"] == "Desk"
+    # a caller that does not opt in only sees the holder; the old clients are never blocked
+    seen = await client.post("/v1/sync/lease", json={"cid": cid, "device": "phone-1", "turn": "turn-b"}, headers=auth(key))
+    assert seen.status_code == 200 and seen.json()["ok"] is False
+    assert seen.json()["holder"]["device"] == "pc-1"
+    refused = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "phone-1", "turn": "turn-b", "take": True},
+        headers=auth(key),
+    )
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "conversation_busy"
+    assert refused.json()["error"]["holder"]["device"] == "pc-1"
+    renewed = await client.post(
+        "/v1/sync/lease/renew", json={"cid": cid, "device": "pc-1", "turn": "turn-a", "ttl": 120}, headers=auth(key)
+    )
+    assert renewed.status_code == 200 and renewed.json()["ok"] is True
+    wrong = await client.post("/v1/sync/lease/renew", json={"cid": cid, "device": "phone-1", "turn": "turn-b"}, headers=auth(key))
+    assert wrong.status_code == 409 and wrong.json()["error"]["code"] == "conversation_busy"
+    forced = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "phone-1", "turn": "turn-b", "force": True, "take": True},
+        headers=auth(key),
+    )
+    assert forced.status_code == 200 and forced.json()["holder"]["device"] == "phone-1"
+    lost = await client.post("/v1/sync/lease/renew", json={"cid": cid, "device": "pc-1", "turn": "turn-a"}, headers=auth(key))
+    assert lost.status_code == 409 and lost.json()["error"]["code"] == "conversation_busy"
+    state = (await client.get("/v1/sync/state", headers=auth(key))).json()
+    assert state["leases"][0]["device"] == "phone-1" and state["leases"][0]["turn"] == "turn-b"
+    released = await client.request("DELETE", "/v1/sync/lease", json={"cid": cid, "device": "phone-1", "turn": "turn-b"}, headers=auth(key))
+    assert released.status_code == 204
+    assert (await client.get("/v1/sync/state", headers=auth(key))).json()["leases"] == []
+    # the lease expires on its own; the next device may take it
+    await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "pc-1", "turn": "turn-c", "ttl": 30, "take": True},
+        headers=auth(key),
+    )
+    with app.state.cloud.db.tx() as c:
+        c.execute("UPDATE sync_leases SET expires_at=0 WHERE account_id=? AND cid=?", (account_id, cid))
+    again = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "phone-1", "turn": "turn-d", "take": True},
+        headers=auth(key),
+    )
+    assert again.status_code == 200 and again.json()["holder"]["device"] == "phone-1"
+
+
+async def test_a_synced_reply_is_delivered_once_across_machines():
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    account_id = cloud.authenticate(key).account_id
+    cloud.db.upsert_device(account_id, "pc-1", "Desk", "computer", "Linux", "0.1", "[]")
+    cloud.db.upsert_device(account_id, "pc-2", "MacBook", "computer", "macOS", "0.1", "[]")
+    cid, mid = uid(), uid()
+    pushed = await client.post(
+        "/v1/sync/changes",
+        json={
+            "device": "pc-1",
+            "conversations": [conv(cid, "main", "Main")],
+            "messages": [msg(mid, cid)],
+        },
+        headers=auth(key),
+    )
+    assert pushed.status_code == 200, pushed.text
+    first = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-1"},
+        headers=auth(key),
+    )
+    assert first.status_code == 200 and first.json()["ok"] is True
+    # the second machine with the same bot is refused, and learns who is sending
+    second = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-2"},
+        headers=auth(key),
+    )
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "delivery_claimed"
+    assert second.json()["error"]["holder"]["device"] == "pc-1"
+    # the same machine may ask again (a retry after an edit); another chat is another claim
+    again = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-1"},
+        headers=auth(key),
+    )
+    assert again.status_code == 200
+    other = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "99", "device": "pc-2"},
+        headers=auth(key),
+    )
+    assert other.status_code == 200
+    released = await client.request(
+        "DELETE",
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-1"},
+        headers=auth(key),
+    )
+    assert released.status_code == 204
+    taken = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-2"},
+        headers=auth(key),
+    )
+    assert taken.status_code == 200
+    # a claim whose machine died goes stale in a minute and may be taken over
+    with app.state.cloud.db.tx() as c:
+        c.execute(
+            "UPDATE sync_deliveries SET claimed_at=claimed_at-61 WHERE account_id=? AND mid=?",
+            (account_id, mid),
+        )
+    after = await client.post(
+        "/v1/sync/delivery/claim",
+        json={"mid": mid, "channel": "telegram", "chat": "42", "device": "pc-1"},
+        headers=auth(key),
+    )
+    assert after.status_code == 200 and after.json()["device"] == "pc-1"
+
+
+async def test_a_lagging_device_can_still_rename_and_a_title_echo_is_not_a_change():
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    cid = uid()
+    created = 1_700_000_000
+    await client.post(
+        "/v1/sync/changes",
+        json={"device": "pc-1", "conversations": [conv(cid, "side", "Old", created_at=created)]},
+        headers=auth(key),
+    )
+    # the phone's clock is a day behind: its updated_at is older than the relay's row
+    r = await client.post(
+        "/v1/sync/changes",
+        json={
+            "device": "phone-1",
+            "conversations": [conv(cid, "side", "A better name", created_at=created, updated_at=created - 86400)],
+        },
+        headers=auth(key),
+    )
+    assert r.status_code == 200
+    catalog = (await client.get("/v1/sync/catalog?client=view", headers=auth(key))).json()
+    row = next(c for c in catalog["conversations"] if c["cid"] == cid)
+    assert row["title"] == "A better name"
+    assert row["updated_at"] >= created
+    # the same title arriving again with a newer client timestamp is not a new change
+    cursor = (await client.get("/v1/sync/state", headers=auth(key))).json()["cursor"]
+    again = await client.post(
+        "/v1/sync/changes",
+        json={
+            "device": "pc-1",
+            "conversations": [conv(cid, "side", "A better name", created_at=created, updated_at=created + 3600)],
+        },
+        headers=auth(key),
+    )
+    assert again.status_code == 200 and again.json()["accepted"] == 0
+    assert (await client.get("/v1/sync/state", headers=auth(key))).json()["cursor"] == cursor

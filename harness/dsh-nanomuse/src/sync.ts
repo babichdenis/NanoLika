@@ -660,8 +660,8 @@ export class SyncEngine {
   private readonly dirty = new Set<string>()
   /** Sessions whose turn started (true) or ended (false) here, told to the relay after the push (C9). */
   private readonly presence = new Map<string, boolean>()
-  /** cid → the other device working on it (C9). */
-  private readonly working = new Map<string, WorkingPresence>()
+  /** cid → device → the other device working on it (C9); two devices may overlap. */
+  private readonly working = new Map<string, Map<string, WorkingPresence>>()
   private pulling: Promise<number> | undefined
   private pushing: Promise<void> | undefined
   private frameCursor = 0
@@ -1097,35 +1097,59 @@ export class SyncEngine {
     this.expireWorking()
     if (!this.owns(sessionId)) return null
     const cid = this.state.cids[sessionId]
-    return (cid && this.working.get(cid)) || null
+    const by = cid ? this.working.get(cid) : undefined
+    if (!by?.size) return null
+    return [...by.values()].sort((a, b) => b.at - a.at)[0] ?? null
   }
 
   /** Whether the line the browser half shows moved. */
   private noteWorking(w: WireWorking, tell: boolean): boolean {
     if (!w.cid || w.from === this.options.deviceId()) return false
     const at = w.at * 1000
-    if (!w.working || Date.now() - at >= WORKING_TTL_MS) return this.working.delete(w.cid)
-    const known = this.working.get(w.cid)
-    if (known && known.from === w.from && known.at >= at) return false
-    this.working.set(w.cid, { from: w.from, deviceName: w.device_name, at })
-    // the line goes away by itself 10 minutes after the last `at`
+    let by = this.working.get(w.cid)
+    if (!w.working || Date.now() - at >= WORKING_TTL_MS) {
+      if (!by) return false
+      const dropped = by.delete(w.from) || by.size === 0
+      if (!by.size) this.working.delete(w.cid)
+      return dropped
+    }
+    const known = by?.get(w.from)
+    if (known && known.at >= at) return false
+    if (!by) {
+      by = new Map()
+      this.working.set(w.cid, by)
+    }
+    by.set(w.from, { from: w.from, deviceName: w.device_name, at })
+    // the line goes away by itself ten minutes after the newest `at` in this chat
     if (this.workingTimer) clearTimeout(this.workingTimer)
+    const until = Math.max(...[...by.values()].map((p) => p.at)) + WORKING_TTL_MS
     this.workingTimer = setTimeout(() => {
       this.workingTimer = undefined
       if (this.expireWorking()) this.changed()
-    }, Math.max(0, at + WORKING_TTL_MS - Date.now()) + 50)
+    }, Math.max(0, until - Date.now()) + 50)
     return tell
   }
 
   private expireWorking(): boolean {
     let dropped = false
-    for (const [cid, w] of this.working) {
-      if (Date.now() - w.at >= WORKING_TTL_MS) {
-        this.working.delete(cid)
-        dropped = true
+    for (const [cid, by] of this.working) {
+      for (const [device, w] of by) {
+        if (Date.now() - w.at >= WORKING_TTL_MS) {
+          by.delete(device)
+          dropped = true
+        }
       }
+      if (!by.size) this.working.delete(cid)
     }
     return dropped
+  }
+
+  /** One device's reply landed: its presence goes, the other device's stays. */
+  private clearWorking(cid: string, device: string): void {
+    const by = this.working.get(cid)
+    if (!by) return
+    by.delete(device)
+    if (!by.size) this.working.delete(cid)
   }
 
   /** Told to the relay after the push: best-effort, once, never blocking (C9). */
@@ -1631,8 +1655,8 @@ export class SyncEngine {
     // main conversation; do not advance the cursor past its final reply.
     const kind = this.state.conversations[m.cid]?.kind
     if (this.catalogSupported !== true && !this.state.sideChats && (kind === 'side' || (kind !== 'main' && sessionId !== this.state.mainSession))) return
-    // the reply arrived: the other device is not working on it any more
-    if (m.role === 'assistant') this.working.delete(m.cid)
+    // the reply arrived: that device is not working on it any more; another device's line stays
+    if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
     const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
     try {

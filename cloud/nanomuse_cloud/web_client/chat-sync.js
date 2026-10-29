@@ -1,8 +1,8 @@
 /* Shared metadata everywhere; bodies and read marks belong to the selected visible chat. */
 export class ChatSync {
- constructor({session,getChats,setChats,current,save,remove,onChange}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.account='';let id;try{id=localStorage.getItem('nl.web.chat-client');if(!id){id='web-'+crypto.randomUUID();localStorage.setItem('nl.web.chat-client',id);}}catch{id='web-'+crypto.randomUUID();}this.device=id;}
+ constructor({session,getChats,setChats,current,save,remove,onChange}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.account='';let id;try{id=localStorage.getItem('nl.web.chat-client');if(!id){id='web-'+crypto.randomUUID();localStorage.setItem('nl.web.chat-client',id);}}catch{id='web-'+crypto.randomUUID();}this.device=id;this.catalogETag='';this.catalogRows=[];this.started=false;this.socket=null;this.socketOpen=false;this.reconnectTimer=null;this.wakeTimer=null;this.pollTimer=null;this.retry=0;}
  run(fn){const task=this.queue.then(fn);this.queue=task.catch(()=>{});return task;}
- async request(path,options,session){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(path,{...options,signal:controller.signal,cache:'no-store',headers:{Authorization:'Bearer '+session.key,'Content-Type':'application/json'}});const data=r.status===204?null:await r.json();if(!r.ok||data?.ok===false){const e=new Error(data?.error?.message||'Chat sync unavailable');e.status=r.status;e.code=data?.error?.code||data?.reason;throw e;}return data;}finally{clearTimeout(timer);}}
+ async request(path,options={},session){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(path,{...options,signal:controller.signal,cache:'no-store',headers:{...(options.headers||{}),Authorization:'Bearer '+session.key,'Content-Type':'application/json'}});if(r.headers.get('etag'))this.catalogETag=r.headers.get('etag');if(r.status===304||r.status===204)return null;const data=await r.json();if(!r.ok||data?.ok===false){const e=new Error(data?.error?.message||'Chat sync unavailable');e.status=r.status;e.code=data?.error?.code||data?.reason;throw e;}return data;}finally{clearTimeout(timer);}}
  valid(session){const now=this.session();return now?.key===session?.key&&now?.owner===session?.owner;}
  /* A chat with nothing to say is not a conversation yet: the first message publishes it. */
  async publish(chat){return this.run(()=>this.upload(chat,this.session()));}
@@ -30,8 +30,11 @@ export class ChatSync {
   const session=this.session();if(!session?.key||!session.owner||!navigator.onLine)return;
   if(this.account!==session.owner){this.account=session.owner;this.cursors.clear();this.known.clear();this.selected='';}
   for(const chat of [...this.getChats()])if(!chat.local&&(!chat.shared||chat.messages.some(m=>!m.shared&&m.content&&(m.role==='user'||!m.interrupted))))await this.upload(chat,session);
-  const result=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{},session);
-  if(!this.valid(session)||result.complete!==true||(result.account_id&&result.account_id!==session.owner))return;
+  const result=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{headers:this.catalogETag?{'If-None-Match':this.catalogETag}:{}},session);
+  if(!this.valid(session))return;
+  if(result===null){/* 304: the list is what this tab already has; the open chat may still have new text */const open=this.current();if(open?.syncCid&&document.visibilityState!=='hidden'){const changed=await this.pull(open,session);if(this.valid(session))this.onChange({messages:changed});}return;}
+  if(result.complete!==true||(result.account_id&&result.account_id!==session.owner))return;
+  this.catalogRows=result.conversations||[];
   const existing=new Map(this.getChats().map(c=>[c.syncCid,c]));const rows=[];const ids=new Set();
   for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;rows.push(chat);await this.save(chat);}
   const deleted=new Set((result.deleted||[]).map(c=>c.cid));
@@ -41,6 +44,23 @@ export class ChatSync {
   const current=this.current();if(current?.syncCid&&ids.has(current.syncCid)&&document.visibilityState!=='hidden')messagesChanged=(await this.pull(current,session))||messagesChanged;
   if(this.valid(session))this.onChange({messages:messagesChanged});
  });this.refreshTask=task.finally(()=>{this.refreshTask=null;});return this.refreshTask;}
+ /* A permanent hub socket replaces the three-second catalogue poll (S8): another device
+    says it pushed, and only then does this tab ask. A quiet relay costs nothing. */
+ start(){if(this.started)return;this.started=true;this.connect();this.pollTimer=setInterval(()=>{if(this.socketOpen)return;const session=this.session();if(session?.key&&navigator.onLine&&document.visibilityState!=='hidden')this.refresh().catch(()=>{});},30000);}
+ stop(){this.started=false;clearInterval(this.pollTimer);clearTimeout(this.reconnectTimer);clearTimeout(this.wakeTimer);this.pollTimer=this.reconnectTimer=this.wakeTimer=null;try{this.socket?.close();}catch{}this.socket=null;this.socketOpen=false;}
+ connect(){
+  if(!this.started)return;
+  const session=this.session();if(!session?.key||!session.owner){this.scheduleReconnect(15000);return;}
+  let socket;try{socket=new WebSocket(new URL('/v1/hub',location.origin).href.replace(/^http/,'ws'));}catch{this.scheduleReconnect(30000);return;}
+  this.socket=socket;
+  socket.onopen=()=>{if(this.socket!==socket)return;this.socketOpen=true;this.retry=0;socket.send(JSON.stringify({type:'hello',key:session.key,device:{id:this.device,name:'nanoLika Web',kind:'web',actions:[]}}));this.refresh().catch(()=>{});};
+  socket.onmessage=event=>{let frame;try{frame=JSON.parse(event.data);}catch{return;}if(frame.type==='sync'){this.wake();}else if(frame.type==='working'){this.onChange({working:frame});}else if(frame.type==='error'&&['bad_key','signed_out'].includes(frame.code)){/* the key is gone: stop asking */this.stop();}};
+  socket.onerror=()=>{};
+  socket.onclose=()=>{if(this.socket===socket)this.socketOpen=false;this.scheduleReconnect();};
+ }
+ scheduleReconnect(delay){if(!this.started)return;clearTimeout(this.reconnectTimer);const wait=delay??Math.min(30000,1000*Math.pow(2,Math.min(this.retry++,5)));this.reconnectTimer=setTimeout(()=>this.connect(),wait);}
+ /* A sync frame: one refresh behind a short quiet window, however many frames arrive. */
+ wake(){if(this.wakeTimer)return;this.wakeTimer=setTimeout(()=>{this.wakeTimer=null;this.refresh().catch(()=>{});},150);}
  /* Only a chat with a conversation id has anything to ask the relay about. */
  async open(chat){return this.run(async()=>{const session=this.session();if(!session?.key||chat.owner!==session.owner)return;if(chat.local||!chat.syncCid)return;this.selected=chat.syncCid;const changed=await this.pull(chat,session);if(this.valid(session))this.onChange({messages:changed});});}
  async pull(chat,session){

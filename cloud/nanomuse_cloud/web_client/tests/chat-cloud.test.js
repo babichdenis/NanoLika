@@ -5,7 +5,7 @@ const source=await readFile(new URL('../chat-sync.js',import.meta.url),'utf8');
 const {ChatSync}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const {locales}=await import('../i18n.js');
 
-function reply(body,status=200){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});}
+function reply(body,status=200,headers={}){return new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json',...headers}});}
 function row(mid,seq,text,role='user'){return {mid,cid:'cid-1',seq,role,text,created_at:seq,deleted:false,truncated:false,attachments:[]};}
 
 /* A relay that answers only what a test plans for, and remembers every request it saw. */
@@ -13,17 +13,18 @@ function relay(plan){
  const calls=[],removed=[],kept=new Map(),session={key:'key-1',owner:'owner'};let chats=[];
  globalThis.localStorage={getItem:key=>kept.has(key)?kept.get(key):null,setItem:(key,value)=>{kept.set(key,String(value));},removeItem:key=>{kept.delete(key);}};
  globalThis.document={visibilityState:'visible'};
+ globalThis.location={origin:'https://relay.test'};
  Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true,writable:true});
  globalThis.fetch=async (path,options={})=>{
-  const method=options.method||'GET';calls.push({path,method});
+  const method=options.method||'GET';calls.push({path,method,headers:options.headers||{}});
   if(method==='DELETE')return new Response(null,{status:204});
-  if(path.startsWith('/v1/sync/catalog'))return reply(plan.catalog);
+  if(path.startsWith('/v1/sync/catalog')){const tag=options.headers?.['If-None-Match'];if(plan.catalogETag&&tag===plan.catalogETag)return new Response(null,{status:304,headers:{ETag:plan.catalogETag}});return reply(plan.catalog,200,plan.catalogETag?{ETag:plan.catalogETag}:{});}
   if(path.includes('/messages'))return reply({account_id:'owner',more:false,has_older:false,cursor:0,through_seq:0,messages:[],...(plan.messages?plan.messages(path):{})});
   if(path==='/v1/sync/changes')return reply({ok:true,rejected:[]});
   if(path.includes('/read'))return reply({seen:0});
   throw new Error('unexpected request '+method+' '+path);
  };
- const sync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;},current:()=>null,save:async chat=>{kept.set(chat.key,chat);},remove:async key=>{removed.push(key);},onChange:()=>{}});
+ const sync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;},current:plan.current||(()=>null),save:async chat=>{kept.set(chat.key,chat);},remove:async key=>{removed.push(key);},onChange:plan.onChange||(()=>{})});
  return {calls,removed,deletes:()=>calls.filter(c=>c.method==='DELETE'),sync};
 }
 function chat(extra){return {key:'owner:cid-1',owner:'owner',title:'Длинная беседа',messages:[],syncCid:'cid-1',shared:true,updated:1000,...extra};}
@@ -118,4 +119,42 @@ test('the new cloud words exist in every language and carry no en or em dash',()
  for(const [name,dict] of Object.entries(locales)){
   for(const key of keys){assert.equal(typeof dict[key],'string',name+' is missing '+key);assert.ok(dict[key].length>0);assert.ok(!dash.test(dict[key]),name+' '+key+' has a dash');}
  }
+});
+
+
+test('the catalogue carries its tag and a 304 leaves this tab\'s list alone',async()=>{
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'One',device:'phone',updated_at:10,unread:0,message_count:1}],deleted:[]},catalogETag:'"rev-1"'});
+ await r.sync.refresh();
+ const first=r.calls.filter(c=>c.path.startsWith('/v1/sync/catalog')).at(-1);
+ assert.equal(first.headers['If-None-Match'],undefined,'the first ask has no tag yet');
+ assert.equal(r.sync.catalogETag,'"rev-1"');
+ const chats=[chat()]; // the rows a 304 must not clear
+ r.sync.setChats(chats);
+ await r.sync.refresh();
+ const second=r.calls.filter(c=>c.path.startsWith('/v1/sync/catalog')).at(-1);
+ assert.equal(second.headers['If-None-Match'],'"rev-1"');
+ assert.deepEqual(r.sync.getChats(),chats);
+});
+
+test('a sync frame replaces the three-second poll',async()=>{
+ const sockets=[];
+ globalThis.WebSocket=class{constructor(url){this.url=url;this.sent=[];this.closed=false;sockets.push(this);}send(value){this.sent.push(JSON.parse(value));}close(){this.closed=true;}};
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[],deleted:[]}});
+ try{
+  r.sync.start();
+  const socket=sockets.at(-1);
+  assert.equal(socket.url,'wss://relay.test/v1/hub');
+  socket.onopen();
+  assert.equal(socket.sent[0].type,'hello');
+  assert.equal(socket.sent[0].device.kind,'web');
+  await r.sync.refresh(); // the hello's own refresh settles before the frame count
+  const before=r.calls.filter(c=>c.path.startsWith('/v1/sync/catalog')).length;
+  socket.onmessage({data:JSON.stringify({type:'sync',cursor:3})});
+  socket.onmessage({data:JSON.stringify({type:'sync',cursor:4})});
+  await new Promise(resolve=>setTimeout(resolve,220));
+  const after=r.calls.filter(c=>c.path.startsWith('/v1/sync/catalog')).length;
+  assert.equal(after,before+1,'two frames inside the quiet window make one refresh');
+  r.sync.stop();
+  assert.equal(socket.closed,true);
+ } finally {r.sync.stop();delete globalThis.WebSocket;}
 });

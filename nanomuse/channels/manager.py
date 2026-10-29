@@ -1630,6 +1630,30 @@ class ChannelManager(ChannelBus):
         self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         self.svc.sync.thread_changed(thread)
 
+    async def _claim_synced_delivery(self, mid: str, channel: str, chat: str) -> bool:
+        """True when this machine may send the reply. The relay arbitrates between machines
+        signed into one account; an old relay (404) or an unreachable one does not block a
+        delivery that a person is waiting for."""
+        sync = self.svc.sync
+        if not sync.active:
+            return True
+        try:
+            await sync.client.claim_delivery(mid, channel, chat, self.svc.hub.device_id)
+        except CloudError as exc:
+            if exc.code == "delivery_claimed":
+                return False
+            logger.debug("sync: delivery claim not taken ({}); sending anyway", exc)
+        return True
+
+    async def _release_synced_delivery(self, mid: str, channel: str, chat: str) -> None:
+        sync = self.svc.sync
+        if not sync.active:
+            return
+        try:
+            await sync.client.release_delivery(mid, channel, chat, self.svc.hub.device_id)
+        except Exception as exc:  # noqa: BLE001 — the claim expires in a minute by itself
+            logger.debug("sync: delivery claim not released: {}", exc)
+
     async def _deliver_synced_channel(self, event: dict[str, Any]) -> None:
         role = str(event.get("type") or "")
         thread = str(event.get("thread") or "")
@@ -1675,6 +1699,12 @@ class ChannelManager(ChannelBus):
                 continue
             if self.sync_receipts.delivered(key):
                 continue
+            # One machine sends one synced message to one channel chat: two desktops with
+            # the same bot used to deliver a reply twice (S12). The local receipt stays a
+            # cache; the relay is the arbiter. An old relay has no route and says yes.
+            if not await self._claim_synced_delivery(mid, channel, chat):
+                continue
+            sent_here = False
             for attempt in range(3):
                 # Re-check after a retry: the person may have switched away.
                 current = self.picker.selected(channel, chat)
@@ -1709,7 +1739,11 @@ class ChannelManager(ChannelBus):
                     )
                 else:
                     self.sync_receipts.mark(key)
+                    sent_here = True
                 break
+            if not sent_here:
+                # let another machine try now, not a minute after our claim goes stale
+                await self._release_synced_delivery(mid, channel, chat)
 
     def welcome_links(self, channel: str) -> list[tuple[str, str]]:
         """Where a chat can go next, as ``(label, url)``, from the channel's own settings.

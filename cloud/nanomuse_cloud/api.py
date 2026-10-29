@@ -1031,6 +1031,74 @@ def create_app(
             cloud.note(caller.account_id, "sync.on" if enabled else "sync.off")
         return out
 
+    @app.post("/v1/sync/lease")
+    async def sync_lease(request: Request, caller: Caller = Depends(sync_dep)) -> dict:
+        """Take the chat's turn lease. 409 `conversation_busy` hands back the holder; a
+        caller that opts in is the only one refused, old clients never ask."""
+        body = await _json(request)
+        try:
+            ttl = int(body.get("ttl") or 120)
+        except (TypeError, ValueError) as exc:
+            raise CloudError(400, "bad_ttl", "ttl is seconds") from exc
+        return sync_store.take_lease(
+            caller.account_id,
+            str(body.get("cid") or ""),
+            str(body.get("device") or ""),
+            str(body.get("turn") or ""),
+            ttl,
+            bool(body.get("force")),
+            bool(body.get("take")),
+        )
+
+    @app.post("/v1/sync/lease/renew")
+    async def sync_lease_renew(request: Request, caller: Caller = Depends(sync_dep)) -> dict:
+        body = await _json(request)
+        try:
+            ttl = int(body.get("ttl") or 120)
+        except (TypeError, ValueError) as exc:
+            raise CloudError(400, "bad_ttl", "ttl is seconds") from exc
+        return sync_store.renew_lease(
+            caller.account_id,
+            str(body.get("cid") or ""),
+            str(body.get("device") or ""),
+            str(body.get("turn") or ""),
+            ttl,
+        )
+
+    @app.delete("/v1/sync/lease", status_code=204)
+    async def sync_lease_release(request: Request, caller: Caller = Depends(sync_dep)) -> Response:
+        body = await _json(request)
+        sync_store.release_lease(
+            caller.account_id,
+            str(body.get("cid") or ""),
+            str(body.get("device") or ""),
+            str(body.get("turn") or ""),
+        )
+        return Response(status_code=204)
+
+    @app.post("/v1/sync/delivery/claim")
+    async def sync_delivery_claim(request: Request, caller: Caller = Depends(sync_dep)) -> dict:
+        body = await _json(request)
+        return sync_store.claim_delivery(
+            caller.account_id,
+            str(body.get("mid") or ""),
+            str(body.get("channel") or ""),
+            str(body.get("chat") or ""),
+            str(body.get("device") or ""),
+        )
+
+    @app.delete("/v1/sync/delivery/claim", status_code=204)
+    async def sync_delivery_release(request: Request, caller: Caller = Depends(sync_dep)) -> Response:
+        body = await _json(request)
+        sync_store.release_delivery(
+            caller.account_id,
+            str(body.get("mid") or ""),
+            str(body.get("channel") or ""),
+            str(body.get("chat") or ""),
+            str(body.get("device") or ""),
+        )
+        return Response(status_code=204)
+
     @app.get("/v1/sync/changes")
     async def sync_changes(
         since: int = 0, limit: int = DEFAULT_PAGE, scope: str = "all", tail: int = 0, caller: Caller = Depends(sync_dep)

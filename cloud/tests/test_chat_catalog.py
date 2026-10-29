@@ -198,3 +198,33 @@ async def test_fold_ignores_unrelated_titles():
     data = (await client.get("/v1/sync/catalog?client=view", headers=a)).json()
     assert len([c for c in data["conversations"] if c["title"] in {"Лента новостей", "Feed на завтра"}]) == 2
     assert not any(c["title"] == "Лента" for c in data["conversations"])
+
+
+async def test_catalog_answers_304_until_something_changes():
+    _, client, a, _, c1, _ = await setup()
+    first = await client.get("/v1/sync/catalog?client=view", headers=a)
+    assert first.status_code == 200 and first.headers["etag"] == f'"{first.json()["rev"]}"'
+    etag = first.headers["etag"]
+    unchanged = await client.get("/v1/sync/catalog?client=view", headers={**a, "If-None-Match": etag})
+    assert unchanged.status_code == 304 and unchanged.content == b""
+    assert unchanged.headers["etag"] == etag
+    # a new message changes the list (unread and last seq), and with it the tag
+    await client.post(
+        "/v1/sync/changes",
+        headers=a,
+        json={"device": "computer", "messages": [msg(uid(), c1, text="new")]},
+    )
+    changed = await client.get("/v1/sync/catalog?client=view", headers={**a, "If-None-Match": etag})
+    assert changed.status_code == 200 and changed.headers["etag"] != etag
+    # reading a chat changes only its unread count, which is in the list too
+    etag = changed.headers["etag"]
+    cursor = changed.json()["cursor"]
+    mark = await client.post(
+        f"/v1/sync/conversations/{c1}/read",
+        headers=a,
+        json={"client": "view", "through_seq": cursor},
+    )
+    assert mark.status_code == 200
+    read = await client.get("/v1/sync/catalog?client=view", headers={**a, "If-None-Match": etag})
+    assert read.status_code == 200 and read.headers["etag"] != etag
+    assert next(row for row in read.json()["conversations"] if row["cid"] == c1)["unread"] == 0

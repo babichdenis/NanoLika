@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
-from fastapi import Depends, Query, Response
+from fastapi import Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import CloudError
@@ -77,13 +79,19 @@ class ChatCatalog:
                     updated_at=max(item["updated_at"], int(r["message_at"])),
                 )
                 output.append(item)
-            return {
+            payload = {
                 "account_id": account,
                 "conversations": output,
                 "deleted": deleted,
                 "cursor": self.store._cursor(c, account),
                 "complete": True,
             }
+            # The same list, byte for byte, gets the same tag: a 3-second poll then costs a
+            # 304 and a few dozen bytes instead of half a megabyte (S8).
+            payload["rev"] = hashlib.sha256(
+                json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+            ).hexdigest()[:32]
+            return payload
 
     def set_archived(self, account: str, cid: str, archived: bool) -> dict:
         return self.store.set_archived(account, cid, archived)
@@ -145,13 +153,19 @@ def install(app: Any, store: Any, caller_dep: Any) -> None:
 
     @app.get("/v1/sync/catalog")
     async def catalog(
+        request: Request,
         response: Response,
         client: str = Query(min_length=4, max_length=80, pattern=r"^[a-zA-Z0-9._:-]+$"),
         device: str = Query(default="", max_length=80),
         caller: Any = Depends(caller_dep),
-    ) -> dict:  # noqa: B008
+    ) -> Any:  # noqa: B008
+        out = service.catalog(caller.account_id, client, device)
+        etag = f'"{out["rev"]}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-store"})
         response.headers["Cache-Control"] = "no-store"
-        return service.catalog(caller.account_id, client, device)
+        response.headers["ETag"] = etag
+        return out
 
     @app.post("/v1/sync/conversations/{cid}/archive")
     async def archive(cid: str, body: ArchiveMark, response: Response, caller: Any = Depends(caller_dep)) -> dict:
