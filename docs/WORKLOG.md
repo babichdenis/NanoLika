@@ -1,3 +1,25 @@
+## 2026-10-29 · Сцена 09 фильма о Лике: телефон и пост в канале
+
+Принят ролик `clip_09_телефон_seedance25.mp4` (14 с, 480p, Seedance 2.5 через Polza, 264,60 ₽),
+лежит в `artifacts/lika-film-v8-dreamina/03_Рулетка_и_возврат_инструментов/` на `.7`.
+Рядом `СЦЕНА_09_ПРИНЯТО.md` и `prompt_15s_телефон_v4_принят.txt`.
+
+Сцена держит два кадра-границы: старт с 11-й секунды `clip_03_take8_v8_UI_chat_layout_v2.mp4`
+(пост с фиксиками и вопрос «Публикуем готовый пост?» уже на экране, руки на клавиатуре),
+финал — тётя с телефоном и опубликованным постом в канале nanoLika, блок контактов с QR.
+
+Главная находка: **Seedance-2-mini не удержать от касания дисплея даже явным запретом и двумя
+референсами — три прогона подряд (v1–v3) кладут палец на экран**. Seedance 2.5 с first+last frame
+сделал правильно с первого раза. Для сцен с руками и техникой брать 2.5, не mini.
+
+Bothub как обходной путь не сработал по деньгам: видео-эндпоинт `/openai/v1/videos/generations`
+отвечает 403 NOT_ENOUGH_TOKENS — Wan 2.6 на 15 с требует 450000 caps при 350299 на балансе,
+на 8 с требует 240000 при 212458. Цены Bothub за секунду — это витрина, ключ считает по CAPS.
+
+Осталось: сцена 08 «Контакты из поста» (монтаж исходной карточки с QR, не нейрогенерация),
+баланс Polza после прогона ≈86 ₽. Открытый изъян: лицо героини на крупных планах чуть плывёт,
+лечится портретом-референсом или заменой лица на монтаже.
+
 ## 2026-10-29 · Bothub media prices return to the model base
 
 The base table showed video and audio models from Bothub without prices: the catalogue
@@ -46,7 +68,17 @@ customer account was touched.
 The public catalogue now opens on the **Лика Команда** price (−30%) with a checkbox
 «Цена тарифа Лика Команда» that switches every row to the base price; the plan pill and
 its payment link follow the chosen tariff (`plan=team` or `plan=lika-plus`), and
-`?plan=base` keeps the undiscounted view. Bothub's website login does not change the
+`?plan=base` keeps the undiscounted view.
+
+The Bothub key was moved to **PREMIUM**: 200 ₽ per 1M Caps, 3M Caps, balance 3.1M, and
+`/pricing/models` now reports `PREMIUM`. The purchase cost fell 20%; the public team
+prices were deliberately left unchanged, so the media margin is now about 29–32%
+instead of 1.5–5% (WAN 3.0 Prime 26 / 18.2 ₽/s against 14.06 cost). The base catalogue's
+media markup was raised to ×1.8125 (video) and ×1.875 (speech, pictures), which is the
+same ×1.45/×1.5 over the old BASIC cost, so its retail matches the team-aware public
+price and the daily generator cannot quietly reprice the shop. GPT 6.1 Terra is still
+absent from the key's 377 models, and Gemini/Eleven speech still answers
+`404 DeploymentNotFound`; only `tts-1` and `tts-1-hd` remain on the shelf. Bothub's website login does not change the
 API key's tariff: `/pricing/models` still answers `BASIC` (250 ₽ per 1M caps), while the
 site displays `ELITE` (157.14 ₽). Moving the subscription that owns `BOTHUB_KEY` to
 ELITE would cut our purchase cost by 37% to the site's **non-promo** price
