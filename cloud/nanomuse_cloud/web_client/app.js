@@ -5,8 +5,8 @@ import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
-import {installComposerControls} from './composer-controls.js?v=20261026-catalogue';
-import {installModelSheet} from './model-sheet.js?v=20261029-all';
+import {installComposerControls} from './composer-controls.js?v=20261029-fav';
+import {installModelSheet} from './model-sheet.js?v=20261029-fav';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 const $=id=>document.getElementById(id);const sessionKey='nl.web.session.v1';
 const local={get(key){try{return localStorage.getItem(key);}catch{return null;}},set(key,value){try{localStorage.setItem(key,value);}catch{notice(t('storageBlocked'));}},remove(key){try{localStorage.removeItem(key);}catch{}}};
@@ -177,7 +177,8 @@ const composerControls=installComposerControls({form:$('composer'),message:$('me
 
 // Кнопка открывает панель с карточками: провайдеры слева, типы и поиск сверху.
 const modelSheet=installModelSheet({api,session:()=>session,
- onPick:id=>composerControls.selectModel(id)});
+ onPick:id=>composerControls.selectModel(id),
+ onFavourites:()=>composerControls.load().catch(()=>{})});
 {const open=$('model-browse');if(open)open.addEventListener('click',()=>{modelSheet.setPicked($('model-select')?.value||'');modelSheet.open();});}
 
 if(!authenticated())location.replace('/app/?signin=1&next='+encodeURIComponent(location.origin+location.pathname+location.search));

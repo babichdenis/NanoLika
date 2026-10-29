@@ -15,7 +15,7 @@
       sort: 'Сортировка', sortRecommended: 'По рекомендации', sortPrice: 'Сначала дешевле', sortContext: 'Сначала большой контекст', sortName: 'По названию',
       allVendors: 'Все производители', otherVendors: 'Другие', vendorFilter: 'Производитель',
       planLocked: 'на другом тарифе', planNote: (n) => `На старших тарифах доступно ещё ${n}.`, upgrade: 'Поднять тариф →', upgradeShort: 'поднять тариф',
-      planTitle: 'Тариф и пополнение', planIntro: 'Пополнение остаётся на балансе. Когда оплаченный остаток достигает порога тарифа, тариф включается на 30 дней.',
+      planTitle: 'Тариф и пополнение', planPill: 'Лика+', planHeader: 'Тариф', planIntro: 'Пополнение остаётся на балансе. Когда оплаченный остаток достигает порога тарифа, тариф включается на 30 дней.',
       planAmount: 'Своя сумма, ₽', planHint: 'Можно пополнить на любую сумму; тариф выберете на странице оплаты.', planGo: 'Перейти к тарифам и пополнению',
       planLoading: 'Загружаем тарифы…', planUnavailable: 'Тарифы сейчас недоступны. Откройте кабинет, чтобы пополнить баланс.',
       discount: 'Скидка', days: 'дней', close: 'Закрыть',
@@ -46,7 +46,7 @@
       sort: 'Sort', sortRecommended: 'Recommended', sortPrice: 'Lowest price', sortContext: 'Largest context', sortName: 'Name',
       allVendors: 'All makers', otherVendors: 'Other', vendorFilter: 'Maker',
       planLocked: 'on a higher plan', planNote: (n) => `${n} models open on higher plans.`, upgrade: 'Upgrade plan →', upgradeShort: 'upgrade plan',
-      planTitle: 'Plan and top-up', planIntro: 'Top-ups stay on your balance. When the paid balance reaches a plan threshold, the plan starts for 30 days.',
+      planTitle: 'Plan and top-up', planPill: 'Lika+', planHeader: 'Plan', planIntro: 'Top-ups stay on your balance. When the paid balance reaches a plan threshold, the plan starts for 30 days.',
       planAmount: 'Custom amount, ₽', planHint: 'Top up any amount; choose the plan on the payment page.', planGo: 'Open plans and top-up',
       planLoading: 'Loading plans…', planUnavailable: 'Plans are unavailable right now. Open your account to top up.',
       discount: 'Discount', days: 'days', close: 'Close',
@@ -77,7 +77,7 @@
       sort: '排序', sortRecommended: '推荐', sortPrice: '价格从低到高', sortContext: '上下文从大到小', sortName: '名称',
       allVendors: '全部制造商', otherVendors: '其他', vendorFilter: '制造商',
       planLocked: '更高套餐', planNote: (n) => `${n} 个模型需要更高套餐。`, upgrade: '升级套餐 →', upgradeShort: '升级套餐',
-      planTitle: '套餐与充值', planIntro: '充值金额留在余额中；付费余额达到套餐门槛后，套餐开通 30 天。',
+      planTitle: '套餐与充值', planPill: 'Lika+', planHeader: '套餐', planIntro: '充值金额留在余额中；付费余额达到套餐门槛后，套餐开通 30 天。',
       planAmount: '自定义金额，₽', planHint: '可以充值任意金额；在支付页面选择套餐。', planGo: '前往套餐与充值',
       planLoading: '正在读取套餐…', planUnavailable: '暂时无法读取套餐，请到账户页面充值。',
       discount: '折扣', days: '天', close: '关闭',
@@ -280,12 +280,6 @@
     title.append(name);
     if (model.vendor) title.append(h('span', ' · ' + vendorName(model.vendor), 'mm-vendor-inline'));
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
-    if (model.plan_locked) {
-      const upgrade = h('a', T.upgradeShort, 'tag tag-lock');
-      upgrade.href = upgradeHref();
-      upgrade.onclick = (event) => { event.preventDefault(); event.stopPropagation(); openPlanDialog(); };
-      title.append(upgrade);
-    }
     if (!usable && !model.plan_locked) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
 
@@ -329,7 +323,14 @@
       ? [priceCell(block.lines[0],true),priceCell(block.lines[1])]
       : [priceCell(block.lines[0],true),h('td',capability,'mm-capability')];
     const enabled=h('label',undefined,'table-toggle');enabled.append(box);box.setAttribute('role','switch');
-    line.append(td(names),...priceCells,td(enabled),td(...(usable?[pick]:[])),td(star));
+    const plan=td();plan.className='mm-plan-cell';
+    if (model.plan_locked) {
+      const pill=h('a',T.planPill,'plan-pill');
+      pill.href=upgradeHref();
+      pill.onclick=(event)=>{event.preventDefault();openPlanDialog();};
+      plan.append(pill);
+    }
+    line.append(td(names),...priceCells,td(enabled),td(...(usable?[pick]:[])),td(star),plan);
     return line;
   }
 
@@ -379,7 +380,7 @@
       });
       const shown = shownCount[spec.key] || PAGE;
       const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
-      const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное'],en:['Model','Price','Output','Enabled','Default','Favourite'],zh:['模型','价格','输出','启用','默认','收藏']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite'];
+      const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное','Тариф'],en:['Model','Price','Output','Enabled','Default','Favourite','Plan'],zh:['模型','价格','输出','启用','默认','收藏','套餐']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite','Plan'];
       if (spec.kind !== 'chat') labels[2] = T.capability;
       for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
       const page = sorted.slice(0, shown);
@@ -428,10 +429,10 @@
     const locked = all.filter((m) => m.plan_locked).length;
     if (locked) {
       const note = h('p', T.planNote(locked), 'fine plan-note');
-      const link = h('a', T.upgrade, 'mm-link');
+      const link = h('a', T.planPill, 'plan-pill');
       link.href = upgradeHref();
       link.onclick = (event) => { event.preventDefault(); openPlanDialog(); };
-      note.append(' ', link);
+      note.append(link);
       holder.append(note);
     }
   }

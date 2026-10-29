@@ -1,4 +1,4 @@
-import {modelDetails} from './model-detail.js?v=20261027-model-info';
+import {modelDetails} from './model-detail.js?v=20261029-fav';
 /**
  * Панель выбора модели: провайдеры слева, карточки справа, фильтры по типу и поиск.
  *
@@ -154,7 +154,7 @@ export function filterCards(cards, { kind = '', vendor = '', query = '', favouri
 }
 
 /** Accessible catalogue shared by the chat picker and model settings. */
-export function installModelSheet({onPick,api,session}){
+export function installModelSheet({onPick,api,session,onFavourites}){
  const sheet=document.createElement('div');sheet.className='model-sheet';sheet.dataset.open='0';
  sheet.innerHTML='<div class="model-sheet-panel" role="dialog" aria-modal="true" aria-label="Выбор модели"><aside class="model-vendors" id="ms-vendors"></aside><div class="model-body"><div class="model-searchline"><input id="ms-search" type="search" placeholder="Поиск модели" aria-label="Поиск модели"><button id="ms-close" type="button" class="quiet" aria-label="Закрыть">✕</button></div><div class="model-kindrow" id="ms-kinds"></div><div class="model-filterrow"><label>Контекст <select id="ms-context"><option value="0">Любой</option><option value="128000">128 тыс. и больше</option><option value="200000">200 тыс. и больше</option><option value="1000000">1 млн и больше</option></select></label><label>Порядок <select id="ms-sort"><option value="recommended">Рекомендованные</option><option value="price">По цене</option><option value="context">По контексту</option></select></label></div><div id="ms-status" role="status"></div><div class="model-cards" id="ms-cards"></div></div></div>';
  document.body.append(sheet);const el=id=>sheet.querySelector('#'+id);
@@ -162,7 +162,7 @@ export function installModelSheet({onPick,api,session}){
  let owner='',key='',version=0,previousFocus=null,queue=Promise.resolve();
  function paintKinds(){const box=el('ms-kinds');box.replaceChildren();const items=[['','Все модели',state.cards.length],...filterCounts(state.cards,{favourites:state.favourites,selected:state.selected})];if(!items.some(item=>item[0]===state.kind))state.kind='';for(const [kind,label,count] of items){const b=document.createElement('button');b.type='button';b.className='model-kind-btn';b.setAttribute('aria-pressed',String(kind===state.kind));const title=document.createElement('span');title.textContent=label;const badge=document.createElement('b');badge.textContent=String(count);b.append(title,badge);b.onclick=()=>{state.kind=kind;paint();};box.append(b);}}
  function paintVendors(){const box=el('ms-vendors');box.replaceChildren();for(const row of [{name:'',count:state.cards.length},...vendorRows(state.cards)]){const b=document.createElement('button');b.type='button';b.className='model-vendor-row';b.textContent=(row.name||'Все производители')+' · '+row.count;b.setAttribute('aria-pressed',String(state.vendor===row.name));b.onclick=()=>{state.vendor=row.name;paint();};box.append(b);}}
- function persist(){const identity=session(),ids=[...state.favourites];queue=queue.catch(()=>{}).then(async()=>{if(session()?.key!==identity?.key)return;try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:ids})});}catch{el('ms-status').textContent='Избранное не сохранилось. Обновите список и попробуйте ещё раз.';}});}
+ function persist(){const identity=session(),ids=[...state.favourites];queue=queue.catch(()=>{}).then(async()=>{if(session()?.key!==identity?.key)return;try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:ids})});onFavourites?.();}catch{el('ms-status').textContent='Избранное не сохранилось. Обновите список и попробуйте ещё раз.';}});}
  function paintCards(){const box=el('ms-cards');box.replaceChildren();let rows=filterCards(state.cards,{...state,favourites:state.favourites,selected:state.selected}).filter(c=>!state.context||c.context>=state.context);
  rows.sort((a,b)=>state.sort==='context'?b.context-a.context||a.name.localeCompare(b.name):state.sort==='price'&&state.kind&&state.kind!=='__fav'?(a.price??Infinity)-(b.price??Infinity):Number(b.recommended)-Number(a.recommended)||a.name.localeCompare(b.name));
  if(!rows.length){const empty=document.createElement('p');empty.textContent='Ничего не нашлось. Измените поиск или фильтры.';box.append(empty);}
