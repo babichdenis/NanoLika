@@ -53,6 +53,7 @@ import { ProfileStore, type Profile } from './profile.ts'
 import { cloudOffFailure, relayFailure, transportFailure, type RelayRefusal } from './refusals.ts'
 import { Relay, RelayError, type Account, type RelaySearch, type Estimate, type Invite, type ProfileWrite, type RelayModel, type SignIn } from './relay.ts'
 import { MIRROR_NOTE, TaskRunner, textOf } from './task.ts'
+import { shareFileLinks } from './share.ts'
 import { Turns, aggregateWork, type WorkItem } from './work.ts'
 import { SCREEN_RUN_IDLE_MS, ScreenRuns, Trajectory, type ScreenRun, type StepAction, type TrajectoryView } from './trajectory.ts'
 import { RemoteStore, SyncEngine, SyncRelay, type RemoteLine, type SessionInfo, type SessionLine, type SyncState } from './sync.ts'
@@ -851,6 +852,7 @@ export default class NanomuseCloud extends Service {
         },
         closed: () => this.gateClosed,
         resolveShared: async (cid) => this.sync?.resolveCid(cid, true),
+        shareFiles: (text) => shareFileLinks(text),
       })
       this.tasks = runner
       ctx.effect(() => runner.attach(), 'nanomuse cloud: tasks')

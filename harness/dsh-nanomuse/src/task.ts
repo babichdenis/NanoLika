@@ -49,6 +49,8 @@ export interface TaskRunnerOptions {
   notice?(from: string, text: string): void
   /** The session a conversation lived in before (survives a restart); absent means remember in memory only. */
   recall?(key: string): string | undefined
+  /** Local file links in the final answer become durable links (S3); a failure leaves the text as it was. */
+  shareFiles?(text: string): Promise<string>
   remember?(key: string, sessionId: string): void
   /**
    * Whether this computer is handing over (a protected exit, later a restart-update):
@@ -180,7 +182,8 @@ export class TaskRunner {
       // (`MIRROR_NOTE`) keeps the sync from carrying them back as something typed here
       agent.followup(createUserMessage({ content: [{ type: 'text', text: shared ? text : frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
       const final = await settled
-      return { text: final, conversation, thread: sessionId, device: this.options.deviceName(), ...(sharedCid ? { sync_cid: sharedCid } : {}) }
+      const sharedFinal = this.options.shareFiles ? await this.options.shareFiles(final).catch(() => final) : final
+      return { text: sharedFinal, conversation, thread: sessionId, device: this.options.deviceName(), ...(sharedCid ? { sync_cid: sharedCid } : {}) }
     } finally {
       clearTimeout(timer)
       this.bySession.delete(sessionId)
