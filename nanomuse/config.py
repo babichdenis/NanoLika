@@ -619,13 +619,15 @@ class HubSettings(BaseModel):
     """The hub: this computer as one of the account's devices (see docs/hub.md).
 
     ``enabled`` joins the hub whenever the Cloud account is signed in. ``remote_control``
-    off answers other devices with ``info`` and nothing else. ``name`` is what the other
-    devices call this one (empty: the host name). ``device_id`` is per installation and
-    normally left to the app.
+    off refuses device operations. ``memory_sharing`` independently controls the account's
+    shared facts and defaults on to preserve the existing cross-device memory behavior.
+    ``name`` is what the other devices call this one (empty: the host name). ``device_id``
+    is per installation and normally left to the app.
     """
 
     enabled: bool = True
     remote_control: bool = True
+    memory_sharing: bool = True
     name: str = ""
     device_id: str = ""
     # The device the chat channels are served by (an id, a name or a unique part of one):
@@ -1084,7 +1086,7 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
         if "models" in cloud and cloud["models"] is not None:
             settings.cloud.models = bool(cloud["models"])
     if hub := data.get("hub"):
-        for key in ("enabled", "remote_control"):
+        for key in ("enabled", "remote_control", "memory_sharing"):
             if key in hub and hub[key] is not None:
                 setattr(settings.hub, key, bool(hub[key]))
         for key in ("name", "device_id"):

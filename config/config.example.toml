@@ -373,6 +373,7 @@ sync = true              # default for the account-wide Data controls → Sync s
 # ------------------------------------------------------------------------------
 [hub]
 enabled = true           # join the hub whenever the Cloud account is signed in
-remote_control = true    # false: other devices get `info` from this one and nothing else
+remote_control = true    # false: refuse operations from other devices
+memory_sharing = true    # allow account devices to read and change shared memory facts
 name = ""                # what the other devices call this one; empty = the host name
 # device_id is per installation and written by the app; leave it alone

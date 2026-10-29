@@ -111,6 +111,12 @@ hears `not_allowed` when the card expires. `info` and `notify` never ask; a
 caller as before. A device may `approve` only cards of its own runs that were
 sent to it, never the card asking whether it may run something.
 
+Shared memory is a separate choice: *Share memory with my devices* (`[hub] memory_sharing`, on by default) lets the account's signed-in devices use
+`memory.add`, `memory.search` and `memory.forget` on this device's memory store.
+It remains available when *Remote control* is off, unless memory sharing is also
+turned off. This shares durable facts only; conversation histories, attachments
+and active tasks stay in their own sessions.
+
 ### Proposed `proxy_fetch`: the phone uses the computer's connection
 
 Not built yet; written down here so the three implementations agree before

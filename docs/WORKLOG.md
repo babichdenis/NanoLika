@@ -2303,3 +2303,15 @@ Validation: all 56 `cloud/tests/test_cloud.py` tests passed, including sample re
 the one-time migration. Ruff check and JavaScript syntax check passed; the changed database
 and test files pass Ruff formatting. A whole-file format check for `service.py` still reports
 pre-existing formatting in unrelated sections, which were left untouched.
+
+## 2026-10-29 · Isolation audit I11: separate shared-memory access from remote control
+
+Added `[hub] memory_sharing`, defaulting to `true` to preserve shared account memory across
+devices. It has its own persisted API setting and Devices-page switch. Turning it off refuses
+`memory.add`, `memory.search` and `memory.forget`, regardless of the remote-control setting;
+turning remote control off alone still permits shared memory. Conversation history, attachments
+and task state are unchanged.
+
+Validation: all 28 `tests/test_hub.py` tests, all 129 web tests, TypeScript typecheck, web
+production build, Ruff and formatting passed. The bundle reports its existing large main-chunk
+warning; the build completed successfully.

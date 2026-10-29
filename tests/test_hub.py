@@ -1094,6 +1094,35 @@ def test_the_account_memory_is_read_and_written_from_another_device(hub_server) 
     assert service.app.memory.get(mid) is None
 
 
+def test_shared_memory_has_its_own_switch(hub_server) -> None:
+    """The shared facts remain available with remote operations off, until separately disabled."""
+    client, service, _llm, relay = hub_server
+    sign_in(client)
+    wait_for(lambda: client.get("/api/hub").json()["state"] == "connected")
+    assert client.get("/api/hub").json()["memory_sharing"] is True
+
+    # Preserve the existing shared-memory behavior while denying device operations.
+    client.put("/api/hub", json={"remote_control": False})
+    relay.call_runtime("memory.add", {"content": "Prefers concise notes"}, "shared-add")
+    result = relay.next_frame("result")
+    assert result["id"] == "shared-add" and result["ok"] is True
+
+    # The memory switch is independent and blocks all memory operations even when other
+    # remote control is enabled.
+    client.put("/api/hub", json={"remote_control": True, "memory_sharing": False})
+    assert client.get("/api/hub").json()["memory_sharing"] is False
+    assert service.connections.data["hub"]["memory_sharing"] is False
+    for cid, action, args in (
+        ("shared-search", "memory.search", {"query": "concise"}),
+        ("shared-forget", "memory.forget", {"query": "concise"}),
+        ("shared-add-denied", "memory.add", {"content": "Another fact"}),
+    ):
+        relay.call_runtime(action, args, cid)
+        result = relay.next_frame("result")
+        assert result["id"] == cid and result["ok"] is False
+        assert result["error"] == "not_allowed"
+
+
 def test_coding_actions_are_served_to_other_devices(
     hub_server, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -463,6 +463,7 @@ class CodingStopBody(BaseModel):
 class HubBody(BaseModel):
     enabled: bool | None = None
     remote_control: bool | None = None
+    memory_sharing: bool | None = None
     name: str | None = Field(default=None, max_length=60)
 
 
@@ -1555,6 +1556,8 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
                 await svc.hub.rename(body.name)
             if body.remote_control is not None:
                 svc.hub.set_remote_control(body.remote_control)
+            if body.memory_sharing is not None:
+                svc.hub.set_memory_sharing(body.memory_sharing)
             if body.enabled is not None:
                 await svc.hub.set_enabled(body.enabled)
         except ValueError as exc:

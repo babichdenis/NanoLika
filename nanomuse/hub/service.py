@@ -297,6 +297,14 @@ class HubService:
         self._save()
         self.publish()
 
+    def set_memory_sharing(self, on: bool) -> None:
+        self.settings.hub.memory_sharing = bool(on)
+        hub = dict(self.data.get("hub") or {})
+        hub["memory_sharing"] = bool(on)
+        self.data["hub"] = hub
+        self._save()
+        self.publish()
+
     async def rename(self, name: str) -> None:
         name = name.strip()[:60]
         if not name:
@@ -636,6 +644,7 @@ class HubService:
         return {
             "enabled": self.settings.hub.enabled,
             "remote_control": self.settings.hub.remote_control,
+            "memory_sharing": self.settings.hub.memory_sharing,
             "state": client.state if client else ("signed_out" if not self.signed_in else "off"),
             "detail": client.state_detail if client else "",
             "device": {
@@ -710,6 +719,9 @@ class HubService:
             await call.fail(
                 "not_allowed", f"{self.device_name} is set not to be operated from other devices"
             )
+            return
+        if call.action.startswith("memory.") and not self.settings.hub.memory_sharing:
+            await call.fail("not_allowed", "shared memory is turned off on this device")
             return
         if call.action in GATED_ACTIONS and not await self._permitted(call):
             await call.fail(

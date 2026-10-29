@@ -225,7 +225,7 @@ export const api = {
   codingSend: (body: { agent: string; text: string; session_id?: string; workspace?: string; device?: string }) => request<CodingRun>("/api/coding/send", json(body)),
   codingStop: (run: string, device = "") => request<{ stopped: boolean }>("/api/coding/stop", json({ run, device })),
   hub: () => request<HubView>("/api/hub"),
-  updateHub: (body: { enabled?: boolean; remote_control?: boolean; name?: string }) =>
+  updateHub: (body: { enabled?: boolean; remote_control?: boolean; memory_sharing?: boolean; name?: string }) =>
     request<HubView>("/api/hub", { method: "PUT", body: JSON.stringify(body) }),
   joinHub: () => request<HubView>("/api/hub/join", json({})),
   leaveHub: () => request<HubView>("/api/hub/leave", json({})),

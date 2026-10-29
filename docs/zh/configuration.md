@@ -200,12 +200,13 @@ models = true        # 账号的模型是否作为来源；控制台里的「使
 [hub]
 enabled = true
 remote_control = true
+memory_sharing = true
 name = ""            # 空：用主机名
 ```
 
 `[cloud]` 是这个运行时登录的中继（[cloud.md](cloud.md)）：`base_url` 是它的公网地址（按 [self-hosting.md](self-hosting.md) 自己架一台后填这里）；`required = false` 允许首次运行不登录账号就完成，适合完全不用中继的运行时；`sync` 是整个账号「数据控制 → 同步」开关的默认值，人一旦选过，以选择为准；`models = false`（控制台里的「使用 nanoMuse Cloud 模型」开关，存在 app-settings 里）把账号的模型从动手、生成图片、短视频的自动顺序和服务商列表里拿掉，登录保持不变，于是除了明确点下的「这次改用 nanoMuse Cloud」，没有什么会消耗额度。账号密钥本身是保险库里的 `NANOMUSE_CLOUD_KEY`。
 
-`[hub]` 是把这台电脑当作账号的一台设备（[hub.md](hub.md)）：`enabled` 表示账号登录后就加入 hub；`remote_control = false` 时，其他设备只能从这台拿到 `info`，别的什么都做不了；`name` 是其他设备对它的称呼（空：用主机名）。`device_id` 按安装生成，由 App 写入。
+`[hub]` 是把这台电脑当作账号的一台设备（[hub.md](hub.md)）：`enabled` 表示账号登录后就加入 hub；`remote_control = false` 会拒绝其他设备对这台机器的操作；`memory_sharing` 独立控制账号设备能否读取、保存和删除共享记忆事实（默认 `true`，保持原有行为）；`name` 是其他设备对它的称呼（空：用主机名）。`device_id` 按安装生成，由 App 写入。
 
 ## `[sentinel]` {#sentinel}
 

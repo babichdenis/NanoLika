@@ -654,6 +654,7 @@ export interface CodingEvent {
 export interface HubView {
   enabled: boolean;
   remote_control: boolean;
+  memory_sharing: boolean;
   state: "connected" | "connecting" | "disconnected" | "refused" | "stopped" | "signed_out" | "off" | string;
   detail: string;
   device: { id: string; name: string; kind: string; actions: string[] };

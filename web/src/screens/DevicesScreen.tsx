@@ -214,7 +214,7 @@ function ThisDeviceCard({ hub, hands, onChange }: { hub: HubView; hands?: HandsS
   // the relay's own row for this device carries the OS and the version
   const self = hub.devices.find((d) => d.this);
 
-  const update = async (body: { enabled?: boolean; remote_control?: boolean; name?: string }) => {
+  const update = async (body: { enabled?: boolean; remote_control?: boolean; memory_sharing?: boolean; name?: string }) => {
     setBusy(true);
     try {
       const h = await api.updateHub(body);
@@ -303,6 +303,9 @@ function ThisDeviceCard({ hub, hands, onChange }: { hub: HubView; hands?: HandsS
         <MuseDivider inset={16} />
         <MuseSwitchRow label={t("My other devices may operate it")} checked={hub.remote_control} disabled={busy} onChange={(v) => void update({ remote_control: v })} />
         <Note>{t("They can run commands, read files and see its screen here; each step still goes through the Sentinel.")}</Note>
+        <MuseDivider inset={16} />
+        <MuseSwitchRow label={t("Share memory with my devices")} checked={hub.memory_sharing} disabled={!signedIn || busy} onChange={(v) => void update({ memory_sharing: v })} />
+        <Note>{t("Other signed-in devices can read, save and forget shared facts. Conversations and tasks stay separate.")}</Note>
       </div>
       {(hub.state === "refused" || hub.state === "disconnected") && hub.detail && (
         <div className="mt-3 rounded-xl bg-amber-500/12 px-3 py-2 text-[12.5px] text-amber-700 dark:text-amber-300">{hub.detail}</div>

@@ -1138,6 +1138,8 @@ const zhCN: Record<string, string> = {
   "Sign in first.": "先登录。",
   "My other devices may operate it": "允许我的其他设备操作它",
   "They can run commands, read files and see its screen here; each step still goes through the Sentinel.": "其他设备可以在这里运行命令、读文件、看屏幕；每一步仍经 Sentinel 审核。",
+  "Share memory with my devices": "在我的设备间共享记忆",
+  "Other signed-in devices can read, save and forget shared facts. Conversations and tasks stay separate.": "其他已登录设备可以读取、保存和删除共享事实；对话和任务仍然各自独立。",
   "Refused": "被拒绝",
   "Connecting…": "连接中…",
   "Connecting to the hub…": "正在连接中继…",
