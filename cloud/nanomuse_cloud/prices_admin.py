@@ -796,6 +796,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 row["commerce"] = commerce
                 rates = commerce["rates_rub"]
                 row["sell"].update(rub_in=rates["input"], rub_out=rates["output"], rub_cached_in=rates["cached_input"])
+                # Наценка считается от РОЗНИЦЫ, а розница только что сменилась: без
+                # этого пересчёта после массовой правки колонка показывала старые числа.
+                if spec.kind == "chat":
+                    cost_in, cost_out = row["cost"].get("rub_in"), row["cost"].get("rub_out")
+                    row["ratio"] = {
+                        "in": round(rates["input"] / cost_in, 6) if cost_in else None,
+                        "out": round(rates["output"] / cost_out, 6) if cost_out else None,
+                    }
                 row["below_cost"] = (
                     any(
                         row["cost"].get("rub_" + side) and rates[field] * (100 - max_discount_pct) / 100 < row["cost"]["rub_" + side]
