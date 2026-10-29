@@ -606,11 +606,50 @@ def _extra_offers(prices: dict, connected: set[str]) -> dict[str, dict[str, dict
     return result
 
 
+# Собранный ответ кэшируем: пересчёт маршрутов по 500 моделям стоит около секунды,
+# а страница открывается часто. Сайты поставщиков при этом не опрашиваются вообще —
+# свежие прайсы приносит только кнопка «Обновить» (refresh=1).
+_CACHE: dict[str, Any] = {"at": 0.0, "full": None, "compact": None}
+_CACHE_TTL = 300.0
+
+_MODEL_FIELDS = ("id", "name", "kind", "listed", "default_on", "recommended", "context", "max_output", "cost", "sell", "priced_as", "upstream")
+_OFFER_FIELDS = ("provider", "model", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason")
+
+
+def _compact(payload: dict) -> dict:
+    """Только то, что рисует админка: без модальностей, параметров и рынка."""
+    models = []
+    for row in payload.get("models") or []:
+        item = {key: row.get(key) for key in _MODEL_FIELDS}
+        routing = row.get("routing")
+        if routing:
+            item["routing"] = {
+                "selected": routing.get("selected"),
+                "selected_model": routing.get("selected_model"),
+                "offers": [
+                    {key: offer.get(key) for key in _OFFER_FIELDS}
+                    for offer in routing.get("offers") or []
+                ],
+            }
+        models.append(item)
+    return {
+        "rate": payload.get("rate"),
+        "generated_at": payload.get("generated_at"),
+        "count": payload.get("count"),
+        "plan_discounts": payload.get("plan_discounts"),
+        "providers": payload.get("providers"),
+        "models": models,
+    }
+
+
 def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, router: Any = None) -> None:
     """Включает страницу цен в релей."""
 
     @app.get("/v1/admin/prices", dependencies=[Depends(admin_dep)])
-    async def admin_prices() -> dict:
+    async def admin_prices(refresh: int = 0, compact: int = 0) -> dict:
+        now = time.time()
+        if not refresh and _CACHE["full"] is not None and now - _CACHE["at"] <= _CACHE_TTL:
+            return _CACHE["compact"] if compact else _CACHE["full"]
         prices = _read("prices.json")
         rate = _rate(settings, prices)
         models = _models(settings, float(rate["cny_rub"] or 0))
@@ -748,7 +787,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]
-        return {
+        payload = {
             "routing": router.status() if router is not None else None,
             "plan_discounts": plan_discounts,
             "rate": rate,
@@ -766,6 +805,10 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             "retail": _retail(),
             "drafts": drafts,
         }
+        _CACHE["full"] = payload
+        _CACHE["compact"] = _compact(payload)
+        _CACHE["at"] = now
+        return _CACHE["compact"] if compact else payload
 
     @app.put("/v1/admin/prices/models/{model_id}/pricing", dependencies=[Depends(admin_dep)])
     async def save_model_price(model_id: str, body: dict) -> dict:

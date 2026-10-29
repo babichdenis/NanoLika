@@ -537,22 +537,54 @@ function draw() {
 
 // ── данные ────────────────────────────────────────────────────────────────────
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Обычная загрузка — из кэша релея, без походов на сайты поставщиков. */
 async function load(force = false) {
   if (loading) return;
   loading = true;
-  setNote("Загружаем цены…");
+  const query = new URLSearchParams({ compact: "1" });
+  if (force) query.set("refresh", "1");
   try {
-    const data = await API("GET", "/v1/admin/prices" + (force ? "?refresh=1" : ""));
+    const data = await API("GET", "/v1/admin/prices?" + query.toString());
     DATA = data || {};
     error = "";
     syncControls();
     draw();
-    setNote("");
+    if (force) setNote("");
   } catch (e) {
     error = String(e.message || e);
     setNote(`Не удалось загрузить: ${error}`);
   } finally {
     loading = false;
+  }
+}
+
+/** Кнопка: собрать прайсы с сайтов поставщиков и пересчитать маршруты. */
+async function refreshPrices() {
+  const button = $("mt-refresh");
+  if (button) button.disabled = true;
+  setNote("Собираем цены с поставщиков… это может занять до минуты.");
+  try {
+    // снимок сравниваем в его собственном формате: у /v1/admin/prices время
+    // отдаётся как «2026-10-29 21:03 UTC», у снимка — ISO
+    const before = await API("GET", "/v1/admin/provider-prices").catch(() => null);
+    const was = (before && before.generated_at) || "";
+    await Promise.allSettled([
+      API("POST", "/v1/admin/provider-prices/refresh", {}),
+      API("POST", "/v1/admin/provider-routing/refresh", {}),
+    ]);
+    for (let i = 0; i < 30; i += 1) {
+      await sleep(3000);
+      const snapshot = await API("GET", "/v1/admin/provider-prices").catch(() => null);
+      if (snapshot && snapshot.generated_at && snapshot.generated_at !== was) break;
+    }
+    await load(true);
+    setNote(`Цены обновлены: ${(DATA && DATA.generated_at) || "—"}.`);
+  } catch (e) {
+    setNote(`Не удалось обновить: ${e.message}`);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -568,7 +600,7 @@ function wire() {
   const sell = $("mt-sell");
   if (sell) sell.onchange = () => { state.sellOnly = sell.checked; draw(); };
   const refresh = $("mt-refresh");
-  if (refresh) refresh.onclick = () => load(true);
+  if (refresh) refresh.onclick = refreshPrices;
 }
 
 // ── перегородка между таблицами ───────────────────────────────────────────────

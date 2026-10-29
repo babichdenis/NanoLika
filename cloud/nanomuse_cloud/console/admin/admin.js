@@ -940,95 +940,6 @@
       h("code", { class: "fine" }, v.id));
   }
   const browserOf = (ua) => { ua = String(ua || ""); const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : ""; const b = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : ""; return [os, b].filter(Boolean).join(" ") || ua.split(" ")[0]; };
-  /** 0.11: the models under the key and what the probes found; 0.14: searched and narrowed to the ones that see. */
-  function catalogPanel(cv) {
-    const title = h("h2", {}, T.catalog);
-    if (!cv.enabled) return h("div", { class: "panel" }, title, h("div", { class: "empty" }, T.catalogOff));
-    const q = (params.get("q") || "").toLowerCase(), onlyVision = params.get("v") === "1";
-    const all = (cv.models || []).filter((m) => m.kind === "chat"), others = (cv.models || []).filter((m) => m.kind !== "chat");
-    const chat = all.filter((m) => (!q || m.id.toLowerCase().includes(q)) && (!onlyVision || m.vision));
-    const tick = (v) => h("span", { class: "pill " + (v ? "ok" : "grey") }, v ? T.cYes : T.cNo);
-    const note = [cv.error ? T.catalogError(cv.error) : "", cv.fetched_at ? T.catalogFetched(when(cv.fetched_at)) : "", !cv.probe ? T.catalogNames : cv.probing ? T.catalogProbing : "", cv.probe && cv.pending ? T.catalogPending(cv.pending) : ""].filter(Boolean).join(" · ");
-    const rows = chat.sort((a, b) => a.id.localeCompare(b.id)).map((m) => h("tr", {}, h("td", {}, h("code", {}, m.id)), h("td", {}, tick(m.vision)), h("td", { class: "hide-sm" }, cv.probe ? tick(m.verified) : h("span", { class: "fine" }, "·"))));
-    return h("div", { class: "panel" }, title,
-      h("div", { class: "toolbar" },
-        h("span", { class: "search" }, h("input", { type: "search", "data-focus": "models-q", placeholder: T.cSearch, value: params.get("q") || "", oninput: (e) => setParams({ q: e.target.value }) })),
-        h("button", { class: "chip" + (onlyVision ? " on" : ""), onclick: () => setParams({ v: onlyVision ? "" : "1" }) }, T.cOnlyVision),
-        h("span", { class: "cnt" }, T.cCount(all.length, all.filter((m) => m.vision).length), note ? ` · ${note}` : "")),
-      rows.length ? h("div", { class: "ledger", style: "max-height:520px;overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, T.cModel), h("th", {}, T.cSees), h("th", { class: "hide-sm" }, T.cVerified))), h("tbody", {}, ...rows))) : h("div", { class: "empty" }, T.none),
-      others.length ? h("div", { class: "fine", style: "padding:10px 16px 0" }, ...others.sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)).map((m) => h("span", { class: "pill", style: "margin:2px 4px 2px 0" }, `${T.kinds[m.kind] || m.kind} · ${m.id}`))) : null,
-      h("h3", { style: "margin:12px 16px 0" }, T.cUnusable),
-      (cv.unusable || []).length ? h("div", { class: "list" }, ...cv.unusable.map((u) => h("div", { class: "row" }, h("span", { class: "tile bad", html: ICON.warn }), h("div", { class: "txt" }, h("div", { class: "t" }, h("code", {}, u.id)), h("div", { class: "s" }, u.note || "", u.checked_at ? ` · ${when(u.checked_at)}` : ""))))) : h("div", { class: "fine", style: "padding:6px 16px" }, T.cNoUnusable),
-      h("div", { class: "fine", style: "padding:8px 16px 12px" }, T.catalogNote));
-  }
-  const platformOf = (ua) => { ua = String(ua || ""); if (ua.startsWith("nanoMuse-Android")) return "android"; if (ua.startsWith("nanoMuse/")) { const m = /\(([^)]*)\)/.exec(ua); return { windows: "windows", darwin: "macos", linux: "linux" }[(m ? m[1] : "").toLowerCase()] || "runtime"; } return ua.startsWith("Mozilla/") ? "browser" : "other"; };
-  const versionOf = (ua) => { const m = /^nanoMuse(?:-Android)?\/([0-9][^\s(]*)/.exec(String(ua || "")); return m ? m[1] : ""; };
-  const clientLine = (ua) => { if (!ua) return ""; const p = T.dPlatforms[platformOf(ua)] || ""; const v = versionOf(ua); return [p, v ? `v${v}` : ""].filter(Boolean).join(" "); };
-  // an address, and where it is when the relay knows (0.11) — one click opens every account seen from it
-  const ipChip = (ip, fromAccount) => {
-    if (!ip) return null;
-    const p = placeOf(ip), txt = placeText(p);
-    const chip = h("code", { class: "ip tap", title: T.atAddress(ip), onclick: (e) => { e.stopPropagation(); openAddress(ip, fromAccount); } }, ip);
-    return txt ? h("span", { class: "ipp" }, chip, h("span", { class: "place", title: p.isp || "" }, txt)) : chip;
-  };
-  /** Everything a kept message holds, in order: text parts, omitted parts named, tool calls with their arguments. */
-  const msgText = (m) => !m ? "" : typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((p) => p && p.type === "text" ? p.text : p && p.omitted ? `[${p.type} ${T.omitted}]` : "").filter(Boolean).join("\n") : "";
-  function messageBlock(m) {
-    const role = (m && m.role) || "?";
-    const parts = [h("b", { class: "role " + role }, (T.roles[role] || role) + ": ")];
-    const txt = msgText(m);
-    if (m && m.omitted && !txt) parts.push(h("i", { class: "fine" }, T.omitted)); else parts.push(txt);
-    for (const c of Array.isArray(m && m.tool_calls) ? m.tool_calls : []) {
-      const f = c && c.function ? c.function : {};
-      parts.push(h("div", { class: "toolcall" }, h("span", { class: "pill violet" }, T.toolCall), " ", h("code", {}, f.name || ""), f.arguments ? h("pre", {}, typeof f.arguments === "string" ? f.arguments : JSON.stringify(f.arguments, null, 1)) : null));
-    }
-    return h("div", { class: "msg " + role }, ...parts);
-  }
-  /** One kept turn: the header line, then the last thing the person said and the reply in full — and the
-      whole exchange (every message, every tool call) when expanded. `who` adds the account's hint and a tap into it. */
-  function sampleRow(smp, opts = {}) {
-    const msgs = Array.isArray(smp.request) ? smp.request : [];
-    const lastUser = [...msgs].reverse().find((m) => m && m.role === "user");
-    const meta = smp.meta || {};
-    let open = false;
-    const body = h("div", {});
-    const toggle = h("button", { class: "btn quiet sm", style: "margin-top:6px", onclick: (e) => { e.stopPropagation(); open = !open; paint(); } });
-    const paint = () => {
-      toggle.textContent = open ? T.collapse : `${T.expand} · ${T.lengthNote(msgs.length + 1)}`;
-      body.replaceChildren(...(open
-        ? [...msgs.map(messageBlock), messageBlock({ role: "assistant", content: String(smp.response || "") })]
-        : [messageBlock({ role: "user", content: msgText(lastUser) }), messageBlock({ role: "assistant", content: String(smp.response || "") })]));
-    };
-    paint();
-    const head = h("div", { class: "s" }, when(smp.ts), opts.who && smp.hint ? [" · ", h("span", { class: "tap", onclick: (e) => { e.stopPropagation(); openAccount(smp.account_id); } }, identOf(smp.account_id, smp.hint))] : null,
-      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", smp.cut ? ` · ${T.cut}` : "");
-    return h("div", { class: "row sample", style: "align-items:flex-start" }, h("div", { class: "txt", style: "white-space:pre-wrap;word-break:break-word;min-width:0" }, head, body, toggle));
-  }
-  /** The relay's own series: sign-ins, accounts, invites, the data switch, calls — and the devices and nanoMuse Web as they stand. */
-  function trendsPanel(sr) {
-    const rows = sr.days || [];
-    const dayOf = (r) => day(r.day);
-    const dev = sr.devices || [];
-    const byKind = {};
-    for (const d of dev) { const k = byKind[d.kind] || (byKind[d.kind] = { n: 0, os: [] }); k.n += d.count; k.os.push(`${d.os || "?"} ${fmt(d.count)}`); }
-    return h("div", { class: "panel" },
-      h("h2", {}, T.trends(days)),
-      h("div", { class: "sparks" },
-        sparkRow(T.mSignIns, rows, "sign_ins", "blue", dayOf), sparkRow(T.mNew, rows, "new_accounts", "ok", dayOf), sparkRow(T.mActive, rows, "active_accounts", "cyan", dayOf),
-        sparkRow(T.mInvites, rows, "invites_used", "violet", dayOf), sparkRow(T.mContribute, rows, "contribute_on", "violet", dayOf), sparkRow(T.mCalls, rows, "calls", "ok", dayOf),
-        sparkRow(T.mRefused, rows, "budget_refusals", "warn", dayOf), sparkRow(T.mErrors, rows, "upstream_errors", "warn", dayOf), sparkRow(T.mContentRejected, rows, "content_rejected", "grey", dayOf)),
-      h("div", { class: "kv" },
-        h("b", {}, T.devices), h("span", {}, Object.keys(byKind).length ? Object.entries(byKind).map(([k, v]) => h("div", {}, h("span", { class: "pill", style: "margin-right:6px" }, `${T.devKinds[k] || k} ${fmt(v.n)}`), h("span", { class: "fine" }, v.os.join(" · ")))) : T.none),
-        h("b", {}, T.invitesTitle), h("span", {}, T.invitesLine({ with_code: 0, inviters: 0, invited: 0, ...(sr.invites || {}) }), " · ", h("a", { class: "more-link", href: "#invites" }, T.invSeeRanking)),
-        h("b", {}, T.webTitle), h("span", {}, sr.web && sr.web.enabled === false ? T.webOff : T.webLine(sr.web))));
-  }
-  function eventRow(e, withWho, accountId) {
-    const [tone, icon] = EVENT_STYLE[e.kind] || ["grey", ICON.person];
-    return h("div", { class: "row" + (withWho && e.account_id ? " tap" : ""), onclick: withWho && e.account_id ? () => openAccount(e.account_id) : null },
-      h("span", { class: "tile " + tone, html: icon }),
-      h("div", { class: "txt" }, h("div", { class: "t" }, T.eventName[e.kind] || e.kind, withWho && (e.hint || e.identifier) ? [" · ", h("span", { style: "color:var(--ink-2);font-weight:400" }, e.identifier || identOf(e.account_id, e.hint))] : null),
-        h("div", { class: "s" }, [when(e.ts), e.detail, e.ua ? clientLine(e.ua) : ""].filter(Boolean).join(" · "), e.ip ? [" · ", ipChip(e.ip, accountId || e.account_id)] : null)));
-  }
   const deviceIcon = (k) => (k === "phone" ? ICON.phone : k === "web" ? ICON.web : ICON.computer);
   const download = (blob, name) => {
     const url = URL.createObjectURL(blob);
@@ -1959,12 +1870,9 @@
 
   function modelsView() {
     setTimeout(mountModels, 0);
-    const panels = [h("div", { class: "panel mt-panel" }, h("div", { id: "mt-root" }))];
-    const cv = need("catalog");
-    if (!cv) panels.push(loadingPanel(T.catalog));
-    else if (cv._error) panels.push(failedPanel(T.catalog, "catalog", cv._error));
-    else panels.push(catalogPanel(cv));
-    return panels;
+    // Только таблица цен: каталог под ключом сюда не выводим, чтобы не было
+    // второй простыни под поставщиками.
+    return [h("div", { class: "panel mt-panel" }, h("div", { id: "mt-root" }))];
   }
 
   function healthView() {
