@@ -43,6 +43,16 @@ Validated end-to-end through the relay: `bh-ltx-video` 4 s → SUCCEEDED with an
 PNG. A temporary Telegram test account was used (plan Лика+, then disabled); no live
 customer account was touched.
 
+The public catalogue now opens on the **Лика Команда** price (−30%) with a checkbox
+«Цена тарифа Лика Команда» that switches every row to the base price; the plan pill and
+its payment link follow the chosen tariff (`plan=team` or `plan=lika-plus`), and
+`?plan=base` keeps the undiscounted view. Bothub's website login does not change the
+API key's tariff: `/pricing/models` still answers `BASIC` (250 ₽ per 1M caps), while the
+site displays `ELITE` (157.14 ₽). Moving the subscription that owns `BOTHUB_KEY` to
+ELITE would cut our purchase cost by 37% to the site's **non-promo** price
+(WAN 3.0 8.12 ₽/s, Kling 13.65, Gemini TTS 14.44, GPT 6.1 Sol 216.61/1083.03); the
+site's extra −60% web promo is not part of the API tariff.
+
 ## 2026-10-29 · One payment dialog from models and a public retail catalogue
 
 The model table's plan pill opened a tariff preview, then sent the customer to a second
