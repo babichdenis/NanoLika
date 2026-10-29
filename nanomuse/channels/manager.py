@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import re
+import tempfile
 import time
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -48,6 +52,14 @@ from nanomuse.logger import logger
 from nanomuse.memory import account_scope, channel_scope
 from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
+
+# The share links the desktop writes into a synced answer. The bot may fetch a small one
+# and send the file itself, so Telegram shows a player instead of asking the person to
+# tap a link; larger files stay links (the Telegram Bot API ceiling is 50 MB).
+SHARE_HOST = "s3.regru.cloud"
+SHARE_PREFIX = "/nanolika/files/"
+SHARE_MAX_BYTES = 50 * 1024 * 1024
+SHARE_URL = re.compile(r"https://s3\.regru\.cloud/nanolika/files/[^\s)>\"]+")
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
@@ -1702,6 +1714,46 @@ class ChannelManager(ChannelBus):
         except Exception as exc:  # noqa: BLE001 — the claim expires in a minute by itself
             logger.debug("sync: delivery claim not released: {}", exc)
 
+    async def _shared_files(self, text: str) -> list[Path]:
+        """Small S3 objects linked in an answer, fetched so the channel can play them.
+
+        Telegram's cloud Bot API takes 50 MB; a larger object is left as the link and the
+        person is not made to wait for a download that would fail. The host and prefix are
+        fixed, so a path in a message can never make the bot fetch an arbitrary address."""
+        urls = list(dict.fromkeys(SHARE_URL.findall(text)))
+        if not urls:
+            return []
+        out: list[Path] = []
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            for url in urls:
+                parts = urlsplit(url)
+                if parts.hostname != SHARE_HOST or not parts.path.startswith(SHARE_PREFIX):
+                    continue
+                suffix = Path(unquote(parts.path)).suffix[:12]
+                target = (
+                    Path(tempfile.gettempdir())
+                    / f"nanolika-share-{hashlib.sha1(url.encode()).hexdigest()[:12]}{suffix}"
+                )
+                total = 0
+                try:
+                    async with client.stream("GET", url) as response:
+                        response.raise_for_status()
+                        with target.open("wb") as stream:
+                            async for chunk in response.aiter_bytes():
+                                total += len(chunk)
+                                if total > SHARE_MAX_BYTES:
+                                    break
+                                stream.write(chunk)
+                    if total > SHARE_MAX_BYTES:
+                        target.unlink(missing_ok=True)
+                        logger.debug("channel: share object over 50 MB left as a link")
+                        continue
+                    out.append(target)
+                except (httpx.HTTPError, OSError) as exc:
+                    target.unlink(missing_ok=True)
+                    logger.debug("channel: share object not fetched: {}", exc)
+        return out
+
     async def _deliver_synced_channel(self, event: dict[str, Any]) -> None:
         role = str(event.get("type") or "")
         thread = str(event.get("thread") or "")
@@ -1736,62 +1788,75 @@ class ChannelManager(ChannelBus):
             return
         if role == "user":
             body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
-        for channel, chat in targets:
-            if self.picker.topics.defer(thread, (channel, chat), event):
-                continue
-            key = self.sync_receipts.key(channel, chat, mid, role)
-            if self.picker.consume(
-                thread, (channel, chat), role, str(event.get("text") or "").strip()
-            ):
-                self.sync_receipts.mark(key)
-                continue
-            if self.sync_receipts.delivered(key):
-                continue
-            # One machine sends one synced message to one channel chat: two desktops with
-            # the same bot used to deliver a reply twice (S12). The local receipt stays a
-            # cache; the relay is the arbiter. An old relay has no route and says yes.
-            if not await self._claim_synced_delivery(mid, channel, chat):
-                continue
-            sent_here = False
-            for attempt in range(3):
-                # Re-check after a retry: the person may have switched away.
-                current = self.picker.selected(channel, chat)
-                if current and current != thread:
-                    break
-                paired = any(
-                    str(e.get("chat_id") or sender) == physical_chat(channel, chat)
-                    for sender, e in self.pairing.approved(channel).items()
-                )
-                if (
-                    not paired
-                    or channel not in self.channels
-                    or not self.store.config(channel).enabled
+        # A desktop answer may carry a share link. For a small object the channel gets the
+        # file itself first and the link after it; a big one stays just the link.
+        shared_files = await self._shared_files(body) if role == "assistant" else []
+        try:
+            for channel, chat in targets:
+                if self.picker.topics.defer(thread, (channel, chat), event):
+                    continue
+                key = self.sync_receipts.key(channel, chat, mid, role)
+                if self.picker.consume(
+                    thread, (channel, chat), role, str(event.get("text") or "").strip()
                 ):
-                    break
-                try:
-                    await self.channels[channel].send(chat, self._redact_outbound(body))
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    if attempt < 2:
-                        await asyncio.sleep(attempt + 1)
-                        continue
-                    self._set(
-                        channel,
-                        "error",
-                        self.say(
-                            "Could not deliver a synced message.",
-                            "同步消息发送失败。",
-                            "Не удалось доставить сообщение из приложения.",
-                        ),
-                    )
-                else:
                     self.sync_receipts.mark(key)
-                    sent_here = True
-                break
-            if not sent_here:
-                # let another machine try now, not a minute after our claim goes stale
-                await self._release_synced_delivery(mid, channel, chat)
+                    continue
+                if self.sync_receipts.delivered(key):
+                    continue
+                # One machine sends one synced message to one channel chat: two desktops with
+                # the same bot used to deliver a reply twice (S12). The local receipt stays a
+                # cache; the relay is the arbiter. An old relay has no route and says yes.
+                if not await self._claim_synced_delivery(mid, channel, chat):
+                    continue
+                sent_here = False
+                files_sent = False
+                for attempt in range(3):
+                    # Re-check after a retry: the person may have switched away.
+                    current = self.picker.selected(channel, chat)
+                    if current and current != thread:
+                        break
+                    paired = any(
+                        str(e.get("chat_id") or sender) == physical_chat(channel, chat)
+                        for sender, e in self.pairing.approved(channel).items()
+                    )
+                    if (
+                        not paired
+                        or channel not in self.channels
+                        or not self.store.config(channel).enabled
+                    ):
+                        break
+                    try:
+                        if shared_files and not files_sent:
+                            await self.channels[channel].send(
+                                chat, "", files=[str(path) for path in shared_files]
+                            )
+                            files_sent = True
+                        await self.channels[channel].send(chat, self._redact_outbound(body))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        if attempt < 2:
+                            await asyncio.sleep(attempt + 1)
+                            continue
+                        self._set(
+                            channel,
+                            "error",
+                            self.say(
+                                "Could not deliver a synced message.",
+                                "同步消息发送失败。",
+                                "Не удалось доставить сообщение из приложения.",
+                            ),
+                        )
+                    else:
+                        self.sync_receipts.mark(key)
+                        sent_here = True
+                    break
+                if not sent_here:
+                    # let another machine try now, not a minute after our claim goes stale
+                    await self._release_synced_delivery(mid, channel, chat)
+        finally:
+            for path in shared_files:
+                path.unlink(missing_ok=True)
 
     def welcome_links(self, channel: str) -> list[tuple[str, str]]:
         """Where a chat can go next, as ``(label, url)``, from the channel's own settings.
