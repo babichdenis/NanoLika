@@ -10,9 +10,15 @@
 }
 
 main {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 24px 18px 96px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 20px 28px 96px;
+}
+
+#intro {
+  max-width: 1000px;
 }
 
 header a {
@@ -198,14 +204,23 @@ h1 {
 }
 
 .mm-name {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
   font-size: 15px;
   font-weight: 600;
+}
+
+.mm-model-name {
   cursor: pointer;
 }
 
 .mm-row-off .mm-name {
   color: var(--muted);
+}
+
+.mm-row-off .mm-model-name {
   cursor: default;
 }
 
@@ -214,6 +229,14 @@ h1 {
   color: var(--muted);
   font-size: 12.5px;
   line-height: 1.45;
+}
+
+.mm-vendor-inline {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .mm-link {
@@ -320,6 +343,11 @@ h1 {
 .tag-lock {
   background: #f3e8d0;
   color: #8a6420;
+  text-decoration: none;
+}
+
+.tag-lock:hover {
+  text-decoration: underline;
 }
 
 .plan-note {
@@ -373,6 +401,118 @@ h1 {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* -- черновик окна тарифа ------------------------------------------------------------- */
+
+.plan-dialog {
+  width: min(720px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 24px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.plan-dialog::backdrop {
+  background: rgba(36, 31, 26, 0.45);
+}
+
+.plan-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.plan-close {
+  position: absolute;
+  right: 14px;
+  top: 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.plan-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fffdf9;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-card:hover,
+.plan-card:focus-visible {
+  border-color: var(--accent);
+}
+
+.plan-card-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.plan-name {
+  font-size: 14px;
+}
+
+.plan-price {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.plan-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-dialog label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.plan-dialog input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf9;
+  color: var(--ink);
+  font: inherit;
+}
+
+.plan-dialog .btn {
+  display: inline-block;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  main {
+    padding: 18px 12px 80px;
+  }
 }
 
 @media (max-width: 520px) {

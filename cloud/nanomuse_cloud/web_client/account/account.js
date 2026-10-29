@@ -101,7 +101,24 @@ const autopay=installAutopay({lang,request:api});
 const usageChart=installUsageChart({lang,request:api});
 const paymentDialog=installPaymentDialog({lang,request:api,getSession:()=>session,fromConsole});
 addEventListener('storage',e=>{if(e.key===sessionKey||!e.key){paymentDialog.close();$('private-content').hidden=true;$('identity').textContent='';location.reload();}});
-load();
+load().then(()=>{
+ const q=new URLSearchParams(location.search);
+ if(q.get('pay')!=='1'||$('private-content').hidden)return;
+ $('fund-account')?.click();
+ const plan=q.get('plan')||'', amount=q.get('amount')||'';
+ if(!plan&&!amount)return;
+ const dialog=$('payment-dialog');
+ const apply=()=>{
+  let done=false;
+  if(plan){const radio=[...dialog.querySelectorAll('input[name="payment-option"]')].find(x=>x.value===plan);if(radio){radio.click();done=true;}}
+  else if(amount){const custom=dialog.querySelector('input[name="payment-option"][value="custom"]');if(custom){custom.click();const input=$('payment-custom-amount');if(input){input.value=amount;input.dispatchEvent(new Event('input',{bubbles:true}));done=true;}}}
+  return done;
+ };
+ if(apply())return;
+ const observer=new MutationObserver(()=>{if(apply())observer.disconnect();});
+ observer.observe(dialog,{childList:true,subtree:true});
+ setTimeout(()=>observer.disconnect(),6000);
+});
 
 let installOffer=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installOffer=e;});
 $('install-app').onclick=async()=>{if(installOffer){await installOffer.prompt();await installOffer.userChoice;installOffer=null;}else{$('install-note').textContent=lang==='en'?'Use your browser menu to install the app or add it to your home screen.':'В меню браузера выберите «Установить приложение» или «На экран Домой».';}};
