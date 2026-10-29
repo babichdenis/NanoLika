@@ -2009,9 +2009,9 @@
   // «не найдено» в публичном домене, и читают её через туннель к релею (0.30)
   function modelsView() {
     const cv = need("catalog");
-    if (!cv) return loadingPanel(T.catalog);
-    if (cv._error) return failedPanel(T.catalog, "catalog", cv._error);
-    return catalogPanel(cv);
+    if (!cv) return [balancesPanel(), loadingPanel(T.catalog)];
+    if (cv._error) return [balancesPanel(), failedPanel(T.catalog, "catalog", cv._error)];
+    return [balancesPanel(), catalogPanel(cv)];
   }
   function healthView() {
     const hv = need("health");
