@@ -374,3 +374,4 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt.mt-single .mt-pane-top { flex: 1 1 auto; }
 .admin .mt th small { display: block; margin-top: 1px; font-size: 10px; font-weight: 400; color: var(--ink-3); opacity: .85; }
 .admin .mt td.mt-status { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.admin .mt .mt-alias { margin-left: 4px; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }

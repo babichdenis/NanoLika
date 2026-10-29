@@ -122,14 +122,63 @@ function offersOf(model) {
   return (model.routing && model.routing.offers) || [];
 }
 
-function bestOffer(model) {
+function bestOffer(offers) {
   let best = null;
-  for (const offer of offersOf(model)) {
+  for (const offer of offers || []) {
     const price = offerEstimate(offer);
     if (price === null) continue;
     if (!best || price < offerEstimate(best)) best = offer;
   }
   return best;
+}
+
+/** Одна строка — одно название: закреплённая версия и её latest-алиас склеиваются. */
+function groupKeyOf(model) {
+  return `${String(model.name || model.id).trim().toLowerCase()}|${groupOf(model)}`;
+}
+
+function modelRank(model) {
+  if (model.default_on) return 0;
+  if (model.recommended) return 1;
+  if (model.listed) return 2;
+  return 3;
+}
+
+function unionOffers(models) {
+  const seen = new Set();
+  const out = [];
+  for (const model of models) {
+    for (const offer of offersOf(model)) {
+      // одна и та же цена у pinned-версии и latest-алиаса — одна строка
+      const key = `${offer.provider}|${offer.input_rub}|${offer.output_rub}|${offer.cached_rub}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      offer._from = model.id;
+      out.push(offer);
+    }
+  }
+  return out;
+}
+
+function allGroups() {
+  const map = new Map();
+  for (const model of (DATA && DATA.models) || []) {
+    const key = groupKeyOf(model);
+    let group = map.get(key);
+    if (!group) {
+      group = { key, name: model.name || model.id, group: groupOf(model), models: [] };
+      map.set(key, group);
+    }
+    group.models.push(model);
+  }
+  const groups = [...map.values()];
+  for (const group of groups) {
+    group.models.sort((a, b) => modelRank(a) - modelRank(b) || String(a.id).length - String(b.id).length);
+    group.primary = group.models[0];
+    group.listed = group.models.every((model) => Boolean(model.listed));
+    group.offers = unionOffers(group.models);
+  }
+  return groups;
 }
 
 function hasSell(model) {
@@ -169,22 +218,21 @@ function saveFilters() {
   } catch (_) { /* не наша страница */ }
 }
 
-function visibleModels() {
-  const data = DATA || {};
+function visibleGroups() {
   const q = state.q.trim().toLowerCase();
-  let rows = (data.models || []).filter((model) => {
-    if (state.group !== "all" && groupOf(model) !== state.group) return false;
-    if (state.visibility === "visible" && !model.listed) return false;
-    if (state.visibility === "hidden" && model.listed) return false;
-    if (state.sellOnly && !hasSell(model)) return false;
-    if (state.provider && !offersOf(model).some((offer) => offer.provider === state.provider)) return false;
+  let rows = allGroups().filter((group) => {
+    if (state.group !== "all" && group.group !== state.group) return false;
+    if (state.visibility === "visible" && !group.listed) return false;
+    if (state.visibility === "hidden" && group.listed) return false;
+    if (state.sellOnly && !group.models.some(hasSell)) return false;
+    if (state.provider && !group.offers.some((offer) => offer.provider === state.provider)) return false;
     if (!q) return true;
-    return `${model.name || ""} ${model.id || ""}`.toLowerCase().includes(q);
+    return group.models.some((model) => `${model.name || ""} ${model.id || ""}`.toLowerCase().includes(q));
   });
-  const byName = (a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), "ru");
-  if (state.sort === "cost") rows = rows.sort((a, b) => (a.cost?.rub_in ?? Infinity) - (b.cost?.rub_in ?? Infinity) || byName(a, b));
-  else if (state.sort === "client") rows = rows.sort((a, b) => (a.sell?.rub_in || Infinity) - (b.sell?.rub_in || Infinity) || byName(a, b));
-  else if (state.sort === "offers") rows = rows.sort((a, b) => offersOf(b).length - offersOf(a).length || byName(a, b));
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), "ru");
+  if (state.sort === "cost") rows = rows.sort((a, b) => (a.primary.cost?.rub_in ?? Infinity) - (b.primary.cost?.rub_in ?? Infinity) || byName(a, b));
+  else if (state.sort === "client") rows = rows.sort((a, b) => (a.primary.sell?.rub_in || Infinity) - (b.primary.sell?.rub_in || Infinity) || byName(a, b));
+  else if (state.sort === "offers") rows = rows.sort((a, b) => b.offers.length - a.offers.length || byName(a, b));
   else rows = rows.sort(byName);
   return rows;
 }
@@ -274,10 +322,10 @@ const TEMPLATE = `
 function drawGroups() {
   const box = $("mt-groups");
   if (!box) return;
-  const rows = (DATA && DATA.models) || [];
+  const groups = allGroups();
   box.replaceChildren();
   for (const [key, label] of GROUPS) {
-    const count = key === "all" ? rows.length : rows.filter((model) => groupOf(model) === key).length;
+    const count = key === "all" ? groups.length : groups.filter((group) => group.group === key).length;
     if (!count && key !== "all") continue;
     const button = el("button", "chip" + (state.group === key ? " on" : ""));
     button.type = "button";
@@ -302,22 +350,27 @@ function drawProviderFilter() {
   if (!select.value) state.provider = "";
 }
 
-function visibilityCell(model) {
+/** Галочка общая для всех id одной строки: клиент не должен видеть дубль наполовину. */
+function visibilityCell(group) {
   const cell = el("td", "mt-pick-cell");
   const label = el("label", "mt-check");
   const input = el("input");
   input.type = "checkbox";
-  input.checked = Boolean(model.listed);
-  input.setAttribute("aria-label", "Показывать клиентам: " + (model.name || model.id));
-  label.append(input, el("span", "", input.checked ? "Видна" : "Скрыта"));
+  input.checked = group.listed;
+  input.setAttribute("aria-label", "Показывать клиентам: " + group.name);
+  label.append(input, el("span", "", group.listed ? "Видна" : "Скрыта"));
   const text = label.lastChild;
   input.onclick = (event) => event.stopPropagation();
   input.onchange = async () => {
     const next = input.checked;
     input.disabled = true;
     try {
-      await API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/visibility`, { visible: next });
-      model.listed = next;
+      for (const model of group.models) {
+        if (Boolean(model.listed) === next) continue;
+        await API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/visibility`, { visible: next });
+        model.listed = next;
+      }
+      group.listed = next;
       text.textContent = next ? "Видна" : "Скрыта";
       const row = cell.closest("tr");
       if (row) row.classList.toggle("mt-off", !next);
@@ -338,19 +391,23 @@ function drawModels(rows) {
   if (!body) return;
   body.replaceChildren();
   const frag = document.createDocumentFragment();
-  for (const model of rows) {
-    const best = bestOffer(model);
-    const offers = offersOf(model);
-    const tr = el("tr", "mt-row" + (model.listed ? "" : " mt-off") + (state.sel === model.id ? " mt-active" : ""));
+  for (const group of rows) {
+    const model = group.primary;
+    const best = bestOffer(group.offers);
+    const offers = group.offers;
+    const active = group.models.some((item) => item.id === state.sel);
+    const tr = el("tr", "mt-row" + (group.listed ? "" : " mt-off") + (active ? " mt-active" : ""));
 
-    tr.append(visibilityCell(model));
+    tr.append(visibilityCell(group));
 
     const name = el("td", "mt-model-cell");
-    name.append(el("span", "mt-name", model.name || model.id));
+    name.title = group.models.map((item) => item.id).join(" · ");
+    name.append(el("span", "mt-name", group.name));
     name.append(el("code", "mt-code", model.id));
+    if (group.models.length > 1) name.append(el("span", "mt-alias", ` +${group.models.length - 1}`));
     tr.append(name);
 
-    tr.append(el("td", "mt-kind", groupLabel(groupOf(model))));
+    tr.append(el("td", "mt-kind", groupLabel(group.group)));
     tr.append(el("td", "num", ctxText(model.context)));
     tr.append(el("td", "num", purchaseText(model)));
     tr.append(el("td", "num", clientText(model)));
@@ -370,7 +427,7 @@ function drawModels(rows) {
     tr.append(count);
 
     tr.onclick = () => select(model.id);
-    if (state.sel === model.id) requestAnimationFrame(() => tr.scrollIntoView({ block: "nearest" }));
+    if (active) requestAnimationFrame(() => tr.scrollIntoView({ block: "nearest" }));
     frag.append(tr);
   }
   body.append(frag);
@@ -380,7 +437,7 @@ function select(id) {
   // повторный клик по выбранной строке закрывает нижнюю таблицу
   state.sel = state.sel === id ? "" : id;
   saveFilters();
-  drawModels(visibleModels());
+  drawModels(visibleGroups());
   drawOffers();
 }
 
@@ -399,21 +456,23 @@ function drawOffers() {
   const body = ROOT.querySelector("#mt-offers tbody");
   if (!body) return;
   body.replaceChildren();
-  const models = (DATA && DATA.models) || [];
-  const model = models.find((m) => m.id === state.sel) || null;
-  if (!model) {
+  const group = allGroups().find((item) => item.models.some((model) => model.id === state.sel)) || null;
+  if (!group) {
     if (title) title.textContent = "Поставщики модели";
     if (meta) meta.textContent = "";
     splitVisible(false);
     return;
   }
   splitVisible(true);
-  if (title) title.textContent = model.name || model.id;
-  if (meta) meta.textContent = `${model.id} · ${groupLabel(groupOf(model))} · ${offersOf(model).length} предложений`;
-  const offers = offersOf(model).slice().sort((a, b) => (offerEstimate(a) ?? Infinity) - (offerEstimate(b) ?? Infinity));
+  if (title) title.textContent = group.name;
+  if (meta) {
+    const ids = group.models.map((model) => model.id).join(" · ");
+    meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} предложений`;
+  }
+  const offers = group.offers.slice().sort((a, b) => (offerEstimate(a) ?? Infinity) - (offerEstimate(b) ?? Infinity));
   if (!offers.length) {
     const tr = el("tr");
-    const td = el("td", "fine", groupOf(model) === "text"
+    const td = el("td", "fine", group.group === "text"
       ? "Поставщики цену не публикуют."
       : "У медиамодели предложения поставщиков пока не собираются.");
     td.colSpan = 7;
@@ -424,7 +483,8 @@ function drawOffers() {
   const cheapest = offers.find((offer) => offerEstimate(offer) !== null) || null;
   for (const offer of offers) {
     const tr = el("tr", offer === cheapest ? "mt-cheap" : "");
-    if (offer.provider === model.routing?.selected && offer.model === model.routing?.selected_model) tr.classList.add("mt-serving");
+    const serving = Boolean(offer.selected) && offer._from === group.primary.id;
+    if (serving) tr.classList.add("mt-serving");
     tr.append(el("td", "mt-provider", providerLabel(offer.provider)));
     const modelCell = el("td");
     modelCell.append(el("code", "mt-code", offer.model || "—"));
@@ -435,11 +495,10 @@ function drawOffers() {
     tr.append(el("td", "num", ctxText(offer.context_length)));
     let status = "только сверка";
     let cls = "mt-status";
-    if (offer.selected) { status = "сейчас раздаёт"; cls += " is-serving"; }
+    if (serving) { status = "сейчас раздаёт"; cls += " is-serving"; }
     else if (offer.eligible) { status = "можно переключить"; cls += " is-ready"; }
-    else if (offer.exclusion_reason) status = offer.exclusion_reason;
     const statusCell = el("td", cls, status);
-    statusCell.title = status;
+    statusCell.title = offer.exclusion_reason || status;
     tr.append(statusCell);
     body.append(tr);
   }
@@ -447,7 +506,7 @@ function drawOffers() {
 
 function drawCounts(rows) {
   const count = $("mt-count");
-  if (count) count.textContent = `показано ${rows.length} из ${((DATA && DATA.models) || []).length}`;
+  if (count) count.textContent = `показано ${rows.length} из ${allGroups().length}`;
 }
 
 function setNote(text) {
@@ -469,9 +528,10 @@ function syncControls() {
 
 function draw() {
   saveFilters();
+  const rows = visibleGroups();
   drawGroups();
-  drawCounts(visibleModels());
-  drawModels(visibleModels());
+  drawCounts(rows);
+  drawModels(rows);
   drawOffers();
 }
 
