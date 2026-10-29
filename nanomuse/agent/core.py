@@ -157,7 +157,10 @@ class MuseAgent:
         if tool is None:
             return ""
         try:
-            missing = tool.missing_lines()
+            missing_lines = getattr(tool, "missing_lines", None)
+            if not callable(missing_lines):
+                return ""
+            missing = missing_lines()
         except Exception as exc:  # noqa: BLE001 — the prompt must never fail on this
             logger.debug("store section skipped: {}", exc)
             return ""

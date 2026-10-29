@@ -45,7 +45,7 @@ from nanomuse.channels.welcome import send_welcome_art
 from nanomuse.cloud import CloudError
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
-from nanomuse.schema import Message
+from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
 
 if TYPE_CHECKING:
@@ -473,7 +473,7 @@ class ChannelManager(ChannelBus):
                     requested,
                     device,
                     fallback=False,
-                    shared_cid=self.svc.sync.cid_of(thread_id)
+                    shared_cid=self.svc.sync.cid_of(thread_id) or ""
                     if self.svc.sync.active and self.svc.sync._eligible(self.svc.threads[thread_id])
                     else "",
                 )
@@ -534,7 +534,7 @@ class ChannelManager(ChannelBus):
                     msg,
                     text,
                     device,
-                    shared_cid=self.svc.sync.cid_of(thread_id)
+                    shared_cid=self.svc.sync.cid_of(thread_id) or ""
                     if self.svc.sync.active and self.svc.sync._eligible(self.svc.threads[thread_id])
                     else "",
                 )
@@ -625,7 +625,7 @@ class ChannelManager(ChannelBus):
         ]
         thread.agent.messages.append(
             Message(
-                role="system",
+                role=Role.SYSTEM,
                 content=(
                     "Continue this same server-owned conversation using its shared history. "
                     "This turn runs on the server, not in the computer's existing agent session. "
@@ -1404,7 +1404,8 @@ class ChannelManager(ChannelBus):
             if isinstance(parsed, dict):
                 body = parsed
         if answer.status_code != 200:
-            error = body.get("error") if isinstance(body.get("error"), dict) else {}
+            raw_error = body.get("error")
+            error = raw_error if isinstance(raw_error, dict) else {}
             code = str(error.get("code") or "")
             text = str(error.get("message") or "")
             logger.warning(

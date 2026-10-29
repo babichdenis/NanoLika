@@ -140,3 +140,20 @@ def test_feishu_login_endpoints(server, monkeypatch: pytest.MonkeyPatch, setting
     assert me["status"]["state"] in ("missing_sdk", "connecting", "error", "connected")
     if me["status"]["state"] == "missing_sdk":
         assert me["status"]["detail"] == "pip install 'nanomuse[feishu]'"
+
+
+def test_max_webhook_requires_an_actual_configured_max_channel(server):
+    client, service = server
+    from nanomuse.channels.base import Channel
+
+    channels = service.channels.channels
+    original = dict(channels)
+    try:
+        for wrong in (None, Channel({})):
+            channels["max"] = wrong
+            response = client.post("/api/channels/max/webhook", json=None)
+            assert response.status_code == 503
+            assert response.json()["detail"] == "MAX is not configured"
+    finally:
+        channels.clear()
+        channels.update(original)

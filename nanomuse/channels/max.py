@@ -233,6 +233,9 @@ class MaxChannel(Channel):
         return False
 
     def handle_update(self, data: dict) -> None:
+        bus = self.bus
+        if bus is None:
+            return
         kind = data.get("update_type")
         if kind == "bot_started":
             user = data.get("user") or {}
@@ -240,7 +243,7 @@ class MaxChannel(Channel):
             sender = str(user.get("user_id") or "")
             key = f"start:{chat}:{sender}:{data.get('timestamp')}"
             if chat and sender and not self._duplicate(key):
-                self.bus.inbound(
+                bus.inbound(
                     InboundMessage(
                         channel=self.name,
                         chat_id=chat,
@@ -275,7 +278,7 @@ class MaxChannel(Channel):
             ):
                 if "menu" in value:
                     value["_menu_message_id"] = str(body.get("mid") or "")
-                self.bus.action(self.name, chat, sender, value)
+                bus.action(self.name, chat, sender, value)
             return
         if kind != "message_created":
             return
@@ -360,7 +363,8 @@ class MaxChannel(Channel):
             if not isinstance(item, dict):
                 continue
             kind = str(item.get("type") or "")
-            payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+            raw_payload = item.get("payload")
+            payload = raw_payload if isinstance(raw_payload, dict) else {}
             if kind == "image":
                 url = str(payload.get("url") or "")
                 name = f"photo-{payload.get('photo_id') or 'max'}.jpg"
@@ -370,10 +374,12 @@ class MaxChannel(Channel):
                 url = str(payload.get("url") or "")
                 if not url and token:
                     details = await self._call("GET", f"/videos/{token}")
-                    urls = details.get("urls") if isinstance(details.get("urls"), dict) else {}
+                    raw_urls = details.get("urls")
+                    urls = raw_urls if isinstance(raw_urls, dict) else {}
                     for key in ("mp4_1080", "mp4_720", "mp4_480", "mp4_360", "mp4_240"):
-                        if isinstance(urls.get(key), str) and urls[key]:
-                            url = urls[key]
+                        candidate = urls.get(key)
+                        if isinstance(candidate, str) and candidate:
+                            url = candidate
                             break
                 name = f"video-{token or 'max'}.mp4"
                 got = await self._download_url(url, name, "video")
@@ -653,7 +659,7 @@ class MaxChannel(Channel):
 
 
 async def receive_webhook(channel: MaxChannel | None, request: Request) -> dict:
-    if channel is None or channel._http is None:
+    if channel is None or channel._http is None or channel.bus is None:
         raise HTTPException(503, "MAX is not configured")
     expected = str(channel.settings.get("webhook_secret") or "")
     supplied = request.headers.get("X-Max-Bot-Api-Secret", "")

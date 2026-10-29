@@ -40,3 +40,10 @@ def test_credential_values_hidden_from_card_and_details():
 def test_missing_args_and_long_commands_have_bounded_details():
     assert len(approval_details({"tool": "shell", "args": {"command": "x " * 10000}})) <= 3900
     assert "Что сделать" in readable_approval({"args": None}, "Лика")
+
+
+def test_malformed_approval_args_are_treated_as_empty():
+    for args in (None, [], ["bad"], "bad", 0):
+        event = {"tool": "shell", "args": args}
+        assert "Что сделать" in readable_approval(event, "Лика")
+        assert "Технические подробности" in approval_details(event)

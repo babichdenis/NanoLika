@@ -137,7 +137,8 @@ class ChatLink:
             # The chat is somebody's already. The relay says whose (a masked address) and
             # whether that chat *is* the account, because the answer is a question rather than
             # a wall: "connected to this account, leave it and connect here instead?".
-            taken = error.get("taken") if isinstance(error.get("taken"), dict) else {}
+            raw_taken = error.get("taken")
+            taken = raw_taken if isinstance(raw_taken, dict) else {}
             self.taken = {
                 "label": str(taken.get("label") or ""),
                 "own": bool(taken.get("own")),

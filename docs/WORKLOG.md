@@ -1,5 +1,12 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Validate optional channel payloads and MAX readiness
+
+The full type check reported 30 errors across eight runtime files. Narrow repeated JSON mapping lookups once, preserve optional text during history hydration, use the schema role and an empty shared-id sentinel, and keep optional store inventory duck-typed. MAX now rejects webhooks with the existing 503 response until its bus is ready, before acknowledgment or deduplication; direct updates without a bus return safely. A wrong channel registry entry is also treated as unconfigured.
+
+Validation: mypy passed for 162 source files, global runtime Ruff check passed, touched-file formatting passed; 110 channel/agent/project/profile tests, three sync hydration/history tests and 18 MAX tests passed. New regressions cover absent bus and retry, malformed media/approval payloads and an invalid channel registry entry. No type suppressions, pricing or sync-policy changes. This follow-up is separate from the already verified and installed eb350942 runtime; a refreshed package and the narrow server MAX guard require their own deployment record.
+
+
 ## 2026-10-29: Wait for the side-chat transition's own sync pull
 
 The full runtime run completed with 1066 passing tests, 5 platform skips and one failure: the side-chat toggle test assumed the next recorded request must be its bootstrap. A main-only background poll could already be in flight before the settings change. Wait for the exact all-scope pull from zero with a 300-message tail, then assert that bootstrap occurs once; retain history, cursor, push and switch-off assertions. No runtime sync logic, defaults or owner-paused policies changed.

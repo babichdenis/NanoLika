@@ -352,12 +352,12 @@ def account_key() -> str:
     from nanomuse.config import load_settings
 
     settings = load_settings()
-    value = CredentialVault(settings.vault_file, settings.vault_key_file).get(CLOUD_KEY)
-    if not value:
+    vault_value = CredentialVault(settings.vault_file, settings.vault_key_file).get(CLOUD_KEY)
+    if not vault_value:
         raise ProjectError(
             "Войдите в nanoLika Cloud в локальном приложении; ключ нельзя присылать в чат"
         )
-    return value
+    return vault_value
 
 
 async def main_async(args: argparse.Namespace) -> dict | None:

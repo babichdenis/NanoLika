@@ -956,7 +956,7 @@ class ConversationSync:
                 and current_user_text
                 and history
                 and history[-1].role == "user"
-                and history[-1].content.strip() == current_user_text.strip()
+                and (history[-1].content or "").strip() == current_user_text.strip()
             ):
                 history.pop()
             thread.agent.messages = history

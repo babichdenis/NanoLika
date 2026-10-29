@@ -114,6 +114,46 @@ class Tests(unittest.IsolatedAsyncioTestCase):
     async def post(self, data, secret="s" * 40):
         return await self.client.post("/hook", json=data, headers={"X-Max-Bot-Api-Secret": secret})
 
+    async def test_updates_without_a_bus_do_not_consume_events(self):
+        self.ch.bus = None
+        started = {
+            "update_type": "bot_started",
+            "chat_id": 19,
+            "user": {"user_id": 17},
+            "timestamp": 7,
+        }
+        callback = self.update("message_callback")
+        callback["callback"] = {
+            "callback_id": "lifecycle-callback",
+            "user": {"user_id": 17},
+            "payload": json.dumps({"menu": "chats"}),
+        }
+        for update in (started, callback, self.update()):
+            self.ch.handle_update(update)
+        self.assertEqual(self.bus.messages, [])
+        self.assertEqual(self.bus.actions, [])
+        self.assertEqual(self.ch._seen, set())
+        self.assertEqual((await self.post(started)).status_code, 503)
+        self.assertEqual(self.ch._seen, set())
+        self.ch.bus = self.bus
+        self.ch.handle_update(started)
+        self.ch.handle_update(callback)
+        self.assertEqual(len(self.bus.messages), 1)
+        self.assertEqual(len(self.bus.actions), 1)
+
+    async def test_malformed_attachment_payloads_preserve_text_delivery(self):
+        update = self.update()
+        update["message"]["body"]["attachments"] = [
+            {"type": kind, "payload": payload}
+            for kind in ("image", "video", "audio", "file")
+            for payload in (None, [], "bad")
+        ]
+        await self.post(update)
+        await asyncio.sleep(0.05)
+        self.assertEqual(len(self.bus.messages), 1)
+        self.assertEqual(self.bus.messages[0].text, "hello")
+        self.assertEqual(self.bus.messages[0].files, [])
+
     async def test_verified_bot_and_subscription(self):
         self.assertEqual(self.bus.status[-1][1], "connected")
         self.assertTrue(all(r.headers.get("Authorization") == "fixture-token" for r in self.calls))

@@ -75,9 +75,10 @@ def install_channels(app: FastAPI, svc: MuseService, dep: list[Any]) -> ChannelM
     # This one public route uses MAX's secret; management retains Bearer authentication.
     @app.post("/api/channels/max/webhook", include_in_schema=False)
     async def max_webhook(request: Request) -> dict:
-        from nanomuse.channels.max import receive_webhook
+        from nanomuse.channels.max import MaxChannel, receive_webhook
 
-        return await receive_webhook(manager.channels.get("max"), request)
+        channel = manager.channels.get("max")
+        return await receive_webhook(channel if isinstance(channel, MaxChannel) else None, request)
 
     inner = app.router.lifespan_context
 

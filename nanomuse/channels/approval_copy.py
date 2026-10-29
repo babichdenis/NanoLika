@@ -22,7 +22,8 @@ def clean(value: Any, limit: int = 400) -> str:
 
 def readable_approval(event: dict[str, Any], name: str) -> str:
     tool = str(event.get("tool") or "")
-    args = event.get("args") if isinstance(event.get("args"), dict) else {}
+    raw_args = event.get("args")
+    args = raw_args if isinstance(raw_args, dict) else {}
     actions = {
         "shell": "Выполнить команду: запустить программы или технические операции.",
         "device_shell": "Выполнить команду на связанном устройстве.",
@@ -91,7 +92,8 @@ def readable_approval(event: dict[str, Any], name: str) -> str:
 
 
 def approval_details(event: dict[str, Any]) -> str:
-    args = event.get("args") if isinstance(event.get("args"), dict) else {}
+    raw_args = event.get("args")
+    args = raw_args if isinstance(raw_args, dict) else {}
     lines = [
         "Технические подробности запроса",
         "Инструмент: " + clean(event.get("tool"), 100),
