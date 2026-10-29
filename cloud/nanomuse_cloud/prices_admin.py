@@ -613,7 +613,7 @@ _CACHE: dict[str, Any] = {"at": 0.0, "full": None, "compact": None}
 _CACHE_TTL = 300.0
 
 _MODEL_FIELDS = ("id", "name", "kind", "listed", "default_on", "recommended", "context", "max_output", "cost", "sell", "ratio", "priced_as", "upstream")
-_OFFER_FIELDS = ("provider", "model", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason")
+_OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason")
 
 
 def _compact(payload: dict) -> dict:

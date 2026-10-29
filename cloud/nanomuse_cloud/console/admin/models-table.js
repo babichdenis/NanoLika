@@ -412,6 +412,7 @@ const TEMPLATE = `
           <tr>
             <th>Поставщик</th>
             <th>Модель у поставщика</th>
+            <th>Тариф</th>
             <th class="num">Вход, ₽/1M</th>
             <th class="num">Выход, ₽/1M</th>
             <th class="num">Кэш, ₽/1M</th>
@@ -602,7 +603,7 @@ function drawOffers() {
     const td = el("td", "fine", group.group === "text"
       ? "Поставщики цену не публикуют."
       : "У медиамодели предложения поставщиков пока не собираются.");
-    td.colSpan = 7;
+    td.colSpan = 8;
     tr.append(td);
     body.append(tr);
     return;
@@ -616,6 +617,16 @@ function drawOffers() {
     const modelCell = el("td");
     modelCell.append(el("code", "mt-code", offer.model || "—"));
     tr.append(modelCell);
+    const endpoint = String(offer.endpoint || "");
+    const tier = endpoint ? endpoint.split("/").slice(-2).join("/") : "—";
+    const tierCell = el("td", "mt-tier", tier);
+    if (/flex/i.test(endpoint)) {
+      tierCell.classList.add("is-flex");
+      tierCell.title = `${endpoint}: гибкий тариф — дешевле, но медленнее обычного`;
+    } else {
+      tierCell.title = endpoint || "обычный тариф";
+    }
+    tr.append(tierCell);
     tr.append(el("td", "num", fmt(offer.input_rub)));
     tr.append(el("td", "num", fmt(offer.output_rub)));
     tr.append(el("td", "num", offer.cached_rub == null ? "—" : fmt(offer.cached_rub)));
