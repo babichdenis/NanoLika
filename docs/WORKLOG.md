@@ -117,6 +117,17 @@ prompts.py without the matching core.py compiles and starts fine, then fails on 
 turn; deployment checks must exercise one real turn or at least call
 `build_system_prompt`, not only `/healthz`.
 
+The next Telegram message surfaced a second skew: the bot's chat preference still held
+`mode: full-access` from before `channels.shared_thread` was turned on. For a shared chat the
+manager tried to push that mode to the desktop before every turn; the DSH preset is named
+`danger-full-access`, the call failed, and the turn ended with the misleading "installed
+version cannot change access" reply. Fixed in `920562c1`: a shared chat ignores a stored
+per-messenger mode (the desktop app's setting governs it), and the DSH plugin maps
+`full-access` to `danger-full-access` when the host does not know the former. Bot manager
+override deployed and the container restarted; plugin rebuilt and installed in both desktop
+copies (backup `~/.nanolika/backups/sync-preset-20261029T140500Z`), app restarted. The stale
+preference is harmless now; the bot no longer sends `channel_permissions` for a shared chat.
+
 ## 2026-10-29 · Isolation audit: preserve client experience, separate session state
 
 The owner asked to close the findings in `~/Downloads/NanoLika-isolation-razbor.md`. The
