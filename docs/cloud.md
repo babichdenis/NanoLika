@@ -305,21 +305,28 @@ The API, all under the account's key (401 without one; 409 `sync_off` while the
 switch is off, for reads as well as writes):
 
 ```
-GET    /v1/sync/state                   → {enabled, cursor, counts{conversations, messages}, limits{messages, text_bytes, conversations}, working[]}
+GET    /v1/sync/state                   → {enabled, cursor, counts{conversations, messages}, limits{messages, text_bytes, conversations}, working[], leases[]}
 PUT    /v1/sync/state   {enabled}       → the same; false deletes everything stored, the counter keeps counting
 GET    /v1/sync/changes ?since=0&limit=500&scope=all|main&tail=K   → {cursor, more, conversations[], messages[], skipped?}
 POST   /v1/sync/changes {device, conversations[], messages[]}   → {cursor, accepted, rejected[{cid | mid, reason, cid_main?}]}
 POST   /v1/sync/working {cid, working, device?}   → 204; the hub tells the other devices   404 no_conversation
+POST   /v1/sync/lease {cid, device, turn, ttl?, force?, take?} → 200 {ok, holder{device, name, turn, expires_at}}; 409 conversation_busy when take
+POST   /v1/sync/lease/renew {cid, device, turn, ttl?} → 200 {ok, holder}; 409 conversation_busy | lease_lost
+DELETE /v1/sync/lease {cid, device, turn} → 204
+POST   /v1/sync/delivery/claim {mid, channel, chat, device} → 200 {ok, device}; 409 delivery_claimed {holder{device}}
+DELETE /v1/sync/delivery/claim {mid, channel, chat, device} → 204
 DELETE /v1/sync/changes                 → the state, counts at zero     everything stored, switch unchanged
 DELETE /v1/sync/conversations/{cid}     → {cursor, deleted: true}      a tombstone the other devices apply; 404 no_conversation
 ```
 
 `scope` (relay 0.20) is `all` unless said; `main` returns only the main
 conversation and its messages, and an account with no main yet gets an empty
-page whose `cursor` is the account's counter. `tail=K` (K ≤ 500, honoured with
-`since=0` only) returns the newest K messages in `seq` order, the conversations
-they belong to, `cursor` at the account's counter, `more: false` and `skipped`
-(how many older messages were left out). From relay 0.25 the tail page also
+page whose `cursor` is `since`. `tail=K` (K ≤ 500, honoured with `since=0`
+only) returns the newest K messages in `seq` order, the conversations they
+belong to, `cursor` at the newest row actually handed out, `more: false` and
+`skipped` (how many older messages were left out). A scoped page never moves
+the cursor past a row of another scope, so turning side chats on later still
+finds their older messages. From relay 0.25 the tail page also
 carries the account's main conversation's row whenever it exists, even with no
 message of its own among the K, so a fresh device adopts `cid_main` from its
 first pull instead of minting a second main and learning the id from a
