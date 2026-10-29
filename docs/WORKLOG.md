@@ -1,3 +1,24 @@
+## 2026-10-29 · Isolation boundary mapped before I1/I2 changes
+
+Revised the isolation audit's initial per-thread proposal to preserve the owner's requirement:
+client preferences, effective work patterns and pointers to known files are long-lived client
+knowledge shared by that client's sessions; each thread's transcript, running task and uploads
+remain session-owned. This was a source review only; no behavior changed.
+
+Current evidence: `Thread` already owns its timeline and agent session. `ConversationSync` maps
+synced threads to a Cloud account through `owner_of`, but local ownerless threads have no such
+identity. The messenger's `access_scope` is per private chat and currently only scopes access
+settings. Public bot sign-in creates/finds an account by `(channel, sender_id)` and returns its
+account ID, but the channel manager currently keeps only the API key and model. `MuseService`
+still builds one workspace/tool set and one `MemoryStore`; messenger uploads and `/api/files/upload`
+are saved without a thread ID. Therefore the next change must propagate an explicit customer
+identity from ingress through the `Thread` and tool context, keep topic IDs as session IDs, and
+keep group chats from borrowing a private sender's memory. Do not migrate unknown old files or
+memories to a customer account without a trusted owner mapping.
+
+Audit updates are in `~/Downloads/NanoLika-isolation-razbor.md`. No code or production state was
+changed by this mapping.
+
 ## 2026-10-29 · Hub replay protection survives relay restarts
 
 Closed audit item I14 at the relay boundary. Cloud now persists used call IDs and nonces per
