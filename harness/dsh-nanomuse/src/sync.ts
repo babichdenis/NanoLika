@@ -633,6 +633,8 @@ export interface SyncView {
   mainSession: string
   /** Sessions that hold a synced conversation: listed in the chats column even before a turn ran here. */
   sessions: string[]
+  /** The title of each synced session, so a chat the harness has not listed yet still has a name. */
+  titles: Record<string, string>
   /** Sessions that belong to another account than the one signed in (C10): hidden by the browser half, not deleted; empty when signed out. */
   foreign: string[]
   /** mids of rows deleted elsewhere: hidden in the transcript. */
@@ -754,6 +756,9 @@ export class SyncEngine {
       rev: this.rev,
       mainSession: this.state.mainSession,
       sessions: Object.keys(this.state.cids).filter((sid) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
+      titles: Object.fromEntries(
+        Object.entries(this.state.titles).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
+      ),
       foreign: this.foreign(),
       hidden: [...this.state.hidden],
       toArchive: this.state.toArchive.filter(sid => this.state.clouds[sid] !== 'local' || !this.state.cids[sid]),

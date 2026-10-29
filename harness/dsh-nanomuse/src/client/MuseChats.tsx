@@ -41,6 +41,7 @@ interface SyncList {
   enabled: boolean
   mainSession: string
   sessions: Set<string>
+  titles: Record<string, string>
   /** Sessions of another account than the one signed in (C10): not listed, not searched; empty when signed out. */
   foreign: Set<string>
   toRestore?: string[]
@@ -51,7 +52,7 @@ interface SyncList {
    */
   synced: Set<string>
 }
-const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), foreign: new Set(), toArchive: [], synced: new Set() }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set() }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -59,8 +60,8 @@ export function useSyncList(): SyncList {
   const [list, setList] = useState<SyncList>(NO_SYNC)
   useEffect(() => {
     let alive = true
-    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
-      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
+    call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
+      .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
       .catch(() => undefined)
     return () => { alive = false }
   }, [rev])
@@ -319,10 +320,17 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   // the rooms' running batches (the feed being written) are the agent's work, not chats of the person's
   const batches = new Set(useRooms().batches)
   // signed in, the column shows this account's chats and the ones never synced (C10); another account's stay, hidden
-  const visible = state.ids
-    .map((id) => state.byId[id])
+  // A synced conversation is a chat from the moment the account has it, even when the
+  // harness's session list does not carry the still-empty session yet: the row is built from
+  // the sync view, so the MAX chat cannot be invisible on the computer while the web sees it.
+  const syncedOnly = [...sync.sessions]
+    .filter((id) => !state.byId[id] && !sync.foreign.has(id) && !archivedSet.has(id))
+    .map((id): ChatSummary => ({ id, displayTitle: sync.titles[id] || t('chBlank'), running: false, retainedBy: {}, blank: false, updatedAt: Date.now() }))
+  const allById: Record<string, ChatSummary> = { ...state.byId, ...Object.fromEntries(syncedOnly.map((row) => [row.id, row])) }
+  const visible = [...state.ids, ...syncedOnly.map((row) => row.id)]
+    .map((id) => allById[id])
     .filter((s): s is ChatSummary => s !== undefined && s.origin !== 'subagent' && !s.parentId && !archivedSet.has(s.id) && !sync.foreign.has(s.id) && !batches.has(s.id))
-  const current = Object.values(state.byId).find((s) => (s.retainedBy.mainView ?? 0) > 0)?.id
+  const current = Object.values(allById).find((s) => (s.retainedBy.mainView ?? 0) > 0)?.id
 
   // The main chat: the one the account's main conversation lives in (C8) while it exists, else
   // the remembered one, else the oldest, else the one on screen (a first session being created
