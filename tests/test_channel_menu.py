@@ -14,7 +14,10 @@ def manager(tmp_path):
     svc = SimpleNamespace(
         data_dir=tmp_path,
         app=SimpleNamespace(sentinel=SimpleNamespace()),
-        settings=SimpleNamespace(channels=SimpleNamespace(shared_thread=False)),
+        settings=SimpleNamespace(
+            channels=SimpleNamespace(shared_thread=False),
+            server=SimpleNamespace(keep_files_hours=48),
+        ),
         hub=SimpleNamespace(primary=lambda: None),
         # the menu binds a ticket to the account and asks it which threads are the person's:
         # a conversation this fake does not know is not the account's, so the chats list
@@ -59,6 +62,19 @@ def test_preferences_persist_without_cross_chat_access(tmp_path):
     assert p.path.stat().st_mode & 0o777 == 0o600
 
 
+def test_file_retention_preference_uses_fallback_and_validates_values(tmp_path):
+    p = Preferences(tmp_path / "prefs.json")
+    assert p.file_retention_hours("one", 48) == 48
+    p.set_file_retention_hours("one", 1)
+    assert Preferences(p.path).file_retention_hours("one", 48) == 1
+    p.set_file_retention_hours("one", 0)
+    assert p.file_retention_hours("one", 48) == 0
+    p.put("one", file_retention_hours="nan")
+    assert p.file_retention_hours("one", 48) == 48
+    p.set_file_retention_hours("one", None)
+    assert p.file_retention_hours("one", 48) == 48
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("channel", ["telegram", "max"])
 async def test_menu_has_all_controls_and_private_callback(channel, tmp_path):
@@ -78,6 +94,23 @@ async def test_menu_has_all_controls_and_private_callback(channel, tmp_path):
     await menu.callback(channel, "chat", "owner", {"menu": token})
     assert len(menu.tickets) >= 3
     assert "mode" not in menu.preferences.get("channel-" + channel + "-chat")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("channel", ["telegram", "max"])
+async def test_retention_can_be_changed_for_one_conversation(channel, tmp_path):
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    message = msg(channel)
+    thread = m._thread_for(message)
+
+    await menu.perform(message, "retention")
+    assert "48 h" in str(m.channels[channel]._call.call_args)
+    await menu.perform(message, "retention-hours:1")
+    assert menu.preferences.file_retention_hours(thread, 48) == 1
+    await menu.perform(message, "retention-hours:default")
+    assert menu.preferences.file_retention_hours(thread, 48) == 48
+    assert menu.preferences.file_retention_hours(m._thread_for(msg(chat="other")), 48) == 48
 
 
 @pytest.mark.asyncio

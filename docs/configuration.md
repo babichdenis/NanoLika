@@ -461,13 +461,13 @@ the version under *Settings → About* with a link to the release page; nothing 
 nothing about the install is sent beyond the runtime's version in the request's `User-Agent`. `NANOMUSE_NO_UPDATE_CHECK=1` turns it off too, and a hosted
 web session (a runtime started with `NANOMUSE_CLOUD_KEY`) never checks; its operator updates it.
 
-`keep_files_hours` decides how long the workspace keeps what the person sends and what the
-agent makes for them. 0, the default, keeps everything: a runtime on the person's own computer
-holds their own files. A runtime that serves people from a shared box sets it, and a sweep at
-start and once an hour deletes the older files, so the picture they sent is looked at once and
-the document they asked for is delivered once. Nothing an account does leaves a picture or a
-file on a relay: the conversation sync carries text, and the name, type and size of an
-attachment, never its bytes.
+`keep_files_hours` is the default lifetime for files sent to or made by the agent. A private
+conversation can override it from the bot's **Settings → File retention** menu. A missing
+override uses this setting; `0` keeps files forever. At start and once an hour, the runtime
+checks each conversation's own folder, so one chat's cleanup does not remove another chat's
+files. A runtime on a shared box should set a finite default. Nothing an account does leaves a
+picture or a file on a relay: conversation sync carries text and an attachment's name, type and
+size, never its bytes.
 
 These settings apply to the Python runtime. The Windows desktop shell checks separately
 after startup and every six hours. Its saved automatic download switch is on by default,

@@ -449,6 +449,7 @@ token            = ""            # empty → generated once, stored in <data_dir
 approval_timeout = 3600          # seconds an approval card waits before counting as "deny"
 cors_origins     = []            # only for the Vite dev server, e.g. ["http://localhost:5173"]
 max_upload_mb    = 25            # largest file the app may attach to a message
+keep_files_hours = 0             # 0 keeps files; set a limit for a shared runtime
 update_check     = true          # Settings → About says when a newer release is out (the download index, then GitHub Releases; once a day)
 start_grace      = 4             # seconds the services may take before the app answers anyway
 ```
@@ -458,6 +459,12 @@ start_grace      = 4             # seconds the services may take before the app 
 除了请求 `User-Agent` 里的运行时版本号，也不发送任何关于这次安装的信息。
 `NANOMUSE_NO_UPDATE_CHECK=1` 同样能关掉它；托管的网页会话（用 `NANOMUSE_CLOUD_KEY`
 启动的运行时）从不检查；由它的运营者来更新。
+
+`keep_files_hours` 是发送给智能体或由智能体生成的文件的默认保留时长。私聊可在机器人
+「设置 → 文件保留」中单独设置；没有单独设置时使用此值。`0` 表示永久保留。运行时启动时
+和之后每小时检查每个对话自己的文件夹，因此清理一个对话不会删除其他对话的文件。共享服务器
+应设置有限的默认时长。文件不会上传到中继服务器；对话同步只传文字和附件的名称、类型、大小，
+不传文件内容。
 
 这些设置只适用于 Python 运行时。Windows 桌面壳在启动后和每六小时独立检查，自动下载
 开关默认开启并保存，计费或未知网络等待主动下载，详见[桌面版](desktop.md#updating-on-windows)。

@@ -1143,6 +1143,9 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     and nothing of A's, pushes nothing of A's; A back: everything of A's again, nothing of
     B's. Signed out, every local conversation is shown."""
     client, service, llm, relay = synced
+    main_workspace = service.workspace_for_thread(MAIN_THREAD)
+    (main_workspace / "notes").mkdir(parents=True)
+    (main_workspace / "notes" / "kept.txt").write_text("same conversation", "utf-8")
     client.portal.call(service.sync.account_changed, "acct-A")  # type: ignore[union-attr]
     llm.script.append(LLMResponse(content="A's answer", finish_reason="stop"))
     client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "A's question"})
@@ -1171,6 +1174,9 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     assert main_b == []
     archived_id = service.sync.state["mains"]["acct-A"]
     archived = service.threads[archived_id]
+    archived_workspace = service.workspace_for_thread(archived_id)
+    assert (archived_workspace / "notes" / "kept.txt").read_text() == "same conversation"
+    assert service.workspace_for_thread(MAIN_THREAD) != archived_workspace
     assert archived.main_of == "acct-A" and service.sync.cid_of(archived_id) == a_main_cid
     assert [e["text"] for e in archived.timeline.events if e["type"] == "user"] == ["A's question"]
     assert all(e["thread"] == archived_id for e in archived.timeline.events)
@@ -1201,6 +1207,9 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     assert texts == ["A's question"]
     assert service.sync.cid_of(MAIN_THREAD) == a_main_cid
     assert service.sync.owner_of(MAIN_THREAD) == "acct-A"
+    assert (service.workspace_for_thread(MAIN_THREAD) / "notes" / "kept.txt").read_text() == (
+        "same conversation"
+    )
     assert archived_id not in service.threads and "acct-A" not in service.sync.state["mains"]
     b_kept = service.threads[service.sync.state["mains"]["acct-B"]]
     assert [e["text"] for e in b_kept.timeline.events if e["type"] == "user"] == ["B's question"]

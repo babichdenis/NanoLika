@@ -15,6 +15,7 @@ import json
 import mimetypes
 import re
 import secrets
+import shutil
 import time
 import uuid
 from collections.abc import Coroutine
@@ -34,7 +35,7 @@ from nanomuse.cloud import CLOUD_KEY, DEFAULT_CHAT_MODEL, CloudError, model_url
 from nanomuse.coding.service import CodingService
 from nanomuse.config import LLMSettings, Settings
 from nanomuse.goals import Goal
-from nanomuse.housekeeping import keep_sweeping
+from nanomuse.housekeeping import SWEEP_EVERY_S, sweep
 from nanomuse.hub.service import HubService
 from nanomuse.llm import BaseLLM
 from nanomuse.llm.factory import create_llm, llm_ready
@@ -352,6 +353,8 @@ class Thread:
     # durable customer scope for newly created local conversations; old threads with no
     # scope remain session-private until an explicit, trusted account mapping exists
     customer_scope: str = ""
+    # stable partition for files; memory ownership can narrow or change independently
+    workspace_scope: str = ""
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -500,13 +503,10 @@ class MuseService:
         await self._step("cloud account and hub", self.hub.start(), 30)
         self.sync.start()
         self._scheduler = asyncio.create_task(self._goal_scheduler(), name="goal-scheduler")
-        # a runtime that serves people from a shared box keeps no files: the sweep deletes
-        # what they sent and what the agent made, once the setting says it is old enough
-        if self.settings.server.keep_files_hours > 0:
-            self._housekeeping = asyncio.create_task(
-                keep_sweeping(self.workspace(), self.settings.server.keep_files_hours),
-                name="housekeeping",
-            )
+        # Per-thread overrides can be active even when the installation default is 0.
+        self._housekeeping = asyncio.create_task(
+            self._keep_thread_workspaces_sweeping(), name="housekeeping"
+        )
         self.starting = ""
         logger.info(
             "MuseService started ({} threads, {:.1f}s)",
@@ -525,6 +525,30 @@ class MuseService:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("starting: {} failed: {}: {}", name, type(exc).__name__, exc)
+
+    def _sweep_thread_workspaces(self) -> None:
+        fallback = float(self.settings.server.keep_files_hours)
+        manager = getattr(self, "channels", None)
+        preferences = getattr(getattr(manager, "menu", None), "preferences", None)
+        for thread in list(self.threads.values()):
+            try:
+                hours = (
+                    preferences.file_retention_hours(thread.id, fallback)
+                    if preferences is not None
+                    else fallback
+                )
+                sweep(self.workspace_for_thread(thread.id), hours)
+            except Exception as exc:  # noqa: BLE001 — maintenance cannot stop the agent
+                logger.warning("housekeeping failed for conversation {}: {}", thread.id, exc)
+
+    async def _keep_thread_workspaces_sweeping(self) -> None:
+        """Sweep each conversation's private files using its override or server default."""
+        while True:
+            try:
+                await asyncio.to_thread(self._sweep_thread_workspaces)
+            except Exception as exc:  # noqa: BLE001 — maintenance cannot stop the agent
+                logger.warning("housekeeping failed: {}", exc)
+            await asyncio.sleep(SWEEP_EVERY_S)
 
     async def stop(self) -> None:
         if self._scheduler:
@@ -812,6 +836,8 @@ class MuseService:
                 thread.main_of = str(m["main_of"])
             if m.get("customer_scope"):
                 thread.customer_scope = str(m["customer_scope"])
+            if m.get("workspace_scope"):
+                thread.workspace_scope = str(m["workspace_scope"])
         self._save_index()
 
     def _save_index(self) -> None:
@@ -835,6 +861,8 @@ class MuseService:
                 m["main_of"] = t.main_of
             if t.customer_scope:
                 m["customer_scope"] = t.customer_scope
+            if t.workspace_scope:
+                m["workspace_scope"] = t.workspace_scope
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -928,6 +956,7 @@ class MuseService:
             thread.customer_scope = session_scope(thread.id)
         else:
             thread.customer_scope = "installation"
+        thread.workspace_scope = thread.customer_scope
         self._save_index()
         self.bus.publish({"kind": "thread", "thread": thread.meta()})
         self.sync.thread_changed(thread)
@@ -977,6 +1006,9 @@ class MuseService:
 
     def _drop_thread(self, thread: Thread) -> None:
         """Forget a thread and its files without the sync tombstone (the main chat put aside)."""
+        scope = (
+            thread.workspace_scope or thread.customer_scope or self.memory_scope_for_thread(thread)
+        )
         self.threads.pop(thread.id, None)
         if thread.worker:
             thread.worker.cancel()
@@ -985,10 +1017,19 @@ class MuseService:
                 Path(p).unlink()
         self.app.holds.clear_thread(thread.id)
         self.app.sentinel.end_conversation(thread.id)
+        self._remove_thread_workspace(thread.id, scope)
 
     def _move_thread(self, thread: Thread, new_id: str) -> Thread:
         """The same conversation under another id: its timeline and the agent's transcript
         move file by file and the thread is rebuilt from them (the events say the new id)."""
+        scope = (
+            thread.workspace_scope or thread.customer_scope or self.memory_scope_for_thread(thread)
+        )
+        workspaces = self.settings.data_dir / "workspaces" / self._workspace_key(scope) / "threads"
+        old_workspace = (workspaces / self._workspace_key(thread.id)).resolve()
+        new_workspace = (workspaces / self._workspace_key(new_id)).resolve()
+        if old_workspace != new_workspace and old_workspace.is_dir() and new_workspace.exists():
+            raise FileExistsError(f"workspace already exists for conversation {new_id}")
         self.threads.pop(thread.id, None)
         if thread.worker:
             thread.worker.cancel()
@@ -1021,8 +1062,22 @@ class MuseService:
             thread.origin_device_name,
         )
         moved.main_of = thread.main_of
+        moved.customer_scope = thread.customer_scope
+        moved.workspace_scope = thread.workspace_scope or scope
+        if old_workspace != new_workspace and old_workspace.is_dir():
+            new_workspace.parent.mkdir(parents=True, exist_ok=True)
+            old_workspace.replace(new_workspace)
         self.ui.last_assistant_text.pop(thread.id, None)
         return moved
+
+    def _remove_thread_workspace(self, thread_id: str, scope: str) -> None:
+        """Remove one deleted conversation's files without following a workspace symlink."""
+        root = self.settings.data_dir / "workspaces"
+        candidate = root / self._workspace_key(scope) / "threads" / self._workspace_key(thread_id)
+        if candidate.is_symlink():
+            return
+        if candidate.is_dir() and candidate.resolve().is_relative_to(root.resolve()):
+            shutil.rmtree(candidate)
 
     def rename_thread(self, thread_id: str, title: str) -> Thread | None:
         thread = self.threads.get(thread_id)
@@ -1038,9 +1093,13 @@ class MuseService:
     def delete_thread(self, thread_id: str) -> bool:
         if thread_id == MAIN_THREAD:
             return False
-        thread = self.threads.pop(thread_id, None)
+        thread = self.threads.get(thread_id)
         if thread is None:
             return False
+        scope = (
+            thread.workspace_scope or thread.customer_scope or self.memory_scope_for_thread(thread)
+        )
+        self.threads.pop(thread_id, None)
         if thread.worker:
             thread.worker.cancel()
         for p in (thread.timeline.path, thread.agent.session_file):
@@ -1048,6 +1107,7 @@ class MuseService:
                 Path(p).unlink()
         self.app.holds.clear_thread(thread_id)
         self.app.sentinel.end_conversation(thread_id)
+        self._remove_thread_workspace(thread_id, scope)
         self._save_index()
         self.bus.publish({"kind": "thread_deleted", "thread": thread_id})
         self.sync.thread_deleted(thread_id)
@@ -2583,17 +2643,22 @@ class MuseService:
     def workspace_for_thread(self, thread_id: str, customer_scope: str = "") -> Path:
         """A durable workspace for one thread, partitioned under its trusted customer."""
         thread = self.threads.get(thread_id)
-        owner = self.sync.owner_of(thread_id)
-        if thread is not None and thread.customer_scope:
-            # A later sign-in can narrow an ownerless chat's memory scope. Keep its already
-            # assigned files in place; changing who owns its transcript must not orphan uploads.
-            scope = thread.customer_scope
-        elif owner:
-            scope = account_scope(owner)
+        if thread is not None and thread.workspace_scope:
+            scope = thread.workspace_scope
         else:
-            scope = customer_scope or (
-                self.memory_scope_for_thread(thread) if thread is not None else "installation"
-            )
+            owner = self.sync.owner_of(thread_id)
+            if thread is not None and thread.customer_scope:
+                scope = thread.customer_scope
+            elif owner:
+                scope = account_scope(owner)
+            else:
+                scope = customer_scope or (
+                    self.memory_scope_for_thread(thread) if thread is not None else "installation"
+                )
+        if thread is not None and not thread.workspace_scope:
+            # File placement is stable even when the conversation's memory scope changes.
+            thread.workspace_scope = scope
+            self._save_index()
         return (
             self.settings.data_dir
             / "workspaces"

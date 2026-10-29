@@ -749,6 +749,53 @@ def test_side_chats_are_isolated(server):
     assert client.get(f"/api/threads/{t['id']}/events").status_code == 404
 
 
+def test_deleting_a_thread_removes_its_private_workspace(server):
+    _, service, _ = server
+    thread = service.create_thread("Disposable")
+    workspace = service.workspace_for_thread(thread.id)
+    workspace.mkdir(parents=True)
+    (workspace / "result.txt").write_text("private output")
+
+    assert service.delete_thread(thread.id)
+    assert not workspace.exists()
+
+
+def test_read_only_conversation_cannot_resolve_a_sibling_workspace(server):
+    _, service, _ = server
+    reader = service.create_thread("Reader")
+    private = service.create_thread("Private")
+    private_workspace = service.workspace_for_thread(private.id)
+    private_workspace.mkdir(parents=True)
+    (private_workspace / "secret.txt").write_text("private", "utf-8")
+
+    with service.workspace_context_for_thread(reader):
+        with pytest.raises(PermissionError, match="different conversation"):
+            service.resolve_workspace_path(f"threads/{private.id}/secret.txt", thread_id=reader.id)
+
+
+def test_file_retention_is_applied_per_conversation(server):
+    _, service, _ = server
+    expiring = service.create_thread("Expires")
+    retained = service.create_thread("Retained")
+    expiring_file = service.workspace_for_thread(expiring.id) / "old.txt"
+    retained_file = service.workspace_for_thread(retained.id) / "old.txt"
+    expiring_file.parent.mkdir(parents=True)
+    retained_file.parent.mkdir(parents=True)
+    expiring_file.write_text("old", "utf-8")
+    retained_file.write_text("old", "utf-8")
+    old = time.time() - 2 * 3600
+    os.utime(expiring_file, (old, old))
+    os.utime(retained_file, (old, old))
+    preferences = service.channels.menu.preferences
+    preferences.set_file_retention_hours(expiring.id, 1)
+    preferences.set_file_retention_hours(retained.id, 0)
+
+    service._sweep_thread_workspaces()
+
+    assert not expiring_file.exists()
+    assert retained_file.read_text("utf-8") == "old"
+
+
 def test_a_thread_id_cannot_reach_outside_the_threads_folder(server):
     """A client sends the thread id, and that id names the file the conversation is written
     to: an id that walks out of the folder is refused, not obeyed."""

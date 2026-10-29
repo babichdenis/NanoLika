@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import secrets
 import time
@@ -72,6 +73,14 @@ COPY = {
         "tokens": "Остаток текстовых токенов",
         "demo": "Тестовые платежи не меняют рабочий баланс.",
         "lang_saved": "Язык ответов сохранён для этой беседы.",
+        "retention": "Срок хранения файлов этой беседы. Настройка сервера по умолчанию: {default}.",
+        "retention_default": "По умолчанию",
+        "retention_never": "Не удалять",
+        "retention_1": "1 час",
+        "retention_24": "24 часа",
+        "retention_168": "7 дней",
+        "retention_saved": "Срок хранения изменён для этой беседы.",
+        "retention_shared": "Срок хранения нельзя менять, пока сообщения этого канала объединены в одну беседу.",
     },
     "en": {
         "opened_channel": "Conversation “{title}” selected in {channel}.",
@@ -127,6 +136,14 @@ COPY = {
         "tokens": "Remaining text tokens",
         "demo": "Test payments do not change the real balance.",
         "lang_saved": "Reply language saved for this conversation.",
+        "retention": "File retention for this conversation. Server default: {default}.",
+        "retention_default": "Server default",
+        "retention_never": "Keep forever",
+        "retention_1": "1 hour",
+        "retention_24": "24 hours",
+        "retention_168": "7 days",
+        "retention_saved": "File retention changed for this conversation.",
+        "retention_shared": "Retention cannot be changed while this channel shares one conversation.",
     },
     "zh": {
         "opened_channel": "已在 {channel} 中选择对话「{title}」。",
@@ -182,6 +199,14 @@ COPY = {
         "tokens": "剩余文本令牌",
         "demo": "测试支付不会改变实际余额。",
         "lang_saved": "已保存当前对话的回复语言。",
+        "retention": "此对话的文件保留时间。服务器默认值：{default}。",
+        "retention_default": "使用服务器默认值",
+        "retention_never": "永久保留",
+        "retention_1": "1 小时",
+        "retention_24": "24 小时",
+        "retention_168": "7 天",
+        "retention_saved": "此对话的文件保留时间已更改。",
+        "retention_shared": "此频道仍共用一个对话，暂时无法更改文件保留时间。",
     },
 }
 
@@ -199,6 +224,22 @@ class Preferences(_Watched):
     def mode(self, thread: str) -> str:
         mode = self.get(thread).get("mode", "")
         return mode if mode in MODES else ""
+
+    def file_retention_hours(self, thread: str, fallback: float) -> float:
+        raw = self.get(thread).get("file_retention_hours", "")
+        if not raw:
+            return fallback
+        try:
+            hours = float(raw)
+        except (TypeError, ValueError):
+            return fallback
+        return hours if math.isfinite(hours) and hours >= 0 else fallback
+
+    def set_file_retention_hours(self, thread: str, hours: float | None) -> None:
+        if hours is None:
+            self.put(thread, file_retention_hours="")
+        elif math.isfinite(hours) and hours >= 0:
+            self.put(thread, file_retention_hours=str(hours))
 
 
 class ChatMenu:
@@ -283,7 +324,16 @@ class ChatMenu:
         return self.preferences.get(thread).get("language", default)
 
     def ticket(self, msg: InboundMessage, action: str) -> dict[str, str]:
-        if action in {"home", "settings", "permissions", "balance", "language", "chats", "models"}:
+        if action in {
+            "home",
+            "settings",
+            "permissions",
+            "balance",
+            "language",
+            "retention",
+            "chats",
+            "models",
+        }:
             return {"menu": "nav:" + action}
         if action.startswith("chat:"):
             now = time.time()
@@ -419,6 +469,17 @@ class ChatMenu:
                 [(label, self.ticket(msg, "lang:" + lang))]
                 for lang, label in (("ru", "Русский"), ("en", "English"), ("zh", "简体中文"))
             ]
+        elif page == "retention":
+            fallback = float(self.m.svc.settings.server.keep_files_hours)
+            default_label = c["retention_never"] if fallback <= 0 else f"{fallback:g} h"
+            text = c["retention"].format(default=default_label)
+            rows = [
+                [(c["retention_default"], self.ticket(msg, "retention-hours:default"))],
+                [(c["retention_never"], self.ticket(msg, "retention-hours:0"))],
+                [(c["retention_1"], self.ticket(msg, "retention-hours:1"))],
+                [(c["retention_24"], self.ticket(msg, "retention-hours:24"))],
+                [(c["retention_168"], self.ticket(msg, "retention-hours:168"))],
+            ]
         elif page == "confirm-full":
             text = c["full_note"]
             rows = [row("confirm", "mode-confirm:full-access")]
@@ -427,6 +488,11 @@ class ChatMenu:
             rows = [
                 row("permissions", "permissions"),
                 row("language", "language"),
+                *(
+                    []
+                    if getattr(self.m.svc.settings.channels, "shared_thread", False)
+                    else [row("retention", "retention")]
+                ),
                 # the way out of a link sits with the settings, where somebody looking for it
                 # would look, and says what it costs before it does anything
                 row("unlink", "unlink"),
@@ -490,7 +556,9 @@ class ChatMenu:
             rows.append(
                 row(
                     "back",
-                    "settings" if page in {"permissions", "language", "confirm-full"} else "home",
+                    "settings"
+                    if page in {"permissions", "language", "retention", "confirm-full"}
+                    else "home",
                 )
             )
         await self.send(msg, (note + "\n\n" if note else "") + text, rows)
@@ -582,6 +650,7 @@ class ChatMenu:
                 "permissions",
                 "balance",
                 "language",
+                "retention",
                 "chats",
                 "models",
             }:
@@ -635,7 +704,12 @@ class ChatMenu:
             return
         c = COPY[self.language(msg)]
         thread = self.m._thread_for(msg)
-        if action in {"home", "settings", "permissions", "language"}:
+        if getattr(self.m.svc.settings.channels, "shared_thread", False) and (
+            action == "retention" or action.startswith("retention-hours:")
+        ):
+            await self.show(msg, "settings", c["retention_shared"])
+            return
+        if action in {"home", "settings", "permissions", "language", "retention"}:
             await self.show(msg, action)
         elif action == "pay":
             await self.show(msg, note="https://nanolika.ru/pricing.html")
@@ -678,6 +752,19 @@ class ChatMenu:
         elif action.startswith("lang:") and action[5:] in COPY:
             self.preferences.put(thread, language=action[5:])
             await self.show(msg, note=COPY[action[5:]]["lang_saved"])
+        elif action.startswith("retention-hours:"):
+            selected = action.split(":", 1)[1]
+            if selected == "default":
+                self.preferences.set_file_retention_hours(thread, None)
+            else:
+                try:
+                    hours = float(selected)
+                except ValueError:
+                    return
+                if hours not in {0.0, 1.0, 24.0, 168.0}:
+                    return
+                self.preferences.set_file_retention_hours(thread, hours)
+            await self.show(msg, "retention", c["retention_saved"])
         elif action == "mode:full-access":
             await self.show(msg, "confirm-full")
         elif action.startswith(("mode:", "mode-confirm:")):

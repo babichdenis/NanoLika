@@ -2423,3 +2423,20 @@ and mypy across 164 source files passed. A final post-review rerun passed 68 tar
 tests, skipped 5, and repeated Ruff, formatting and mypy successfully. Code commit `9202ca70`.
 Shell/Python remain governed by Sentinel; without bubblewrap they retain their existing
 sensitive approval gate. Not deployed.
+
+## 2026-10-29 · Isolation audit I1 follow-up and I5: conversation file lifecycle
+
+Thread workspaces now follow a conversation when account switching archives or restores the
+main chat, and deleting a conversation removes only its private workspace. A stable workspace
+scope is stored separately from memory ownership, so account changes cannot orphan or redirect
+existing files. The regression coverage includes an install-scoped main chat moved across two
+account switches.
+
+File retention now sweeps each known conversation's private workspace at startup and hourly.
+The server's `keep_files_hours` remains the fallback, and Telegram/MAX owners can set a per-chat
+override in Settings. Zero keeps files; the shared legacy workspace and account library are not
+swept. In a legacy shared-thread configuration, the per-chat control is hidden and rejected.
+Configuration documentation was updated.
+
+Validation: 135 related runtime tests passed, 1 skipped; Ruff check and formatting passed;
+mypy reported no issues in all 164 source files. No deployment or file migration was performed.
