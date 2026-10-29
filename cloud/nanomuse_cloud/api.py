@@ -3142,7 +3142,7 @@ def create_app(
                         at = None
                     if at is not None and at.date() == today:
                         spent += caps
-                    if len(recent) < 6:
+                    if len(recent) < 10:
                         recent.append({
                             "at": int(at.timestamp()) if at else 0,
                             "caps": round(caps, 2),
