@@ -968,16 +968,6 @@ export function QuietHours({ value, onChange }: { value: string; onChange: (v: s
 function DesktopAppSettings() {
   const t = useT();
   const bridge = desktopBridge();
-  const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null);
-  useEffect(() => {
-    let live = true;
-    void bridge?.loginItem?.().then((v) => {
-      if (live) setOpenAtLogin(v);
-    });
-    return () => {
-      live = false;
-    };
-  }, [bridge]);
   const mac = bridge?.platform === "darwin";
   const shortcuts: Array<[string, string]> = [
     [t("Quick chat"), mac ? "⌥ Space" : "Ctrl+Shift+Space"],
@@ -986,17 +976,6 @@ function DesktopAppSettings() {
   ];
   return (
     <>
-      {bridge?.setLoginItem && openAtLogin !== null && bridge.platform !== "linux" && (
-        <Toggle
-          label={t("Start with the computer")}
-          hint={t("Opens in the tray at sign-in; the agent's goals and check-ins run from then on.")}
-          checked={openAtLogin}
-          onChange={(v) => {
-            setOpenAtLogin(v);
-            bridge.setLoginItem?.(v);
-          }}
-        />
-      )}
       <div className="text-[13.5px]">
         {t("In the tray")}
         <span className="block text-[12px] text-muted">{t("The icon by the clock shows what the hands are doing and has Stop; closing the window keeps the agent running.")}</span>

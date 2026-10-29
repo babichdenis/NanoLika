@@ -178,7 +178,7 @@ function publishDesktopPrefs(p: DesktopPrefs): void {
   for (const l of desktopPrefsListeners) l(p)
 }
 /** What `setPrefs` takes: the switches, the quick-chat key, the proxy and the relay hosts it must never cover. */
-export type DesktopPrefsPatch = Partial<Pick<DesktopPrefs, 'openAtLogin' | 'menuBar' | 'quickChat' | 'quickChatKey' | 'proxy'> & { relayHosts: string[] }>
+export type DesktopPrefsPatch = Partial<Pick<DesktopPrefs, 'menuBar' | 'quickChat' | 'quickChatKey' | 'proxy'> & { relayHosts: string[] }>
 export function useDesktopPrefs(): { prefs: DesktopPrefs | undefined; set: (patch: DesktopPrefsPatch) => void } {
   const b = bridge()
   const [prefs, setLocal] = useState<DesktopPrefs | undefined>(desktopPrefsCache)
@@ -230,12 +230,12 @@ export function HotkeyField({ t }: { t: Translate }): ReactNode {
     hint ? h('span', { className: 'nm-hotkey-hint' }, hint) : prefs?.quickChatTaken && prefs.quickChat ? h('span', { className: 'nm-hotkey-hint nm-cn-warn' }, t('gnHotkeyTaken')) : null)
 }
 
-/** Muse's App behavior: open at login, the menu bar icon, the quick-chat key — the shell's switches, when there is a shell. */
+/** The shell's app behavior switches: the menu bar icon and quick-chat key. */
 export function AppBehaviorRows({ t }: { t: Translate }): ReactNode {
   const b = bridge()
   const { prefs, set } = useDesktopPrefs()
   if (!b?.prefs || !prefs) return null
-  const row = (key: 'openAtLogin' | 'menuBar' | 'quickChat', title: string, sub: string) =>
+  const row = (key: 'menuBar' | 'quickChat', title: string, sub: string) =>
     prefs.supports[key]
       ? h('div', { key, className: 'nm-row' },
           h('div', { className: 'nm-row-main' },
@@ -246,7 +246,6 @@ export function AppBehaviorRows({ t }: { t: Translate }): ReactNode {
   return h('div', { className: 'nm-section nm-section-inline' },
     h('h2', null, t('abTitle')),
     h('div', { className: 'nm-card' },
-    row('openAtLogin', t('abOpenAtLogin'), t('abOpenAtLoginSub')),
     row('menuBar', b.platform === 'darwin' ? t('abMenuBar') : t('abTray'), t('abMenuBarSub')),
     row('quickChat', t('abQuickChat', { key: keyLabel(prefs.quickChatKey, b.platform) }), t('abQuickChatSub'))))
 }

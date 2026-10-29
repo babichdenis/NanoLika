@@ -8,10 +8,13 @@ re-registered that saved value at every launch. Removed the setting from both de
 surfaces and from the shell/preload contract. The shell now discards the old saved key and no
 longer creates startup entries. Other app preferences remain intact.
 
-Validation: source paths and the live Mac's Login Items/prefs were inspected over SSH. No tests,
-build, app replacement or cleanup of the existing five OS entries has been performed yet; the
-currently installed app must be updated before the old binary stops re-registering them. Commit:
-not yet made.
+Validation: source paths and the live Mac's Login Items/prefs were inspected over SSH. Desktop
+shell typecheck/build, plugin typecheck, and web lint/typecheck passed; no test suite was run. The
+owner asked to stop packaging while more edits are pending, so the macOS bundle was not produced,
+installed app was not replaced, and the five existing OS entries were not removed. The source
+change is committed separately; update the installed app before relying on its new behavior.
+The packaging command was stopped during `prepare-dsh`, before `electron-builder`; its ignored
+staging directory may be partial, and the next packaging run recreates it from scratch.
 
 ## 2026-10-29 · Redact vault secrets before model context and delivery
 

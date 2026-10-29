@@ -587,8 +587,6 @@ export const en = {
   cpPlaceholder: 'Message',
   // app behaviour (the shell's switches) and the bug report
   abTitle: 'App behavior',
-  abOpenAtLogin: 'Open at login',
-  abOpenAtLoginSub: 'NanoLika starts with the computer and waits in the menu bar.',
   abMenuBar: 'Show in the menu bar',
   abTray: 'Show in the system tray',
   abMenuBarSub: 'An icon to bring the window back and start a chat from anywhere.',
@@ -2131,8 +2129,6 @@ export const zh: typeof en = {
   cpPlaceholder: '消息',
   // app behaviour (the shell's switches) and the bug report
   abTitle: '应用行为',
-  abOpenAtLogin: '开机启动',
-  abOpenAtLoginSub: 'NanoLika 随电脑一起启动，安静地待在菜单栏里。',
   abMenuBar: '显示在菜单栏',
   abTray: '显示在系统托盘',
   abMenuBarSub: '一个小图标，随时把窗口叫回来、开始一段聊天。',
@@ -3658,8 +3654,6 @@ export const ru: typeof en = {
   dataSignedOut: 'Войдите, и эта страница решит, что NanoLika Cloud хранит.',
   cpPlaceholder: 'Сообщение',
   abTitle: 'Поведение программы',
-  abOpenAtLogin: 'Запускать при входе в систему',
-  abOpenAtLoginSub: 'NanoLika запускается вместе с компьютером и ждёт в строке меню.',
   abMenuBar: 'Показывать в строке меню',
   abTray: 'Показывать в системном лотке',
   abMenuBarSub: 'Значок, чтобы вернуть окно и начать чат из любого места.',

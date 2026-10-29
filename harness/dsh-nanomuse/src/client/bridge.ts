@@ -32,7 +32,6 @@ export interface WindowsUpdateBridge {
 
 /** App behaviour, as the shell keeps it: the values, the quick-chat key's name, what this platform can do. */
 export interface DesktopPrefs {
-  openAtLogin: boolean
   menuBar: boolean
   quickChat: boolean
   /** The combination in force, an Electron accelerator (`Alt+Space`). */
@@ -50,7 +49,7 @@ export interface DesktopPrefs {
   proxyApplied?: string
   /** The relay hosts the shell keeps off the proxy (the plugin's `config.baseURL`), besides the default relay and loopback. */
   relayHosts?: string[]
-  supports: { openAtLogin: boolean; menuBar: boolean; quickChat: boolean }
+  supports: { menuBar: boolean; quickChat: boolean }
 }
 
 /** What the shell's glow and capsule show of the hands (0.1.40 adds the step, the title and the two buttons' words). */
@@ -87,7 +86,7 @@ export interface HarnessBridge {
   setTheme(theme: 'light' | 'dark'): Promise<void>
   // since 0.1.30 — absent in older shells
   prefs?(): Promise<DesktopPrefs>
-  setPrefs?(patch: Partial<Pick<DesktopPrefs, 'openAtLogin' | 'menuBar' | 'quickChat' | 'quickChatKey' | 'proxy'> & { relayHosts: string[] }>): Promise<DesktopPrefs>
+  setPrefs?(patch: Partial<Pick<DesktopPrefs, 'menuBar' | 'quickChat' | 'quickChatKey' | 'proxy'> & { relayHosts: string[] }>): Promise<DesktopPrefs>
   reportBug?(): Promise<{ screenshot: string; url: string }>
   reveal?(path: string): Promise<void>
   onQuickChat?(listener: () => void): () => void

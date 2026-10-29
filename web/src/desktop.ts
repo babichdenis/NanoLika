@@ -8,9 +8,6 @@ export interface DesktopBridge {
   /** Node's process.platform: "darwin", "win32", "linux" */
   platform: string;
   version: string;
-  /** whether the app starts with the computer (Electron's login item); older shells have neither */
-  loginItem?: () => Promise<boolean>;
-  setLoginItem?: (on: boolean) => void;
   /** the quick-chat shortcut was pressed: the window is up, the composer should take focus */
   onQuickChat?: (cb: () => void) => void | (() => void);
 }

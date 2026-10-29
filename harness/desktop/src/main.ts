@@ -937,7 +937,6 @@ function releaseAwake(): void {
 
 /** What Muse's General page calls App behavior: start with the system, live in the menu bar, the quick-chat key. */
 interface Prefs {
-  openAtLogin: boolean;
   menuBar: boolean;
   quickChat: boolean;
   autoDownloadUpdates?: boolean;
@@ -950,7 +949,7 @@ interface Prefs {
   /** The app version whose launch already opened the privacy panes; absent means never asked here. */
   permissionsPaneFor?: string;
 }
-const PREFS_DEFAULT: Prefs = { openAtLogin: false, menuBar: true, quickChat: true };
+const PREFS_DEFAULT: Prefs = { menuBar: true, quickChat: true };
 /** ⌥ Space on macOS as in Muse; Ctrl+Alt+Space where Alt+Space is the window menu. */
 const QUICK_CHAT_DEFAULT = process.platform === "darwin" ? "Alt+Space" : "Ctrl+Alt+Space";
 /** One or more modifiers and a key, in Electron's accelerator words; a function key may stand alone. */
@@ -976,8 +975,11 @@ function prefsPath(): string {
 
 function readPrefs(): Prefs {
   try {
-    const raw = JSON.parse(readFileSync(prefsPath(), "utf8")) as Partial<Prefs>;
-    return { ...PREFS_DEFAULT, ...(typeof raw === "object" && raw ? raw : {}) };
+    const raw = JSON.parse(readFileSync(prefsPath(), "utf8")) as Partial<Prefs> & { openAtLogin?: boolean };
+    // Old releases stored this preference and registered it on every launch. Ignore it now:
+    // people who want auto-start can add the app themselves in their operating system settings.
+    const { openAtLogin: _legacyOpenAtLogin, ...stored } = typeof raw === "object" && raw ? raw : {};
+    return { ...PREFS_DEFAULT, ...stored };
   } catch {
     return PREFS_DEFAULT;
   }
@@ -1121,36 +1123,15 @@ function applyMenuBar(): void {
   if (process.platform !== "darwin") tray.on("click", () => void showWindow());
 }
 
-function applyOpenAtLogin(): void {
-  if (process.platform === "linux") {
-    // freedesktop autostart: a .desktop entry pointing at this executable (the AppImage or the installed binary)
-    const dir = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "autostart");
-    const file = join(dir, "NanoLika.desktop");
-    try {
-      if (prefs.openAtLogin) {
-        mkdirSync(dir, { recursive: true });
-        const exe = process.env.APPIMAGE || process.execPath;
-        writeFileSync(file, `[Desktop Entry]\nType=Application\nName=NanoLika\nExec="${exe}"\nIcon=NanoLika\nX-GNOME-Autostart-enabled=true\nTerminal=false\n`);
-      } else rmSync(file, { force: true });
-    } catch (exc) {
-      log(`open at login: ${String(exc)}`);
-    }
-    return;
-  }
-  if (!app.isPackaged) return; // a dev checkout should not register itself
-  app.setLoginItemSettings({ openAtLogin: prefs.openAtLogin, ...(process.platform === "darwin" ? { openAsHidden: true } : {}) });
-}
-
 function applyPrefs(): void {
   applyMenuBar();
   applyQuickChat();
-  applyOpenAtLogin();
 }
 
 /** What the General page shows: the values, the key in force and the default, whether another app holds it, and which of the three this platform can do; the Network row's proxy, as kept and as shown. */
-function prefsView(): Prefs & { quickChatKey: string; quickChatDefault: string; quickChatTaken: boolean; proxy: string; proxyMasked: string; proxyApplied: string; supports: { openAtLogin: boolean; menuBar: boolean; quickChat: boolean } } {
+function prefsView(): Prefs & { quickChatKey: string; quickChatDefault: string; quickChatTaken: boolean; proxy: string; proxyMasked: string; proxyApplied: string; supports: { menuBar: boolean; quickChat: boolean } } {
   const proxy = validProxyUrl(prefs.proxy ?? "") ?? "";
-  return { ...prefs, quickChatKey: quickChatKey(), quickChatDefault: QUICK_CHAT_DEFAULT, quickChatTaken, proxy, proxyMasked: maskProxyUrl(proxy), proxyApplied: hostProxy, supports: { openAtLogin: process.platform !== "linux" || Boolean(process.env.APPIMAGE) || app.isPackaged, menuBar: true, quickChat: true } };
+  return { ...prefs, quickChatKey: quickChatKey(), quickChatDefault: QUICK_CHAT_DEFAULT, quickChatTaken, proxy, proxyMasked: maskProxyUrl(proxy), proxyApplied: hostProxy, supports: { menuBar: true, quickChat: true } };
 }
 
 /**
@@ -1281,7 +1262,7 @@ function registerBridge(): void {
   ipcMain.handle("nanomuse:prefs", () => prefsView());
   ipcMain.handle("nanomuse:prefs:set", (_e, patch: Partial<Prefs>) => {
     if (patch && typeof patch === "object") {
-      for (const key of ["openAtLogin", "menuBar", "quickChat"] as const) if (typeof patch[key] === "boolean") prefs = { ...prefs, [key]: patch[key] };
+      for (const key of ["menuBar", "quickChat"] as const) if (typeof patch[key] === "boolean") prefs = { ...prefs, [key]: patch[key] };
       if (typeof patch.quickChatKey === "string") {
         // the person's combination; an empty string or the default puts the default back
         const key = patch.quickChatKey.trim();
