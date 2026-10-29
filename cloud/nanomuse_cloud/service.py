@@ -1403,26 +1403,20 @@ class Cloud:
                     "max_video_tokens": max(0, int(row.get("max_video_tokens") or 0)),
                     "video_min_paid_rub": max(
                         0.0,
-                        float(
-                            row.get("video_min_paid_rub")
-                            if row.get("video_min_paid_rub") is not None
-                            else self.s.video_min_paid_rub
-                        ),
+                        float(row.get("video_min_paid_rub") if row.get("video_min_paid_rub") is not None else self.s.video_min_paid_rub),
                     ),
                     "video_reserve_rub": max(
                         0.0,
-                        float(
-                            row.get("video_reserve_rub")
-                            if row.get("video_reserve_rub") is not None
-                            else self.s.video_reserve_rub
-                        ),
+                        float(row.get("video_reserve_rub") if row.get("video_reserve_rub") is not None else self.s.video_reserve_rub),
                     ),
                     "models": [
-                        str(mid) for mid in (row.get("models") if isinstance(row.get("models"), list) else [])
+                        str(mid)
+                        for mid in (row.get("models") if isinstance(row.get("models"), list) else [])
                         if isinstance(mid, str) and mid
                     ],
                     "exclude": [
-                        str(mid) for mid in (row.get("exclude") if isinstance(row.get("exclude"), list) else [])
+                        str(mid)
+                        for mid in (row.get("exclude") if isinstance(row.get("exclude"), list) else [])
                         if isinstance(mid, str) and mid
                     ],
                 }
@@ -1449,14 +1443,10 @@ class Cloud:
             "max_chat_out_rub": float(terms.get("max_chat_out_rub") or 0),
             "max_video_tokens": int(terms.get("max_video_tokens") or 0),
             "video_min_paid_rub": float(
-                terms.get("video_min_paid_rub")
-                if terms.get("video_min_paid_rub") is not None
-                else self.s.video_min_paid_rub
+                terms.get("video_min_paid_rub") if terms.get("video_min_paid_rub") is not None else self.s.video_min_paid_rub
             ),
             "video_reserve_rub": float(
-                terms.get("video_reserve_rub")
-                if terms.get("video_reserve_rub") is not None
-                else self.s.video_reserve_rub
+                terms.get("video_reserve_rub") if terms.get("video_reserve_rub") is not None else self.s.video_reserve_rub
             ),
             "models": list(terms.get("models") or []),
             "exclude": list(terms.get("exclude") or []),
@@ -2175,10 +2165,7 @@ class Cloud:
         say the price and the balance, not just "the allowance is used up"."""
         required = self.s.cny_to_rub(self.s.uy_to_cny(max(0, int(cost_uy))))
         balance = self.s.cny_to_rub(self.s.uy_to_cny(max(0, int(left_uy))))
-        message = (
-            f"This generation costs ₽{required:g}; the balance has ₽{balance:g}. "
-            "Top up, choose a cheaper model, or shorten the clip."
-        )
+        message = f"This generation costs ₽{required:g}; the balance has ₽{balance:g}. Top up, choose a cheaper model, or shorten the clip."
         base = self.s.public_base.rstrip("/")
         return CloudError(
             402,
@@ -2270,7 +2257,11 @@ class Cloud:
                 default.pop(kind, None)
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
-        return {"enabled": enabled, "default": default, "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models(caller)}]}
+        return {
+            "enabled": enabled,
+            "default": default,
+            "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models(caller)}],
+        }
 
     def catalogue_public(self) -> dict[str, Any]:
         """The menu for anyone, key or not: what each model is for and what an account pays
@@ -2286,6 +2277,12 @@ class Cloud:
                 {
                     "id": spec.id,
                     "name": spec.name,
+                    "vendor": spec.vendor,
+                    "available": spec.available,
+                    "context_length": spec.context_length,
+                    "max_output": spec.max_output,
+                    "audio": {"kind": spec.audio_kind},
+                    "commerce": model_pricing.describe(self, spec),
                     "kind": spec.kind,
                     "for": list(spec.lanes),
                     "recommended": spec.recommended,
@@ -2408,7 +2405,11 @@ class Cloud:
                 default[kind] = ids[0]
         favourites = data.get("favourites", stored.get("favourites", []))
         known_ids = {m.id for m in self.visible_models(caller)}
-        if not isinstance(favourites, list) or len(favourites) > 500 or any(not isinstance(mid, str) or mid not in known_ids for mid in favourites):
+        if (
+            not isinstance(favourites, list)
+            or len(favourites) > 500
+            or any(not isinstance(mid, str) or mid not in known_ids for mid in favourites)
+        ):
             raise CloudError(400, "bad_model", "Invalid favourites")
         body = {"enabled": {kind: ids for kind, ids in enabled.items()}, "default": default, "favourites": list(dict.fromkeys(favourites))}
         self.db.put_shelf(caller.account_id, json.dumps(body, ensure_ascii=False))
@@ -2735,10 +2736,7 @@ class Cloud:
 
     def visible_models(self, caller: Caller | None = None) -> list[ModelSpec]:
         """The menu: globally visible, and for a signed-in caller, open on the tariff."""
-        return [
-            m for m in self.s.public_models
-            if self.model_visible(m) and (caller is None or self.plan_allows(caller, m))
-        ]
+        return [m for m in self.s.public_models if self.model_visible(m) and (caller is None or self.plan_allows(caller, m))]
 
     def set_model_visibility(self, model_id: str, visible: bool) -> None:
         with self.db.tx() as conn:
@@ -2870,7 +2868,10 @@ class Cloud:
         # what the provider bills the relay (telemetry, and the margin's other half) and what
         # the account pays: the operator's sale rate, less the running tariff's share
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
-        sale = self.discount(self.s.chat_charge_uy(model_pricing.retail_spec(self, model), prompt_tokens, completion_tokens, cached_tokens), caller.account_id)
+        sale = self.discount(
+            self.s.chat_charge_uy(model_pricing.retail_spec(self, model), prompt_tokens, completion_tokens, cached_tokens),
+            caller.account_id,
+        )
         if (
             provider_cost_rub is not None
             and not isinstance(provider_cost_rub, bool)
@@ -2906,7 +2907,9 @@ class Cloud:
         charged = model.per_image * max(1, n)
         cost = model.image_cost_uy(size, inputs) * max(1, n)
         sale = model_pricing.amount(self, model, {"size": size or "1024x1024", "count": n, "inputs": inputs}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
+        self.db.charge(
+            caller.account_id, "image", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
+        )
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2917,7 +2920,9 @@ class Cloud:
         charged = model.per_speech * thousands
         cost = round(model.price_speech * thousands * 1_000_000)
         sale = model_pricing.amount(self, model, {"characters": characters}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
+        self.db.charge(
+            caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
+        )
         self.settle_invite(caller.account_id)
         return charged
 
@@ -2927,7 +2932,9 @@ class Cloud:
         charged = model.per_minute * minutes
         cost = round(model.price_minute * minutes * 1_000_000)
         sale = model_pricing.amount(self, model, {"seconds": seconds}, caller)["sale_uy"]
-        self.db.charge(caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash)
+        self.db.charge(
+            caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
+        )
         self.settle_invite(caller.account_id)
         return charged
 

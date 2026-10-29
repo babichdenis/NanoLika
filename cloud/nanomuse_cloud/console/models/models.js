@@ -1,3 +1,4 @@
+import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
 /* nanoLika web console — the models page.
 
    A chooser, not a table: one search field, one row of kinds, and every model of the relay
@@ -13,6 +14,7 @@
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа и возможности видны у каждой модели.',
       search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные', favouritesShort: '★ Избранное',
       sort: 'Сортировка', sortRecommended: 'По рекомендации', sortPrice: 'Сначала дешевле', sortContext: 'Сначала большой контекст', sortName: 'По названию',
+      availability: 'Доступ', available: 'Доступные мне', higherPlan: 'На старшем тарифе', publicCatalog: 'Открытый каталог',
       allVendors: 'Все производители', otherVendors: 'Другие', vendorFilter: 'Производитель',
       planNote: (n) => `На старших тарифах доступно ещё ${n}.`,
       planTitle: 'Тариф и пополнение', planPill: 'Лика+', planHeader: 'Тариф', planIntro: 'Пополнение остаётся на балансе. Когда оплаченный остаток достигает порога тарифа, тариф включается на 30 дней.',
@@ -44,6 +46,7 @@
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices and model capabilities are shown on every row.',
       search: 'Search models', all: 'All models', mine: 'My picks', favouritesShort: '★ Favourites',
       sort: 'Sort', sortRecommended: 'Recommended', sortPrice: 'Lowest price', sortContext: 'Largest context', sortName: 'Name',
+      availability: 'Access', available: 'Available to me', higherPlan: 'Higher plan', publicCatalog: 'Public catalogue',
       allVendors: 'All makers', otherVendors: 'Other', vendorFilter: 'Maker',
       planNote: (n) => `${n} models open on higher plans.`,
       planTitle: 'Plan and top-up', planPill: 'Lika+', planHeader: 'Plan', planIntro: 'Top-ups stay on your balance. When the paid balance reaches a plan threshold, the plan starts for 30 days.',
@@ -71,6 +74,7 @@
       mod: { text: 'text', image: 'pictures', audio: 'sound', video: 'video' },
     },
     zh: {
+      availability: '可用范围', available: '当前可用', higherPlan: '更高套餐', publicCatalog: '公开目录',
       title: '模型', eyebrow: 'nanoLika · 账户',
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。每行显示套餐折扣价和模型能力。',
       search: '快速搜索模型', all: '全部模型', mine: '已选', favouritesShort: '★ 收藏',
@@ -185,12 +189,17 @@
   }
 
   function upgradeHref(plan, amount) {
-    const base = web ? '/web/account/' : '../';
-    const params = new URLSearchParams({ pay: '1' });
+    const base = '/web/account/';
+    const params = new URLSearchParams({ pay: '1', source: web ? 'web' : 'console' });
     if (plan) params.set('plan', plan);
     if (amount) params.set('amount', amount);
     return `${base}?${params.toString()}`;
   }
+
+  const accessLabel=h('label',T.availability+' '),accessSelect=h('select');accessSelect.setAttribute('aria-label',T.availability);
+  for(const [value,label] of [['',T.all],['available',T.available],['higher',T.higherPlan]]){const item=h('option',label);item.value=value;accessSelect.append(item);}
+  accessSelect.onchange=()=>{availability=accessSelect.value;shownCount={};if(draft)draw();};accessLabel.append(accessSelect);document.querySelector('.catalog-toolbar').append(accessLabel);
+  const publicLink=h('a',T.publicCatalog,'public-catalog-link');publicLink.href='https://nanolika.ru/models.html';publicLink.target='_blank';publicLink.rel='noopener';document.querySelector('header').append(publicLink);
 
   /** Полка ведётся по видам, поэтому у звука и музыки один вид: «ключ полки». */
   const SHELF_KINDS = ['chat', 'image', 'video', 'audio'];
@@ -204,13 +213,13 @@
 
   let loaded = null; // что сказал сервер в прошлый раз
   let draft = null; // что человек выбрал сейчас
+  let availability='';
   let contextMin=0;let favouriteWrites=Promise.resolve();
   let section = readPref('nm.models.section', 'all'); // какой раздел открыт
   if (!SECTION_KEYS.has(section)) section = 'all';
   let needle = ''; // что в поиске
   let vendorFilter = readPref('nm.models.vendor', ''); // один провайдер или все
   let sortMode = readPref('nm.models.sort', 'recommended'); // как расставлены строки
-  let planChoice = ''; // выбранный тариф в черновике окна
   if (!['recommended', 'price', 'context', 'name'].includes(sortMode)) sortMode = 'recommended';
   let shownCount = {}; // сколько строк раздела уже показано
   let collapsedKinds = new Set(); // разделы можно свернуть, не меняя выбранные модели
@@ -339,6 +348,8 @@
     const wanted = needle.trim().toLowerCase();
     const spec = SECTIONS.find((s) => s.key === section);
     return all.filter((model) => {
+      if(availability==='available'&&(model.plan_locked||model.available===false))return false;
+      if(availability==='higher'&&!model.plan_locked)return false;
       const hay = `${model.name} ${model.vendor || ''} ${model.id} ${model.upstream || ''}`.toLowerCase();
       if (wanted && !hay.includes(wanted)) return false;
       if (vendorFilter === OTHER_BUCKET) { if (MAJOR_VENDORS.has(vendorName(model.vendor))) return false; }
@@ -471,94 +482,19 @@
     el('save').disabled = busy || !isChanged;
     el('save').parentElement.classList.toggle('has-changes',isChanged);
     el('reset').hidden = !isChanged;
-    el('status').textContent = busy ? T.saving : isChanged ? T.dirty : T.unchanged;
+    el('status').textContent = busy ? T.saving : isChanged ? T.dirty : '';
     el('count').textContent = T.found(visible().length);
   }
 
-  const money = (cents) => new Intl.NumberFormat(document.documentElement.lang, { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(Number(cents) / 100);
-
-  /** Черновик окна тарифа: карточки тарифов и переход в кабинет, где проходит оплата. */
-  async function loadPlanConfig(holder, status, go, updateGo, amount) {
-    try {
-      const response = await fetch('/v1/payments/config', { headers: { Authorization: 'Bearer ' + token() }, cache: 'no-store' });
-      if (!response.ok) throw new Error('config');
-      const config = await response.json();
-      const ids = ['lika', 'plus', 'lika-plus', 'team'];
-      holder.replaceChildren();
-      let any = false;
-      for (const id of ids) {
-        const plan = config?.plans?.[id];
-        if (!plan || !Number.isSafeInteger(plan.amount) || plan.amount < 1) continue;
-        any = true;
-        const card = h('button', undefined, 'plan-card');
-        card.type = 'button';
-        card.append(
-          h('strong', plan.name || id, 'plan-name'),
-          h('span', money(plan.amount), 'plan-price'),
-          h('span', `${T.discount} ${plan.discount}% · ${plan.days || 30} ${T.days}`, 'plan-meta'),
-        );
-        card.onclick = () => {
-          planChoice = id;
-          amount.value = '';
-          for (const other of holder.querySelectorAll('.plan-card')) other.classList.toggle('plan-card-on', other === card);
-          updateGo();
-        };
-        holder.append(card);
-      }
-      status.textContent = any ? '' : T.planUnavailable;
-      if (!any) updateGo();
-    } catch (_) {
-      status.textContent = T.planUnavailable;
-    }
+  async function paymentRequest(path,options={}){
+    const response=await fetch(path,{...options,cache:'no-store',headers:{Authorization:'Bearer '+token(),...(options.body?{'Content-Type':'application/json'}:{})}});
+    if(!response.ok){const error=new Error('payment');error.status=response.status;throw error;}
+    return response.json();
   }
-
-  function buildPlanDialog() {
-    const dialog = el('plan-dialog');
-    if (!dialog || dialog.dataset.built) return;
-    dialog.dataset.built = '1';
-    const close = h('button', '×', 'plan-close');
-    close.type = 'button';
-    close.setAttribute('aria-label', T.close);
-    close.onclick = () => dialog.close();
-    const title = h('h2', T.planTitle);
-    title.id = 'plan-title';
-    const plans = h('div', undefined, 'plan-options');
-    const status = h('p', T.planLoading, 'fine');
-    status.id = 'plan-status';
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
-    const label = h('label', T.planAmount + ' ');
-    const amount = h('input');
-    amount.type = 'text';
-    amount.inputMode = 'decimal';
-    amount.placeholder = '1000';
-    amount.id = 'plan-amount';
-    amount.autocomplete = 'off';
-    label.append(amount);
-    const go = h('a', T.planGo, 'btn');
-    const updateGo = () => { go.href = upgradeHref(planChoice, planChoice ? '' : amount.value.trim()); };
-    amount.oninput = () => {
-      if (amount.value.trim()) {
-        planChoice = '';
-        for (const card of plans.querySelectorAll('.plan-card')) card.classList.remove('plan-card-on');
-      }
-      updateGo();
-    };
-    updateGo();
-    dialog.append(close, title, h('p', T.planIntro, 'fine'), plans, status, label, h('p', T.planHint, 'fine'), go);
-    dialog.setAttribute('aria-labelledby', 'plan-title');
-    dialog.addEventListener('close', () => document.body.classList.remove('plan-open'));
-    dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
-    loadPlanConfig(plans, status, go, updateGo, amount);
-  }
-
-  function openPlanDialog() {
-    const dialog = el('plan-dialog');
-    if (!dialog) return;
-    buildPlanDialog();
-    if (!dialog.open) dialog.showModal();
-    document.body.classList.add('plan-open');
-  }
+  const paymentDialog=installPaymentDialog({lang:document.documentElement.lang,request:paymentRequest,fromConsole:!web,getSession:async()=>{
+    const me=await paymentRequest('/v1/me');return {key:token(),owner:me.account?.id};
+  }});
+  function openPlanDialog(){void paymentDialog.open({plan:'lika-plus'});}
 
   async function load() {
     const key = token();
@@ -578,12 +514,12 @@
       }
       if (!response.ok) throw new Error('request');
       loaded = await response.json();
-      if(!el('context-filter')){const label=h('label','Контекст ');const select=h('select');select.id='context-filter';select.setAttribute('aria-label','Контекст');for(const n of [0,128000,200000,1000000]){const option=h('option',n?(n/1000)+'K+':'Любой');option.value=n;select.append(option);}select.onchange=()=>{contextMin=Number(select.value);draw();};label.append(select);document.querySelector('.search-row').append(label);}
+      if(!el('context-filter')){const label=h('label','Контекст ');const select=h('select');select.id='context-filter';select.setAttribute('aria-label','Контекст');for(const n of [0,128000,200000,1000000]){const option=h('option',n?(n/1000)+'K+':'Любой');option.value=n;select.append(option);}select.onchange=()=>{contextMin=Number(select.value);draw();};label.append(select);document.querySelector('.catalog-toolbar').append(label);}
       if(!el('vendor-filter')){
         const label=h('label',T.vendorFilter+' ');
         const select=h('select');select.id='vendor-filter';select.setAttribute('aria-label',T.vendorFilter);
         select.onchange=()=>{vendorFilter=select.value;writePref('nm.models.vendor',vendorFilter);draw();};
-        label.append(select);document.querySelector('.search-row').append(label);
+        label.append(select);document.querySelector('.catalog-toolbar').append(label);
       }
       const vendorSelect=el('vendor-filter');
       const buckets=[...new Set((loaded.models||[]).map(m=>vendorBucket(m.vendor)))];
@@ -602,7 +538,7 @@
         for(const [value,title] of [['recommended',T.sortRecommended],['price',T.sortPrice],['context',T.sortContext],['name',T.sortName]]){const option=h('option',title);option.value=value;select.append(option);}
         select.value=sortMode;
         select.onchange=()=>{sortMode=select.value;writePref('nm.models.sort',sortMode);draw();};
-        label.append(select);document.querySelector('.search-row').append(label);
+        label.append(select);document.querySelector('.catalog-toolbar').append(label);
       }
 
       draft = fromServer(loaded.shelf || {});

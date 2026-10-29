@@ -53,6 +53,31 @@ async def test_quote_requires_auth_and_never_spends():
         assert len(cloud.db.recent_ledger(caller.account_id)) == len(before)
 
 
+async def test_public_menu_exposes_current_retail_rates_without_account_or_provider_data(monkeypatch):
+    client, cloud, _headers = await stack()
+    async with opened(client):
+        model_pricing.save(cloud, cloud.s.model("image"), {"revision": 0, "rates_rub": {"image": 25}})
+
+        def no_account_discount(_account):
+            raise AssertionError("The public catalogue must not read an account's tariff")
+
+        monkeypatch.setattr(cloud, "spend_discount_pct", no_account_discount)
+        response = await client.get("/v1/menu")
+        assert response.status_code == 200
+        rows = {row["id"]: row for row in response.json()["models"]}
+        assert rows["image"]["commerce"]["rates_rub"]["image"] == 25
+        assert rows["image"]["commerce"]["effective_rub"]["image"] == 25
+        assert rows["image"]["commerce"]["discount_pct"] == 0
+        assert rows["text"]["context_length"] == 200000
+        assert rows["text"]["max_output"] == 10000
+        for row in rows.values():
+            assert not (
+                {"price_in", "price_out", "price_image", "upstream", "provider", "api_key", "enabled", "default", "plan_locked"}
+                & row.keys()
+            )
+        assert "shelf" not in response.json()
+
+
 async def test_saved_price_visible_in_catalogue_and_actual_image_charge(monkeypatch):
     client, cloud, headers = await stack()
     async with opened(client):

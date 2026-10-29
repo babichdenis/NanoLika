@@ -1,7 +1,7 @@
 import {ChannelOnboarding,isChannelLinked,isDesktopDevice} from '../channel-onboarding.js?v=20261029-connect';
 import {installAutopay} from './autopay.js';
 import {installUsageChart} from './usage-chart.js?v=20261027-compact';
-import {installPaymentDialog} from './payments.js';
+import {installPaymentDialog} from './payments.js?v=20261029-single';
 import {groupWebDevices} from './payment-utils.js';
 import {clearOwner} from '../storage.js';
 const words={
@@ -103,21 +103,7 @@ const paymentDialog=installPaymentDialog({lang,request:api,getSession:()=>sessio
 addEventListener('storage',e=>{if(e.key===sessionKey||!e.key){paymentDialog.close();$('private-content').hidden=true;$('identity').textContent='';location.reload();}});
 load().then(()=>{
  const q=new URLSearchParams(location.search);
- if(q.get('pay')!=='1'||$('private-content').hidden)return;
- $('fund-account')?.click();
- const plan=q.get('plan')||'', amount=q.get('amount')||'';
- if(!plan&&!amount)return;
- const dialog=$('payment-dialog');
- const apply=()=>{
-  let done=false;
-  if(plan){const radio=[...dialog.querySelectorAll('input[name="payment-option"]')].find(x=>x.value===plan);if(radio){radio.click();done=true;}}
-  else if(amount){const custom=dialog.querySelector('input[name="payment-option"][value="custom"]');if(custom){custom.click();const input=$('payment-custom-amount');if(input){input.value=amount;input.dispatchEvent(new Event('input',{bubbles:true}));done=true;}}}
-  return done;
- };
- if(apply())return;
- const observer=new MutationObserver(()=>{if(apply())observer.disconnect();});
- observer.observe(dialog,{childList:true,subtree:true});
- setTimeout(()=>observer.disconnect(),6000);
+ if(q.get('pay')==='1'&&!$('private-content').hidden)void paymentDialog.open({plan:q.get('plan')||'',amount:q.get('amount')||''});
 });
 
 let installOffer=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installOffer=e;});

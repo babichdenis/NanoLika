@@ -843,3 +843,22 @@ computer is off and can answer ordinary questions. The Cloud relay carries sync 
 does not run the agent; if the messenger runtime is offline too, it cannot answer until it
 reconnects. Local project files and processes remain on the computer and cannot be checked
 while that computer is offline.
+
+
+### Public model catalogue and payment entry, 2026-10-29
+
+`GET /v1/menu` remains public and read-only. Each model now also exposes its maker,
+availability, context and output limits, audio type and `commerce` retail declaration.
+The retail rates use the same operator overrides as the account catalogue, with zero
+account discount. No account shelf, provider credentials, wholesale amounts or upstream
+routing identifiers are included. Existing `sell`, modality and kind fields remain valid.
+
+The public marketing catalogue uses this endpoint for search, filters and prices. A saved
+public snapshot is explicitly dated when current prices cannot be loaded. Missing media
+rates are shown as unavailable, never as a free generation.
+
+The plan link in the account's model table opens the shared payment dialog directly.
+`installPaymentDialog().open({plan, amount})` accepts an initial choice after configuration
+has loaded. The account payment deep link uses the same entry. Amount validation, explicit
+terms acceptance, order idempotency and the existing test-mode gate are unchanged. This
+interface change does not enable a payment provider or collect a live payment.

@@ -1,3 +1,34 @@
+## 2026-10-29 · One payment dialog from models and a public retail catalogue
+
+The model table's plan pill opened a tariff preview, then sent the customer to a second
+payment dialog in the account. It now opens the shared payment dialog directly, with the
+higher plan preselected. The account deep link uses the same async entry. The dialog uses
+compact tariff rows and a custom-amount field; explicit terms acceptance, test-mode gating
+and idempotent order retries remain in place. Concurrent clicks are latched before fetching
+the account identity. The model settings page has a separate filter toolbar, an access filter
+and a link to the public read-only catalogue.
+
+The public menu adds maker, availability, context/output limits, audio type and the retail
+commerce declaration with no account discount. Its rates use the account's operator price
+overrides. Missing old-format media rates stay unknown in the public page, never free. The
+marketing catalogue has search, type/maker/modality/context filters, sorting and pagination;
+it does not write a shelf, pick a model or require an account.
+
+Validation: 28 focused server tests passed, including retail metadata without account/provider
+secrets; Ruff lint and format checks passed. Browser checks at 390/768/1440 verified direct
+payment entry, preset/custom amounts, explicit acceptance, duplicate-click prevention and
+same-key retry, the test-mode gate, access filters, public read-only filtering/pagination and
+an explicitly dated offline snapshot. No real payment or model generation was submitted.
+The relay and marketing site were deployed with backups; public menu and health checks pass.
+
+Deployment trap: the web-client parent is a read-only bind mount. Binding a new CSS file
+beneath it failed because the target did not exist; the previous compose file was restored.
+The successful deployment mounts an account directory containing all prior account files,
+then preserves the existing individual overrides. The shared stylesheet is thus available
+without changing container permissions. Effective mounted service.py differed from the
+checkout, so only catalogue_public was transplanted into that live file. Robokassa is not
+activated by this change; the existing provider remains in test mode.
+
 ## 2026-10-29 · A synced chat gets its first turn, so the computer lists it
 
 The MAX conversation was in the account, the desktop catalogue and the remote transcript, but
