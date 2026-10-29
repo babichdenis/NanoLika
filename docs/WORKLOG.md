@@ -1,3 +1,20 @@
+## 2026-10-29 · A synced chat gets its first turn, so the computer lists it
+
+The MAX conversation was in the account, the desktop catalogue and the remote transcript, but
+the native workspace column shows a session only after a prompt: a synced session is created
+blank, and `sessionVisible` hides every blank row except the current one. A raw user event in
+the session log did not change that; the harness projection stays blank until the session
+controller opens a turn. The sync engine now promotes the first remote user line of a synced
+session with a real `sessionController.prompt` (one turn), immediately cancels the answer, and
+renames the session back to the conversation title. The line itself is still kept in the
+remote store and drawn as a bubble; the prompt is only what makes the session a listed chat.
+The desktop column also reads `sync/state` on a slow tick and builds a row from the sync view
+for a conversation the harness has not listed yet, which covers the custom chat column.
+
+The MAX session `session-8ffd963f` now has `sessionListMetadata.blank=false`, title
+`MAX · nanoLika`, one aborted promotion turn, cursor 2730 and its remote transcript. Commit
+`154e3b5f`, plugin 433/433. Backup `~/.nanolika/backups/promote2-20261029T194500Z`.
+
 ## 2026-10-29 · A synced chat is a row even before the harness lists its session
 
 The MAX chat still did not appear in the desktop column after the first pull: the cloud
