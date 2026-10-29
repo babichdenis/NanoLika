@@ -3091,8 +3091,7 @@ def create_app(
     bothub_cache: dict[str, Any] = {"at": 0.0, "data": None}
     bothub_lock = asyncio.Lock()
 
-    @app.get("/v1/admin/bothub", dependencies=[Depends(admin_dep)])
-    async def admin_bothub() -> dict:
+    async def bothub_status() -> dict:
         """Plan, CAPS balance and recent charges of the Bothub API key.
 
         Bothub bills in CAPS; the key's plan turns them into rubles
@@ -3113,11 +3112,11 @@ def create_app(
                 return bothub_cache["data"]
             try:
                 headers = {"Authorization": f"Bearer {key}"}
-                me_r = await http.get(f"{api}/auth/me", headers=headers, timeout=15)
+                me_r = await http.get(f"{api}/auth/me", headers=headers, timeout=8)
                 if me_r.status_code >= 400:
                     raise RuntimeError(f"Bothub refused the key ({me_r.status_code})")
                 me = me_r.json()
-                tx_r = await http.get(f"{api}/transaction/list?limit=20", headers=headers, timeout=15)
+                tx_r = await http.get(f"{api}/transaction/list?limit=20", headers=headers, timeout=8)
                 if tx_r.status_code >= 400:
                     raise RuntimeError(f"Bothub refused the ledger ({tx_r.status_code})")
                 tx = tx_r.json().get("data") or []
@@ -3171,10 +3170,42 @@ def create_app(
                     return {**bothub_cache["data"], "stale": True, "error": str(error)[:200]}
                 return {"ok": False, "error": str(error)[:200]}
 
+    @app.get("/v1/admin/bothub", dependencies=[Depends(admin_dep)])
+    async def admin_bothub() -> dict:
+        return await bothub_status()
+
     @app.get("/v1/admin/provider-balances", dependencies=[Depends(admin_dep)])
     async def provider_balances_status() -> dict:
-        """The provider wallets and the floor each route is judged by; no offers, cheap."""
-        return router.status(include_offers=False)
+        """The provider wallets and the floor each route is judged by; no offers, cheap.
+
+        Bothub bills in CAPS rather than rubles, so its row carries the plan rate and
+        the ruble estimate the balances panel compares with the floor."""
+        status = router.status(include_offers=False)
+        bothub = await bothub_status()
+        balances = status.get("balances")
+        if not isinstance(balances, dict):
+            balances = {}
+            status["balances"] = balances
+        if bothub.get("ok"):
+            balances["bothub"] = {
+                "amount": bothub["available_caps"],
+                "currency": "CAPS",
+                "checked": bothub["checked"],
+                "error": None,
+                "rub_estimate": bothub["balance_rub"],
+                "plan": bothub["plan"],
+                "rate_rub_per_million": bothub["rate_rub_per_million"],
+                "spent_today_rub": bothub["spent_today_rub"],
+            }
+        else:
+            balances["bothub"] = {
+                "amount": None,
+                "currency": "CAPS",
+                "checked": int(time.time()),
+                "error": bothub.get("error") or "unavailable",
+                "rub_estimate": None,
+            }
+        return status
 
 
     @app.post("/v1/admin/provider-routing/refresh", dependencies=[Depends(admin_dep)])

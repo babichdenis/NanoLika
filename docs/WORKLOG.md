@@ -80,12 +80,14 @@ price and the daily generator cannot quietly reprice the shop. GPT 6.1 Terra is 
 absent from the key's 377 models, and Gemini/Eleven speech still answers
 `404 DeploymentNotFound`; only `tts-1` and `tts-1-hd` remain on the shelf.
 
-The admin's provider view now carries a **Bothub** card: plan, CAPS balance, the ruble
-estimate at `plan.price / plan.tokens`, today's spend and the last six charges.
-`GET /v1/admin/bothub` proxies `/auth/me` and `/transaction/list` with the server key,
-caches for a minute, never returns the key and falls back to the last good answer when
-Bothub is down. It sits above the provider wallet panel; the live key shows PREMIUM,
-3,100,393 CAPS ≈ 620 ₽ and 58,261 CAPS ≈ 11.65 ₽ spent today by the smoke tests. Bothub's website login does not change the
+Bothub now sits in the **common provider balances table** rather than a separate card:
+the row shows 3,100,393 CAPS, the ruble estimate at `plan.price / plan.tokens`
+(≈ 620 ₽), the PREMIUM rate of 200 ₽ per 1M CAPS and today's spend (≈ 11.65 ₽ by the
+smoke tests). `GET /v1/admin/provider-balances` adds it to the wallet rows with
+`currency: CAPS`; the panel compares the ruble estimate with the same floor as the
+other providers. `GET /v1/admin/bothub` still exposes the last ten charges, caches for
+a minute, never returns the key and falls back to the last good answer when Bothub is
+down. Bothub's website login does not change the
 API key's tariff: `/pricing/models` still answers `BASIC` (250 ₽ per 1M caps), while the
 site displays `ELITE` (157.14 ₽). Moving the subscription that owns `BOTHUB_KEY` to
 ELITE would cut our purchase cost by 37% to the site's **non-promo** price
