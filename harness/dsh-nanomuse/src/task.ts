@@ -16,6 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ApprovalOutcome, ApprovalRequestEvent } from '@deepseek-ai/dsh-user-approval/types'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
+import { basename } from 'node:path'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import { HubError, type Caller, type IncomingCall } from './hub.ts'
@@ -34,6 +35,8 @@ interface Run {
   readonly agent: Agent
   /** The tool calls of the run so far, for approval previews and result names. */
   readonly tools: Map<string, { name: string; args: string }>
+  /** Files the agent put in the local preview: path → the description it gave. */
+  readonly presented: Map<string, string>
   /** Approvals waiting on the asker, cancelled with the run. */
   readonly approvals: Set<string>
   final: string
@@ -167,7 +170,7 @@ export class TaskRunner {
       resolve = res
       reject = rej
     })
-    const run: Run = { callId: call.id, call, sessionId, agent, tools: new Map(), approvals: new Set(), final: '', resolve, reject }
+    const run: Run = { callId: call.id, call, sessionId, agent, tools: new Map(), presented: new Map(), approvals: new Set(), final: '', resolve, reject }
     this.bySession.set(sessionId, run)
     this.byCall.set(call.id, run)
     const timer = setTimeout(() => {
@@ -182,7 +185,12 @@ export class TaskRunner {
       // (`MIRROR_NOTE`) keeps the sync from carrying them back as something typed here
       agent.followup(createUserMessage({ content: [{ type: 'text', text: shared ? text : frame(from.name || from.id, this.options.deviceName(), text) }], source: { kind: 'user' } }))
       const final = await settled
-      const sharedFinal = this.options.shareFiles ? await this.options.shareFiles(final).catch(() => final) : final
+      // `present` puts a clip in the local preview but does not write a path into the answer;
+      // the asker cannot see that preview. Add the presented files as links so the S3 rewrite
+      // can carry them to Telegram/web too.
+      const presented = [...run.presented].map(([path, description]) => `[${description || basename(path)}](<${path}>)`)
+      const withFiles = presented.length ? [final, ...presented].filter(Boolean).join('\n\n') : final
+      const sharedFinal = this.options.shareFiles ? await this.options.shareFiles(withFiles).catch(() => withFiles) : withFiles
       return { text: sharedFinal, conversation, thread: sessionId, device: this.options.deviceName(), ...(sharedCid ? { sync_cid: sharedCid } : {}) }
     } finally {
       clearTimeout(timer)
@@ -253,6 +261,16 @@ export class TaskRunner {
   private onEvent(session: Session, event: SessionEvent): void {
     const run = this.bySession.get(session.id)
     if (!run) return
+    // `present` is a client-facing deliverable event the host's public SessionEvent union
+    // does not name yet; read it structurally rather than widening the host's types.
+    const presented = event as unknown as { type: string; data?: { files?: Array<{ path?: string; description?: string }> } }
+    if (presented.type === 'deliverables/presented') {
+      for (const file of presented.data?.files ?? []) {
+        const path = String(file.path ?? '')
+        if (path) run.presented.set(path, String(file.description ?? ''))
+      }
+      return
+    }
     switch (event.type) {
       case 'tool/call': {
         const { callId, name, arguments: args } = event.data

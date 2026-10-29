@@ -4,6 +4,9 @@
 // `stop {call}` cancelling the run, busy and timeout handling.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { MIRROR_NOTE, TaskRunner, frame, preview, taskTitle, textOf } from '../lib/task.js'
 
 /** The slice of a dsh Context the runner touches. */
@@ -311,5 +314,23 @@ test('a shared chat task uses only a verified catalogue session and does not cre
   h.emit('session-1', 'assistant/message', { message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] }, stream: [] })
   h.emit('session-1', 'turn/end', { reason: { kind: 'completed' } })
   assert.equal((await pending).thread, 'session-1')
+  off()
+})
+
+
+test('presented files are appended as local links for the sharing step', async () => {
+  const h = fakeContext()
+  const { r, off } = runner(h)
+  const dir = await mkdtemp(join(tmpdir(), 'nanolika-present-'))
+  const file = join(dir, 'clip one.mp4')
+  await writeFile(file, 'x')
+  const call = fakeCall('c-present')
+  const p = r.task({ text: 'send the clip' }, call)
+  await tick()
+  h.emit('session-1', 'assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'Here it is.' }] }, stream: [] })
+  h.emit('session-1', 'deliverables/presented', { files: [{ path: file, description: 'Clip one' }] })
+  h.emit('session-1', 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+  const result = await p
+  assert.equal(result.text, `Here it is.\n\n[Clip one](<${file}>)`)
   off()
 })

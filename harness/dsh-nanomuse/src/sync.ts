@@ -1225,6 +1225,30 @@ export class SyncEngine {
     this.dirty.add(sessionId)
     this.pushSoon(200)
   }
+  /** A local answer presented a file: put its link into the shared transcript as an assistant
+   * line, so the other devices (and the Telegram bot) can deliver it too. The local session
+   * already draws the preview; the synthetic mid is remembered so the relay echo is not shown
+   * here twice. */
+  async sharePresented(sessionId: string, text: string): Promise<void> {
+    if (!text.trim() || !this.syncs(sessionId) || this.options.isTaskSession?.(sessionId) === true) return
+    if (!(await this.active())) return
+    const token = await this.options.token()
+    if (!token) return
+    const cid = this.cidFor(sessionId)
+    const mid = randomUUID()
+    try {
+      const out = await this.options.relay.push(token, this.options.deviceId(), [], [
+        { mid, cid, role: 'assistant', text, created_at: Math.floor(Date.now() / 1000) },
+      ])
+      if (out.accepted > 0) {
+        this.state.mids[`presented:${mid}`] = mid
+        await this.save()
+      }
+    } catch {
+      // the local preview stays; a later turn retries the normal sync path
+    }
+  }
+
 
   /** The relay's `sync` frame: another device pushed. Frames arriving together become one pull, and a frame arriving during an in-flight pull runs a follow-up pull when needed. */
   onFrame(frame: { cursor?: number; from?: string }): void {

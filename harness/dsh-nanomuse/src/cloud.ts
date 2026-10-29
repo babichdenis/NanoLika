@@ -965,6 +965,10 @@ export default class NanomuseCloud extends Service {
             if (event.type === 'turn/end') sync.turnEnded(id)
             else if (event.type === 'user/message' && isOwnWords(event.data)) sync.messageSent(id)
             else if ((event as { type: string }).type === 'session/title') sync.sessionRenamed(String(session.id))
+            else if ((event as { type: string }).type === 'deliverables/presented') {
+              const presented = event as unknown as { data?: { files?: unknown } }
+              void this.sharePresentedLocal(id, presented.data?.files)
+            }
           }),
         'nanomuse cloud: sync turns',
       )
@@ -3661,6 +3665,24 @@ export default class NanomuseCloud extends Service {
   }
 
   /** The person's prompts and the model's final texts of one session, for the sync engine. */
+  /** A file the local agent presented (the desktop preview) also goes to the account as a link. */
+  private async sharePresentedLocal(sessionId: string, files: unknown): Promise<void> {
+    if (!Array.isArray(files) || !files.length) return
+    const links = files
+      .map((f) => (f && typeof f === 'object' ? (f as { path?: unknown; description?: unknown }) : {}))
+      .map((f) => {
+        const path = String(f.path ?? '')
+        if (!path) return ''
+        return `[${String(f.description ?? '') || path.split('/').pop() || 'file'}](<${path}>)`
+      })
+      .filter(Boolean)
+      .join('\n')
+    if (!links) return
+    const shared = await shareFileLinks(links)
+    if (!shared.includes('https://')) return
+    await this.sync?.sharePresented(sessionId, shared)
+  }
+
   private async sessionLines(ctx: Context, sessionId: string): Promise<SessionLine[]> {
     const entry = this.cached(sessionId)
     if (entry.lines) return entry.lines
