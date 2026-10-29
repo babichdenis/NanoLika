@@ -78,7 +78,14 @@ media markup was raised to ×1.8125 (video) and ×1.875 (speech, pictures), whic
 same ×1.45/×1.5 over the old BASIC cost, so its retail matches the team-aware public
 price and the daily generator cannot quietly reprice the shop. GPT 6.1 Terra is still
 absent from the key's 377 models, and Gemini/Eleven speech still answers
-`404 DeploymentNotFound`; only `tts-1` and `tts-1-hd` remain on the shelf. Bothub's website login does not change the
+`404 DeploymentNotFound`; only `tts-1` and `tts-1-hd` remain on the shelf.
+
+The admin's provider view now carries a **Bothub** card: plan, CAPS balance, the ruble
+estimate at `plan.price / plan.tokens`, today's spend and the last six charges.
+`GET /v1/admin/bothub` proxies `/auth/me` and `/transaction/list` with the server key,
+caches for a minute, never returns the key and falls back to the last good answer when
+Bothub is down. It sits above the provider wallet panel; the live key shows PREMIUM,
+3,100,393 CAPS ≈ 620 ₽ and 58,261 CAPS ≈ 11.65 ₽ spent today by the smoke tests. Bothub's website login does not change the
 API key's tariff: `/pricing/models` still answers `BASIC` (250 ₽ per 1M caps), while the
 site displays `ELITE` (157.14 ₽). Moving the subscription that owns `BOTHUB_KEY` to
 ELITE would cut our purchase cost by 37% to the site's **non-promo** price

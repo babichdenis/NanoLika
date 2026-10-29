@@ -105,6 +105,7 @@ import secrets
 import time
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -3086,6 +3087,90 @@ def create_app(
     @app.get("/v1/admin/provider-routing", dependencies=[Depends(admin_dep)])
     async def provider_routing_status() -> dict:
         return router.status(include_offers=True)
+    # -- Bothub: план, CAPS и списания ---------------------------------------------------------
+    bothub_cache: dict[str, Any] = {"at": 0.0, "data": None}
+    bothub_lock = asyncio.Lock()
+
+    @app.get("/v1/admin/bothub", dependencies=[Depends(admin_dep)])
+    async def admin_bothub() -> dict:
+        """Plan, CAPS balance and recent charges of the Bothub API key.
+
+        Bothub bills in CAPS; the key's plan turns them into rubles
+        (plan.price / plan.tokens). The key stays on the server."""
+        entry = settings.providers.get("bothub")
+        if entry is None or not entry.base:
+            return {"ok": False, "error": "Bothub is not configured"}
+        key = entry.key()
+        if not key:
+            return {"ok": False, "error": "BOTHUB_KEY is empty"}
+        api = entry.base.rstrip("/")
+        if "/openai/" in api:
+            api = api.split("/openai/")[0]
+        if bothub_cache["data"] is not None and time.monotonic() - bothub_cache["at"] < 60:
+            return bothub_cache["data"]
+        async with bothub_lock:
+            if bothub_cache["data"] is not None and time.monotonic() - bothub_cache["at"] < 60:
+                return bothub_cache["data"]
+            try:
+                headers = {"Authorization": f"Bearer {key}"}
+                me_r = await http.get(f"{api}/auth/me", headers=headers, timeout=15)
+                if me_r.status_code >= 400:
+                    raise RuntimeError(f"Bothub refused the key ({me_r.status_code})")
+                me = me_r.json()
+                tx_r = await http.get(f"{api}/transaction/list?limit=20", headers=headers, timeout=15)
+                if tx_r.status_code >= 400:
+                    raise RuntimeError(f"Bothub refused the ledger ({tx_r.status_code})")
+                tx = tx_r.json().get("data") or []
+                sub = me.get("subscription") or {}
+                plan = sub.get("plan") or {}
+                price = float(plan.get("price") or 0)
+                tokens = float(plan.get("tokens") or 0)
+                rate = price / tokens if tokens else 0.0
+                balance = float(sub.get("balance") or 0)
+                available = float(sub.get("availableBalance") or balance)
+                today = datetime.now(UTC).date()
+                spent = 0.0
+                recent = []
+                for row in tx:
+                    if row.get("type") != "WRITE_OFF":
+                        continue
+                    caps = float(row.get("amount") or 0)
+                    raw = str(row.get("createdAt") or "")
+                    try:
+                        at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    except ValueError:
+                        at = None
+                    if at is not None and at.date() == today:
+                        spent += caps
+                    if len(recent) < 6:
+                        recent.append({
+                            "at": int(at.timestamp()) if at else 0,
+                            "caps": round(caps, 2),
+                            "rub": round(caps * rate, 2),
+                        })
+                data = {
+                    "ok": True,
+                    "plan": str(plan.get("type") or ""),
+                    "plan_price_rub": round(price, 2),
+                    "plan_tokens": int(tokens),
+                    "rate_rub_per_million": round(rate * 1_000_000, 2),
+                    "balance_caps": round(balance, 2),
+                    "available_caps": round(available, 2),
+                    "balance_rub": round(available * rate, 2),
+                    "spent_today_caps": round(spent, 2),
+                    "spent_today_rub": round(spent * rate, 2),
+                    "recent": recent,
+                    "checked": int(time.time()),
+                    "stale": False,
+                }
+                bothub_cache.update(at=time.monotonic(), data=data)
+                return data
+            except Exception as error:  # noqa: BLE001 — the card must not break the admin
+                log.warning("Bothub admin card: %s", error)
+                if bothub_cache["data"] is not None:
+                    return {**bothub_cache["data"], "stale": True, "error": str(error)[:200]}
+                return {"ok": False, "error": str(error)[:200]}
+
     @app.get("/v1/admin/provider-balances", dependencies=[Depends(admin_dep)])
     async def provider_balances_status() -> dict:
         """The provider wallets and the floor each route is judged by; no offers, cheap."""

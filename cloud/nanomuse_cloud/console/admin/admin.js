@@ -635,8 +635,9 @@
     siteCounter: () => "/v1/admin/site-counter",
     providers: () => "/v1/admin/provider-prices",
     balances: () => "/v1/admin/provider-balances",
+    bothub: () => "/v1/admin/bothub",
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances", "bothub"]);
   const CACHE = new Map();
   const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}${key === "payments" ? ":" + SOURCES.payments(days) : ""}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
@@ -1892,6 +1893,38 @@
   function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
   function trafficView() { return siteTrafficView(); }
   /** Кошельки поставщиков над таблицей цен: видно, на что ещё хватит маршрута. */
+  /** Bothub: план, CAPS, курс и последние списания — по API ключа на сервере. */
+  function bothubPanel() {
+    const title = L3("Bothub · API", "Bothub · API", "Bothub · API");
+    const bv = need("bothub");
+    if (!bv) return loadingPanel(title);
+    if (bv._error) return failedPanel(title, "bothub", bv._error);
+    if (bv.ok === false) return panel(title, h("div", { class: "empty" }, bv.error || "—"));
+    const kpi = (label, value, sub) => h("div", { class: "kpi flat" },
+      h("div", { class: "k" }, label),
+      h("div", { class: "v" }, value, sub ? h("small", {}, sub) : null));
+    const rows = (bv.recent || []).map((x) => h("tr", {},
+      h("td", { class: "fine" }, when(x.at)),
+      h("td", { class: "num" }, `${fmt(Math.round(Number(x.caps) || 0))} CAPS`),
+      h("td", { class: "num" }, `${fmt(Number(x.rub) || 0)} ₽`)));
+    return panel([title, h("span", { class: "fine" }, ` · ${bv.plan || "—"}${bv.stale ? " · " + L3("данные с задержкой", "stale", "数据过期") : ""}`)],
+      h("div", { class: "kpis in-panel" },
+        kpi(L3("Остаток", "Balance", "余额"), `${fmt(Math.round(Number(bv.available_caps) || 0))} CAPS`, `≈ ${fmt(Number(bv.balance_rub) || 0)} ₽`),
+        kpi(L3("Тариф", "Plan", "套餐"), bv.plan || "—", `${fmt(Number(bv.plan_price_rub) || 0)} ₽ / ${fmt(Number(bv.plan_tokens) || 0)} CAPS`),
+        kpi(L3("Расход сегодня", "Spent today", "今日支出"), `${fmt(Number(bv.spent_today_rub) || 0)} ₽`, `${fmt(Math.round(Number(bv.spent_today_caps) || 0))} CAPS`),
+        kpi(L3("Ставка", "Rate", "费率"), `${fmt(Number(bv.rate_rub_per_million) || 0)} ₽`, L3("за 1M CAPS", "per 1M CAPS", "每百万 CAPS"))),
+      rows.length ? h("div", { class: "ledger", style: "margin:10px 16px" }, h("table", {},
+        h("thead", {}, h("tr", {},
+          h("th", {}, L3("Списание", "Charge", "扣费")),
+          h("th", { class: "num" }, "CAPS"),
+          h("th", { class: "num" }, "₽"))),
+        h("tbody", {}, ...rows)))
+        : h("div", { class: "empty" }, L3("Списаний пока нет.", "No charges yet.", "暂无扣费。")),
+      h("p", { class: "foot" }, L3("План, CAPS и цены — из API Bothub; обновляется раз в минуту. Пополнить: bothub.chat/ru/profile.",
+        "Plan, CAPS and prices come from Bothub's API; refreshed once a minute. Top up: bothub.chat/ru/profile.",
+        "套餐、CAPS 和价格来自 Bothub API；每分钟刷新。充值：bothub.chat/ru/profile。")));
+  }
+
   function balancesPanel() {
     const title = L3("Балансы поставщиков", "Provider balances", "供应商余额");
     const bv = need("balances");
@@ -1936,7 +1969,7 @@
   }
   /** Цены поставщиков и кошельки: одна таблица, у кого на каждую модель дешевле. */
   function providersView() {
-    return [balancesPanel(), legacyProvidersSnapshotView()];
+    return [bothubPanel(), balancesPanel(), legacyProvidersSnapshotView()];
   }
   function legacyProvidersSnapshotView() {
     const title = L3("Цены поставщиков", "Provider prices", "供应商价格");
