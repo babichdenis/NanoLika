@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const format = value => new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB'}).format(value / 100);
-  let key = '', config = null, order = params.get('order') || '';
+  let key = '', config = null, order = params.get('order') || params.get('Shp_order') || '';
   let idempotency = crypto.randomUUID().replaceAll('-', '');
   let busy = false;
   try { key = localStorage.getItem('nm.key') || ''; } catch (_) {}
@@ -78,7 +78,7 @@
       }
       if(data.credited){await check();return;}
       const target=new URL(data.payment_url);
-      if(target.protocol!=='https:' || !['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru','yookassa.ru','yoomoney.ru'].includes(target.hostname))throw Error('Недопустимый адрес оплаты.');
+      if(target.protocol!=='https:' || !['pay.tbank-online.com','securepayments.tinkoff.ru','securepayments.tbank.ru','securepay.tinkoff.ru','securepay.tbank.ru','yookassa.ru','yoomoney.ru','auth.robokassa.ru'].includes(target.hostname))throw Error('Недопустимый адрес оплаты.');
       location.assign(target.href);
     }catch(e){message(e.message);}finally{busy=false;$('pay').disabled=false;}
   });

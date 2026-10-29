@@ -486,6 +486,10 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
         from .yookassa import configured_yookassa
 
         p = configured_yookassa(cloud, cloud.s.public_base)
+    elif os.getenv("PAYMENT_PROVIDER", "tbank").strip().lower() == "robokassa":
+        from .robokassa import configured_robokassa
+
+        p = configured_robokassa(cloud, cloud.s.public_base)
     else:
         p = Payments(cloud, os.getenv("TBANK_TERMINAL_KEY", ""), os.getenv("TBANK_PASSWORD", ""), os.getenv("TBANK_PUBLIC_BASE", ""))
     caller_auth = Depends(caller_dep)
@@ -515,10 +519,12 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
     @router.get("/v1/payments/config")
     async def config():
         p.ready()
+        provider_names = {"yookassa": "ЮKassa", "robokassa": "Robokassa", "tbank": "Т-Банк"}
+        provider = str(getattr(p, "provider", "tbank"))
         return {
             "test_mode": bool(getattr(p, "test_mode", p.terminal.endswith("DEMO"))),
-            "provider": str(getattr(p, "provider", "tbank")),
-            "provider_name": "ЮKassa" if getattr(p, "provider", "tbank") == "yookassa" else "Т-Банк",
+            "provider": provider,
+            "provider_name": provider_names.get(provider, "Платёжный сервис"),
             "webhook_url": getattr(p, "webhook_url", ""),
             "plans": {
                 key: {
@@ -578,6 +584,13 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
         else:
             p.apply(data, signed=True)
         return PlainTextResponse("OK")
+
+    if hasattr(p, "handle_result"):
+
+        @router.post("/v1/payments/robokassa/notify")
+        async def robokassa_notify(request: Request):
+            result = await p.handle_result(request)
+            return PlainTextResponse(result)
 
     if hasattr(p, "handle_notification"):
 

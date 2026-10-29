@@ -1,5 +1,41 @@
 # Как теперь выкатывается релей
 
+## Robokassa
+
+В проекте есть hosted checkout Robokassa и обработка `ResultURL`. Создание заказа подписывается
+Паролем №1; сервер сверяет подпись и точную сумму уведомления по Паролю №2, затем зачисляет
+средства через существующий idempotent live-ledger. Возврат браузера не подтверждает платёж.
+Для сверки незавершённых заказов используется `OpStateExt`, подписанный Паролем №2.
+
+В технических настройках магазина задайте:
+
+| Параметр | Значение | Метод |
+|---|---|---|
+| Алгоритм подписи | `MD5` | — |
+| ResultURL | `https://cloud.nanolika.ru/v1/payments/robokassa/notify` | `POST` |
+| SuccessURL | `https://cloud.nanolika.ru/payments/checkout` | `GET` |
+| FailURL | `https://cloud.nanolika.ru/payments/checkout` | `GET` |
+
+Robokassa вернёт подписанный параметр `Shp_order` на страницу оформления; она найдёт заказ и
+покажет серверный статус. `ResultURL` подтверждает оплату, а SuccessURL только возвращает
+пользователя в кабинет.
+
+В `.env` используются `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD_1` и
+`ROBOKASSA_PASSWORD_2`. Пароль №3 в hosted checkout и `OpStateExt` не используется.
+Для тестового режима нужны отдельные тестовые пароли №1 и №2 и
+`ROBOKASSA_TEST_MODE=1`. Тестовые деньги попадают только в отдельный DEMO-баланс.
+
+Боевой режим остаётся закрытым, пока не заданы и не проверены состав фискального чека и его
+отправка покупателю. Для Robocheki обязательна позиция чека и ставка налога; система
+налогообложения, способ расчёта и предмет расчёта можно передать через конфигурацию или
+оставить на настройках магазина, если бухгалтер подтвердил такие значения. Только после
+проверки включаются `ROBOKASSA_LIVE_ENABLED=1` и `ROBOKASSA_RECEIPTS_READY=1`.
+
+Официальные правила: [интерфейс оплаты](https://docs.robokassa.ru/ru/pay-interface),
+[ResultURL](https://docs.robokassa.ru/ru/notifications-and-redirects),
+[сверка операции](https://docs.robokassa.ru/ru/xml-interfaces),
+[фискализация](https://docs.robokassa.ru/ru/fiscalization).
+
 ## YooKassa: текущая готовность
 
 В исходниках есть отдельный адаптер YooKassa. Для тестового подключения задаются только

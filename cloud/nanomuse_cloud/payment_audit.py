@@ -123,7 +123,11 @@ def readiness(cloud, payments) -> dict:
     """Facts about the running process, not promises inferred from a terminal key."""
     retail = any(getattr(m, "sells_at_own_rate", lambda: False)() for m in cloud.s.models if m.kind == "chat")
     plans = payments.plans()
-    provider_name = "ЮKassa" if getattr(payments, "provider", "tbank") == "yookassa" else "Т-Банк"
+    provider_name = {
+        "yookassa": "ЮKassa",
+        "robokassa": "Robokassa",
+        "tbank": "Т-Банк",
+    }.get(getattr(payments, "provider", "tbank"), "платёжный сервис")
     test_mode = bool(getattr(payments, "test_mode", payments.terminal.endswith("DEMO")))
     checks = [
         {
@@ -193,7 +197,7 @@ def readiness(cloud, payments) -> dict:
         "flow": {
             "site": "https://nanolika.ru/pricing.html",
             "checkout": payments.public_base + "/payments/checkout",
-            "bank": "Т-Банк",
+            "bank": provider_name,
             "renewal": "manual",
             "demo_isolated": True,
         },
