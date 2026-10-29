@@ -166,7 +166,8 @@ async def test_known_mids_are_idempotent_and_tombstones_propagate():
     out = (await client.get("/v1/sync/changes?since=2", headers=auth(key))).json()
     by = {m["mid"]: m for m in out["messages"]}
     assert by[mid]["deleted"] is True and by[mid]["text"] == "" and by[mid2]["text"] == "edited"
-    # the newer title wins; an older updated_at does not
+    # a rename is a fact, not a clock comparison: an older client timestamp still renames,
+    # and the relay stamps the row with its own time (S10)
     r = await client.post(
         "/v1/sync/changes", json={"device": "d2", "conversations": [conv(cid, title="Renamed", updated_at=1738000500)]}, headers=auth(key)
     )
@@ -174,9 +175,9 @@ async def test_known_mids_are_idempotent_and_tombstones_propagate():
     r = await client.post(
         "/v1/sync/changes", json={"device": "d2", "conversations": [conv(cid, title="Stale", updated_at=1738000400)]}, headers=auth(key)
     )
-    assert r.json()["accepted"] == 0
+    assert r.json()["accepted"] == 1
     out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
-    assert out["conversations"][0]["title"] == "Renamed"
+    assert out["conversations"][0]["title"] == "Stale"
     # delete the chat: the tombstone propagates, its texts are gone at once
     r = await client.delete(f"/v1/sync/conversations/{cid}", headers=auth(key))
     assert r.status_code == 200 and r.json()["deleted"] is True
@@ -581,19 +582,22 @@ async def test_a_conversation_older_than_a_week_can_still_be_renamed():
     assert r.json()["accepted"] == 1, r.json()
     out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
     assert [(c["title"], c["updated_at"]) for c in out["conversations"]] == [("New", t)]
-    # a time from the future, or before the chat began, is still brought back to the chat's clock
+    # even a future or lagging client timestamp renames; the relay's own time is kept,
+    # so the title is not scheduled into next month (S10)
     r = await client.post(
         "/v1/sync/changes",
         json={"device": "a", "conversations": [conv(cid, "main", "Later", created_at=born, updated_at=t + 30 * 86400)]},
         headers=auth(key),
     )
-    assert r.json()["accepted"] == 0  # falls back to created_at, which is older than what is stored
+    assert r.json()["accepted"] == 1
     r = await client.post(
         "/v1/sync/changes",
         json={"device": "a", "conversations": [conv(cid, "main", "Earlier", created_at=born, updated_at=born - 5)]},
         headers=auth(key),
     )
-    assert r.json()["accepted"] == 0
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
+    assert out["conversations"][0]["title"] == "Earlier"
 
 
 async def test_working_is_presence_kept_ten_minutes_in_memory():
