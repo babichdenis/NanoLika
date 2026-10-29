@@ -96,6 +96,18 @@ before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
+## 2026-10-29 · A presented clip now reaches Telegram too
+
+The desktop preview came from dsh's `present` tool (`deliverables/presented`), not from a
+Markdown link in the answer. Sync carries only text, and the final answer was empty, so the
+Telegram bot had nothing to deliver. Fixed both directions in the plugin: a task from another
+device collects presented files, appends them as links and rewrites them through S3; a
+presented file in a local synced session is uploaded to S3 and pushed once as an assistant
+line, so the bot and the other devices get the link while the local preview stays. Synthetic
+mids are remembered and not shown twice locally. `6eec473e`; plugin rebuilt, installed and app
+restarted. Tests share/task/sync: 45/45. Trap: `present` is not text; a generic text-only sync
+will silently drop it.
+
 ## 2026-10-29 · Local files in an answer become S3 links (reg.ru)
 
 A Telegram task from the desktop agent returned local paths (`/Volumes/Dev/nanoLika/...`);
