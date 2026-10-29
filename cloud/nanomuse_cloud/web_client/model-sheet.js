@@ -77,6 +77,7 @@ function cardOf(row) {
     context: Number(facts.context_length) || 0,
     recommended: facts.recommended === true,
     audioKind: facts.audio_kind || facts.audio?.kind || '',
+    locked: facts.plan_locked === true,
   };
 }
 
@@ -84,7 +85,8 @@ function cardOf(row) {
 export function modelCards(catalogue) {
   const seen = new Set();
   const cards = [];
-  for (const row of catalogue.data || []) {
+  const rows = Array.isArray(catalogue?.models) ? catalogue.models : Array.isArray(catalogue?.data) ? catalogue.data : [];
+  for (const row of rows) {
     const facts = row.nanomuse || row;
     if (!row.id || seen.has(row.id) || facts.listed === false || facts.hidden === true) continue;
     seen.add(row.id);
@@ -166,14 +168,14 @@ export function installModelSheet({onPick,api,session}){
  if(!rows.length){const empty=document.createElement('p');empty.textContent='Ничего не нашлось. Измените поиск или фильтры.';box.append(empty);}
  const table=document.createElement('table');table.className='compact-table model-picker-table';const head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');for(const label of ['Модель','Тип','Вход / единица','Ответ','Избранное','']){const th=document.createElement('th');th.scope='col';th.textContent=label;hr.append(th);}head.append(hr);table.append(head,body);box.append(table);
  const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};const rub=n=>n===null||n===undefined?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:4}).format(n)+' ₽';
- for(const card of rows){const tr=h('tr');tr.dataset.id=card.id;tr.classList.toggle('is-selected',card.id===state.picked);const pick=h('button',undefined,'model-card-pick');pick.type='button';pick.setAttribute('aria-pressed',String(card.id===state.picked));pick.append(h('strong',card.name),h('small',card.id,'table-subtitle'));pick.title=card.desc;const name=h('td');name.append(pick);const rates=card.row.nanomuse?.commerce?.effective_rub||{},unit=card.kind==='image'?'image':card.kind==='video'?'second':card.row.nanomuse?.commerce?.unit==='speech'?'speech':'minute';const first=card.kind==='chat'?rates.input:rates[unit];const price=h('td',card.free?'0 ₽':rub(first),'numeric'),output=h('td',card.kind==='chat'?(card.free?'0 ₽':rub(rates.output)):'—','numeric');
+ for(const card of rows){const tr=h('tr');tr.dataset.id=card.id;tr.classList.toggle('is-selected',card.id===state.picked);const pick=h('button',undefined,'model-card-pick');pick.type='button';pick.setAttribute('aria-pressed',String(card.id===state.picked));pick.append(h('strong',card.name),h('small',card.id,'table-subtitle'));pick.title=card.desc;const name=h('td');name.append(pick);if(card.locked){const up=h('a','поднять тариф','model-lock');up.href='/web/account/?pay=1';name.append(up);}const facts=card.row.nanomuse||card.row,rates=facts.commerce?.effective_rub||{},unit=card.kind==='image'?'image':card.kind==='video'?'second':facts.commerce?.unit==='speech'?'speech':'minute';const first=card.kind==='chat'?rates.input:rates[unit];const price=h('td',card.free?'0 ₽':rub(first),'numeric'),output=h('td',card.kind==='chat'?(card.free?'0 ₽':rub(rates.output)):'—','numeric');
  price.append(h('small',card.kind==='chat'?'за 1 млн токенов':({image:'за изображение',second:'за секунду',speech:'за 1000 знаков',minute:'за минуту'}[unit]||''),'table-subtitle'));if(card.kind==='chat')output.append(h('small','за 1 млн токенов','table-subtitle'));const detailRow=h('tr',undefined,'model-detail-row'),detailCell=h('td');detailRow.hidden=true;detailCell.colSpan=6;detailRow.append(detailCell);let loaded=false;const expand=()=>{detailRow.hidden=!detailRow.hidden;if(!loaded){loaded=true;detailCell.append(modelDetails(card.row,{api}));}info.setAttribute('aria-expanded',String(!detailRow.hidden));};
- pick.onclick=()=>{if(card.kind!=='chat'){expand();return;}state.picked=card.id;onPick?.(card.id);close();};
+ pick.disabled=card.locked;pick.setAttribute('aria-disabled',String(card.locked));pick.onclick=()=>{if(card.locked)return;if(card.kind!=='chat'){expand();return;}state.picked=card.id;onPick?.(card.id);close();};
  const star=h('button',state.favourites.has(card.id)?'★':'☆','model-card-star');star.type='button';star.setAttribute('aria-label','В избранное: '+card.name);star.setAttribute('aria-pressed',String(state.favourites.has(card.id)));star.onclick=()=>{state.favourites.has(card.id)?state.favourites.delete(card.id):state.favourites.add(card.id);persist();paintCards();};
  const info=h('button','Подробнее','model-row-info');info.type='button';info.setAttribute('aria-expanded','false');info.onclick=expand;const favourite=h('td'),detail=h('td');favourite.append(star);detail.append(info);const type=card.kind==='audio'?({speech:'Озвучка',transcribe:'Распознавание',music:'Музыка'}[card.audioKind]||'Аудио'):(KIND_LABELS[card.kind]?.label||card.kind);tr.append(name,h('td',type),price,output,favourite,detail);body.append(tr,detailRow);}}
 
  function paint(){paintKinds();paintVendors();paintCards();}
- async function load(){const identity=session();if(!identity?.key)return;const request=++version,requestedKey=identity.key;if(key!==identity.key){key=identity.key;owner=identity.owner;state.cards=[];state.favourites=new Set();}el('ms-status').textContent='Загружаем модели и цены…';try{const [data,shelf]=await Promise.all([api('/v1/models'),api('/v1/me/models')]);if(request!==version||session()?.key!==requestedKey)return;state.cards=modelCards(data);state.favourites=new Set(shelf.shelf?.favourites||[]);state.selected=new Set(Object.values(shelf.shelf?.enabled||{}).flat());el('ms-status').textContent='';paint();}catch{if(request===version)el('ms-status').textContent='Не удалось загрузить каталог. Проверьте связь и откройте список ещё раз.';}}
+ async function load(){const identity=session();if(!identity?.key)return;const request=++version,requestedKey=identity.key;if(key!==identity.key){key=identity.key;owner=identity.owner;state.cards=[];state.favourites=new Set();state.selected=new Set();}el('ms-status').textContent='Загружаем модели и цены…';try{const data=await api('/v1/me/models');if(request!==version||session()?.key!==requestedKey)return;state.cards=modelCards(data);state.favourites=new Set(data.shelf?.favourites||[]);state.selected=new Set(Object.values(data.shelf?.enabled||{}).flat());el('ms-status').textContent='';paint();}catch{if(request===version)el('ms-status').textContent='Не удалось загрузить каталог. Проверьте связь и откройте список ещё раз.';}}
  function open(){previousFocus=document.activeElement;sheet.dataset.open='1';paint();el('ms-search').focus();void load();}
  function close(){version++;sheet.dataset.open='0';previousFocus?.focus();}
  el('ms-search').oninput=e=>{state.query=e.target.value;paintCards();};el('ms-context').onchange=e=>{state.context=Number(e.target.value);paintCards();};el('ms-sort').onchange=e=>{state.sort=e.target.value;paintCards();};el('ms-close').onclick=close;

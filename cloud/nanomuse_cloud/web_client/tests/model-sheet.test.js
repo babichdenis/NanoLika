@@ -37,3 +37,14 @@ test('vendor names are normalized and small makers become Other', () => {
   ]);
   assert.deepEqual(filterCards(cards, {vendor: 'Другие'}).map((card) => card.id), ['flux', 'kling']);
 });
+
+test('the cabinet catalogue shape keeps locked models for the preview', () => {
+  const cards = modelCards({models: [
+    {id: 'locked', name: 'Locked', kind: 'chat', vendor: '~Openai', plan_locked: true, context_length: 1000, commerce: {effective_rub: {input: 1, output: 2}}},
+    {id: 'speech', name: 'Speech', kind: 'audio', vendor: 'OpenAI', audio: {kind: 'speech'}, commerce: {unit: 'speech', effective_rub: {speech: 0.5}}},
+  ]});
+  assert.equal(cards[0].locked, true);
+  assert.equal(cards[0].vendor, '~Openai');
+  assert.equal(cards[1].audioKind, 'speech');
+  assert.deepEqual(filterCards(cards, {kind: 'speech'}).map((card) => card.id), ['speech']);
+});
