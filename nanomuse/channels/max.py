@@ -422,10 +422,22 @@ class MaxChannel(Channel):
         """The relay's two linking calls, with the settings the sign-in door already uses
         (``cloud_url`` and ``cloud_bot_token``); made once, on the first code. The messenger
         is this bot's own name, and it is what keeps a MAX id apart from the Telegram id with
-        the same digits: the relay keys a chat's account on the pair."""
+        the same digits: the relay keys a chat's account on the pair.
+
+        The relay and its shared bot secret are account-wide, but older configs kept them
+        only in ``[channels.telegram]``. A MAX channel without its own pair borrows the
+        Telegram one: a QR that opens the bot must not end in "connect later" because the
+        second messenger was never given the relay's address."""
         if self._chat_link is None:
+            settings = dict(self.settings)
+            store = getattr(getattr(self, "bus", None), "store", None)
+            if store is not None:
+                shared = store.resolved(store.config("telegram"))
+                for key in ("cloud_url", "cloud_bot_token"):
+                    if not str(settings.get(key) or "").strip() and shared.get(key):
+                        settings[key] = shared[key]
             self._chat_link = ChatLink(
-                channel=self.name, settings=self.settings, transport=self._transport
+                channel=self.name, settings=settings, transport=self._transport
             )
         return self._chat_link
 

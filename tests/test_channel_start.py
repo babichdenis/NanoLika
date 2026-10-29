@@ -95,3 +95,30 @@ def test_max_start_keeps_connection_payload_without_a_model():
     msg = channel.bus.inbound.call_args.args[0]
     assert msg.text == "/start nl_" + MX
     assert msg.sender_id == "17"
+
+
+def test_max_borrows_the_relays_shared_settings_from_telegram():
+    """The relay and its bot secret belong to the account, not to one messenger: a MAX QR
+    must work even when the older config wrote them only under `[channels.telegram]`."""
+    from types import SimpleNamespace
+
+    from nanomuse.channels.max import MaxChannel
+
+    class Store:
+        def config(self, name):
+            settings = (
+                {"cloud_url": "https://relay.example.test", "cloud_bot_token": "shared-secret"}
+                if name == "telegram"
+                else {}
+            )
+            return SimpleNamespace(settings=settings)
+
+        def resolved(self, cfg):
+            return dict(cfg.settings)
+
+    channel = MaxChannel({})
+    channel.bus = SimpleNamespace(store=Store())
+    link = channel._link()
+    assert link.configured()
+    assert link._base() == "https://relay.example.test"
+    assert link._token() == "shared-secret"
