@@ -239,7 +239,14 @@ class Sentinel:
         if mode:
             from nanomuse.channels.permission_mode import scoped_decision
 
-            decision = scoped_decision(mode, tool, args, assessment, decision)
+            decision = scoped_decision(
+                mode,
+                tool,
+                args,
+                assessment,
+                decision,
+                tainted_ask=result_policy.tainted_ask,
+            )
             reasons.append("conversation access: " + mode)
         approved: bool | None = None
         scope: str | None = None

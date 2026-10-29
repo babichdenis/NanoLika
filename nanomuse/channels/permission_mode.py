@@ -12,11 +12,21 @@ READ_TOOLS = {"web_search", "web_fetch", "search", "fetch", "time", "terminate"}
 
 
 def scoped_decision(
-    mode: str, tool: BaseTool, args: dict[str, Any], assessment: CallAssessment, original: Decision
+    mode: str,
+    tool: BaseTool,
+    args: dict[str, Any],
+    assessment: CallAssessment,
+    original: Decision,
+    *,
+    tainted_ask: bool = False,
 ) -> Decision:
     if original == Decision.DENY:
         return original
     if mode == "full-access":
+        # Full access skips routine approval prompts, not Sentinel warnings about
+        # sensitive data or a request that would expose tainted conversation content.
+        if assessment.warnings or tainted_ask:
+            return original
         return Decision.ALLOW
     if mode not in {"read-only", "workspace-write"}:
         return original

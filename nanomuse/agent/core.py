@@ -405,6 +405,7 @@ class MuseAgent:
         addendum = (self.prompt_addendum() if self.prompt_addendum is not None else "").strip()
         if addendum:
             extra += f"\n## This conversation\n{addendum}\n"
+        capabilities = self.capabilities_section()
         return prompts.SYSTEM_PROMPT.format(
             name=a.name,
             language_rule=language_rule,
@@ -424,9 +425,8 @@ class MuseAgent:
             + self.devices_section()
             + self.skills_section()
             + self.connectors_section()
-            + self.capabilities_section()
             + self.store_section(),
-            capabilities=self.capabilities_section(),
+            capabilities=capabilities,
             extra=extra,
         )
 
