@@ -96,6 +96,22 @@ before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
+## 2026-10-29 · Admin: provider wallets and the price table on one page
+
+The admin console's Providers tab redirected to `/app/prices/`, which the public domain answers
+404 by design, so the operator could not see either the provider wallets or the comparison
+table. Added `GET /v1/admin/provider-balances` (the routing status without the heavy offers)
+and a balances panel above the price table on the Providers tab; the tab now renders the
+comparison table itself instead of redirecting. The panel shows each provider's available
+amount and currency, the ruble estimate, when it was checked, and whether it is below the 90 ₽
+route floor; `/app/prices/` stays private.
+
+Live: narrow patches to the existing admin.js/index.html and api.py overrides, backup
+`/opt/nanomuse/cloud/backups/admin-balances-20261029T143000Z`; relay restarted, health 200,
+admin 200, `admin.js?v=20261029-balances`. The token-protected endpoint returned the live
+wallets: Polza 74.72 ₽ (below the floor after one paid run), AITunnel 306.78 ₽, RouterAI
+440.41 ₽, ProxyAPI 109.13 ₽, DeepSeek $2.64, OpenRouter $8.62. Committed `c56d674d`.
+
 ## 2026-10-29 · Bot prompt mismatch: KeyError 'capabilities' after reboot
 
 A Telegram message sent while the Mac was rebooting failed before the model call:
