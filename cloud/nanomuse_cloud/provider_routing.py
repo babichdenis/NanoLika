@@ -163,11 +163,16 @@ class Offer:
     fx_rub_per_unit: float | None = None
     valid_until: int = 0
 
-    def rates(self, at: float | None = None) -> tuple[float, float, float | None]:
+    def rates(self, at: float | None = None, prompt_tokens: int | None = None) -> tuple[float, float, float | None]:
         now = datetime.fromtimestamp(time.time() if at is None else at, UTC)
         minute = now.hour * 100 + now.minute
         day = now.strftime("%A").lower()
         for rule in self.overrides:
+            # Длинный тариф (min_prompt_tokens) включается только когда промпт дорос
+            # до порога. Раньше он применялся всегда и завышал цену в два раза.
+            minimum = rule.get("min_prompt_tokens")
+            if minimum is not None and (prompt_tokens is None or prompt_tokens < int(minimum)):
+                continue
             if rule.get("utc_dates") and now.date().isoformat() not in rule["utc_dates"]:
                 continue
             if rule.get("utc_days") and day not in rule["utc_days"]:
@@ -179,7 +184,7 @@ class Offer:
         return self.input_rub, self.output_rub, self.cached_rub
 
     def estimate(self, prompt: int, output: int, cached: int = 0) -> float:
-        inp, out, cache = self.rates()
+        inp, out, cache = self.rates(prompt_tokens=prompt)
         cached = min(max(cached, 0), max(prompt, 0)) if cache is not None else 0
         return self.request_rub + ((prompt - cached) * inp + cached * (cache or 0) + output * out) / 1_000_000
 
@@ -607,7 +612,7 @@ class ProviderRouter:
                         **(usage_options if isinstance(usage_options, dict) else {}),
                         "include": True,
                     }
-                inp, out, cache = offer.rates(now)
+                inp, out, cache = offer.rates(now, prompt)
                 fixed = replace(offer, input_rub=inp, output_rub=out, cached_rub=cache, overrides=())
                 estimated_cost = fixed.estimate(prompt, expected)
                 available_rub = number(balance.get("rub_estimate"))
