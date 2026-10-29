@@ -3,16 +3,37 @@
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const format = value => new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB'}).format(value / 100);
-  let key = '', config = null, order = params.get('order') || params.get('Shp_order') || '';
+  let key = '', sessionOwner = '', config = null, order = params.get('order') || params.get('Shp_order') || '';
   let idempotency = crypto.randomUUID().replaceAll('-', '');
   let busy = false;
-  try { key = localStorage.getItem('nm.key') || ''; } catch (_) {}
+  try {
+    const webSession = JSON.parse(localStorage.getItem('nl.web.session.v1') || 'null');
+    if (webSession?.key) { key = webSession.key; sessionOwner = webSession.owner || ''; }
+    if (!key) key = localStorage.getItem('nm.key') || '';
+  } catch (_) {}
   const message = text => { $('message').textContent = text; };
+  function clearAuth() {
+    const expired = key;
+    key = ''; sessionOwner = '';
+    try {
+      const webSession = JSON.parse(localStorage.getItem('nl.web.session.v1') || 'null');
+      if (webSession?.key === expired) localStorage.removeItem('nl.web.session.v1');
+      if (localStorage.getItem('nm.key') === expired) localStorage.removeItem('nm.key');
+    } catch (_) {}
+  }
+  async function loadConfig() {
+    config = await api('/v1/payments/config');
+    $('provider-label').textContent = `nanoLika · ${config.provider_name}${config.test_mode ? ' · тестовый режим' : ''}`;
+    $('payment-notice').textContent = config.test_mode
+      ? 'Тестовое оформление. Тестовый баланс и условия не меняют рабочий аккаунт.'
+      : 'Оплата проходит через защищённую форму платёжного сервиса. Статус подтверждается сервером.';
+    $('pay').textContent = `Перейти в ${config.provider_name}${config.test_mode ? ' · тест' : ''}`;
+  }
   async function api(path, body) {
     const r = await fetch(path, {method:body ? 'POST' : 'GET', cache:'no-store', headers:{...(body ? {'Content-Type':'application/json'} : {}), ...(key ? {Authorization:'Bearer ' + key} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
     const data = r.status === 204 ? {} : await r.json();
     if (!r.ok) {
-      if (r.status === 401) { key = ''; $('login').hidden = false; $('purchase').hidden = true; }
+      if (r.status === 401) { clearAuth(); $('login').hidden = false; $('purchase').hidden = true; }
       throw Error((data.error?.code === 'signup_closed' ? 'Новые регистрации временно закрыты. Существующие аккаунты продолжают работать.' : data.error?.message) || 'Не удалось выполнить запрос. Попробуйте позднее.');
     }
     return data;
@@ -45,8 +66,15 @@
     return data;
   }
   async function show() {
-    if (!key) { $('login').hidden = false; return; }
-    await api('/v1/me');
+    if (!key) { $('login').hidden = false; $('purchase').hidden = true; return; }
+    const me = await api('/v1/me');
+    if (!me.account?.id || (sessionOwner && me.account.id !== sessionOwner)) {
+      clearAuth(); $('login').hidden = false; $('purchase').hidden = true;
+      message('Сессия аккаунта не совпала. Войдите ещё раз.');
+      return;
+    }
+    sessionOwner = me.account.id;
+    await loadConfig();
     $('login').hidden = true; $('purchase').hidden = false;
     if (order) { await check(); return; }
     const plan = config.plans[params.get('plan')];
@@ -65,7 +93,7 @@
   });
   $('code-form').addEventListener('submit', async e => {
     e.preventDefault(); const button=e.submitter;button.disabled=true;
-    try { const data=await api('/v1/auth/verify',{identifier:$('email').value.trim(),code:$('code').value.trim(),device:'Оплата nanoLika'});key=data.api_key;try{localStorage.setItem('nm.key',key);}catch(_){} message('');await show(); } catch(e){message(e.message);} finally{button.disabled=false;}
+    try { const data=await api('/v1/auth/verify',{identifier:$('email').value.trim(),code:$('code').value.trim(),device:'Оплата nanoLika'});key=data.api_key;sessionOwner='';try{localStorage.setItem('nm.key',key);}catch(_){} message('');await show(); } catch(e){message(e.message);} finally{button.disabled=false;}
   });
   $('pay').addEventListener('click',async()=>{
     if(busy)return; if(!$('accept-terms').checked){message('Подтвердите ознакомление с условиями.');return;} busy=true;$('pay').disabled=true;
@@ -83,6 +111,6 @@
     }catch(e){message(e.message);}finally{busy=false;$('pay').disabled=false;}
   });
   $('refresh').addEventListener('click',async()=>{if(busy)return;busy=true;$('refresh').disabled=true;try{await check();}catch(e){message(e.message);}finally{busy=false;$('refresh').disabled=false;}});
-  $('logout').addEventListener('click',()=>{key='';try{localStorage.removeItem('nm.key');}catch(_){}$('purchase').hidden=true;$('login').hidden=false;message('Введите почту другого аккаунта.');});
-  api('/v1/payments/config').then(data=>{config=data;$('provider-label').textContent=`nanoLika · ${data.provider_name}${data.test_mode?' · тестовый режим':''}`;$('payment-notice').textContent=data.test_mode?'Тестовое оформление. Тестовый баланс и условия не меняют рабочий аккаунт.':'Оплата проходит через защищённую форму платёжного сервиса. Статус подтверждается сервером.';$('pay').textContent=`Перейти в ${data.provider_name}${data.test_mode?' · тест':''}`;return show();}).catch(e=>message(e.message));
+  $('logout').addEventListener('click',()=>{clearAuth();$('purchase').hidden=true;$('login').hidden=false;message('Введите почту другого аккаунта.');});
+  show().catch(e=>message(e.message));
 })();
