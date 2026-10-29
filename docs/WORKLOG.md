@@ -2419,5 +2419,7 @@ The web client was rebuilt into `nanomuse/server/static`.
 
 Validation: 191 related runtime tests passed, 4 skipped; all 129 web tests passed with lint
 and TypeScript checks; the production web build completed; Ruff, formatting, `git diff --check`
-and mypy across 164 source files passed. Shell/Python remain governed by Sentinel; without
-bubblewrap they retain their existing sensitive approval gate. Not deployed.
+and mypy across 164 source files passed. A final post-review rerun passed 68 targeted runtime
+tests, skipped 5, and repeated Ruff, formatting and mypy successfully. Code commit `9202ca70`.
+Shell/Python remain governed by Sentinel; without bubblewrap they retain their existing
+sensitive approval gate. Not deployed.
