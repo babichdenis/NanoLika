@@ -84,9 +84,15 @@ Live relay: narrow patches over the existing overrides, backup
 and installed the dsh plugin in both desktop copies (backup
 `~/.nanolika/backups/sync-stage2-plugin-20261029T123800Z`); app restarted and dsh ready.
 
-Not touched: `sync_enabled`, media discounts, hub behaviour on an expired tariff. Open: S9
-(web writes to the account's main chat) needs the owner's choice; S14 (same text from two
-devices) waits for a client-wide `duplicate` handling. Trap: another session was editing
+S9 followed the owner's choice of option A (`c85e9b6c`): the first chat born in a browser
+goes up as `kind: main`, later ones stay side; when the account already has a main the web
+reads `main_exists.cid_main`, adopts it and re-sends the batch without overwriting the
+existing title. Old side chats are not promoted retroactively. Live web serves
+`app.js?v=20261029-main` and SW cache `...20261029f`; 13/13 web chat tests pass.
+
+Not touched: `sync_enabled`, media discounts, hub behaviour on an expired tariff. Open: S14
+(same text from two devices) needs every client to rewrite its rejected `mid` to `mid_of`
+before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
