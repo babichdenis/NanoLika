@@ -1,3 +1,18 @@
+## 2026-10-29 · Stop adding NanoLika to Login Items automatically
+
+The owner reported repeated NanoLika entries in macOS Login Items and asked to remove
+automatic registration, leaving people to add the app manually if they want it at sign-in.
+The running Mac confirmed five `NanoLika` entries all pointed to `/Applications/NanoLika.app`;
+its legacy `~/.nanolika/desktop/desktop.json` also had `openAtLogin: true`. The Electron shell
+re-registered that saved value at every launch. Removed the setting from both desktop settings
+surfaces and from the shell/preload contract. The shell now discards the old saved key and no
+longer creates startup entries. Other app preferences remain intact.
+
+Validation: source paths and the live Mac's Login Items/prefs were inspected over SSH. No tests,
+build, app replacement or cleanup of the existing five OS entries has been performed yet; the
+currently installed app must be updated before the old binary stops re-registering them. Commit:
+not yet made.
+
 ## 2026-10-29 · Redact vault secrets before model context and delivery
 
 Closed audit item I9 in runtime code. Recalled memories and older session messages/tool
@@ -95,6 +110,17 @@ Not touched: `sync_enabled`, media discounts, hub behaviour on an expired tariff
 before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
+
+## 2026-10-29 · Small shared files arrive as files, not only links
+
+A share link in a synced answer is now fetched by the bot when the object is at most 50 MB:
+the channel gets the video/audio/document first and the link follows, so Telegram shows a
+player and the person does not have to guess whether to tap. Larger objects stay links, since
+the cloud Bot API cannot upload them; the link remains the delivery. Only the fixed
+`s3.regru.cloud/nanolika/files/` host and prefix are fetched, so a message cannot make the bot
+open an arbitrary address. Temp files are deleted after delivery. `e97a947a`; bot override
+deployed and container restarted; live helper fetched a real presigned object (14 bytes) and
+returned a file. Tests: channels manager sync/shared subset 6/6.
 
 ## 2026-10-29 · A presented clip now reaches Telegram too
 
