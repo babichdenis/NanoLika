@@ -292,6 +292,28 @@ async def test_a_link_writes_to_the_accounts_own_address():
         assert when, "the letter says when it happened"
 
 
+async def test_a_max_link_writes_the_same_letter_naming_max():
+    """The messenger in the letter is the one that joined, not a generic word: a person who
+    never opened MAX must see MAX in the first line, or the warning reads like noise."""
+    from test_bot import stack as bot_stack
+
+    from nanomuse_cloud.senders import channel_link_mail_text
+
+    app, cloud = bot_stack()
+    mail = RecordingMailer()
+    cloud.sender = mail
+    async with client_of(app) as client:
+        account = await sign_in_with_email(client, cloud, "letter-max@example.com")
+        code = (await link_code(client, account["api_key"]))["code"]
+        assert (await link_chat(client, "8008008008", code, channel="max", identifier="@denis_max")).status_code == 200
+
+        assert len(mail.links) == 1
+        address, channel, who, when = mail.links[0]
+        assert address == "letter-max@example.com"
+        assert channel == "max" and who == "@denis_max" and when
+        assert "MAX" in channel_link_mail_text("max", who, when)
+
+
 async def test_unlinking_does_not_write_about_itself():
     """Only joining is the news a person may not expect; letting a chat go is not."""
     from test_bot import stack as bot_stack

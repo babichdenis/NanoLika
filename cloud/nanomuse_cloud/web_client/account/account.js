@@ -1,4 +1,4 @@
-import {ChannelOnboarding,isChannelLinked,isDesktopDevice} from '../channel-onboarding.js?v=20261027-state';
+import {ChannelOnboarding,isChannelLinked,isDesktopDevice} from '../channel-onboarding.js?v=20261029-connect';
 import {installAutopay} from './autopay.js';
 import {installUsageChart} from './usage-chart.js?v=20261027-compact';
 import {installPaymentDialog} from './payments.js';

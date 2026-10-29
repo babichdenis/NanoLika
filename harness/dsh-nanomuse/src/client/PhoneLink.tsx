@@ -4,6 +4,7 @@ import { createElement as h, useEffect, useMemo, useRef, useState, type ReactNod
 import { call, column, errorStyle, type LinkChannel, type ChannelStart, type Translate, failureText, muted, row } from './api.ts'
 import { openLink } from './bridge.ts'
 import { BOT_LINKS, connectionQR } from './channel-qr.ts'
+import { linkKey, newLink } from './link-state.ts'
 import { useLive } from './live.ts'
 
 export function PhoneLink({ t }: { t: Translate }): ReactNode {
@@ -13,8 +14,13 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
   const [channels, setChannels] = useState<LinkChannel[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [notice, setNotice] = useState<string>()
   const [now, setNow] = useState(Date.now())
   const revision = useRef(0)
+  /* The chats the account held when the code was made. A row that was already there is not
+   * the result of this QR, so only a row outside this set stops it — otherwise the account's
+   * own Telegram chat would make the Telegram tab look connected before anything was scanned. */
+  const known = useRef<Set<string>>(new Set())
   const qr = useMemo(() => start ? connectionQR(start) : undefined, [start])
 
   useEffect(() => {
@@ -24,6 +30,7 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
     setChannels([])
     setBusy(false)
     setError(undefined)
+    setNotice(undefined)
     if (!live.cloud.signedIn) return
     const refresh = async () => {
       if (document.visibilityState === 'hidden') return
@@ -33,16 +40,46 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
       } catch { /* Keep the last confirmed list on a temporary network failure. */ }
     }
     void refresh()
-    const poll = window.setInterval(() => { setNow(Date.now()); void refresh() }, 3000)
+    const poll = window.setInterval(() => { setNow(Date.now()); void refresh() }, 2000)
     return () => { active = false; revision.current++; window.clearInterval(poll) }
   }, [identity, live.cloud.signedIn])
+
+  /* The QR has done its job: the new chat is on the account. Take the code away at once
+   * instead of leaving a live link on screen for the rest of its three minutes. */
+  useEffect(() => {
+    if (!start) return
+    const linked = newLink(known.current, channels, start.channel)
+    if (!linked) return
+    setStart(undefined)
+    setNotice(t('plConnected', { name: start.channel === 'telegram' ? 'Telegram' : 'MAX' }))
+  }, [channels, start, t])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(undefined), 8000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  useEffect(() => {
+    if (!start) return
+    const tick = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(tick)
+  }, [start])
 
   const connect = async (channel: 'telegram' | 'max') => {
     const request = ++revision.current
     setStart(undefined)
     setBusy(true)
     setError(undefined)
+    setNotice(undefined)
     try {
+      // The list as it is now, not as the last poll saw it: a chat linked a moment ago must
+      // not pass for the result of the code that is about to be made.
+      const before = await call<{ channels?: LinkChannel[] }>('link/channels')
+      const rows = Array.isArray(before.channels) ? before.channels : []
+      if (request !== revision.current) return
+      known.current = new Set(rows.map(linkKey))
+      setChannels(rows)
       const next = await call<ChannelStart>('link/start', { channel })
       connectionQR(next) // Validate the bot destination before displaying a clickable link.
       if (request === revision.current) { setStart(next); setNow(Date.now()) }
@@ -69,27 +106,29 @@ export function PhoneLink({ t }: { t: Translate }): ReactNode {
   }
 
   if (!live.cloud.signedIn) return h('div', { className: 'nm-section', 'data-testid': 'nm-phone-link' }, h('p', null, t('plLead')), h('p', { className: 'nm-fine' }, t('plSignedOut')))
-  const connected = !!start && channels.some(c => c.channel === start.channel)
   const left = Math.max(0, Math.ceil(((start?.expiresAt ?? 0) - now) / 1000))
-  const alive = !!start && left > 0 && !connected
+  const alive = !!start && left > 0
   const name = start?.channel === 'telegram' ? 'Telegram' : 'MAX'
   return h('div', { className: 'nm-section', 'data-testid': 'nm-phone-link' },
     h('p', null, t('plLead')),
     h('div', { style: { ...row, flexWrap: 'wrap' } },
       ...(['telegram', 'max'] as const).map(channel => h(Button, { key: channel, variant: start?.channel === channel ? 'primary' : 'outline', size: 'sm', disabled: busy, onClick: () => { void connect(channel) } }, channel === 'telegram' ? 'Telegram' : 'MAX'))),
     busy ? h('p', { role: 'status' }, t('plMaking')) : null,
+    notice ? h('p', { role: 'status', style: noticeStyle }, notice) : null,
     start ? h('div', { className: 'nm-card', style: { marginTop: 14 } },
-      h('h2', null, connected ? t('plConnected', { name }) : t('plCodeTitle', { name })),
+      h('h2', null, t('plCodeTitle', { name })),
       alive && qr ? h('svg', { viewBox: `0 0 ${qr.size} ${qr.size}`, width: 232, height: 232, role: 'img', 'aria-label': `QR: ${name}`, style: { display: 'block', maxWidth: '100%', height: 'auto', background: '#fff', borderRadius: 12, margin: '16px auto' } }, h('rect', { width: '100%', height: '100%', fill: '#fff' }), h('path', { d: qr.path, fill: '#253020', shapeRendering: 'crispEdges' })) : null,
       alive ? h('p', null, t('plInstruction')) : null,
       alive ? h('p', { style: muted, role: 'status' }, t('plRemaining', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` })) : null,
-      !alive && !connected ? h('p', { role: 'status' }, t('plExpired')) : null,
-      alive || connected ? h(Button, { variant: 'primary', size: 'sm', onClick: () => openLink(connected ? BOT_LINKS[start.channel] : start.url) }, start.channel === 'telegram' ? t('plTelegram') : t('plMax')) : h(Button, { variant: 'primary', size: 'sm', onClick: () => { void connect(start.channel) } }, t('plNewCode')),
+      !alive ? h('p', { role: 'status' }, t('plExpired')) : null,
+      alive ? h(Button, { variant: 'primary', size: 'sm', onClick: () => openLink(start.url) }, start.channel === 'telegram' ? t('plTelegram') : t('plMax')) : h(Button, { variant: 'primary', size: 'sm', onClick: () => { void connect(start.channel) } }, t('plNewCode')),
       alive ? h('p', { className: 'nm-fine' }, t('plFine')) : null) : null,
     error ? h('p', { style: errorStyle, role: 'alert' }, error) : null,
     h('h2', null, t('plChannelsTitle')),
-    h('div', { className: 'nm-card' }, channels.length ? channels.map(c => h('div', { key: c.channel, className: 'nm-row' }, h('span', { className: 'nm-row-title' }, c.label || (c.channel === 'telegram' ? 'Telegram' : 'MAX')), h('span', { className: 'nm-state nm-state-on' }, t('plOn')), h('span', { style: { marginLeft: 'auto' } }, h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => { void unlink(c.channel) } }, t('plUnlink')))) ) : h('p', null, t('plNoChannelsSub'))))
+    h('div', { className: 'nm-card' }, channels.length ? channels.map(c => h('div', { key: linkKey(c), className: 'nm-row' }, h('span', { className: 'nm-row-title' }, c.label || (c.channel === 'telegram' ? 'Telegram' : 'MAX')), h('span', { className: 'nm-state nm-state-on' }, t('plOn')), h('span', { style: { marginLeft: 'auto' } }, h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => { void unlink(c.channel) } }, t('plUnlink')))) ) : h('p', null, t('plNoChannelsSub'))))
 }
+
+const noticeStyle: Record<string, string | number> = { color: 'var(--dsw-alias-state-success-primary, #2f6f44)', fontSize: 13, lineHeight: 1.5 }
 
 export function makePhoneLinkSection(t: Translate) {
   return function PhoneLinkSection(): ReactNode {

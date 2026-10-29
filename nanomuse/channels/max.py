@@ -237,10 +237,19 @@ class MaxChannel(Channel):
         if bus is None:
             return
         kind = data.get("update_type")
+        logger.info("max: inbound update received ({})", kind or "unknown")
         if kind == "bot_started":
             user = data.get("user") or {}
             chat = str(data.get("chat_id") or "")
             sender = str(user.get("user_id") or "")
+            # The deep link's payload is a one-use secret: the log says whether MAX passed
+            # one, never what it was. A missing payload here is why a QR looks scanned and
+            # connects nothing, so the line earns its noise.
+            logger.info(
+                "max: bot started by {} (payload {})",
+                sender or "unknown",
+                "present" if str(data.get("payload") or "").lower().startswith("nl_") else "absent",
+            )
             key = f"start:{chat}:{sender}:{data.get('timestamp')}"
             if chat and sender and not self._duplicate(key):
                 bus.inbound(
