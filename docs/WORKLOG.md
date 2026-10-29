@@ -1,3 +1,23 @@
+## 2026-10-29 · Isolation audit: preserve client experience, separate session state
+
+The owner asked to close the findings in `~/Downloads/NanoLika-isolation-razbor.md`. The
+design constraint is to keep accumulating each customer's preferences, useful file locations
+and effective work patterns for that customer's sessions, while keeping every session's
+conversation and active task separate. A blanket per-thread memory split would break that
+behavior; derive customer scope before changing memory or workspace boundaries.
+
+Committed `99af666c`: full access now skips routine confirmations but preserves Sentinel
+warnings and tainted-context asks; the system prompt inserts its capabilities block once.
+Touched-file Ruff checks and formatting passed. Functional tests were not run. The audit in
+Downloads records these two items as done and the remaining items as open. Existing unrelated
+conversation-sync changes in the working tree were left untouched.
+
+Next: map the isolation boundary to customer identity and session task state, then implement
+the highest-risk data boundary without discarding shared customer knowledge. Recheck Hub and
+messenger findings against the current protocol before changing their documented behavior.
+Trap: the audit uses an older merge-base; some claims are already explicitly limited to the
+desktop runtime or are intentional Hub behavior.
+
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
 ## 2026-10-29: Verify and install the completed audit fixes
