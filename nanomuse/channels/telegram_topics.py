@@ -15,6 +15,7 @@ from typing import Any
 
 from nanomuse.channels.base import InboundMessage
 from nanomuse.channels.link_code import as_code
+from nanomuse.channels.origin import conversation_origin, shows_in
 from nanomuse.channels.store import _Watched
 from nanomuse.logger import logger
 
@@ -227,7 +228,15 @@ class TelegramTopics:
             if not isinstance(row, dict) or not self._valid(row) or not row.get("cid"):
                 continue
             if (
-                row["cid"] in catalog.rows
+                (
+                    shows_in(
+                        conversation_origin(
+                            str(row.get("thread") or ""), str(row.get("name") or "")
+                        ),
+                        "telegram",
+                    )
+                    and row["cid"] in catalog.rows
+                )
                 or row.get("archived")
                 or float(row.get("retry_after") or 0) > time.time()
             ):
@@ -264,7 +273,13 @@ class TelegramTopics:
             matches = [
                 (key, row)
                 for key, row in self.file.load().items()
-                if isinstance(row, dict) and self._valid(row) and row.get("cid") == cid
+                if isinstance(row, dict)
+                and self._valid(row)
+                and row.get("cid") == cid
+                and shows_in(
+                    conversation_origin(str(row.get("thread") or ""), str(row.get("name") or "")),
+                    "telegram",
+                )
             ]
             target = next(
                 (
@@ -274,6 +289,11 @@ class TelegramTopics:
                 ),
                 None,
             )
+            if target is not None and not shows_in(
+                conversation_origin(target.id, target.title), "telegram"
+            ):
+                target = None
+                continue
             for key, row in matches:
                 if target is not None and row.get("thread") != target.id:
                     row = {**row, "thread": target.id}
@@ -328,6 +348,8 @@ class TelegramTopics:
             )
             if thread is None:
                 continue
+            if not shows_in(conversation_origin(thread.id, thread.title), "telegram"):
+                continue
             for owner, pair in self.m.pairing.approved("telegram").items():
                 chat = str(pair.get("chat_id") or owner)
                 if chat != owner:
@@ -346,7 +368,9 @@ class TelegramTopics:
         """Initial catalogue pulls are quiet; only new chats may seed a native topic."""
         for tid in self.new_threads():
             thread = self.m.svc.threads.get(tid)
-            if thread is None:
+            if thread is None or not shows_in(
+                conversation_origin(thread.id, thread.title), "telegram"
+            ):
                 continue
             event = next(
                 (
@@ -371,6 +395,10 @@ class TelegramTopics:
         account = sync.account_id
         thread = self.m.svc.threads.get(str(event.get("thread") or ""))
         if not account or thread is None or not sync._mine(thread):
+            return
+        if not shows_in(conversation_origin(thread.id, thread.title), "telegram"):
+            # A MAX conversation belongs to MAX, the web and the computer; Telegram is a
+            # different door and must not receive a topic for it.
             return
         if not started_by_person(thread):
             # a conversation the bot began on its own gets no topic
@@ -520,6 +548,9 @@ class TelegramTopics:
 
     def targets(self, thread: str) -> list[tuple[str, str]]:
         if not self.enabled() or not self.m.store.config("telegram").enabled:
+            return []
+        thread_row = self.m.svc.threads.get(thread)
+        if not shows_in(conversation_origin(thread, getattr(thread_row, "title", "")), "telegram"):
             return []
         thread_cid = self.m.svc.sync.cid_of(thread)
         return [
@@ -717,6 +748,9 @@ class TelegramTopics:
             return False
         if not self.m.menu.private_owner(msg) or not self.m.svc.sync._mine(thread):
             raise ValueError("topic owner unavailable")
+        if not shows_in(conversation_origin(thread.id, thread.title), "telegram"):
+            # MAX has no Telegram topics; its chats are not copied into this messenger.
+            return False
         account = self.m.svc.sync.account_id
 
         def current() -> None:

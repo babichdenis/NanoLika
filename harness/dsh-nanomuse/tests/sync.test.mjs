@@ -992,6 +992,17 @@ test('preparing a closed chat for work does not mark it read, and windows keep i
   e.stop()
 })
 
+test('a messenger chat that arrives from the account gets its first page on the computer', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('chat-max', 'side', 'MAX · nanoLika')
+  relay.say('chat-max', 'user', 'привет')
+  const { engine: e } = engine(relay, sessions)
+  await e.pull()
+  const sid = [...sessions.rows.values()].find(s => s.title === 'MAX · nanoLika').id
+  assert.equal(sessions.remote(sid).length, 1)
+  e.stop()
+})
+
 // ---- C11: whose cloud a chat is --------------------------------------------------------------
 
 /** An engine that stops itself when the test ends, so a failed assertion here leaves no timer behind. */

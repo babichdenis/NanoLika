@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from nanomuse.channels.origin import conversation_origin, shows_in
 from nanomuse.channels.store import _Watched
 from nanomuse.channels.telegram_topics import TelegramTopics, normalize_name, split_chat
 from nanomuse.cloud import CloudError
@@ -200,11 +201,13 @@ class ChatPicker:
 
     def selected(self, channel: str, chat: str) -> str:
         value = self.file.load().get(self.reader(channel, chat), {})
-        return (
-            str(value.get("thread") or "")
-            if isinstance(value, dict) and value.get("account") == self.m.svc.sync.account_id
-            else ""
-        )
+        if not isinstance(value, dict) or value.get("account") != self.m.svc.sync.account_id:
+            return ""
+        thread = str(value.get("thread") or "")
+        # A thread the account no longer has (a deleted side chat, an old runtime) is not a
+        # selection: the chat's own thread is used and remembered by the manager, instead of
+        # a dead id quietly blocking every synced delivery here.
+        return thread if thread in self.m.svc.threads else ""
 
     def bind(self, msg: Any, thread: str, *, fresh: bool = False) -> None:
         data = dict(self.file.load())
@@ -271,9 +274,15 @@ class ChatPicker:
         return expires > time.monotonic()
 
     def targets(self, thread: str) -> list[tuple[str, str]]:
+        thread_row = self.m.svc.threads.get(thread)
+        origin = conversation_origin(thread, getattr(thread_row, "title", ""))
         result = []
         for channel in ("telegram", "max"):
             if channel not in self.m.channels or not self.m.store.config(channel).enabled:
+                continue
+            # A conversation born at one messenger belongs there, the web and the computer;
+            # the other messenger is a different door, not a copy of this chat.
+            if not shows_in(origin, channel):
                 continue
             for sender, entry in self.m.pairing.approved(channel).items():
                 chat = str(entry.get("chat_id") or sender)
@@ -282,7 +291,8 @@ class ChatPicker:
                     if channel == "telegram" and self.topics.enabled(channel):
                         continue
                     result.append((channel, chat))
-        result.extend(self.topics.targets(thread))
+        if origin != "max":
+            result.extend(self.topics.targets(thread))
         return list({self.topics.redirect(thread, channel, chat) for channel, chat in result})
 
     def reply_text(self, thread: str, endpoint: tuple[str, str], text: str) -> str:
@@ -337,10 +347,21 @@ class ChatPicker:
                 raise ValueError("catalog unavailable")
             reader = self.reader(msg.channel, msg.chat_id)
             listing = await self._cloud_read(engine.client.catalog, reader)
+
+            def visible(row: dict[str, Any]) -> bool:
+                """The other messenger's chats are not offered here: each door shows its own
+                conversations and the account's own (computer/web/main) ones."""
+                thread = engine.thread_of(str(row.get("cid") or ""))
+                origin = conversation_origin(
+                    thread.id if thread is not None else "",
+                    str(row.get("title") or ""),
+                )
+                return shows_in(origin, msg.channel)
+
             entries = [
                 row
                 for row in listing.get("conversations", [])
-                if bool(row.get("archived")) == archived
+                if bool(row.get("archived")) == archived and visible(row)
             ]
             current = self.selected(msg.channel, msg.chat_id)
             general_topic = self.topics.enabled(msg.channel) and not split_chat(msg.chat_id)[1]
@@ -356,7 +377,7 @@ class ChatPicker:
                 entries = [
                     row
                     for row in listing.get("conversations", [])
-                    if bool(row.get("archived")) == archived
+                    if bool(row.get("archived")) == archived and visible(row)
                 ]
             title = self.m.svc.threads.get(current)
             text = (

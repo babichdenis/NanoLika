@@ -731,6 +731,10 @@ class ChannelManager(ChannelBus):
                 if msg.channel in {"telegram", "max"}
                 else f"{label} · {who}"[:60],
             )
+        if not selected or selected != thread_id:
+            # No selection, or one whose thread is gone: remember this chat's own thread so
+            # synced replies from the web and the computer have a destination here.
+            self.picker.bind(msg, thread_id)
         return thread_id
 
     async def _handle_action(

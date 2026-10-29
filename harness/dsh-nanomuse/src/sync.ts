@@ -1479,6 +1479,15 @@ export class SyncEngine {
     let changed = this.catalogueSignature !== JSON.stringify(data)
     this.catalogueSignature = JSON.stringify(data)
     for (const c of data.conversations) { await this.applyConversation(c); this.unread.set(c.cid, c.unread || 0) }
+    // Messenger conversations that arrived before this build have no cursor and used to
+    // stay blank on the computer. Pull their first page once, so the chat is a chat here
+    // and not an empty row only the web can see.
+    for (const c of data.conversations) {
+      if (c.archived || !/^(MAX|Telegram) ·/.test(String(c.title || ''))) continue
+      const sid = this.sessionOf(c.cid)
+      if (!sid || !this.owns(sid) || this.state.clouds[sid] === 'local' || this.messageCursors.has(c.cid)) continue
+      this.viewSelections.set(`sync-new:${sid}`, { ids: [sid], until: Date.now() + 45_000 })
+    }
     const main = data.conversations.find(c => c.kind === 'main' && !c.deleted)
     const mainSession = main ? this.sessionOf(main.cid) : undefined
     if (mainSession && mainSession !== this.state.mainSession) {
@@ -1620,6 +1629,13 @@ export class SyncEngine {
         this.adopt(sessionId)
         this.state.titles[sessionId] = title
         if (c.kind === 'main') this.state.mainSession = sessionId
+        // A messenger conversation is a chat here at once, with its first page of words: a
+        // blank row that never pulled anything is not a chat a person can find, and the MAX
+        // chat used to be exactly that on the computer. A side chat of another device stays
+        // closed until the person opens it, as before.
+        if (/^(MAX|Telegram) ·/.test(title)) {
+          this.viewSelections.set(`sync-new:${sessionId}`, { ids: [sessionId], until: Date.now() + 45_000 })
+        }
       }
       this.noteCloud(sessionId, c.device)
       if (c.archived && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
