@@ -114,6 +114,16 @@ before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
+## 2026-10-29 · MAX webhook route restored
+
+The MAX bot's subscription pointed at `https://cloud.nanolika.ru/bots/max/webhook`, but the
+live Caddyfile had no `/bots/max/webhook` route: MAX updates got a 404, so the QR connection
+looked complete while every message disappeared. Added the route back (rewrite to
+`/api/channels/max/webhook`, proxy to the bot container on 8799, pass the MAX secret header),
+validated and reloaded Caddy. The endpoint now answers 403 without the secret, as it should;
+the desktop settings show the channel connected. Backup:
+`/opt/nanomuse/cloud/backups/max-webhook-20261029T161500Z`.
+
 ## 2026-10-29 · Small shared files arrive as files, not only links
 
 A share link in a synced answer is now fetched by the bot when the object is at most 50 MB:
