@@ -50,6 +50,18 @@ def expand(path: str | None) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(path or "~"))).resolve()
 
 
+def _file_path(path: str | None, root: Path | None) -> Path:
+    if root is None:
+        return expand(path)
+    base = root.expanduser().resolve()
+    raw = Path(os.path.expandvars(os.path.expanduser(path or str(base))))
+    candidate = raw if raw.is_absolute() else base / raw
+    resolved = candidate.resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ActionError("forbidden", "file access is limited to this device's workspace")
+    return resolved
+
+
 def shell_name() -> str:
     if os.name == "nt":
         return os.environ.get("COMSPEC", "cmd.exe")
@@ -140,8 +152,8 @@ def _entry(p: Path, st: os.stat_result) -> dict[str, Any]:
     return {"name": p.name, "type": kind, "size": st.st_size, "mtime": int(st.st_mtime)}
 
 
-def files(path: str | None = None) -> dict[str, Any]:
-    p = expand(path)
+def files(path: str | None = None, *, root: Path | None = None) -> dict[str, Any]:
+    p = _file_path(path, root)
     if not p.exists():
         raise ActionError("not_found", f"{p} does not exist")
     if p.is_file():
@@ -161,8 +173,8 @@ def files(path: str | None = None) -> dict[str, Any]:
     return {"path": str(p), "entries": entries}
 
 
-def file_get(path: str) -> dict[str, Any]:
-    p = expand(path)
+def file_get(path: str, *, root: Path | None = None) -> dict[str, Any]:
+    p = _file_path(path, root)
     if not p.is_file():
         raise ActionError("not_found", f"{p} is not a file")
     size = p.stat().st_size
@@ -179,8 +191,10 @@ def file_get(path: str) -> dict[str, Any]:
     }
 
 
-def file_put(path: str, data: str, force: bool = False) -> dict[str, Any]:
-    p = expand(path)
+def file_put(
+    path: str, data: str, force: bool = False, *, root: Path | None = None
+) -> dict[str, Any]:
+    p = _file_path(path, root)
     raw = base64.b64decode(data or "")
     if p.is_dir():
         raise ActionError("is_dir", f"{p} is a folder")
@@ -288,19 +302,22 @@ def _ps(s: str) -> str:
     return s.replace("'", "''")[:400]
 
 
-def run(action: str, args: dict[str, Any]) -> dict[str, Any]:
+def run(action: str, args: dict[str, Any], *, root: Path | None = None) -> dict[str, Any]:
     """Dispatch by the hub's action name (blocking; the service runs it in a thread)."""
     if action == "info":
         return info()
     if action == "shell":
         return shell(str(args.get("command", "")), args.get("cwd"), args.get("timeout"))
     if action == "files":
-        return files(args.get("path"))
+        return files(args.get("path"), root=root)
     if action == "file.get":
-        return file_get(str(args.get("path", "")))
+        return file_get(str(args.get("path", "")), root=root)
     if action == "file.put":
         return file_put(
-            str(args.get("path", "")), str(args.get("data", "")), bool(args.get("force"))
+            str(args.get("path", "")),
+            str(args.get("data", "")),
+            bool(args.get("force")),
+            root=root,
         )
     if action == "open":
         return open_target(str(args.get("url", "")))

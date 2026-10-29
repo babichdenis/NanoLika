@@ -2325,3 +2325,17 @@ account's existing `notify` contract or yet confine file operations to configure
 
 Validation: the two focused hub tests passed; Ruff and formatting passed. The remaining I10
 file-root work is not included in this change.
+
+## 2026-10-29 · Isolation audit I10: confine hub file actions
+
+The hub's `files`, `file.get` and `file.put` actions now resolve paths inside the target
+device's configured workspace. Relative paths resolve from that workspace; absolute paths are
+accepted only when they stay inside it. Parent traversal and symlinks resolving outside the
+workspace are refused. Other hub actions and the existing `info`/`notify` contract are
+unchanged.
+
+Validation: the two focused hub tests passed, covering file operations inside the workspace,
+parent traversal, an outside absolute path and a symlink escape. Ruff check, formatting and
+`git diff --check` passed. The repository's ignored `.venv` still points to a removed Python 3.11;
+checks ran from an isolated Python 3.13 environment and a temporary source snapshot while the
+network share was disconnected.

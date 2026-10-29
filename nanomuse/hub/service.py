@@ -769,7 +769,12 @@ class HubService:
                 summary=self._brief(call),
             )
             try:
-                result = await asyncio.to_thread(actions.run, call.action, call.args)
+                result = await asyncio.to_thread(
+                    actions.run,
+                    call.action,
+                    call.args,
+                    root=self.svc.workspace(),
+                )
             except actions.ActionError as exc:
                 await call.fail(exc.code, exc.message)
                 return

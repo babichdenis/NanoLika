@@ -73,24 +73,45 @@ def test_info_and_shell(tmp_path: Path) -> None:
 def test_files_get_put(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("hello")
     (tmp_path / "sub").mkdir()
-    listing = actions.run("files", {"path": str(tmp_path)})
+    listing = actions.run("files", {"path": "."}, root=tmp_path)
     names = {e["name"]: e for e in listing["entries"]}
     assert names["a.txt"]["size"] == 5 and names["sub"]["type"] == "dir"
-    got = actions.run("file.get", {"path": str(tmp_path / "a.txt")})
+    got = actions.run("file.get", {"path": "a.txt"}, root=tmp_path)
     assert base64.b64decode(got["data"]) == b"hello" and got["mime"].startswith("text/")
     put = actions.run(
         "file.put",
-        {"path": str(tmp_path / "b.txt"), "data": base64.b64encode(b"copy").decode()},
+        {"path": "b.txt", "data": base64.b64encode(b"copy").decode()},
+        root=tmp_path,
     )
     assert put["bytes"] == 4 and (tmp_path / "b.txt").read_bytes() == b"copy"
     with pytest.raises(actions.ActionError) as exc:
-        actions.run("file.put", {"path": str(tmp_path / "b.txt"), "data": "eA=="})
+        actions.run("file.put", {"path": "b.txt", "data": "eA=="}, root=tmp_path)
     assert exc.value.code == "exists"
-    actions.run("file.put", {"path": str(tmp_path / "b.txt"), "data": "eA==", "force": True})
+    actions.run("file.put", {"path": "b.txt", "data": "eA==", "force": True}, root=tmp_path)
     assert (tmp_path / "b.txt").read_bytes() == b"x"
     with pytest.raises(actions.ActionError) as exc:
-        actions.run("file.get", {"path": str(tmp_path / "missing")})
+        actions.run("file.get", {"path": "missing"}, root=tmp_path)
     assert exc.value.code == "not_found"
+
+    outside = tmp_path.parent / "outside-secret.txt"
+    outside.write_text("private")
+    with pytest.raises(actions.ActionError) as exc:
+        actions.run("file.get", {"path": str(outside)}, root=tmp_path)
+    assert exc.value.code == "forbidden"
+    with pytest.raises(actions.ActionError) as exc:
+        actions.run("file.put", {"path": "../escape.txt", "data": "eA=="}, root=tmp_path)
+    assert exc.value.code == "forbidden"
+    assert not (tmp_path.parent / "escape.txt").exists()
+
+    link = tmp_path / "outside-link"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pass
+    else:
+        with pytest.raises(actions.ActionError) as exc:
+            actions.run("file.get", {"path": "outside-link"}, root=tmp_path)
+        assert exc.value.code == "forbidden"
     with pytest.raises(actions.ActionError):
         actions.run("dance", {})
 

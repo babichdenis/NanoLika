@@ -251,7 +251,9 @@ Device ids are per installation (`phone-…`, `pc-…`); names are for people an
 can be changed on the device. A `web` device is never a target and is not
 remembered. Bodies for `file.get`, `file.put` and `screen` carry the bytes in
 base64 (`data`) with `mime`; the desktop refuses files over 8 MB, the relay
-refuses frames over `HUB_FRAME_LIMIT`.
+refuses frames over `HUB_FRAME_LIMIT`. The `files`, `file.get` and `file.put`
+actions are confined to the target device's configured workspace; absolute paths
+inside it are accepted, while `..` and symlinks that resolve outside it are refused.
 
 The agent's name and look are the account's, not a device's: `GET` / `PUT
 /v1/me/profile` on the relay keep them (the dragon, an emoji on a colour, or a
