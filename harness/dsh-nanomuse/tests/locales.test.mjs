@@ -28,6 +28,7 @@ const SAME_ON_PURPOSE = new Set([
   'fsMacTitle',
   'abVersionBundle',
   'ownKeyKeyField',
+  'mpPlanLocked',
   'ownKeyChatGptRow',
   'nwProxyPlaceholder',
 ])
