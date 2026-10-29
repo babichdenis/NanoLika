@@ -27,6 +27,7 @@ from nanomuse.config import Settings
 from nanomuse.hub import actions
 from nanomuse.hub.client import HubClient, HubError
 from nanomuse.llm import MockLLM
+from nanomuse.memory import account_scope, memory_scope
 from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
 from nanomuse.server.service import MuseService
@@ -1103,12 +1104,20 @@ def test_the_account_memory_is_read_and_written_from_another_device(hub_server) 
     assert res["id"] == "m1" and res["ok"] is True
     mid = res["body"]["id"]
     assert mid.startswith("m_")
-    assert service.app.memory.get(mid).content == "Denis works in the evenings"
+    with memory_scope(account_scope(service.sync.account_id)):
+        assert service.app.memory.get(mid).content == "Denis works in the evenings"
 
     relay.call_runtime("memory.search", {"query": "evenings", "limit": 5}, "m2")
     res = relay.next_frame("result")
     assert res["ok"] is True
     assert [m["content"] for m in res["body"]["items"]] == ["Denis works in the evenings"]
+
+    owner = service.sync.account_id
+    service.sync.state["account_id"] = "another-account"
+    relay.call_runtime("memory.search", {"query": "evenings", "limit": 5}, "m2-other")
+    res = relay.next_frame("result")
+    assert res["ok"] is True and res["body"]["items"] == []
+    service.sync.state["account_id"] = owner
 
     # an empty fact is a usage error, not a silent write
     relay.call_runtime("memory.add", {"content": "   "}, "m3")
@@ -1118,7 +1127,8 @@ def test_the_account_memory_is_read_and_written_from_another_device(hub_server) 
     relay.call_runtime("memory.forget", {"id": mid}, "m4")
     res = relay.next_frame("result")
     assert res["ok"] is True and res["body"]["forgotten"] == 1
-    assert service.app.memory.get(mid) is None
+    with memory_scope(account_scope(owner)):
+        assert service.app.memory.get(mid) is None
 
 
 def test_shared_memory_has_its_own_switch(hub_server) -> None:

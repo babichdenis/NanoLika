@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from nanomuse.memory import MemoryStore
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, int_arg
 
@@ -39,7 +38,7 @@ class Remember(BaseTool):
         "required": ["content"],
     }
     risk: RiskLevel = RiskLevel.SAFE
-    store: MemoryStore
+    store: Any
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         a = super().assess(args)
@@ -103,7 +102,7 @@ class Recall(BaseTool):
     }
     risk: RiskLevel = RiskLevel.SAFE
     reads_private_data: bool = True
-    store: MemoryStore
+    store: Any
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         a = super().assess(args)
@@ -128,7 +127,7 @@ class Forget(BaseTool):
         "properties": {"memory_id": {"type": "string"}, "query": {"type": "string"}},
     }
     risk: RiskLevel = RiskLevel.MODERATE
-    store: MemoryStore
+    store: Any
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         a = super().assess(args)

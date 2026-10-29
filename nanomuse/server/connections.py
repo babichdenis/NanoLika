@@ -35,6 +35,7 @@ from nanomuse.config import (
 from nanomuse.contacts import OWN
 from nanomuse.llm.chatgpt import DEFAULT_MODEL as CHATGPT_DEFAULT_MODEL
 from nanomuse.logger import logger
+from nanomuse.memory import memory_scope
 from nanomuse.schema import Message
 from nanomuse.search import WebSearchProvider
 from nanomuse.server.endpoints import Endpoints
@@ -918,8 +919,9 @@ class Connections:
         if vectors is None:
             return {"ok": False, "error": emb.reason[:400]}
         indexed = 0
-        if app_.memory.index is not None and await app_.memory.index.ensure(app_.memory.all()):
-            indexed = app_.memory.index.status()["indexed"]
+        with memory_scope(self.svc.memory_scope_for_current_account()):
+            if app_.memory.index is not None and await app_.memory.index.ensure(app_.memory.all()):
+                indexed = app_.memory.index.status()["indexed"]
         self._publish()
         return {
             "ok": True,

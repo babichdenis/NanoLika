@@ -88,7 +88,11 @@ class Door:
         self.body = (
             body
             if body is not None or answer is not None
-            else {"api_key": "key-from-the-door", "models": [{"id": "deepseek-flash"}]}
+            else {
+                "api_key": "key-from-the-door",
+                "models": [{"id": "deepseek-flash"}],
+                "account": {"id": "cloud-account"},
+            }
         )
         self.calls: list[dict[str, Any]] = []
 
@@ -179,6 +183,7 @@ def test_the_door_opens_an_account_for_the_chat_and_the_key_is_kept(chan, monkey
     monkeypatch.setattr(manager_module.httpx, "AsyncClient", door.client(real))
     key, model = run(manager, manager._cloud_key_for("quiet", message()))
     assert (key, model) == ("key-from-the-door", "deepseek-flash")
+    assert manager.customer_scope_for(message()) == "account:cloud-account"
     assert door.calls[0]["url"] == "https://cloud.test/v1/bot/signin"
     assert door.calls[0]["token"] == "bot-secret"
     assert door.calls[0]["body"]["channel"] == "quiet"
@@ -193,6 +198,20 @@ def test_the_door_opens_an_account_for_the_chat_and_the_key_is_kept(chan, monkey
     assert len(door.calls) == 2
 
 
+def test_group_memory_scope_does_not_inherit_a_member_cloud_identity(chan):
+    _service, manager, _fake = chan
+    private = message()
+    manager._cloud_customer_scopes[(private.channel, private.sender_id)] = "account:private-owner"
+    group_a = message(sender="member-a", chat="group-1")
+    group_a.is_group = True
+    group_b = message(sender="member-b", chat="group-1")
+    group_b.is_group = True
+
+    assert manager.customer_scope_for(private) == "account:private-owner"
+    assert manager.customer_scope_for(group_a) == manager.customer_scope_for(group_b)
+    assert manager.customer_scope_for(group_a) != "account:private-owner"
+
+
 def test_the_same_number_on_two_messengers_is_two_accounts(chan, monkeypatch):
     """MAX chat 123 and Telegram chat 123 are two accounts, so the door is told which wrote."""
     _service, manager, _fake = chan
@@ -203,6 +222,7 @@ def test_the_same_number_on_two_messengers_is_two_accounts(chan, monkeypatch):
         return {
             "api_key": f"key-{body['channel']}-{body['chat_id']}",
             "models": [{"id": "deepseek-flash"}],
+            "account": {"id": f"{body['channel']}-{body['chat_id']}"},
         }
 
     door = Door(answer=account)
@@ -217,6 +237,11 @@ def test_the_same_number_on_two_messengers_is_two_accounts(chan, monkeypatch):
     assert on_max == "key-max-123"
     assert on_telegram == "key-telegram-123"
     assert on_max != on_telegram
+    assert manager.customer_scope_for(message(sender="123", channel="max")) == "account:max-123"
+    assert (
+        manager.customer_scope_for(message(sender="123", channel="telegram"))
+        == "account:telegram-123"
+    )
     # a MAX chat never calls its id by another messenger's name
     assert [call["body"]["channel"] for call in door.calls] == ["max", "telegram"]
     assert [call["body"]["chat_id"] for call in door.calls] == ["123", "123"]

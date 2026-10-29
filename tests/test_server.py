@@ -15,8 +15,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from nanomuse.cloud import CLOUD_KEY
 from nanomuse.config import Settings
 from nanomuse.llm import MockLLM
+from nanomuse.memory import account_scope, memory_scope, session_scope
 from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
 from nanomuse.server.service import MuseService, _parse_ideas
@@ -958,6 +960,84 @@ def test_memory_api(server):
     assert client.delete(f"/api/memory/{m['id']}").status_code == 200
     assert client.get("/api/memory").json() == []
     assert client.delete("/api/memory/m_nope").status_code == 404
+
+
+def test_memory_api_uses_signed_in_customer_and_keeps_legacy_local(server):
+    client, service, _ = server
+    with memory_scope():
+        legacy = service.app.memory.add("Existing installation memory")
+
+    local_thread = service.create_thread("Ownerless local chat")
+    assert local_thread.customer_scope == "installation"
+    service.app.vault.set(CLOUD_KEY, "signed-in-key")
+    service.sync.state["account_id"] = "account-a"
+    assert service.memory_scope_for_thread(local_thread) == session_scope(local_thread.id)
+    created = service.create_thread("A new customer chat")
+    assert created.customer_scope == account_scope("account-a")
+    index = json.loads((service.threads_dir / "index.json").read_text("utf-8"))
+    assert (
+        next(row for row in index if row["id"] == created.id)["customer_scope"]
+        == created.customer_scope
+    )
+    assert "customer_scope" not in created.meta()
+    assert client.get("/api/memory").json() == []
+    account_item = client.post(
+        "/api/memory", json={"content": "Account A preference", "category": "preference"}
+    ).json()
+    assert client.get("/api/memory").json()[0]["id"] == account_item["id"]
+
+    service.sync.state["account_id"] = "account-b"
+    assert client.get("/api/memory").json() == []
+    assert client.delete(f"/api/memory/{account_item['id']}").status_code == 404
+
+    service.sync.state["account_id"] = "account-a"
+    assert client.get("/api/memory").json()[0]["content"] == "Account A preference"
+    with memory_scope():
+        assert service.app.memory.get(legacy.id).content == "Existing installation memory"
+
+    # Existing ownerless sessions are not silently assigned to whichever account is signed in.
+    assert service.memory_scope_for_thread(service.threads["main"]) == session_scope("main")
+    service.sync.state["owners"]["main"] = "account-a"
+    assert service.memory_scope_for_thread(service.threads["main"]) == account_scope("account-a")
+
+
+def test_agent_turns_share_memory_by_account_not_thread(server):
+    client, service, llm = server
+    service.sync.state["account_id"] = "account-a"
+    first = service.create_thread("Customer A, first chat")
+    llm.script.extend(
+        [
+            LLMResponse(
+                tool_calls=[
+                    tc("remember", content="Prefers concise answers", category="preference")
+                ]
+            ),
+            LLMResponse(content="I'll remember that."),
+            LLMResponse(content="I know your preference."),
+        ]
+    )
+    client.post(f"/api/threads/{first.id}/send", json={"text": "Keep answers concise"})
+    wait_idle(service, first.id)
+
+    second = service.create_thread("Customer A, second chat")
+    client.post(
+        f"/api/threads/{second.id}/send",
+        json={"text": "What do you know about my answer style?"},
+    )
+    wait_idle(service, second.id)
+    second_prompt = llm.calls[-1]["messages"][0].content
+    assert "Prefers concise answers" in second_prompt
+
+    service.sync.state["account_id"] = "account-b"
+    third = service.create_thread("Customer B chat")
+    llm.script.append(LLMResponse(content="I don't know that preference."))
+    client.post(
+        f"/api/threads/{third.id}/send",
+        json={"text": "What do you know about my answer style?"},
+    )
+    wait_idle(service, third.id)
+    third_prompt = llm.calls[-1]["messages"][0].content
+    assert "Prefers concise answers" not in third_prompt
 
 
 def test_memory_tidy_from_the_app_and_on_schedule(server):

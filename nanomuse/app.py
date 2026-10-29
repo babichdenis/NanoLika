@@ -20,7 +20,7 @@ from nanomuse.goals import GoalStore
 from nanomuse.llm import BaseLLM, catalogue, create_llm
 from nanomuse.llm.catalogue import Provider
 from nanomuse.logger import logger, setup_logging
-from nanomuse.memory import Embedder, MemoryIndex, MemoryStore
+from nanomuse.memory import Embedder, MemoryIndex, MemoryStore, MemoryStoreRouter
 from nanomuse.phone import PhoneLink
 from nanomuse.phone.operator import AUTO_LANGUAGE, COMPUTER, PhoneOperator
 from nanomuse.reminders import ReminderStore
@@ -84,7 +84,11 @@ class NanoMuseApp:
         )
 
         self.vault = CredentialVault(settings.vault_file, settings.vault_key_file)
-        self.memory = MemoryStore(settings.memory_db) if settings.memory.enabled else None
+        self.memory = (
+            MemoryStoreRouter(MemoryStore(settings.memory_db), settings.data_dir / "memory-scopes")
+            if settings.memory.enabled
+            else None
+        )
         self.embedder: Embedder | None = None
         self.attach_embedder()
         self.goals = GoalStore(settings.goals_db)
@@ -165,9 +169,10 @@ class NanoMuseApp:
             self.embedder = Embedder(
                 self.settings.memory, self.settings.llm, api_key=self._embedding_key()
             )
-        if self.memory is not None:
-            self.memory.index = (
-                MemoryIndex(self.memory, self.embedder) if self.embedder is not None else None
+        if isinstance(self.memory, MemoryStoreRouter):
+            embedder = self.embedder
+            self.memory.set_index_factory(
+                lambda store: MemoryIndex(store, embedder) if embedder is not None else None
             )
         if old is not None:
             with contextlib.suppress(RuntimeError):

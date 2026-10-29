@@ -19,7 +19,7 @@ from nanomuse.llm import session as llm_session
 from nanomuse.llm.base import BaseLLM
 from nanomuse.llm.vision import keep_newest_images
 from nanomuse.logger import logger
-from nanomuse.memory import MemoryItem, MemoryStore
+from nanomuse.memory import MemoryItem, MemoryStore, MemoryStoreRouter
 from nanomuse.runtime import device
 from nanomuse.schema import AgentState, Attachment, Message, Role, ToolResult
 from nanomuse.sentinel import AuditLog, Sentinel
@@ -34,7 +34,7 @@ class Incoming:
     for *Use NanoLika Cloud this time*, the model client this one turn runs on (``llm``)
     and its id (``model``); None and "" for a turn on the configured model."""
 
-    __slots__ = ("files", "language", "llm", "model", "text")
+    __slots__ = ("customer_scope", "files", "language", "llm", "model", "text")
 
     def __init__(
         self,
@@ -43,12 +43,14 @@ class Incoming:
         language: str = "",
         llm: BaseLLM | None = None,
         model: str = "",
+        customer_scope: str = "",
     ):
         self.text = text
         self.files = files or []
         self.language = language
         self.llm = llm
         self.model = model
+        self.customer_scope = customer_scope
 
 
 class MuseAgent:
@@ -60,7 +62,7 @@ class MuseAgent:
         sentinel: Sentinel,
         ui: UI,
         audit: AuditLog,
-        memory: MemoryStore | None = None,
+        memory: MemoryStore | MemoryStoreRouter | None = None,
         goals: GoalStore | None = None,
         calendar: CalendarFeeds | None = None,
         contacts: ContactBook | None = None,

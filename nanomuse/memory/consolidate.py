@@ -18,11 +18,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nanomuse.llm.base import BaseLLM
 from nanomuse.memory.store import MemoryChange, MemoryItem, MemoryStore, tokenize
 from nanomuse.schema import Message
+
+if TYPE_CHECKING:
+    from nanomuse.memory.scope import MemoryStoreRouter
 
 TIDY_PROMPT = """You maintain the long-term memory of a personal agent: short facts about one user, saved over time. Below is everything it holds. Propose the changes that make it smaller and truer without losing anything the user would want kept.
 
@@ -261,7 +264,9 @@ def plan(items: list[MemoryItem], reply: str) -> tuple[list[dict[str, Any]], lis
     return ops, skipped
 
 
-def apply(store: MemoryStore, ops: list[dict[str, Any]], report: TidyReport) -> None:
+def apply(
+    store: MemoryStore | MemoryStoreRouter, ops: list[dict[str, Any]], report: TidyReport
+) -> None:
     for op in ops:
         if op["op"] == "merge":
             change = store.replace(
@@ -275,7 +280,9 @@ def apply(store: MemoryStore, ops: list[dict[str, Any]], report: TidyReport) -> 
                 report.dropped.append(change)
 
 
-async def tidy(store: MemoryStore, llm: BaseLLM, dry_run: bool = False) -> TidyReport:
+async def tidy(
+    store: MemoryStore | MemoryStoreRouter, llm: BaseLLM, dry_run: bool = False
+) -> TidyReport:
     """One tidy-up pass over the store. ``dry_run`` plans and reports without changing."""
     items = store.all(limit=MAX_LINES)
     report = TidyReport(considered=len(items))

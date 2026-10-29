@@ -45,6 +45,7 @@ from nanomuse.channels.welcome import send_welcome_art
 from nanomuse.cloud import CloudError
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
+from nanomuse.memory import account_scope, channel_scope
 from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
 
@@ -200,6 +201,7 @@ class ChannelManager(ChannelBus):
         self._loop = asyncio.get_running_loop()
         # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
         self._cloud_keys: dict[tuple[str, str], tuple[str, str, float]] = {}
+        self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
         for name in self.types:
@@ -546,9 +548,13 @@ class ChannelManager(ChannelBus):
         if cloud_key == "!":
             return
         self._shared_runtime_context(thread_id)
+        linked_owner = self.svc.sync.owner_of(thread_id) if not msg.is_group else ""
         send_options: dict[str, Any] = {
             "files": paths or None,
             "language": self.menu.language(msg),
+            "customer_scope": account_scope(linked_owner)
+            if linked_owner
+            else self.customer_scope_for(msg),
         }
         # Most linked chats use the bot's configured account and need no per-chat key.
         # Keep that path compatible with older installed MuseService versions, whose
@@ -1435,7 +1441,18 @@ class ChannelManager(ChannelBus):
             await self._cloud_no_account(channel, msg.chat_id)
             return "!", ""
         self._cloud_keys[cache_key] = (key, model, time.time() + CLOUD_KEY_TTL_S)
+        account = body.get("account")
+        account_id = str(account.get("id") or "") if isinstance(account, dict) else ""
+        if account_id:
+            self._cloud_customer_scopes[cache_key] = account_scope(account_id)
         return key, model
+
+    def customer_scope_for(self, msg: InboundMessage) -> str:
+        """Use relay identity privately; each group keeps its own shared memory scope."""
+        if msg.is_group:
+            return channel_scope(msg.channel, f"group:{msg.chat_id}")
+        key = (msg.channel, msg.sender_id)
+        return self._cloud_customer_scopes.get(key) or channel_scope(msg.channel, msg.sender_id)
 
     async def _cloud_no_account(self, channel: str, chat_id: str) -> None:
         """Say that the relay has no account for this chat: nothing runs for it."""

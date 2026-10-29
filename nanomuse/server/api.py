@@ -88,6 +88,7 @@ from nanomuse.fences import MAX_NAME
 from nanomuse.hub.client import HubError
 from nanomuse.llm.chatgpt import ChatGPTError
 from nanomuse.logger import logger
+from nanomuse.memory import memory_scope
 from nanomuse.server import tickets
 from nanomuse.server.channels_api import install_channels
 from nanomuse.server.events import MAIN_THREAD
@@ -913,20 +914,25 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     async def list_memory() -> list[dict[str, Any]]:
         if svc.app.memory is None:
             return []
-        return [m.__dict__ for m in svc.app.memory.all()]
+        with memory_scope(svc.memory_scope_for_current_account()):
+            return [m.__dict__ for m in svc.app.memory.all()]
 
     @app.post("/api/memory", dependencies=dep)
     async def add_memory(body: MemoryBody) -> dict[str, Any]:
         if svc.app.memory is None:
             raise HTTPException(400, "memory is disabled")
-        item = svc.app.memory.add(body.content, body.category or "profile", source="user")
+        with memory_scope(svc.memory_scope_for_current_account()):
+            item = svc.app.memory.add(body.content, body.category or "profile", source="user")
         svc.bus.publish({"kind": "memory"})
         return item.__dict__
 
     @app.delete("/api/memory/{memory_id}", dependencies=dep)
     async def forget_memory(memory_id: str) -> dict[str, Any]:
-        if svc.app.memory is None or not svc.app.memory.forget(memory_id):
+        if svc.app.memory is None:
             raise HTTPException(404, "no such memory")
+        with memory_scope(svc.memory_scope_for_current_account()):
+            if not svc.app.memory.forget(memory_id):
+                raise HTTPException(404, "no such memory")
         svc.bus.publish({"kind": "memory"})
         return {"ok": True}
 
@@ -934,7 +940,8 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
     async def tidy_memory(dry_run: bool = False) -> dict[str, Any]:
         """One tidy-up pass now (merge duplicates, drop non-facts); ``dry_run`` only plans."""
         try:
-            return await svc.tidy_memory(dry_run=dry_run)
+            with memory_scope(svc.memory_scope_for_current_account()):
+                return await svc.tidy_memory(dry_run=dry_run)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
@@ -943,13 +950,15 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         """What tidy-ups and updates changed, newest first; each entry can be restored."""
         if svc.app.memory is None:
             return []
-        return [c.to_dict() for c in svc.app.memory.history(limit)]
+        with memory_scope(svc.memory_scope_for_current_account()):
+            return [c.to_dict() for c in svc.app.memory.history(limit)]
 
     @app.post("/api/memory/changes/{change_id}/restore", dependencies=dep)
     async def restore_memory_change(change_id: str) -> dict[str, Any]:
         if svc.app.memory is None:
             raise HTTPException(400, "memory is disabled")
-        change = svc.app.memory.restore(change_id)
+        with memory_scope(svc.memory_scope_for_current_account()):
+            change = svc.app.memory.restore(change_id)
         if change is None:
             raise HTTPException(404, "no such change")
         svc.bus.publish({"kind": "memory"})

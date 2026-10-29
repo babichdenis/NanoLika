@@ -38,6 +38,7 @@ from nanomuse.hub.service import HubService
 from nanomuse.llm import BaseLLM
 from nanomuse.llm.factory import create_llm, llm_ready
 from nanomuse.logger import logger
+from nanomuse.memory import account_scope, memory_scope, session_scope
 from nanomuse.memory.consolidate import TidyReport, tidy
 from nanomuse.nudges import NudgesPolicy
 from nanomuse.phone import PhoneLink
@@ -346,6 +347,9 @@ class Thread:
     # the main chat of another account of this device (contract C10): kept while someone
     # else is signed in, hidden from them, back as `main` when that account returns
     main_of: str = ""
+    # durable customer scope for newly created local conversations; old threads with no
+    # scope remain session-private until an explicit, trusted account mapping exists
+    customer_scope: str = ""
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -804,6 +808,8 @@ class MuseService:
                 thread.origin_device_name = str(m.get("origin_device_name") or "")
             if m.get("main_of"):
                 thread.main_of = str(m["main_of"])
+            if m.get("customer_scope"):
+                thread.customer_scope = str(m["customer_scope"])
         self._save_index()
 
     def _save_index(self) -> None:
@@ -825,6 +831,8 @@ class MuseService:
                 m["origin_device_name"] = t.origin_device_name
             if t.main_of:
                 m["main_of"] = t.main_of
+            if t.customer_scope:
+                m["customer_scope"] = t.customer_scope
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -912,6 +920,12 @@ class MuseService:
     def create_thread(self, title: str = "") -> Thread:
         tid = "t_" + uuid.uuid4().hex[:8]
         thread = self._make_thread(tid, title.strip() or "Side chat")
+        if self.sync.account_id:
+            thread.customer_scope = account_scope(self.sync.account_id)
+        elif self.hub.signed_in:
+            thread.customer_scope = session_scope(thread.id)
+        else:
+            thread.customer_scope = "installation"
         self._save_index()
         self.bus.publish({"kind": "thread", "thread": thread.meta()})
         self.sync.thread_changed(thread)
@@ -1098,6 +1112,7 @@ class MuseService:
         via: str = "",
         once_key: str = "",
         once_model: str = "",
+        customer_scope: str = "",
     ) -> dict[str, Any]:
         """Queue a message for a thread. Returns the timeline event that was created.
 
@@ -1118,6 +1133,7 @@ class MuseService:
             raise ValueError("empty message")
         once = self.cloud_once(once_key, once_model) if (via == "cloud" or once_key) else None
         thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
+        turn_scope = customer_scope or self.memory_scope_for_thread(thread)
         thread.updated_at = now_iso()
         if language:
             # remembered on the conversation: a chat addressed to another device passes it on
@@ -1188,13 +1204,54 @@ class MuseService:
             if label:
                 thread.purposes[text] = label
         if once is not None:
-            thread.inbox.put_nowait(Incoming(text, attachments, language, once[0], once[1]))
+            thread.inbox.put_nowait(
+                Incoming(text, attachments, language, once[0], once[1], turn_scope)
+            )
         else:
             thread.inbox.put_nowait(
-                Incoming(text, attachments, language) if attachments or language else text
+                Incoming(text, attachments, language, customer_scope=turn_scope)
             )
         self._ensure_worker(thread)
         return event
+
+    def memory_scope_for_thread(self, thread: Thread) -> str:
+        """Resolve trusted ownership without claiming old ownerless conversations.
+
+        A synced owner is authoritative. New threads persist their scope at creation; an
+        existing ownerless thread stays session-private for a signed-in account and uses the
+        installation scope only on the single-owner local runtime.
+        """
+        owner = self.sync.owner_of(thread.id)
+        if owner:
+            return account_scope(owner)
+        if thread.customer_scope:
+            if thread.customer_scope == "installation" and self.hub.signed_in:
+                return session_scope(thread.id)
+            return thread.customer_scope
+        if self.hub.signed_in:
+            return session_scope(thread.id)
+        if not self.sync.account_id:
+            return "installation"
+        return session_scope(thread.id)
+
+    def memory_scope_for_current_account(self) -> str:
+        """The signed-in device owner for account-level memory surfaces (API and hub)."""
+        if self.hub.signed_in:
+            return (
+                account_scope(self.sync.account_id)
+                if self.sync.account_id
+                else session_scope(MAIN_THREAD)
+            )
+        return "installation"
+
+    def memory_scope_for_main(self) -> str:
+        """The customer scope used by installation-level work attached to the main chat."""
+        main = self.threads.get(MAIN_THREAD)
+        return (
+            self.memory_scope_for_thread(main)
+            if main is not None
+            else self.memory_scope_for_current_account()
+        )
 
     def cloud_once(self, key: str = "", model: str = "") -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
@@ -1299,13 +1356,19 @@ class MuseService:
                         None if purpose else self._firstrun_addendum_for(thread.id)
                     )
                     self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
-                    final = await thread.agent.run(
-                        text, purpose=purpose, files=incoming.files, language=incoming.language
-                    )
-                    quiet, final = (
-                        prompts.split_quiet(final or "") if purpose else (False, final or "")
-                    )
-                    self._finish_run(thread, purpose, final.strip(), quiet)
+                    with memory_scope(
+                        incoming.customer_scope or self.memory_scope_for_thread(thread)
+                    ):
+                        final = await thread.agent.run(
+                            text,
+                            purpose=purpose,
+                            files=incoming.files,
+                            language=incoming.language,
+                        )
+                        quiet, final = (
+                            prompts.split_quiet(final or "") if purpose else (False, final or "")
+                        )
+                        self._finish_run(thread, purpose, final.strip(), quiet)
                 except asyncio.CancelledError:
                     if thread.stopping:
                         self._settle_stopped(thread)
@@ -2038,10 +2101,11 @@ class MuseService:
                 main = self.threads.get(MAIN_THREAD)
                 if main is None or main.busy or not main.inbox.empty():
                     continue
-                if self.memory_tidy_due():
-                    # housekeeping takes this tick; the goal pass is next time
-                    await self.tidy_memory()
-                    continue
+                with memory_scope(self.memory_scope_for_main()):
+                    if self.memory_tidy_due():
+                        # housekeeping takes this tick; the goal pass is next time
+                        await self.tidy_memory()
+                        continue
                 goal = self._pick_goal_for_pass()
                 if goal is not None:
                     self.advance_goal(goal.id)  # one goal per tick keeps the chat readable
@@ -2207,8 +2271,9 @@ class MuseService:
     async def refresh_ideas(self, n: int = 5) -> dict[str, Any]:
         context_lines: list[str] = []
         if self.app.memory is not None:
-            for m in self.app.memory.all(limit=30):
-                context_lines.append(f"- memory ({m.category}): {m.content}")
+            with memory_scope(self.memory_scope_for_main()):
+                for m in self.app.memory.all(limit=30):
+                    context_lines.append(f"- memory ({m.category}): {m.content}")
         for g in self.app.goals.list("active")[:8]:
             nxt = g.next_step
             context_lines.append(
@@ -2349,7 +2414,8 @@ class MuseService:
             or bool(self.connections.data.get("onboarded"))
         )
         if not known and self.app.memory is not None:
-            known = self.app.memory.count() >= 5
+            with memory_scope(self.memory_scope_for_main()):
+                known = self.app.memory.count() >= 5
         if not known:
             return False
         last = data.get("generated_at")
@@ -2372,8 +2438,9 @@ class MuseService:
         if self.profile.user_name:
             lines.append(f"- the user's name: {self.profile.user_name}")
         if self.app.memory is not None:
-            for m in self.app.memory.all(limit=40):
-                lines.append(f"- memory ({m.category}): {m.content}")
+            with memory_scope(self.memory_scope_for_main()):
+                for m in self.app.memory.all(limit=40):
+                    lines.append(f"- memory ({m.category}): {m.content}")
         for g in self.app.goals.list("active")[:8]:
             nxt = g.next_step
             lines.append(

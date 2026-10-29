@@ -32,6 +32,7 @@ from nanomuse.hub import actions
 from nanomuse.hub.client import HubClient, HubError, IncomingCall
 from nanomuse.hub.profile import ProfileSync
 from nanomuse.logger import logger
+from nanomuse.memory import memory_scope
 from nanomuse.schema import RiskLevel
 from nanomuse.sentinel.grants import grant_key, normalize_scope
 from nanomuse.server.events import MAIN_THREAD, STOPPED_NOTICE, now_iso
@@ -783,6 +784,10 @@ class HubService:
         await call.fail("unknown_action", f"this computer does not do '{call.action}'")
 
     async def _memory_call(self, call: IncomingCall) -> None:
+        with memory_scope(self.svc.memory_scope_for_current_account()):
+            await self._memory_call_in_scope(call)
+
+    async def _memory_call_in_scope(self, call: IncomingCall) -> None:
         """The account's facts, for every device: this machine keeps the one store (the phone
         and the computer keep no copy of their own), and the hub is how they read and write
         it — `memory.add {content, category?}`, `memory.search {query, limit?}`,
