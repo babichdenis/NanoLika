@@ -50,6 +50,11 @@ async def test_hosted_checkout_and_signed_result_credit_once_in_test_wallet(monk
     )
     assert query["SignatureValue"] == expected
     assert query["IsTest"] == "1"
+    return_url = "https://cloud.example.test/payments/checkout?order=" + result["order_id"]
+    assert query["SuccessUrl2"] == return_url
+    assert query["SuccessUrl2Method"] == "GET"
+    assert query["FailUrl2"] == return_url
+    assert query["FailUrl2Method"] == "GET"
 
     row = payments.order(result["order_id"])
     fields = callback_fields(payments, row)
