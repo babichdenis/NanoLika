@@ -96,6 +96,26 @@ before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
+## 2026-10-29 · Local files in an answer become S3 links (reg.ru)
+
+A Telegram task from the desktop agent returned local paths (`/Volumes/Dev/nanoLika/...`);
+the bot and the cloud web cannot read them. Added `share.ts` to the dsh plugin: before a task
+result goes back over the hub, every Markdown link to an existing absolute file is uploaded to
+the private `nanolika` bucket and replaced with a presigned GET URL valid for 24 hours. Uploads
+stream to S3; the bucket lifecycle deletes `files/` objects after 30 days and aborts unfinished
+multipart uploads after one day.
+
+Config is `~/.nanolika/desktop/nanolika/s3.json` (endpoint, region, bucket, no secrets); the
+access key and secret are read from the macOS Keychain (`nanolika-s3-access`,
+`nanolika-s3-secret`). Endpoint `https://s3.regru.cloud`, path-style, `us-east-1`; the bucket is
+private (anonymous path-style is 403). Verified PUT/GET/DELETE against the real bucket, a real
+presigned download, and the lifecycle rule. Tests: plugin `share`/`task`/`sync` 44/44.
+
+Committed `370885f5`. Rebuilt the plugin and installed it in both desktop copies (backup
+`~/.nanolika/backups/s3-share-20261029T144000Z`), app restarted and ready. Trap: keys were sent
+in chat; rotate the pair before public use. Free egress means large clips go as links, not
+through the bot or hub.
+
 ## 2026-10-29 · Admin: provider wallets and the price table on one page
 
 The admin console's Providers tab redirected to `/app/prices/`, which the public domain answers
