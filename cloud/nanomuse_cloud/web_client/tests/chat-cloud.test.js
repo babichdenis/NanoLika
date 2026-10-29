@@ -16,11 +16,11 @@ function relay(plan){
  globalThis.location={origin:'https://relay.test'};
  Object.defineProperty(globalThis,'navigator',{value:{onLine:true},configurable:true,writable:true});
  globalThis.fetch=async (path,options={})=>{
-  const method=options.method||'GET';calls.push({path,method,headers:options.headers||{}});
+  const method=options.method||'GET';let body=null;try{body=options.body?JSON.parse(options.body):null;}catch{}calls.push({path,method,headers:options.headers||{},body});
   if(method==='DELETE')return new Response(null,{status:204});
   if(path.startsWith('/v1/sync/catalog')){const tag=options.headers?.['If-None-Match'];if(plan.catalogETag&&tag===plan.catalogETag)return new Response(null,{status:304,headers:{ETag:plan.catalogETag}});return reply(plan.catalog,200,plan.catalogETag?{ETag:plan.catalogETag}:{});}
   if(path.includes('/messages'))return reply({account_id:'owner',more:false,has_older:false,cursor:0,through_seq:0,messages:[],...(plan.messages?plan.messages(path):{})});
-  if(path==='/v1/sync/changes')return reply({ok:true,rejected:[]});
+  if(path==='/v1/sync/changes')return reply((plan.push&&plan.push(body,calls.filter(c=>c.path==='/v1/sync/changes').length-1))||{ok:true,rejected:[]});
   if(path.includes('/read'))return reply({seen:0});
   throw new Error('unexpected request '+method+' '+path);
  };
@@ -157,4 +157,39 @@ test('a sync frame replaces the three-second poll',async()=>{
   r.sync.stop();
   assert.equal(socket.closed,true);
  } finally {r.sync.stop();delete globalThis.WebSocket;}
+});
+
+
+test('the first chat this browser syncs is the account main chat; later ones are side',async()=>{
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[],deleted:[]}});
+ const first=chat({key:'owner:first',syncCid:undefined,shared:false,title:'First',messages:[{mid:'m1',role:'user',content:'hello',at:1000,shared:false}]});
+ const second=chat({key:'owner:second',syncCid:undefined,shared:false,title:'Second',messages:[{mid:'m2',role:'user',content:'again',at:2000,shared:false}]});
+ await r.sync.publish(first);
+ await r.sync.publish(second);
+ const pushes=r.calls.filter(c=>c.path==='/v1/sync/changes').map(c=>c.body.conversations[0]);
+ assert.equal(pushes[0].kind,'main');
+ assert.equal(pushes[1].kind,'side');
+ assert.equal(localStorage.getItem('nl.web.main.owner'),first.syncCid);
+});
+
+test('a web chat joins the main chat another device already owns',async()=>{
+ let pushes=0;
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[],deleted:[]},push:(body)=>{
+  pushes++;
+  if(pushes===1)return {ok:true,accepted:0,rejected:[
+   {cid:body.conversations[0].cid,reason:'main_exists',cid_main:'main-cid'},
+   {mid:body.messages[0].mid,reason:'main_exists',cid_main:'main-cid'},
+  ]};
+  return {ok:true,accepted:2,rejected:[]};
+ }});
+ const one=chat({key:'owner:first',syncCid:undefined,shared:false,title:'Web title',messages:[{mid:'m1',role:'user',content:'hello',at:1000,shared:false}]});
+ await r.sync.publish(one);
+ assert.equal(one.syncCid,'main-cid');
+ assert.equal(localStorage.getItem('nl.web.main.owner'),'main-cid');
+ const sent=r.calls.filter(c=>c.path==='/v1/sync/changes').map(c=>c.body);
+ assert.equal(sent.length,2);
+ assert.equal(sent[1].conversations[0].cid,'main-cid');
+ assert.equal(sent[1].conversations[0].kind,'main');
+ assert.equal(sent[1].conversations[0].title,'','an adopted main keeps the title it had');
+ assert.equal(one.messages[0].shared,true);
 });

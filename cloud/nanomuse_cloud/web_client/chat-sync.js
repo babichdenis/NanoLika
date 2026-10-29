@@ -6,15 +6,36 @@ export class ChatSync {
  valid(session){const now=this.session();return now?.key===session?.key&&now?.owner===session?.owner;}
  /* A chat with nothing to say is not a conversation yet: the first message publishes it. */
  async publish(chat){return this.run(()=>this.upload(chat,this.session()));}
- async upload(chat,session,{force=false}={}){
+ mainKey(owner){return 'nl.web.main.'+owner;}
+ loadMain(session){try{return localStorage.getItem(this.mainKey(session.owner))||'';}catch{return '';}}
+ saveMain(session,cid){try{localStorage.setItem(this.mainKey(session.owner),cid);}catch{}}
+ async upload(chat,session,{force=false,adopted=false}={}){
   if(chat.deleted||chat.local||!session?.key||chat.owner!==session.owner||!this.valid(session))return;
   const pending=chat.messages.filter(m=>!m.shared&&m.content&&(m.role==='user'||!m.interrupted));
   if(!pending.length&&!chat.syncCid&&!force)return;
-  if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}await this.save(chat);
+  const fresh=!chat.syncCid;
+  if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}
+  // The first chat this browser puts in the cloud is the account's main chat (S9):
+  // desktop and phones with "main only" see it. Later chats here stay side chats.
+  let mainCid=this.loadMain(session);
+  // Only a chat born here can become the account's main: promoting an old side chat
+  // would leave its already-shared text under the old id. An existing chat stays side.
+  if(!mainCid&&fresh){mainCid=chat.syncCid;this.saveMain(session,mainCid);}
+  const isMain=chat.syncCid===mainCid;
+  await this.save(chat);
   for(let offset=0;offset<Math.max(1,pending.length);offset+=200){
    if(!this.valid(session))return;
-   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:'side',title:chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:m.content,created_at:Math.floor(m.at/1000),attachments:[]}))};
+   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:m.content,created_at:Math.floor(m.at/1000),attachments:[]}))};
    const result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);
+   const clash=(result.rejected||[]).find(r=>r.reason==='main_exists'&&r.cid_main&&r.cid===chat.syncCid);
+   if(clash&&!adopted){
+    // the account already has a main chat (desktop/phone): this browser joins it under
+    // the id the relay named instead of minting a second one; the batch goes again
+    chat.syncCid=String(clash.cid_main);this.saveMain(session,chat.syncCid);
+    for(const m of batch)m.shared=false;
+    await this.save(chat);
+    return this.upload(chat,session,{force:true,adopted:true});
+   }
    if(result.rejected?.length)throw new Error('Some chat messages could not be synced');
    for(const m of batch)m.shared=true;chat.shared=true;await this.save(chat);
   }
@@ -121,5 +142,5 @@ export class ChatSync {
   if(chat.syncCid)await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid)+'/archive',{method:'POST',body:JSON.stringify({archived:!!archived})},session);
   chat.archived=!!archived;await this.save(chat);this.onChange({archive:true});return chat;
  });}
- async delete(chat){return this.run(async()=>{const session=this.session();if(chat.syncCid&&session?.owner===chat.owner){await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid),{method:'DELETE'},session);}await this.remove(chat.key);this.known.delete(chat.syncCid);});}
+ async delete(chat){return this.run(async()=>{const session=this.session();if(chat.syncCid&&session?.owner===chat.owner){if(this.loadMain(session)===chat.syncCid)this.saveMain(session,'');await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid),{method:'DELETE'},session);}await this.remove(chat.key);this.known.delete(chat.syncCid);});}
 }

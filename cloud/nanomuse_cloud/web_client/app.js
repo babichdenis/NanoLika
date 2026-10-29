@@ -1,6 +1,6 @@
 import {fundsView} from './funds.js';
 import {navigationTools,performNavigation} from './navigation-tool.js';
-import {ChatSync} from './chat-sync.js?v=20261029-syncsp';
+import {ChatSync} from './chat-sync.js?v=20261029-main';
 import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js';
 import * as db from './storage.js';
