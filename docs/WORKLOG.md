@@ -72,7 +72,7 @@ Validation: 45 packaging, phone, capabilities and presence tests passed; touched
 
 Проверки: cloud `test_sync.py` + `test_chat_catalog.py` — 36 passed; полный cloud — 641 passed, 3 failed (только отложенные hub 2 и pricing 1); runtime `test_sync.py` — 23 passed; dsh `sync.test.mjs` — 31 passed; Ruff/format изменённых файлов; `swiftc -parse` чистый. Android-модуль без JDK/SDK не прогонялся.
 
-Не тронуто: `sync_enabled`, скидки, hub при истёкшем тарифе, формат API. Выкладка relay отдельным шагом: live `sync.py`/`chat_catalog.py` старше репозитория, нужен точечный патч, а не замена файлов целиком.
+Не тронуто: `sync_enabled`, скидки, hub при истёкшем тарифе, формат API. dsh-плагин собран и установлен в обе копии, приложение перезапущено. Runtime-бинарник, Android/iOS и relay пока не пересобирались: live `sync.py` старше репозитория, live `catalog` уже read-only; нужен узкий патч S3/S5/S7, а не замена файлов целиком.
 
 ## 2026-10-29 · Модели: пилюля Лика+, избранное у поля и ошибка расчёта
 
