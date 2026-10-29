@@ -201,7 +201,9 @@ class Store(BaseTool):
         shown = packages if everything else (missing or packages)
         for package in shown:
             section = package["section"]
-            label = package["name"] + (f" {package.get('version','')}".rstrip() if section == "capsules" else "")
+            label = package["name"] + (
+                f" {package.get('version', '')}".rstrip() if section == "capsules" else ""
+            )
             state = ""
             if section == "capsules":
                 if self._installed(package["name"]) is not None:
@@ -211,7 +213,7 @@ class Store(BaseTool):
                 else:
                     state = ": not needed (this build has it)"
             size = _human(package.get("bytes") or 0)
-            rows.append(f"- [{section}] {label} ({size}){state}: {package.get('description','')}")
+            rows.append(f"- [{section}] {label} ({size}){state}: {package.get('description', '')}")
         if not rows:
             return "the store is empty"
         head = (
@@ -219,9 +221,7 @@ class Store(BaseTool):
             if everything
             else "The store: what this build is missing comes first."
         )
-        tail = (
-            "\n\nInstall with `store` action=addon|skill|mcp and the name. Never pip."
-        )
+        tail = "\n\nInstall with `store` action=addon|skill|mcp and the name. Never pip."
         return head + "\n" + "\n".join(rows) + tail
 
     def _status(self) -> str:
@@ -235,7 +235,7 @@ class Store(BaseTool):
                     data = json.loads(meta.read_text(encoding="utf-8"))
                 except ValueError:
                     data = {}
-                rows.append(f"- {data.get('name', folder.name)} {data.get('version','')}")
+                rows.append(f"- {data.get('name', folder.name)} {data.get('version', '')}")
         importable = [p.name for p in self.addons_dir.iterdir()] if self.addons_dir.is_dir() else []
         body = "\n".join(rows) or "(no capsules installed)"
         return f"Installed capsules ({self.addons_dir}):\n{body}\nOn sys.path: {', '.join(importable) or 'nothing'}"
@@ -312,7 +312,7 @@ class Store(BaseTool):
         folder = self.addons_dir / package["name"]
         if self._installed(package["name"]) is not None:
             return ToolResult(
-                output=f"{package['name']} {package.get('version','')} is already installed in {folder}"
+                output=f"{package['name']} {package.get('version', '')} is already installed in {folder}"
             )
         archive = self.addons_dir / f"{package['name']}-{tag}.zip"
         try:
@@ -330,7 +330,9 @@ class Store(BaseTool):
             shutil.rmtree(folder, ignore_errors=True)
             staging.replace(folder)
         except Exception as exc:  # noqa: BLE001
-            return ToolResult.fail(f"could not install '{package['name']}': {type(exc).__name__}: {exc}")
+            return ToolResult.fail(
+                f"could not install '{package['name']}': {type(exc).__name__}: {exc}"
+            )
         finally:
             archive.unlink(missing_ok=True)
         self.enable(package["name"])
@@ -338,7 +340,7 @@ class Store(BaseTool):
         modules = ", ".join(package.get("modules") or []) or "(none listed)"
         return ToolResult(
             output=(
-                f"{package['name']} {package.get('version','')} installed: {_human(size)} into "
+                f"{package['name']} {package.get('version', '')} installed: {_human(size)} into "
                 f"{folder}, importable now. Modules it provides: {modules}. "
                 "Try the job again; nothing needs a restart."
             )
@@ -380,12 +382,16 @@ class Store(BaseTool):
             return ToolResult.fail("MCP servers are not managed in this build")
         server = package.get("server") or {}
         if not (server.get("command") or server.get("url")):
-            return ToolResult.fail(f"the store's description of '{package['name']}' has no command or url")
+            return ToolResult.fail(
+                f"the store's description of '{package['name']}' has no command or url"
+            )
         try:
             await self.install_mcp(server)
         except Exception as exc:  # noqa: BLE001
             return ToolResult.fail(f"could not connect '{package['name']}': {exc}")
-        return ToolResult(output=f"MCP server '{package['name']}' connected: {package.get('description','')}")
+        return ToolResult(
+            output=f"MCP server '{package['name']}' connected: {package.get('description', '')}"
+        )
 
 
 __all__ = ["DEFAULT_STORE", "Store", "digest_of", "platform_tag", "verify_digest"]

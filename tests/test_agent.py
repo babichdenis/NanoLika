@@ -134,10 +134,7 @@ async def test_max_steps_wraps_up(settings: Settings):
 
 async def test_default_task_can_continue_past_forty_tool_steps(settings: Settings):
     assert settings.agent.max_steps == 0
-    script = [
-        LLMResponse(tool_calls=[tc("add", a=i, b=1)])
-        for i in range(45)
-    ]
+    script = [LLMResponse(tool_calls=[tc("add", a=i, b=1)]) for i in range(45)]
     script.append(LLMResponse(content="Готово"))
     agent, llm, *_ = make_agent(settings, script)
 

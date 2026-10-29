@@ -134,7 +134,10 @@ def inventory(tools: Any, settings: Any) -> dict[str, Any]:
             {
                 "title": "Everything else",
                 "russian": "остальное",
-                "tools": [{"name": t.name, "line": _tool_line(t)} for t in sorted(rest, key=lambda t: t.name)],
+                "tools": [
+                    {"name": t.name, "line": _tool_line(t)}
+                    for t in sorted(rest, key=lambda t: t.name)
+                ],
             }
         )
 

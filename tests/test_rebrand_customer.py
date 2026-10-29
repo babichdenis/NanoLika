@@ -39,13 +39,15 @@ def test_localized_upstream_spots_follow_catalogue_without_renaming_storage(tmp_
     source = root / "Agent/Intents/Fixture.swift"
     source.parent.mkdir(parents=True)
     source.write_text(
-        'class NanoMuseIntent {}\n'
-        '// nanoMuse: localized notification title.\n'
+        "class NanoMuseIntent {}\n"
+        "// nanoMuse: localized notification title.\n"
         'let title = AppLocalized(\n    "nanoMuse: Retrying")\n'
         'let event = "nanoMuse.openChat"\nlet storage = "nanoMuse"\n'
     )
     catalogue = root / "Localizable.xcstrings"
-    catalogue.write_text(json.dumps({"strings": {"nanoMuse: Retrying": {"shouldTranslate": False}}}))
+    catalogue.write_text(
+        json.dumps({"strings": {"nanoMuse: Retrying": {"shouldTranslate": False}}})
+    )
     module.customer_branding(tmp_path)
     after = source.read_text()
     assert '"nanoLika: Retrying"' in after

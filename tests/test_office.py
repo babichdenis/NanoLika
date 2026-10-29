@@ -40,14 +40,18 @@ def test_resolve_inside_refuses_to_leave_the_workspace(tmp_path: Path):
     # an extra root is allowed, and so is a file that is not there yet (an output path)
     extra = tmp_path / "docs"
     extra.mkdir()
-    assert resolve_inside(ws, [extra], str(extra / "new.pdf"), must_exist=False) == extra / "new.pdf"
+    assert (
+        resolve_inside(ws, [extra], str(extra / "new.pdf"), must_exist=False) == extra / "new.pdf"
+    )
 
 
 def test_write_bas_is_something_office_can_import(tmp_path: Path):
     bas = write_bas(tmp_path / "book.xlsm", "Отчёт", 'Sub Hello()\n  MsgBox "привет"\nEnd Sub\n')
     assert bas.name == "book.bas"
     raw = bas.read_bytes()
-    assert b'Attribute VB_Name = "\xd0\x9e\xd1\x82\xd1\x87\xd1\x91\xd1\x82"' in raw  # utf-8, not mangled
+    assert (
+        b'Attribute VB_Name = "\xd0\x9e\xd1\x82\xd1\x87\xd1\x91\xd1\x82"' in raw
+    )  # utf-8, not mangled
     assert b"\r\n" in raw  # the VBA editor wants CRLF
     text = raw.decode("utf-8")
     assert text.startswith('Attribute VB_Name = "Отчёт"')
@@ -107,9 +111,7 @@ async def test_convert_makes_a_pdf_with_libreoffice(tmp_path: Path):
     assert (tmp_path / "report.docx").exists()
 
 
-@pytest.mark.skipif(
-    com_available(), reason="on Windows the macro really goes into the file"
-)
+@pytest.mark.skipif(com_available(), reason="on Windows the macro really goes into the file")
 async def test_vba_falls_back_to_a_bas_file(tmp_path: Path):
     docx = pytest.importorskip("docx")
     docx.Document().save(tmp_path / "letter.docx")
@@ -119,6 +121,8 @@ async def test_vba_falls_back_to_a_bas_file(tmp_path: Path):
     )
     assert not r.ok
     assert "Microsoft Office on Windows" in r.error and "Import" in r.error
-    assert (tmp_path / "letter.bas").read_text(encoding="utf-8").startswith(
-        'Attribute VB_Name = "Hello"'
+    assert (
+        (tmp_path / "letter.bas")
+        .read_text(encoding="utf-8")
+        .startswith('Attribute VB_Name = "Hello"')
     )

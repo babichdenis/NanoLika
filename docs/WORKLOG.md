@@ -1,5 +1,10 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Finish runtime formatting checks
+
+The audit still had eleven runtime/test files failing Ruff's formatting gate after the functional fixes. Format those files only and verify identical Python ASTs before and after. Full runtime Ruff check and format check now pass across 280 files. No behavior, pricing or sync defaults changed. The ongoing full runtime test and separately built desktop snapshot contain the same behavior, with formatting as the sole source difference.
+
+
 ## 2026-10-29: Keep bundled avatar copies aligned
 
 The full runtime audit found five canonical WebP resources stale in the web and desktop packages. Add an avatar-only mode to the existing brand generator, skip the absent retired demo directory, copy the canonical artwork and regenerate content revisions. Rebuild the committed web app so its packaged copies match too. The internal dragon identifier and personal studio avatars stay intact.

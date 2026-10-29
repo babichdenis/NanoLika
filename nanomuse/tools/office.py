@@ -392,7 +392,9 @@ def has_vba_project(path: Path) -> bool:
 
 
 # --------------------------------------------------------------------------- the tools
-def resolve_inside(workspace: Path, extra_roots: list[Path], raw: str, must_exist: bool = True) -> Path:
+def resolve_inside(
+    workspace: Path, extra_roots: list[Path], raw: str, must_exist: bool = True
+) -> Path:
     """The path, made absolute inside the workspace or one of its extra roots."""
     candidate = Path(os.path.expanduser((raw or "").strip()))
     if not candidate.is_absolute():
@@ -407,6 +409,7 @@ def resolve_inside(workspace: Path, extra_roots: list[Path], raw: str, must_exis
     if must_exist and not resolved.exists():
         raise FileNotFoundError(f"'{raw}' does not exist")
     return resolved
+
 
 class OfficeConvert(BaseTool):
     name: str = "office_convert"

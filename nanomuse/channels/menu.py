@@ -24,7 +24,7 @@ COPY = {
         "new": "Новая беседа",
         "settings": "Настройки",
         "account": "Кабинет ↗",
-                "switch_yes": "Выйти и подключить",
+        "switch_yes": "Выйти и подключить",
         "switch_no": "Оставить как есть",
         "unlink": "Отвязать этот чат",
         "unlink_hint": "Чат перестанет быть этим аккаунтом: своя касса, своя история. Аккаунт в приложении останется.",
@@ -79,7 +79,7 @@ COPY = {
         "new": "New chat",
         "settings": "Settings",
         "account": "Account ↗",
-                "switch_yes": "Leave and connect",
+        "switch_yes": "Leave and connect",
         "switch_no": "Keep as it is",
         "unlink": "Unlink this chat",
         "unlink_hint": "The chat stops being this account: its own allowance, its own history. The account in the app stays.",
@@ -134,7 +134,7 @@ COPY = {
         "new": "新对话",
         "settings": "设置",
         "account": "账户 ↗",
-                "switch_yes": "离开并连接",
+        "switch_yes": "离开并连接",
         "switch_no": "保持原样",
         "unlink": "解除此聊天的绑定",
         "unlink_hint": "这个聊天将不再是该账号：自己的额度，自己的记录。App 里的账号保持不变。",
@@ -918,7 +918,9 @@ class ChatMenu:
             return
         try:
             await link().release(msg.sender_id or msg.chat_id, self.language(msg))
-            answer = await link().redeem(msg.chat_id, code, msg.sender_name[:80], self.language(msg))
+            answer = await link().redeem(
+                msg.chat_id, code, msg.sender_name[:80], self.language(msg)
+            )
         except Exception:  # noqa: BLE001 — a question's answer must not break the chat
             answer = c["models_error"]
         await self.show(msg, note=answer or c["switch_no"])

@@ -298,9 +298,27 @@ async def test_catalogue_creates_topics_without_transcript_and_reconciles_archiv
     assert len(world.topic_calls("createForumTopic")) == 1
     sync.catalog.rows["shared-cid"]["archived"] = True
     await world.topics.discover()
-    assert len([call for call in world.topic_calls("editForumTopic") if call["name"].startswith("Архив")]) == 1
+    assert (
+        len(
+            [
+                call
+                for call in world.topic_calls("editForumTopic")
+                if call["name"].startswith("Архив")
+            ]
+        )
+        == 1
+    )
     await world.topics.discover()
-    assert len([call for call in world.topic_calls("editForumTopic") if call["name"].startswith("Архив")]) == 1
+    assert (
+        len(
+            [
+                call
+                for call in world.topic_calls("editForumTopic")
+                if call["name"].startswith("Архив")
+            ]
+        )
+        == 1
+    )
     sync.catalog.rows["shared-cid"]["archived"] = False
     await world.topics.discover()
     assert world.topic_calls("editForumTopic")[-1]["name"] == "Shared chat"

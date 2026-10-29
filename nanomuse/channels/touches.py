@@ -4,6 +4,7 @@ The words are never written: the question this answers is "was it me or someone 
 and from where", not what was said. One JSON line per inbound message, appended to the
 bot\x27s workspace so it survives restarts and can be read by a report script.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,9 @@ def _path() -> Path:
     return Path(os.environ.get("TOUCH_LOG") or "/workspace/touches.jsonl")
 
 
-def note(channel: str, sender_id: object, chat_id: object, text: str = "", kind: str = "message") -> None:
+def note(
+    channel: str, sender_id: object, chat_id: object, text: str = "", kind: str = "message"
+) -> None:
     """Record one inbound message. Failure never breaks the chat: a lost line is a lost line."""
     try:
         path = _path()
