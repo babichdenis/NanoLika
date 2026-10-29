@@ -203,8 +203,11 @@ export class TaskRunner {
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw new HubError('failed', 'the conversation could not be opened')
     const presets = this.ctx.get('permissionPresets') as { names: readonly string[]; set(session: Session, name: string): void } | undefined
-    if (!presets?.names.includes(mode)) throw new HubError('not_allowed', 'this access preset is unavailable')
-    presets.set(resolved.agent.session, mode)
+    // The bot's mode names are its own; DSH's full preset is `danger-full-access`.
+    // Accept either so an older DSH that already says `full-access` keeps working.
+    const preset = mode === 'full-access' && !presets?.names.includes('full-access') ? 'danger-full-access' : mode
+    if (!presets?.names.includes(preset)) throw new HubError('not_allowed', 'this access preset is unavailable')
+    presets.set(resolved.agent.session, preset)
     return { mode, conversation }
   }
 

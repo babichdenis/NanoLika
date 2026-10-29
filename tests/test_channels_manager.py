@@ -394,6 +394,36 @@ def test_one_memory_shared_chats_write_into_the_main_thread(chan):
     assert thread_id_for("fake", "chat1") not in manager.routes
 
 
+def test_a_stale_permission_mode_does_not_swallow_a_shared_chat_turn(chan, monkeypatch):
+    """A mode saved before `shared_thread` was switched on must not be sent to the desktop:
+    its access is the app setting, and a failed apply used to end the turn with remote_old."""
+    from nanomuse.server.events import MAIN_THREAD
+
+    client, service, _llm, manager, fake = chan
+    service.settings.channels.shared_thread = True
+    pair(client, fake)
+    manager.menu.preferences.put(MAIN_THREAD, mode="full-access")
+    calls: list[str] = []
+
+    async def call(
+        to: str,
+        action: str,
+        args: dict[str, Any] | None = None,
+        timeout: float = 120,
+        on_event=None,
+    ):  # noqa: ANN001
+        calls.append(action)
+        return {"text": "The shared chat answered."}
+
+    monkeypatch.setattr(
+        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
+    )
+    monkeypatch.setattr(service.hub, "call", call)
+    fake.bus.inbound(dm("are you there?"))
+    wait_for(lambda: any("shared chat answered" in t for t in fake.texts()))
+    assert calls == ["task"], "no channel_permissions call for a shared chat"
+
+
 def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
     """With `hub.primary` naming an online device, a chat's message goes there as a task and
     its answer lands in the chat — the Muse on this machine does not answer it too."""

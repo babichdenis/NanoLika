@@ -280,12 +280,12 @@ test('bot tasks reuse their session and preserve a user rename', async () => {
 test('channel access uses the installed session preset and does not cross conversations', async () => {
   const h = fakeContext()
   const changed = []
-  h.ctx.get = (name) => name === 'permissionPresets' ? { names: ['read-only', 'workspace-write', 'full-access'], set: (session, mode) => changed.push([session.id, mode]) } : undefined
+  h.ctx.get = (name) => name === 'permissionPresets' ? { names: ['read-only', 'workspace-write', 'danger-full-access'], set: (session, mode) => changed.push([session.id, mode]) } : undefined
   const { r } = runner(h)
   const first = await r.permissions({ conversation: 'channel-telegram-chat-one', channel: 'telegram', mode: 'full-access' }, fakeCall('p1'))
   assert.equal(first.mode, 'full-access')
   await r.permissions({ conversation: 'channel-max-chat-two', channel: 'max', mode: 'read-only' }, fakeCall('p2'))
-  assert.deepEqual(changed, [['session-1', 'full-access'], ['session-2', 'read-only']])
+  assert.deepEqual(changed, [['session-1', 'danger-full-access'], ['session-2', 'read-only']])
   assert.equal(h.agents.get('session-1').sent.length, 0)
 })
 

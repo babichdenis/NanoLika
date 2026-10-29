@@ -1543,7 +1543,14 @@ class ChannelManager(ChannelBus):
                     self._schedule_flush(thread)
 
             mode = self.menu.preferences.mode(thread)
-            if mode:
+            # A shared chat is the account's main conversation: its access is the desktop
+            # app's setting, not a per-messenger override. An old preference may still sit
+            # in the bot's file from before the shared switch was turned on; applying it
+            # would fail and swallow the turn (seen as "the installed version cannot change
+            # access"), so it is ignored here.
+            if mode and not getattr(
+                getattr(self.svc.settings, "channels", None), "shared_thread", False
+            ):
                 try:
                     applied = await hub.call(
                         str(device.get("id") or ""),
