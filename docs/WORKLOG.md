@@ -96,6 +96,27 @@ before a `duplicate` rejection can be enabled. Trap: another session was editing
 hub/isolation files in the same worktree; only the sync files were staged, and the runtime
 was built from a detached worktree at HEAD so those unfinished changes were not packaged.
 
+## 2026-10-29 · Bot prompt mismatch: KeyError 'capabilities' after reboot
+
+A Telegram message sent while the Mac was rebooting failed before the model call:
+`prompts.SYSTEM_PROMPT.format()` raised `KeyError: 'capabilities'`. The bot image carried an
+older `nanomuse/agent/core.py` that did not pass the placeholder, while the newer
+`overrides/prompts.py` had `{capabilities}` in the system prompt. The desktop later pulled the
+same user message from sync, but messages from another device are shown, not answered, so the
+chat had no reply on either side.
+
+Fixed with a narrow bot-only override: `overrides/agent/core.py` now has
+`capabilities_section()` and passes `capabilities=self.capabilities_section()`, and
+`overrides/agent/capabilities.py` is mounted next to it. Both containers (app and
+site-packages paths) get the mounts; compose was validated before `docker compose up -d`.
+Backup `/opt/nanolika-bot/backups/sync-fix-20261029T132500Z`. Bot recreated and healthy, no
+traceback on start. The message that failed is not retried automatically: send it again.
+
+Trap: the bot mixes an image from one build with file overrides from later builds. A new
+prompts.py without the matching core.py compiles and starts fine, then fails on the first
+turn; deployment checks must exercise one real turn or at least call
+`build_system_prompt`, not only `/healthz`.
+
 ## 2026-10-29 · Isolation audit: preserve client experience, separate session state
 
 The owner asked to close the findings in `~/Downloads/NanoLika-isolation-razbor.md`. The
