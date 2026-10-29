@@ -2440,3 +2440,24 @@ Configuration documentation was updated.
 
 Validation: 135 related runtime tests passed, 1 skipped; Ruff check and formatting passed;
 mypy reported no issues in all 164 source files. No deployment or file migration was performed.
+
+## 2026-10-29 · Isolation audit I6, I7 and I13
+
+Python runtimes now accept an explicit Telegram/MAX access preset from an authenticated paired
+device after the existing remote-control check. The preset is stored on the remote task's own
+thread; incoming threads are keyed by both peer device and conversation so two devices cannot
+reuse each other's session. When no messenger preset was chosen, the runtime keeps its existing
+configured access behavior.
+
+Removed the local absolute workspace path and Sentinel mode from the model's system prompt.
+The prompt still tells the model to use paths relative to the active conversation workspace,
+and memory, named user paths and active-turn context remain intact. Updated English and Chinese
+Hub/Cloud docs to distinguish the online messenger runtime from the Cloud relay: the runtime
+can continue the shared conversation when the desktop is off, but the relay itself does not run
+the agent and local computer files/processes cannot be checked offline.
+
+Validation: targeted Hub, agent prompt and shared-execution tests passed (9 tests); the broader
+Hub/agent/shared-execution set passed 61 tests with one unrelated shared-memory test excluded.
+The unfiltered run exposed that test failing because its expected account-scoped memory row was
+missing; it is outside these edits and remains for separate investigation. Ruff/format and mypy
+over 164 source files passed. No deployment was performed.

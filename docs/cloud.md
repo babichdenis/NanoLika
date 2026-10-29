@@ -838,5 +838,8 @@ The Bot API cannot force the Telegram client to reopen a particular screen; the
 persisted selection controls routing, not the client's navigation.
 
 Per-chat cloud-off continues to block shared desktop task resolution. With cloud
-sync enabled, the server retains conversation continuity while the computer is off;
-its local project files and processes remain on that computer.
+sync enabled, an online messenger runtime retains conversation continuity while the
+computer is off and can answer ordinary questions. The Cloud relay carries sync data but
+does not run the agent; if the messenger runtime is offline too, it cannot answer until it
+reconnects. Local project files and processes remain on the computer and cannot be checked
+while that computer is offline.

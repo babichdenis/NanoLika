@@ -16,6 +16,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -789,6 +790,44 @@ def test_task_from_a_device_runs_in_a_visible_side_chat(hub_server) -> None:
     relay.call_runtime("task", {"text": "again", "conversation": "conv-1"}, "t2")
     assert relay.next_frame("result")["body"]["text"] == "Again"
     assert len([t for t in client.get("/api/threads").json() if t["title"] == "From Pixel"]) == 1
+
+
+def test_messenger_access_mode_is_applied_to_the_callers_private_task_thread(hub_server) -> None:
+    client, service, _llm, relay = hub_server
+    sign_in(client)
+    wait_for(lambda: client.get("/api/hub").json()["state"] == "connected")
+    service.settings.hub.remote_control = True
+    service.app.sentinel.grants.add("remote_control", "phone-1", "always")
+    conversation = "channel-telegram-chat-42"
+
+    relay.call_runtime(
+        "channel_permissions",
+        {"conversation": conversation, "channel": "telegram", "mode": "read-only"},
+        "permissions-1",
+    )
+    result = relay.next_frame("result")
+
+    assert result["id"] == "permissions-1" and result["ok"] is True
+    assert result["body"] == {"mode": "read-only", "conversation": conversation}
+    thread = next(t for t in service.threads.values() if t.remote_from)
+    assert thread.remote_from["device"] == "phone-1"
+    assert service.channels.menu.preferences.mode(thread.id) == "read-only"
+
+
+def test_remote_conversations_from_different_devices_do_not_share_a_thread(hub_server) -> None:
+    _, service, _, _ = hub_server
+    conversation = "channel-telegram-chat-42"
+    first = SimpleNamespace(
+        sender_id="phone-1", sender_name="Pixel", sender={"id": "phone-1", "kind": "phone"}
+    )
+    second = SimpleNamespace(
+        sender_id="phone-2", sender_name="Tablet", sender={"id": "phone-2", "kind": "phone"}
+    )
+
+    first_thread = service.hub._incoming_thread(first, conversation)
+    second_thread = service.hub._incoming_thread(second, conversation)
+
+    assert first_thread.id != second_thread.id
 
 
 def test_a_stopped_task_fails_with_cancelled_and_only_for_its_asker(hub_server) -> None:

@@ -81,6 +81,14 @@ async def test_plain_answer_ends_turn(settings: Settings):
     assert len(llm.calls) == 1
 
 
+def test_system_prompt_hides_private_workspace_path_and_sentinel_mode(settings: Settings):
+    agent, *_ = make_agent(settings, [])
+    prompt = agent.build_system_prompt("hi")
+    assert str(settings.agent.workspace.resolve()) not in prompt
+    assert "Sentinel mode:" not in prompt
+    assert "relative to the active conversation workspace" in prompt
+
+
 async def test_memories_and_legacy_history_are_redacted_before_model_and_reply(settings: Settings):
     secret = "ghp_SuperSecretToken123"
     answer = f"I found {secret} in the saved note."

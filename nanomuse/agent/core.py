@@ -447,8 +447,6 @@ class MuseAgent:
             name=a.name,
             language_rule=language_rule,
             now=datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%A, UTC%z)"),
-            workspace=str(a.workspace.resolve()),
-            sentinel_mode=self.settings.sentinel.mode,
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
             tool_names=", ".join(t.name for t in self.tools),

@@ -51,7 +51,17 @@ _RISK_WORDS = {"safe": "safe", "low": "low", "moderate": "moderate", "sensitive"
 # read-only looks at the coding agents' lists do not ask; a ``task`` runs in a side chat
 # under this computer's own Sentinel.
 GATED_ACTIONS = frozenset(
-    {"shell", "files", "file.get", "file.put", "open", "screen", "coding.send", "coding.stop"}
+    {
+        "shell",
+        "files",
+        "file.get",
+        "file.put",
+        "open",
+        "screen",
+        "coding.send",
+        "coding.stop",
+        "channel_permissions",
+    }
 )
 REMOTE_CONTROL_TOOL = "remote_control"
 
@@ -747,6 +757,9 @@ class HubService:
         if call.action == "task":
             await self._task(call)
             return
+        if call.action == "channel_permissions":
+            await self._channel_permissions(call)
+            return
         if call.action.startswith("memory."):
             await self._memory_call(call)
             return
@@ -1024,7 +1037,11 @@ class HubService:
 
     def _incoming_thread(self, call: IncomingCall, conversation: str) -> Thread:
         for t in self.svc.threads.values():
-            if t.remote_from and t.remote_from.get("conversation") == conversation:
+            if (
+                t.remote_from
+                and t.remote_from.get("device") == call.sender_id
+                and t.remote_from.get("conversation") == conversation
+            ):
                 return t
         thread = self.svc.create_thread(f"From {call.sender_name}")
         thread.remote_from = {
@@ -1036,6 +1053,29 @@ class HubService:
         self.svc._save_index()
         self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         return thread
+
+    async def _channel_permissions(self, call: IncomingCall) -> None:
+        """Apply an explicit messenger access choice to this device's private task thread."""
+        from nanomuse.channels.menu import MODES
+
+        args = call.args
+        channel = str(args.get("channel") or "")
+        conversation = str(args.get("conversation") or "").strip()
+        mode = str(args.get("mode") or "")
+        if channel not in {"telegram", "max"} or not conversation.startswith(f"channel-{channel}-"):
+            await call.fail("usage", "a Telegram or MAX conversation is required")
+            return
+        if mode not in MODES:
+            await call.fail("usage", "unknown messenger access mode")
+            return
+        manager = getattr(self.svc, "channels", None)
+        preferences = getattr(getattr(manager, "menu", None), "preferences", None)
+        if preferences is None:
+            await call.fail("not_available", "messenger preferences are not available here")
+            return
+        thread = self._incoming_thread(call, conversation)
+        preferences.put(thread.id, mode=mode, access_source="")
+        await call.result({"mode": mode, "conversation": conversation})
 
     async def _relay_run(
         self, thread: Thread, call: IncomingCall, queue: asyncio.Queue[dict[str, Any]]

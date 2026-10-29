@@ -40,8 +40,7 @@ SYSTEM_PROMPT = """You are {name}, a personal AI agent built on NanoLika. You do
 
 ## Context
 - Current date/time: {now}
-- Workspace directory for your files: {workspace}
-- Sentinel mode: {sentinel_mode}
+- File paths in tool calls are relative to the active conversation workspace.
 - {sandbox}
 {contacts}- Available tools: {tool_names}
 {user_profile}{memories}{goals}{capabilities}{extra}"""
