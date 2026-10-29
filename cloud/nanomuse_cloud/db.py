@@ -197,6 +197,10 @@ CREATE TABLE IF NOT EXISTS settings (
     value         TEXT NOT NULL,               -- JSON
     updated_at    INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    name          TEXT PRIMARY KEY,
+    applied_at    INTEGER NOT NULL
+);
 -- 0.19: the text of an account's conversations, so every device of it shows the same
 -- chats (sync.py). Only user and assistant texts and attachment names; never a file or a
 -- picture. Deleted with the account, on request, or when the person turns sync off.
@@ -603,6 +607,27 @@ class Database:
         # aggregates) and the sign-ups of the last day (the per-domain limit), without a scan
         self._conn.execute("CREATE INDEX IF NOT EXISTS accounts_invited_by ON accounts(invited_by) WHERE invited_by<>''")
         self._conn.execute("CREATE INDEX IF NOT EXISTS accounts_created_at ON accounts(created_at)")
+        # Contributed conversation samples must not retain network addresses. Keep the
+        # separate account/security analytics intact, and scrub already stored samples once.
+        if self._conn.execute("SELECT 1 FROM schema_migrations WHERE name='sample_meta_without_ip'").fetchone() is None:
+            with self.tx() as c:
+                for row in c.execute("SELECT id, meta FROM samples").fetchall():
+                    try:
+                        meta = json.loads(row["meta"] or "{}")
+                    except (TypeError, ValueError):
+                        meta = {}
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    if "ip" in meta:
+                        meta.pop("ip", None)
+                        c.execute(
+                            "UPDATE samples SET meta=? WHERE id=?",
+                            (json.dumps(meta, ensure_ascii=False), row["id"]),
+                        )
+                c.execute(
+                    "INSERT INTO schema_migrations(name, applied_at) VALUES(?,?)",
+                    ("sample_meta_without_ip", int(time.time())),
+                )
         # 0.30: the messenger a chat came from and what it calls its person there: what the
         # app shows under the account's channels, empty for the addresses linked before it
         add("account_aliases", "surface", "TEXT NOT NULL DEFAULT ''")

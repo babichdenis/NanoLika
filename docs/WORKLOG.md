@@ -2292,3 +2292,14 @@ macOS ставила на панель строку **приложения** с 
   `tests/sync.test.mjs`.
 - No paid inference request was made during deployment. A short controlled request is still needed
   to confirm the provider charge against the displayed price.
+## 2026-10-29 · Isolation audit I12: remove IP from contributed samples
+
+Contribution samples now retain only the app and language hints needed for aggregate views;
+IP stays in the separate account/security analytics tables. A one-time SQLite migration
+removes IP from existing sample metadata. Admin sample responses and the sample list no
+longer expose legacy IP values.
+
+Validation: all 56 `cloud/tests/test_cloud.py` tests passed, including sample retention and
+the one-time migration. Ruff check and JavaScript syntax check passed; the changed database
+and test files pass Ruff formatting. A whole-file format check for `service.py` still reports
+pre-existing formatting in unrelated sections, which were left untouched.

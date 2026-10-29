@@ -3376,6 +3376,9 @@ class Cloud:
             return
         request, cut = _fit_messages(_training_view(messages), self.SAMPLE_MAX_CHARS)
         meta = dict(meta or {})
+        # IP remains in the separate account/security analytics tables. It is not useful for
+        # improving the model and must not travel with the contributed conversation sample.
+        meta.pop("ip", None)
         if cut or len(response) > self.SAMPLE_MAX_CHARS:
             meta["truncated"] = True
         self.db.add_sample(
@@ -3396,6 +3399,7 @@ class Cloud:
             d = dict(r)
             d["request"], cut = _load_messages(d["request"])
             d["meta"] = _load_meta(d["meta"])
+            d["meta"].pop("ip", None)
             if cut:
                 d["meta"]["truncated"] = True
             d["platform"] = platform_of(d["meta"].get("ua", ""))

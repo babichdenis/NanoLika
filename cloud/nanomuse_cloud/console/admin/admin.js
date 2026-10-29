@@ -1000,7 +1000,7 @@
     };
     paint();
     const head = h("div", { class: "s" }, when(smp.ts), opts.who && smp.hint ? [" · ", h("span", { class: "tap", onclick: (e) => { e.stopPropagation(); openAccount(smp.account_id); } }, identOf(smp.account_id, smp.hint))] : null,
-      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", meta.ip ? [" · ", ipChip(meta.ip, smp.account_id)] : null, smp.cut ? ` · ${T.cut}` : "");
+      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", smp.cut ? ` · ${T.cut}` : "");
     return h("div", { class: "row sample", style: "align-items:flex-start" }, h("div", { class: "txt", style: "white-space:pre-wrap;word-break:break-word;min-width:0" }, head, body, toggle));
   }
   /** The relay's own series: sign-ins, accounts, invites, the data switch, calls — and the devices and nanoMuse Web as they stand. */

@@ -1241,8 +1241,8 @@ async def test_the_operator_sees_addresses_clients_and_every_line(stack):
     listing = (await client.get("/v1/admin/accounts", headers=admin)).json()["accounts"]
     assert listing[0]["last_ip"] == "198.51.100.2" and listing[0]["last_platform"] == "linux"
 
-    # with "help improve" on, the kept turn carries the address for the operator — and the
-    # training export leaves it out
+    # with "help improve" on, the kept turn keeps app/language hints but no network address;
+    # sign-in/security analytics above still retain the address separately
     r = await client.post("/v1/me/contribute", headers=headers, json={"on": True})
     assert r.status_code == 200
     r = await client.post(
@@ -1250,7 +1250,7 @@ async def test_the_operator_sees_addresses_clients_and_every_line(stack):
     )
     assert r.status_code == 200
     kept = (await client.get("/v1/admin/samples", headers=admin)).json()["samples"]
-    assert kept[0]["meta"]["ip"] == "203.0.113.7" and kept[0]["platform"] == "android"
+    assert "ip" not in kept[0]["meta"] and kept[0]["platform"] == "android"
     exported = (await client.get(f"/v1/admin/samples/export?account_id={data['account']['id']}", headers=admin)).text
     line = json.loads(exported.strip())
     assert "ip" not in line["meta"] and "account_id" not in line and line["response"] == "hi"
@@ -1876,8 +1876,8 @@ async def test_data_controls_keep_the_training_view_only_and_are_deletable(stack
     assert first["request"][2] == {"role": "tool", "tool_call_id": "c1", "content": "", "omitted": True}
     dumped = json.dumps(first)
     assert "AAAA" not in dumped and "Ada" not in dumped and "SECRET" not in dumped
-    # 0.10: the address goes with the turn for the operator (the test client has none)
-    assert first["meta"] == {"ua": "NanoLika-Android/0.1.27", "lang": "zh-CN", "ip": first["meta"]["ip"]}
+    # The address stays in account/security analytics, not in the contributed turn.
+    assert first["meta"] == {"ua": "NanoLika-Android/0.1.27", "lang": "zh-CN"}
     assert first["platform"] == "android"
     assert first["prompt_tokens"] == 100 and first["completion_tokens"] == 50
     account = (await client.get(f"/v1/admin/accounts/{data['account']['id']}", headers=admin)).json()["account"]
@@ -2028,6 +2028,33 @@ def test_database_from_before_0_4_migrates(tmp_path):
     names = {r["name"] for r in db._conn.execute("PRAGMA index_list(accounts)").fetchall()}
     assert {"accounts_invite_code", "accounts_invited_by", "accounts_created_at"} <= names
     assert db._conn.execute("SELECT invite_code, contribute FROM accounts WHERE id='a1'").fetchone()[0] == ""
+
+
+def test_existing_contribution_samples_are_scrubbed_of_ip_once():
+    """The privacy fix removes IP from old sample rows but leaves app/language hints."""
+    from nanomuse_cloud.db import Database
+
+    db = Database(":memory:")
+    account = db.create_account("sample-ip-hash", "email", "a***@example.test", 0)["id"]
+    sample = db.add_sample(
+        account,
+        "fixture-model",
+        "[]",
+        "answer",
+        1,
+        1,
+        json.dumps({"ua": "NanoLika-Web/1", "lang": "ru", "ip": "203.0.113.9"}),
+    )
+    db._conn.execute("DELETE FROM schema_migrations WHERE name='sample_meta_without_ip'")
+
+    db._migrate()
+    row = db._conn.execute("SELECT meta FROM samples WHERE id=?", (sample,)).fetchone()
+    assert json.loads(row["meta"]) == {"ua": "NanoLika-Web/1", "lang": "ru"}
+
+    # Reopening/rerunning the migration is idempotent.
+    db._migrate()
+    row = db._conn.execute("SELECT meta FROM samples WHERE id=?", (sample,)).fetchone()
+    assert json.loads(row["meta"]) == {"ua": "NanoLika-Web/1", "lang": "ru"}
 
 
 def test_paid_balance_migration_preserves_unspent_paid_amount(tmp_path):
