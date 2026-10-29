@@ -468,6 +468,12 @@ class SyncStore:
         with self.db.tx() as c:
             if not self._enabled(c, account_id):
                 raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            known = c.execute(
+                "SELECT 1 FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid_ok)
+            ).fetchone()
+            if known is None:
+                # pruned by retention, or never here: let the sender deliver, not 500
+                raise CloudError(404, "unknown_mid", "No synced message with that id")
             made = c.execute(
                 "INSERT OR IGNORE INTO sync_deliveries(account_id, mid, channel, chat, device, claimed_at) VALUES (?,?,?,?,?,?)",
                 (account_id, mid_ok, channel, chat, device, t),
