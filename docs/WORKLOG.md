@@ -1,5 +1,12 @@
 ## 2026-10-29 · Cloud hygiene и стабильное завершение уведомлений
 
+## 2026-10-29: Wait for the side-chat transition's own sync pull
+
+The full runtime run completed with 1066 passing tests, 5 platform skips and one failure: the side-chat toggle test assumed the next recorded request must be its bootstrap. A main-only background poll could already be in flight before the settings change. Wait for the exact all-scope pull from zero with a 300-message tail, then assert that bootstrap occurs once; retain history, cursor, push and switch-off assertions. No runtime sync logic, defaults or owner-paused policies changed.
+
+Validation: all 22 sync tests passed after the test fix; touched-file Ruff/format passed. The earlier full run remains recorded as one failure, rather than being relabelled as a fresh full green run. Desktop runtime and plugin installation uses an idle gate and a full application backup; active work is never interrupted to make the installation pass.
+
+
 ## 2026-10-29: Finish runtime formatting checks
 
 The audit still had eleven runtime/test files failing Ruff's formatting gate after the functional fixes. Format those files only and verify identical Python ASTs before and after. Full runtime Ruff check and format check now pass across 280 files. No behavior, pricing or sync defaults changed. The ongoing full runtime test and separately built desktop snapshot contain the same behavior, with formatting as the sole source difference.

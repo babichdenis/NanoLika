@@ -923,8 +923,10 @@ def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -
     st = client.put("/api/sync/state", json={"side_chats": True}).json()
     assert st["side_chats"] is True and service.sync.state["side_chats"] is True
     # one pull from zero, everything, as a tail — the phone's side chat is here now
-    wait_for(lambda: len(relay.pulls) > n_pulls)
-    assert relay.pulls[n_pulls] == {"since": 0, "limit": 500, "scope": "all", "tail": 300}
+    bootstrap = {"since": 0, "limit": 500, "scope": "all", "tail": 300}
+    # A main-only poll can already be in flight when the settings request arrives.
+    # Wait for the transition's own pull rather than whichever request finishes first.
+    wait_for(lambda: bootstrap in relay.pulls[n_pulls:])
     wait_for(lambda: "Phone side" in [t["title"] for t in client.get("/api/threads").json()])
     # and ours went up
     wait_for(lambda: any(c["title"] == "Here first" for c in relay.convs.values()))
@@ -932,6 +934,7 @@ def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -
     # the cursor did not go backwards; the pulls that follow are `all` from the cursor
     wait_for(lambda: service.sync.cursor == relay.seq)
     assert service.sync.cursor >= cursor_before
+    assert relay.pulls[n_pulls:].count(bootstrap) == 1
     assert relay.pulls[-1]["scope"] == "all" and relay.pulls[-1]["tail"] == 0
     # off again: a new side chat stays here, the synced one keeps its place everywhere
     client.put("/api/sync/state", json={"side_chats": False})
