@@ -55,10 +55,10 @@ def candidates(alias_or_slug: str) -> list[dict]:
     return list(model.get("candidates") or [])
 
 
-# видео: у polza свой медиа-таск, у aitunnel OpenAI-подобный /v1/videos.
-# RouterAI держит 500 ₽ на счету под каждый клип, Bothub открывает видео не на
-# всех тарифах — их в перебор пока не берём.
-VIDEO_PROVIDERS = frozenset({"polza", "aitunnel"})
+# видео: у polza свой медиа-таск, у aitunnel и Bothub — OpenAI-подобный
+# /videos/generations. RouterAI держит 500 ₽ на счету под каждый клип — его в
+# перебор не берём.
+VIDEO_PROVIDERS = frozenset({"polza", "aitunnel", "bothub"})
 
 
 def video_candidates(alias: str) -> list[dict]:

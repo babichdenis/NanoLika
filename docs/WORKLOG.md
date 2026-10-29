@@ -1,3 +1,48 @@
+## 2026-10-29 · Bothub media prices return to the model base
+
+The base table showed video and audio models from Bothub without prices: the catalogue
+page had silently switched to its English/USD version, while the parser looked for the
+Russian labels (`За секунду`, `За 1K символов`, `Аудио`) and rubles. Every media offer
+fell back to `per_1m` with a null cost, so the cheapest-purchase column ignored Bothub
+and the public shop stayed at five video and five audio models. The collector now sends
+`Accept-Language: ru-RU`, decides the model kind before reading the price (a TTS card
+carries both a per-1K-character price and a per-1M-token output price), and treats a
+per-minute audio price as transcription. Video context placeholders (`4 095`) are still
+discarded.
+
+The displayed catalogue price is not our price: Bothub runs a public promo (up to −60%)
+and bills an API key at its own tariff. The authoritative source is
+`GET /api/v2/pricing/models` with the key, platform `API_COMPLETIONS`, plan `BASIC`:
+rubles at 125 ₽/$ (`rubPerMillionCaps` 250, `usdPerMillionCaps` 2). WAN 3.0 costs
+12.92 ₽/s (site 8.12), Kling 3.0 Standard 21.71 (site 13.65), Gemini 3.8 Flash TTS
+22.97 ₽ per 1K characters (site 14.44), Whisper 1.26 ₽/min (site 0.79),
+GPT 6.1 Sol 344.60 / 1723.01 ₽ per 1M (site 86.64 / 433.21). GPT 6.1 Terra is absent
+from the key's 377-model pricing list — the API answers `MODEL_NOT_ALLOWED`.
+
+The refreshed base has 40 Bothub video models with our API prices, 18 speech + 2
+transcription offers, and 58 image models; `pricing.models` supplies them, and
+`generationPrices` is used for image models (its `per_image` field is a per-image-token
+rate, not the picture price). `catalog.json` and the pages were rebuilt and published.
+
+The public shop now adds 86 working media models through
+`CLOUD_MODELS_FILE=/srv/models/api/media.json`: 37 video, 2 speech, 2 transcription and
+45 image models with `provider: bothub`, retail rates in `model_retail_prices`
+(video ×1.45, speech and pictures ×1.5) and a public page of 476 models (376 text,
+49 images, 42 video, 9 audio). Ten Gemini/ElevenLabs voices stay in the base but are
+`available: false`: Bothub answers their speech endpoint with
+`404 DeploymentNotFound`; only `tts-1` and `tts-1-hd` were verified. Bothub's Videos API
+is `/openai/v1/videos/generations`; the task poll returns `unsigned_urls` with a public
+MP4, so no file proxy is needed. Audio speech and transcription reuse the
+OpenAI-compatible paths, and the image fallback now sends non-Polza providers to the
+OpenAI-shaped call. The public page omits the context column for media; all 376 chat
+models have a measured window (55 were filled from the model base, four by hand), so no
+chat row says "unknown".
+
+Validated end-to-end through the relay: `bh-ltx-video` 4 s → SUCCEEDED with an MP4 URL,
+`bh-tts-1` → MP3, `bh-assembly-ai-best` → the spoken text, `bh-flux-schnell` → a 19 KB
+PNG. A temporary Telegram test account was used (plan Лика+, then disabled); no live
+customer account was touched.
+
 ## 2026-10-29 · One payment dialog from models and a public retail catalogue
 
 The model table's plan pill opened a tariff preview, then sent the customer to a second

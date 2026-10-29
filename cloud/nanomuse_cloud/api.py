@@ -1711,7 +1711,9 @@ def create_app(
         # каталога нет — ведём себя как раньше
         provider, base, key = settings.route(spec)
         if provider:
-            return await _polza_image(base, key, spec.upstream, prompt, size)
+            if provider == "polza":
+                return await _polza_image(base, key, spec.upstream, prompt, size)
+            return await _openai_image(base, key, spec.upstream, prompt, size)
         return await _dashscope_image(spec.upstream, [{"text": prompt}], params or {"size": size, "watermark": False})
 
     async def _polza_image(base: str, key: str, model: str, prompt: str, size: str) -> bytes:
@@ -1880,8 +1882,10 @@ def create_app(
         `{"audio": <base64>, "contentType": "audio/wav", "duration": 3.32}` — разбираем оба."""
         payload = {"model": spec.upstream, "input": text, "response_format": fmt, "voice": voice}
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        # у Bothub база уже кончается на /v1, у Polza — нет
+        path = "/audio/speech" if base.rstrip("/").endswith("/v1") else "/v1/audio/speech"
         try:
-            r = await http.post(f"{base}/v1/audio/speech", headers=headers, content=dumps(payload))
+            r = await http.post(base + path, headers=headers, content=dumps(payload))
         except httpx.HTTPError as e:
             raise CloudError(502, "upstream", "The speech provider did not answer") from e
         if r.status_code >= 400:
@@ -1932,8 +1936,9 @@ def create_app(
         if language:
             form["language"] = language
         files = {"file": (filename or "recording.webm", data, _recording_type(filename, given_type))}
+        path = "/audio/transcriptions" if base.rstrip("/").endswith("/v1") else "/v1/audio/transcriptions"
         try:
-            r = await http.post(f"{base}/v1/audio/transcriptions", headers={"Authorization": f"Bearer {key}"}, data=form, files=files)
+            r = await http.post(base + path, headers={"Authorization": f"Bearer {key}"}, data=form, files=files)
         except httpx.HTTPError as e:
             raise CloudError(502, "upstream", "The transcription provider did not answer") from e
         if r.status_code >= 400:
@@ -2094,9 +2099,24 @@ def create_app(
         payload["resolution"] = (resolution or "480P").lower()
         return payload
 
-    VIDEO_PATHS = {"polza": "/v1/media", "aitunnel": "/v1/videos"}
+    VIDEO_PATHS = {"polza": "/v1/media", "aitunnel": "/v1/videos", "bothub": "/videos/generations"}
 
     def _video_payload(provider: str, model: str, spec: ModelSpec, body: dict) -> dict:
+        if provider == "bothub":
+            # OpenAI-совместимый Videos API: длина в settings, первый кадр — imageUrl.
+            clip = _provider_clip_input(body, spec)
+            payload = {
+                "model": model,
+                "prompt": clip["prompt"],
+                "settings": {"duration_seconds": int(_clip_seconds(body, spec) or 4)},
+            }
+            incoming = body.get("input") if isinstance(body.get("input"), dict) else {}
+            image_url = str(incoming.get("img_url") or "").strip()
+            if image_url:
+                if urlsplit(image_url).scheme != "https":
+                    raise CloudError(400, "bad_request", "Bothub needs a public HTTPS first-frame URL")
+                payload["imageUrl"] = image_url
+            return payload
         if provider == "aitunnel":
             clip = _provider_clip_input(body, spec)
             payload = {
@@ -2154,7 +2174,7 @@ def create_app(
             except httpx.HTTPError as e:
                 raise CloudError(502, "upstream", "The video provider did not answer") from e
             if r.status_code >= 400:
-                log.warning("polza video HTTP %s: %s", r.status_code, r.text[:300])
+                log.warning("%s video HTTP %s: %s", provider, r.status_code, r.text[:300])
                 raise CloudError(502, "upstream", f"The video provider refused ({r.status_code})")
             try:
                 task_json = r.json()
@@ -2174,7 +2194,7 @@ def create_app(
                 )["sale_uy"],
                 provider=provider,
             )
-            log.info("polza video task %s for %s: %s", task_id[:14], caller.account_id[:8], spec.id)
+            log.info("%s video task %s for %s: %s", provider, task_id[:14], caller.account_id[:8], spec.id)
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(content={"output": {"task_id": task_id, "task_status": "PENDING"}})
@@ -2196,6 +2216,34 @@ def create_app(
     async def _provider_video_poll(provider: str, base: str, key: str, task) -> Response:
         """Спросить провайдера о клипе, списать его один раз и ответить по-дашскоповски."""
         task_id = str(task["task_id"])
+        if provider == "bothub":
+            try:
+                r = await http.get(f"{base}/videos/{task_id}", headers={"Authorization": f"Bearer {key}"})
+            except httpx.HTTPError as e:
+                raise CloudError(502, "upstream", "The video provider did not answer") from e
+            if r.status_code >= 400:
+                raise CloudError(502, "upstream", f"The video provider refused ({r.status_code})")
+            try:
+                data = r.json()
+            except ValueError as e:
+                raise CloudError(502, "upstream", "The video provider sent no task") from e
+            status = PROVIDER_TASK.get(str(data.get("status", "")).lower(), "RUNNING")
+            output = {"task_id": task_id, "task_status": status}
+            if status == "SUCCEEDED":
+                urls = data.get("unsigned_urls") or []
+                if urls:
+                    output["video_url"] = str(urls[0])
+                else:
+                    output = {"task_id": task_id, "task_status": "FAILED", "code": "NoFile", "message": "The provider sent no file"}
+            elif status in ("FAILED", "CANCELED"):
+                output["message"] = str(data.get("error") or "the provider could not make this clip")[:300]
+            charged = cloud.settle_video_task(task, output["task_status"])
+            if charged is not None:
+                log.info(
+                    "bothub video task %s done for %s: %s, charged %d",
+                    task_id[:14], str(task["account_id"])[:8], output["task_status"], charged,
+                )
+            return JSONResponse(content={"output": output})
         if provider == "aitunnel":
             try:
                 r = await http.get(f"{base}/v1/videos/{task_id}", headers={"Authorization": f"Bearer {key}"})

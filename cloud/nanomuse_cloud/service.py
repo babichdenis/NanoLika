@@ -22,6 +22,7 @@ from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from . import __version__, model_pricing
@@ -56,6 +57,29 @@ USAGE_KINDS = ("chat", "image", "video", "audio", "realtime")
 # messengers draw their buttons from it.
 SHELF_KINDS = ("chat", "image", "video", "audio")
 SHELF_MAX_PER_KIND = 24
+
+# Measured context windows for the models a provider catalogue describes, keyed by the
+# retail id the menu/API uses. The relay's own declarations carry a window only for a few
+# models; this file (built from the catalogue pages) fills the rest for the public page and
+# the cabinet without inventing a number in code.
+_CONTEXT_FILE = Path("/srv/models/api/context.json")
+_CONTEXT_CACHE: dict[str, int] | None = None
+
+
+def measured_context() -> dict[str, int]:
+    global _CONTEXT_CACHE
+    if _CONTEXT_CACHE is None:
+        try:
+            raw = json.loads(_CONTEXT_FILE.read_text(encoding="utf-8"))
+            rows = raw.get("models") if isinstance(raw, dict) else {}
+        except (OSError, ValueError, TypeError):
+            rows = {}
+        _CONTEXT_CACHE = {
+            str(key): int(value)
+            for key, value in (rows or {}).items()
+            if isinstance(value, (int, float)) and int(value) > 0
+        }
+    return _CONTEXT_CACHE
 
 # 0.30: the short code an account shows in the app and types into its chat. Six characters
 # from an alphabet without O/0 and I/1 — a code is copied off a screen or read out loud —
@@ -2270,6 +2294,9 @@ class Cloud:
         read it to mark a model instead of keeping a hand-written copy that drifts: the
         kind, the modalities and the lanes all come from the relay's one declaration."""
         models = []
+        free_terms = self.plan_terms("")
+        anonymous = type("_PublicCaller", (), {"account_id": ""})()
+        context = measured_context()
         for spec in self.s.models:
             if not self.model_visible(spec):
                 continue
@@ -2279,7 +2306,8 @@ class Cloud:
                     "name": spec.name,
                     "vendor": spec.vendor,
                     "available": spec.available,
-                    "context_length": spec.context_length,
+                    "context_length": spec.context_length or context.get(spec.id, 0),
+                    "plan_locked": not self.plan_allows(anonymous, spec, free_terms),
                     "max_output": spec.max_output,
                     "audio": {"kind": spec.audio_kind},
                     "commerce": model_pricing.describe(self, spec),
@@ -2350,7 +2378,7 @@ class Cloud:
         for row in models:
             spec = self.s.model(row["id"])
             row["commerce"] = model_pricing.describe(self, spec, caller)
-            row["context_length"] = spec.context_length
+            row["context_length"] = spec.context_length or measured_context().get(spec.id, 0)
             row["max_output"] = spec.max_output
         return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf}
 

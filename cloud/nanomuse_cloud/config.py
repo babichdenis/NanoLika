@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field, replace
+from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # What a chat model is for (0.17): the conversation ("chat") or the hands — the GUI model
 # that reads screenshots and drives a phone or a computer ("gui"). A model may do both.
@@ -598,12 +602,9 @@ def context_for(model_id: str) -> tuple[int, int]:
     return (0, 0)
 
 
-def _models_from_env() -> tuple[ModelSpec, ...]:
-    raw = _env("CLOUD_MODELS")
-    if not raw:
-        return DEFAULT_MODELS
+def _specs(items: list[dict]) -> list[ModelSpec]:
     out = []
-    for item in json.loads(raw):
+    for item in items:
         item = dict(item)
         if "for" in item:  # the JSON name; `for` is a keyword in Python
             item["for_"] = item.pop("for")
@@ -611,8 +612,42 @@ def _models_from_env() -> tuple[ModelSpec, ...]:
             if k in item:
                 item[k] = tuple(item[k])
         out.append(ModelSpec(**item))
-    filled: list[ModelSpec] = []
+    return out
+
+
+def _models_from_env() -> tuple[ModelSpec, ...]:
+    """The menu: CLOUD_MODELS plus an optional catalogue file (video, voice, pictures).
+
+    The file is how the daily model base adds media without rewriting a 128 KB
+    environment value: `CLOUD_MODELS_FILE=/srv/models/api/media.json`. A broken or
+    missing file is logged and skipped, never taking the relay down.
+    """
+    raw = _env("CLOUD_MODELS")
+    extra = _env("CLOUD_MODELS_FILE")
+    if not raw and not extra:
+        return DEFAULT_MODELS
+    items: list[dict] = list(json.loads(raw)) if raw else []
+    if extra:
+        try:
+            more = json.loads(Path(extra).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            log.warning("CLOUD_MODELS_FILE %s is unreadable (%s)", extra, error)
+            more = []
+        if isinstance(more, list):
+            items.extend(more)
+        else:
+            log.warning("CLOUD_MODELS_FILE %s is not a list", extra)
+    out = _specs(items)
+    seen: set[str] = set()
+    unique = []
     for spec in out:
+        if spec.id in seen:
+            log.warning("model %s is declared twice, keeping the first", spec.id)
+            continue
+        seen.add(spec.id)
+        unique.append(spec)
+    filled: list[ModelSpec] = []
+    for spec in unique:
         if spec.context_length:
             filled.append(spec)
             continue
