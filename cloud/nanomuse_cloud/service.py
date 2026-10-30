@@ -2935,7 +2935,7 @@ class Cloud:
 
     def _check_key_limit(self, caller: Caller, extra_uy: int) -> None:
         """Stop a key at its own daily or rolling 30-day ruble limit before it spends more."""
-        if not caller.key_hash or extra_uy <= 0:
+        if not caller.key_hash:
             return
         t = now()
         for limit_rub, since, period in (
