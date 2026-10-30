@@ -1,7 +1,7 @@
 /* Встраиваемый выбор модели для Лики: та же модалка, но в окне приложения.
    Ключ сессии приходит в #key=..., результат уходит хосту через nlPicker
    (Electron-мост) или postMessage (iframe/веб). */
-import { openModelPicker } from '/web/model-picker.js?v=20261030-embed';
+import { openModelPicker } from '/web/model-picker.js?v=20261030-embed2';
 import { allModels } from '/web/catalog.js?v=20261030-locked';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));

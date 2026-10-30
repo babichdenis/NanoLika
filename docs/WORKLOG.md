@@ -9,7 +9,8 @@
 
 В Лике (desktop 1.0.8, исходники `harness/desktop` и `harness/dsh-nanomuse`):
 `CloudModelPill` в шапке чата показывает текущую модель и открывает серверную страницу в
-модальном `BrowserWindow` (920×760, sandbox, отдельный `picker-preload` с одним `send`).
+модальном `BrowserWindow` (920×760, sandbox, отдельный `picker-preload` с одним `send`);
+заголовок окна — локализованные «Модели», список сам прокручивается к выбранной строке.
 Хост выдаёт короткоживущий ключ через `POST /model-picker-session` (15 минут,
 `/v1/auth/session-key`), ключ идёт в `#key=` и не попадает в referrer. Выбор возвращается
 в чат через `POST /chat-model`, «Управление моделями» открывает раздел настроек, пилюля

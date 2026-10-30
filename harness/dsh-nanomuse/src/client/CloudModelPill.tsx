@@ -29,7 +29,7 @@ export function makeCloudModelPill(t: Translate) {
       setBusy(true)
       try {
         const session = await call<PickerSession>('model-picker-session', {})
-        const answer = await picker.open({ url: session.url, key: session.key, selected: slot.model, kind: 'chat', title: t('mlCloudModels') })
+        const answer = await picker.open({ url: session.url, key: session.key, selected: slot.model, kind: 'chat', title: t('mlTitle') })
         if (answer?.type === 'pick' && answer.id && answer.id !== slot.model) {
           await call('chat-model', { provider: 'nanomuse', model: answer.id })
           reload()

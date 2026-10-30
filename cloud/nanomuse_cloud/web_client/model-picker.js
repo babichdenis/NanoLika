@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261030-embed', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261030-embed2', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -132,6 +132,7 @@ export function openModelPicker({
       tip.style.left = Math.max(8, left) + "px";
       tip.style.top = Math.max(8, Math.min(rect.top, window.innerHeight - 170)) + "px";
     };
+    let scrolledToSelected = false;
     const render = () => {
       const query = search.value.trim().toLowerCase();
       list.replaceChildren();
@@ -214,6 +215,10 @@ export function openModelPicker({
     }
     if (inPage) document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePicker(); });
     render();
+    if (selected && !scrolledToSelected) {
+      scrolledToSelected = true;
+      requestAnimationFrame(() => list.querySelector(".mp-item.on")?.scrollIntoView({ block: "center" }));
+    }
     if (!inPage) dialog.showModal();
     search.focus();
   });
