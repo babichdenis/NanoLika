@@ -2284,7 +2284,7 @@ class Cloud:
         return {
             "enabled": enabled,
             "default": default,
-            "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.visible_models(caller)}],
+            "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.s.public_models if self.model_visible(m)}],
         }
 
     def catalogue_public(self) -> dict[str, Any]:
@@ -2432,7 +2432,7 @@ class Cloud:
             elif default.get(kind) not in ids:
                 default[kind] = ids[0]
         favourites = data.get("favourites", stored.get("favourites", []))
-        known_ids = {m.id for m in self.visible_models(caller)}
+        known_ids = {m.id for m in self.s.public_models if self.model_visible(m)}
         if (
             not isinstance(favourites, list)
             or len(favourites) > 500
