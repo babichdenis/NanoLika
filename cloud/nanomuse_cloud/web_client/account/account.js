@@ -12,17 +12,17 @@ zh:{autopay:'银行卡与自动充值',title:'你的账户',back:'返回 Lika',o
 Object.assign(words.ru,{
  apiName:'Название ключа',apiNamePlaceholder:'Например, «Мой бот»',apiTerm:'Срок действия',apiForever:'Бессрочно',api1d:'1 день',api7d:'7 дней',api30d:'30 дней',api90d:'90 дней',
  apiDaily:'Лимит в день, ₽',apiMonthly:'Лимит за 30 дней, ₽',apiLimitHint:'0 — без лимита',apiBalance:'Баланс аккаунта',apiExpires:'Действует до',apiNoExpiry:'Бессрочно',apiLimits:'Лимиты',apiToday:'Сегодня',apiMonth:'За 30 дней',apiNoLimit:'без лимита',
- apiEdit:'Изменить',apiSave:'Сохранить',apiCancel:'Отмена',apiKeepTerm:'Не менять',apiActive:'Активен',apiExpired:'Истёк',apiUsage:'Расход',apiNoKeys:'Личных ключей пока нет.',apiEditTitle:'Настройки ключа',apiSaving:'Сохраняем…',apiSaved:'Ключ обновлён.',apiLimitLeft:'Осталось'
+ apiEdit:'Изменить',apiSave:'Сохранить',apiCancel:'Отмена',apiKeepTerm:'Не менять',apiActive:'Активен',apiExpired:'Истёк',apiUsage:'Расход',apiNoKeys:'Личных ключей пока нет.',apiRevokedHistory:'Отозванные',apiEditTitle:'Настройки ключа',apiSaving:'Сохраняем…',apiSaved:'Ключ обновлён.',apiLimitLeft:'Осталось'
 });
 Object.assign(words.en,{
  apiName:'Key name',apiNamePlaceholder:'For example, “My bot”',apiTerm:'Key lifetime',apiForever:'No expiry',api1d:'1 day',api7d:'7 days',api30d:'30 days',api90d:'90 days',
  apiDaily:'Daily limit, RUB',apiMonthly:'Limit per 30 days, RUB',apiLimitHint:'0 — no limit',apiBalance:'Account balance',apiExpires:'Valid until',apiNoExpiry:'No expiry',apiLimits:'Limits',apiToday:'Today',apiMonth:'Last 30 days',apiNoLimit:'no limit',
- apiEdit:'Edit',apiSave:'Save',apiCancel:'Cancel',apiKeepTerm:'Keep as is',apiActive:'Active',apiExpired:'Expired',apiUsage:'Spend',apiNoKeys:'No personal keys yet.',apiEditTitle:'Key settings',apiSaving:'Saving…',apiSaved:'Key updated.',apiLimitLeft:'Left'
+ apiEdit:'Edit',apiSave:'Save',apiCancel:'Cancel',apiKeepTerm:'Keep as is',apiActive:'Active',apiExpired:'Expired',apiUsage:'Spend',apiNoKeys:'No personal keys yet.',apiRevokedHistory:'Revoked',apiEditTitle:'Key settings',apiSaving:'Saving…',apiSaved:'Key updated.',apiLimitLeft:'Left'
 });
 Object.assign(words.zh,{
  apiName:'密钥名称',apiNamePlaceholder:'例如“我的机器人”',apiTerm:'有效期',apiForever:'永久',api1d:'1 天',api7d:'7 天',api30d:'30 天',api90d:'90 天',
  apiDaily:'每日限额，₽',apiMonthly:'30 天限额，₽',apiLimitHint:'0 — 不限额',apiBalance:'账户余额',apiExpires:'有效期至',apiNoExpiry:'永久',apiLimits:'限额',apiToday:'今天',apiMonth:'最近 30 天',apiNoLimit:'不限额',
- apiEdit:'编辑',apiSave:'保存',apiCancel:'取消',apiKeepTerm:'保持不变',apiActive:'有效',apiExpired:'已过期',apiUsage:'消费',apiNoKeys:'暂无个人密钥。',apiEditTitle:'密钥设置',apiSaving:'保存中…',apiSaved:'密钥已更新。',apiLimitLeft:'剩余'
+ apiEdit:'编辑',apiSave:'保存',apiCancel:'取消',apiKeepTerm:'保持不变',apiActive:'有效',apiExpired:'已过期',apiUsage:'消费',apiNoKeys:'暂无个人密钥。',apiRevokedHistory:'已撤销',apiEditTitle:'密钥设置',apiSaving:'保存中…',apiSaved:'密钥已更新。',apiLimitLeft:'剩余'
 });
 const $=id=>document.getElementById(id),fromConsole=new URLSearchParams(location.search).get('source')==='console',sessionKey=fromConsole?'nm.key':'nl.web.session.v1';let session=null,lang='ru',me=null,minPassword=8,revision=0;
 try{session=fromConsole?{key:localStorage.getItem(sessionKey),owner:null}:JSON.parse(localStorage.getItem(sessionKey)||'null');if(!session?.key){const key=localStorage.getItem('nm.key');if(key)session={key,owner:null};}lang=localStorage.getItem('nl.web.language')||'ru';}catch{}
@@ -85,10 +85,7 @@ function keyStat(label,spent,limit){
  if(limit>0){const meter=h('div',undefined,'api-key-meter'),fill=h('i');fill.style.width=Math.min(100,Math.max(0,spent/limit*100))+'%';meter.append(fill);box.append(meter,h('small',`${T.apiLimitLeft}: ${rub(Math.max(0,limit-spent))}`,'api-key-stat-note'));}
  return box;
 }
-function renderApiKeys(keys){
- const target=$('api-keys'),personal=keys.filter(k=>k.via==='user');
- if(!personal.length){empty(target,T.apiNoKeys);return;}
- target.replaceChildren(...personal.map(k=>{
+function apiKeyCard(k){
   const [state,stateClass]=keyState(k),card=h('article',undefined,'api-key-item '+stateClass);
   const head=h('div',undefined,'api-key-head'),names=h('div',undefined,'api-key-names');
   names.append(h('strong',k.label||k.device||k.prefix),h('code',k.prefix));
@@ -99,7 +96,13 @@ function renderApiKeys(keys){
   card.append(head,h('p',meta,'api-key-meta'),usage);
   if(!k.revoked){const actions=h('div',undefined,'api-key-actions'),edit=h('button',T.apiEdit,'quiet'),revoke=h('button',T.apiRevoke,'quiet danger-text');edit.type='button';revoke.type='button';edit.onclick=()=>openKeyEditor(k);revoke.onclick=async()=>{if(!confirm(T.apiRevokeConfirm))return;revoke.disabled=true;try{await api('/v1/me/keys/'+encodeURIComponent(k.prefix),{method:'DELETE'});await loadApiKeys();}catch(_){$('api-key-status').textContent=T.apiError;revoke.disabled=false;}};actions.append(edit,revoke);card.append(actions);}
   return card;
- }));
+}
+function renderApiKeys(keys){
+ const target=$('api-keys'),personal=keys.filter(k=>k.via==='user');
+ if(!personal.length){empty(target,T.apiNoKeys);return;}
+ const live=personal.filter(k=>!k.revoked),revoked=personal.filter(k=>k.revoked),nodes=live.map(apiKeyCard);
+ if(revoked.length){const box=h('details',undefined,'api-key-history');box.append(h('summary',`${T.apiRevokedHistory} · ${revoked.length}`),...revoked.map(apiKeyCard));nodes.push(box);}
+ target.replaceChildren(...nodes);
 }
 let editingKey=null;
 function openKeyEditor(k){

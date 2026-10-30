@@ -30,6 +30,9 @@ html,body{height:auto;min-height:100%}html{scroll-padding-top:24px}body{margin:0
 .api-key-form small{font-size:11px;color:var(--muted)}
 .api-balance{margin:8px 0;font-size:13px;color:var(--sage,#52694e)}
 .api-key-item{display:grid;gap:10px;padding:14px;border-top:1px solid #d8dfd1;background:#fffdf8}
+.api-key-history{border-top:1px solid #d8dfd1;background:#fbf8f0}
+.api-key-history>summary{padding:11px 14px;cursor:pointer;font-size:12px;color:var(--muted,#77786b)}
+.api-key-history>.api-key-item{padding:12px 14px;background:transparent;border-top:1px solid #e7e2d7}
 .api-key-item:first-child{border-top:0}
 .api-key-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .api-key-names{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;min-width:0}
