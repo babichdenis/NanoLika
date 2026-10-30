@@ -13,7 +13,7 @@ function injectStyles() {
 
 const CATEGORIES = [
   ["chat", "Текст"],
-  ["image", "Картинки"],
+  ["image", "Изображения"],
   ["video", "Видео"],
   ["audio", "Аудио"],
   ["other", "Другое"],
@@ -157,7 +157,7 @@ export function openModelPicker({
           pick.textContent = model.name;
           pick.disabled = !model.forChat || Boolean(model.locked);
           if (model.locked) pick.title = "Доступно на другом тарифе";
-          else if (!model.forChat) pick.title = "Только для картинок, видео или аудио";
+          else if (!model.forChat) pick.title = "Только для изображений, видео или аудио";
           pick.onclick = () => {
             if (!model.forChat) return;
             selected = model.id;

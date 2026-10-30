@@ -8,7 +8,7 @@ export function modelDetails(row,{api}){
  const architecture=row.architecture||{},inputs=facts.input_modalities||facts.in||architecture.input_modalities||[],outputs=facts.output_modalities||facts.out||architecture.output_modalities||[];
  if(inputs.length||outputs.length)add('p',`Ввод: ${inputs.join(', ')||'—'} · Ответ: ${outputs.join(', ')||'—'}`);
  if((facts.supported_parameters||[]).length)add('p',`Возможности: ${(facts.supported_parameters||[]).join(', ')}`);
- const labels={input:'Вход / М. ток',cached_input:'Кешированный вход / М. ток',output:'Ответ / М. ток',image:'Картинка',image_2k:'Картинка 2K',image_input:'Исходная картинка',second:'Секунда видео',speech:'1000 знаков',minute:'Минута записи'};
+ const labels={input:'Вход / М. ток',cached_input:'Кешированный вход / М. ток',output:'Ответ / М. ток',image:'Изображение',image_2k:'Изображение 2K',image_input:'Исходное изображение',second:'Секунда видео',speech:'1000 знаков',minute:'Минута записи'};
  const kind=facts.kind||'chat', unit=commerce.unit;
  const fields=kind==='chat'?['input','cached_input','output']:kind==='image'?['image','image_2k','image_input']:kind==='video'?['second']:unit==='speech'?['speech']:['minute'];
  const rates=commerce.effective_rub||{};

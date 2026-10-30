@@ -18,3 +18,5 @@
 .model-cards .model-picker-table thead th{position:sticky;top:0;z-index:3;background:var(--paper,#faf7ef);box-shadow:inset 0 -1px 0 var(--line,#dedacb)}
 
 .model-sheet .model-cards > .model-picker-table{grid-column:1/-1;width:100%}
+/* rows are not emphasised: only the table headings stay strong */
+.model-picker-table .model-card-pick strong,.model-picker-table .numeric strong{font-weight:400}

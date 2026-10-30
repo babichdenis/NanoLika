@@ -24,7 +24,7 @@ export function chatModels(catalogue){
 function priceOf(facts, kind){
  const rates=(facts.commerce&&facts.commerce.rates_rub)||{};
  const one=(value,unit)=>Number(value)>0?{value:Number(value),unit}:null;
- if(kind==='image')return one(rates.image,'картинка');
+ if(kind==='image')return one(rates.image,'изображение');
  if(kind==='video')return one(rates.second,'секунда');
  if(kind==='audio')return one(rates.speech,'1000 знаков')||one(rates.minute,'минута');
  return one(rates.input,'М. ток')||one(rates.output,'М. ток');

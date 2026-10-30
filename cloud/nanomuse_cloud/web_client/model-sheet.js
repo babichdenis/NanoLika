@@ -1,4 +1,4 @@
-import {modelDetails} from './model-detail.js?v=20261030-ot';
+import {modelDetails} from './model-detail.js?v=20261030-izob';
 /**
  * Панель выбора модели: провайдеры слева, карточки справа, фильтры по типу и поиск.
  *
@@ -12,7 +12,7 @@ import {modelDetails} from './model-detail.js?v=20261030-ot';
 /** Что показать для типа: подпись и значок. */
 const KIND_LABELS = {
   chat: { label: 'Текст', glyph: 'T' },
-  image: { label: 'Картинка', glyph: '▣' },
+  image: { label: 'Изображение', glyph: '▣' },
   video: { label: 'Видео', glyph: '▶' },
   audio: { label: 'Аудио', glyph: '♪' },
   embedding: { label: 'Векторы', glyph: '#' },
@@ -51,7 +51,7 @@ function isCoding(card) {
   return CODE_WORDS.some((word) => `${card.name} ${card.id} ${card.vendor}`.toLowerCase().includes(word));
 }
 const SECTION_LABELS = [
-  ['__code', 'Кодинг'], ['chat', 'Переписка'], ['image', 'Картинки'], ['video', 'Видео'],
+  ['__code', 'Кодинг'], ['chat', 'Переписка'], ['image', 'Изображения'], ['video', 'Видео'],
   ['speech', 'Озвучка'], ['transcribe', 'Распознавание'], ['music', 'Музыка'],
 ];
 function sectionKeyOf(card) {
@@ -182,15 +182,15 @@ export function installModelSheet({onPick,api,session,onFavourites}){
    if(card.locked){const up=h('a','Лика+','model-lock');up.href='/web/account/?pay=1';name.append(up);}
    const facts=card.row.nanomuse||card.row,rates=facts.commerce?.effective_rub||{},unit=card.kind==='image'?'image':card.kind==='video'?'second':facts.commerce?.unit==='speech'?'speech':'minute';
    const first=card.kind==='chat'?rates.input:rates[unit];
-   const price=h('td',card.free?'0':rub(first),'numeric'),output=h('td',card.kind==='chat'?(card.free?'0':rub(rates.output)):'—','numeric');
+   const price=h('td',card.free?'0':rub(first),'numeric'),output=h('td',card.kind==='chat'?(card.free?'0':rub(rates.output)):'','numeric');
    const detailRow=h('tr',undefined,'model-detail-row'),detailCell=h('td');detailRow.hidden=true;detailCell.colSpan=6;detailRow.append(detailCell);
    let loaded=false;const expand=()=>{detailRow.hidden=!detailRow.hidden;if(!loaded){loaded=true;detailCell.append(modelDetails(card.row,{api}));}};
    pick.disabled=card.locked;pick.setAttribute('aria-disabled',String(card.locked));pick.onclick=()=>{if(card.locked)return;if(card.kind!=='chat'){expand();return;}state.picked=card.id;onPick?.(card.id);close();};
    const star=h('button',state.favourites.has(card.id)?'★':'☆','model-card-star');star.type='button';star.setAttribute('aria-label','В избранное: '+card.name);star.setAttribute('aria-pressed',String(state.favourites.has(card.id)));star.onclick=()=>{state.favourites.has(card.id)?state.favourites.delete(card.id):state.favourites.add(card.id);favouritesDirty=true;persist();paintKinds();paintCards();};
    const favourite=h('td');favourite.append(star);
    const type=card.kind==='audio'?({speech:'Озвучка',transcribe:'Распознавание',music:'Музыка'}[card.audioKind]||'Аудио'):(KIND_LABELS[card.kind]?.label||card.kind);
-   const typeCell=h('td',type);const unitNote=card.kind==='chat'?'':({image:'за изображение',second:'за секунду',speech:'за 1000 знаков',minute:'за минуту'}[unit]||'');if(unitNote)typeCell.append(h('small',unitNote,'table-subtitle'));
-   tr.append(name,typeCell,h('td',ctx(card.context),'numeric'),price,output,favourite);body.append(tr,detailRow);
+   const typeCell=h('td',type);const unitNote=card.kind==='chat'||card.kind==='image'?'':({second:'за секунду',speech:'за 1000 знаков',minute:'за минуту'}[unit]||'');if(unitNote)typeCell.append(h('small',unitNote,'table-subtitle'));
+   tr.append(name,typeCell,h('td',card.kind==='image'?'шт.':ctx(card.context),'numeric'),price,output,favourite);body.append(tr,detailRow);
   }
  }
  function paint(){paintKinds();paintVendors();paintCards();}
