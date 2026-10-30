@@ -28,9 +28,10 @@
 данные без CSP-ошибок; прозрачное окно и карточка без широкого фона проверены на живом
 desktop; в композере Лики осталась только новая пилюля, выбор DeepSeek V4.1 Flash
 сменил `slots.chat.model` на `deepseek-flash`; desktop 1.0.8 собран, `tsc` чистый,
-433 теста плагина зелёные. Установленная в `/Applications` 1.0.5 не заменялась:
-тестовый бандл лежит в `harness/desktop/dist/mac/NanoLika.app` и запущен оттуда.
-`locales.ts` не трогали.
+433 теста плагина зелёные. Собранный 1.0.8 поставлен в `/Applications/NanoLika.app`
+вместо 1.0.5; прежний бандл лежит в
+`~/Library/Application Support/nanolika-desktop/backups/NanoLika-1.0.5.app`, подпись
+ad-hoc обновлена. `locales.ts` не трогали.
 
 ## 2026-10-30 · Избранные модели в выборе
 
