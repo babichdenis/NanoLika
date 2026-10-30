@@ -1,5 +1,5 @@
 import {allModels,chatModel,chatModels} from './catalog.js?v=20261026-models';
-import {openModelPicker} from './model-picker.js?v=20261030-manage';
+import {openModelPicker} from './model-picker.js?v=20261030-code';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
 export function installComposerControls({form,message,select,refresh,status,session,api,words,storage=localStorage}){
  let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),selected='',owner='',pending=null,busy=false,generation=0;
@@ -39,6 +39,9 @@ export function installComposerControls({form,message,select,refresh,status,sess
    allVisible=allModels(data);allChat=allVisible.filter(m=>m.forChat);
    let shelf=null;try{shelf=await api('/v1/me/models');}catch{}
    if(session()?.key!==identity.key||session()?.owner!==identity.owner||generation!==version)return '';
+   const shelfModels=Array.isArray(shelf?.models)?shelf.models:[];
+   const lockedIds=new Set(shelfModels.filter(m=>m.plan_locked).map(m=>m.id));
+   if(shelfModels.length){const known=new Set(allVisible.map(m=>m.id));const extra=allModels({data:shelfModels}).filter(m=>!known.has(m.id));for(const m of extra)m.locked=lockedIds.has(m.id);allVisible=allVisible.concat(extra);for(const m of allVisible)if(lockedIds.has(m.id))m.locked=true;allChat=allVisible.filter(m=>m.forChat);}
    const favourites=new Set(shelf?.shelf?.favourites||[]);try{const raw=localStorage.getItem('nl.web.favourites.'+identity.owner);if(raw!==null){for(const id of JSON.parse(raw)||[])favourites.add(id);}}catch{}const enabledChat=new Set((shelf?.shelf?.enabled||{}).chat||[]);
    const preferred=allChat.filter(m=>favourites.has(m.id)||enabledChat.has(m.id));favSet=favourites;enabledSet=enabledChat;
    all=preferred.length?preferred:allChat;

@@ -125,8 +125,9 @@ export function openModelPicker({
           pick.type = "button";
           pick.className = "mp-item" + (model.id === selected ? " on" : "");
           pick.textContent = model.name;
-          pick.disabled = !model.forChat;
-          if (!model.forChat) pick.title = "Только для картинок, видео или аудио";
+          pick.disabled = !model.forChat || Boolean(model.locked);
+          if (model.locked) pick.title = "Доступно на другом тарифе";
+          else if (!model.forChat) pick.title = "Только для картинок, видео или аудио";
           pick.onclick = () => {
             if (!model.forChat) return;
             selected = model.id;
