@@ -85,7 +85,7 @@ function keyStat(label,spent,limit){
  if(limit>0){const meter=h('div',undefined,'api-key-meter'),fill=h('i');fill.style.width=Math.min(100,Math.max(0,spent/limit*100))+'%';meter.append(fill);box.append(meter,h('small',`${T.apiLimitLeft}: ${rub(Math.max(0,limit-spent))}`,'api-key-stat-note'));}
  return box;
 }
-function renderApiKeys(keys,balance){
+function renderApiKeys(keys){
  const target=$('api-keys'),personal=keys.filter(k=>k.via==='user');
  if(!personal.length){empty(target,T.apiNoKeys);return;}
  target.replaceChildren(...personal.map(k=>{
@@ -113,7 +113,7 @@ function openKeyEditor(k){
  $('api-key-dialog').showModal();
  $('api-key-edit-label').focus();
 }
-async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[],result.balance||{});const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited:Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
+async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited:Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
 async function loadUsage(){await usageChart.load();}
 async function load(){
  if(!session?.key){location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));return;}$('refresh').disabled=true;$('status').textContent=T.loading;
