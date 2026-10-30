@@ -75,6 +75,10 @@ export function openModelPicker({
     manage.onclick = () => { finish(null); onManage?.(); };
     dialog.append(head, search, list, manage);
     document.body.append(dialog);
+    const tip = document.createElement("div");
+    tip.className = "mp-tip";
+    tip.hidden = true;
+    dialog.append(tip);
 
     const finish = (value = null) => {
       if (dialog.open) dialog.close();
@@ -82,6 +86,42 @@ export function openModelPicker({
       resolve(value);
     };
 
+    const contextText = (value) => {
+      const n = Number(value) || 0;
+      if (!n) return "—";
+      if (n >= 1000000) return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1000000) + "M";
+      if (n >= 1000) return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n / 1000) + "K";
+      return new Intl.NumberFormat("ru-RU").format(n);
+    };
+    const hideTip = () => { tip.hidden = true; };
+    const showTip = (model, row) => {
+      tip.replaceChildren();
+      const title = document.createElement("b");
+      title.textContent = model.name;
+      const add = (label, value) => {
+        const line = document.createElement("span");
+        const em = document.createElement("em");
+        em.textContent = label + ": ";
+        line.append(em, document.createTextNode(value));
+        tip.append(line);
+      };
+      tip.append(title);
+      add("Изготовитель", model.vendor || "—");
+      add("Контекст", contextText(model.context));
+      add("Тип", (CATEGORIES.find(([key]) => key === categoryOf(model)) || ["", "Другое"])[1]);
+      const price = model.price
+        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: Math.abs(model.price.value) >= 1 ? 2 : 4 }).format(model.price.value) + " ₽ / " + model.price.unit
+        : "—";
+      add("Цена", price);
+      const rect = row.getBoundingClientRect();
+      const dialogRect = dialog.getBoundingClientRect();
+      tip.hidden = false;
+      const width = 258;
+      let left = dialogRect.right + 12;
+      if (left + width > window.innerWidth - 8) left = dialogRect.left - width - 12;
+      tip.style.left = Math.max(8, left) + "px";
+      tip.style.top = Math.max(8, Math.min(rect.top, window.innerHeight - 170)) + "px";
+    };
     const render = () => {
       const query = search.value.trim().toLowerCase();
       list.replaceChildren();
@@ -138,6 +178,10 @@ export function openModelPicker({
             render();
           };
           row.append(star);
+          row.addEventListener("mouseenter", () => showTip(model, row));
+          row.addEventListener("mouseleave", hideTip);
+          pick.addEventListener("focus", () => showTip(model, row));
+          pick.addEventListener("blur", hideTip);
           list.append(row);
         }
       }

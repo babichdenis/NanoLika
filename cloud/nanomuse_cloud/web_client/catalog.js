@@ -21,6 +21,14 @@ export function chatModels(catalogue){
  * `for: ["chat"]`. They are listed here too — the picker decides what to show, and a model
  * of another kind says so in one line instead of vanishing.
  */
+function priceOf(facts, kind){
+ const rates=(facts.commerce&&facts.commerce.rates_rub)||{};
+ const one=(value,unit)=>Number(value)>0?{value:Number(value),unit}:null;
+ if(kind==='image')return one(rates.image,'картинка');
+ if(kind==='video')return one(rates.second,'секунда');
+ if(kind==='audio')return one(rates.speech,'1000 знаков')||one(rates.minute,'минута');
+ return one(rates.input,'1M токенов')||one(rates.output,'1M токенов');
+}
 export function allModels(catalogue){
  const seen=new Set();return (catalogue.data||[]).filter(row=>{
   const facts=row.nanomuse||row;
@@ -30,6 +38,9 @@ export function allModels(catalogue){
   const facts=row.nanomuse||row;
   const kind=(typeof facts.kind==='string'&&facts.kind)||(Array.isArray(facts.for)&&facts.for.includes('chat')?'chat':'chat');
   return {id:row.id,name:row.name||facts.name||row.id,kind,
+          vendor:facts.vendor||row.vendor||'',
+          context:Number(facts.context_length||row.context_length||0),
+          price:priceOf(facts,kind),
           forChat:Array.isArray(facts.for)?facts.for.includes('chat'):kind==='chat'};
  });
 }
