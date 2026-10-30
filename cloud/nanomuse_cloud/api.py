@@ -15,6 +15,11 @@
     GET  /v1/me/sessions                                        → live sign-ins (device, via, when; the current one marked)
     DELETE /v1/me/sessions/{prefix}                             → 204 (sign one device out)
     GET  /v1/me/events                                          → the account's own timeline (sign-ins, password changes…)
+    GET  /v1/me/key                                             → the current key: name, lifetime, limits, spend, balance
+    GET  /v1/me/keys                                            → personal API keys with spend per key
+    POST /v1/me/keys {device,label?,ttl_s?,daily_limit_rub?,monthly_limit_rub?} → {prefix,api_key}
+    PATCH /v1/me/keys/{prefix} {label?,ttl_s?,daily_limit_rub?,monthly_limit_rub?} → {key}
+    DELETE /v1/me/keys/{prefix}                                 → 204
     POST /v1/me/contribute {on}                                 → Data controls: "help improve NanoLika's AI models" — keep the text of my chat turns (new accounts start off and require an explicit choice)
     DELETE /v1/me/samples                                       → delete every turn kept from me
     GET  /v1/sync/state                                         → 0.19: {enabled, cursor, counts, limits, working[]} — conversation sync between the account's devices
