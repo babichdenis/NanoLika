@@ -815,6 +815,11 @@ def create_app(
         page and by the messengers' `модель` menu alike."""
         return cloud.catalogue(caller)
 
+    @app.post("/v1/me/models")
+    async def me_post_models(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        """Старые веб-клиенты шлют POST; принимаем наравне с PUT."""
+        return {"shelf": cloud.put_shelf(caller, await _json(request))}
+
     @app.put("/v1/me/models")
     async def me_put_models(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
         """0.28: tick models on the shelf, or pick the default of a kind. Kinds the body does
@@ -937,7 +942,7 @@ def create_app(
     async def me_revoke_key(prefix: str, caller: Caller = Depends(caller_dep)) -> Response:
         cloud.revoke_key(caller, prefix)
         await _drop_signed_out(caller.account_id)
-        return browser_marker(Response(status_code=204), settings, signed_in=False)
+        return Response(status_code=204)
 
     @app.post("/v1/auth/sign-out", status_code=204)
     async def sign_out(caller: Caller = Depends(caller_dep)) -> Response:
