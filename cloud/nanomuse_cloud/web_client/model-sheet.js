@@ -170,7 +170,7 @@ export function installModelSheet({onPick,api,session,onFavourites}){
   if(!rows.length){const empty=document.createElement('p');empty.textContent='Ничего не нашлось. Измените поиск или фильтры.';box.append(empty);}
   const table=document.createElement('table');table.className='compact-table model-picker-table';
   const head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
-  for(const label of ['Модель','Тип','Контекст','Вход, ₽/М. ток','Ответ, ₽/М. ток','Избранное']){const th=document.createElement('th');th.scope='col';th.textContent=label;hr.append(th);}
+  for(const label of ['Модель','Тип','Контекст / ед.','Вход, ₽/М. ток','Ответ, ₽/М. ток','Избранное']){const th=document.createElement('th');th.scope='col';th.textContent=label;hr.append(th);}
   head.append(hr);table.append(head,body);box.append(table);
   const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const rub=n=>n===null||n===undefined?'—':'от '+new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n);
@@ -189,8 +189,9 @@ export function installModelSheet({onPick,api,session,onFavourites}){
    const star=h('button',state.favourites.has(card.id)?'★':'☆','model-card-star');star.type='button';star.setAttribute('aria-label','В избранное: '+card.name);star.setAttribute('aria-pressed',String(state.favourites.has(card.id)));star.onclick=()=>{state.favourites.has(card.id)?state.favourites.delete(card.id):state.favourites.add(card.id);favouritesDirty=true;persist();paintKinds();paintCards();};
    const favourite=h('td');favourite.append(star);
    const type=card.kind==='audio'?({speech:'Озвучка',transcribe:'Распознавание',music:'Музыка'}[card.audioKind]||'Аудио'):(KIND_LABELS[card.kind]?.label||card.kind);
-   const typeCell=h('td',type);const unitNote=card.kind==='chat'||card.kind==='image'?'':({second:'за секунду',speech:'за 1000 знаков',minute:'за минуту'}[unit]||'');if(unitNote)typeCell.append(h('small',unitNote,'table-subtitle'));
-   tr.append(name,typeCell,h('td',card.kind==='image'?'шт.':ctx(card.context),'numeric'),price,output,favourite);body.append(tr,detailRow);
+   const typeCell=h('td',type);
+   const context=card.kind==='image'?'шт.':card.kind==='video'?'сек.':card.kind==='audio'?(card.audioKind==='speech'?'1000 зн.':'мин.'):ctx(card.context);
+   tr.append(name,typeCell,h('td',context,'numeric'),price,output,favourite);body.append(tr,detailRow);
   }
  }
  function paint(){paintKinds();paintVendors();paintCards();}
