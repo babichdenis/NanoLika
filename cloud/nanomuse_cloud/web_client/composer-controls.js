@@ -1,5 +1,5 @@
 import {allModels,chatModel,chatModels} from './catalog.js?v=20261026-models';
-import {openModelPicker} from './model-picker.js?v=20261030-code';
+import {openModelPicker} from './model-picker.js?v=20261030-css2';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
 export function installComposerControls({form,message,select,refresh,status,session,api,words,storage=localStorage}){
  let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),selected='',owner='',pending=null,busy=false,generation=0;
