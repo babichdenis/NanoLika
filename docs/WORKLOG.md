@@ -94,6 +94,12 @@ Polza: voice (gemini-3.8-flash-lite-tts), voice-hd (MiniMax Speech HD), ear/ear-
 ear-ru. Списки TTS/STT из ProxyAPI (35+35) в `media.json` вообще не заведены — ProxyAPI
 не подключён как медиа-поставщик.
 
+Проверили все медиамодели: из 113 без предложений остались 4. Причины: Suno Sounds и
+Suno Music Generate — Bothub отдаёт Suno V6 с пустым прайсом; Lyria 3 Clip — модели нет
+ни у кого; GPT Image 2.5 — поставщики публикуют только входные токены, цены за картинку
+нет. Ещё две единицы не попадали в медиа-набор: «видео» (clip-omni, Polza 48 ₽/видео) и
+«1M токенов (картинка)» (gpt-image-1, RouterAI 4 195,16 ₽/1M токенов картинки) — добавили.
+
 Заодно починили сопоставление медиа-цен: `_media_key` теперь приводит `-_.` и пробелы
 к дефису, поэтому `eleven_flash_v2_5` = `eleven-flash-v2.5`; цены Bothub появились у
 ElevenLabs, Gemini TTS, Voicekit.
