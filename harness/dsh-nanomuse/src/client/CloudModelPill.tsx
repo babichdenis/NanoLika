@@ -25,11 +25,11 @@ export function makeCloudModelPill(t: Translate) {
     const slot = view.slots.chat
     if (slot.provider !== 'nanomuse' || !slot.model) return null
     const name = slot.options.find((option) => option.id === slot.model)?.name ?? slot.model
-    const open = async (): Promise<void> => {
+    const open = async (anchor: { x: number; y: number; width: number; height: number }): Promise<void> => {
       setBusy(true)
       try {
         const session = await call<PickerSession>('model-picker-session', {})
-        const answer = await picker.open({ url: session.url, key: session.key, selected: slot.model, kind: 'chat', title: t('mlTitle') })
+        const answer = await picker.open({ url: session.url, key: session.key, selected: slot.model, kind: 'chat', title: t('mlTitle'), anchor })
         if (answer?.type === 'pick' && answer.id && answer.id !== slot.model) {
           await call('chat-model', { provider: 'nanomuse', model: answer.id })
           reload()
@@ -51,7 +51,7 @@ export function makeCloudModelPill(t: Translate) {
         disabled: busy,
         title: `${t('mlCloudModels')}: ${name}`,
         'aria-label': `${t('mlCloudModels')}: ${name}`,
-        onClick: () => void open(),
+        onClick: (event) => { const r = event.currentTarget.getBoundingClientRect(); void open({ x: r.x, y: r.y, width: r.width, height: r.height }); },
       },
       `${t('mlTitle')} · ${name}`,
     )

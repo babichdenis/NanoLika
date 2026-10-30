@@ -1180,7 +1180,7 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
  * the fragment is short-lived (the host mints it per open), and the preload is one narrow
  * `send` — the page has no Node and no access to the shell beyond the answer.
  */
-function openModelPickerWindow(options: { url: string; key: string; selected?: string; kind?: string; title?: string }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> {
+function openModelPickerWindow(options: { url: string; key: string; selected?: string; kind?: string; title?: string; anchor?: { x: number; y: number; width: number; height: number } }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> {
   let page: URL;
   try {
     page = new URL(String(options?.url ?? ""));
@@ -1200,8 +1200,8 @@ function openModelPickerWindow(options: { url: string; key: string; selected?: s
     modelPickerAnswer = resolve;
     const parent = alive(mainWindow) ? mainWindow : undefined;
     const win = new BrowserWindow({
-      width: 880,
-      height: 760,
+      width: 860,
+      height: 460,
       show: false,
       modal: Boolean(parent),
       ...(parent ? { parent } : {}),
@@ -1222,7 +1222,29 @@ function openModelPickerWindow(options: { url: string; key: string; selected?: s
       },
     });
     modelPickerWindow = win;
-    win.once("ready-to-show", () => win.show());
+    // The card is left-aligned in the transparent window; the right side is where the hover
+    // card lives. Put the whole window above the composer's pill, not in the middle of the screen.
+    const popoverWidth = 860;
+    const popoverHeight = 460;
+    const place = (): void => {
+      if (!parent || !options.anchor || win.isDestroyed()) return;
+      const bounds = parent.getContentBounds();
+      const zoom = parent.webContents.getZoomFactor();
+      const anchorX = bounds.x + options.anchor.x * zoom;
+      const anchorY = bounds.y + options.anchor.y * zoom;
+      const anchorH = options.anchor.height * zoom;
+      let x = Math.round(anchorX - 16);
+      if (x + popoverWidth > bounds.x + bounds.width - 8) x = Math.round(bounds.x + bounds.width - popoverWidth - 8);
+      x = Math.max(bounds.x + 8, x);
+      let y = Math.round(anchorY - popoverHeight - 8);
+      if (y < bounds.y + 8) y = Math.round(anchorY + anchorH + 8);
+      win.setPosition(x, y);
+    };
+    place();
+    const follow = (): void => place();
+    parent?.on("move", follow);
+    parent?.on("resize", follow);
+    win.once("ready-to-show", () => { place(); win.show(); });
     // A link in the picker (the plan pill, an account page) belongs in the person's browser.
     win.webContents.setWindowOpenHandler(({ url }) => {
       if (EXTERNAL_URL.test(url)) void shell.openExternal(url);
@@ -1234,6 +1256,8 @@ function openModelPickerWindow(options: { url: string; key: string; selected?: s
       if (EXTERNAL_URL.test(target)) void shell.openExternal(target);
     });
     win.on("closed", () => {
+      parent?.removeListener("move", follow);
+      parent?.removeListener("resize", follow);
       if (modelPickerWindow === win) modelPickerWindow = null;
       const answer = modelPickerAnswer;
       modelPickerAnswer = null;
@@ -1314,7 +1338,7 @@ function registerBridge(): void {
   ipcMain.handle("nanomuse:permissions:settings", (_e, kind: PermissionKind | "files") => {
     if (process.platform === "darwin" && typeof kind === "string" && kind in PERMISSION_PANES) void shell.openExternal(PERMISSION_PANES[kind]);
   });
-  ipcMain.handle("nanomuse:model-picker:open", (_e, options: { url: string; key: string; selected?: string; kind?: string; title?: string }) => openModelPickerWindow(options));
+  ipcMain.handle("nanomuse:model-picker:open", (_e, options: { url: string; key: string; selected?: string; kind?: string; title?: string; anchor?: { x: number; y: number; width: number; height: number } }) => openModelPickerWindow(options));
   ipcMain.on("nanomuse:model-picker:message", (event, payload: { type?: string; id?: string }) => {
     if (!modelPickerWindow || event.sender !== modelPickerWindow.webContents) return;
     if (payload?.type === "pick" && typeof payload.id === "string" && payload.id) finishModelPicker({ type: "pick", id: payload.id });

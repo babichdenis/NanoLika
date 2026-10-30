@@ -78,7 +78,7 @@ const bridge = {
    * markup and styles live on the server, so they change without a new app build.
    */
   modelPicker: {
-    open: (options: { url: string; key: string; selected?: string; kind?: string; title?: string }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> =>
+    open: (options: { url: string; key: string; selected?: string; kind?: string; title?: string; anchor?: { x: number; y: number; width: number; height: number } }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> =>
       ipcRenderer.invoke("nanomuse:model-picker:open", options),
   },
   /**

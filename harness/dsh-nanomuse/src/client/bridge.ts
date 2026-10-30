@@ -63,6 +63,8 @@ export interface ModelPickerOpen {
   /** One kind or a comma-separated list (`chat`, `image`, `video`); all kinds when absent. */
   kind?: string
   title?: string
+  /** The pill in the page's CSS pixels; the shell anchors the popover to it. */
+  anchor?: { x: number; y: number; width: number; height: number }
 }
 
 export type ModelPickerAnswer = { type: 'pick'; id: string } | { type: 'manage' } | null
