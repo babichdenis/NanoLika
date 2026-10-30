@@ -10,7 +10,9 @@ export function installComposerControls({form,message,select,refresh,status,sess
 .mp-wrap{position:relative;display:flex;align-items:center;min-width:0}
 .mp-trigger{appearance:none;border:1px solid var(--line,#d8d1c1);background:var(--surface,#fffdf8);color:var(--ink,#38372f);border-radius:8px;padding:7px 30px 7px 10px;font:inherit;font-size:13px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-align:left;position:relative}
 .mp-trigger::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.6}
-.mp-panel{position:absolute;z-index:80;left:0;bottom:calc(100% + 8px);width:min(360px,calc(100vw - 32px));max-height:min(420px,60vh);overflow:auto;background:var(--surface,#fffdf8);border:1px solid var(--line,#d8d1c1);border-radius:12px;box-shadow:0 18px 40px rgba(40,35,20,.16);padding:8px}
+.mp-panel{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(560px,100vw);max-height:min(72vh,560px);overflow:auto;background:var(--surface,#fffdf8);color:var(--ink,#38372f);border:0;border-top:1px solid var(--line,#d8d1c1);border-radius:16px 16px 0 0;box-shadow:0 -18px 40px rgba(40,35,20,.18);padding:12px 12px calc(12px + env(safe-area-inset-bottom))}
+.mp-panel::backdrop{background:rgba(40,35,20,.38)}
+.mp-panel[open]{display:block}
 .mp-panel[hidden]{display:none}
 .mp-search{width:100%;box-sizing:border-box;margin:0 0 6px;padding:8px 10px;border:1px solid var(--line,#d8d1c1);border-radius:8px;background:var(--paper,#f7f1e6);color:var(--ink,#38372f);font:inherit;font-size:13px}
 .mp-cat{margin:10px 10px 4px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted,#66675b)}
@@ -27,10 +29,10 @@ export function installComposerControls({form,message,select,refresh,status,sess
  const wrap=document.createElement('div');wrap.className='mp-wrap';
  select.parentNode.insertBefore(wrap,select);wrap.append(select);select.hidden=true;
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-label','Выбрать модель');
- const panel=document.createElement('div');panel.className='mp-panel';panel.hidden=true;
+ const panel=document.createElement('dialog');panel.className='mp-panel';
  const search=document.createElement('input');search.type='search';search.className='mp-search';search.placeholder='Поиск модели';search.setAttribute('aria-label','Поиск модели');
  const list=document.createElement('div');list.className='mp-list';
- panel.append(search,list);wrap.append(trigger,panel);
+ panel.append(search,list);document.body.append(panel);wrap.append(trigger);
  const CATS=[['chat','Текст'],['image','Картинки'],['video','Видео'],['audio','Аудио']];
  const catOf=m=>m.kind==='chat'?'chat':m.kind==='image'?'image':m.kind==='video'?'video':m.kind==='audio'?'audio':'other';
  const pickerModels=()=>{const chosen=allVisible.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));return chosen.length?chosen:allChat;};
@@ -47,12 +49,12 @@ export function installComposerControls({form,message,select,refresh,status,sess
     star.onclick=async(event)=>{event.stopPropagation();if(favSet.has(m.id))favSet.delete(m.id);else favSet.add(m.id);const ownerId=session()?.owner||'';try{localStorage.setItem('nl.web.favourites.'+ownerId,JSON.stringify([...favSet]));}catch{}renderPicker();const pref=allChat.filter(x=>favSet.has(x.id)||enabledSet.has(x.id));all=pref.length?pref:allChat;applyFilters();try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});}catch{}};
     row.append(b,star);list.append(row);
    }}}
- function openPicker(){search.value='';renderPicker();panel.hidden=false;trigger.setAttribute('aria-expanded','true');search.focus();}
- function closePicker(){panel.hidden=true;trigger.setAttribute('aria-expanded','false');}
- trigger.onclick=()=>panel.hidden?openPicker():closePicker();
+ function openPicker(){search.value='';renderPicker();trigger.setAttribute('aria-expanded','true');panel.showModal();search.focus();}
+ function closePicker(){trigger.setAttribute('aria-expanded','false');if(panel.open)panel.close();}
+ trigger.onclick=()=>panel.open?closePicker():openPicker();
  search.oninput=renderPicker;
- search.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closePicker();trigger.focus();}};
- document.addEventListener('click',e=>{if(!wrap.contains(e.target))closePicker();});
+ panel.addEventListener('click',e=>{if(e.target===panel)closePicker();});
+ panel.addEventListener('cancel',e=>{e.preventDefault();closePicker();});
 
  /** Список под фильтры: по типу (chat/image/video/audio) и по куску названия. */
  const applyFilters=()=>{
