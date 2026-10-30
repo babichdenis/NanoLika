@@ -1,5 +1,5 @@
-import {allModels,chatModel,chatModels} from './catalog.js?v=20261030-locked';
-import {openModelPicker} from './model-picker.js?v=20261030-embed2';
+import {allModels,chatModel,chatModels} from './catalog.js?v=20261030-mtok';
+import {openModelPicker} from './model-picker.js?v=20261030-mtok';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
 export function installComposerControls({form,message,select,refresh,status,session,api,words,storage=localStorage}){
  let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),selected='',owner='',pending=null,busy=false,generation=0;
@@ -12,7 +12,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-label','Выбрать модель');
  wrap.append(trigger);
  function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?'Модели · '+m.name:'Модель';}
- function chosenModels(){const chosen=allVisible.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));return chosen.length?chosen:allChat;}
+ function chosenModels(){return allChat.filter(m=>favSet.has(m.id));}
  async function saveFavourites(){const ownerId=session()?.owner||'';try{localStorage.setItem('nl.web.favourites.'+ownerId,JSON.stringify([...favSet]));}catch{}try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});}catch{}}
  trigger.onclick=()=>openModelPicker({models:chosenModels(),favourites:favSet,selected,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
  const applyFilters=()=>{

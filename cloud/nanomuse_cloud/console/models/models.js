@@ -1,4 +1,5 @@
-import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
+import {costEstimate} from '/web/cost-estimate.js?v=20261030-round';
+import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard-signin';
 /* nanoLika web console — the models page.
 
    A chooser, not a table: one search field, one row of kinds, and every model of the relay
@@ -256,7 +257,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
     const commerce=model.commerce||{},rates=commerce.effective_rub||{};
     const labels={input:T.perMillionIn,output:T.perMillionOut,image:T.perPicture,second:T.perSecond,speech:T.perSpeech,minute:T.perMinute};
     const fields=model.kind==='chat'?['input','output']:model.kind==='image'?['image']:model.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
-    return {lines:fields.filter(k=>rates[k]!==null&&rates[k]!==undefined&&Number.isFinite(Number(rates[k]))&&Number(rates[k])>=0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:4}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
+    return {lines:fields.filter(k=>rates[k]!==null&&rates[k]!==undefined&&Number.isFinite(Number(rates[k]))&&Number(rates[k])>=0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:0}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
   }
 
   function row(model, spec = { kind: model.kind }) {
@@ -291,6 +292,8 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
     if (model.default_on === false && usable) title.append(h('em', T.manual, 'tag'));
     if (!usable && !model.plan_locked) title.append(h('em', T.soon, 'tag tag-wait'));
     names.append(title);
+    const marks={OpenAI:'openai',Anthropic:'anthropic',Google:'google',DeepSeek:'deepseek',Qwen:'qwen',Mistral:'mistral',Meta:'meta',xAI:'xai',Moonshot:'moonshot',MiniMax:'minimax',NVIDIA:'nvidia',Cohere:'cohere'};
+    const mark=marks[vendorName(model.vendor)];if(mark){const img=h('img',undefined,'maker-model-icon');img.src='https://nanolika.ru/assets/model-makers/'+mark+'.svg';img.alt='';img.width=23;img.height=23;names.prepend(img);}
 
     const prices = h('div', undefined, 'mm-prices');
     const block = priceBlock(model);
@@ -318,7 +321,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
 
     const star=h('button',(loaded.shelf?.favourites||[]).includes(model.id)?'★':'☆','chip');star.type='button';star.setAttribute('aria-label','В избранное: '+model.name);star.setAttribute('aria-pressed',String((loaded.shelf?.favourites||[]).includes(model.id)));star.onclick=()=>{const old=loaded.shelf?.favourites||[],next=old.includes(model.id)?old.filter(id=>id!==model.id):[...old,model.id];loaded.shelf.favourites=next;draw();favouriteWrites=favouriteWrites.catch(()=>{}).then(async()=>{const response=await fetch('/v1/me/models',{method:'PUT',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({enabled:{},favourites:next})});if(!response.ok)throw new Error('favourite');}).catch(()=>{el('status').textContent='Избранное не сохранилось. Обновите страницу.';});};
     const td=(...nodes)=>{const n=h('td');n.append(...nodes);return n;};
-    const priceCell=(item,note=false)=>{const n=h('td',undefined,'numeric');n.append(h('strong',item?item[1]:'—'));if(item)n.append(h('small',item[0],'table-subtitle'));if(note&&block.note)n.append(h('small',block.note,'table-subtitle'));return n;};
+    const priceCell=(item,note=false)=>{const n=h('td',undefined,'numeric');n.append(h('strong',item?item[1]:'—'));if(note&&block.note)n.append(h('small',block.note,'table-subtitle'));return n;};
     const audioKind=(model.audio||{}).kind;
     const mods=model.in||[], hasText=mods.includes('text'), hasImage=mods.includes('image');
     const capability=spec.kind==='image'
@@ -339,6 +342,8 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
       pill.onclick=(event)=>{event.preventDefault();openPlanDialog();};
       plan.append(pill);
     }
+    const estimate=h('button',lang==='ru'?'Оценить расход':lang==='zh'?'估算费用':'Estimate cost','model-estimate-toggle');estimate.type='button';estimate.setAttribute('aria-expanded','false');names.append(estimate);
+    let detail=null;estimate.onclick=()=>{if(!detail){detail=h('tr',undefined,'model-estimate-row');const cell=h('td');cell.colSpan=7;cell.append(costEstimate(model,model.commerce?.effective_rub,lang));detail.append(cell);line.after(detail);}else detail.hidden=!detail.hidden;estimate.setAttribute('aria-expanded',String(!detail.hidden));};
     line.append(td(names),...priceCells,td(enabled),td(...(usable?[pick]:[])),td(star),plan);
     return line;
   }
@@ -391,8 +396,16 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
       });
       const shown = shownCount[spec.key] || PAGE;
       const wrap=h('div',undefined,'table-scroll');wrap.tabIndex=0;wrap.setAttribute('role','region');wrap.setAttribute('aria-label',title);const table=h('table',undefined,'compact-table model-settings-table'),thead=h('thead'),heading=h('tr'),tbody=h('tbody');
-      const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное','Тариф'],en:['Model','Price','Output','Enabled','Default','Favourite','Plan'],zh:['模型','价格','输出','启用','默认','收藏','套餐']}[document.documentElement.lang]||['Model','Price','Output','Enabled','Default','Favourite','Plan'];
-      if (spec.kind !== 'chat') labels[2] = T.capability;
+      const lang=document.documentElement.lang;
+      const labels={ru:['Модель','Цена','Ответ','Включена','Основная','Избранное','Тариф'],en:['Model','Price','Output','Enabled','Default','Favourite','Plan'],zh:['模型','价格','输出','启用','默认','收藏','套餐']}[lang]||['Model','Price','Output','Enabled','Default','Favourite','Plan'];
+      if (spec.kind === 'chat') {
+        labels[1]=lang==='ru'?'Вход, ₽/М. ток':lang==='zh'?'输入，₽/百万令牌':'Input, ₽/M tok';
+        labels[2]=lang==='ru'?'Ответ, ₽/М. ток':lang==='zh'?'输出，₽/百万令牌':'Output, ₽/M tok';
+      } else {
+        const unit=spec.kind==='image'?T.perPicture:spec.kind==='video'?T.perSecond:spec.sub==='speech'?T.perSpeech:spec.sub==='music'?T.perTrack:T.perMinute;
+        labels[1]=(lang==='ru'?'Цена, ₽ / ':lang==='zh'?'价格，₽ / ':'Price, ₽ / ')+unit;
+        labels[2]=T.capability;
+      }
       for(const label of labels){const th=h('th',label);th.scope='col';heading.append(th);}thead.append(heading);table.append(thead,tbody);wrap.append(table);block.append(wrap);
       const page = sorted.slice(0, shown);
       // Название провайдера стоит в строке модели: отдельные группы только удлиняли таблицу.
@@ -499,7 +512,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
   async function load() {
     const key = token();
     if (!key) {
-      el('status').textContent = T.login;
+      location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));
       return;
     }
     el('status').textContent = T.loading;
@@ -509,7 +522,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
         cache: 'no-store',
       });
       if (response.status === 401) {
-        el('status').textContent = T.expired;
+        location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));
         return;
       }
       if (!response.ok) throw new Error('request');
@@ -552,7 +565,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261029-single';
     if (busy || !draft) return;
     const key = token();
     if (!key) {
-      el('status').textContent = T.login;
+      location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));
       return;
     }
     busy = true;

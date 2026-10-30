@@ -1,6 +1,6 @@
 /* Управление моделями: та же панель, что в вебе (`model-sheet.js`), в окне Лики.
    Страница отдаёт выбор и закрытие хосту через postMessage. */
-import { installModelSheet } from '/web/model-sheet.js?v=20261030-manage';
+import { installModelSheet } from '/web/model-sheet.js?v=20261030-mtok';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));
 const key = params.get('key') || '';

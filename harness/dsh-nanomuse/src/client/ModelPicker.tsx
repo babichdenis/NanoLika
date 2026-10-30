@@ -84,7 +84,7 @@ function visiblePrice(model: CatalogueModel | undefined, t: Translate): string |
   if (!model) return undefined
   const rates = model.commerce?.effective_rub ?? {}
   const fmt = (value: unknown) => Number(value) > 0
-    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(Number(value))
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Number(value))
     : undefined
   if (model.free) return t('mpFreeModel')
   if (model.kind === 'chat') {

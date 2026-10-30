@@ -27,7 +27,7 @@ function priceOf(facts, kind){
  if(kind==='image')return one(rates.image,'картинка');
  if(kind==='video')return one(rates.second,'секунда');
  if(kind==='audio')return one(rates.speech,'1000 знаков')||one(rates.minute,'минута');
- return one(rates.input,'1M токенов')||one(rates.output,'1M токенов');
+ return one(rates.input,'М. ток')||one(rates.output,'М. ток');
 }
 export function allModels(catalogue){
  const seen=new Set();return (catalogue.data||[]).filter(row=>{

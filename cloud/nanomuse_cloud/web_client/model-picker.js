@@ -120,7 +120,7 @@ export function openModelPicker({
       add("Контекст", contextText(model.context));
       add("Тип", (CATEGORIES.find(([key]) => key === categoryOf(model)) || ["", "Другое"])[1]);
       const price = model.price
-        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: Math.abs(model.price.value) >= 1 ? 2 : 4 }).format(model.price.value) + " ₽ / " + model.price.unit
+        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(model.price.value) + " ₽ / " + model.price.unit
         : "—";
       add("Цена", price);
       const rect = row.getBoundingClientRect();
@@ -199,6 +199,12 @@ export function openModelPicker({
           pick.addEventListener("blur", hideTip);
           list.append(row);
         }
+      }
+      if (!list.children.length) {
+        const empty = document.createElement("p");
+        empty.className = "mp-empty";
+        empty.textContent = models.length ? "Ничего не нашлось" : "Нет избранных моделей";
+        list.append(empty);
       }
     };
 

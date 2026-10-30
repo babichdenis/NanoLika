@@ -33,7 +33,7 @@ export function ModelEstimate({ model, t }: { model: CatalogueModel; t: Translat
     setResult(t('mpEstimateLoading'))
     const timer = setTimeout(() => {
       void call<{ total_rub: number }>('model-quote', { model: model.id, ...params })
-        .then(data => { if (alive) setResult(new Intl.NumberFormat(undefined, { style: 'currency', currency: 'RUB', maximumFractionDigits: 6 }).format(data.total_rub)) })
+        .then(data => { if (alive) setResult(new Intl.NumberFormat(undefined, { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(data.total_rub)) })
         .catch(() => { if (alive) setResult(t('mpEstimateError')) })
     }, 250)
     return () => { alive = false; clearTimeout(timer) }
