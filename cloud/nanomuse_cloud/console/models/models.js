@@ -13,6 +13,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
     ru: {
       title: 'Модели', eyebrow: 'nanoLika · Ваш кабинет',
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа и возможности видны у каждой модели.',
+      balance: 'Баланс', noLimit: 'без ограничения',
       search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные', favouritesShort: '★ Избранное',
       sort: 'Сортировка', sortRecommended: 'По рекомендации', sortPrice: 'Сначала дешевле', sortContext: 'Сначала большой контекст', sortName: 'По названию',
       availability: 'Доступ', available: 'Доступные мне', higherPlan: 'На старшем тарифе', publicCatalog: 'Открытый каталог',
@@ -45,6 +46,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
     en: {
       title: 'Models', eyebrow: 'nanoLika · Your account',
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices and model capabilities are shown on every row.',
+      balance: 'Balance', noLimit: 'no limit',
       search: 'Search models', all: 'All models', mine: 'My picks', favouritesShort: '★ Favourites',
       sort: 'Sort', sortRecommended: 'Recommended', sortPrice: 'Lowest price', sortContext: 'Largest context', sortName: 'Name',
       availability: 'Access', available: 'Available to me', higherPlan: 'Higher plan', publicCatalog: 'Public catalogue',
@@ -78,6 +80,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       availability: '可用范围', available: '当前可用', higherPlan: '更高套餐', publicCatalog: '公开目录',
       title: '模型', eyebrow: 'nanoLika · 账户',
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。每行显示套餐折扣价和模型能力。',
+      balance: '余额', noLimit: '无限制',
       search: '快速搜索模型', all: '全部模型', mine: '已选', favouritesShort: '★ 收藏',
       sort: '排序', sortRecommended: '推荐', sortPrice: '价格从低到高', sortContext: '上下文从大到小', sortName: '名称',
       allVendors: '全部制造商', otherVendors: '其他', vendorFilter: '制造商',
@@ -527,6 +530,13 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       }
       if (!response.ok) throw new Error('request');
       loaded = await response.json();
+      const cash = loaded.key && loaded.key.balance;
+      if (cash) {
+        const left = cash.unlimited
+          ? T.noLimit
+          : new Intl.NumberFormat(document.documentElement.lang, { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 }).format(Number(cash.left_rub) || 0);
+        el('intro').textContent = T.intro + ' · ' + T.balance + ': ' + left;
+      }
       if(!el('context-filter')){const label=h('label','Контекст ');const select=h('select');select.id='context-filter';select.setAttribute('aria-label','Контекст');for(const n of [0,128000,200000,1000000]){const option=h('option',n?(n/1000)+'K+':'Любой');option.value=n;select.append(option);}select.onchange=()=>{contextMin=Number(select.value);draw();};label.append(select);document.querySelector('.catalog-toolbar').append(label);}
       if(!el('vendor-filter')){
         const label=h('label',T.vendorFilter+' ');
