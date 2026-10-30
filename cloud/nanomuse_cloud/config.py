@@ -533,8 +533,8 @@ DEFAULT_SIGNUP_DOMAIN_BLOCK: tuple[str, ...] = (
 # and includes connection between supported devices on the account.
 DEFAULT_PLANS = (
     '[{"id": "lika", "name": "Лика", "price_rub": 590, "discount_pct": 10, "connect": true},'
-    ' {"id": "lika-plus", "name": "Лика+", "price_rub": 1490, "discount_pct": 20, "connect": true},'
-    ' {"id": "team", "name": "Лика Команда", "price_rub": 3900, "discount_pct": 30, "connect": true}]'
+    ' {"id": "lika-plus", "name": "Лика+", "price_rub": 1490, "discount_pct": 15, "connect": true},'
+    ' {"id": "team", "name": "Лика Команда", "price_rub": 3900, "discount_pct": 20, "connect": true}]'
 )
 
 
