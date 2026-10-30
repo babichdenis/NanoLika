@@ -79,9 +79,10 @@ function keyState(k){
  if(k.expires_at&&k.expires_at*1000<=Date.now())return[T.apiExpired,'is-expired'];
  return[T.apiActive,'is-active'];
 }
-function keyStat(label,spent,limit){
+function keyStat(label,spent,limit,showLimit){
  const box=h('div',undefined,'api-key-stat');
- box.append(h('span',label,'api-key-stat-label'),h('strong',limit>0?`${rub(spent)} / ${rub(limit)}`:rub(spent),'api-key-stat-value'));
+ const value=limit>0?`${rub(spent)} / ${rub(limit)}`:showLimit?`${rub(spent)} · ${T.apiNoLimit}`:rub(spent);
+ box.append(h('span',label,'api-key-stat-label'),h('strong',value,'api-key-stat-value'));
  if(limit>0){const meter=h('div',undefined,'api-key-meter'),fill=h('i');fill.style.width=Math.min(100,Math.max(0,spent/limit*100))+'%';meter.append(fill);box.append(meter,h('small',`${T.apiLimitLeft}: ${rub(Math.max(0,limit-spent))}`,'api-key-stat-note'));}
  return box;
 }
@@ -92,7 +93,7 @@ function apiKeyCard(k){
   head.append(names,h('span',state,'api-key-badge '+stateClass));
   const meta=[T.apiCreatedAt+': '+date(k.created_at),k.last_used_at?T.apiLastUsed+': '+date(k.last_used_at):T.apiNever,k.expires_at?`${T.apiExpires}: ${date(k.expires_at)}`:T.apiNoExpiry].join(' · ');
   const usage=h('div',undefined,'api-key-usage');
-  usage.append(keyStat(T.apiToday,Number(k.spent_today_rub)||0,Number(k.daily_limit_rub)||0),keyStat(T.apiMonth,Number(k.spent_30d_rub)||0,Number(k.monthly_limit_rub)||0),keyStat(T.apiSpend,Number(k.total_sale_rub)||0,0));
+  usage.append(keyStat(T.apiToday,Number(k.spent_today_rub)||0,Number(k.daily_limit_rub)||0,true),keyStat(T.apiMonth,Number(k.spent_30d_rub)||0,Number(k.monthly_limit_rub)||0,true),keyStat(T.apiSpend,Number(k.total_sale_rub)||0,0,false));
   card.append(head,h('p',meta,'api-key-meta'),usage);
   if(!k.revoked){const actions=h('div',undefined,'api-key-actions'),edit=h('button',T.apiEdit,'quiet'),revoke=h('button',T.apiRevoke,'quiet danger-text');edit.type='button';revoke.type='button';edit.onclick=()=>openKeyEditor(k);revoke.onclick=async()=>{if(!confirm(T.apiRevokeConfirm))return;revoke.disabled=true;try{await api('/v1/me/keys/'+encodeURIComponent(k.prefix),{method:'DELETE'});await loadApiKeys();}catch(_){$('api-key-status').textContent=T.apiError;revoke.disabled=false;}};actions.append(edit,revoke);card.append(actions);}
   return card;
