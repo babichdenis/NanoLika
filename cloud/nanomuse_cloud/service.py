@@ -3001,11 +3001,19 @@ class Cloud:
 
     def chat_sale_reserve_uy(self, model: ModelSpec, caller: Caller) -> int:
         """The same typical turn at what this account would actually pay: key limits are
-        set in customer rubles, not in the provider's invoice."""
+        set in customer rubles, not in the provider's invoice. The reserve is clamped to
+        the model's context and output ceiling so a tiny model cannot make the check fail."""
+        prompt = CHAT_RESERVE_PROMPT_TOKENS
+        completion = CHAT_RESERVE_COMPLETION_TOKENS
+        if model.max_output:
+            completion = min(completion, model.max_output)
+        if model.context_length:
+            completion = min(completion, max(1, model.context_length - 1))
+            prompt = min(prompt, max(0, model.context_length - completion))
         return model_pricing.amount(
             self,
             model,
-            {"input_tokens": CHAT_RESERVE_PROMPT_TOKENS, "output_tokens": CHAT_RESERVE_COMPLETION_TOKENS},
+            {"input_tokens": prompt, "output_tokens": completion},
             caller,
         )["sale_uy"]
 
