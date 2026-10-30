@@ -613,7 +613,7 @@ _CACHE: dict[str, Any] = {"at": 0.0, "full": None, "compact": None}
 _CACHE_TTL = 300.0
 
 _MODEL_FIELDS = ("id", "name", "kind", "listed", "default_on", "recommended", "context", "max_output", "cost", "sell", "ratio", "priced_as", "upstream")
-_OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason")
+_OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason", "unit", "price_rub")
 
 
 def _compact(payload: dict) -> dict:
@@ -660,6 +660,40 @@ def _bulk_rates(item: dict, multiplier: float) -> dict:
             continue
         rates[key] = round(number * multiplier, 6)
     return rates
+
+
+# Медиа продаётся не за токены, а за штуку/секунду/1000 знаков/минуту:
+# эти цены лежат в снимке прайсов поставщиков, а не в маршрутизаторе.
+_MEDIA_UNITS = {"изображение", "секунда", "1000 символов", "минута", "1M символов", "запрос"}
+
+
+def _media_offers(prices: dict) -> dict[str, list[dict]]:
+    index: dict[str, list[dict]] = {}
+    for row in prices.get("models") or []:
+        unit = str(row.get("unit") or "")
+        key = str(row.get("key") or "")
+        if unit not in _MEDIA_UNITS or not key:
+            continue
+        for offer in row.get("offers") or []:
+            provider = str(offer.get("provider") or "")
+            try:
+                price = float(offer.get("rub"))
+            except (TypeError, ValueError):
+                continue
+            if not provider or price <= 0:
+                continue
+            index.setdefault(key, []).append(
+                {
+                    "provider": provider,
+                    "model": str(offer.get("model") or ""),
+                    "unit": unit,
+                    "price_rub": round(price, 4),
+                    "eligible": False,
+                    "selected": False,
+                    "exclusion_reason": "нет адаптера маршрутизации: цена только для сверки",
+                }
+            )
+    return index
 
 
 def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, router: Any = None) -> None:
@@ -764,6 +798,24 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     row["cost_source"] = "live_provider_quote"
                 else:
                     _clear_unquoted_purchase_cost(row)
+        media = _media_offers(prices)
+        for row, spec in zip(models, settings.models, strict=True):
+            if spec.kind == "chat":
+                continue
+            upstream = re.sub(r"\s+", "-", str(getattr(spec, "upstream", "") or "").strip().lower().rsplit("/", 1)[-1])
+            offers = []
+            for offer in media.get(upstream) or []:
+                if any(item["provider"] == offer["provider"] and item["unit"] == offer["unit"] for item in offers):
+                    continue
+                offers.append(dict(offer))
+            if offers:
+                row["routing"] = {
+                    "offers": offers,
+                    "selected": None,
+                    "selected_model": None,
+                    "configured": {"provider": spec.provider, "model": spec.upstream},
+                    "basis": "цена за единицу из снимка прайсов",
+                }
         actuals = {}
         if cloud is not None:
             with cloud.db._lock:

@@ -408,18 +408,7 @@ const TEMPLATE = `
     </div>
     <div class="mt-wrap">
       <table id="mt-offers">
-        <thead>
-          <tr>
-            <th>Поставщик</th>
-            <th>Модель у поставщика</th>
-            <th>Тариф</th>
-            <th class="num">Вход, ₽/1M</th>
-            <th class="num">Выход, ₽/1M</th>
-            <th class="num">Кэш, ₽/1M</th>
-            <th class="num">Контекст</th>
-            <th>Состояние</th>
-          </tr>
-        </thead>
+        <thead><tr></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -578,6 +567,19 @@ function splitVisible(show) {
   if (box) box.classList.toggle("mt-single", !show);
 }
 
+function drawOfferHead(media) {
+  const row = ROOT.querySelector("#mt-offers thead tr");
+  if (!row) return;
+  row.replaceChildren();
+  const labels = media
+    ? ["Поставщик", "Модель", "Цена", "Единица", "Состояние"]
+    : ["Поставщик", "Модель", "Тариф", "Вход, ₽/1M", "Выход, ₽/1M", "Кэш, ₽/1M", "Контекст", "Состояние"];
+  for (const label of labels) {
+    const th = el("th", label.startsWith("Вход") || label.startsWith("Выход") || label.startsWith("Кэш") || label === "Цена" ? "num" : "", label);
+    row.append(th);
+  }
+}
+
 function drawOffers() {
   const title = $("mt-sel-name");
   const meta = $("mt-sel-meta");
@@ -592,23 +594,29 @@ function drawOffers() {
     return;
   }
   splitVisible(true);
+  const media = group.group !== "text" && group.group !== "code";
+  drawOfferHead(media);
   if (title) title.textContent = group.name;
   if (meta) {
     const ids = group.models.map((model) => model.id).join(" · ");
     meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} предложений`;
   }
-  const offers = group.offers.slice().sort((a, b) => (offerEstimate(a) ?? Infinity) - (offerEstimate(b) ?? Infinity));
+  const offers = group.offers.slice().sort((a, b) => {
+    const left = media ? Number(a.price_rub ?? Infinity) : (offerEstimate(a) ?? Infinity);
+    const right = media ? Number(b.price_rub ?? Infinity) : (offerEstimate(b) ?? Infinity);
+    return left - right;
+  });
   if (!offers.length) {
     const tr = el("tr");
-    const td = el("td", "fine", group.group === "text"
+    const td = el("td", "fine", media
       ? "Поставщики цену не публикуют."
-      : "У медиамодели предложения поставщиков пока не собираются.");
-    td.colSpan = 8;
+      : "Поставщики цену не публикуют.");
+    td.colSpan = media ? 5 : 8;
     tr.append(td);
     body.append(tr);
     return;
   }
-  const cheapest = offers.find((offer) => offerEstimate(offer) !== null) || null;
+  const cheapest = offers[0];
   for (const offer of offers) {
     const tr = el("tr", offer === cheapest ? "mt-cheap" : "");
     const serving = Boolean(offer.selected) && offer._from === group.primary.id;
@@ -619,18 +627,23 @@ function drawOffers() {
     tr.append(modelCell);
     const endpoint = String(offer.endpoint || "");
     const tier = endpoint ? endpoint.split("/").slice(-2).join("/") : "—";
-    const tierCell = el("td", "mt-tier", tier);
-    if (/flex/i.test(endpoint)) {
-      tierCell.classList.add("is-flex");
-      tierCell.title = `${endpoint}: гибкий тариф — дешевле, но медленнее обычного`;
+    if (!media) {
+      const tierCell = el("td", "mt-tier", tier);
+      if (/flex/i.test(endpoint)) {
+        tierCell.classList.add("is-flex");
+        tierCell.title = `${endpoint}: гибкий тариф — дешевле, но медленнее обычного`;
+      } else {
+        tierCell.title = endpoint || "обычный тариф";
+      }
+      tr.append(tierCell);
+      tr.append(el("td", "num", fmt(offer.input_rub)));
+      tr.append(el("td", "num", fmt(offer.output_rub)));
+      tr.append(el("td", "num", offer.cached_rub == null ? "—" : fmt(offer.cached_rub)));
+      tr.append(el("td", "num", ctxText(offer.context_length)));
     } else {
-      tierCell.title = endpoint || "обычный тариф";
+      tr.append(el("td", "num", `${fmt(offer.price_rub)} ₽`));
+      tr.append(el("td", "mt-unit", offer.unit || "—"));
     }
-    tr.append(tierCell);
-    tr.append(el("td", "num", fmt(offer.input_rub)));
-    tr.append(el("td", "num", fmt(offer.output_rub)));
-    tr.append(el("td", "num", offer.cached_rub == null ? "—" : fmt(offer.cached_rub)));
-    tr.append(el("td", "num", ctxText(offer.context_length)));
     let status = "только сверка";
     let cls = "mt-status";
     if (serving) { status = "сейчас раздаёт"; cls += " is-serving"; }

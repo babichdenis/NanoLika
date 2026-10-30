@@ -586,6 +586,9 @@ class ProviderRouter:
                     exclusions.append("временно отключена после расхождения цены")
                 if not self.allow_quantized and any(q in offer.endpoint.lower() for q in ("fp4", "int4", "q4")):
                     exclusions.append("квантованная версия исключена правилами")
+                if "flex" in offer.endpoint.lower():
+                    # flex — дешевле, но медленнее и с низким приоритетом; клиентам не отдаём
+                    exclusions.append("flex-тариф: медленнее обычного")
                 if tools and "tools" not in offer.parameters:
                     exclusions.append("не поддерживает вызов инструментов")
                 if vision and "image" not in offer.modalities:
