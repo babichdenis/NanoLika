@@ -8,8 +8,7 @@ import { createElement as h, Fragment, useEffect, useLayoutEffect, useRef, useSt
 import { createPortal } from 'react-dom'
 import { call, type Translate } from './api.ts'
 import { openLink } from './bridge.ts'
-import { settingsBus } from './bus.ts'
-import { MODELS_SECTION, useModels } from './ModelsSection.tsx'
+import { useModels } from './ModelsSection.tsx'
 
 interface PickerSession {
   url: string
@@ -30,6 +29,7 @@ export function makeCloudModelPill(t: Translate) {
     const [busy, setBusy] = useState(false)
     const [sheet, setSheet] = useState<PickerSession | null>(null)
     const [box, setBox] = useState<Box | null>(null)
+    const [manage, setManage] = useState(false)
     const button = useRef<HTMLButtonElement>(null)
     const frame = useRef<HTMLIFrameElement>(null)
     const slot = view?.slots.chat
@@ -40,6 +40,12 @@ export function makeCloudModelPill(t: Translate) {
       if (!sheet) {
         setBox(null)
         return
+      }
+      if (manage) {
+        const full = (): void => setBox({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })
+        full()
+        window.addEventListener('resize', full)
+        return () => window.removeEventListener('resize', full)
       }
       const place = (): void => {
         const pill = button.current?.getBoundingClientRect()
@@ -56,7 +62,7 @@ export function makeCloudModelPill(t: Translate) {
       place()
       window.addEventListener('resize', place)
       return () => window.removeEventListener('resize', place)
-    }, [sheet])
+    }, [sheet, manage])
 
     useEffect(() => {
       if (!sheet) return
@@ -66,14 +72,18 @@ export function makeCloudModelPill(t: Translate) {
         if (frame.current && event.source !== frame.current.contentWindow) return
         const data = event.data as { type?: unknown; id?: unknown; url?: unknown } | null
         if (!data || typeof data !== 'object') return
-        if (data.type === 'close') setSheet(null)
-        else if (data.type === 'pick' && typeof data.id === 'string' && data.id) {
+        if (data.type === 'close') {
+          setSheet(null)
+          setManage(false)
+        } else if (data.type === 'pick' && typeof data.id === 'string' && data.id) {
           const id = data.id
           setSheet(null)
+          setManage(false)
           if (id !== slot?.model) void call('chat-model', { provider: 'nanomuse', model: id }).then(() => reload()).catch(() => undefined)
         } else if (data.type === 'manage') {
-          setSheet(null)
-          settingsBus.openSection?.(MODELS_SECTION)
+          // The same web panel as Settings in the web client, inside this iframe.
+          setManage(true)
+          setSheet((prev) => prev ? { ...prev, url: new URL('manage/', prev.url).href } : prev)
         } else if (data.type === 'plan') {
           const url = typeof data.url === 'string' && data.url ? new URL(data.url, sheet.url).href : 'https://cloud.nanolika.ru/web/account/?pay=1&plan=lika-plus&source=picker'
           openLink(url)
@@ -87,6 +97,7 @@ export function makeCloudModelPill(t: Translate) {
     const name = slot.options.find((option) => option.id === slot.model)?.name ?? slot.model
     const open = async (): Promise<void> => {
       setBusy(true)
+      setManage(false)
       try {
         setSheet(await call<PickerSession>('model-picker-session', {}))
       } catch {
