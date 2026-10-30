@@ -113,7 +113,7 @@ function openKeyEditor(k){
  $('api-key-dialog').showModal();
  $('api-key-edit-label').focus();
 }
-async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited:Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
+async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited.toLocaleLowerCase(lang):Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
 async function loadUsage(){await usageChart.load();}
 async function load(){
  if(!session?.key){location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));return;}$('refresh').disabled=true;$('status').textContent=T.loading;
