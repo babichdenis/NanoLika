@@ -1,12 +1,12 @@
 import {fundsView} from './funds.js';
 import {navigationTools,performNavigation} from './navigation-tool.js';
-import {ChatSync} from './chat-sync.js?v=20261029-main';
+import {ChatSync} from './chat-sync.js?v=20261030-sync';
 import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
 import {installComposerControls} from './composer-controls.js?v=20261030-izob';
-import {installModelSheet} from './model-sheet.js?v=20261030-units';
+import {installModelSheet} from './model-sheet.js?v=20261030-remote';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 const $=id=>document.getElementById(id);const sessionKey='nl.web.session.v1';
 const local={get(key){try{return localStorage.getItem(key);}catch{return null;}},set(key,value){try{localStorage.setItem(key,value);}catch{notice(t('storageBlocked'));}},remove(key){try{localStorage.removeItem(key);}catch{}}};

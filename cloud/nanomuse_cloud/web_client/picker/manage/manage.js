@@ -1,9 +1,10 @@
 /* Управление моделями: та же панель, что в вебе (`model-sheet.js`), в окне Лики.
    Страница отдаёт выбор и закрытие хосту через postMessage. */
-import { installModelSheet } from '/web/model-sheet.js?v=20261030-units';
+import { installModelSheet } from '/web/model-sheet.js?v=20261030-remote';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));
 const key = params.get('key') || '';
+const kind = params.get('kind') || 'chat';
 const session = () => ({ owner: 'picker', key });
 
 function send(payload) {
@@ -31,7 +32,8 @@ if (!key) {
   const sheet = installModelSheet({
     api,
     session,
-    onPick: (id) => send({ type: 'pick', id }),
+    pickKind: kind === 'all' ? 'any' : kind,
+    onPick: (id, pickedKind) => send({ type: 'pick', id, kind: pickedKind }),
     onFavourites: () => send({ type: 'favourite' }),
   });
   const panel = document.querySelector('.model-sheet');
@@ -50,4 +52,15 @@ if (!key) {
   });
   sheet.open();
   opened = true;
+  if (kind && kind !== 'all') {
+    const applyKind = () => {
+      const tab = document.querySelector(`.model-kind-btn[data-kind="${kind}"]`);
+      if (!tab) return false;
+      tab.click();
+      return true;
+    };
+    applyKind();
+    const observer = new MutationObserver(() => { if (applyKind()) observer.disconnect(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 }

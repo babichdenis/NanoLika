@@ -12,11 +12,12 @@ import { createElement as h, Fragment, useCallback, useEffect, useState, type Re
 import type { ProviderEntry } from '../catalogue.ts'
 import { call, errorCode, errorStyle, muted, type Translate, failureText } from './api.ts'
 import { settingsBus } from './bus.ts'
-import { IconHand, IconImage, IconMessage, IconVideo } from './icons.tsx'
+import { IconChevronDown, IconHand, IconImage, IconMessage, IconVideo } from './icons.tsx'
 import { useLive } from './live.ts'
 import type { ModelGroup } from './model-list.ts'
 import type { CatalogueModel } from './ModelEstimate.tsx'
 import { ModelPicker, type PickerHead } from './ModelPicker.tsx'
+import { openRemoteModelPicker } from './RemoteModelPicker.ts'
 import { MODELS_SECTION, providersNamed, useProviders, type ModelOption } from './OwnKey.tsx'
 import { OWN_KEYS_SECTION } from './MuseSettings.tsx'
 
@@ -258,31 +259,47 @@ export function makeModelsSection(t: Translate) {
       h('p', null, t('mlLead')),
       view.signedIn ? h('div', { className: 'nm-card', style: { padding: 18, marginBottom: 14 }, 'data-testid': 'nm-primary-cloud-slot' },
         h('strong', null, 'nanoLika Cloud'), h('p', { className: 'nm-row-sub nm-wrap' }, t('nlCloudReady')),
-        h(ModelPicker<ModelOption>, {
-          t, label: t('mlCloudModels'),
-          text: view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.id === view.slots.chat.model)?.name ?? t('nlUseCloud'),
-          groups: [{ key: 'nanomuse', label: 'nanoLika Cloud', rows: view.slots.chat.options.filter(o => o.provider === 'nanomuse') }],
-          ...(view.slots.chat.provider === 'nanomuse' ? { current: { group: 'nanomuse', id: view.slots.chat.model } } : {}),
+        h('button', {
+          type: 'button',
+          className: 'nm-field nm-select nm-mp-btn',
           disabled: busy !== null || !view.cloudModels,
-          testId: 'nm-cloud-model-library',
-          catalogueFilter: (model) => model.kind === 'chat' && (model.for ?? []).includes('chat'),
-          onPick: (_provider, row) => pick('chat', 'nanomuse', row.id),
-        }),
+          'data-testid': 'nm-cloud-model-library',
+          title: view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.id === view.slots.chat.model)?.name ?? t('nlUseCloud'),
+          onClick: () => {
+            void (async () => {
+              const picked = await openRemoteModelPicker({
+                kind: 'chat',
+                selected: view.slots.chat.model,
+                title: t('mlCloudModels'),
+              })
+              if (picked?.kind === 'chat') pick('chat', 'nanomuse', picked.id)
+            })()
+          },
+        },
+          h('span', { className: 'nm-mp-btn-text' }, view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.id === view.slots.chat.model)?.name ?? t('nlUseCloud')),
+          h(IconChevronDown, { size: 16 })),
+
         libraryRows.length > 1 ? h('div', { style: { marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--nm-divider)' }, 'data-testid': 'nm-cloud-all-models' },
           h('p', { className: 'nm-row-sub nm-wrap', style: { margin: '0 0 6px' } }, t('mlAllModelsHint')),
-          h(ModelPicker<ModelOption>, {
-            t, label: t('mlAllModels'), text: t('mlAllModels'),
-            groups: [{ key: 'nanomuse', label: 'nanoLika Cloud', rows: libraryRows }],
-            currentIds: inUse,
+          h('button', {
+            type: 'button',
+            className: 'nm-field nm-select nm-mp-btn',
             disabled: busy !== null || !view.cloudModels,
-            testId: 'nm-cloud-all-models',
-            catalogueFilter: (model) => ['chat', 'image', 'video'].includes(model.kind),
-            onPick: (_provider, row) => {
-              const slot = slotOfCloud(row.id)
-              setLibrarySaid(t('mlLibrarySaved', { slot: slotTitle(t, slot), model: row.name }))
-              pick(slot, 'nanomuse', row.id)
+            'data-testid': 'nm-cloud-all-models',
+            onClick: () => {
+              void (async () => {
+                const picked = await openRemoteModelPicker({ kind: 'all', title: t('mlAllModels') })
+                if (!picked || !['chat', 'image', 'video'].includes(picked.kind)) return
+                const slot = picked.kind as Slot
+                const name = view.slots[slot].options.find(o => o.provider === 'nanomuse' && o.id === picked.id)?.name ?? picked.id
+                setLibrarySaid(t('mlLibrarySaved', { slot: slotTitle(t, slot), model: name }))
+                pick(slot, 'nanomuse', picked.id)
+              })()
             },
-          }),
+          },
+            h('span', { className: 'nm-mp-btn-text' }, t('mlAllModels')),
+            h(IconChevronDown, { size: 16 })),
+
           librarySaid ? h('p', { className: 'nm-row-sub nm-wrap', style: { margin: '6px 0 0' }, role: 'status' }, librarySaid) : null) : null) : null,
 
       h('div', { className: 'nm-card' }, rows),
