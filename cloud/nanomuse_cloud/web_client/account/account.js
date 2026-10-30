@@ -9,10 +9,26 @@ ru:{autopay:'Карта и автопополнение',title:'Ваш каби�
 en:{autopay:'Card and automatic top-ups',title:'Your account',back:'Back to Lika',overview:'Overview',usage:'Usage and models',devices:'Devices and channels',security:'Sign-in and security',settings:'Settings',eyebrow:'nanoLika Cloud',refresh:'Refresh',balance:'Available balance',pay:'Top up and plans',plan:'Your plan',period:'Period, days',statement:'All calls and tokens →',deviceNote:'Devices and sign-in methods linked to this account.',channels:'Linked accounts',sessions:'Active sign-ins',apiTitle:'nanoLika API key',apiNote:'Use this key in your own apps. Requests use your account balance. The full key is shown only once.',apiCreate:'Create key',apiEndpoint:'API address',apiOneTime:'Copy the key now and store it safely. It cannot be shown again later.',apiCopy:'Copy key',apiCopied:'Key copied.',apiRevoke:'Revoke key',apiRevokeConfirm:'Revoke this key? Apps using it will lose access immediately.',apiCreated:'Key created. Save it now.',apiError:'Could not update the key.',apiCreatedAt:'Created',apiLastUsed:'Last used',apiSpend:'Spent through key',apiNever:'not used yet',apiRevoked:'Revoked',apiHeader:'Model requests only',password:'Account password',current:'Current password',newPassword:'New password',repeat:'Repeat the new password',save:'Save password',language:'Language',localNote:'Documents and attachments stay in your browser. Clearing browser data may remove local files.',privacy:'Data processing',logout:'Sign out',clear:'Delete local data',loading:'Loading your account…',error:'Could not refresh your account. Please try again.',login:'Sign in to Lika to open your account.',unlimited:'No limit',balanceNote:'The balance is reported by your account.',paidBalance:'Paid balance that counts toward a tariff',unlimitedNote:'Balance limits are disabled for this account.',planUnknown:'The server does not report plan information yet.',noPlan:'No active plan',expiredPlan:'Plan period ended',balanceAfterExpiry:'Your remaining balance stays available; the discount and device link last until the plan expires.',until:'Valid until',discount:'Discount',connected:'Device connection is available',disconnected:'Device connection is restricted',usageNote:'Amounts come from the nanoLika ledger. One task can involve several model calls.',legacy:'Historical amounts use the relay configuration and are not a verified provider invoice.',input:'Input',output:'Output',calls:'Calls',empty:'Nothing here yet.',unavailable:'Data is currently unavailable.',online:'Connected',offline:'Not connected',currentSession:'This sign-in',revoke:'End sign-in',revokeConfirm:'End this sign-in on the other device?',clearConfirm:'Delete all conversations and documents for this account from this browser? This cannot be undone.',saved:'Password saved.',mismatch:'Passwords do not match.',short:'Minimum password length',characters:'characters',passwordError:'Could not save the password. Check your current password and try again.',tokenUnit:'tokens',usageError:'Usage is currently unavailable.',deleting:'Deleting…',unlink:'Unlink',unlinkConfirm:'Unlink the {name} chat from the account? The chat stays, but stops being this account: its own allowance, its own history. The account in the app is unchanged.',unlinked:'The {name} chat is unlinked from the account.',unlinkIsAccount:'This chat is the account itself: the account began there. It cannot be unlinked without deleting the account.',unlinkError:'Could not unlink the chat. Try again.'},
 zh:{autopay:'银行卡与自动充值',title:'你的账户',back:'返回 Lika',overview:'概览',usage:'用量与模型',devices:'设备与渠道',security:'登录与安全',settings:'设置',eyebrow:'nanoLika Cloud',refresh:'刷新',balance:'可用余额',pay:'充值与套餐',plan:'你的套餐',period:'天数',statement:'所有调用及令牌 →',deviceNote:'此账户绑定的设备及登录方式。',channels:'已关联账户',sessions:'有效登录',apiTitle:'nanoLika API 密钥',apiNote:'在自己的应用中使用此密钥。请求会从账户余额扣除。完整密钥仅显示一次。',apiCreate:'创建密钥',apiEndpoint:'API 地址',apiOneTime:'请立即复制并妥善保存。之后无法再次查看。',apiCopy:'复制密钥',apiCopied:'密钥已复制。',apiRevoke:'撤销密钥',apiRevokeConfirm:'撤销此密钥？使用它的应用将立即失去访问权限。',apiCreated:'密钥已创建，请立即保存。',apiError:'无法更新密钥。',apiCreatedAt:'创建时间',apiLastUsed:'最近使用',apiSpend:'此密钥已扣款',apiNever:'尚未使用',apiRevoked:'已撤销',apiHeader:'仅限模型请求',password:'账户密码',current:'当前密码',newPassword:'新密码',repeat:'再次输入新密码',save:'保存密码',language:'语言',localNote:'文档及附件保存在浏览器中，清除浏览器数据可能删除本地文件。',privacy:'数据处理',logout:'退出登录',clear:'删除本地数据',loading:'正在读取账户…',error:'无法刷新，请重试。',login:'请先登录 Lika。',unlimited:'无限制',balanceNote:'余额来自账户记录。',paidBalance:'可用于开通套餐的付费余额',unlimitedNote:'此账户未限制余额。',planUnknown:'服务器暂未提供套餐信息。',noPlan:'没有有效套餐',expiredPlan:'套餐期限已结束',balanceAfterExpiry:'余额保留；折扣和设备互联仅在套餐有效期内提供。',until:'有效期至',discount:'折扣',connected:'设备互联可用',disconnected:'设备互联受限',usageNote:'金额来自 nanoLika 账本，一个任务可能包含多次模型调用。',legacy:'历史金额按中继配置计算，并非已核实的服务商账单。',input:'输入',output:'输出',calls:'调用次数',empty:'暂无记录。',unavailable:'暂时无法获取数据。',online:'在线',offline:'不在线',currentSession:'当前登录',revoke:'结束登录',revokeConfirm:'结束另一设备上的此登录？',clearConfirm:'删除此浏览器中此账户的所有对话及文档？此操作无法撤销。',saved:'密码已保存。',mismatch:'两次密码不同。',short:'密码最少长度',characters:'字符',passwordError:'无法保存，请检查当前密码后重试。',tokenUnit:'令牌',usageError:'暂时无法读取用量。',deleting:'正在删除…',unlink:'解除绑定',unlinkConfirm:'把 {name} 聊天与账号解除绑定？聊天会保留，但不再是这个账号：自己的额度，自己的记录。App 里的账号不变。',unlinked:'{name} 聊天已解除绑定。',unlinkIsAccount:'这个聊天就是账号本身：账号是从这里开始的。不删除账号就无法解除绑定。',unlinkError:'无法解除绑定，请重试。'}
 };
+Object.assign(words.ru,{
+ apiName:'Название ключа',apiNamePlaceholder:'Например, «Мой бот»',apiTerm:'Срок действия',apiForever:'Бессрочно',api1d:'1 день',api7d:'7 дней',api30d:'30 дней',api90d:'90 дней',
+ apiDaily:'Лимит в день, ₽',apiMonthly:'Лимит за 30 дней, ₽',apiLimitHint:'0 — без лимита',apiBalance:'Баланс аккаунта',apiExpires:'Действует до',apiNoExpiry:'Бессрочно',apiLimits:'Лимиты',apiToday:'Сегодня',apiMonth:'За 30 дней',apiNoLimit:'без лимита',
+ apiEdit:'Изменить',apiSave:'Сохранить',apiCancel:'Отмена',apiKeepTerm:'Не менять',apiActive:'Активен',apiExpired:'Истёк',apiUsage:'Расход',apiNoKeys:'Личных ключей пока нет.',apiEditTitle:'Настройки ключа',apiSaving:'Сохраняем…',apiSaved:'Ключ обновлён.',apiLimitLeft:'Осталось'
+});
+Object.assign(words.en,{
+ apiName:'Key name',apiNamePlaceholder:'For example, “My bot”',apiTerm:'Key lifetime',apiForever:'No expiry',api1d:'1 day',api7d:'7 days',api30d:'30 days',api90d:'90 days',
+ apiDaily:'Daily limit, RUB',apiMonthly:'Limit per 30 days, RUB',apiLimitHint:'0 — no limit',apiBalance:'Account balance',apiExpires:'Valid until',apiNoExpiry:'No expiry',apiLimits:'Limits',apiToday:'Today',apiMonth:'Last 30 days',apiNoLimit:'no limit',
+ apiEdit:'Edit',apiSave:'Save',apiCancel:'Cancel',apiKeepTerm:'Keep as is',apiActive:'Active',apiExpired:'Expired',apiUsage:'Spend',apiNoKeys:'No personal keys yet.',apiEditTitle:'Key settings',apiSaving:'Saving…',apiSaved:'Key updated.',apiLimitLeft:'Left'
+});
+Object.assign(words.zh,{
+ apiName:'密钥名称',apiNamePlaceholder:'例如“我的机器人”',apiTerm:'有效期',apiForever:'永久',api1d:'1 天',api7d:'7 天',api30d:'30 天',api90d:'90 天',
+ apiDaily:'每日限额，₽',apiMonthly:'30 天限额，₽',apiLimitHint:'0 — 不限额',apiBalance:'账户余额',apiExpires:'有效期至',apiNoExpiry:'永久',apiLimits:'限额',apiToday:'今天',apiMonth:'最近 30 天',apiNoLimit:'不限额',
+ apiEdit:'编辑',apiSave:'保存',apiCancel:'取消',apiKeepTerm:'保持不变',apiActive:'有效',apiExpired:'已过期',apiUsage:'消费',apiNoKeys:'暂无个人密钥。',apiEditTitle:'密钥设置',apiSaving:'保存中…',apiSaved:'密钥已更新。',apiLimitLeft:'剩余'
+});
 const $=id=>document.getElementById(id),fromConsole=new URLSearchParams(location.search).get('source')==='console',sessionKey=fromConsole?'nm.key':'nl.web.session.v1';let session=null,lang='ru',me=null,minPassword=8,revision=0;
 try{session=fromConsole?{key:localStorage.getItem(sessionKey),owner:null}:JSON.parse(localStorage.getItem(sessionKey)||'null');if(!session?.key){const key=localStorage.getItem('nm.key');if(key)session={key,owner:null};}lang=localStorage.getItem('nl.web.language')||'ru';}catch{}
 if(!words[lang])lang='ru';const T=words[lang];document.documentElement.lang=lang;document.title=`${T.title} · nanoLika`;
-for(const n of document.querySelectorAll('[data-word]'))n.textContent=T[n.dataset.word];$('language').value=lang;
+for(const n of document.querySelectorAll('[data-word]'))n.textContent=T[n.dataset.word];
+for(const n of document.querySelectorAll('[data-word-placeholder]'))n.placeholder=T[n.dataset.wordPlaceholder]||n.placeholder;$('language').value=lang;
 $('statement').href='/app/usage/?source='+(fromConsole?'console':'web')+'&lang='+encodeURIComponent(lang);if(fromConsole){for(const a of document.querySelectorAll('.account-top a'))a.href='/app/';}
 const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const money=n=>new Intl.NumberFormat(lang,{style:'currency',currency:'RUB',maximumFractionDigits:6}).format(n);
@@ -57,20 +73,50 @@ function renderMe(){
  const channels=a.linked||[];$('channels').replaceChildren(...channels.map(c=>channelRow(c)));if(!channels.length)empty($('channels'));
  $('current-row').hidden=!a.has_password;$('current-password').required=!!a.has_password;
 }
-function renderApiKeys(keys){
+const rub=n=>new Intl.NumberFormat(lang,{style:'currency',currency:'RUB',maximumFractionDigits:2}).format(Number(n)||0);
+function keyState(k){
+ if(k.revoked)return[T.apiRevoked,'is-revoked'];
+ if(k.expires_at&&k.expires_at*1000<=Date.now())return[T.apiExpired,'is-expired'];
+ return[T.apiActive,'is-active'];
+}
+function keyStat(label,spent,limit){
+ const box=h('div',undefined,'api-key-stat');
+ box.append(h('span',label,'api-key-stat-label'),h('strong',limit>0?`${rub(spent)} / ${rub(limit)}`:rub(spent),'api-key-stat-value'));
+ if(limit>0){const meter=h('div',undefined,'api-key-meter'),fill=h('i');fill.style.width=Math.min(100,Math.max(0,spent/limit*100))+'%';meter.append(fill);box.append(meter,h('small',`${T.apiLimitLeft}: ${rub(Math.max(0,limit-spent))}`,'api-key-stat-note'));}
+ return box;
+}
+function renderApiKeys(keys,balance){
  const target=$('api-keys'),personal=keys.filter(k=>k.via==='user');
- if(!personal.length){empty(target);return;}
+ if(!personal.length){empty(target,T.apiNoKeys);return;}
  target.replaceChildren(...personal.map(k=>{
-  const detail=[T.apiCreatedAt+': '+date(k.created_at),k.last_used_at?T.apiLastUsed+': '+date(k.last_used_at):T.apiNever,T.apiSpend+': '+money(Number(k.total_sale_rub)||0),k.revoked?T.apiRevoked:T.apiHeader].join(' · ');
-  const n=row(k.prefix,detail);
-  if(!k.revoked){const b=h('button',T.apiRevoke,'quiet');b.type='button';b.onclick=async()=>{if(!confirm(T.apiRevokeConfirm))return;b.disabled=true;try{await api('/v1/me/keys/'+encodeURIComponent(k.prefix),{method:'DELETE'});await load();}catch(_){$('status').textContent=T.apiError;b.disabled=false;}};n.append(b);}
-  return n;
+  const [state,stateClass]=keyState(k),card=h('article',undefined,'api-key-item '+stateClass);
+  const head=h('div',undefined,'api-key-head'),names=h('div',undefined,'api-key-names');
+  names.append(h('strong',k.label||k.device||k.prefix),h('code',k.prefix));
+  head.append(names,h('span',state,'api-key-badge '+stateClass));
+  const meta=[T.apiCreatedAt+': '+date(k.created_at),k.last_used_at?T.apiLastUsed+': '+date(k.last_used_at):T.apiNever,k.expires_at?`${T.apiExpires}: ${date(k.expires_at)}`:T.apiNoExpiry].join(' · ');
+  const usage=h('div',undefined,'api-key-usage');
+  usage.append(keyStat(T.apiToday,Number(k.spent_today_rub)||0,Number(k.daily_limit_rub)||0),keyStat(T.apiMonth,Number(k.spent_30d_rub)||0,Number(k.monthly_limit_rub)||0),keyStat(T.apiSpend,Number(k.total_sale_rub)||0,0));
+  card.append(head,h('p',meta,'api-key-meta'),usage);
+  if(!k.revoked){const actions=h('div',undefined,'api-key-actions'),edit=h('button',T.apiEdit,'quiet'),revoke=h('button',T.apiRevoke,'quiet danger-text');edit.type='button';revoke.type='button';edit.onclick=()=>openKeyEditor(k);revoke.onclick=async()=>{if(!confirm(T.apiRevokeConfirm))return;revoke.disabled=true;try{await api('/v1/me/keys/'+encodeURIComponent(k.prefix),{method:'DELETE'});await loadApiKeys();}catch(_){$('api-key-status').textContent=T.apiError;revoke.disabled=false;}};actions.append(edit,revoke);card.append(actions);}
+  return card;
  }));
 }
-async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);}
+let editingKey=null;
+function openKeyEditor(k){
+ editingKey=k;
+ $('api-key-edit-title').textContent=`${T.apiEditTitle} · ${k.prefix}`;
+ $('api-key-edit-label').value=k.label||'';
+ $('api-key-edit-daily').value=Number(k.daily_limit_rub)||0;
+ $('api-key-edit-monthly').value=Number(k.monthly_limit_rub)||0;
+ $('api-key-edit-term').value='keep';
+ $('api-key-edit-status').textContent='';
+ $('api-key-dialog').showModal();
+ $('api-key-edit-label').focus();
+}
+async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[],result.balance||{});const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited:Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
 async function loadUsage(){await usageChart.load();}
 async function load(){
- if(!session?.key){const entry=h('a',T.login);entry.href='/app/?signin=1&next='+encodeURIComponent(location.href);$('status').replaceChildren(entry);return;}$('refresh').disabled=true;$('status').textContent=T.loading;
+ if(!session?.key){location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));return;}$('refresh').disabled=true;$('status').textContent=T.loading;
  try{me=await api('/v1/me');if(!me.account?.id||(session.owner&&me.account.id!==session.owner))throw new Error('identity');session.owner=me.account.id;renderMe();$('private-content').hidden=false;autopay.load();
  const results=await Promise.allSettled([api('/v1/devices'),api('/v1/me/sessions'),api('/v1/config'),loadUsage(),loadApiKeys(),api('/v1/link/channels')]);
  const [devices,sessions,config,usage,apiKeys,channelLinks]=results;
@@ -84,11 +130,42 @@ async function load(){
  if(sessions.status==='fulfilled'){const list=sessions.value.sessions||[];$('sessions').replaceChildren(...list.map(s=>{const n=row(s.device||'nanoLika',`${s.current?T.currentSession+' · ':''}${date(s.last_used_at||s.created_at)}`);if(!s.current){const b=h('button',T.revoke);b.type='button';b.onclick=async()=>{if(!confirm(T.revokeConfirm))return;b.disabled=true;try{await api('/v1/me/sessions/'+encodeURIComponent(s.prefix),{method:'DELETE'});await load();}catch(_){$('status').textContent=T.error;b.disabled=false;}};n.append(b);}return n;}));if(!list.length)empty($('sessions'));}else empty($('sessions'),T.unavailable);
  if(config.status==='fulfilled')minPassword=Math.max(1,Number(config.value.password_min_len)||8);if(usage.status==='rejected')$('status').textContent=T.usageError;if(apiKeys.status==='rejected')empty($('api-keys'),T.unavailable);
  $('status').textContent='';
- }catch(e){$('private-content').hidden=true;$('identity').textContent='';$('status').textContent=e.status===401||e.message==='identity'?T.login:T.error;}finally{$('refresh').disabled=false;}
+ }catch(e){$('private-content').hidden=true;$('identity').textContent='';if(e.status===401||e.message==='identity')location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));else $('status').textContent=T.error;}finally{$('refresh').disabled=false;}
 }
 $('refresh').onclick=load;
-if($('create-api-key'))$('create-api-key').onclick=async()=>{const button=$('create-api-key');button.disabled=true;try{const result=await api('/v1/me/keys',{method:'POST',body:JSON.stringify({device:'web-api'})});$('new-api-key-value').textContent=result.api_key;$('new-api-key').hidden=false;$('status').textContent=T.apiCreated;await loadApiKeys();}catch(_){$('status').textContent=T.apiError;}finally{button.disabled=false;}};
-if($('copy-api-key'))$('copy-api-key').onclick=async()=>{const button=$('copy-api-key');try{await navigator.clipboard.writeText($('new-api-key-value').textContent);button.textContent=T.apiCopied;setTimeout(()=>button.textContent=T.apiCopy,1800);}catch{$('status').textContent=T.apiError;}};
+if($('create-api-key'))$('create-api-key').onclick=async()=>{
+ const button=$('create-api-key');button.disabled=true;
+ const label=($('api-key-label')?.value||'').trim();
+ const ttl=Number($('api-key-term')?.value)||0;
+ const daily=Math.max(0,Math.floor(Number($('api-key-daily')?.value)||0));
+ const monthly=Math.max(0,Math.floor(Number($('api-key-monthly')?.value)||0));
+ try{
+  const result=await api('/v1/me/keys',{method:'POST',body:JSON.stringify({device:'web-api',label,...(ttl?{ttl_s:ttl}:{}),daily_limit_rub:daily,monthly_limit_rub:monthly})});
+  if(!result.api_key)throw new Error('missing_key');
+  $('new-api-key-value').textContent=result.api_key;$('new-api-key').hidden=false;$('api-key-status').textContent=T.apiCreated;
+  await loadApiKeys();
+ }catch(e){$('api-key-status').textContent=lang==='ru'?(e.status===401?'Войдите в аккаунт заново, затем создайте ключ.':e.status===404?'Сервис выдачи ключей недоступен. Попробуйте обновить страницу.':T.apiError):T.apiError;}finally{button.disabled=false;}
+};
+if($('api-key-edit-form'))$('api-key-edit-form').onsubmit=async e=>{
+ e.preventDefault();
+ if(!editingKey)return;
+ const button=$('api-key-edit-save'),status=$('api-key-edit-status');
+ const body={
+  label:($('api-key-edit-label').value||'').trim(),
+  daily_limit_rub:Math.max(0,Math.floor(Number($('api-key-edit-daily').value)||0)),
+  monthly_limit_rub:Math.max(0,Math.floor(Number($('api-key-edit-monthly').value)||0))
+ };
+ const term=$('api-key-edit-term').value;
+ if(term!=='keep')body.ttl_s=Number(term)||0;
+ button.disabled=true;status.textContent=T.apiSaving;
+ try{
+  await api('/v1/me/keys/'+encodeURIComponent(editingKey.prefix),{method:'PATCH',body:JSON.stringify(body)});
+  $('api-key-dialog').close();$('api-key-status').textContent=T.apiSaved;
+  await loadApiKeys();
+ }catch(_){status.textContent=T.apiError;}finally{button.disabled=false;}
+};
+if($('api-key-edit-cancel'))$('api-key-edit-cancel').onclick=()=>$('api-key-dialog').close();
+if($('copy-api-key'))$('copy-api-key').onclick=async()=>{const button=$('copy-api-key');try{await navigator.clipboard.writeText($('new-api-key-value').textContent);button.textContent=T.apiCopied;setTimeout(()=>button.textContent=T.apiCopy,1800);}catch{$('api-key-status').textContent=T.apiError;}};
 $('password-form').onsubmit=async e=>{e.preventDefault();const password=$('new-password').value,status=$('password-status'),button=e.currentTarget.querySelector('button');status.textContent='';if(password.length<minPassword){status.textContent=`${T.short}: ${minPassword} ${T.characters}`;return;}if(password!==$('repeat-password').value){status.textContent=T.mismatch;return;}button.disabled=true;try{await api('/v1/auth/password',{method:'POST',body:JSON.stringify({password,current:me.account.has_password?$('current-password').value:undefined})});e.target.reset();await load();status.textContent=T.saved;}catch(_){status.textContent=T.passwordError;}finally{button.disabled=false;}};
 $('language').onchange=()=>{try{localStorage.setItem('nl.web.language',$('language').value);}catch{}location.reload();};
 $('logout').onclick=async()=>{const b=$('logout');b.disabled=true;try{await api('/v1/auth/sign-out',{method:'POST',body:'{}'});}catch{}try{localStorage.removeItem(sessionKey);localStorage.removeItem('nm.key');localStorage.removeItem('nm.hint');localStorage.removeItem('nm.acct');localStorage.removeItem('nl.web.session.v1');}catch{}location.replace('/v1/auth/logout?next='+encodeURIComponent(location.origin+'/app/?signin=1&next='+encodeURIComponent(location.origin+'/web/')));};

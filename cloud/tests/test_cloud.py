@@ -1405,7 +1405,7 @@ async def test_members_see_the_models_under_the_key_and_pick():
     assert len([q for q in up.state.requests if q[0] == "models"]) == 1
     # a guest: the menu, nothing more
     glist = (await client.get("/v1/models", headers=gh)).json()
-    assert [m["id"] for m in glist["data"]] == menu_ids and glist["nanomuse"] == {"any_model": False}
+    assert [m["id"] for m in glist["data"]] == menu_ids and glist["nanomuse"]["any_model"] is False
     # a catalog model chats under its own id, priced as the dearest menu model
     r = await client.post(
         "/v1/chat/completions", json={"model": "vanchin/deepseek-v3", "messages": [{"role": "user", "content": "hi"}]}, headers=mh
@@ -2159,7 +2159,7 @@ async def test_members_may_name_any_model_of_the_right_kind():
 
     # the menu says who may go beyond it (0.10: and lists what the key has, for members — below)
     assert (await client.get("/v1/models", headers=mh)).json()["nanomuse"]["any_model"] is True
-    assert (await client.get("/v1/models", headers=gh)).json()["nanomuse"] == {"any_model": False}
+    assert (await client.get("/v1/models", headers=gh)).json()["nanomuse"]["any_model"] is False
 
     # a typed id is checked with the kind it is for
     r = await client.get("/v1/models/deepseek-v4-pro", params={"kind": "chat"}, headers=mh)

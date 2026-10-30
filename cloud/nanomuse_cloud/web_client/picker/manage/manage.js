@@ -1,6 +1,6 @@
 /* Управление моделями: та же панель, что в вебе (`model-sheet.js`), в окне Лики.
    Страница отдаёт выбор и закрытие хосту через postMessage. */
-import { installModelSheet } from '/web/model-sheet.js?v=20261030-remote';
+import { installModelSheet } from '/web/model-sheet.js?v=20261030-balance';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));
 const key = params.get('key') || '';
@@ -33,6 +33,7 @@ if (!key) {
     api,
     session,
     pickKind: kind === 'all' ? 'any' : kind,
+    showBalance: true,
     onPick: (id, pickedKind) => send({ type: 'pick', id, kind: pickedKind }),
     onFavourites: () => send({ type: 'favourite' }),
   });

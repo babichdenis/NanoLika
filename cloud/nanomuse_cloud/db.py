@@ -67,7 +67,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at    INTEGER NOT NULL,
     last_used_at  INTEGER,
     revoked_at    INTEGER,
-    via           TEXT NOT NULL DEFAULT 'code' -- how this sign-in happened: code | password
+    via           TEXT NOT NULL DEFAULT 'code', -- how this sign-in happened: code | password
+    label         TEXT NOT NULL DEFAULT '',
+    daily_limit_rub INTEGER NOT NULL DEFAULT 0,
+    monthly_limit_rub INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS api_keys_account ON api_keys(account_id);
 CREATE TABLE IF NOT EXISTS codes (
@@ -528,6 +531,13 @@ class Database:
                 self._conn.execute(f"ALTER TABLE accounts ADD COLUMN {col} {ddl}")
         if "via" not in cols("api_keys"):
             self._conn.execute("ALTER TABLE api_keys ADD COLUMN via TEXT NOT NULL DEFAULT 'code'")
+        for col, ddl in (
+            ("label", "TEXT NOT NULL DEFAULT ''"),
+            ("daily_limit_rub", "INTEGER NOT NULL DEFAULT 0"),
+            ("monthly_limit_rub", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if col not in cols("api_keys"):
+                self._conn.execute(f"ALTER TABLE api_keys ADD COLUMN {col} {ddl}")
         # 0.4: invitations, credit and the clip allowance
         for col, ddl in (
             ("invite_code", "TEXT NOT NULL DEFAULT ''"),
@@ -2031,6 +2041,68 @@ class Database:
                 (key_hash,),
             ).fetchone()
             return int(row["total"] or 0) if row else 0
+
+    def key_spent_uy_since(self, key_hash: str, since: int) -> int:
+        """What one key was charged from `since` (epoch seconds), in micro-yuan."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT SUM(sale_uy) AS total FROM ledger WHERE key_hash=? AND sale_uy>0 AND ts>=?",
+                (key_hash, int(since)),
+            ).fetchone()
+            return int(row["total"] or 0) if row else 0
+
+    def set_key_meta(self, key_hash: str, label: str, daily_limit_rub: int, monthly_limit_rub: int) -> None:
+        """Name and spend limits of a user key (0 = no limit)."""
+        with self.tx() as c:
+            c.execute(
+                "UPDATE api_keys SET label=?, daily_limit_rub=?, monthly_limit_rub=? WHERE key_hash=?",
+                ((label or "")[:60], max(0, int(daily_limit_rub)), max(0, int(monthly_limit_rub)), key_hash),
+            )
+
+    def key_hash_by_prefix(self, account_id: str, prefix: str) -> str | None:
+        """The hash behind a key prefix, if this account still owns that key."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT key_hash FROM api_keys WHERE account_id=? AND prefix=? LIMIT 1",
+                (account_id, prefix[:10]),
+            ).fetchone()
+        return str(row["key_hash"]) if row else None
+
+    def update_key_by_prefix(
+        self,
+        account_id: str,
+        prefix: str,
+        *,
+        label: str | None = None,
+        daily_limit_rub: int | None = None,
+        monthly_limit_rub: int | None = None,
+        expires_at: int | None = None,
+        change_expiry: bool = False,
+    ) -> bool:
+        """Edit a live key of this account. `None` leaves a field alone; `change_expiry`
+        is what tells "keep the date" from "make it permanent" (`expires_at=None`)."""
+        fields: list[str] = []
+        args: list = []
+        if label is not None:
+            fields.append("label=?")
+            args.append((label or "")[:60])
+        if daily_limit_rub is not None:
+            fields.append("daily_limit_rub=?")
+            args.append(max(0, int(daily_limit_rub)))
+        if monthly_limit_rub is not None:
+            fields.append("monthly_limit_rub=?")
+            args.append(max(0, int(monthly_limit_rub)))
+        if change_expiry:
+            fields.append("expires_at=?")
+            args.append(expires_at)
+        if not fields:
+            return self.key_hash_by_prefix(account_id, prefix) is not None
+        with self.tx() as c:
+            cur = c.execute(
+                f"UPDATE api_keys SET {', '.join(fields)} WHERE account_id=? AND prefix=? AND revoked_at IS NULL",
+                (*args, account_id, prefix[:10]),
+            )
+            return cur.rowcount > 0
 
     def revoke_key(self, key_hash: str) -> None:
         with self.tx() as c:

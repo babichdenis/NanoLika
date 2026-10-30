@@ -348,6 +348,18 @@ def _provider_url_ok(url: object, own_hosts: tuple[str, ...] = ()) -> bool:
     return parts.scheme == "https" and host.endswith(PROVIDER_HOST_SUFFIXES)
 
 
+def _key_limit_rub(body: dict, name: str) -> int:
+    """A key's spend limit: whole rubles, 0 = no limit, capped so a typo cannot block an
+    account forever."""
+    try:
+        value = int(body.get(name) or 0)
+    except (TypeError, ValueError) as e:
+        raise CloudError(400, "bad_request", f"{name} must be a whole number of rubles") from e
+    if value < 0 or value > 10_000_000:
+        raise CloudError(400, "bad_request", f"{name} must be between 0 and 10,000,000")
+    return value
+
+
 def create_app(
     settings: Settings | None = None,
     cloud: Cloud | None = None,
@@ -555,9 +567,9 @@ def create_app(
                 or path.startswith("/v1/audio/")
                 or path.startswith("/v1/videos/")
             )
-            model_list = request.method == "GET" and path == "/v1/models"
+            model_list = request.method == "GET" and path in ("/v1/models", "/v1/me/key")
             if not (inference or model_list):
-                raise CloudError(403, "api_key_scope", "Personal API keys can call model endpoints only")
+                raise CloudError(403, "api_key_scope", "Personal API keys can call model endpoints and read their own key status only")
         return caller
 
     # платежи устанавливаются ниже, после admin_dep: у них есть админ-раздел
@@ -919,9 +931,18 @@ def create_app(
     async def me_keys(caller: Caller = Depends(caller_dep)) -> dict:
         keys = cloud.list_keys(caller)
         for item in keys:
-            cny = cloud.s.uy_to_cny(int(item.get("total_sale_uy") or 0))
-            item["total_sale_rub"] = cloud.s.cny_to_rub(cny)
-        return {"keys": keys}
+            for field in ("total_sale", "spent_today", "spent_30d"):
+                cny = cloud.s.uy_to_cny(int(item.get(field + "_uy") or 0))
+                item[field + "_rub"] = cloud.s.cny_to_rub(cny)
+        view = cloud.key_view(caller)
+        return {"keys": keys, "balance": view["balance"], "key": view}
+
+    @app.get("/v1/me/key")
+    async def me_key(caller: Caller = Depends(caller_dep)) -> dict:
+        """The key this request came with: name, lifetime, its own limits, spend and the
+        account balance behind it. Read-only, so an app can show all of it without the
+        rest of the account page."""
+        return cloud.key_view(caller)
 
     @app.post("/v1/me/keys")
     async def me_create_key(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
@@ -933,10 +954,42 @@ def create_app(
                 ttl_s = int(ttl_s)
             except (TypeError, ValueError) as e:
                 raise CloudError(400, "bad_request", "ttl_s must be a number of seconds") from e
+            if ttl_s < 0:
+                raise CloudError(400, "bad_request", "ttl_s cannot be negative")
         else:
             ttl_s = None  # permanent (no expiration)
-        api_key, prefix = await asyncio.to_thread(cloud.create_user_key, caller, device, ttl_s)
+        label = str(body.get("label") or "")[:60]
+        daily_limit_rub = _key_limit_rub(body, "daily_limit_rub")
+        monthly_limit_rub = _key_limit_rub(body, "monthly_limit_rub")
+        api_key, prefix = await asyncio.to_thread(
+            cloud.create_user_key, caller, device, ttl_s, label, daily_limit_rub, monthly_limit_rub
+        )
         return {"prefix": prefix, "api_key": api_key}
+
+    @app.patch("/v1/me/keys/{prefix}")
+    async def me_update_key(prefix: str, request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        body = await _json(request)
+        label = None if "label" not in body else str(body.get("label") or "")[:60]
+        daily_limit_rub = None if "daily_limit_rub" not in body else _key_limit_rub(body, "daily_limit_rub")
+        monthly_limit_rub = None if "monthly_limit_rub" not in body else _key_limit_rub(body, "monthly_limit_rub")
+        ttl_s = None
+        if "ttl_s" in body:
+            try:
+                ttl_s = int(body.get("ttl_s") or 0)
+            except (TypeError, ValueError) as e:
+                raise CloudError(400, "bad_request", "ttl_s must be a number of seconds") from e
+            if ttl_s < 0:
+                raise CloudError(400, "bad_request", "ttl_s cannot be negative")
+        view = await asyncio.to_thread(
+            cloud.update_user_key,
+            caller,
+            prefix,
+            label=label,
+            daily_limit_rub=daily_limit_rub,
+            monthly_limit_rub=monthly_limit_rub,
+            ttl_s=ttl_s,
+        )
+        return {"key": view}
 
     @app.delete("/v1/me/keys/{prefix}", status_code=204)
     async def me_revoke_key(prefix: str, caller: Caller = Depends(caller_dep)) -> Response:

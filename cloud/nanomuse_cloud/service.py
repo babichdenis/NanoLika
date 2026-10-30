@@ -361,6 +361,11 @@ class Caller:
     via: str = "code"
     key_created_at: int = 0
     key_prefix: str = ""
+    # A user-issued API key may carry its own spend limits and label (0 = no limit).
+    key_label: str = ""
+    key_daily_limit_rub: int = 0
+    key_monthly_limit_rub: int = 0
+    key_expires_at: int | None = None
     # Invitations (0.4): the code this person hands out and how many came.
     invite_code: str = ""
     invites: int = 0
@@ -1929,6 +1934,10 @@ class Cloud:
                 via=row["via"] or "code",
                 key_created_at=int(row["created_at"]),
                 key_prefix=row["prefix"],
+                key_label=row["label"] or "",
+                key_daily_limit_rub=int(row["daily_limit_rub"] or 0),
+                key_monthly_limit_rub=int(row["monthly_limit_rub"] or 0),
+                key_expires_at=int(row["expires_at"]) if row["expires_at"] else None,
                 invite_code=row["invite_code"] or "",
                 invites=int(row["invites"] or 0),
                 grant_uy=int(row["grant_uy"] or 0),
@@ -2015,21 +2024,108 @@ class Cloud:
                     "expires_at": int(k["expires_at"]) if k["expires_at"] else None,
                     "revoked": k["revoked_at"] is not None,
                     "total_sale_uy": spent,
+                    "label": k["label"] or "",
+                    "daily_limit_rub": int(k["daily_limit_rub"] or 0),
+                    "monthly_limit_rub": int(k["monthly_limit_rub"] or 0),
+                    "spent_today_uy": self.db.key_spent_uy_since(kh, self.s.day_start(now())),
+                    "spent_30d_uy": self.db.key_spent_uy_since(kh, now() - 30 * 86400),
                 }
             )
         out.sort(key=lambda s: -(s["last_used_at"] or s["created_at"]))
         return out
 
-    def create_user_key(self, caller: Caller, device: str = "console", ttl_s: int | None = None) -> tuple[str, str]:
-        """Create a permanent user key for this account.
-        Returns (full_key, prefix). If ttl_s is None the key never expires (expires_at=NULL)."""
-        expires_at = now() + ttl_s if ttl_s else None
+    def create_user_key(
+        self,
+        caller: Caller,
+        device: str = "console",
+        ttl_s: int | None = None,
+        label: str = "",
+        daily_limit_rub: int = 0,
+        monthly_limit_rub: int = 0,
+    ) -> tuple[str, str]:
+        """Create a user key with an optional lifetime and daily/30-day spend limits.
+        `ttl_s` None means no expiry; limits are whole rubles, 0 means no limit."""
+        ttl = max(60, min(int(ttl_s), 365 * 86400)) if ttl_s else None
+        expires_at = now() + ttl if ttl else None
         key, new_caller = self._issue_key(caller.account_id, device, "user", expires_at=expires_at)
+        self.db.set_key_meta(new_caller.key_hash, label or device, max(0, int(daily_limit_rub)), max(0, int(monthly_limit_rub)))
+        self.db.add_event(caller.account_id, "key.create", f"{new_caller.key_prefix} {(label or device)[:40]}")
         return key, new_caller.key_prefix
+
+    def key_view(self, caller: Caller) -> dict:
+        """The current key as its own app sees it: name, lifetime, limits, spend and the
+        account balance the key draws from. Light enough for `/v1/models`, which every
+        client reads before a request."""
+        t = now()
+        day_start = self.s.day_start(t)
+        allowance = self.allowance(caller)
+
+        def rub(uy: int) -> float:
+            return self.s.cny_to_rub(self.s.uy_to_cny(uy))
+
+        left_rub = None if allowance["left_uy"] is None else rub(allowance["left_uy"])
+        return {
+            "prefix": caller.key_prefix,
+            "label": caller.key_label or caller.key_prefix,
+            "expires_at": caller.key_expires_at,
+            "daily_limit_rub": caller.key_daily_limit_rub,
+            "monthly_limit_rub": caller.key_monthly_limit_rub,
+            "spent_today_rub": rub(self.db.key_spent_uy_since(caller.key_hash, day_start)),
+            "spent_30d_rub": rub(self.db.key_spent_uy_since(caller.key_hash, t - 30 * 86400)),
+            "total_spent_rub": rub(self.db.key_spent_uy(caller.key_hash)),
+            "balance": {
+                "unlimited": not allowance["limited"],
+                "left_rub": left_rub,
+                "grant_rub": rub(allowance["grant_uy"]),
+                "spent_rub": rub(allowance["spent_uy"]),
+                "today_rub": rub(self.db.spent_since(caller.account_id, day_start)),
+                "warn": allowance["warn"],
+            },
+        }
+
+    def update_user_key(
+        self,
+        caller: Caller,
+        prefix: str,
+        *,
+        label: str | None = None,
+        daily_limit_rub: int | None = None,
+        monthly_limit_rub: int | None = None,
+        ttl_s: int | None = None,
+    ) -> dict:
+        """Change a user key's name, spend limits or lifetime. `None` keeps a field as it
+        is; `ttl_s=0` removes the expiry, a positive value counts from now."""
+        expires_at = None
+        change_expiry = ttl_s is not None
+        if change_expiry:
+            ttl = max(60, min(int(ttl_s), 365 * 86400)) if ttl_s else None
+            expires_at = now() + ttl if ttl else None
+        if not self.db.update_key_by_prefix(
+            caller.account_id,
+            prefix[:10],
+            label=label,
+            daily_limit_rub=daily_limit_rub,
+            monthly_limit_rub=monthly_limit_rub,
+            expires_at=expires_at,
+            change_expiry=change_expiry,
+        ):
+            raise CloudError(404, "no_key", "No such API key")
+        self.db.add_event(caller.account_id, "key.update", prefix[:10])
+        return self.key_view(self._caller_after_update(caller, prefix[:10]))
+
+    def _caller_after_update(self, caller: Caller, prefix: str) -> Caller:
+        """Re-read the edited key so the reply carries what the page will show."""
+        key_hash = self.db.key_hash_by_prefix(caller.account_id, prefix)
+        if key_hash is None:
+            raise CloudError(404, "no_key", "No such API key")
+        return self._caller(key_hash) or caller
 
     def revoke_key(self, caller: Caller, prefix: str) -> bool:
         """Revoke a key by its prefix (what shows on the account page)."""
-        return self.db.revoke_key_by_prefix(caller.account_id, prefix)
+        revoked = self.db.revoke_key_by_prefix(caller.account_id, prefix)
+        if revoked:
+            self.db.add_event(caller.account_id, "key.revoke", prefix[:10])
+        return revoked
 
     def events(self, caller: Caller, limit: int = 50) -> list[dict]:
         return [dict(r) for r in self.db.events_for(caller.account_id, max(1, min(limit, 200)))]
@@ -2381,7 +2477,7 @@ class Cloud:
             row["commerce"] = model_pricing.describe(self, spec, caller)
             row["context_length"] = spec.context_length or measured_context().get(spec.id, 0)
             row["max_output"] = spec.max_output
-        return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf}
+        return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf, "key": self.key_view(caller)}
 
     def put_shelf(self, caller: Caller, data: dict[str, Any]) -> dict[str, Any]:
         """Store the shelf. `enabled` maps a kind to the ids it keeps there; a kind the write
@@ -2485,6 +2581,7 @@ class Cloud:
             # 0.26: the tariff the account is on (None: never bought one) and whether its
             # devices may meet through the relay; an app shows both on the account page
             "plan": self.plan_state(caller.account_id),
+            "key": self.key_view(caller),
             "connect": self.connect_state(caller.account_id),
             "usage": self.usage(caller.account_id, day_start),
             "tokens": {
@@ -2789,11 +2886,12 @@ class Cloud:
         return row
 
     def models_for(self, caller: Caller) -> dict:
-        """The menu, and whether this account may name a model beyond it."""
+        """The menu, whether this account may name a model beyond it, and the key/balance
+        the caller draws from — one read for an app that shows both together."""
         return {
             "object": "list",
             "data": [self.public_model(m, caller) for m in self.visible_models(caller)],
-            "nanomuse": {"any_model": self.any_model(caller)},
+            "nanomuse": {"any_model": self.any_model(caller), "key": self.key_view(caller)},
         }
 
     def check_budget(
@@ -2815,6 +2913,9 @@ class Cloud:
         allowance — so requests started together cannot each pass this check and
         together overshoot it. `place` is where the request came from (geo.py), for
         the refusal's "ways on" when the allowance is out."""
+        # A user-issued API key can carry its own daily/30-day spend limits. Only a request
+        # with a known price or reserve is checked; status calls with cost_uy=0 are let through.
+        self._check_key_limit(caller, max(cost_uy, hold_uy or 0))
         try:
             self._check_budget(caller, minimum, cost_uy, place)
         except CloudError as e:
@@ -2830,6 +2931,27 @@ class Cloud:
     def settle(self, caller: Caller, request_id: str) -> None:
         """The request is over (charged, failed or dropped): its reservation goes."""
         self.in_flight.settle(caller.account_id, request_id)
+
+    def _check_key_limit(self, caller: Caller, extra_uy: int) -> None:
+        """Stop a key at its own daily or rolling 30-day ruble limit before it spends more."""
+        if not caller.key_hash or extra_uy <= 0:
+            return
+        t = now()
+        for limit_rub, since, period in (
+            (caller.key_daily_limit_rub, self.s.day_start(t), "daily"),
+            (caller.key_monthly_limit_rub, t - 30 * 86400, "30-day"),
+        ):
+            if limit_rub <= 0:
+                continue
+            spent_rub = self.s.cny_to_rub(self.s.uy_to_cny(self.db.key_spent_uy_since(caller.key_hash, since)))
+            extra_rub = self.s.cny_to_rub(self.s.uy_to_cny(extra_uy))
+            if spent_rub + extra_rub > limit_rub + 0.01:
+                raise CloudError(
+                    429,
+                    "key_limit",
+                    f"This API key reached its {period} limit of ₽{limit_rub}; change the limit in the cabinet or use another key",
+                    {"limit": period, "limit_rub": limit_rub, "spent_rub": round(spent_rub, 2)},
+                )
 
     def _check_budget(self, caller: Caller, minimum: int, cost_uy: int, place: Place | None = None) -> None:
         if not self.s.unlimited and caller.remaining < minimum:
