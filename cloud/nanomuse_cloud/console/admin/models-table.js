@@ -21,6 +21,7 @@ const state = {
   provider: "",
   sellOnly: false,
   ours: false,   // только российские модели (GigaChat, Yandex, Alice…)
+  jumps: false,  // только модели, где следующий поставщик дороже в 1.8+ раза
   sort: "name",
   dir: "asc",
   cols: {},   // фильтры колонок: ключ колонки → строка
@@ -302,6 +303,7 @@ function readFilters() {
   state.provider = p.get("p") || "";
   state.sellOnly = p.get("sell") === "1";
   state.ours = p.get("ru") === "1";
+  state.jumps = p.get("jump") === "1";
   const sort = OLD_SORT[p.get("s")] || p.get("s") || "name";
   state.sort = SORT_KEYS.has(sort) ? sort : "name";
   state.dir = p.get("d") === "desc" ? "desc" : "asc";
@@ -315,6 +317,7 @@ function saveFilters() {
   if (state.provider) p.set("p", state.provider);
   if (state.sellOnly) p.set("sell", "1");
   if (state.ours) p.set("ru", "1");
+  if (state.jumps) p.set("jump", "1");
   if (state.sort !== "name") p.set("s", state.sort);
   if (state.dir === "desc") p.set("d", "desc");
   if (state.sel) p.set("sel", state.sel);
@@ -324,6 +327,36 @@ function saveFilters() {
   } catch (_) { /* не наша страница */ }
 }
 
+/** Скачок между поставщиками: следующий дороже самого дешёвого в 1.8+ раза. */
+function mediaPriceText(offer, group) {
+  const media = group.group !== "text" && group.group !== "code";
+  if (!media) return `${fmt(offer.input_rub)} ₽`;
+  return `${fmt(offer.price_rub)} ₽ / ${offer.unit || "ед."}`;
+}
+
+function priceJump(group) {
+  const media = group.group !== "text" && group.group !== "code";
+  const offers = group.offers.filter((offer) => (media ? Number(offer.price_rub) > 0 : offer.eligible && Number(offer.input_rub) > 0));
+  if (offers.length < 2) return null;
+  const buckets = new Map();
+  for (const offer of offers) {
+    const key = media ? String(offer.unit || "") : "";
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(offer);
+  }
+  let best = null;
+  for (const list of buckets.values()) {
+    const price = (offer) => Number(media ? offer.price_rub : offer.input_rub);
+    const sorted = list.slice().sort((a, b) => price(a) - price(b));
+    const first = sorted[0];
+    const next = sorted.find((offer) => offer.provider !== first.provider);
+    if (!next) continue;
+    const ratio = price(next) / price(first);
+    if (ratio >= 1.8 && (!best || ratio > best.ratio)) best = { ratio, first, next, unit: media ? first.unit : "" };
+  }
+  return best;
+}
+
 function visibleGroups() {
   let rows = allGroups().filter((group) => {
     if (state.group !== "all" && group.group !== state.group) return false;
@@ -331,6 +364,7 @@ function visibleGroups() {
     if (state.visibility === "hidden" && group.listed) return false;
     if (state.sellOnly && !group.models.some(hasSell)) return false;
     if (state.ours && !isOurs(group)) return false;
+    if (state.jumps && !priceJump(group)) return false;
     if (state.provider && !group.offers.some((offer) => offer.provider === state.provider)) return false;
     for (const [key, value] of Object.entries(state.cols)) {
       if (value && !matchesColumn(group, key, value)) return false;
@@ -437,6 +471,12 @@ function drawGroups() {
   ours.title = "Только российские модели: GigaChat, Yandex, Alice и другие";
   ours.onclick = () => { state.ours = !state.ours; draw(); };
   box.append(ours);
+  const jumps = el("button", "chip mt-jumps" + (state.jumps ? " on" : ""));
+  jumps.type = "button";
+  jumps.append(el("span", "", "скачки"), el("b", "", String(groups.filter(priceJump).length)));
+  jumps.title = "Модели, где следующий поставщик дороже самого дешёвого в 1,8 раза и больше";
+  jumps.onclick = () => { state.jumps = !state.jumps; draw(); };
+  box.append(jumps);
 }
 
 function drawProviderFilter() {
@@ -535,6 +575,14 @@ function drawModels(rows) {
       bestCell.append(el("span", "fine", " вход · " + providerLabel(best.provider)));
     } else {
       bestCell.append(el("span", "fine", "—"));
+    }
+    const jump = priceJump(group);
+    if (jump) {
+      const badge = el("span", "mt-jump", " ⚠ ×" + fmt(jump.ratio, 1));
+      const first = mediaPriceText(jump.first, group);
+      const next = mediaPriceText(jump.next, group);
+      badge.title = `Следующий поставщик дороже: ${providerLabel(jump.first.provider)} ${first} → ${providerLabel(jump.next.provider)} ${next}`;
+      bestCell.append(badge);
     }
     tr.append(bestCell);
 
