@@ -122,8 +122,8 @@ async def test_key_daily_limit_stops_inference_until_raised():
         id="qwen3.8-27b",
         name="Qwen 3.8",
         upstream="qwen3.8-27b",
-        price_in=1000.0,
-        price_out=1000.0,
+        sell_in=1000.0,
+        sell_out=1000.0,
     )
     app, client, sender, upstream, cloud, settings = make(models=(priced,), rub_per_usd=90.0, usd_cny=7.2)
     signed_in = await sign_up(client, sender, "key-limit@example.com", "browser")

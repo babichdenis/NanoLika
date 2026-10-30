@@ -2902,6 +2902,7 @@ class Cloud:
         request_id: str | None = None,
         hold_uy: int | None = None,
         place: Place | None = None,
+        key_uy: int | None = None,
     ) -> None:
         """Each limit is off when its setting is 0; the per-minute one guards the
         operator's bill against a runaway loop even on an unlimited relay.
@@ -2913,9 +2914,9 @@ class Cloud:
         allowance — so requests started together cannot each pass this check and
         together overshoot it. `place` is where the request came from (geo.py), for
         the refusal's "ways on" when the allowance is out."""
-        # A user-issued API key can carry its own daily/30-day spend limits. Only a request
-        # with a known price or reserve is checked; status calls with cost_uy=0 are let through.
-        self._check_key_limit(caller, max(cost_uy, hold_uy or 0))
+        # A user-issued API key can carry its own daily/30-day spend limits. The limit is in
+        # customer rubles, so `key_uy` (the sale estimate) wins over the provider's cost.
+        self._check_key_limit(caller, max(cost_uy, key_uy if key_uy is not None else (hold_uy or 0)))
         try:
             self._check_budget(caller, minimum, cost_uy, place)
         except CloudError as e:
@@ -2995,8 +2996,18 @@ class Cloud:
                 raise self._insufficient(caller, a, cost_uy, left, self.region(caller, place))
 
     def chat_reserve_uy(self, model: ModelSpec) -> int:
-        """What a chat on `model` is held at while it runs."""
+        """What a chat on `model` is held at while it runs, at the provider's cost."""
         return model.chat_cost_uy(CHAT_RESERVE_PROMPT_TOKENS, CHAT_RESERVE_COMPLETION_TOKENS)
+
+    def chat_sale_reserve_uy(self, model: ModelSpec, caller: Caller) -> int:
+        """The same typical turn at what this account would actually pay: key limits are
+        set in customer rubles, not in the provider's invoice."""
+        return model_pricing.amount(
+            self,
+            model,
+            {"input_tokens": CHAT_RESERVE_PROMPT_TOKENS, "output_tokens": CHAT_RESERVE_COMPLETION_TOKENS},
+            caller,
+        )["sale_uy"]
 
     def charge_chat(
         self,

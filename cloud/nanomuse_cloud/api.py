@@ -1406,7 +1406,13 @@ def create_app(
         headers = upstream_headers()
         request_id = uuid.uuid4().hex[:16]
         # held at a typical turn's price while it runs; settled when the reply is in
-        cloud.check_budget(caller, request_id=request_id, hold_uy=cloud.chat_reserve_uy(spec), place=client_place(request))
+        cloud.check_budget(
+            caller,
+            request_id=request_id,
+            hold_uy=cloud.chat_reserve_uy(spec),
+            key_uy=cloud.chat_sale_reserve_uy(spec, caller),
+            place=client_place(request),
+        )
         body["model"] = spec.upstream
         apply_chat_defaults(body, settings.chat_defaults)
         stream = bool(body.get("stream"))
