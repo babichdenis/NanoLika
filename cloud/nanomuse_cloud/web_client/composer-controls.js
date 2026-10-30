@@ -15,6 +15,18 @@ export function installComposerControls({form,message,select,refresh,status,sess
  function chosenModels(){const chosen=allVisible.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));return chosen.length?chosen:allChat;}
  async function saveFavourites(){const ownerId=session()?.owner||'';try{localStorage.setItem('nl.web.favourites.'+ownerId,JSON.stringify([...favSet]));}catch{}try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});}catch{}}
  trigger.onclick=()=>openModelPicker({models:chosenModels(),favourites:favSet,selected,onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
+ const applyFilters=()=>{
+  const q=query.trim().toLowerCase();
+  rows=all.filter(m=>(kind==='all'||m.kind===kind)&&(!q||m.name.toLowerCase().includes(q)||m.id.toLowerCase().includes(q)));
+  if(selected&&!rows.some(m=>m.id===selected)&&!q){const current=allChat.find(m=>m.id===selected);if(current)rows=[current,...rows];}
+  if(!rows.some(m=>m.id===selected))selected=rows[0]?.id||'';
+  select.replaceChildren();
+  for(const m of rows){const option=document.createElement('option');option.value=m.id;option.textContent=m.name;select.append(option);}
+  if(selected)select.value=selected;
+  paintTrigger();
+  status.textContent=rows.length?'':words.empty;
+  paint();
+ };
  message.addEventListener('keydown',event=>{if(enterSends(event)){event.preventDefault();form.requestSubmit();}});
  select.addEventListener('change',()=>{if(busy||!rows.some(row=>row.id===select.value))return;selected=select.value;try{storage.setItem(key(),selected);}catch{}});
  async function load(){
