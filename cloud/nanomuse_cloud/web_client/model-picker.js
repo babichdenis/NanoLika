@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261030-css', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261030-embed', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -43,11 +43,17 @@ export function openModelPicker({
   onToggleFavourite,
   onManage,
   payUrl = '/web/account/?pay=1&plan=lika-plus&source=models',
+  embedded = false,
+  container = null,
+  kinds = null,
+  onPlan,
+  onClose,
 } = {}) {
   injectStyles();
   return new Promise((resolve) => {
-    const dialog = document.createElement("dialog");
-    dialog.className = "mp-dialog";
+    const inPage = Boolean(embedded && container);
+    const dialog = document.createElement(inPage ? "div" : "dialog");
+    dialog.className = inPage ? "mp-embed" : "mp-dialog";
 
     const head = document.createElement("div");
     head.className = "mp-head";
@@ -74,7 +80,7 @@ export function openModelPicker({
     manage.textContent = "Управление моделями";
     manage.onclick = () => { finish(null); onManage?.(); };
     dialog.append(head, search, list, manage);
-    document.body.append(dialog);
+    if (inPage) container.append(dialog); else document.body.append(dialog);
     const tip = document.createElement("div");
     tip.className = "mp-tip";
     tip.hidden = true;
@@ -82,8 +88,12 @@ export function openModelPicker({
 
     const finish = (value = null) => {
       if (dialog.open) dialog.close();
-      dialog.remove();
+      if (!inPage) dialog.remove();
       resolve(value);
+    };
+    const closePicker = () => {
+      if (inPage) onClose?.();
+      finish(null);
     };
 
     const contextText = (value) => {
@@ -126,6 +136,7 @@ export function openModelPicker({
       const query = search.value.trim().toLowerCase();
       list.replaceChildren();
       for (const [kind, label] of CATEGORIES) {
+        if (Array.isArray(kinds) && !kinds.includes(kind)) continue;
         const items = models.filter(
           (model) =>
             categoryOf(model) === kind &&
@@ -158,7 +169,10 @@ export function openModelPicker({
             plan.href = payUrl;
             plan.textContent = "Лика+";
             plan.title = "Открыть тарифы и подключить Лика+";
-            plan.onclick = (event) => event.stopPropagation();
+            plan.onclick = (event) => {
+              event.stopPropagation();
+              if (onPlan) { event.preventDefault(); onPlan(); }
+            };
             row.append(pick, plan);
           } else {
             row.append(pick);
@@ -188,16 +202,19 @@ export function openModelPicker({
     };
 
     search.oninput = render;
-    closeButton.onclick = () => finish(null);
-    dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) finish(null);
-    });
-    dialog.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      finish(null);
-    });
+    closeButton.onclick = () => closePicker();
+    if (!inPage) {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) closePicker();
+      });
+      dialog.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        closePicker();
+      });
+    }
+    if (inPage) document.addEventListener("keydown", (event) => { if (event.key === "Escape") closePicker(); });
     render();
-    dialog.showModal();
+    if (!inPage) dialog.showModal();
     search.focus();
   });
 }

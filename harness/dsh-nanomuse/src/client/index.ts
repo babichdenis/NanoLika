@@ -43,6 +43,7 @@ import { makeLibraryPanel } from './LibraryPanel.tsx'
 import { IconPanelLeft, IconPlus } from './icons.tsx'
 import { makeInviteButton } from './Invite.tsx'
 import { makeUsagePill } from './UsagePill.tsx'
+import { makeCloudModelPill } from './CloudModelPill.tsx'
 import { useLive, subscribeLive } from './live.ts'
 import { en, ru, zh } from './locales.ts'
 import type { ChatActions } from './MuseChats.tsx'
@@ -499,6 +500,10 @@ export function apply(ctx: ClientContext): void {
   const InviteButton = makeInviteButton(t)
   slots.inject('conversation.session.header.utilities', () =>
     slots.register({ name: 'conversation.session.header.utilities', id: 'nanomuse-invite', order: -20, locale: 'nanomuse' }, InviteButton))
+  // The model the chat answers with, beside Invite: the catalogue itself is the relay's page.
+  const CloudModelPill = makeCloudModelPill(t)
+  slots.inject('conversation.session.header.utilities', () =>
+    slots.register({ name: 'conversation.session.header.utilities', id: 'nanomuse-model', order: -21, locale: 'nanomuse' }, CloudModelPill))
   // What today cost, beside Invite: yuan and tokens; a click opens the account.
   const UsagePill = makeUsagePill(t)
   slots.inject('conversation.session.header.utilities', () =>

@@ -4120,6 +4120,14 @@ export default class NanomuseCloud extends Service {
         await this.setHandsModel(String(body.model ?? ''), typeof body.provider === 'string' && body.provider ? body.provider : PROVIDER_ID)
         return send(res, 200, this.handsChoice())
       }
+      // The model picker page is served by the relay, so its UI changes ship without a new app.
+      // The shell gets a short-lived key for it, never the device's standing one.
+      if (req.method === 'POST' && route === '/model-picker-session') {
+        const token = await this.token()
+        if (!token || !this.state.account) throw new RelayError(401, 'bad_key', 'Sign in to nanoLika')
+        const session = await this.relay.sessionKey(token, 'model-picker', 15 * 60)
+        return send(res, 200, { url: `${this.relay.origin}/web/picker/`, key: session.apiKey, expiresAt: session.expiresAt })
+      }
       // Settings → Models (0.1.41): the four slots in one read, the two media slots' setters, the one-time Cloud retry.
       if ((req.method === 'GET' && route === '/model-catalogue') || (req.method === 'POST' && ['/model-favourites', '/model-quote'].includes(route))) {
         const token = await this.token()

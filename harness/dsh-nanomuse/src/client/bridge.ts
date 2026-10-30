@@ -52,6 +52,21 @@ export interface DesktopPrefs {
   supports: { menuBar: boolean; quickChat: boolean }
 }
 
+/** The relay-hosted model picker, opened in a window of the shell's own. */
+export interface ModelPickerOpen {
+  /** The page the relay serves, e.g. `https://cloud.nanolika.ru/web/picker/`. */
+  url: string
+  /** A short-lived key for that page; it lapses on its own. */
+  key: string
+  /** The model to mark as chosen. */
+  selected?: string
+  /** One kind or a comma-separated list (`chat`, `image`, `video`); all kinds when absent. */
+  kind?: string
+  title?: string
+}
+
+export type ModelPickerAnswer = { type: 'pick'; id: string } | { type: 'manage' } | null
+
 /** What the shell's glow and capsule show of the hands (0.1.40 adds the step, the title and the two buttons' words). */
 export interface OverlayHands {
   active: boolean
@@ -99,6 +114,12 @@ export interface HarnessBridge {
   onOverlayAction?(listener: (card: string, action: string) => void): () => void
   // since 0.1.41: the Host again with the window up, so a proxy just set applies
   restartHost?(): Promise<void>
+  /**
+   * The model catalogue as the relay serves it, in a modal window of the shell's own: the
+   * picker's markup and styles live on the server, so they change without a new app build.
+   * Absent in older shells, which keep the picker in the bundle.
+   */
+  modelPicker?: { open(options: ModelPickerOpen): Promise<ModelPickerAnswer> }
   /**
    * A share link's code (nanolika://invite/CODE, from nanolika.ru): taken once for the
    * sign-in screen's invite field, and waited for while the app is open. Absent in older

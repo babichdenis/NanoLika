@@ -654,6 +654,18 @@ export class Relay {
     })
   }
 
+  /** A key that expires on its own, for a page the shell opens in a window of its own. */
+  async sessionKey(apiKey: string, device = 'model-picker', ttlS = 15 * 60): Promise<{ apiKey: string; expiresAt: number }> {
+    const res = await this.fetchImpl(`${this.origin}/v1/auth/session-key`, {
+      method: 'POST',
+      headers: { ...this.auth(apiKey), ...JSON_HEADERS },
+      body: JSON.stringify({ device, ttl_s: ttlS }),
+    })
+    if (!res.ok) await fail(res)
+    const body = (await res.json()) as Record<string, unknown>
+    return { apiKey: String(body.api_key ?? ''), expiresAt: Number(body.expires_at ?? 0) }
+  }
+
   /** Retail metadata and account favourites, without provider credentials. */
   async modelCatalogue(apiKey: string, favourites?: string[]): Promise<Record<string, unknown>> {
     const res = await this.fetchImpl(`${this.origin}/v1/me/models`, { method: favourites ? 'PUT' : 'GET', headers: { ...this.auth(apiKey), 'Content-Type': 'application/json' }, ...(favourites ? { body: JSON.stringify({ enabled: {}, favourites }) } : {}) })

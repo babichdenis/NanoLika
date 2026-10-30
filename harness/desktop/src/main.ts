@@ -145,6 +145,9 @@ const logs: string[] = [];
 let hostStderr = "";
 let child: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
+/** The relay-hosted model picker, when its window is up, and the caller waiting for the answer. */
+let modelPickerWindow: BrowserWindow | null = null;
+let modelPickerAnswer: ((answer: { type: "pick"; id: string } | { type: "manage" } | null) => void) | null = null;
 let hostUrl: string | null = null;
 let quitting = false;
 let sessionEnding = false;
@@ -1171,6 +1174,82 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
   return { screenshot, url };
 }
 
+/**
+ * The model catalogue the relay serves, in a window of its own. The page is remote on
+ * purpose: its markup and styles change with the relay, not with an app update. The key in
+ * the fragment is short-lived (the host mints it per open), and the preload is one narrow
+ * `send` — the page has no Node and no access to the shell beyond the answer.
+ */
+function openModelPickerWindow(options: { url: string; key: string; selected?: string; kind?: string; title?: string }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> {
+  let page: URL;
+  try {
+    page = new URL(String(options?.url ?? ""));
+  } catch {
+    return Promise.resolve(null);
+  }
+  if (page.protocol !== "https:" || !page.pathname.endsWith("/web/picker/") || !options?.key) return Promise.resolve(null);
+  if (modelPickerWindow) {
+    if (!modelPickerWindow.isDestroyed()) modelPickerWindow.focus();
+    return Promise.resolve(null);
+  }
+  const hash = new URLSearchParams({ key: options.key });
+  if (options.selected) hash.set("sel", options.selected);
+  if (options.kind) hash.set("kind", options.kind);
+  if (options.title) hash.set("title", options.title);
+  return new Promise((resolve) => {
+    modelPickerAnswer = resolve;
+    const parent = alive(mainWindow) ? mainWindow : undefined;
+    const win = new BrowserWindow({
+      width: 920,
+      height: 760,
+      minWidth: 640,
+      minHeight: 520,
+      show: false,
+      modal: Boolean(parent),
+      ...(parent ? { parent } : {}),
+      backgroundColor: "#efe8d9",
+      autoHideMenuBar: true,
+      title: "Выбор модели",
+      webPreferences: {
+        preload: join(__dirname, "picker-preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        spellcheck: false,
+      },
+    });
+    modelPickerWindow = win;
+    win.once("ready-to-show", () => win.show());
+    // A link in the picker (the plan pill, an account page) belongs in the person's browser.
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      if (EXTERNAL_URL.test(url)) void shell.openExternal(url);
+      return { action: "deny" };
+    });
+    win.webContents.on("will-navigate", (event, target) => {
+      if (target.startsWith(`${page.origin}${page.pathname}`)) return;
+      event.preventDefault();
+      if (EXTERNAL_URL.test(target)) void shell.openExternal(target);
+    });
+    win.on("closed", () => {
+      if (modelPickerWindow === win) modelPickerWindow = null;
+      const answer = modelPickerAnswer;
+      modelPickerAnswer = null;
+      answer?.(null);
+    });
+    void win.loadURL(`${page.origin}${page.pathname}#${hash.toString()}`);
+  });
+}
+
+/** Close the picker with an answer (or nothing) and wake the caller exactly once. */
+function finishModelPicker(answer: { type: "pick"; id: string } | { type: "manage" } | null): void {
+  const win = modelPickerWindow;
+  modelPickerWindow = null;
+  const resolve = modelPickerAnswer;
+  modelPickerAnswer = null;
+  if (win && !win.isDestroyed()) win.destroy();
+  resolve?.(answer);
+}
+
 /** The requests the preload bridge forwards from the web client (see preload.ts). */
 function registerBridge(): void {
   // appImage: the Linux build runs from an AppImage (the runtime sets APPIMAGE), so About offers the AppImage of a newer version, not the .deb
@@ -1231,6 +1310,17 @@ function registerBridge(): void {
   }
   ipcMain.handle("nanomuse:permissions:settings", (_e, kind: PermissionKind | "files") => {
     if (process.platform === "darwin" && typeof kind === "string" && kind in PERMISSION_PANES) void shell.openExternal(PERMISSION_PANES[kind]);
+  });
+  ipcMain.handle("nanomuse:model-picker:open", (_e, options: { url: string; key: string; selected?: string; kind?: string; title?: string }) => openModelPickerWindow(options));
+  ipcMain.on("nanomuse:model-picker:message", (event, payload: { type?: string; id?: string }) => {
+    if (!modelPickerWindow || event.sender !== modelPickerWindow.webContents) return;
+    if (payload?.type === "pick" && typeof payload.id === "string" && payload.id) finishModelPicker({ type: "pick", id: payload.id });
+    else if (payload?.type === "manage") finishModelPicker({ type: "manage" });
+    else if (payload?.type === "close") finishModelPicker(null);
+    else if (payload?.type === "plan") {
+      const plan = "https://cloud.nanolika.ru/web/account/?pay=1&plan=lika-plus&source=picker";
+      void shell.openExternal(plan);
+    }
   });
   ipcMain.handle("nanomuse:open-external", (_e, url: string) => {
     if (typeof url === "string" && EXTERNAL_URL.test(url)) void shell.openExternal(url);

@@ -1,0 +1,14 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #efe8d9;
+  color: #38372f;
+  font: 14px/1.5 ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+#picker { height: 100%; padding: 16px; box-sizing: border-box; }
+#status {
+  margin: 8px 16px 16px;
+  font-size: 12px;
+  color: #8a5a34;
+}
+#status:empty { display: none; }

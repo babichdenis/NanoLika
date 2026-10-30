@@ -74,6 +74,14 @@ const bridge = {
     return () => ipcRenderer.off("nanomuse:overlay:action", handler);
   },
   /**
+   * The model catalogue the relay serves, in a modal window of the shell: the picker's
+   * markup and styles live on the server, so they change without a new app build.
+   */
+  modelPicker: {
+    open: (options: { url: string; key: string; selected?: string; kind?: string; title?: string }): Promise<{ type: "pick"; id: string } | { type: "manage" } | null> =>
+      ipcRenderer.invoke("nanomuse:model-picker:open", options),
+  },
+  /**
    * A share link's code (nanolika://invite/CODE, from nanolika.ru): taken once, for the
    * sign-in screen's invite field, or waited for while the app is open. "" when there is none.
    */
