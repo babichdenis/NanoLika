@@ -19,6 +19,7 @@ export function installPaymentDialog({lang,request,getSession,fromConsole}){
  const legal=h('a',lang==='ru'?'Официальная информация':lang==='zh'?'法律信息':'Legal information','payment-legal');legal.href='https://nanolika.ru/legal.html';legal.target='_blank';legal.rel='noopener';
  dialog.append(close,heading,h('p',T.intro),fieldset,acceptance,total,mode,status,pay);
  dialog.setAttribute('aria-labelledby','payment-title');
+ const signIn=()=>{dialog.close();location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));};
  const option=()=>selected==='custom'?amountValue(amount.value):config?.plans?.[selected]?{cents:config.plans[selected].amount,plan:selected}:null;
  function update(){const pick=option();total.textContent=pick?`${T.summary}: ${money(pick.cents)}`:'';pay.disabled=busy||!authenticated||!config||!pick||!accept.checked;}
  function renderPlans(){
@@ -48,7 +49,7 @@ export function installPaymentDialog({lang,request,getSession,fromConsole}){
    mode.textContent=config.test_mode===true?T.demo:'';pay.textContent=config.test_mode===true?T.testPay:T.pay;
    status.textContent='';
    preselect(choice);
-  }catch(e){status.textContent=e.status===401?T.login:T.unavailable;}
+  }catch(e){if(e.status===401){signIn();return;}status.textContent=T.unavailable;}
   finally{fieldset.disabled=!authenticated;update();}
  }
 
@@ -63,8 +64,8 @@ export function installPaymentDialog({lang,request,getSession,fromConsole}){
   if(!accept.checked){status.textContent=T.accept;return;}
   busy=true;fieldset.disabled=true;pay.disabled=true;close.disabled=true;status.textContent=T.preparing;
   try{
-   const session=await getSession();if(!session?.key||!session?.owner){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;status.textContent=T.login;return;}
-   const me=await request('/v1/me');if(!me.account?.id||me.account.id!==session.owner){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;status.textContent=T.login;return;}
+   const session=await getSession();if(!session?.key||!session?.owner){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;signIn();return;}
+   const me=await request('/v1/me');if(!me.account?.id||me.account.id!==session.owner){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;signIn();return;}
    const selection=pick.plan?{plan:pick.plan}:{amount:pick.amount};
    const scope=JSON.stringify({account:session.owner,selection}),draftKey='nl.account.payment.draft.'+encodeURIComponent(scope);
    try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||'null');if(saved?.scope===scope&&/^[a-zA-Z0-9_-]{16,64}$/.test(saved.id))draft=saved;}catch{}
@@ -76,7 +77,7 @@ export function installPaymentDialog({lang,request,getSession,fromConsole}){
    const result='/app/payments/?order='+encodeURIComponent(data.order_id);
    if(data.credited||data.status!=='NEW'){location.assign(result);return;}
    const target=bankTarget(data.payment_url);if(!target){status.textContent=T.invalidBank;return;}location.assign(target);
-  }catch(e){if(e.status===401){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;status.textContent=T.login;}else status.textContent=T.error;}
+  }catch(e){if(e.status===401){authenticated=false;fieldset.hidden=true;acceptance.hidden=true;total.hidden=true;mode.hidden=true;pay.hidden=true;signIn();}else status.textContent=T.error;}
   finally{busy=false;fieldset.disabled=!authenticated;update();close.disabled=false;}
  };
  return {open,close:()=>{if(dialog.open)dialog.close();}};

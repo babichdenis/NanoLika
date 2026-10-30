@@ -5,7 +5,7 @@
   const format = value => new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB'}).format(value / 100);
   let key = '', sessionOwner = '', config = null, order = params.get('order') || params.get('Shp_order') || '';
   let idempotency = crypto.randomUUID().replaceAll('-', '');
-  let busy = false;
+  let busy = false, redirecting = false;
   try {
     const webSession = JSON.parse(localStorage.getItem('nl.web.session.v1') || 'null');
     if (webSession?.key) { key = webSession.key; sessionOwner = webSession.owner || ''; }
@@ -21,6 +21,12 @@
       if (localStorage.getItem('nm.key') === expired) localStorage.removeItem('nm.key');
     } catch (_) {}
   }
+  function signIn() {
+    redirecting = true;
+    $('checkout').hidden = true;
+    $('purchase').hidden = true;
+    location.replace('/app/?signin=1&next=' + encodeURIComponent(location.href));
+  }
   async function loadConfig() {
     config = await api('/v1/payments/config');
     $('provider-label').textContent = `nanoLika · ${config.provider_name}${config.test_mode ? ' · тестовый режим' : ''}`;
@@ -33,7 +39,7 @@
     const r = await fetch(path, {method:body ? 'POST' : 'GET', cache:'no-store', headers:{...(body ? {'Content-Type':'application/json'} : {}), ...(key ? {Authorization:'Bearer ' + key} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
     const data = r.status === 204 ? {} : await r.json();
     if (!r.ok) {
-      if (r.status === 401) { clearAuth(); $('login').hidden = false; $('purchase').hidden = true; }
+      if (r.status === 401) { clearAuth(); signIn(); }
       throw Error((data.error?.code === 'signup_closed' ? 'Новые регистрации временно закрыты. Существующие аккаунты продолжают работать.' : data.error?.message) || 'Не удалось выполнить запрос. Попробуйте позднее.');
     }
     return data;
@@ -66,16 +72,15 @@
     return data;
   }
   async function show() {
-    if (!key) { $('login').hidden = false; $('purchase').hidden = true; return; }
+    if (!key) { signIn(); return; }
     const me = await api('/v1/me');
     if (!me.account?.id || (sessionOwner && me.account.id !== sessionOwner)) {
-      clearAuth(); $('login').hidden = false; $('purchase').hidden = true;
-      message('Сессия аккаунта не совпала. Войдите ещё раз.');
+      clearAuth(); signIn();
       return;
     }
     sessionOwner = me.account.id;
     await loadConfig();
-    $('login').hidden = true; $('purchase').hidden = false;
+    $('checkout').hidden = false; $('purchase').hidden = false;
     if (order) { await check(); return; }
     const plan = config.plans[params.get('plan')];
     if (params.has('plan') && !plan) throw Error('Неизвестный тариф. Вернитесь к выбору пакета.');
@@ -87,14 +92,6 @@
       ? `Сумма поступит на баланс. Когда оплаченный остаток достигнет ${format(plan.amount)}, включится тариф «${plan.name}» на 30 дней. Деньги останутся на балансе.`
       : 'Пополнение поступит на баланс. Достигнутый порог включит соответствующий тариф на 30 дней; само пополнение действующий срок не продлевает.';
   }
-  $('email-form').addEventListener('submit', async e => {
-    e.preventDefault(); const button=e.submitter; button.disabled=true;
-    try { await api('/v1/auth/code', {identifier:$('email').value.trim()}); $('code-form').hidden=false; message('Введите код из письма.'); $('code').focus(); } catch(e) { message(e.message); } finally { button.disabled=false; }
-  });
-  $('code-form').addEventListener('submit', async e => {
-    e.preventDefault(); const button=e.submitter;button.disabled=true;
-    try { const data=await api('/v1/auth/verify',{identifier:$('email').value.trim(),code:$('code').value.trim(),device:'Оплата nanoLika'});key=data.api_key;sessionOwner='';try{localStorage.setItem('nm.key',key);}catch(_){} message('');await show(); } catch(e){message(e.message);} finally{button.disabled=false;}
-  });
   $('pay').addEventListener('click',async()=>{
     if(busy)return; if(!$('accept-terms').checked){message('Подтвердите ознакомление с условиями.');return;} busy=true;$('pay').disabled=true;
     try {
@@ -111,6 +108,6 @@
     }catch(e){message(e.message);}finally{busy=false;$('pay').disabled=false;}
   });
   $('refresh').addEventListener('click',async()=>{if(busy)return;busy=true;$('refresh').disabled=true;try{await check();}catch(e){message(e.message);}finally{busy=false;$('refresh').disabled=false;}});
-  $('logout').addEventListener('click',()=>{clearAuth();$('purchase').hidden=true;$('login').hidden=false;message('Введите почту другого аккаунта.');});
-  show().catch(e=>message(e.message));
+  $('logout').addEventListener('click',()=>{clearAuth();signIn();});
+  show().catch(e=>{if(!redirecting){$('checkout').hidden=false;message(e.message);}});
 })();

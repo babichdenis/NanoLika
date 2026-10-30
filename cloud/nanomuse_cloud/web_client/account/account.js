@@ -1,7 +1,7 @@
 import {ChannelOnboarding,isChannelLinked,isDesktopDevice} from '../channel-onboarding.js?v=20261029-connect';
 import {installAutopay} from './autopay.js';
 import {installUsageChart} from './usage-chart.js?v=20261027-compact';
-import {installPaymentDialog} from './payments.js?v=20261030-auth-gate';
+import {installPaymentDialog} from './payments.js?v=20261030-standard-signin';
 import {groupWebDevices} from './payment-utils.js';
 import {clearOwner} from '../storage.js';
 const words={
