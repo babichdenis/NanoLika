@@ -1,0 +1,207 @@
+/* Кабинет: «тихая бухгалтерия» — бумага, линейки, крупные цифры.
+   Один визуальный язык с каталогом моделей: ink, sage, tabular numerals. */
+body.account-studio, body.model-studio {
+  --canvas: #f7f1e6;
+  --surface: #fbf6ec;
+  --fill: #efe9da;
+  --hairline: #d8d1c1;
+  --ink: #38372f;
+  --ink-2: #66675b;
+  --ink-3: #8a8a7b;
+  --action: #52694e;
+  --amber: #c48d3d;
+  --brand-body: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --brand-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 15px/1.65 var(--brand-body);
+  -webkit-font-smoothing: antialiased;
+}
+.account-studio ::selection, .model-studio ::selection { background: #ccd8bb; color: #283624; }
+.account-studio [hidden], .model-studio [hidden] { display: none !important; }
+
+/* Шапка */
+.account-studio .account-top, .model-studio .account-top {
+  max-width: 1320px; margin: 0 auto; padding: 20px 40px; min-height: 84px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 24px;
+  border-bottom: 1px solid var(--hairline);
+}
+.account-studio .account-top .brand, .model-studio .account-top .brand {
+  font: 700 30px/1 var(--brand-body); letter-spacing: -.04em;
+}
+.account-studio .account-top .brand b, .model-studio .account-top .brand b { color: var(--action); }
+.account-studio .account-top > a:last-child, .model-studio .account-top > a:last-child {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2);
+  text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 3px;
+}
+.account-studio .account-top > a:last-child:hover, .model-studio .account-top > a:last-child:hover {
+  color: var(--ink); border-bottom-color: var(--ink);
+}
+
+/* Сетка: узкое оглавление слева, выписка справа */
+.account-studio .account-layout, .model-studio .account-layout {
+  display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 56px;
+  max-width: 1320px; margin: 0 auto; padding: 40px 40px 72px; align-items: start;
+}
+.account-studio .account-layout main, .model-studio .account-layout main { width: 100%; max-width: none; margin: 0; padding: 0; min-width: 0; }
+.account-studio .account-nav, .model-studio .account-nav { position: sticky; top: 28px; align-self: start; min-width: 0; }
+.account-menu-caption {
+  margin: 0 0 14px !important; padding-bottom: 10px; border-bottom: 1px solid var(--hairline);
+  font: 700 9.5px/1.4 var(--brand-body) !important; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3) !important;
+}
+.account-studio .account-nav nav, .model-studio .account-nav nav { display: grid; gap: 1px; }
+.account-studio .account-nav a, .model-studio .account-nav a {
+  display: block; padding: 8px 0 8px 14px; min-height: 0;
+  border-left: 2px solid transparent; border-radius: 0;
+  font: 14px/1.45 var(--brand-body); color: var(--ink-2); text-decoration: none;
+  transition: color .16s ease, border-color .16s ease;
+}
+.account-studio .account-nav a:hover, .model-studio .account-nav a:hover { background: none; color: var(--ink); border-left-color: var(--hairline); }
+.account-studio .account-nav a[aria-current=page], .model-studio .account-nav a[aria-current=page] {
+  background: none; color: var(--ink); font-weight: 600; border-left-color: var(--action);
+}
+.account-studio .account-nav .account-help, .model-studio .account-nav .account-help {
+  margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--hairline);
+  font-size: 11px; letter-spacing: .04em; color: var(--ink-3);
+}
+
+/* Заголовок раздела */
+.account-studio h1, .account-studio .account-layout h1, .model-studio h1 {
+  margin: 0 0 8px !important; font: 500 clamp(34px, 4.4vw, 58px)/1.02 var(--brand-body) !important;
+  letter-spacing: -.04em; color: var(--ink);
+}
+.account-studio .page-heading {
+  position: relative; margin: 0 0 34px; padding: 0 0 26px; border-bottom: 2px solid var(--ink); min-height: 0;
+}
+.account-studio #identity { margin: 10px 0 0; font: 11.5px/1.5 var(--brand-body); letter-spacing: .04em; color: var(--ink-3); overflow-wrap: anywhere; }
+.account-studio .page-heading #refresh {
+  position: absolute; top: 4px; right: 0; min-height: 34px; padding: 6px 14px;
+  border: 1px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink);
+  font: 600 10px/1.4 var(--brand-body); letter-spacing: .1em; text-transform: uppercase;
+}
+.account-studio .page-heading #refresh:hover { background: var(--ink); color: var(--canvas); }
+.account-studio #status:empty, .account-studio #api-key-status:empty { display: none; }
+.account-studio #status:not(:empty), .account-studio #api-key-status:not(:empty) {
+  margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid var(--hairline);
+  color: #7a5b24; font-size: 12.5px; letter-spacing: .01em;
+}
+
+/* Разделы как главы выписки */
+.account-studio #private-content > section { padding: 0; border: 0; }
+.account-studio #private-content > section + section { margin-top: 6px; }
+.account-studio .account-layout h2, .model-studio .kind-title {
+  margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--hairline);
+  font: 600 13px/1.4 var(--brand-body); letter-spacing: .14em; text-transform: uppercase; color: var(--ink);
+}
+.account-studio .account-layout h3 { margin: 30px 0 12px; font: 600 12px/1.4 var(--brand-body); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.account-studio p, .model-studio p { max-width: 72ch; margin: 0 0 14px; font: 14px/1.7 var(--brand-body); color: var(--ink-2); }
+
+/* Обзор: баланс и тариф как две колонки выписки */
+.account-studio .overview-grid {
+  display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  background: transparent; border: 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--hairline);
+  border-radius: 0; box-shadow: none;
+}
+.account-studio .overview-grid > .card { padding: 28px 28px 28px 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.account-studio .overview-grid > .card + .card { padding-left: 28px; border-left: 1px solid var(--hairline); }
+.account-studio .overview-grid .eyebrow {
+  margin: 0 0 12px; font: 700 9.5px/1.4 var(--brand-body); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3);
+}
+.account-studio #balance {
+  display: block; font: 500 clamp(38px, 4.6vw, 62px)/1 var(--brand-body); letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.account-studio #plan-name { margin: 6px 0 12px; font: 500 clamp(26px, 2.6vw, 34px)/1.1 var(--brand-body); letter-spacing: -.03em; color: var(--action); }
+.account-studio #balance-note, .account-studio #paid-balance-note, .account-studio #plan-detail, .account-studio #connect {
+  margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--ink-3);
+}
+
+/* Кнопки и поля: плоские, с линейкой */
+.account-studio button, .account-studio input, .account-studio select, .account-studio .button,
+.model-studio button, .model-studio input, .model-studio select {
+  border: 1px solid var(--hairline); border-radius: 0; background: var(--surface);
+  color: var(--ink); font: 14px/1.45 var(--brand-body); padding: 9px 14px; min-height: 40px; box-shadow: none;
+}
+.account-studio button, .model-studio button { cursor: pointer; letter-spacing: .01em; }
+.account-studio button:hover, .model-studio button:hover { filter: none; border-color: var(--ink); }
+.account-studio .account-layout button[type=submit], .account-studio .account-layout .button,
+.account-studio #create-api-key, .account-studio #copy-api-key {
+  background: var(--action); border: 1px solid var(--action); color: #fffdf4;
+  font: 600 10.5px/1.4 var(--brand-body); letter-spacing: .12em; text-transform: uppercase;
+  padding: 12px 18px; min-height: 42px;
+}
+.account-studio .account-layout button[type=submit]:hover, .account-studio .account-layout .button:hover,
+.account-studio #create-api-key:hover, .account-studio #copy-api-key:hover { background: #42573e; border-color: #42573e; }
+.account-studio button::before, .account-studio button::after { content: none !important; }
+.account-studio button:disabled, .model-studio button:disabled { opacity: .45; cursor: default; }
+.account-studio input, .account-studio select { border: 0; border-bottom: 1px solid var(--hairline); background: transparent; padding-left: 0; }
+.account-studio label { display: grid; gap: 6px; margin: 0 0 16px; font: 700 9.5px/1.4 var(--brand-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.account-studio label input, .account-studio label select { text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--ink); }
+.account-studio :focus-visible, .model-studio :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+
+/* Карточки-панели: только линейки, без теней */
+.account-studio .card, .model-studio .card { background: transparent; border: 0; border-top: 1px solid var(--hairline); border-radius: 0; box-shadow: none; padding: 22px 0; }
+.account-studio .card.pad { padding: 24px 0; }
+.account-studio details.card { border-top: 1px solid var(--hairline); }
+.account-studio summary { cursor: pointer; font: 600 12px/1.5 var(--brand-body); letter-spacing: .04em; color: var(--ink); }
+
+/* Короткие ссылки */
+.account-studio .account-shortcuts { display: flex; flex-wrap: wrap; gap: 10px 30px; margin: 26px 0 0; padding-top: 18px; border-top: 1px solid var(--hairline); }
+.account-studio .account-shortcuts a { font-size: 12px; letter-spacing: .04em; color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--hairline); padding-bottom: 2px; }
+.account-studio .account-shortcuts a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* Расход и график */
+.account-studio .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.account-studio .usage-periods { display: flex; gap: 4px; }
+.account-studio .usage-periods button { min-height: 30px; padding: 4px 10px; border: 0; border-bottom: 1px solid transparent; background: none; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.account-studio .usage-periods button[aria-pressed=true] { color: var(--ink); border-bottom-color: var(--ink); }
+.account-studio #usage-chart { border-top: 1px solid var(--hairline); padding-top: 22px; }
+.account-studio .usage-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin: 18px 0; }
+.account-studio .usage-metric strong { display: block; font: 500 28px/1.1 var(--brand-body); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+
+/* API-ключ: тёмная панель-«ключница» */
+.account-studio #api { margin-top: 4px; }
+.account-studio #api > p { max-width: 64ch; }
+.account-studio .api-key-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 26px; margin: 20px 0 18px; }
+.account-studio .api-key-controls > span { font-size: 11.5px; letter-spacing: .02em; color: var(--ink-3); }
+.account-studio .api-key-controls code { font: 12px/1.5 var(--brand-mono); color: var(--ink); background: var(--fill); padding: 3px 7px; }
+.account-studio #new-api-key {
+  margin: 20px 0; padding: 22px; background: var(--ink) !important; color: var(--canvas);
+  border: 0; border-radius: 0;
+}
+.account-studio #new-api-key p { color: #d9d4c4; max-width: 58ch; }
+.account-studio #new-api-key code { display: block; margin: 16px 0; padding: 14px; background: #2c2b25; color: #f4eeda; font: 13px/1.6 var(--brand-mono); overflow-wrap: anywhere; }
+.account-studio #api-keys { border-top: 1px solid var(--hairline); }
+.account-studio .api-key-row, .account-studio #api-keys > * { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+.account-studio code { font-family: var(--brand-mono); font-size: 12px; }
+
+/* Таблицы сессий, устройств, каналов */
+.account-studio table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.account-studio th { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--ink); text-align: left; font: 700 9.5px/1.4 var(--brand-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.account-studio td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.account-studio .account-row { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+.account-studio .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--hairline); border-radius: 999px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+
+/* Низ страницы */
+.account-studio footer { display: flex; flex-wrap: wrap; gap: 12px 26px; margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--hairline); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); }
+.account-studio footer a { color: var(--ink-2); text-decoration: none; }
+.account-studio .actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 26px; }
+.account-studio .danger { border-color: #b08a6a !important; color: #8a5a34 !important; background: transparent !important; }
+
+@media (max-width: 980px) {
+  .account-studio .account-layout, .model-studio .account-layout { grid-template-columns: 1fr; gap: 26px; padding: 28px 22px 48px; }
+  .account-studio .account-nav, .model-studio .account-nav { position: static; }
+  .account-studio .account-nav nav, .model-studio .account-nav nav { display: flex; overflow-x: auto; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--hairline); }
+  .account-studio .account-nav a, .model-studio .account-nav a { flex: none; border-left: 0; border-bottom: 2px solid transparent; padding: 8px 10px; white-space: nowrap; }
+  .account-studio .account-nav a[aria-current=page], .model-studio .account-nav a[aria-current=page] { border-bottom-color: var(--action); }
+  .account-menu-caption, .account-studio .account-nav .account-help { display: none !important; }
+  .account-studio .overview-grid { grid-template-columns: 1fr; }
+  .account-studio .overview-grid > .card + .card { padding-left: 0; border-left: 0; border-top: 1px solid var(--hairline); }
+  .account-studio .page-heading #refresh { position: static; margin-top: 14px; }
+}
+@media (max-width: 600px) {
+  .account-studio .account-top, .model-studio .account-top { padding: 16px 18px; min-height: 0; }
+  .account-studio .account-layout h1, .model-studio h1 { font-size: 34px; }
+  .account-studio .usage-metrics { grid-template-columns: 1fr 1fr; }
+  .account-studio #balance { font-size: 42px; }
+}
