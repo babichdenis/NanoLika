@@ -89,12 +89,12 @@ function visiblePrice(model: CatalogueModel | undefined, t: Translate): string |
   if (model.free) return t('mpFreeModel')
   if (model.kind === 'chat') {
     const input = fmt(rates.input), output = fmt(rates.output)
-    return input || output ? `${t('mpPriceMillion')}: ${input ?? '—'} / ${output ?? '—'}` : undefined
+    return input || output ? `${t('mpPriceMillion')}: от ${input ?? '—'} / ${output ?? '—'}` : undefined
   }
   const media = model.kind === 'image' ? fmt(rates.image) : model.kind === 'video' ? fmt(rates.second) : fmt(rates.speech ?? rates.minute)
   if (!media) return undefined
   const unit = model.kind === 'image' ? t('mpPriceImage') : model.kind === 'video' ? t('mpPriceSecond') : rates.speech ? t('mpPriceSpeech') : t('mpPriceMinute')
-  return `${media} ${unit}`
+  return `от ${media} ${unit}`
 }
 
 function place(anchor: HTMLElement): Record<string, number> {

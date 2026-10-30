@@ -1,4 +1,4 @@
-import {modelDetails} from './model-detail.js?v=20261030-mtok';
+import {modelDetails} from './model-detail.js?v=20261030-ot';
 /**
  * Панель выбора модели: провайдеры слева, карточки справа, фильтры по типу и поиск.
  *
@@ -173,7 +173,7 @@ export function installModelSheet({onPick,api,session,onFavourites}){
   for(const label of ['Модель','Тип','Контекст','Вход, ₽/М. ток','Ответ, ₽/М. ток','Избранное']){const th=document.createElement('th');th.scope='col';th.textContent=label;hr.append(th);}
   head.append(hr);table.append(head,body);box.append(table);
   const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
-  const rub=n=>n===null||n===undefined?'—':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n);
+  const rub=n=>n===null||n===undefined?'—':'от '+new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n);
   const ctx=n=>{const v=Number(n)||0;if(!v)return '—';if(v>=1000000)return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(v/1000000)+'M';if(v>=1000)return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(v/1000)+'K';return new Intl.NumberFormat('ru-RU').format(v);};
   for(const card of rows){
    const tr=h('tr');tr.dataset.id=card.id;tr.classList.toggle('is-selected',card.id===state.picked);

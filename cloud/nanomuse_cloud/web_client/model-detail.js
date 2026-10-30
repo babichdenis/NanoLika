@@ -12,7 +12,7 @@ export function modelDetails(row,{api}){
  const kind=facts.kind||'chat', unit=commerce.unit;
  const fields=kind==='chat'?['input','cached_input','output']:kind==='image'?['image','image_2k','image_input']:kind==='video'?['second']:unit==='speech'?['speech']:['minute'];
  const rates=commerce.effective_rub||{};
- for(const key of fields)if(Number(rates[key])>0)add('p',`${labels[key]}: ${money(rates[key])}`);
+ for(const key of fields)if(Number(rates[key])>0)add('p',`${labels[key]}: от ${money(rates[key])}`);
  if(commerce.discount_pct)add('p',`Учтена скидка ${commerce.discount_pct}% действующего тарифа.`);
  const controls=commerce.controls||[];if(!controls.length){add('p','Для этого режима пока нет расчёта.');return box;}
  const form=document.createElement('div');form.className='model-estimate-controls';box.append(form);

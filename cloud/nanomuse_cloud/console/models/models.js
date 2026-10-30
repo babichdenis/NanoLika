@@ -257,7 +257,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
     const commerce=model.commerce||{},rates=commerce.effective_rub||{};
     const labels={input:T.perMillionIn,output:T.perMillionOut,image:T.perPicture,second:T.perSecond,speech:T.perSpeech,minute:T.perMinute};
     const fields=model.kind==='chat'?['input','output']:model.kind==='image'?['image']:model.kind==='video'?['second']:commerce.unit==='speech'?['speech']:['minute'];
-    return {lines:fields.filter(k=>rates[k]!==null&&rates[k]!==undefined&&Number.isFinite(Number(rates[k]))&&Number(rates[k])>=0).map(k=>[labels[k],new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:0}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
+    return {lines:fields.filter(k=>rates[k]!==null&&rates[k]!==undefined&&Number.isFinite(Number(rates[k]))&&Number(rates[k])>=0).map(k=>[labels[k],'от '+new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:0}).format(rates[k])+' ₽']),note:commerce.discount_pct?'−'+commerce.discount_pct+'%':''};
   }
 
   function row(model, spec = { kind: model.kind }) {
