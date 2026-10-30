@@ -17,3 +17,5 @@ body{overflow:hidden}.shell{height:100dvh;grid-template-columns:280px minmax(0,1
 .composer-note{margin:2px 0 0;font-size:10px}
 /* the model table keeps its headings while the list scrolls */
 .model-cards .model-picker-table thead th{position:sticky;top:0;z-index:3;background:var(--paper,#faf7ef);box-shadow:inset 0 -1px 0 var(--line,#dedacb)}
+
+.model-sheet .model-cards > .model-picker-table{grid-column:1/-1;width:100%}

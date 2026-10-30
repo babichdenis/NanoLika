@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261030-wide', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261030-compact', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -127,15 +127,9 @@ export function openModelPicker({
       const dialogRect = dialog.getBoundingClientRect();
       tip.hidden = false;
       const width = 258;
-      let left;
-      if (inPage) {
-        // the card fills the frame: the hover card sits inside it, over the right edge
-        left = dialogRect.right - width - 12;
-      } else {
-        left = dialogRect.right + 12;
-        if (left + width > window.innerWidth - 8) left = dialogRect.left - width - 12;
-      }
-      tip.style.left = Math.max(8, Math.min(left, window.innerWidth - width - 8)) + "px";
+      let left = dialogRect.right + 12;
+      if (left + width > window.innerWidth - 8) left = dialogRect.left - width - 12;
+      tip.style.left = Math.max(8, left) + "px";
       tip.style.top = Math.max(8, Math.min(rect.top, window.innerHeight - 170)) + "px";
     };
     let scrolledToSelected = false;
