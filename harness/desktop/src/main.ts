@@ -1200,14 +1200,17 @@ function openModelPickerWindow(options: { url: string; key: string; selected?: s
     modelPickerAnswer = resolve;
     const parent = alive(mainWindow) ? mainWindow : undefined;
     const win = new BrowserWindow({
-      width: 920,
+      width: 880,
       height: 760,
-      minWidth: 640,
-      minHeight: 520,
       show: false,
       modal: Boolean(parent),
       ...(parent ? { parent } : {}),
-      backgroundColor: "#efe8d9",
+      // only the picker's card and its hover card are visible: the rest of the window is transparent
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      resizable: false,
+      backgroundColor: "#00000000",
       autoHideMenuBar: true,
       title: "Выбор модели",
       webPreferences: {

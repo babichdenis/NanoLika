@@ -25,6 +25,13 @@ async function api(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+// the window is transparent around the card: a click on the paper closes it
+document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return;
+  if (event.target.closest('.mp-embed')) return;
+  send({ type: 'close' });
+});
+
 async function start() {
   if (!key) {
     status.textContent = 'Нет ключа сессии — откройте выбор модели из приложения.';

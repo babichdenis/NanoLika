@@ -403,7 +403,21 @@ html[data-nm-muse] [data-composer-card] > [class*="_accessory"] { flex-basis: 10
 html[data-nm-muse] [data-composer-card] [class*="_modes"] { display: none !important; }
 /* the right-hand seats stay for the microphone; the model picker goes (Settings keeps it) */
 html[data-nm-muse] [data-composer-card] [class*="_standardControls"] { gap: 2px !important; }
-html[data-nm-muse] [data-composer-card] [data-slot="conversation.input.model"] { display: none !important; }
+/* the stock model seat goes everywhere; our pill takes its place and opens the relay's catalogue */
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] > div { display: none !important; }
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] { display: contents; }
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-model-pill {
+  min-width: 0; max-width: min(300px, 45cqw); min-height: 28px; padding: 0 8px;
+  border: 0; border-radius: var(--dsw-radius-sm, 8px); background: transparent;
+  box-shadow: none; color: var(--dsw-alias-label-secondary, inherit); font-size: 13px;
+  font-weight: 400; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-model-pill::after {
+  content: "⌄"; margin-left: 4px; color: var(--dsw-alias-label-caption, inherit); flex: none;
+}
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-model-pill:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover, var(--nm-hover));
+}
 html[data-nm-muse] [data-composer-card] [class*="_activity"] { display: none !important; }
 html[data-nm-muse] [data-composer-card] [class*="_add"] { width: 34px; height: 34px; border-radius: 50%; color: var(--dsw-alias-label-secondary); }
 /* the send disc is the ink (black in the light, white in the dark) with the arrow in the opposite colour */
