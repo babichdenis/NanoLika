@@ -5,7 +5,7 @@ import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
-import {installComposerControls} from './composer-controls.js?v=20261029-fav';
+import {installComposerControls} from './composer-controls.js?v=20261030-shelf';
 import {installModelSheet} from './model-sheet.js?v=20261030-favs';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 const $=id=>document.getElementById(id);const sessionKey='nl.web.session.v1';

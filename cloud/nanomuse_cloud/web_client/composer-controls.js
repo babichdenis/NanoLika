@@ -29,8 +29,8 @@ export function installComposerControls({form,message,select,refresh,status,sess
    allChat=allModels(data).filter(m=>m.forChat);
    let shelf=null;try{shelf=await api('/v1/me/models');}catch{}
    if(session()?.key!==identity.key||session()?.owner!==identity.owner||generation!==version)return '';
-   const favourites=new Set(shelf?.shelf?.favourites||[]);
-   const preferred=allChat.filter(m=>favourites.has(m.id));
+   const favourites=new Set(shelf?.shelf?.favourites||[]);const enabledChat=new Set((shelf?.shelf?.enabled||{}).chat||[]);
+   const preferred=allChat.filter(m=>favourites.has(m.id)||enabledChat.has(m.id));
    all=preferred.length?preferred:allChat;
    const chat=chatModels(data);
    let saved='';try{saved=storage.getItem(key())||'';}catch{}
