@@ -667,11 +667,16 @@ def _bulk_rates(item: dict, multiplier: float) -> dict:
 _MEDIA_UNITS = {"изображение", "секунда", "1000 символов", "минута", "1M символов", "запрос"}
 
 
+def _media_key(value: Any) -> str:
+    """Одно имя у поставщика и у нас: `eleven_flash_v2_5` = `eleven-flash-v2.5`."""
+    return re.sub(r"[-_.\s]+", "-", str(value or "").strip().lower()).strip("-")
+
+
 def _media_offers(prices: dict) -> dict[str, list[dict]]:
     index: dict[str, list[dict]] = {}
     for row in prices.get("models") or []:
         unit = str(row.get("unit") or "")
-        key = str(row.get("key") or "")
+        key = _media_key(row.get("key"))
         if unit not in _MEDIA_UNITS or not key:
             continue
         for offer in row.get("offers") or []:
@@ -802,9 +807,12 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         for row, spec in zip(models, settings.models, strict=True):
             if spec.kind == "chat":
                 continue
-            upstream = re.sub(r"\s+", "-", str(getattr(spec, "upstream", "") or "").strip().lower().rsplit("/", 1)[-1])
+            candidates = {
+                _media_key(str(getattr(spec, "upstream", "") or "").rsplit("/", 1)[-1]),
+                _media_key(str(getattr(spec, "name", "") or "")),
+            }
             offers = []
-            for offer in media.get(upstream) or []:
+            for offer in (item for key in candidates for item in (media.get(key) or [])):
                 if any(item["provider"] == offer["provider"] and item["unit"] == offer["unit"] for item in offers):
                     continue
                 offers.append(dict(offer))
