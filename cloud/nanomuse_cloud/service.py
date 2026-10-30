@@ -2023,7 +2023,8 @@ class Cloud:
     def create_user_key(self, caller: Caller, device: str = "console", ttl_s: int | None = None) -> tuple[str, str]:
         """Create a permanent user key for this account.
         Returns (full_key, prefix). If ttl_s is None the key never expires (expires_at=NULL)."""
-        key, new_caller = self._issue_key(caller.account_id, device, "user", expires_at=ttl_s if ttl_s else None)
+        expires_at = now() + ttl_s if ttl_s else None
+        key, new_caller = self._issue_key(caller.account_id, device, "user", expires_at=expires_at)
         return key, new_caller.key_prefix
 
     def revoke_key(self, caller: Caller, prefix: str) -> bool:
