@@ -3364,7 +3364,7 @@ def create_app(
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 + ("script-src 'self' https://telegram.org; " if path == "/web/telegram.html" else "script-src 'self'; ")
-                + "style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org"
+                + "style-src 'self'; connect-src 'self'; img-src 'self' blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org http://127.0.0.1:* http://localhost:*"
             )
         elif path == "/app" or path.startswith("/app/"):
             # The console and the operator's page are never framed; scripts are files only,

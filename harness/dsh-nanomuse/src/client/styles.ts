@@ -418,6 +418,9 @@ html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] 
 html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-model-pill:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover, var(--nm-hover));
 }
+/* the relay's picker is an iframe over the app; its own page is transparent around the card */
+html[data-nanomuse] .nm-picker-layer { position: fixed; inset: 0; z-index: 1200; background: transparent; }
+html[data-nanomuse] .nm-picker-frame { position: fixed; border: 0; background: transparent; color-scheme: light; }
 html[data-nm-muse] [data-composer-card] [class*="_activity"] { display: none !important; }
 html[data-nm-muse] [data-composer-card] [class*="_add"] { width: 34px; height: 34px; border-radius: 50%; color: var(--dsw-alias-label-secondary); }
 /* the send disc is the ink (black in the light, white in the dark) with the arrow in the opposite colour */
