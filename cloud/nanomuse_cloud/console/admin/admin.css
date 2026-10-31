@@ -386,17 +386,19 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
   background: var(--fill); color: var(--ink); font: inherit; font-size: 11px; }
 .admin .mt th .mt-col:focus { outline: none; box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.22); }
 .admin .mt td.mt-low { color: var(--warn); font-weight: 600; }
-.admin .mt #mt-models { table-layout: fixed; min-width: 1108px; }
-.admin .mt #mt-models th.mt-pick { width: 92px; }
-.admin .mt #mt-models th.mt-model { width: 230px; }
-.admin .mt #mt-models th:nth-child(3) { width: 70px; }
-.admin .mt #mt-models th:nth-child(4) { width: 78px; }
-.admin .mt #mt-models th:nth-child(5) { width: 120px; }
-.admin .mt #mt-models th:nth-child(6) { width: 120px; }
-.admin .mt #mt-models th:nth-child(7) { width: 84px; }
-.admin .mt #mt-models th:nth-child(8) { width: 88px; }
-.admin .mt #mt-models th:nth-child(9) { width: 130px; }
-.admin .mt #mt-models th:nth-child(10) { width: 96px; }
+.admin .mt #mt-models { table-layout: fixed; min-width: 1352px; }
+.admin .mt #mt-models th.mt-pick { width: 96px; }
+.admin .mt #mt-models th.mt-model { width: 236px; }
+.admin .mt #mt-models th:nth-child(3) { width: 62px; }   /* тип */
+.admin .mt #mt-models th:nth-child(4) { width: 96px; }   /* появилась */
+.admin .mt #mt-models th:nth-child(5) { width: 76px; }   /* контекст */
+.admin .mt #mt-models th:nth-child(6) { width: 128px; }  /* закупка */
+.admin .mt #mt-models th:nth-child(7) { width: 128px; }  /* клиенту */
+.admin .mt #mt-models th:nth-child(8) { width: 116px; }  /* официально */
+.admin .mt #mt-models th:nth-child(9) { width: 92px; }   /* наценка вход */
+.admin .mt #mt-models th:nth-child(10) { width: 96px; }  /* наценка выход */
+.admin .mt #mt-models th:nth-child(11) { width: 130px; } /* дешевле всех */
+.admin .mt #mt-models th:nth-child(12) { width: 96px; }  /* предложений */
 .admin .mt #mt-models td.mt-model-cell { max-width: none; }
 .admin .mt #mt-models td.mt-model-cell .mt-name { display: inline; }
 /* шапка: поле-фильтр и маленькая кнопка сортировки рядом */
@@ -411,36 +413,8 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt th .mt-sort:hover { background: var(--fill); color: var(--ink); }
 .admin .mt th .mt-sort.on { color: var(--action); font-weight: 700; }
 .admin .mt th small { margin-top: 2px; padding-left: 6px; }
-.admin .mt #mt-models { min-width: 1144px; }
-.admin .mt #mt-models th.mt-pick { width: 96px; }
-.admin .mt #mt-models th.mt-model { width: 240px; }
-.admin .mt #mt-models th:nth-child(3) { width: 64px; }
-.admin .mt #mt-models th:nth-child(4) { width: 72px; }
-.admin .mt #mt-models th:nth-child(5) { width: 128px; }
-.admin .mt #mt-models th:nth-child(6) { width: 128px; }
-.admin .mt #mt-models th:nth-child(7) { width: 92px; }
-.admin .mt #mt-models th:nth-child(8) { width: 96px; }
-.admin .mt #mt-models th:nth-child(9) { width: 132px; }
-.admin .mt #mt-models th:nth-child(10) { width: 96px; }
 .admin .mt #mt-models td { overflow: hidden; text-overflow: ellipsis; }
 .admin .mt th .mt-col { font-size: 10.5px; padding: 3px 5px; }
-.admin .mt #mt-models th.mt-pick { width: 104px; }
-.admin .mt #mt-models th.mt-model { width: 220px; }
-.admin .mt #mt-models th:nth-child(3) { width: 62px; }
-.admin .mt #mt-models th:nth-child(4) { width: 92px; }
-.admin .mt #mt-models th:nth-child(5) { width: 124px; }
-.admin .mt #mt-models th:nth-child(6) { width: 124px; }
-.admin .mt #mt-models th:nth-child(7) { width: 104px; }
-.admin .mt #mt-models th:nth-child(8) { width: 108px; }
-.admin .mt #mt-models th:nth-child(9) { width: 130px; }
-.admin .mt #mt-models th:nth-child(10) { width: 96px; }
-.admin .mt #mt-models { min-width: 1164px; }
-.admin .mt th .mt-col { font-size: 10px; padding: 2px 4px; }
-.admin .mt #mt-models th.mt-pick { width: 112px; }
-.admin .mt #mt-models th.mt-model { width: 212px; }
-.admin .mt #mt-models th:nth-child(7) { width: 112px; }
-.admin .mt #mt-models th:nth-child(8) { width: 116px; }
-.admin .mt #mt-models { min-width: 1180px; }
 .admin .mt .mt-bulk { gap: 8px; }
 .admin .mt .mt-bulk #mt-k { width: 72px; margin: 0; padding: 4px 8px; border: 0; border-radius: 9px; background: var(--fill);
   color: var(--ink); font: inherit; font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -449,6 +423,16 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt td.mt-tier.is-flex { color: var(--warn); font-weight: 600; }
 .admin .mt td.mt-unit { font-size: 11.5px; color: var(--ink-3); }
 .admin .mt .mt-jump { margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--warn); cursor: help; }
+.admin .mt .mt-reference { margin-left: auto; color: var(--ink-3); white-space: nowrap; }
+.admin .mt .mt-seen { color: var(--ink-2); }
+.admin .mt .mt-new { margin-left: 5px; padding: 1px 6px; border-radius: 999px; background: rgba(52, 199, 89, 0.14);
+  color: var(--ok); font-size: 10px; font-weight: 600; }
+.admin .mt td.mt-ref { color: var(--ink-2); }
+.admin .mt .mt-ref-mark { margin-left: 2px; color: var(--ink-3); }
+.admin .mt .mt-official { color: var(--ink-2); }
+.admin .mt .mt-ref-status { margin-left: 5px; padding: 1px 6px; border-radius: 999px; background: rgba(255, 159, 10, 0.14);
+  color: var(--warn); font-size: 10px; font-weight: 600; }
+.admin .mt .mt-ref-status.is-dead { background: rgba(255, 59, 48, 0.12); color: var(--bad); }
 
 /* «Поставщики»: сверху кошельки, снизу связанные модели выбранного поставщика. */
 .admin .pt.mt { height: calc(100vh - 175px); }

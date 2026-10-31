@@ -80,6 +80,8 @@ uv.lock
 # nanoMuse Cloud relay runtime data
 cloud/data/
 cloud/nanomuse_cloud/console/providers/prices.json
+# справочник Ferro Labs (2.4 МБ, обновляется раз в неделю из GitHub Releases)
+cloud/nanomuse_cloud/console/providers/ferro.json
 
 # the store's capsules are built, not committed: vendored wheels (12 MB of .so) and their
 # zips are made by cloud/scripts/store_build_capsule.py (docs/store.md)

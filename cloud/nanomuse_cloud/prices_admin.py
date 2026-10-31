@@ -31,6 +31,11 @@ from fastapi import Depends, HTTPException
 from . import model_pricing
 from .provider_routing import ROUTING_CATALOG_PROVIDERS, identity
 
+try:  # справочник необязателен: без него страница цен работает как раньше
+    from . import reference_catalog
+except ImportError:  # pragma: no cover - старая сборка без файла справочника
+    reference_catalog = None  # type: ignore[assignment]
+
 PROVIDERS_DIR = Path(__file__).resolve().parent / "console" / "providers"
 
 
@@ -542,6 +547,92 @@ def _slug_keys(*values: Any) -> set[str]:
     return out
 
 
+def _first_seen(prices: dict) -> dict[str, dict[str, Any]]:
+    """Когда поставщики впервые показали модель в снимке прайсов.
+
+    У одного поставщика модель лежит несколькими строками (вход, выход, кэш),
+    поэтому у ключа остаётся самая ранняя дата. Первый сбор — это база учёта, а
+    не «новинка»: модели из него не получают бейдж, иначе весь каталог в первый
+    день выглядел бы новым.
+    """
+    rows = [row for row in prices.get("models") or [] if row.get("first_seen_at")]
+    if not rows:
+        return {}
+    baseline = min(str(row["first_seen_at"]) for row in rows)[:10]
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        at = str(row.get("first_seen_at") or "")[:10]
+        if not at:
+            continue
+        entry = {"at": at, "new": bool(row.get("new_model")) and at > baseline}
+        for value in (row.get("name"), row.get("key")):
+            text = str(value or "").strip().lower()
+            if not text:
+                continue
+            bare = text.rsplit("/", 1)[-1]
+            for key in (text, bare, bare.replace(" ", "-"), identity(bare)):
+                if not key:
+                    continue
+                old = out.get(key)
+                if old is None or at < old["at"]:
+                    out[key] = entry
+    return out
+
+
+def _lookup_seen(seen: dict[str, dict[str, Any]], *values: Any) -> dict[str, Any] | None:
+    """Точное имя поставщика важнее голого: `google/gemini-3.5-flash` не должен
+    получить дату чужой модели с таким же коротким именем."""
+    for value in values:
+        text = str(value or "").strip().lower()
+        if not text:
+            continue
+        for key in (text, text.rsplit("/", 1)[-1], text.rsplit("/", 1)[-1].replace(" ", "-")):
+            found = seen.get(key)
+            if found:
+                return found
+    return None
+
+
+def _attach_reference(models: list[dict], specs: list[Any], prices: dict) -> dict[str, Any]:
+    """Дата появления у поставщиков и строка официального справочника.
+
+    Справочник Ferro Labs — это чужие официальные ставки и характеристики, а не
+    наша закупка и не розница. Он заполняет только пустые поля (контекст, выход)
+    и показывается отдельной колонкой; биллинг и маршруты его не читают.
+    """
+    seen = _first_seen(prices)
+    ref_models: dict[str, dict[str, Any]] = {}
+    ref_info: dict[str, Any] = {}
+    if reference_catalog is not None:
+        ref_models, ref_info = reference_catalog.index()
+    matched = 0
+    for row, spec in zip(models, specs, strict=True):
+        earliest = _lookup_seen(
+            seen,
+            getattr(spec, "upstream", ""),
+            getattr(spec, "priced_as", ""),
+            getattr(spec, "id", ""),
+        )
+        row["first_seen"] = earliest["at"] if earliest else None
+        row["new_model"] = bool(earliest and earliest["new"])
+        ref = reference_catalog.describe(spec, ref_models) if reference_catalog is not None and ref_models else None
+        row["reference"] = ref
+        if ref:
+            matched += 1
+            if not row.get("context") and ref.get("context"):
+                row["context"] = ref["context"]
+                row["context_source"] = "reference"
+            if not row.get("max_output") and ref.get("max_output"):
+                row["max_output"] = ref["max_output"]
+                row["output_source"] = "reference"
+    return {
+        "info": ref_info,
+        "count": len(ref_models),
+        "matched": matched,
+        "source": "https://github.com/ferro-labs/model-catalog",
+    }
+
+
 def _extra_offers(prices: dict, connected: set[str]) -> dict[str, dict[str, dict]]:
     """Предложения поставщиков без адаптера маршрутизации — сейчас это Bothub.
 
@@ -627,6 +718,11 @@ _MODEL_FIELDS = (
     "priced_as",
     "upstream",
     "last_request",
+    "first_seen",
+    "new_model",
+    "reference",
+    "context_source",
+    "output_source",
 )
 _OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason", "unit", "price_rub")
 
@@ -654,6 +750,7 @@ def _compact(payload: dict) -> dict:
         "count": payload.get("count"),
         "plan_discounts": payload.get("plan_discounts"),
         "providers": payload.get("providers"),
+        "reference": payload.get("reference"),
         "models": models,
     }
 
@@ -725,6 +822,13 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         now = time.time()
         if not refresh and _CACHE["full"] is not None and now - _CACHE["at"] <= _CACHE_TTL:
             return _CACHE["compact"] if compact else _CACHE["full"]
+        if refresh and reference_catalog is not None:
+            # «Обновить цены» — единственный момент, когда админка ходит в GitHub
+            # за справочником: страница открывается часто и ждать 5 секунд нельзя.
+            try:
+                reference_catalog.refresh(force=True)
+            except Exception:  # справочник не должен ломать обновление прайсов
+                pass
         prices = _read("prices.json")
         rate = _rate(settings, prices)
         models = _models(settings, float(rate["cny_rub"] or 0))
@@ -840,6 +944,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     "configured": {"provider": spec.provider, "model": spec.upstream},
                     "basis": "цена за единицу из снимка прайсов",
                 }
+        reference = _attach_reference(models, list(settings.models), prices)
         actuals = {}
         if cloud is not None:
             with cloud.db._lock:
@@ -904,6 +1009,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 "with_sell": len(with_sell),
             },
             "models": models,
+            "reference": reference,
             "discovery": _discovered(settings, router),
             "providers": _providers(settings, prices),
             "retail": _retail(),

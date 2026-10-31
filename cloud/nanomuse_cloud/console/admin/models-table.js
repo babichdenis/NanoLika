@@ -81,6 +81,36 @@ function providerLabel(name) {
   return PROVIDER_LABELS[name] || name;
 }
 
+/** «2026-10-29» → «29.10.2026»: дата первого появления в снимке прайсов. */
+function dateText(value) {
+  const text = String(value || "");
+  if (!text) return "—";
+  const parts = text.slice(0, 10).split("-");
+  return parts.length === 3 && parts.every(Boolean) ? `${parts[2]}.${parts[1]}.${parts[0]}` : text;
+}
+
+function firstSeenModel(group) {
+  return group.models.find((model) => model.first_seen) || group.primary;
+}
+
+function referenceModel(group) {
+  return group.models.find((model) => model.reference) || null;
+}
+
+function usdText(value, digits = 3) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "—";
+  return "$" + number.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+}
+
+function officialText(group) {
+  const model = referenceModel(group);
+  const ref = model && model.reference;
+  if (!ref) return "—";
+  const price = [usdText(ref.input_usd), usdText(ref.output_usd)].join(" / ");
+  return ref.status && ref.status !== "ga" ? `${price} · ${ref.status}` : price;
+}
+
 function groupOf(model) {
   const kind = String(model.kind || "chat");
   if (kind === "chat" || kind === "responses" || kind === "completion") {
@@ -208,9 +238,11 @@ const COLUMNS = [
   { key: "listed", label: "Показывать", cls: "mt-pick", numeric: false },
   { key: "name", label: "Модель", cls: "mt-model", numeric: false },
   { key: "kind", label: "Тип", numeric: false },
+  { key: "firstSeen", label: "Появилась", numeric: true },
   { key: "context", label: "Контекст", numeric: true },
   { key: "purchase", label: "Закупка", sub: "вход / выход", numeric: true },
   { key: "client", label: "Клиенту", sub: "вход / выход", numeric: true },
+  { key: "official", label: "Официально", sub: "$ за 1M", numeric: true },
   { key: "markupIn", label: "Наценка вход", numeric: true },
   { key: "markupOut", label: "Наценка выход", numeric: true },
   { key: "best", label: "Дешевле всех", numeric: true },
@@ -241,9 +273,14 @@ function columnText(group, key) {
     case "listed": return group.listed ? "Видна" : "Скрыта";
     case "name": return `${group.name} ${group.models.map((item) => item.id).join(" ")}`;
     case "kind": return groupLabel(group.group);
+    case "firstSeen": {
+      const seen = firstSeenModel(group);
+      return `${dateText(seen.first_seen)}${seen.new_model ? " новая" : ""}`;
+    }
     case "context": return ctxText(model.context);
     case "purchase": return purchaseText(model);
     case "client": return clientText(model);
+    case "official": return officialText(group);
     case "markupIn": return ratioText(model.ratio?.in);
     case "markupOut": return ratioText(model.ratio?.out);
     case "best": {
@@ -258,12 +295,21 @@ function columnText(group, key) {
 function columnNumber(group, key) {
   const model = group.primary;
   switch (key) {
+    case "firstSeen": {
+      const seen = firstSeenModel(group);
+      const parsed = Date.parse(seen.first_seen || "");
+      return Number.isFinite(parsed) ? parsed : null;
+    }
     case "context": return Number(model.context) || null;
     case "purchase": {
       const cost = model.cost || {};
       return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? null;
     }
     case "client": return Number(model.sell?.rub_in) || null;
+    case "official": {
+      const ref = referenceModel(group)?.reference;
+      return ref && Number.isFinite(Number(ref.input_usd)) ? Number(ref.input_usd) : null;
+    }
     case "markupIn": return Number(model.ratio?.in) > 0 ? Number(model.ratio.in) : null;
     case "markupOut": return Number(model.ratio?.out) > 0 ? Number(model.ratio.out) : null;
     case "best": {
@@ -414,6 +460,7 @@ const TEMPLATE = `
           </select>
         </label>
         <button class="chip" id="mt-refresh" type="button">Обновить цены</button>
+        <span class="fine mt-reference" id="mt-reference"></span>
       </div>
       <div class="mt-toolbar mt-bulk">
         <label class="field">наценка ×
@@ -564,9 +611,62 @@ function drawModels(rows) {
       return cell;
     };
     tr.append(textCell("mt-kind", groupLabel(group.group)));
-    tr.append(textCell("num", ctxText(model.context)));
+
+    const seen = firstSeenModel(group);
+    const seenCell = el("td", "num mt-seen", dateText(seen.first_seen));
+    seenCell.title = seen.first_seen
+      ? `Первое появление в снимке прайсов поставщиков: ${dateText(seen.first_seen)}`
+      : "Нет в снимке прайсов поставщиков";
+    if (seen.new_model) {
+      const fresh = el("span", "mt-new", "новая");
+      fresh.title = "Впервые появилась у поставщиков меньше 14 дней назад";
+      seenCell.append(fresh);
+    }
+    tr.append(seenCell);
+
+    const contextCell = el("td", "num", ctxText(model.context));
+    if (model.context_source === "reference") {
+      contextCell.classList.add("mt-ref");
+      contextCell.append(el("span", "mt-ref-mark", "*"));
+      contextCell.title = "Контекст из справочника Ferro Labs: у нас не задан";
+    } else {
+      contextCell.title = model.context ? "Контекст модели" : "Контекст не указан";
+    }
+    tr.append(contextCell);
+
     tr.append(textCell("num", purchaseText(model)));
     tr.append(textCell("num", clientText(model)));
+
+    const officialCell = el("td", "num mt-official");
+    const refModel = referenceModel(group);
+    const ref = refModel && refModel.reference;
+    if (ref) {
+      officialCell.append(el("span", "", `${usdText(ref.input_usd)} / ${usdText(ref.output_usd)}`));
+      const status = String(ref.status || "ga");
+      if (status !== "ga") {
+        const label = { preview: "превью", deprecated: "устарела", sunset: "снята", beta: "бета" }[status] || status;
+        const badge = el("span", "mt-ref-status" + (status === "deprecated" || status === "sunset" ? " is-dead" : ""), label);
+        badge.title = [
+          `Статус в справочнике: ${status}`,
+          ref.deprecation_date ? `устаревает: ${dateText(ref.deprecation_date)}` : "",
+          ref.sunset_date ? `снимается: ${dateText(ref.sunset_date)}` : "",
+          ref.successor ? `замена: ${ref.successor}` : "",
+        ].filter(Boolean).join(" · ");
+        officialCell.append(badge);
+      }
+      const bits = [
+        `Официальная ставка ${ref.key || refModel.id}`,
+        ref.context ? `контекст ${ctxText(ref.context)}` : "",
+        ref.max_output ? `выход ${ctxText(ref.max_output)}` : "",
+        "источник: Ferro Labs",
+      ].filter(Boolean);
+      officialCell.title = bits.join(" · ");
+    } else {
+      officialCell.append(el("span", "fine", "—"));
+      officialCell.title = "Нет в справочнике Ferro Labs";
+    }
+    tr.append(officialCell);
+
     const markupCell = (value) => {
       const cell = el("td", "num", ratioText(value));
       const number = Number(value);
@@ -942,6 +1042,27 @@ function startColumnResize(event, index) {
   event.stopPropagation();
 }
 
+/** Подпись справочника: сколько моделей сверено и на какую дату. */
+function drawReference() {
+  const node = $("mt-reference");
+  if (!node) return;
+  const ref = DATA && DATA.reference;
+  const info = (ref && ref.info) || {};
+  if (!ref || !ref.count) {
+    node.textContent = "справочник Ferro не загружен";
+    node.title = "Официальные ставки подтянутся при обновлении цен";
+    return;
+  }
+  const total = (DATA.models || []).length;
+  node.textContent = `Ferro ${info.version || ""}: ${ref.matched} из ${total}`;
+  node.title = [
+    `Справочник Ferro Labs: ${info.count || ref.count} моделей`,
+    info.generated_at ? `выгрузка ${dateText(info.generated_at)}` : "",
+    info.license ? `лицензия ${info.license}` : "",
+    "Только для сверки: биллинг, маршруты и розница его не читают",
+  ].filter(Boolean).join(" · ");
+}
+
 function drawBody() {
   const rows = visibleGroups();
   drawCounts(rows);
@@ -953,6 +1074,7 @@ function draw() {
   saveFilters();
   drawHead();
   drawGroups();
+  drawReference();
   const rows = visibleGroups();
   drawCounts(rows);
   drawModels(rows);
