@@ -466,8 +466,11 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 
 /* «Модели»: ширину столбцов можно тянуть за правый край заголовка. */
 .admin .mt #mt-models { table-layout: fixed; }
-.admin .mt .mt-col-resize { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
-.admin .mt .mt-col-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; }
-.admin .mt .mt-col-resize:hover::after, body.mt-col-resizing .mt-col-resize::after { background: var(--action); opacity: .65; }
+.admin .mt .mt-col-resize { position: absolute; top: 0; right: 0; width: 9px; height: 100%; cursor: col-resize; z-index: 6; touch-action: none; }
+.admin .mt .mt-col-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: var(--hairline); opacity: .75; }
+.admin .mt .mt-col-resize:hover::after, body.mt-col-resizing .mt-col-resize::after { background: var(--action); width: 2px; opacity: .9; }
 body.mt-col-resizing { cursor: col-resize; user-select: none; }
 .admin .pt #pt-models { table-layout: fixed; }
+
+/* Таблицы моделей и поставщиков — без карточки со скруглёнными углами. */
+.admin .mt-panel { border-radius: 0; box-shadow: none; background: transparent; }

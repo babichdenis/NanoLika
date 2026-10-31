@@ -258,6 +258,11 @@ function draw() {
     name.append(el("div", "pt-sub", sub));
     tr.append(name);
 
+    const total = row.stats.selected.length + row.stats.configured.length;
+    const modelsCell = el("td", "num", String(total));
+    modelsCell.title = `${row.stats.selected.length} сейчас + ${row.stats.configured.length} по умолчанию`;
+    tr.append(modelsCell);
+
     tr.append(el("td", "num", money(row.entry)));
     const rub = row.entry?.rub_estimate;
     tr.append(el("td", "num hide-sm", rub == null ? "—" : `₽${fmt(rub)}`));
@@ -478,6 +483,7 @@ const TEMPLATE = `
       <table>
         <thead><tr>
           <th>Поставщик</th>
+          <th class="num" title="Сейчас в маршруте + модели по умолчанию">Моделей</th>
           <th class="num">Доступно</th>
           <th class="num hide-sm">Оценка, ₽</th>
           <th class="hide-sm">Проверено</th>
