@@ -429,6 +429,7 @@ function oneGroup(model) {
     models: [model],
     primary: model,
     listed: Boolean(model.listed),
+    available: model.available !== false,
     offers: unionOffers([model], state.allVariants),
   };
 }
@@ -452,6 +453,7 @@ function namedGroups() {
     // Показываем состояние канонической строки, а не «все скрыты»: иначе
     // скрытый алиас делал вид, что скрыта вся модель у клиентов.
     group.listed = Boolean(group.primary.listed);
+    group.available = group.models.some((model) => model.available !== false);
     group.offers = unionOffers(group.models, state.allVariants);
   }
   return groups;
@@ -594,7 +596,7 @@ function editMarkup(cell, group, key, value) {
 function columnText(group, key) {
   const model = group.primary;
   switch (key) {
-    case "listed": return group.listed ? "Видна" : "Скрыта";
+    case "listed": return group.available === false ? "Не подключена" : group.listed ? "Видна" : "Скрыта";
     case "name": return `${group.name} ${group.models.map((item) => item.id).join(" ")}`;
     case "kind": return groupLabel(group.group);
     case "firstSeen": {
@@ -909,19 +911,31 @@ function visibilityCell(group) {
   const input = el("input");
   input.type = "checkbox";
   input.checked = group.listed;
+  input.disabled = group.available === false;
   input.setAttribute("aria-label", "Показывать клиентам: " + group.name);
-  if (group.models.length > 1) {
+  if (group.available === false) {
+    // Клиент не должен увидеть модель, которая всё равно не ответит: у релея
+    // нет endpoint для музыки и части озвучки Bothub. Вместо молчаливого
+    // «Скрыта» честно пишем, что она не подключена.
+    label.title = "Не подключена: у релея нет endpoint для этой модели (музыка, ElevenLabs)";
+  } else if (group.models.length > 1) {
     label.title = `Переключит все ${group.models.length} specs этой строки, включая скрытые`;
   }
-  label.append(input, el("span", "", group.listed ? "Видна" : "Скрыта"));
+  const state = group.available === false ? "Не подключена" : group.listed ? "Видна" : "Скрыта";
+  label.append(input, el("span", "", state));
   const text = label.lastChild;
   input.onclick = (event) => event.stopPropagation();
   input.onchange = async () => {
     const next = input.checked;
+    const targets = group.models.filter((model) => model.available !== false && Boolean(model.listed) !== next);
+    if (next && !targets.length) {
+      input.checked = false;
+      setNote("Нельзя включить: у релея ещё нет endpoint для этой модели.");
+      return;
+    }
     input.disabled = true;
     try {
-      for (const model of group.models) {
-        if (Boolean(model.listed) === next) continue;
+      for (const model of targets) {
         await API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/visibility`, { visible: next });
         model.listed = next;
       }

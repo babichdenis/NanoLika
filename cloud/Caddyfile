@@ -125,11 +125,9 @@
 			header Access-Control-Max-Age "86400"
 			respond "" 204
 		}
-		@cors_webapp header Origin https://nanolika.ru
-		header @cors_webapp {
-			Access-Control-Allow-Origin "https://nanolika.ru"
-			Access-Control-Allow-Credentials "true"
-		}
+		# CORS для https://nanolika.ru ставит сам релей (CORSMiddleware).
+		# Здесь заголовок не дублируем: два Access-Control-Allow-Origin ломают
+		# fetch на публичной странице моделей.
 		reverse_proxy relay:8787 {
 			# Chat streams (SSE) and the hub's WebSocket must not be buffered.
 			flush_interval -1
