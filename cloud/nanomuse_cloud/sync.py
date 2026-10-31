@@ -112,17 +112,23 @@ def clean_attachments(value: object) -> list[dict]:
     return out
 
 
+# A device's clock may be a little ahead; a week ahead is not a clock, it is a way to
+# pin a chat to the top of every other device's list. Beyond this the relay's own time
+# decides the order (the value falls back to `default`, usually the relay's `now`).
+MAX_CLOCK_SKEW_S = 300
+
+
 def _ts(value: object, default: int, ceiling: int | None = None) -> int:
     """A Unix time in seconds from what a device sent: milliseconds are divided down, anything
-    unreadable, non-positive or more than a week past `ceiling` (the relay's clock; `default`
-    when not given) becomes `default`."""
+    unreadable, non-positive or more than `MAX_CLOCK_SKEW_S` past `ceiling` (the relay's clock;
+    `default` when not given) becomes `default`."""
     try:
         t = int(float(value))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
     if t > 10_000_000_000:  # milliseconds
         t //= 1000
-    if t <= 0 or t > (ceiling if ceiling is not None else default) + 7 * 86400:
+    if t <= 0 or t > (ceiling if ceiling is not None else default) + MAX_CLOCK_SKEW_S:
         return default
     return t
 

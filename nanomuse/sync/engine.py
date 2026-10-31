@@ -187,6 +187,8 @@ class ConversationSync:
             for key in ("conversation_marks", "local_archives"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = data[key]
+            if isinstance(data.get("pending_cids"), list):
+                self.state["pending_cids"] = [str(cid) for cid in data["pending_cids"] if isinstance(cid, str)]
             cursors = data.get("message_cursors", {})
             if isinstance(cursors, dict):
                 self.state["message_cursors"] = {
@@ -233,6 +235,15 @@ class ConversationSync:
         self.state["cursor"] = value
         cursors = self.state.setdefault("cursors", {"main": 0, "all": 0})
         cursors[self.scope] = value
+
+    def _advance_cursor(self, value: object) -> None:
+        """Move the current scope's cursor forward only. A missing or unreadable value keeps
+        the cursor where it is: a relay restoring an older number must not replay history."""
+        try:
+            incoming = int(value or 0)
+        except (TypeError, ValueError):
+            incoming = 0
+        self._set_cursor(max(self.cursor, incoming))
 
     @property
     def active(self) -> bool:
@@ -1175,7 +1186,7 @@ class ConversationSync:
                     applied += 1
             finally:
                 self._applying = False
-            self._set_cursor(max(self.cursor, int(out.get("cursor") or 0)))
+            self._advance_cursor(out.get("cursor"))
             self._save()
             if not out.get("more"):
                 break

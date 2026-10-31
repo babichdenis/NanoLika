@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 
 import pytest
@@ -140,6 +141,45 @@ async def test_a_renamed_conversation_rides_along_with_its_messages():
     # a page that already has the conversation does not repeat it
     full = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
     assert [c["cid"] for c in full["conversations"]] == [cid] and [m["mid"] for m in full["messages"]] == [m1]
+
+
+async def test_a_device_clock_far_ahead_does_not_pin_a_chat_to_the_top():
+    """S11: a device a day ahead used to set a future `updated_at`, keeping that chat first
+    on every other device for a week. Beyond the small skew the relay's own time wins."""
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    cid = uid()
+    future = int(time.time()) + 86_400
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "d1", "conversations": [conv(cid, created_at=int(time.time()), updated_at=future)]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
+    assert out["conversations"][0]["updated_at"] < future
+
+
+async def test_a_push_without_a_title_keeps_the_existing_title():
+    """S16: a restored queue or another client sends a conversation row without a title;
+    that is not a rename to an empty one, and every device keeps the name it had."""
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    cid = uid()
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "d1", "conversations": [conv(cid, title="Отпуск")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "d1", "conversations": [{"cid": cid, "kind": "side", "created_at": 1738000000}]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 0
+    out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
+    assert [(c["cid"], c["title"]) for c in out["conversations"]] == [(cid, "Отпуск")]
 
 
 async def test_known_mids_are_idempotent_and_tombstones_propagate():
