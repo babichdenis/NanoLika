@@ -205,7 +205,75 @@ export function apply(ctx: Context): void {
     'nanomuse rooms: make_music',
   )
 
+  ctx.effect(
+    () =>
+      ctx.tools.register(
+        defineTool({
+          name: 'make_image',
+          description:
+            "Make one picture for the person and open it beside the chat. It uses the image model chosen in Settings → Models (the account or an own key), not a provider API you call yourself. Use it when they ask for a picture, illustration, logo concept, diagram-like visual or an edit-like redraw. Do not write a script or a provider client for this.",
+          parameters: {
+            prompt: { type: 'string', required: true, description: 'What to draw, in the person\'s words (at most 2000 characters).' },
+            title: { type: 'string', description: 'What to call the picture in the pane.' },
+          },
+          output: {
+            schema: { type: 'object', properties: { path: { type: 'string' }, bytes: { type: 'number' } }, additionalProperties: false },
+            render: (_args, value) => [{ type: 'text', text: `Picture ready (${Math.round((value.bytes ?? 0) / 1024)} KB).` }],
+          },
+          async execute(args, exec) {
+            const prompt = String(args.prompt ?? '').trim()
+            if (!prompt) throw new Error('What should the picture show?')
+            const png = await ctx.nanomuseCloud.studioDraw(prompt, false)
+            const cwd = exec.agent?.session.header.cwd || process.cwd()
+            const dir = join(cwd, 'images')
+            await mkdir(dir, { recursive: true })
+            const path = join(dir, `image-${Date.now()}.png`)
+            await writeFile(path, png)
+            ctx.nanomuseCloud.showPreview({ path, title: args.title || 'Картинка' })
+            return { path, bytes: png.length }
+          },
+          presentCall: (args) => ({ card: 'generic', title: `Picture: ${(args.title || args.prompt || '').slice(0, 60)}`, kind: 'other', rawInput: args }),
+        }),
+      ),
+    'nanomuse rooms: make_image',
+  )
+
   ctx.inject(['systemPrompt'], (ctx) => {
+    // The map of what this computer and this account already have. The point is to stop
+    // the model before it writes an MCP server, an OAuth flow or a provider client for
+    // something the app already does. Keep the names exact: the model looks for tools by
+    // name, and the person looks for settings by the labels below.
+    ctx.effect(
+      () =>
+        ctx.systemPrompt.context({
+          name: 'nanolika-capabilities',
+          order: 54,
+          text: () =>
+            [
+              '## What is already here — use it before writing code',
+              'This computer and this account already carry the tools below. Before writing a script, an MCP server, a bridge, an OAuth flow, an IMAP client or a provider client, find the task here and use the named tool or settings page. If the task is not here, say what is missing and ask; never invent a model id, a key, an endpoint or an integration.',
+              '',
+              '- **Mail**: Settings → Connectors → Mailbox (Настройки → Коннекторы → Почта). When it is connected, the tools are `read_emails` and `send_email`: use them to search, read, draft and send. If they are not in your tool list, the connector is off: the same card shows the setup (`nanomuse vault set EMAIL_ADDRESS`, `nanomuse vault set EMAIL_PASSWORD`, then `[connectors.email]` in `~/.nanomuse/config.toml` with `imap_host`/`smtp_host`; for Yandex `imap.yandex.ru` / `smtp.yandex.ru` and an app password, then restart). Ask the person to connect it; never write an IMAP client, an OAuth flow or an MCP server for mail as a workaround. Sending is confirmed every time.',
+              '- **Calendar and contacts**: the same Settings → Connectors page has built-in `calendar` and `contacts` tools. Use them; do not parse .ics/.vcf by hand or build a bridge.',
+              '- **Other services** (Notion, GitHub, Linear, Slack, Google Drive and the rest of the catalogue): Settings → Connectors mounts them as `mcp__<server>__<tool>`. Use the mounted tools; do not write a client for a service the page already lists.',
+              '- **Word / PowerPoint / Excel**: use the installed skills `docx`, `pptx`, `xlsx` through `tool-skill` (Settings → Skills / Настройки → Навыки). Do not pip install python-docx/openpyxl or write a parser unless the skill cannot do the job.',
+              '- **Pictures**: `make_image` draws through the image model chosen in Settings → Models (Настройки → Модели) and opens the PNG beside the chat. Avatar looks are `draw_new_look` (opens the studio with four candidates). Do not call a provider image API directly.',
+              '- **Music**: `make_music` — `music-suno-track` (song/instrumental, 25 ₽), `music-sounds-track` (effect, 3.50 ₽), `music-lyria-track` (short clip, 7 ₽). Pick by the request, state the price, the tool opens the MP3 in the side pane.',
+              '- **Speech out loud**: `speak` reads an answer with the system voice; it does not use the cloud voice model. Cloud speech is the app\'s voice feature, not a tool you call.',
+              '- **Video**: the video model in Settings → Models is used by the avatar animation (Settings → Media / Настройки → Медиа). There is no general `make_video` tool in this build. Do not write a video client; if the person asks for a clip, say what is available.',
+              '- **Files**: `tool-fs` (read/write/edit/list) and `fs_search`; use `bash` only for commands, not for reading or writing when the fs tools can do it.',
+              '- **Web**: `web_search` and `web_fetch`; use them before writing a scraper.',
+              '- **This screen**: `computer_screen` and `computer_act` (Settings → Computer use / Настройки → Управление компьютером). Do not use AppleScript, pyautogui or a custom clicker.',
+              '- **Other devices**: `devices`, `device_screen`, `device_shell`, `device_files`, `device_open`, `device_notify`, `delegate` (the account\'s hub).',
+              '- **The side pane**: `preview_show` / `preview_close`; a picture, a clip, a PDF or a page you made belongs here.',
+              '- **Memory and rooms**: `remember`, `recall`, `forget`; `library_add`, `feed_post`, `goals_room_update`.',
+              '- **Code and research**: `bash`, `fs`, `subagent`, plan mode. Do not build an integration that a named tool or settings page already covers.',
+              '',
+              'Before spending money on media, name the model and the price in one line. If the model is not open on the tariff, pick the nearest allowed model of that kind and say which one you used. When a tool refuses because a connection is missing, go to the settings page named above; do not code around it.',
+            ].join('\n'),
+        }),
+      'nanomuse: capability map',
+    )
     // The first conversation (C4): what the model is told for the chat it is bound to, by
     // phase — nothing anywhere else, nothing once it is over. The assembly names its agent.
     ctx.effect(
