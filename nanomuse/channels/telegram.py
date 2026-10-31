@@ -228,6 +228,12 @@ class TelegramChannel(Channel):
         chat_id = str(chat.get("id") or "")
         is_group = chat.get("type") in ("group", "supergroup")
         text = str(message.get("text") or message.get("caption") or "")
+        logger.info(
+            "telegram: message chat={} topic={} chars={}",
+            chat_id,
+            message.get("message_thread_id") or 0,
+            len(text),
+        )
         try:
             from .touches import note as _note
 

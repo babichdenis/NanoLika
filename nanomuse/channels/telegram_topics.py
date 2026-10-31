@@ -7,7 +7,7 @@ import hashlib
 import re
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -531,6 +531,12 @@ class TelegramTopics:
         """
         if not self.enabled(msg.channel) or msg.is_group or split_chat(msg.chat_id)[1]:
             return msg
+        channel = self.m.channels.get(msg.channel)
+        if getattr(channel, "topics_enabled", False):
+            # A client that shows topics tells us the topic on every message that has one.
+            # A message outside any topic is General — a place of its own; guessing the
+            # last topic here sent General words into whichever chat happened to be last.
+            return msg
         if msg.text.strip().startswith("/") or (not msg.text.strip() and not msg.files):
             return msg
         if not self.m.menu.private_owner(msg):
@@ -644,8 +650,30 @@ class TelegramTopics:
             if row and row.get("cid") and lookup is not None:
                 thread = lookup(row["cid"])
             if row and thread is None:
-                await self.m.menu.send(msg, self.copy(msg)["failed"], [])
-                return True
+                cid = str(row.get("cid") or "")
+                catalog = getattr(self.m.svc.sync, "catalog", None)
+                known = bool(cid) and bool(getattr(catalog, "rows", {}).get(cid))
+                if known and lookup is not None:
+                    # the conversation exists on the relay but this runtime has not
+                    # loaded it yet: one pull, then look again
+                    with suppress(Exception):
+                        await self.m.svc.sync.pull()
+                    thread = lookup(cid)
+                if thread is None:
+                    if not known:
+                        # The topic outlived its thread: an older run minted a cid and
+                        # never saved the conversation, so the row points at nothing.
+                        # Start a fresh conversation in this topic instead of refusing
+                        # the person's next message forever.
+                        if not msg.text.strip() and not msg.files:
+                            return True
+                        thread = self.m.svc.create_thread(self._thread_title(msg))
+                        self._put(msg, topic, thread, seeded=True)
+                        self.m.svc.sync.thread_changed(thread)
+                        await self.m.svc.sync.push()
+                    else:
+                        await self.m.menu.send(msg, self.copy(msg)["failed"], [])
+                        return True
             if (
                 row
                 and thread is not None
@@ -793,6 +821,18 @@ class TelegramTopics:
                     ),
                     None,
                 )
+            taken = {
+                normalize_name(str(r.get("name") or ""))
+                for r in rows
+                if isinstance(r, dict) and r is not existing and r.get("chat") == chat
+            }
+            if name in taken:
+                # several conversations may carry the same title; a topic must still say
+                # which one it is, or three "Исправление ошибок" look like one chat
+                suffix = 2
+                while f"{name} · {suffix}" in taken:
+                    suffix += 1
+                name = f"{name} · {suffix}"[:100]
             if existing:
                 topic = int(existing["topic"])
                 # Native private-chat topics are already open; reopenForumTopic is supergroup-only.

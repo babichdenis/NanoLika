@@ -1175,6 +1175,7 @@ class MuseService:
         once_key: str = "",
         once_model: str = "",
         customer_scope: str = "",
+        via_channel: str = "",
     ) -> dict[str, Any]:
         """Queue a message for a thread. Returns the timeline event that was created.
 
@@ -1223,6 +1224,10 @@ class MuseService:
             return event
         if source in ("user", "device"):
             event_data: dict[str, Any] = {"type": "user", "text": text, "thread": thread_id}
+            if via_channel:
+                # the words came from a messenger topic: other devices show the channel's
+                # name on the bubble, not this computer's
+                event_data["via_channel"] = via_channel
             if attachments:
                 event_data["files"] = [a.model_dump() for a in attachments]
             if once is not None:

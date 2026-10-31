@@ -27,7 +27,8 @@
       localStorage.setItem('nm.key', session.key);
       localStorage.setItem('nm.acct', session.owner);
       localStorage.setItem('nm.hint', session.hint);
-      location.replace('/web/');
+      try { localStorage.setItem('nl.web.channel', 'telegram'); } catch {}
+      location.replace('/web/?channel=telegram');
     } catch { status.textContent = 'Не удалось сохранить вход или связаться с сервером. Разрешите хранение данных и попробуйте ещё раз.'; retry.hidden = false; login.hidden = false; }
   }
   retry.onclick = signIn;
