@@ -15,6 +15,8 @@ import { readSharedConnectors, type SharedConnector } from './desk.ts'
 export const RELAY_TIMEOUT_MS = 30_000
 /** The budget for a picture made or edited through the relay: the model behind it takes its time. */
 export const RELAY_IMAGE_TIMEOUT_MS = 180_000
+/** A music track is a queue plus a render: five minutes covers the slow Suno days. */
+export const RELAY_MUSIC_TIMEOUT_MS = 330_000
 
 /** A `fetch` init that may name its own budget; the wrapped fetch takes it off before the call. */
 export type TimedInit = RequestInit & { timeoutMs?: number }
@@ -455,6 +457,27 @@ export class Relay {
     })
     if (!res.ok) await fail(res)
     return this.imageOf(await res.json())
+  }
+
+  /** One music track (`POST /v1/audio/music`); the MP3 bytes. */
+  async generateMusic(
+    apiKey: string,
+    model: string,
+    prompt: string,
+    options: { title?: string; style?: string; instrumental?: boolean; customMode?: boolean; duration?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<Buffer> {
+    const res = await this.fetchImpl(`${this.origin}/v1/audio/music`, {
+      method: 'POST',
+      headers: { ...this.auth(apiKey), ...JSON_HEADERS },
+      body: JSON.stringify({ model, prompt, ...options }),
+      signal: signal ?? null,
+      timeoutMs: RELAY_MUSIC_TIMEOUT_MS,
+    })
+    if (!res.ok) await fail(res)
+    const bytes = Buffer.from(await res.arrayBuffer())
+    if (!bytes.length) throw new RelayError(502, 'empty_track', 'The relay sent an empty track')
+    return bytes
   }
 
   /** The same character in another pose (`POST /v1/images/edits`, multipart); the bytes. */

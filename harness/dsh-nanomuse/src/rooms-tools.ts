@@ -5,6 +5,8 @@
  * flight-price goal doing?" needs no room open. A preset row, like Reach; it
  * needs the rooms service (`dsh-nanomuse/rooms`) and does nothing without it.
  */
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -149,6 +151,58 @@ export function apply(ctx: Context): void {
         }),
       ),
     'nanomuse rooms: draw_new_look',
+  )
+
+  ctx.effect(
+    () =>
+      ctx.tools.register(
+        defineTool({
+          name: 'make_music',
+          description:
+            "Make one music track for the person and open it beside the chat. Pick the model from the account's music menu by what they asked for: music-suno-track — a full song with vocals or an instrumental (25 ₽), music-sounds-track — a short sound effect or sample (3.50 ₽), music-lyria-track — a short musical clip (7 ₽). Use sounds for a whoosh/rain/click, lyria for a sting, suno for a song. Pass style/title/instrumental when they named them; with custom=true the prompt is the lyrics and style and title are required. The charge is per track; say the model and the price in one line after it is ready. Do not invent another model id.",
+          parameters: {
+            prompt: { type: 'string', required: true, description: 'What to make: a description, or the lyrics when custom=true (at most 5000 characters).' },
+            model: { type: 'string', description: 'music-suno-track (song, 25 ₽, default), music-sounds-track (effect, 3.50 ₽) or music-lyria-track (short clip, 7 ₽).' },
+            title: { type: 'string', description: 'The track title, when they gave one (custom mode requires it).' },
+            style: { type: 'string', description: 'Genre and mood, e.g. "lo-fi, calm, piano" (custom mode requires it).' },
+            instrumental: { type: 'boolean', description: 'No vocals.' },
+            custom: { type: 'boolean', description: 'Treat prompt as lyrics; requires style and title.' },
+            duration: { type: 'number', description: 'Length in seconds, 10–360; only with custom=true.' },
+          },
+          output: {
+            schema: {
+              type: 'object',
+              properties: { path: { type: 'string' }, model: { type: 'string' }, bytes: { type: 'number' }, title: { type: 'string' } },
+              additionalProperties: false,
+            },
+            render: (args, value) => [{ type: 'text', text: `Track ready: ${value.title || args.prompt.slice(0, 60)} (${value.model}, ${Math.round((value.bytes ?? 0) / 1024)} KB).` }],
+          },
+          async execute(args, exec) {
+            const prompt = String(args.prompt ?? '').trim()
+            if (!prompt) throw new Error('What should the track be about?')
+            const model = String(args.model || 'music-suno-track').trim()
+            const allowed = new Set(['music-suno-track', 'music-sounds-track', 'music-lyria-track'])
+            if (!allowed.has(model)) throw new Error(`Unknown music model ${model}; use ${[...allowed].join(', ')}`)
+            if (args.custom && (!args.style || !args.title)) throw new Error('Custom mode needs both style and title')
+            const audio = await ctx.nanomuseCloud.generateMusic(prompt, model, {
+              ...(args.title ? { title: args.title } : {}),
+              ...(args.style ? { style: args.style } : {}),
+              ...(args.instrumental ? { instrumental: true } : {}),
+              ...(args.custom ? { customMode: true } : {}),
+              ...(args.duration ? { duration: args.duration } : {}),
+            })
+            const cwd = exec.agent?.session.header.cwd || process.cwd()
+            const dir = join(cwd, 'music')
+            await mkdir(dir, { recursive: true })
+            const path = join(dir, `music-${Date.now()}.mp3`)
+            await writeFile(path, audio)
+            ctx.nanomuseCloud.showPreview({ path, title: args.title || 'Музыка' })
+            return { path, model, bytes: audio.length, title: args.title || '' }
+          },
+          presentCall: (args) => ({ card: 'generic', title: `Music: ${(args.title || args.prompt || '').slice(0, 60)}`, kind: 'other', rawInput: args }),
+        }),
+      ),
+    'nanomuse rooms: make_music',
   )
 
   ctx.inject(['systemPrompt'], (ctx) => {

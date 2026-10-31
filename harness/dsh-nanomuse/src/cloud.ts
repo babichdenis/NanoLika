@@ -59,6 +59,7 @@ import { SCREEN_RUN_IDLE_MS, ScreenRuns, Trajectory, type ScreenRun, type StepAc
 import { RemoteStore, SyncEngine, SyncRelay, type RemoteLine, type SessionInfo, type SessionLine, type SyncState } from './sync.ts'
 import { AvatarMotion, ANIMATED, type MotionMood, type MotionView } from './motion.ts'
 import { OwnClip, isOwnClipMood, type OwnClipMood, type OwnClipView } from './own-clip.ts'
+import { parseWave, type SpeechInput, type Transcript, type SpeechService, SPEECH_WHISPER_KEY, type SpeechWhisper, type SpeechPreparationOptions } from './speech-whisper.ts'
 import { kindOfFile, previewFileUrl } from './preview-kind.ts'
 import { resolveUserPath } from './preview-file.ts'
 import { DEFAULT_VIDEO_MODEL, hostOf, KNOWN_DASHSCOPE_MODELS, looksLikeVideoModel, probe as probeVideoModel, speaksDashScope, type VideoEndpoint } from './video.ts'
@@ -1072,6 +1073,12 @@ export default class NanomuseCloud extends Service {
     })
 
     mountGuarded(this.ctx, API_PREFIX, this.handle, 'nanomuse cloud: api')
+
+    // /voice endpoint for STT — unguarded for voice message processing from Telegram/MAX/Web
+    this.ctx.inject(['webServer'], (ctx) => {
+      ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API_PREFIX}/voice`, handler: this.handleVoice.bind(this) }), 'nanomuse cloud: voice endpoint')
+    ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API_PREFIX}/voice/prepare`, handler: this.handleVoicePrepare.bind(this) }), 'nanomuse cloud: voice prepare endpoint')
+    })
     // The account's other devices see what is connected here (C3): on every change and at start.
     this.ctx.inject(['nanomuseConnectors'], (ctx) => {
       ctx.effect(() => ctx.nanomuseConnectors.onChange(() => void this.publishConnectors().catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: connectors not shared: %s', message(error)))), 'nanomuse cloud: share connectors')
@@ -2272,6 +2279,52 @@ export default class NanomuseCloud extends Service {
     }
   }
 
+  /** Handle voice transcription: base64 WAV → text using local Whisper. */
+  /** Handle voice transcription: base64 WAV → text using local Whisper. */
+  private async handleVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      // A phrase is megabytes of base64: the default 64 KB limit cuts off anything longer than a second.
+      const body = await json(req, 16 * 1024 * 1024)
+      const audioBase64 = typeof body.audio === 'string' ? body.audio : ''
+      const language = typeof body.language === 'string' ? body.language : 'ru'
+      if (!audioBase64) return send(res, 400, { error: { code: 'bad_request', message: 'audio is required' } })
+
+      // Decode base64 WAV
+      const audioBytes = Buffer.from(audioBase64, 'base64')
+      const wave = parseWave(new Uint8Array(audioBytes), 4 * 1024 * 1024)
+
+      // Get the SpeechWhisper instance stored in context
+      const whisper = this.ctx.get(SPEECH_WHISPER_KEY) as SpeechWhisper | undefined
+      if (!whisper) return send(res, 503, { error: { code: 'not_ready', message: 'Speech recognition not available' } })
+
+      // Transcribe
+      const transcript = await whisper.transcribe({ audio: new Uint8Array(audioBytes), language }, new AbortController().signal)
+      return send(res, 200, { text: transcript.text })
+    } catch (error) {
+      this.ctx.logger.warn('nanomuse cloud: voice transcription failed: %s', message(error))
+      return send(res, 500, { error: { code: 'internal', message: `Transcription failed: ${message(error)}` } })
+    }
+  }
+
+  /** Trigger Whisper model download and preparation. */
+  private async handleVoicePrepare(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      const body = await json(req)
+      const downloadSource = typeof body.downloadSource === 'string' ? body.downloadSource : undefined
+      const options: SpeechPreparationOptions = downloadSource ? { downloadSource } : {}
+
+      const whisper = this.ctx.get(SPEECH_WHISPER_KEY) as SpeechWhisper | undefined
+      if (!whisper) return send(res, 503, { error: { code: 'not_ready', message: 'Speech recognition not available' } })
+
+      // Start preparation (non-blocking)
+      whisper.prepare(options)
+      return send(res, 200, { ok: true, message: 'Preparation started' })
+    } catch (error) {
+      this.ctx.logger.warn('nanomuse cloud: voice prepare failed: %s', message(error))
+      return send(res, 500, { error: { code: 'internal', message: 'Preparation failed' } })
+    }
+  }
+
   private defaultModelService(): { currentSelection(): { provider: string; model: string }; saveSelection(next: { provider: string; model: string }): Promise<void> } | undefined {
     return (this.ctx as unknown as { get(name: string): unknown }).get('agentDefaultModel') as ReturnType<NanomuseCloud['defaultModelService']>
   }
@@ -3094,6 +3147,22 @@ export default class NanomuseCloud extends Service {
   private sawBlackScreen(): void {
     this.blackScreenAt = Date.now()
     this.broadcast()
+  }
+
+  /**
+   * One music track through the account's relay (`POST /v1/audio/music`), charged per
+   * track. The caller names a model from the menu (`music-suno-track`,
+   * `music-sounds-track`, `music-lyria-track`); the relay refuses anything else.
+   */
+  async generateMusic(
+    prompt: string,
+    model = 'music-suno-track',
+    options: { title?: string; style?: string; instrumental?: boolean; customMode?: boolean; duration?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<Buffer> {
+    const token = await this.token()
+    if (!token) throw new RelayError(401, 'no_account', 'Sign in to NanoLika Cloud to make music')
+    return this.relay.generateMusic(token, model, prompt, options, signal)
   }
 
   /**
