@@ -210,6 +210,15 @@ function routeLabel(value) {
 }
 
 /** Полная размерность закупки — во всплывающей подсказке, а не в каждой ячейке. */
+function mediaOffersLine(model) {
+  const offers = (model.routing?.offers || []).filter((offer) => Number(offer.price_rub) > 0);
+  if (offers.length < 2) return "";
+  const sorted = [...offers].sort((a, b) => Number(a.price_rub) - Number(b.price_rub));
+  return "\n" + sorted
+    .map((offer) => `${providerLabel(offer.provider)}: ${fmt(offer.price_rub)} ₽ / ${offer.unit || "ед."}`)
+    .join("\n");
+}
+
 function purchaseTitle(model) {
   const cost = model.cost || {};
   const routing = model.routing || {};
@@ -221,10 +230,11 @@ function purchaseTitle(model) {
     ? `\nТочная версия ${model.upstream}: ${providerLabel(exact.provider)} ${fmt(exact.input_rub)} / ${fmt(exact.output_rub)}${exact.eligible ? "" : " (только сверка)"}`
     : "";
   const source = model.cost_offer?.provider ? ` · ${providerLabel(model.cost_offer.provider)}` : "";
-  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${source}${selected}`;
-  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${source}${selected}`;
-  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${source}${selected}`;
-  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${source}${selected}`;
+  const others = mediaOffersLine(model);
+  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${source}${selected}${others}`;
+  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${source}${selected}${others}`;
+  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${source}${selected}${others}`;
+  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${source}${selected}${others}`;
   if (cost.rub_in != null || cost.rub_out != null) {
     return `Закупка выбранного маршрута${selected}: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M${exactLine}`;
   }
@@ -261,10 +271,7 @@ function offersOf(model) {
  */
 function mediaBaseUnit(group) {
   const units = new Set((group.offers || []).map((offer) => String(offer.unit || "")));
-  if (group.group === "image") {
-    if (units.has("изображение")) return "изображение";
-    if (units.has("запрос")) return "запрос";
-  }
+  if (group.group === "image" && units.has("изображение")) return "изображение";
   if (group.group === "video" && units.has("секунда")) return "секунда";
   if (group.group === "audio") {
     if (units.has("1000 символов") || units.has("1M символов")) return "1000 символов";
@@ -286,8 +293,6 @@ function mediaUnitPrice(offer, base) {
   if (!Number.isFinite(price) || price <= 0) return null;
   if (unit === base) return price;
   if (base === "1000 символов" && unit === "1M символов") return price / 1000;
-  if (base === "изображение" && unit === "запрос") return price;
-  if (base === "запрос" && unit === "изображение") return price;
   return null;
 }
 

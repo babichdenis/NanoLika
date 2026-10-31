@@ -111,3 +111,39 @@ def test_flash_revision_is_compared_as_the_same_family_and_can_be_cheapest():
     assert dated["exclusion_reason"] == ""
     assert row["cheapest"] == "openrouter"
     assert row["cheapest_rub"] == 4.5
+
+
+def test_jiugx_pricing_multipliers_become_dollars_per_million():
+    """jiugx отдаёт множители New API, а не рубли.
+
+    Сверено живым запросом deepseek-v4-1-flash-260910: 33 токена входа и 8
+    выхода списали $0,000146 — это ровно model_ratio × 2 × group_ratio для
+    входа и та же ставка × completion_ratio для выхода.
+    """
+    offers = provider_prices.jiugx_offers(
+        {
+            "group_ratio": {"default": 1.1},
+            "data": [
+                {
+                    "model_name": "deepseek-v4-1-flash-260910",
+                    "quota_type": 0,
+                    "model_ratio": 1,
+                    "completion_ratio": 4,
+                    "model_price": 0,
+                },
+                {
+                    "model_name": "doubao-seedream-5-0-pro-260628",
+                    "quota_type": 1,
+                    "model_ratio": 0,
+                    "completion_ratio": 0,
+                    "model_price": 0.3,
+                },
+            ],
+        }
+    )
+    text = {offer["unit"]: offer for offer in offers if offer["model"] == "deepseek-v4-1-flash-260910"}
+    assert text["1M токенов (вход)"]["price"] == 2.2
+    assert text["1M токенов (выход)"]["price"] == 8.8
+    image = next(offer for offer in offers if offer["model"] == "doubao-seedream-5-0-pro-260628")
+    assert image["unit"] == "изображение"
+    assert image["price"] == 0.33

@@ -452,6 +452,7 @@ def _providers(settings: Any, prices: dict) -> dict:
         "proxyapi",
         "proxyapi-openai",
         "bothub",
+        "jiugx",
         "neuroapi",
         "openrouter",
         "own",
@@ -791,20 +792,38 @@ def _bulk_rates(item: dict, multiplier: float) -> dict:
 
 # Медиа продаётся не за токены, а за штуку/секунду/1000 знаков/минуту:
 # эти цены лежат в снимке прайсов поставщиков, а не в маршрутизаторе.
-_MEDIA_UNITS = {"изображение", "видео", "секунда", "1000 символов", "минута", "1M символов", "запрос", "1M токенов (картинка)"}
+# Цена за 1M токенов картинки и «запрос» сюда не входят: первую нельзя
+# перевести в штуку без числа токенов на картинку, вторая — это web_search
+# RouterAI, а не цена изображения.
+_MEDIA_UNITS = {"изображение", "видео", "секунда", "1000 символов", "минута", "1M символов"}
+_TASK_SUFFIX = re.compile(r"-(?:text-to-image|image-to-image|text-to-video|image-to-video|preview)$")
 
 
 def _media_key(value: Any) -> str:
-    """Одно имя у поставщика и у нас: `eleven_flash_v2_5` = `eleven-flash-v2.5`."""
-    return re.sub(r"[-_.\s]+", "-", str(value or "").strip().lower()).strip("-")
+    """Одно имя у поставщика и у нас.
+
+    `eleven_flash_v2_5` = `eleven-flash-v2.5`, `seedream/5-pro-text-to-image` =
+    `seedream-5.0-pro`, `kling/v2.6` = `kling-v2.6`. Поставщики по-разному
+    пишут версию (2.0 / 2) и задачу (text-to-image), поэтому перед сравнением
+    убираем хвостовой ноль у номера и название задачи, а не полагаемся на
+    точное совпадение slug.
+    """
+    key = re.sub(r"[-_.\s/—–]+", "-", str(value or "").strip().lower()).strip("-")
+    key = re.sub(r"(?<=\d)-0(?=-|$)", "", key)
+    return _TASK_SUFFIX.sub("", key)
 
 
 def _media_offers(prices: dict) -> dict[str, list[dict]]:
     index: dict[str, list[dict]] = {}
     for row in prices.get("models") or []:
         unit = str(row.get("unit") or "")
-        key = _media_key(row.get("key"))
-        if unit not in _MEDIA_UNITS or not key:
+        if unit not in _MEDIA_UNITS:
+            continue
+        keys = {_media_key(row.get("key")), _media_key(row.get("name"))}
+        for offer in row.get("offers") or []:
+            keys.add(_media_key(offer.get("model")))
+        keys.discard("")
+        if not keys:
             continue
         for offer in row.get("offers") or []:
             provider = str(offer.get("provider") or "")
@@ -814,17 +833,17 @@ def _media_offers(prices: dict) -> dict[str, list[dict]]:
                 continue
             if not provider or price <= 0:
                 continue
-            index.setdefault(key, []).append(
-                {
-                    "provider": provider,
-                    "model": str(offer.get("model") or ""),
-                    "unit": unit,
-                    "price_rub": round(price, 4),
-                    "eligible": False,
-                    "selected": False,
-                    "exclusion_reason": "нет адаптера маршрутизации: цена только для сверки",
-                }
-            )
+            entry = {
+                "provider": provider,
+                "model": str(offer.get("model") or ""),
+                "unit": unit,
+                "price_rub": round(price, 4),
+                "eligible": False,
+                "selected": False,
+                "exclusion_reason": "нет адаптера маршрутизации: цена только для сверки",
+            }
+            for key in keys:
+                index.setdefault(key, []).append(entry)
     return index
 
 
@@ -944,10 +963,17 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         for row, spec in zip(models, settings.models, strict=True):
             if spec.kind == "chat":
                 continue
+            upstream = str(getattr(spec, "upstream", "") or "")
             candidates = {
-                _media_key(str(getattr(spec, "upstream", "") or "").rsplit("/", 1)[-1]),
+                _media_key(upstream),
+                _media_key(upstream.rsplit("/", 1)[-1]),
                 _media_key(str(getattr(spec, "name", "") or "")),
             }
+            if spec.id.startswith("bh-"):
+                # Bothub-строка: `bh-seedream-5-0-pro` и Slug поставщика
+                # `seedream-5-0-pro` — одна и та же модель.
+                candidates.add(_media_key(spec.id[3:]))
+            candidates.discard("")
             offers = []
             for offer in (item for key in candidates for item in (media.get(key) or [])):
                 if any(item["provider"] == offer["provider"] and item["unit"] == offer["unit"] for item in offers):
@@ -979,8 +1005,6 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     continue
                 if unit == "1M символов":
                     unit, price = "1000 символов", price / 1000
-                elif unit == "запрос" and spec.kind == "image":
-                    unit = "изображение"
                 if unit not in {"изображение", "секунда", "1000 символов", "минута"}:
                     continue
                 if unit not in best or price < best[unit][0]:

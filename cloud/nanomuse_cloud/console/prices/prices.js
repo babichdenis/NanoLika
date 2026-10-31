@@ -59,6 +59,7 @@ const PROVIDER_NAMES = {
   "proxyapi-openai": "ProxyAPI OpenAI",
   routerai: "RouterAI",
   bothub: "Bothub",
+  jiugx: "Jiugx",
   neuroapi: "NeuroAPI",
   own: "DeepSeek официальный",
   deepseek: "DeepSeek",

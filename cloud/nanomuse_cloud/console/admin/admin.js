@@ -1897,7 +1897,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (MODELS_MOD) return run(MODELS_MOD);
-    import("./models-table.js?v=20261031-markup-media2").then((mod) => { MODELS_MOD = mod; run(mod); },
+    import("./models-table.js?v=20261031-media-all2").then((mod) => { MODELS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Таблица не загрузилась: ${e.message}`)); });
   }
 

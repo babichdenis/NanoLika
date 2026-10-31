@@ -92,6 +92,17 @@ DRAFTS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _fresh_prices_cache():
+    """Кэш страницы цен живёт 5 минут и общий на процесс: без сброса тест
+    получал ответ предыдущего теста с другим курсом и другим каталогом."""
+    from nanomuse_cloud import prices_admin
+
+    prices_admin._CACHE.update(at=0.0, full=None, compact=None)
+    yield
+    prices_admin._CACHE.update(at=0.0, full=None, compact=None)
+
+
 @pytest.fixture()
 def market(tmp_path, monkeypatch):
     """Каталог данных рынка: свой у каждого теста, без снимка релея."""
@@ -281,3 +292,48 @@ def test_unrouted_model_does_not_masquerade_as_a_live_supplier_quote():
     assert row["configured_cost"]["rub_in"] == 3.62
     assert row["ratio"] == {"in": None, "out": None}
     assert row["cost_source"] == "no_live_provider_quote"
+
+
+async def test_media_offers_merge_names_of_different_providers(tmp_path, monkeypatch):
+    """Одна картинка у двух поставщиков — одна строка, даже если slug разный.
+
+    Polza называет Seedream 5.0 Pro по задаче (`5-pro-text-to-image`), Bothub —
+    по версии (`seedream-5-0-pro`). Раньше вторая цена не находилась, и в
+    таблице оставался один Bothub.
+    """
+    snapshot = json.loads(json.dumps(SNAPSHOT))
+    snapshot["models"] += [
+        {
+            "key": "seedream-5-0-pro",
+            "name": "seedream-5.0-pro",
+            "unit": "изображение",
+            "offers": [{"provider": "bothub", "unit": "изображение", "rub": 8.25, "model": "seedream-5-0-pro"}],
+        },
+        {
+            "key": "5-pro-text-to-image",
+            "name": "seedream/5-pro-text-to-image",
+            "unit": "изображение",
+            "offers": [{"provider": "polza", "unit": "изображение", "rub": 5.0, "model": "seedream/5-pro-text-to-image"}],
+        },
+    ]
+    (tmp_path / "prices.json").write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("PRICES_DATA_DIR", str(tmp_path))
+
+    from nanomuse_cloud.config import ModelSpec
+
+    models = (ModelSpec("seedream-pro", "Seedream 5.0 Pro", "seedream-5-0-pro", kind="image", price_image=8),)
+    app, client, *_ = make(models=models)
+    body = (await client.get("/v1/admin/prices", headers=ADMIN)).json()
+    row = next(item for item in body["models"] if item["id"] == "seedream-pro")
+    assert {offer["provider"] for offer in row["routing"]["offers"]} == {"bothub", "polza"}
+    assert row["cost"]["rub_image"] == 5.0
+    assert row["cost_offer"]["provider"] == "polza"
+
+
+def test_provider_slugs_of_one_model_meet_at_one_key():
+    from nanomuse_cloud.prices_admin import _media_key
+
+    assert _media_key("seedream/5-pro-text-to-image") == _media_key("seedream-5.0-pro") == "seedream-5-pro"
+    assert _media_key("kling/v2.6") == _media_key("kling-v2.6")
+    assert _media_key("grok-imagine-image-2.0/text-to-image") == _media_key("grok-imagine-image-2-0")
+    assert _media_key("Nano Banana — Pro") == "nano-banana-pro"

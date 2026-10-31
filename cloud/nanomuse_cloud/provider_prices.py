@@ -131,6 +131,67 @@ def usd_rub() -> tuple[float, str]:
 
 
 # ── поставщики ──────────────────────────────────────────────────────────
+JIUGX_PRICING = "https://jiugx.com/api/pricing"
+
+
+def jiugx_offers(data: dict) -> list[dict]:
+    """Ставки jiugx.com из `/api/pricing` (New API), в долларах.
+
+    `quota_type=0` — за токены: $/1M входа = model_ratio × 2 × group_ratio,
+    выход — та же ставка × completion_ratio. `quota_type=1` — фиксированная
+    цена за вызов: model_price × group_ratio.
+
+    Формулу сверили живым запросом `deepseek-v4-1-flash-260910` (33 входа +
+    8 выхода): списание $0,000146 совпало с расчётом по этим полям.
+    """
+    try:
+        ratio = float((data.get("group_ratio") or {}).get("default") or 1)
+    except (TypeError, ValueError):
+        ratio = 1.0
+    offers: list[dict] = []
+    for row in data.get("data") or []:
+        name = str(row.get("model_name") or "").strip()
+        if not name:
+            continue
+        try:
+            quota_type = int(row.get("quota_type") or 0)
+            model_ratio = float(row.get("model_ratio") or 0)
+            completion = float(row.get("completion_ratio") or 0)
+            fixed = float(row.get("model_price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if quota_type == 0:
+            price_in = model_ratio * 2 * ratio
+            if price_in <= 0:
+                continue
+            offers.append(dict(model=name, unit="1M токенов (вход)", price=round(price_in, 6), currency="USD"))
+            if completion > 0:
+                offers.append(
+                    dict(model=name, unit="1M токенов (выход)", price=round(price_in * completion, 6), currency="USD")
+                )
+            continue
+        price = fixed * ratio
+        if price <= 0:
+            continue
+        tags = str(row.get("tags") or "").lower()
+        low = name.lower()
+        if "tts" in tags or "audio" in tags:
+            unit = "запрос"
+        elif "video" in tags or any(word in low for word in ("video", "seedance")):
+            unit = "видео"
+        elif "image" in tags or any(word in low for word in ("image", "seedream")):
+            unit = "изображение"
+        else:
+            unit = "запрос"
+        offers.append(dict(model=name, unit=unit, price=round(price, 6), currency="USD"))
+    return offers
+
+
+def fetch_jiugx() -> list[dict]:
+    """jiugx.com — китайский релей. Прайс открыт, ключ для сбора не нужен."""
+    return jiugx_offers(json.loads(get(JIUGX_PRICING, 30)))
+
+
 def fetch_deepseek() -> list[dict]:
     """Официальный прайс DeepSeek: $ за 1M токенов, peak и off-peak."""
     body = get("https://api-docs.deepseek.com/quick_start/pricing/")
@@ -254,88 +315,83 @@ def fetch_routerai() -> list[dict]:
 
 
 def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
-    """polza.ai: у каждой модели своя страница, цена с единицей (₽).
+    """polza.ai — рубли. Каталог `/api/v1/models` отдаёт ставки по единицам:
 
-    На странице три разных вида записи:
-      «11,56 ₽ | Запрос / 1М | 17,16 ₽ | Ответ / 1М»   — текст, за 1M токенов;
-      «от 3 до 6,75 ₽/ изобр.»                          — картинка, диапазон;
-      «0,24 ₽ | Минута»                                 — речь по минутам.
+      prompt_per_million / completion_per_million — текст за 1M токенов;
+      image_output_per_million                   — картинка за 1M токенов;
+      tts_per_million_characters                 — озвучка за 1M знаков;
+      stt_per_minute                             — расшифровка за минуту;
+      per_request / tiers[].cost_rub             — картинка, видео, музыка за штуку.
+
+    Страницы моделей больше не разбираем: на них одна и та же цена встречается
+    в разных подписях, и в прайс попадали чужие единицы (например, цена за 1M
+    токенов картинки выдавалась за цену одной картинки). Здесь единица известна
+    из поля, а не угадывается регуляркой.
+
+    `limit`/`workers` оставлены для совместимости вызова: теперь это один
+    запрос каталога, а не обход страниц.
     """
     data = json.loads(get("https://polza.ai/api/v1/models", 60))
-    slugs = [m["id"] for m in data.get("data", [])]
+    rows = data.get("data") or []
     if limit:
-        slugs = slugs[:limit]
+        rows = rows[:limit]
 
-    rec_token = re.compile(r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Запрос|Ответ)\s*/\s*1М", re.I)
-    rec_range = re.compile(
-        r"от\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*до\s*([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*/\s*"
-        r"(изобр|сек|видео|картин)",
-        re.I,
+    # Как поставщик называет единицу в зависимости от типа модели. Видео с
+    # `unitParam=duration` — цена за секунду; без него в `tiers` лежит цена за
+    # готовый клип (у Kling 5 секунд стоят 42 ₽, а не 42 ₽/с).
+    tier_unit = {"image": "изображение", "music": "запрос"}
+    request_unit = {"image": "изображение", "video": "видео", "music": "запрос"}
+    units = (
+        ("prompt_per_million", "1M токенов (вход)"),
+        ("completion_per_million", "1M токенов (выход)"),
+        ("input_cache_read_per_million", "1M токенов (вход, кэш)"),
+        ("image_output_per_million", "1M токенов (картинка)"),
+        ("tts_per_million_characters", "1M символов"),
+        ("stt_per_minute", "минута"),
+        ("video_per_second", "секунда"),
     )
-    rec_unit = re.compile(
-        r"([\d\u00a0 ]+(?:[.,]\d+)?)\s*₽\s*(Изображение|Видео|Секунда|Минута|"
-        r"Символ|Запрос|1М символов)",
-        re.I,
-    )
-
-    def one(slug: str) -> list[dict]:
-        try:
-            page = get(f"https://polza.ai/models/{slug}", 20)
-        except Exception:  # noqa: BLE001
-            return []
-        flat = re.sub(r"\s+", " ", text_of(page))
-        out = []
-        for m in rec_token.finditer(flat):
-            price = number(m.group(1))
-            if price:
-                kind = "вход" if m.group(2).lower() == "запрос" else "выход"
-                out.append(dict(model=slug, unit=f"1M токенов ({kind})", price=price, currency="RUB"))
-        for m in rec_range.finditer(flat):
-            low, high = number(m.group(1)), number(m.group(2))
-            unit = (
-                "секунда"
-                if m.group(3).lower() == "сек"
-                else "изображение"
-                if m.group(3).lower().startswith(("изобр", "картин"))
-                else "видео"
-            )
-            for price in (low, high):
-                if price:
-                    out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
-        for m in rec_unit.finditer(flat):
-            price = number(m.group(1))
-            raw = m.group(2).lower()
-            unit = (
-                "изображение"
-                if raw.startswith("изображ")
-                else "видео"
-                if raw == "видео"
-                else "секунда"
-                if raw == "секунда"
-                else "минута"
-                if raw == "минута"
-                else "1M символов"
-                if "символ" in raw
-                else "запрос"
-            )
-            if price:
-                out.append(dict(model=slug, unit=unit, price=price, currency="RUB"))
-        # «Запрос» на карточке — та же цена, что вход за 1M токенов: не дублируем
-        inflow = {o["price"] for o in out if o["unit"] == "1M токенов (вход)"}
-        out = [o for o in out if not (o["unit"] == "запрос" and o["price"] in inflow)]
-        # На странице модели polza бывает несколько тарифов одной единицы
-        # (разные провайдеры, кэш, разрешения). Для сравнения берём самый дешёвый.
-        best: dict[str, dict] = {}
-        for o in out:
-            cur = best.get(o["unit"])
-            if cur is None or o["price"] < cur["price"]:
-                best[o["unit"]] = o
-        return list(best.values())
 
     offers: list[dict] = []
-    with cf.ThreadPoolExecutor(max_workers=workers) as pool:
-        for rows in pool.map(one, slugs):
-            offers.extend(rows)
+    for model in rows:
+        slug = str(model.get("id") or "")
+        if not slug:
+            continue
+        pricing = (model.get("top_provider") or {}).get("pricing") or {}
+        if str(pricing.get("currency") or "RUB").upper() != "RUB":
+            continue
+        kind = str(model.get("type") or "")
+
+        def add(unit: str, raw: Any) -> None:
+            try:
+                price = float(str(raw).replace(",", "."))
+            except (TypeError, ValueError):
+                return
+            if price > 0:
+                offers.append(dict(model=slug, unit=unit, price=round(price, 4), currency="RUB"))
+
+        for field, unit in units:
+            add(unit, pricing.get(field))
+        tiers = pricing.get("tiers")
+        if isinstance(tiers, list):
+            prices: list[float] = []
+            for tier in tiers:
+                if not isinstance(tier, dict):
+                    continue
+                try:
+                    price = float(str(tier.get("cost_rub")).replace(",", "."))
+                except (TypeError, ValueError):
+                    continue
+                if price > 0:
+                    prices.append(price)
+            if prices:
+                # На карточке несколько тарифов (разрешение/качество). Для
+                # сравнения берём самый дешёвый — как и раньше на странице.
+                if kind == "video":
+                    unit = "секунда" if pricing.get("unitParam") == "duration" else "видео"
+                else:
+                    unit = tier_unit.get(kind, "запрос")
+                add(unit, min(prices))
+        add(request_unit.get(kind, "запрос"), pricing.get("per_request"))
     return offers
 
 
@@ -351,7 +407,11 @@ def _money(line: str) -> float | None:
 
 def fetch_proxyapi() -> list[dict]:
     """proxyapi.ru — рубли. В карточке модели подпись и цена на разных строках:
-    «Ввод | 632 ₽ | за 1М токенов», имя модели стоит выше, как «vendor/slug»."""
+    «Ввод | 632 ₽ | за 1М токенов», «Видео 720p без звука | 15,79 ₽ | за 1 секунду».
+
+    Карточка заканчивается следующим «вендор / slug», поэтому модель запоминаем
+    по разделителю, а единицу читаем из подписи цены, а не угадываем.
+    """
     lines = text_of(get("https://proxyapi.ru/pricing")).splitlines()
     offers, model = [], None
     for i, ln in enumerate(lines):
@@ -363,13 +423,31 @@ def fetch_proxyapi() -> list[dict]:
         if not model:
             continue
         low = text.lower()
-        if not (low.startswith("ввод") or low.startswith("вывод") or low.startswith("изображени")):
+        if low.startswith(("ввод", "вывод", "изображени")):
+            tail = " ".join(lines[i : i + 3])
+            price = _money(tail)
+            if price is None or ("токен" not in tail.lower() and "изображени" not in low):
+                continue
+            unit = "1M токенов (вход)" if low.startswith("ввод") else "1M токенов (выход)" if low.startswith("вывод") else "изображение"
+            offers.append(dict(model=model, unit=unit, price=price, currency="RUB"))
             continue
-        tail = " ".join(lines[i : i + 3])
+        # медиа: подпись «Видео 720p без звука», цена и единица — следующие строки
+        if not low.startswith(("видео", "изображение", "аудио")):
+            continue
+        tail = " ".join(lines[i : i + 3]).lower()
         price = _money(tail)
-        if price is None or "токен" not in tail.lower() and "изображени" not in low:
+        if price is None:
             continue
-        unit = "1M токенов (вход)" if low.startswith("ввод") else "1M токенов (выход)" if low.startswith("вывод") else "изображение"
+        if "за 1 секунду" in tail:
+            unit = "секунда"
+        elif "за 1 минуту" in tail:
+            unit = "минута"
+        elif "за 1 изображение" in tail:
+            unit = "изображение"
+        elif "за 1М символов" in tail or "за 1м символов" in tail:
+            unit = "1M символов"
+        else:
+            continue
         offers.append(dict(model=model, unit=unit, price=price, currency="RUB"))
     # на странице есть дубли (карточка + сводка) и разные тарифы — берём самый дешёвый
     best: dict[tuple[str, str], dict] = {}
@@ -561,6 +639,7 @@ FETCHERS = {
     "deepseek": ("https://api-docs.deepseek.com/quick_start/pricing/", fetch_deepseek),
     "proxyapi": ("https://proxyapi.ru/pricing", fetch_proxyapi),
     "bothub": ("https://bothub.chat/models", fetch_bothub),
+    "jiugx": ("https://jiugx.com/api/pricing", fetch_jiugx),
     "neuroapi": ("https://neuroapi.host/pricing", fetch_neuroapi),
     "openrouter": ("https://openrouter.ai/api/v1/models", fetch_openrouter),
 }
@@ -816,8 +895,11 @@ def install_provider_prices(app, admin_dep) -> None:
 # Черновые поставщики: парсеры написаны, но сверка цен показывает систематические
 # ошибки привязки модели к цене (карточка съезжает), поэтому по умолчанию выключены.
 # Bothub сюда больше не входит: с ключом цены берутся из API, а не из вёрстки.
+# ProxyAPI включён: карточки идут подряд, модель определяется по «вендор / slug»,
+# а единица — по подписи цены («за 1 секунду», «за 1 минуту»). Видео там дешевле
+# Bothub, и без него сравнение показывало одного поставщика.
 # Включить остальных для отладки: PRICE_DRAFT_PROVIDERS=1
-DRAFT = {"proxyapi", "neuroapi"}
+DRAFT = {"neuroapi"}
 
 
 def active_fetchers() -> dict:
