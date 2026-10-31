@@ -900,6 +900,9 @@ export function createSpeechWhisper(config: Partial<Config> = {}, env: SpeechWhi
   return new SpeechWhisper(Config(config as Config), env)
 }
 
+/** Context key for the registered SpeechWhisper instance. */
+export const SPEECH_WHISPER_KEY = 'nanomuse:speechWhisper'
+
 /**
  * Register the provider with a Host that has the speech seam.
  *
@@ -913,11 +916,13 @@ export function registerSpeechWhisper(ctx: Context, config: Partial<Config>): bo
   const speech = ctx.get('speechToText') as SpeechService | undefined
   if (speech === undefined) return false
   const provider = createSpeechWhisper(config)
+  ctx.provide(SPEECH_WHISPER_KEY, provider)
   ctx.effect(() => {
     void provider.inspect()
     const dispose = speech.register(provider)
     return () => {
       void dispose()
+      ctx.provide(SPEECH_WHISPER_KEY, undefined)
     }
   }, 'nanomuse speech: the local Whisper recognizer')
   return true

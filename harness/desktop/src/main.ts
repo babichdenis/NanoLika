@@ -50,7 +50,13 @@ const BUNDLE = "dsh-nanomuse";
 /** The community Russian pack for the dsh web shell (vendored under harness/vendor), a bundle of its own. */
 const LOCALE_BUNDLE = "@absolutemikhail/dsh-locale-ru";
 const RELEASES_PAGE = "https://nanolika.ru/";
-const ISSUES_PAGE = "https://nanolika.ru/help";
+const ISSUES_PAGE = "https://nanolika.ru/support.html";
+/** The site's own feedback form: the build, the account and the screenshot go into it. */
+const SUPPORT_PAGE = "https://nanolika.ru/support.html";
+/** The support form's own endpoint: the draft and the letter (support.php on the site). */
+const SUPPORT_ENDPOINT = "https://nanolika.ru/support.php";
+/** A fresh HTML/JS on every report: the browser may hold yesterday's form. */
+const SUPPORT_VERSION = "20261031";
 const DOCS_PAGE = "https://nanolika.ru/help";
 const HARNESS_PAGE = "https://github.com/deepseek-ai/deepseek-harness";
 
@@ -68,9 +74,9 @@ const T = {
   restart: zh ? "重新启动" : "Restart",
   quit: zh ? "退出" : "Quit",
   copyDetails: zh ? "复制详情" : "Copy details",
-  copied: zh ? "已复制。到 GitHub 发一个 issue 时贴上即可。" : "Copied. Paste it into a GitHub issue.",
+  copied: zh ? "已复制。到支持页面粘贴即可。" : "Copied. Paste it into the support form.",
   openLogFolder: zh ? "打开日志文件夹" : "Open the log folder",
-  reportHint: zh ? "「复制详情」会把这段话和日志末尾复制下来，发 issue 时贴上：" : "Copy details puts this and the end of the log on the clipboard for an issue at",
+  reportHint: zh ? "「复制详情」会把这段话和日志末尾复制下来，发到支持页面时贴上：" : "Copy details puts this and the end of the log on the clipboard for the support form at",
   about: zh ? "关于 NanoLika" : "About NanoLika",
   website: zh ? "NanoLika 官网" : "NanoLika website",
   docs: zh ? "这个桌面版的说明" : "About this desktop",
@@ -951,6 +957,8 @@ interface Prefs {
   relayHosts?: string[];
   /** The app version whose launch already opened the privacy panes; absent means never asked here. */
   permissionsPaneFor?: string;
+  /** Where the window sat when it was last closed, so the next launch opens in the same place. */
+  window?: { x: number; y: number; width: number; height: number };
 }
 const PREFS_DEFAULT: Prefs = { menuBar: true, quickChat: true };
 /** ⌥ Space on macOS as in Muse; Ctrl+Alt+Space where Alt+Space is the window menu. */
@@ -1138,8 +1146,33 @@ function prefsView(): Prefs & { quickChatKey: string; quickChatDefault: string; 
 }
 
 /**
- * Report a bug the way Muse does: a screenshot of the window goes to Downloads, the
- * issue page opens with the build's facts filled in; the person drags the picture in.
+ * The account behind this app, for a support report: the cloud page's own sheet, read from
+ * the loopback host. Signed out (or the host not up yet) is an empty label, never an error.
+ */
+async function supportAccount(): Promise<{ email: string; label: string }> {
+  try {
+    if (!mainWindow || !hostUrl) return { email: "", label: "" };
+    const origin = new URL(hostUrl).origin;
+    // the loopback host authenticates with the window's cookie, not with the launch token
+    const cookies = await mainWindow.webContents.session.cookies.get({ url: origin });
+    const cookie = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+    if (!cookie) return { email: "", label: "" };
+    const res = await fetch(`${origin}/nanomuse/cloud/me`, { headers: { cookie }, signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { email: "", label: "" };
+    const sheet = (await res.json()) as { account?: { id?: string; hint?: string; email?: string; channel?: string; region?: string } };
+    const account = sheet.account ?? {};
+    const email = typeof account.email === "string" && account.email.includes("@") && !account.email.includes("*") ? account.email : "";
+    const label = [account.hint, account.id ? `id ${account.id}` : "", account.region ?? ""].filter(Boolean).join(" · ");
+    return { email, label };
+  } catch {
+    return { email: "", label: "" };
+  }
+}
+
+/**
+ * Report a problem: a screenshot of the window and the build's facts go to the site's support
+ * page as a draft (the screenshot is attached there already), and the page opens waiting only
+ * for the person's words. The picture also stays in Downloads, so it is never lost.
  */
 async function reportBug(): Promise<{ screenshot: string; url: string }> {
   const s = shipped();
@@ -1148,28 +1181,59 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
     `DeepSeek Harness ${s.dsh ?? "?"} · dsh-nanomuse ${s.bundle ?? "?"} · Electron ${process.versions.electron}`,
   ];
   let screenshot = "";
+  let jpeg: Buffer | undefined;
   if (mainWindow) {
     try {
       const image = await mainWindow.webContents.capturePage();
+      const size = image.getSize();
+      const scale = Math.min(1, 1600 / Math.max(size.width, size.height));
+      const scaled = scale < 1 ? image.resize({ width: Math.round(size.width * scale), quality: "good" }) : image;
+      // JPEG keeps a full-window shot under the support form's 2 MB: a PNG often is not.
+      jpeg = scaled.toJPEG(84);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      screenshot = join(app.getPath("downloads"), `NanoLika-${stamp}.png`);
-      writeFileSync(screenshot, image.toPNG());
+      screenshot = join(app.getPath("downloads"), `NanoLika-${stamp}.jpg`);
+      writeFileSync(screenshot, jpeg);
     } catch (exc) {
       log(`report: no screenshot: ${String(exc)}`);
       screenshot = "";
     }
   }
-  // The issue form's fields, by id (.github/ISSUE_TEMPLATE/bug_report.yml): a bare `body`
-  // would be dropped on the way to the form.
+  const account = await supportAccount();
+  // The draft carries the picture and the facts; the page then only asks for the words.
+  try {
+    const form = new FormData();
+    if (jpeg && jpeg.length) form.append("shot", new Blob([new Uint8Array(jpeg)], { type: "image/jpeg" }), "screenshot.jpg");
+    form.append("facts", facts.join("\n"));
+    form.append("account", account.label);
+    form.append("email", account.email);
+    form.append("surface", "Desktop app");
+    form.append("version", app.getVersion());
+    form.append("os", `${process.platform} ${process.arch}`);
+    const res = await fetch(`${SUPPORT_ENDPOINT}?action=draft`, {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; id?: string; token?: string };
+    if (res.ok && body.ok && body.id && body.token) {
+      const url = `${SUPPORT_PAGE}?v=${SUPPORT_VERSION}#draft=${encodeURIComponent(body.id)}&token=${encodeURIComponent(body.token)}`;
+      void shell.openExternal(url);
+      return { screenshot, url };
+    }
+    log(`report: draft refused: ${res.status} ${JSON.stringify(body).slice(0, 200)}`);
+  } catch (exc) {
+    log(`report: draft failed: ${String(exc)}`);
+  }
+  // The page still opens: the facts ride in the fragment, the picture waits in Downloads.
   const params = new URLSearchParams({
-    template: "bug_report.yml",
-    labels: "bug,desktop",
     surface: "Desktop app",
     version: app.getVersion(),
-    os: facts.join(" · "),
-    what: screenshot ? `\n\n(Drag the screenshot NanoLika saved to Downloads, ${screenshot.split(/[\\/]/).pop()}, in here.)` : "",
+    os: `${process.platform} ${process.arch}`,
+    facts: facts.join(" · "),
+    account: account.label,
+    screenshot: screenshot ? screenshot.split(/[\\/]/).pop() ?? "" : "",
   });
-  const url = `${ISSUES_PAGE}/new?${params.toString()}`;
+  const url = `${SUPPORT_PAGE}?v=${SUPPORT_VERSION}#${params.toString()}`;
   void shell.openExternal(url);
   return { screenshot, url };
 }
@@ -2192,10 +2256,27 @@ function mainWindowClosed(): void {
   protectedQuit();
 }
 
+/** The saved window rectangle, if it still lands on a display that is plugged in. */
+function rememberedWindow(): { x: number; y: number; width: number; height: number } | undefined {
+  const saved = prefs.window;
+  if (saved === undefined) return undefined;
+  if (![saved.x, saved.y, saved.width, saved.height].every((value) => Number.isFinite(value))) return undefined;
+  if (saved.width < 960 || saved.height < 620) return undefined;
+  const visible = screen.getAllDisplays().some((display) => {
+    const area = display.workArea;
+    const overlapX = Math.max(0, Math.min(saved.x + saved.width, area.x + area.width) - Math.max(saved.x, area.x));
+    const overlapY = Math.max(0, Math.min(saved.y + saved.height, area.y + area.height) - Math.max(saved.y, area.y));
+    return overlapX >= 120 && overlapY >= 80;
+  });
+  return visible ? saved : undefined;
+}
+
 function createWindow(): BrowserWindow {
+  const remembered = rememberedWindow();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    ...(remembered ?? {}),
+    width: remembered?.width ?? 1280,
+    height: remembered?.height ?? 840,
     minWidth: 960,
     minHeight: 620,
     title: "NanoLika",
@@ -2214,7 +2295,39 @@ function createWindow(): BrowserWindow {
     // a <webview>; without it the tab opens but stays blank (Electron defaults it to false).
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, webviewTag: true, preload: join(__dirname, "preload.js") },
   });
-  win.once("ready-to-show", () => win.show());
+  let rememberFrom = Number.POSITIVE_INFINITY
+  win.once("ready-to-show", () => {
+    win.show()
+    // macOS restores the frame from its own saved state right after the window appears;
+    // putting ours back after that settles is the only order that sticks.
+    if (remembered !== undefined) {
+      setTimeout(() => {
+        win.setBounds(remembered)
+      }, 350)
+    }
+    setTimeout(() => {
+      rememberFrom = Date.now()
+    }, 1200)
+  });
+  // Remember where the person left it: a desktop app that forgets its place is a guest every time.
+  let rememberTimer: NodeJS.Timeout | undefined
+  const remember = (): void => {
+    if (Date.now() < rememberFrom) return
+    if (win.isFullScreen() || win.isMaximized() || win.isMinimized()) return
+    if (rememberTimer !== undefined) clearTimeout(rememberTimer)
+    rememberTimer = setTimeout(() => {
+      prefs = { ...prefs, window: win.getBounds() }
+      writePrefs()
+    }, 400)
+  }
+  win.on("resize", remember)
+  win.on("move", remember)
+  win.on("close", () => {
+    if (rememberTimer !== undefined) clearTimeout(rememberTimer)
+    if (win.isFullScreen() || win.isMaximized() || win.isMinimized()) return
+    prefs = { ...prefs, window: win.getBounds() }
+    writePrefs()
+  })
   win.on("enter-full-screen", () => win.webContents.send("nanomuse:fullscreen", true));
   win.on("leave-full-screen", () => win.webContents.send("nanomuse:fullscreen", false));
   // the harness names its document after itself; the window keeps ours
@@ -2364,7 +2477,7 @@ function buildMenu(): void {
     { label: T.website, click: () => void shell.openExternal("https://nanolika.ru/") },
     { label: T.docs, click: () => void shell.openExternal(DOCS_PAGE) },
     { label: T.releases, click: () => void shell.openExternal(RELEASES_PAGE) },
-    { label: T.issue, click: () => void shell.openExternal(ISSUES_PAGE) },
+    { label: T.issue, click: () => void reportBug().catch((error: unknown) => { log(`report: ${String(error)}`); void shell.openExternal(SUPPORT_PAGE) }) },
     { type: "separator" },
     { label: T.builtOn, click: () => void shell.openExternal(HARNESS_PAGE) },
     { label: T.openLogFolder, click: () => shell.showItemInFolder(join(harnessHome(), "desktop.log")) },

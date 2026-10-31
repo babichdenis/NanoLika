@@ -145,6 +145,17 @@ export function makeCloudModelPill(t: Translate) {
                 style: { left: box.left, top: box.top, width: box.width, height: box.height },
                 allow: 'clipboard-write',
               }),
+              // A way out even when the relay's page does not answer: the close sits on the
+              // app's own layer, above the frame, and needs nothing from the server.
+              h('button', {
+                type: 'button',
+                className: 'nm-picker-close',
+                'data-testid': 'nm-picker-close',
+                'aria-label': t('close'),
+                title: t('close'),
+                style: { left: box.left + box.width - 44, top: box.top + 8 },
+                onClick: () => { setSheet(null); setManage(false) },
+              }, '×'),
             ),
             document.body,
           )

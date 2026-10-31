@@ -53,10 +53,25 @@ export async function openRemoteModelPicker(options: { kind?: string; selected?:
       if (done) return
       done = true
       window.removeEventListener('message', onMessage)
+      window.removeEventListener('keydown', onKey)
       layer.remove()
       if (activeLayer === layer) activeLayer = null
       resolve(value)
     }
+    // A way out even when the relay's page does not answer: the close sits on the app's own
+    // layer, above the frame, and needs nothing from the server.
+    const closer = document.createElement('button')
+    closer.type = 'button'
+    closer.className = 'nm-picker-close'
+    closer.dataset.testid = 'nm-picker-close'
+    closer.setAttribute('aria-label', 'Закрыть')
+    closer.title = 'Закрыть'
+    closer.textContent = '×'
+    closer.style.cssText = `left:${Math.max(8, window.innerWidth - 48)}px;top:16px`
+    closer.addEventListener('click', () => finish(null))
+    const onKey = (event: KeyboardEvent): void => { if (event.key === 'Escape') finish(null) }
+    window.addEventListener('keydown', onKey)
+    layer.append(closer)
     const onMessage = (event: MessageEvent): void => {
       if (event.origin !== origin) return
       if (event.source !== frame.contentWindow) return

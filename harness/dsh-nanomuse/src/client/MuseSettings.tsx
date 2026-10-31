@@ -296,13 +296,7 @@ export function makeGeneralSection(t: Translate, version: string) {
             h('span', { className: 'nm-row-title' }, t('gnAccount')),
             h('span', { className: 'nm-row-sub' }, live.cloud.signedIn ? t('gnAccountSub', { hint: live.cloud.hint }) : t('gnAccountSignIn'))),
           h('span', { className: 'nm-row-chevron' }, h(IconChevronRight, { size: 16 }))),
-        // which models draw the pictures and the clips: the Media page, where they are chosen
-        h('button', { type: 'button', className: 'nm-row nm-row-button', onClick: () => { if (!settingsBus.openSection?.(MEDIA_SECTION)) settingsBus.openSection?.('nanomuse-cloud') } },
-          h('span', { className: 'nm-row-icon' }, h(IconImage, { size: 18 })),
-          h('div', { className: 'nm-row-main' },
-            h('span', { className: 'nm-row-title' }, t('vrImageVideo')),
-            h('span', { className: 'nm-row-sub' }, t('vrImageVideoSub'))),
-          h('span', { className: 'nm-row-chevron' }, h(IconChevronRight, { size: 16 })))),
+      ),
       // usage
       h('h2', null, t('gnUsage')),
       h('div', { className: 'nm-card nm-usage' },

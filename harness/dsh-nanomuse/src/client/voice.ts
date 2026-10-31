@@ -13,7 +13,7 @@ import { createElement as h, useRef, useState, type ReactNode } from 'react'
 import type { Translate } from './api.ts'
 import { call } from './api.ts'
 import { prefillComposer } from './composer.ts'
-import { IconMic } from './icons.tsx'
+import { IconMic, IconWave } from './icons.tsx'
 
 /** Частота, которую ждёт распознаватель: 16 кГц, один канал. */
 const RATE = 16000
@@ -76,91 +76,175 @@ interface Run {
 }
 
 /**
- * Кнопка микрофона. `onError` получает короткое объяснение, `onBusy` — состояние для UI.
+ * Детектор реплики по громкости: пока слышно речь — копим, после паузы — отдаём на распознавание.
+ * `silenceMs` — сколько тишины считать концом фразы, `minMs` — короче этого не отправляем.
  */
-export function makeVoiceMic(t: Translate, hooks: { onError?: (message: string) => void; onState?: (state: 'idle' | 'recording' | 'working') => void } = {}) {
-  return function VoiceMic(): ReactNode {
-    const [state, setState] = useState<'idle' | 'recording' | 'working'>('idle')
-    const run = useRef<Run | null>(null)
-    const change = (next: 'idle' | 'recording' | 'working') => {
+function makeSpeechSplitter(onUtterance: (samples: Float32Array) => void, settings: { silenceMs: number; minMs: number; maxMs?: number }) {
+  const parts: Float32Array[] = []
+  let heard = 0
+  let silence = 0
+  let voicing = false
+  let rate = 0
+  const collect = (): Float32Array => {
+    const total = parts.reduce((sum, part) => sum + part.length, 0)
+    const all = new Float32Array(total)
+    let at = 0
+    for (const part of parts) {
+      all.set(part, at)
+      at += part.length
+    }
+    return all
+  }
+  const reset = () => {
+    parts.length = 0
+    heard = 0
+    silence = 0
+    voicing = false
+  }
+  return {
+    push(samples: Float32Array, sampleRate: number): void {
+      rate = sampleRate
+      let sum = 0
+      for (let i = 0; i < samples.length; i += 1) sum += samples[i]! * samples[i]!
+      const rms = Math.sqrt(sum / samples.length)
+      // порог грубый, но для речи в тихой комнате его достаточно; шум ветра он не считает речью
+      const voice = rms > 0.012
+      if (voice) {
+        voicing = true
+        silence = 0
+        parts.push(Float32Array.from(samples))
+        heard += samples.length
+        // a monologue still goes out in one piece instead of growing without a bound
+        if ((heard / sampleRate) * 1000 >= (settings.maxMs ?? 30_000)) {
+          onUtterance(collect())
+          reset()
+        }
+        return
+      }
+      if (!voicing) return
+      // тишина после речи: копим её коротко, чтобы не обрезать окончание слова
+      silence += (samples.length / sampleRate) * 1000
+      if (silence < settings.silenceMs) return
+      if ((heard / rate) * 1000 >= settings.minMs) onUtterance(collect())
+      reset()
+    },
+    flush(): void {
+      if (voicing && heard > 0) onUtterance(collect())
+      reset()
+    },
+  }
+}
+
+/**
+ * Кнопка постоянного слушания. Раз включили — микрофон не закрывается: каждая реплика,
+ * отделённая паузой, уходит на распознавание и появляется в строке ввода. Выключили —
+ * остаток сказанного всё равно распознаётся, а микрофон отпускается.
+ */
+export function makeVoiceListen(t: Translate, hooks: { onError?: (message: string) => void; onState?: (state: 'idle' | 'listening' | 'working') => void } = {}) {
+  return function VoiceListen(props: { inputActions?: { captureInsertion(): unknown; insertText(text: string, span: unknown): boolean; setDraft(text: string): void; submit(): void } } = {}): ReactNode {
+    const [state, setState] = useState<'idle' | 'listening' | 'working'>('idle')
+    const [failure, setFailure] = useState('')
+    const run = useRef<{ stop(): void } | null>(null)
+    const change = (next: 'idle' | 'listening' | 'working') => {
       setState(next)
       hooks.onState?.(next)
     }
     const fail = (message: string) => {
+      run.current = null
       change('idle')
+      setFailure(message)
       hooks.onError?.(message)
+    }
+
+    /** Put the phrase where the person would have typed it and send it, as a live conversation does. */
+    const deliver = (text: string) => {
+      const actions = props.inputActions
+      if (actions === undefined) {
+        prefillComposer(text)
+        return
+      }
+      try {
+        const span = actions.captureInsertion()
+        if (!actions.insertText(text, span)) actions.setDraft(text)
+        actions.submit()
+      } catch {
+        prefillComposer(text)
+      }
+    }
+
+    const send = (samples: Float32Array, rate: number) => {
+      const wave = encodeWave(resample(samples, rate))
+      change('working')
+      void call<{ text?: string }>('voice', { audio: toBase64(wave), language: 'ru' })
+        .then((answer) => {
+          const text = (answer.text ?? '').trim()
+          if (text !== '') deliver(text)
+          setFailure('')
+          if (run.current !== null) change('listening')
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Распознавание не отвечает'
+          setFailure(message)
+          hooks.onError?.(message)
+          if (run.current !== null) change('listening')
+        })
     }
 
     const start = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         const context = new AudioContext()
+        if (context.state !== 'running') await context.resume().catch(() => undefined)
         const source = context.createMediaStreamSource(stream)
         const processor = context.createScriptProcessor(4096, 1, 1)
-        const parts: Float32Array[] = []
-        let held = 0
+        const splitter = makeSpeechSplitter((samples) => send(samples, context.sampleRate), { silenceMs: 900, minMs: 350 })
         processor.onaudioprocess = (event) => {
-          const input = event.inputBuffer.getChannelData(0)
-          if (held >= context.sampleRate * MAX_SECONDS) return
-          parts.push(Float32Array.from(input))
-          held += input.length
+          splitter.push(event.inputBuffer.getChannelData(0), context.sampleRate)
         }
         source.connect(processor)
         processor.connect(context.destination)
 
-        const finish = (send: boolean) => {
+        let watchdog: ReturnType<typeof setInterval> | undefined
+        const finish = () => {
+          if (watchdog !== undefined) clearInterval(watchdog)
           processor.disconnect()
           source.disconnect()
-          stream.getTracks().forEach((track) => track.stop())
-          const rate = context.sampleRate
+          splitter.flush()
+          stream.getTracks().forEach((item) => item.stop())
           void context.close().catch(() => undefined)
           run.current = null
-          if (!send) return change('idle')
-          const total = parts.reduce((sum, part) => sum + part.length, 0)
-          if (total === 0) return fail('Ничего не записалось')
-          const all = new Float32Array(total)
-          let at = 0
-          for (const part of parts) {
-            all.set(part, at)
-            at += part.length
-          }
-          change('working')
-          const wave = encodeWave(resample(all, rate))
-          void call<{ text?: string }>('voice', { audio: toBase64(wave), language: 'ru' })
-            .then((answer) => {
-              const text = (answer.text ?? '').trim()
-              if (text === '') {
-                change('idle')
-                hooks.onError?.('Речь не разобрана: попробуйте ближе к микрофону')
-                return
-              }
-              prefillComposer(text)
-              change('idle')
-            })
-            .catch((error: unknown) => {
-              fail(error instanceof Error ? error.message : 'Распознавание не отвечает')
-            })
+          change('idle')
+          setFailure('')
         }
 
-        run.current = { stop: () => finish(true) }
-        change('recording')
+        // Electron pauses audio in a hidden window; a sleeping context looks exactly like
+        // "the button is on and nothing happens". Wake it, and stop honestly if the device went.
+        const track = stream.getAudioTracks()[0]
+        watchdog = setInterval(() => {
+          if (context.state !== 'running') void context.resume().catch(() => undefined)
+          if (track !== undefined && track.readyState === 'ended') finish()
+        }, 1500)
+
+        run.current = { stop: finish }
+        change('listening')
       } catch (error) {
         fail(error instanceof Error ? error.message : 'Микрофон недоступен')
       }
     }
 
+    const active = state !== 'idle'
+    const title = failure !== '' ? failure : active ? t('continuousStop') : t('continuousStart')
     return h('button', {
       type: 'button',
-      className: `nm-mic${state === 'recording' ? ' nm-live' : ''}`,
-      'aria-label': state === 'recording' ? t('micStop') : t('micStart'),
-      title: state === 'recording' ? t('micStop') : state === 'working' ? t('working') : t('micStart'),
-      'aria-pressed': state === 'recording',
-      disabled: state === 'working',
+      className: `nm-mic nm-listen${active ? ' nm-live' : ''}${failure !== '' ? ' nm-failed' : ''}`,
+      'aria-label': active ? t('continuousStop') : t('continuousStart'),
+      title,
+      'aria-pressed': active,
       onMouseDown: (event: { preventDefault(): void }) => event.preventDefault(),
       onClick: () => {
-        if (state === 'recording') run.current?.stop()
-        else if (state === 'idle') void start()
+        if (state !== 'idle') run.current?.stop()
+        else void start()
       },
-    }, h(IconMic, { size: 17 }))
+    }, h(IconWave, { size: 17 }))
   }
 }

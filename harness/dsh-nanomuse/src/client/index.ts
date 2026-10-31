@@ -28,6 +28,7 @@ import { interceptComposer, makeAvatarChat } from './AvatarChat.tsx'
 import { makeCapsule } from './Capsule.tsx'
 import { prefillComposer } from './composer.ts'
 import { makeQuoteAction } from './ComposerExtras.tsx'
+import { makeVoiceListen } from './voice.ts'
 import { makeDocEditor } from './DocEditor.tsx'
 import { renderTrajectory } from './Trajectory.tsx'
 import { makeCloudSection } from './CloudSection.tsx'
@@ -529,6 +530,17 @@ export function apply(ctx: ClientContext): void {
   // настройки, либо падала. Две кнопки на одном месте только путали, поэтому свою убрали.
   // `makeMicButton` остаётся в ComposerExtras на случай, если понадобится вернуть свою —
   // тогда её надо ставить вместо встроенной, а не рядом.
+  //
+  // Постоянное слушание — наоборот, наша кнопка и стоит рядом с микрофоном: встроенный
+  // ввод записывает по нажатию, а эта держит микрофон открытым и отправляет каждую реплику
+  // на `/voice`. Работает через `AudioContext`, поэтому живёт и в Electron.
+  //
+  // Место — `conversation.input.right` (list, «compact controls before the submit action»):
+  // `conversation.input.activity`, где стоит встроенный микрофон, — одиночный слот, наша
+  // кнопка там просто не отрисуется.
+  const VoiceListen = makeVoiceListen(t)
+  slots.inject('conversation.input.right', () =>
+    slots.register({ name: 'conversation.input.right', id: 'nanomuse-listen', order: -10, locale: 'nanomuse' }, VoiceListen))
   const QuoteAction = makeQuoteAction(t)
   slots.inject('conversation.chat.assistant-actions', () =>
     slots.register({ name: 'conversation.chat.assistant-actions', id: 'nanomuse.quote', order: -10, locale: 'nanomuse' }, QuoteAction))

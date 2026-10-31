@@ -6,10 +6,14 @@
  * kept in localStorage and applied by the stylesheet's theme layer (`styles.ts`).
  */
 import { createElement as h, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { call, errorStyle, failureText, type Skin, type Translate } from './api.ts'
+import { openLink } from './bridge.ts'
 import { applyTheme, themeCss } from './styles.ts'
 
 const THEME_KEY = 'nanomuse.theme'
+/** The catalogue page: previews of every skin, so the link lands on something to look at. */
+const SKINS_URL = 'https://nanolika.ru/skins/'
 
 function readChoice(): string {
   try {
@@ -102,7 +106,12 @@ export function makeSkinsSection(t: Translate) {
         : busy
           ? h('p', { className: 'nm-fine' }, t('skLoading'))
           : h('p', { className: 'nm-fine' }, t('skEmpty')),
-      h('p', { className: 'nm-fine nm-wrap' }, t('skSite')),
+      // The catalogue is a page with previews, not a folder listing: open it in the
+      // person's browser instead of pointing at a path that answers 403.
+      h('div', { className: 'nm-row', style: { alignItems: 'center' } },
+        h(Button, { size: 'sm', onClick: () => openLink(SKINS_URL) }, t('skSite')),
+        h('span', { className: 'nm-fine nm-wrap' }, 'nanolika.ru/skins'),
+      ),
     )
   }
 }

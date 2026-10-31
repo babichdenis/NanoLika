@@ -1,0 +1,3 @@
+allowBuilds:
+  '@computer-use/mac-screen-capture-permissions': true
+  electron-winstaller: true

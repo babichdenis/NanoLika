@@ -64,6 +64,7 @@ export function themeCss(theme: { light?: Record<string, string>; dark?: Record<
     const out: Record<string, string> = {}
     const pairs: [string, string][] = [
       ['--nm-field', '--dsw-specific-input-major'],
+      ['--nm-field-border', '--dsw-alias-border-l2'],
       ['--nm-base', '--dsw-specific-sidebar-fill'],
       ['--nm-agent-bubble', '--dsw-specific-bubble'],
       ['--nm-selected', '--dsw-specific-bubble-highlight'],
@@ -358,7 +359,7 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
 /* 66px: the same size as the Avatar the header draws (MuseHeader.tsx), or the picture
    overflows its box and covers the name under it. */
 .nm-header-face { position: relative; width: 66px; height: 66px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; cursor: pointer; box-shadow: 0 0 0 2px transparent; transition: box-shadow 300ms; }
-.nm-header-face.nm-live { box-shadow: 0 0 0 2px var(--nm-accent); }
+.nm-header-face.nm-live { box-shadow: none; }
 .nm-header-face.nm-wait { box-shadow: 0 0 0 2px var(--dsw-alias-state-warn-primary, #d98c1f); }
 .nm-header-face:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: 2px; }
 .nm-header-name { font-size: 14px; font-weight: 600; line-height: 1.2; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -442,6 +443,8 @@ html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] 
 }
 /* the relay's picker is an iframe over the app; its own page is transparent around the card */
 html[data-nanomuse] .nm-picker-layer { position: fixed; inset: 0; z-index: 1200; background: transparent; }
+html[data-nanomuse] .nm-picker-close { position: fixed; z-index: 1300; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--nm-card, #fff); color: var(--dsw-alias-label-primary, #222); box-shadow: 0 2px 12px rgba(0,0,0,0.18); font: 500 22px/1 system-ui, sans-serif; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+html[data-nanomuse] .nm-picker-close:hover { background: var(--nm-hover, #f2efe6); }
 html[data-nanomuse] .nm-picker-frame { position: fixed; border: 0; background: transparent; color-scheme: light; }
 html[data-nm-muse] [data-composer-card] [class*="_activity"] { display: none !important; }
 html[data-nm-muse] [data-composer-card] [class*="_add"] { width: 34px; height: 34px; border-radius: 50%; color: var(--dsw-alias-label-secondary); }
@@ -456,6 +459,11 @@ html[data-nm-muse] [data-composer-card] ~ [class*="_dock"] { display: none !impo
 .nm-mic:hover { background: var(--nm-hover); color: var(--dsw-alias-label-primary); }
 /* recording: the red breathes (no ring running outward) */
 .nm-mic.nm-live { color: #fff; background: #e0245e; box-shadow: 0 0 0 4px rgba(224,36,94,0.25); animation: nm-mic-pulse 4.8s ease-in-out infinite; }
+/* continuous listening is a mode, not a take: the teal stays on while the room is heard */
+.nm-mic.nm-listen.nm-live { background: #0f9d8f; box-shadow: 0 0 0 4px rgba(15,157,143,0.25); }
+/* sit right before the microphone: inside the flex row the button itself takes the order */
+html[data-nanomuse] [data-slot="conversation.input.right"] > .nm-listen { order: 1; }
+.nm-mic.nm-listen.nm-failed { color: #fff; background: #b3261e; }
 @keyframes nm-mic-pulse { 0%, 100% { opacity: 0.72; } 50% { opacity: 1; } }
 /* Muse keeps the chat bare: no tool-step disclosure, no usage, no fork, no context rows */
 html[data-nm-muse] [data-chat-flow-kind="context"] { display: none !important; }
@@ -1295,7 +1303,7 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-lib-col-top { heig
 /* a run's card in the "hero" layout (no row yet): the width of the thread */
 [data-conversation-content][data-content-phase="hero"] > [data-conversation-scroll] > .nm-traj { flex: 0 0 auto; width: min(var(--dsh-chat-content-width, 680px), 100%); align-self: center; box-sizing: border-box; padding: 0 var(--dsh-composer-side-clearance, 16px); }
 /* the agent's face: a round frame; a clip or a still inside, or an emoji on its colour */
-.nm-avatar { display: block; flex: 0 0 auto; border-radius: 50%; overflow: hidden; background: var(--dsw-alias-surface-sunken, #f1efe9); will-change: transform; transform-origin: 50% 60%; }
+.nm-avatar { display: block; flex: 0 0 auto; border-radius: 50%; overflow: hidden; background: transparent; will-change: transform; transform-origin: 50% 60%; }
 .nm-avatar > img, .nm-avatar > video { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 50%; animation: nm-avatar-in 180ms ease-out both; }
 @keyframes nm-avatar-in { from { opacity: 0; } to { opacity: 1; } }
 .nm-row-pills { display: inline-flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
