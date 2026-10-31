@@ -1,3 +1,67 @@
+## 2026-10-31 · Цены: медиа у всех поставщиков, ProxyAPI и Jiugx
+
+Причина жалобы «по картинкам и видео опять один Bothub»: каталог медиа собран из
+строк Bothub, а предложения других поставщиков искались по точному slug. Polza
+называет Seedream 5.0 Pro по задаче (`seedream/5-pro-text-to-image`), Bothub — по
+версии (`seedream-5-0-pro`), поэтому вторая цена не находилась. Плюс в медиа
+попадала ставка RouterAI `web_search` (≈1,47 ₽ за запрос) и выдавалась за цену
+картинки: у `image-lite` закупка была 1,47 вместо реальных 2,90–4,62.
+
+Что сделано:
+
+- Polza больше не обходим по страницам: `/api/v1/models` отдаёт готовые поля
+  `prompt/completion_per_million`, `image_output_per_million`,
+  `tts_per_million_characters`, `stt_per_minute`, `video_per_second`, `tiers`
+  и `per_request`. Единица берётся из поля, а не угадывается регуляркой. Видео с
+  `unitParam=duration` — за секунду, без него `tiers` — за клип (у Kling 5 секунд
+  стоят 42 ₽, а не 42 ₽/с).
+- ProxyAPI включён (убрали из `DRAFT`): карточки идут подряд, модель определяется
+  по «вендор / slug», единица — по подписи «за 1 секунду». Это дало 26 видеомоделей
+  с ценой за секунду; Kling 3.0 Pro 15,79 ₽/с против 23,10 у Bothub, Seedance 2.0
+  9,05 против 16,50, Veo 3.1 27,37 против 82,51.
+- Jiugx добавлен как источник цен: `/api/pricing` (New API) отдаёт множители;
+  `$ / 1M входа = model_ratio × 2 × group_ratio`, выход — та же ставка ×
+  `completion_ratio`, фиксированные модели — `model_price × group_ratio`. Формулу
+  сверили живым запросом `deepseek-v4-1-flash-260910` (33 входа + 8 выхода):
+  списание $0,000146 совпало. 117 ставок, 81 модель; в прайс попали 19 моделей
+  нашего каталога (MiniMax, Qwen3 Coder, Kimi, GLM, Grok, DeepSeek).
+- Названия сводятся к одному ключу: `seedream/5-pro-text-to-image` =
+  `seedream-5.0-pro`, `kling/v2.6` = `kling-v2.6`, `grok-imagine-image-2.0/text-to-image`
+  = `grok-imagine-image-2-0`, `-preview` и `.0` отбрасываются. Индекс строится и
+  по slug, и по имени предложения, и по upstream строки.
+
+Итог по 113 медиа-моделям: 39 с двумя-тремя поставщиками (было 7), 71 с одним
+(у части просто нет аналога у других), 3 музыкальных без цены. Примеры: Seedream
+5 Lite — Polza 4,00 и Bothub 4,81; Seedream 5.0 Pro — Polza 5,00 и Bothub 8,25;
+Seedance 2.0 — ProxyAPI 9,05, Polza 12,83, Bothub 16,50; WAN 3.0 — ProxyAPI 6,74,
+Bothub 10,31, Polza 22,79; Whisper 1 — Polza 0,43 и Bothub 1,01 за минуту.
+
+В таблице моделей подсказка закупки теперь перечисляет всех поставщиков с ценой;
+«Дешевле всех» по-прежнему показывает одного. Убрана грамматика «наценка за
+секунда» → «за секунду».
+
+Проверено: `tests/test_provider_prices.py` 5/5, `tests/test_prices_admin.py` 13/14
+(прежнее падение plan discount: тест ждёт team 30 %, у нас 20 %),
+`tests/test_price_drafts.py` 7/7, `tests/test_model_log.py` 2/2. Живые mount'ы:
+`provider_prices.py`, `models-table.js` — базовые; `prices_admin.py`, `admin.js`,
+`index.html`, `console/prices/*` — `auto-routing-20261025`. Версии
+`admin.js?v=20261031-media-all2`, `models-table.js?v=20261031-media-all2`,
+`prices.js?v=20261031-jiugx1`. Снимок поставщиков пересобран: polza 891,
+routerai 1369, proxyapi 789, bothub 985, jiugx 117, deepseek 12, openrouter 403.
+Коммит `eb8cf6e8`.
+
+Не сделано и важно:
+
+- Jiugx **не включён в маршрутизацию**: нет адаптера в
+  `ROUTING_CATALOG_PROVIDERS`. Живой ключ работает, но MiniMax отвечает
+  `insufficient balance`, а OpenRouter-модели упёрлись в guardrail $3,00 из $3,00
+  до 2026-11-01T00:00Z. Работает DeepSeek (`deepseek-v4-1-flash-260910`).
+- Три музыкальные модели (`suno/sounds`, `suno/generate`, `lyria-3-clip`) без
+  предложений: поставщики дают цену за запрос, а у нас ставка за секунду —
+  сопоставлять нельзя, пока не решим, в чём продаём музыку.
+- ProxyAPI для картинок отдаёт только цену за 1M токенов, поэтому в медиа-закупку
+  она не идёт; видео и расшифровка — идут.
+
 ## 2026-10-31 · Публикация: убраны неиспользуемые картинки сайта
 
 Проверены картинки, которые уходят на сайт, в `Dev/nanoLika/publish/`. Все 12 иллюстраций, на которые ссылаются страницы, на месте, форматы верные (WebP; JPEG только у `og-1200x630.jpg` и `legal/payment-details.jpeg`); у каждого `<img>` есть `alt` и `width`/`height`, у нижних блоков — `loading="lazy"`. `site/` и `publish/` синхронны, кроме одного чернового mp4 в исходниках.
