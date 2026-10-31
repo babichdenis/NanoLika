@@ -1163,7 +1163,11 @@ class ConversationSync:
 
     async def _pull_locked(self) -> int:
         self.client.cloud.api_key = self.svc.hub._key()
-        lazy = await self.catalog.pull()
+        # S3: a side-chat backfill is a full read of the old `changes` API. The catalogue
+        # hands out bodies only for the chats someone opens; going through it here would
+        # report success and leave the rest of the history on the relay.
+        backfill = bool(self.state.get("backfill"))
+        lazy = None if backfill else await self.catalog.pull()
         if lazy is not None:
             self.last_pull_at = now_iso()
             self.last_error = ""
@@ -1172,7 +1176,6 @@ class ConversationSync:
         # C9: a fresh device (cursor 0) asks for the tail of its scope, not the whole store.
         # S3: side chats just turned on ask for everything from zero, without a tail — the
         # old cursor says nothing about rows the main-only scope never handed out.
-        backfill = bool(self.state.get("backfill"))
         from_zero = (not backfill) and (self._pull_from_zero or self.cursor == 0)
         self._pull_from_zero = False
         try:

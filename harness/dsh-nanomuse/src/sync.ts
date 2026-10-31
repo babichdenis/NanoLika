@@ -1554,8 +1554,13 @@ export class SyncEngine {
     const token = await this.options.token()
     if (!token) return 0
     await this.flushArchives()
-    const lazy = await this.pullCatalogue(token)
-    if (lazy !== undefined) return lazy
+    // S3: a side-chat backfill is a full read of the old `changes` API. The catalogue
+    // hands out bodies only for the chats someone opens; going through it here would
+    // report success and leave the rest of the history on the relay.
+    if (mode !== 'full') {
+      const lazy = await this.pullCatalogue(token)
+      if (lazy !== undefined) return lazy
+    }
     let applied = 0
     // what the other devices added to conversations living in sessions here: context for the model, per session
     const notes = new Map<string, RemoteLine[]>()

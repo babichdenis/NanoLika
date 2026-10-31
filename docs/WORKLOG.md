@@ -18,7 +18,7 @@ S5b (томбстоуны отдельных сообщений в `_retain`), S
 
 Добавлены `tests/test_sync_catalog_lazy.py` (6 тестов: курсор, отсутствующий
 курсор, 61 страница, pending, 404, чистка курсоров); старый
-`tests/test_sync_catalog_guard.py` сохранён и проходит. Итого 36 клиентских
+`tests/test_sync_catalog_guard.py` сохранён и проходит. Итого 37 клиентских
 тестов синхронизации и 31 облачный — зелёные.
 
 **S11.** `_ts` больше не доверяет часам устройства на неделю вперёд: допуск
@@ -32,10 +32,13 @@ S5b (томбстоуны отдельных сообщений в `_retain`), S
 `tail=300` — всё старше оставалось на релее навсегда. Теперь переключатель
 делает полный проход с нуля без tail, страницами по 500; флаг `backfill`
 переживает перезапуск и снимается только после последней страницы. То же в
-`harness/dsh-nanomuse/src/sync.ts` (`pullMode('full')`). Тесты:
-`test_turning_side_chats_on_backfills_history_older_than_the_tail` (700
-сообщений, две страницы) и dsh `C9/S3: turning side chats on reads the whole
-history from zero` (33 теста синхронизации dsh — зелёные).
+`harness/dsh-nanomuse/src/sync.ts` (`pullMode('full')`). Добор идёт мимо
+каталога: каталог отдаёт тела только открытых чатов и, если идти через него,
+отчитался бы успехом, оставив историю на релее. Тесты:
+`test_turning_side_chats_on_backfills_history_older_than_the_tail` (520
+сообщений, две страницы), `test_a_side_chat_backfill_skips_the_catalogue` и
+dsh `C9/S3: turning side chats on reads the whole history from zero` (33 теста
+синхронизации dsh — зелёные).
 
 **Осталось.** S8 — разброс замеров, регрессии нет. Нестабильный тест прогнал
 5/5 в одиночку. `message_cursors` чистятся от удалённых чатов; жёсткий предел

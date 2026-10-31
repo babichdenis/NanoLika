@@ -1034,7 +1034,7 @@ def test_turning_side_chats_on_backfills_history_older_than_the_tail(main_only) 
     wait_for(lambda: relay.pulls)
     theirs = str(uuid.uuid4())
     relay.add_conversation(theirs, "side", "Long phone side")
-    for i in range(700):
+    for i in range(520):
         relay.add_message(theirs, "user", f"side {i:04d}")
     client.post("/api/sync/pull")
     assert "Long phone side" not in [t["title"] for t in client.get("/api/threads").json()]
@@ -1053,12 +1053,35 @@ def test_turning_side_chats_on_backfills_history_older_than_the_tail(main_only) 
     assert service.sync.state["backfill_cursor"] == 0
     events = client.get(f"/api/threads/{tid}/events?limit=1000").json()["events"]
     texts = [e["text"] for e in events if e.get("type") == "user"]
-    assert texts[0] == "side 0000" and texts[-1] == "side 0699"
-    assert len(texts) == 700
+    assert texts[0] == "side 0000" and texts[-1] == "side 0519"
+    assert len(texts) == 520
     all_pulls = [p for p in relay.pulls[n_pulls:] if p["scope"] == "all"]
     assert all_pulls[0] == {"since": 0, "limit": 500, "scope": "all", "tail": 0}
     assert any(p["since"] == 500 for p in all_pulls)
     wait_for(lambda: service.sync.state["backfill"] is False)
+
+
+def test_a_side_chat_backfill_skips_the_catalogue(main_only) -> None:
+    """S3: the catalogue hands out bodies only for the chats someone opens. A backfill that
+    went through it would return success and leave the rest of the history on the relay."""
+    client, service, llm, relay = main_only
+    wait_for(lambda: relay.pulls)
+    catalog_calls: list[str] = []
+
+    async def catalog(device: str, client_id: str) -> dict[str, Any]:
+        catalog_calls.append(device)
+        return {"conversations": [], "deleted": [], "cursor": relay.seq, "complete": True}
+
+    relay.catalog = catalog  # type: ignore[attr-defined]
+    service.sync.state["side_chats"] = True
+    service.sync.state["backfill"] = True
+    n_pulls = len(relay.pulls)
+    client.post("/api/sync/pull")
+    assert catalog_calls == []
+    assert len(relay.pulls) > n_pulls
+    assert relay.pulls[n_pulls]["since"] == 0
+    assert relay.pulls[n_pulls]["scope"] == "all"
+    assert relay.pulls[n_pulls]["tail"] == 0
 
 
 def test_working_goes_up_with_the_turn_and_comes_down_from_the_hub(main_only) -> None:

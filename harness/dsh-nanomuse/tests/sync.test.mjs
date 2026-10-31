@@ -567,11 +567,26 @@ test('C9/S3: turning side chats on reads the whole history from zero, not only a
   const relay = fakeRelay()
   relay.add('old-side', 'side', 'Long before')
   for (let i = 0; i < 700; i++) relay.say('old-side', 'user', `side ${String(i).padStart(4, '0')}`)
+  // A catalogue-capable relay: the normal pull uses it, the backfill must not — the
+  // catalogue hands out bodies only for the chats someone opens.
+  const plainFetch = relay.fetch
+  let catalogCalls = 0
+  relay.fetch = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/sync/catalog') {
+      catalogCalls += 1
+      return new Response(JSON.stringify({ conversations: [], deleted: [], cursor: relay.seq, complete: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return plainFetch(url, init)
+  }
   const sessions = fakeSessions()
   const { engine: e } = engine(relay, sessions, { sideChats: false })
   t.after(() => e.stop())
   await e.start()
   await until(() => e.state.cursor === relay.seq)
+  assert.equal(catalogCalls, 1)
   assert.ok(![...sessions.rows.values()].some((r) => r.title === 'Long before'))
   relay.gets.length = 0
   await e.setSideChats(true)
@@ -585,6 +600,7 @@ test('C9/S3: turning side chats on reads the whole history from zero, not only a
   assert.equal(lines.at(-1).text, 'side 0699')
   assert.deepEqual(relay.gets[0], { since: 0, limit: 500, scope: 'all', tail: 0 })
   assert.ok(relay.gets.some((g) => g.since === 500))
+  assert.equal(catalogCalls, 1)
   e.stop()
 })
 
