@@ -218,7 +218,7 @@ function purchaseTitle(model) {
     : "";
   const exact = (routing.offers || []).find((offer) => normalizedModel(offer.model) === normalizedModel(model.upstream));
   const exactLine = exact && normalizedModel(exact.model) !== normalizedModel(routing.selected_model) && exact.input_rub != null
-    ? `\nТочная версия ${model.upstream}: ${providerLabel(exact.provider)} ${fmt(exact.input_rub)} / ${fmt(exact.output_rub)}`
+    ? `\nТочная версия ${model.upstream}: ${providerLabel(exact.provider)} ${fmt(exact.input_rub)} / ${fmt(exact.output_rub)}${exact.eligible ? "" : " (только сверка)"}`
     : "";
   if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${selected}`;
   if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${selected}`;
