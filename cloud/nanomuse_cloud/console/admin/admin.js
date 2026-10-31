@@ -1879,7 +1879,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (PROVIDERS_MOD) return run(PROVIDERS_MOD);
-    import("/web/providers-table.js?v=20261031-providers7").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
+    import("/web/providers-table.js?v=20261031-jiugx2").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Карта поставщиков не загрузилась: ${e.message}`)); });
   }
 
@@ -1897,7 +1897,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (MODELS_MOD) return run(MODELS_MOD);
-    import("./models-table.js?v=20261031-media-all2").then((mod) => { MODELS_MOD = mod; run(mod); },
+    import("./models-table.js?v=20261031-media-all3").then((mod) => { MODELS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Таблица не загрузилась: ${e.message}`)); });
   }
 

@@ -15,6 +15,7 @@ const LABELS = {
   proxyapi: "ProxyAPI",
   "proxyapi-openai": "ProxyAPI OpenAI",
   bothub: "Bothub",
+  jiugx: "Jiugx",
   deepseek: "DeepSeek",
   openrouter: "OpenRouter",
   own: "Свой ключ",
@@ -146,7 +147,9 @@ function walletRows(stats) {
   const seen = new Set(rows.map((row) => row.id));
   for (const [id, row] of stats) {
     if (seen.has(id)) continue;
-    if (row.selected.length || row.configured.length || row.last.length) rows.push({ id, entry: null, stats: row });
+    // Поставщик без ручки баланса, но с ценами в снимке, всё равно нужен в
+    // списке: иначе Jiugx не видно, хотя его предложения уже в таблице моделей.
+    if (row.selected.length || row.configured.length || row.last.length || row.offerModels.size) rows.push({ id, entry: null, stats: row });
   }
   const rub = (row) => Number(row.entry?.rub_estimate ?? row.entry?.amount ?? 0) || 0;
   return rows.sort((a, b) => rub(b) - rub(a) || b.stats.selected.length - a.stats.selected.length || providerLabel(a.id).localeCompare(providerLabel(b.id), "ru"));

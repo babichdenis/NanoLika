@@ -549,7 +549,7 @@ function editMarkup(cell, group, key, value) {
     setNote("У этой модели нет закупки — наценку считать не от чего.");
     return;
   }
-  const label = model.ratio?.unit ? `за ${model.ratio.unit}` : key === "in" ? "входа" : "выхода";
+  const label = model.ratio?.unit ? `за ${unitPhrase(model.ratio.unit)}` : key === "in" ? "входа" : "выхода";
   cell.replaceChildren();
   const input = el("input", "mt-markup-input");
   input.type = "number";
@@ -1092,7 +1092,7 @@ function drawModels(rows) {
       }
       if (Number.isFinite(number) && number > 0 && number < 1.5) cell.classList.add("mt-low");
       if (Number.isFinite(number) && number > 0) {
-        const unitLabel = model.ratio?.unit ? `за ${model.ratio.unit}` : key === "in" ? "входа" : "выхода";
+        const unitLabel = model.ratio?.unit ? `за ${unitPhrase(model.ratio.unit)}` : key === "in" ? "входа" : "выхода";
         cell.classList.add("mt-editable");
         cell.title = `Наценка ${unitLabel} ${ratioText(number)}`
           + (Number.isFinite(draft) && draft > 0 ? ` → ${ratioText(draft)} в черновике` : "")
