@@ -124,7 +124,7 @@ export function makeCloudModelPill(t: Translate) {
           'aria-label': `${t('mlCloudModels')}: ${name}`,
           onClick: () => void open(),
         },
-        `${t('mlTitle')} · ${name}`,
+        name,
       ),
       sheet && box
         ? createPortal(

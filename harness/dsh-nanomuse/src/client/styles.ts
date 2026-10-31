@@ -57,10 +57,24 @@ export function themeCss(theme: { light?: Record<string, string>; dark?: Record<
       .filter(([key, value]) => /^--[a-z0-9-]+$/i.test(key) && typeof value === 'string' && /^[^;{}]+$/.test(value))
       .map(([key, value]) => `${key}: ${value};`)
       .join(' ')
+  // DSH draws its own slots from --dsw-specific-* variables. A skin only names --nm-* ones, so
+  // mirror them: the composer field, the user bubble and the model pill then still take the
+  // skin's colour instead of falling back to the default look.
+  const dswBridge = (vars: Record<string, string>) => {
+    const out: Record<string, string> = {}
+    const pairs: [string, string][] = [
+      ['--nm-field', '--dsw-specific-input-major'],
+      ['--nm-base', '--dsw-specific-sidebar-fill'],
+      ['--nm-agent-bubble', '--dsw-specific-bubble'],
+      ['--nm-selected', '--dsw-specific-bubble-highlight'],
+    ]
+    for (const [nm, dsw] of pairs) if (vars[nm] !== undefined) out[dsw] = vars[nm]
+    return out
+  }
   const rules: string[] = []
-  const light = declarations(theme.light)
+  const light = declarations({ ...(theme.light ?? {}), ...dswBridge(theme.light ?? {}) })
   if (light) rules.push(`html[data-nanomuse] body { ${light} }`)
-  const dark = declarations(theme.dark)
+  const dark = declarations({ ...(theme.dark ?? {}), ...dswBridge(theme.dark ?? {}) })
   if (dark) rules.push(`html[data-nanomuse] body[data-ds-dark-theme] { ${dark} }`)
   return rules.join('\n')
 }
@@ -383,6 +397,12 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
    in that phase after a restored session, so never let the transition make the input disappear. */
 html[data-nm-muse] [data-composer-seat] { visibility: visible !important; opacity: 1 !important; }
 html[data-nm-muse] [data-composer-card] { display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: flex-end; gap: 2px 4px; padding: 5px 5px 5px 6px !important; border-radius: 26px !important; background: var(--nm-field) !important; box-shadow: 0 0 0 1px var(--nm-field-border), 0 6px 24px rgba(0,0,0,0.10) !important; }
+/* A skin is not Muse mode: in the vendor layout the same two seats still belong to the skin, so
+   they take its colours without its shapes. Only paint here — the vendor keeps its own layout. */
+html[data-nanomuse] [data-composer-card] { background: var(--nm-field) !important; box-shadow: 0 0 0 1px var(--nm-field-border), 0 6px 24px rgba(0,0,0,0.10) !important; }
+html[data-nanomuse] [data-composer-card] [contenteditable] { color: var(--nm-ink) !important; }
+html[data-nanomuse] [data-chat-flow-kind="user"] [class*="_bubble"] { background: var(--nm-user-bubble) !important; color: var(--nm-user-bubble-fg) !important; }
+html[data-nanomuse] [data-chat-flow-kind="user"] [class*="_bubble"] ::selection { background: var(--nm-user-bubble-selection); color: var(--nm-user-bubble-fg); }
 html[data-nm-muse] [data-composer-card] > [data-input-scroll] { flex: 1 1 120px; min-width: 0; order: 0; margin: 0 !important; }
 html[data-nm-muse] [data-composer-card] > [data-input-scroll] [contenteditable] { min-height: 34px !important; padding: 5px 6px 5px 8px !important; }
 html[data-nm-muse] [data-composer-card] [data-composer-placeholder] { inset: 5px 6px auto 8px !important; color: transparent !important; }
@@ -403,9 +423,11 @@ html[data-nm-muse] [data-composer-card] > [class*="_accessory"] { flex-basis: 10
 html[data-nm-muse] [data-composer-card] [class*="_modes"] { display: none !important; }
 /* the right-hand seats stay for the microphone; the model picker goes (Settings keeps it) */
 html[data-nm-muse] [data-composer-card] [class*="_standardControls"] { gap: 2px !important; }
-/* the stock model seat goes everywhere; our pill takes its place and opens the relay's catalogue */
-html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] > div { display: none !important; }
-html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] { display: contents; }
+/* Our pill takes the stock model seat's place — but only while the pill itself is there.
+   It hides when the relay's catalogue is unavailable (signed out, own keys, no model),
+   and then the stock seat must stay, or the composer loses its model choice entirely. */
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"]:has(.nm-model-pill) > div { display: none !important; }
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"]:has(.nm-model-pill) { display: contents; }
 html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-model-pill {
   min-width: 0; max-width: min(300px, 45cqw); min-height: 28px; padding: 0 8px;
   border: 0; border-radius: var(--dsw-radius-sm, 8px); background: transparent;
