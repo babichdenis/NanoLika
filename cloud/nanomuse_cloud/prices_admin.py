@@ -586,10 +586,20 @@ def _lookup_seen(seen: dict[str, dict[str, Any]], *values: Any) -> dict[str, Any
         text = str(value or "").strip().lower()
         if not text:
             continue
-        for key in (text, text.rsplit("/", 1)[-1], text.rsplit("/", 1)[-1].replace(" ", "-")):
+        bare = text.rsplit("/", 1)[-1]
+        for key in (text, bare, bare.replace(" ", "-")):
             found = seen.get(key)
             if found:
                 return found
+        # Ревизия поставщика (1017, 0731) в снимке может отсутствовать, а её
+        # семейство — быть. Дату берём у семейства, иначе новая строка без
+        # причины показывала бы прочерк.
+        family = identity(bare)
+        if family and family != bare:
+            for key in (family, family.rsplit("/", 1)[-1]):
+                found = seen.get(key)
+                if found:
+                    return found
     return None
 
 

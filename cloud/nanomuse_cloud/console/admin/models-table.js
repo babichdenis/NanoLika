@@ -25,6 +25,9 @@ const state = {
   sellOnly: false,
   ours: false,   // только российские модели (GigaChat, Yandex, Alice…)
   jumps: false,  // только модели, где следующий поставщик дороже в 1.8+ раза
+  mergeNames: false, // склеивать одинаковые названия в одну строку (по умолчанию — как у клиентов)
+  duplicates: false, // только строки, у которых есть видимый тёзка
+  allVariants: false, // в нижней таблице показывать все варианты семьи, а не по одному на поставщика
   sort: "name",
   dir: "asc",
   cols: {},   // фильтры колонок: ключ колонки → строка
@@ -307,7 +310,7 @@ function bestTitle(group, offer) {
     }
     return lines.join("\n");
   }
-  return `Дешевле всех: ${providerLabel(offer.provider)} · вход ${fmt(offer.input_rub)} ₽/1M · выход ${fmt(offer.output_rub)} ₽/1M`;
+  return `Дешевле всех по входу: ${providerLabel(offer.provider)} · вход ${fmt(offer.input_rub)} ₽/1M · выход ${fmt(offer.output_rub)} ₽/1M`;
 }
 
 /** Одна строка — одно название: закреплённая версия и её latest-алиас склеиваются. */
@@ -343,7 +346,7 @@ function compareRank(left, right) {
  * сначала совпадающий с upstream самой модели, потом выбранный маршрут,
  * потом доступный, потом дешёвый.
  */
-function unionOffers(models) {
+function unionOffers(models, includeAll = false) {
   const kind = models.length ? groupOf(models[0]) : "text";
   const media = kind !== "text" && kind !== "code";
   const upstreams = new Set();
@@ -354,21 +357,25 @@ function unionOffers(models) {
     }
   }
   const collected = [];
+  const seen = new Set();
   for (const model of models) {
     for (const offer of offersOf(model)) {
+      const fingerprint = [offer.provider, offer.model, offer.unit, offer.input_rub, offer.output_rub, offer.cached_rub, offer.price_rub].join("|");
+      if (includeAll && seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
       collected.push({ offer, from: model.id, exact: upstreams.has(normalizedModel(offer.model)) });
     }
   }
+  if (includeAll) {
+    return collected.map(({ offer, from, exact }) => {
+      offer._from = from;
+      offer._exact = Boolean(exact);
+      return offer;
+    });
+  }
   const base = media ? mediaBaseUnit({ group: kind, offers: collected.map((item) => item.offer) }) : "";
-  // Если у модели есть свои точные версии у двух и более поставщиков, чужие
-  // поколения (0731, v4-flash, latest) в этой строке не показываем: это уже
-  // другая модель, а не альтернатива. Для общего алиаса без версии оставляем
-  // всё семейство — иначе у «DeepSeek V4.1 Flash» остался бы один поставщик.
-  const exactProviders = new Set(collected.filter((item) => item.exact).map((item) => item.offer.provider));
-  const exactOnly = exactProviders.size >= 2;
   const byProvider = new Map();
   for (const item of collected) {
-    if (exactOnly && !item.exact) continue;
     const price = media ? mediaUnitPrice(item.offer, base) : Number(item.offer.input_rub);
     const rank = [
       media && base && !Number.isFinite(price) ? 1 : 0,
@@ -381,13 +388,27 @@ function unionOffers(models) {
     const old = byProvider.get(key);
     if (!old || compareRank(rank, old.rank) < 0) byProvider.set(key, { ...item, rank });
   }
-  return [...byProvider.values()].map(({ offer, from }) => {
+  return [...byProvider.values()].map(({ offer, from, exact }) => {
     offer._from = from;
+    offer._exact = Boolean(exact);
     return offer;
   });
 }
 
-function allGroups() {
+function oneGroup(model) {
+  return {
+    key: model.id,
+    name: model.name || model.id,
+    group: groupOf(model),
+    models: [model],
+    primary: model,
+    listed: Boolean(model.listed),
+    offers: unionOffers([model], state.allVariants),
+  };
+}
+
+/** Сводная строка по одинаковому названию: только если оператор сам её включил. */
+function namedGroups() {
   const map = new Map();
   for (const model of (DATA && DATA.models) || []) {
     const key = groupKeyOf(model);
@@ -402,10 +423,36 @@ function allGroups() {
   for (const group of groups) {
     group.models.sort((a, b) => modelRank(a) - modelRank(b) || String(a.id).length - String(b.id).length);
     group.primary = group.models[0];
-    group.listed = group.models.every((model) => Boolean(model.listed));
-    group.offers = unionOffers(group.models);
+    // Показываем состояние канонической строки, а не «все скрыты»: иначе
+    // скрытый алиас делал вид, что скрыта вся модель у клиентов.
+    group.listed = Boolean(group.primary.listed);
+    group.offers = unionOffers(group.models, state.allVariants);
   }
   return groups;
+}
+
+function allGroups() {
+  const models = (DATA && DATA.models) || [];
+  return state.mergeNames ? namedGroups() : models.map(oneGroup);
+}
+
+/** Видимые модели с одинаковым названием: именно они дают две позиции у клиента. */
+function duplicateNames() {
+  const map = new Map();
+  for (const model of (DATA && DATA.models) || []) {
+    if (!model.listed) continue;
+    // Сравниваем именно то, что видит клиент: «GigaChat-3-Pro» и
+    // «GigaChat 3 Pro» — разные строки, хотя для склейки это одно название.
+    const key = String(model.name || model.id).trim().toLowerCase().replace(/\s+/g, " ");
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(model);
+  }
+  const out = new Map();
+  for (const list of map.values()) {
+    if (list.length < 2) continue;
+    for (const model of list) out.set(model.id, list);
+  }
+  return out;
 }
 
 /** Наши российские модели: id начинается с вендора, а не с западного агрегатора. */
@@ -475,7 +522,7 @@ function columnText(group, key) {
       const best = bestOffer(group);
       return best ? `${priceText(bestPriceOf(group, best))} ${providerLabel(best.provider)}` : "—";
     }
-    case "offers": return String(group.offers.length);
+    case "offers": return String(new Set(group.offers.map((offer) => offer.provider)).size);
     default: return "";
   }
 }
@@ -504,7 +551,7 @@ function columnNumber(group, key) {
       const best = bestOffer(group);
       return best ? bestPriceOf(group, best) : null;
     }
-    case "offers": return group.offers.length;
+    case "offers": return new Set(group.offers.map((offer) => offer.provider)).size;
     default: return null;
   }
 }
@@ -541,6 +588,9 @@ function readFilters() {
   state.sellOnly = p.get("sell") === "1";
   state.ours = p.get("ru") === "1";
   state.jumps = p.get("jump") === "1";
+  state.mergeNames = p.get("merge") === "1";
+  state.duplicates = p.get("dup") === "1";
+  state.allVariants = p.get("var") === "1";
   const sort = OLD_SORT[p.get("s")] || p.get("s") || "name";
   state.sort = SORT_KEYS.has(sort) ? sort : "name";
   state.dir = p.get("d") === "desc" ? "desc" : "asc";
@@ -555,6 +605,9 @@ function saveFilters() {
   if (state.sellOnly) p.set("sell", "1");
   if (state.ours) p.set("ru", "1");
   if (state.jumps) p.set("jump", "1");
+  if (state.mergeNames) p.set("merge", "1");
+  if (state.duplicates) p.set("dup", "1");
+  if (state.allVariants) p.set("var", "1");
   if (state.sort !== "name") p.set("s", state.sort);
   if (state.dir === "desc") p.set("d", "desc");
   if (state.sel) p.set("sel", state.sel);
@@ -595,6 +648,7 @@ function priceJump(group) {
 }
 
 function visibleGroups() {
+  const duplicates = duplicateNames();
   let rows = allGroups().filter((group) => {
     if (state.group !== "all" && group.group !== state.group) return false;
     if (state.visibility === "visible" && !group.listed) return false;
@@ -602,6 +656,7 @@ function visibleGroups() {
     if (state.sellOnly && !group.models.some(hasSell)) return false;
     if (state.ours && !isOurs(group)) return false;
     if (state.jumps && !priceJump(group)) return false;
+    if (state.duplicates && !duplicates.has(group.primary.id)) return false;
     if (state.provider && !group.offers.some((offer) => offer.provider === state.provider)) return false;
     for (const [key, value] of Object.entries(state.cols)) {
       if (value && !matchesColumn(group, key, value)) return false;
@@ -679,6 +734,7 @@ const TEMPLATE = `
   <div class="mt-pane mt-pane-bottom" id="mt-bottom-pane">
     <div class="mt-linked-head">
       <h3 id="mt-sel-name">Поставщики модели</h3>
+      <label class="switch mt-variants"><input id="mt-variants" type="checkbox" /> все варианты семьи</label>
       <span class="fine" id="mt-sel-meta"></span>
     </div>
     <div class="mt-wrap">
@@ -718,6 +774,24 @@ function drawGroups() {
   jumps.title = "Модели, где следующий поставщик дороже самого дешёвого в 1,8 раза и больше";
   jumps.onclick = () => { state.jumps = !state.jumps; draw(); };
   box.append(jumps);
+
+  const dupLists = new Map();
+  for (const list of duplicateNames().values()) {
+    dupLists.set(list.map((model) => model.id).sort().join("|"), list);
+  }
+  const dupFilter = el("button", "chip mt-dups" + (state.duplicates ? " on" : ""));
+  dupFilter.type = "button";
+  dupFilter.append(el("span", "", "дубли"), el("b", "", String(dupLists.size)));
+  dupFilter.title = "Названия, которые у клиентов показаны больше одного раза";
+  dupFilter.onclick = () => { state.duplicates = !state.duplicates; draw(); };
+  box.append(dupFilter);
+
+  const merge = el("button", "chip mt-merge" + (state.mergeNames ? " on" : ""));
+  merge.type = "button";
+  merge.append(el("span", "", "склеивать названия"));
+  merge.title = "Свернуть одинаковые названия в одну строку. Выключено: таблица повторяет список, который видят клиенты";
+  merge.onclick = () => { state.mergeNames = !state.mergeNames; draw(); };
+  box.append(merge);
 }
 
 function drawProviderFilter() {
@@ -746,6 +820,9 @@ function visibilityCell(group) {
   input.type = "checkbox";
   input.checked = group.listed;
   input.setAttribute("aria-label", "Показывать клиентам: " + group.name);
+  if (group.models.length > 1) {
+    label.title = `Переключит все ${group.models.length} specs этой строки, включая скрытые`;
+  }
   label.append(input, el("span", "", group.listed ? "Видна" : "Скрыта"));
   const text = label.lastChild;
   input.onclick = (event) => event.stopPropagation();
@@ -762,7 +839,10 @@ function visibilityCell(group) {
       text.textContent = next ? "Видна" : "Скрыта";
       const row = cell.closest("tr");
       if (row) row.classList.toggle("mt-off", !next);
-      if (!error) setNote("");
+      if (!error) {
+        setNote("");
+        draw();
+      }
     } catch (e) {
       input.checked = !next;
       setNote(`Не сохранено: ${e.message}`);
@@ -779,6 +859,7 @@ function drawModels(rows) {
   if (!body) return;
   body.replaceChildren();
   const frag = document.createDocumentFragment();
+  const duplicates = duplicateNames();
   for (const group of rows) {
     const model = group.primary;
     const best = bestOffer(group);
@@ -793,6 +874,12 @@ function drawModels(rows) {
     name.append(el("span", "mt-name", group.name));
     name.append(el("code", "mt-code", model.id));
     if (group.models.length > 1) name.append(el("span", "mt-alias", ` +${group.models.length - 1}`));
+    const twins = duplicates.get(model.id);
+    if (twins) {
+      const badge = el("span", "mt-dup-badge", "дубль");
+      badge.title = `У клиентов то же название ещё у: ${twins.filter((item) => item.id !== model.id).map((item) => item.id).join(", ")}`;
+      name.append(badge);
+    }
     tr.append(name);
 
     const textCell = (cls, text) => {
@@ -896,7 +983,13 @@ function drawModels(rows) {
     const bestCell = el("td", "mt-best");
     if (best) {
       bestCell.append(el("b", "", priceText(bestPriceOf(group, best))));
-      bestCell.title = bestTitle(group, best);
+      const textModel = group.group === "text" || group.group === "code";
+      if (textModel && !best.eligible) {
+        bestCell.classList.add("mt-ineligible");
+        bestCell.title = `${bestTitle(group, best)} · маршрут недоступен: ${best.exclusion_reason || "только сверка"}`;
+      } else {
+        bestCell.title = bestTitle(group, best);
+      }
     } else {
       bestCell.append(el("span", "fine", "—"));
     }
@@ -910,9 +1003,20 @@ function drawModels(rows) {
     }
     tr.append(bestCell);
 
+    const providerCount = new Set(offers.map((offer) => offer.provider)).size;
+    const exactCount = offers.filter((offer) => offer._exact).length;
+    const familyCount = offers.length - exactCount;
     const count = el("td", "num");
-    count.append(el("b", "", offers.length ? String(offers.length) : "—"));
-    count.title = offers.length ? `${offers.length} поставщиков, по одному предложению на каждого` : "Поставщики цену не публикуют";
+    count.append(el("b", "", providerCount ? String(providerCount) : "—"));
+    count.title = providerCount
+      ? [
+          `${providerCount} поставщиков`,
+          familyCount ? `${exactCount} точных версий, ${familyCount} семейных` : "все отдают точную версию",
+          state.allVariants && offers.length > providerCount ? `${offers.length} вариантов семьи` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "Поставщики цену не публикуют";
     tr.append(count);
 
     tr.onclick = () => select(model.id);
@@ -971,13 +1075,21 @@ function drawOffers() {
   if (title) title.textContent = group.name;
   if (meta) {
     const ids = group.models.map((model) => model.id).join(" · ");
-    const word = group.offers.length === 1 ? "поставщик" : "поставщиков";
-    meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} ${word}`;
+    const providerCount = new Set(group.offers.map((offer) => offer.provider)).size;
+    const exactCount = group.offers.filter((offer) => offer._exact).length;
+    const familyCount = group.offers.length - exactCount;
+    const word = providerCount === 1 ? "поставщик" : "поставщиков";
+    const variants = state.allVariants && group.offers.length > providerCount ? ` · ${group.offers.length} вариантов семьи` : "";
+    const families = familyCount ? ` · ${exactCount} точных, ${familyCount} семейных` : "";
+    meta.textContent = `${ids} · ${groupLabel(group.group)} · ${providerCount} ${word}${families}${variants}`;
   }
   const base = media ? mediaBaseUnit(group) : "";
   const offers = group.offers.slice().sort((a, b) => {
-    const left = media ? (mediaUnitPrice(a, base) ?? Infinity) : (offerEstimate(a) ?? Infinity);
-    const right = media ? (mediaUnitPrice(b, base) ?? Infinity) : (offerEstimate(b) ?? Infinity);
+    // Тот же показатель, что в колонке «Дешевле всех»: вход для текста,
+    // цена за базовую единицу для медиа. Иначе поставщик из ячейки оказывался
+    // не первым в списке, и казалось, что его внизу нет.
+    const left = media ? (mediaUnitPrice(a, base) ?? Infinity) : (Number(a.input_rub) || Infinity);
+    const right = media ? (mediaUnitPrice(b, base) ?? Infinity) : (Number(b.input_rub) || Infinity);
     return left - right;
   });
   if (!offers.length) {
@@ -998,6 +1110,11 @@ function drawOffers() {
     tr.append(el("td", "mt-provider", providerLabel(offer.provider)));
     const modelCell = el("td");
     modelCell.append(el("code", "mt-code", offer.model || "—"));
+    if (offer._exact === false) {
+      const family = el("span", "mt-family", "семья");
+      family.title = "Поставщик отдаёт другую версию семейства, не точный upstream этой модели";
+      modelCell.append(family);
+    }
     tr.append(modelCell);
     const endpoint = String(offer.endpoint || "");
     const tier = endpoint ? endpoint.split("/").slice(-2).join("/") : "—";
@@ -1010,7 +1127,12 @@ function drawOffers() {
         tierCell.title = endpoint || "обычный тариф";
       }
       tr.append(tierCell);
-      tr.append(el("td", "num", fmt(offer.input_rub)));
+      const inputCell = el("td", "num", fmt(offer.input_rub));
+      const estimate = offerEstimate(offer);
+      inputCell.title = estimate == null
+        ? `Вход ${fmt(offer.input_rub)} ₽/1M`
+        : `Вход ${fmt(offer.input_rub)} ₽/1M · при 1000 вх + 512 вых ≈ ${fmt(estimate)} ₽`;
+      tr.append(inputCell);
       tr.append(el("td", "num", fmt(offer.output_rub)));
       tr.append(el("td", "num", offer.cached_rub == null ? "—" : fmt(offer.cached_rub)));
       tr.append(el("td", "num", ctxText(offer.context_length)));
@@ -1287,6 +1409,8 @@ function syncControls() {
   if (vis) vis.value = state.visibility;
   const sell = $("mt-sell");
   if (sell) sell.checked = state.sellOnly;
+  const variants = $("mt-variants");
+  if (variants) variants.checked = state.allVariants;
   drawProviderFilter();
 }
 
@@ -1510,6 +1634,8 @@ function wire() {
   if (vis) vis.onchange = () => { state.visibility = vis.value; draw(); };
   const sell = $("mt-sell");
   if (sell) sell.onchange = () => { state.sellOnly = sell.checked; draw(); };
+  const variants = $("mt-variants");
+  if (variants) variants.onchange = () => { state.allVariants = variants.checked; draw(); };
   const refresh = $("mt-refresh");
   if (refresh) refresh.onclick = refreshPrices;
   const apply = $("mt-apply-k");
