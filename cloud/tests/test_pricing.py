@@ -76,10 +76,12 @@ def test_a_running_tariff_takes_its_share_off_the_money():
     cloud.plan_buy(caller.account_id, "team")
     cloud.charge_chat(caller, model, MILLION, 0, "r3")
     with_team = lines(cloud, caller.account_id)[-1][1]
-    assert with_team == pytest.approx(plain * 0.7, rel=0.001)
+    assert with_team == pytest.approx(plain * 0.8, rel=0.001)
 
 
-def test_the_tariff_never_touches_pictures():
+def test_the_tariff_takes_its_share_off_pictures_too():
+    # The site promises the discount on every model, pictures included: team is 20%,
+    # so a picture sells for 0.8 of its price.
     cloud = stack()
     caller = account_of(cloud)
     cloud.plan_buy(caller.account_id, "team")
@@ -87,7 +89,7 @@ def test_the_tariff_never_touches_pictures():
     assert model is not None
     cloud.charge_image(caller, model, 1, "r1")
     cost, sale = lines(cloud, caller.account_id)[-1]
-    assert cost == sale, "the approved discount is for text turns; a picture is sold at its price"
+    assert sale == pytest.approx(cost * 0.8, rel=0.001)
 
 
 def test_a_model_without_a_sale_rate_is_charged_the_providers_price():

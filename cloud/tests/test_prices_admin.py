@@ -125,8 +125,8 @@ async def test_prices_answers_with_a_working_rate(market):
     assert body["count"]["chat"] > 0
     assert [(plan["id"], plan["discount_pct"]) for plan in body["plan_discounts"]] == [
         ("lika", 10),
-        ("lika-plus", 20),
-        ("team", 30),
+        ("lika-plus", 15),
+        ("team", 20),
     ]
 
 

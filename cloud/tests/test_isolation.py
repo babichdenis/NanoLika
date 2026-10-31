@@ -274,13 +274,13 @@ async def test_a_lapsed_tariff_is_read_by_the_relay_not_by_the_client(monkeypatc
     await client.aclose()
 
 
-def test_the_hub_closes_a_connection_whose_tariff_has_lapsed():
-    """The connection itself is checked when the socket opens, not when the app says it is
-    paid for: the same key that met through the hub yesterday is refused today."""
+def test_a_lapsed_tariff_keeps_the_devices_connected():
+    """Connectivity is included in every tariff (owner's decision 2026-11-01): a plan that
+    ran out takes the discount away, and the socket keeps welcoming the account."""
     from test_plans import sign_up as ws_sign_up
     from test_plans import stack as ws_stack
 
-    client, cloud, sender = ws_stack(connect_requires_plan=True)
+    client, cloud, sender = ws_stack()
     key, me = ws_sign_up(client, sender)
     account_id = me["account"]["id"]
     clock = cloud.clock()
@@ -290,14 +290,12 @@ def test_the_hub_closes_a_connection_whose_tariff_has_lapsed():
         assert ws.receive_json()["type"] == "welcome"
 
     cloud.clock = staticmethod(lambda: clock + 31 * 86400)
-    assert cloud.connect_allowed(account_id) is False
-    with pytest.raises(WebSocketDisconnect) as refused:
-        with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
-            ws.send_json(HELLO)
-            frame = ws.receive_json()
-            assert frame["code"] == "connect_limited"
-            ws.receive_json()  # the close that follows the frame
-    assert refused.value.code == 4004
+    # Connectivity is open to every tariff (owner's decision 2026-11-01): the lapsed plan
+    # takes the discount away, not the devices' meeting point.
+    assert cloud.connect_allowed(account_id) is True
+    with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
+        ws.send_json(HELLO)
+        assert ws.receive_json()["type"] == "welcome"
 
 
 # -- 4. one account sees nothing of another ----------------------------------------------

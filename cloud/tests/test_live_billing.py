@@ -47,7 +47,7 @@ async def test_topup_balance_threshold_activates_the_matching_tier(monkeypatch):
     client, p, account, row = await fixture(monkeypatch, amount=390000)
     p.live_billing.apply(row, event(row), reconciled=True)
     plan = p.db.subscription(account)
-    assert plan is not None and plan["plan"] == "team" and plan["discount_pct"] == 30
+    assert plan is not None and plan["plan"] == "team" and plan["discount_pct"] == 20
     assert plan["expires_at"] - plan["started_at"] == 30 * 86400
     await client.aclose()
 

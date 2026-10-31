@@ -860,7 +860,9 @@ class Settings:
     # An active tariff is the monthly service key for the cross-device hub. Paid balance
     # thresholds are evaluated after confirmed top-ups; no automatic charge is made at expiry.
     # A member is exempt.
-    connect_requires_plan: bool = field(default_factory=lambda: _env("CONNECT_REQUIRES_PLAN", "1") not in ("0", "false", "no"))
+    # Решение владельца 01.11.2026: связь устройств открыта всем тарифам. Флаг остался
+    # для оператора, который захочет вернуть гейт в своей установке.
+    connect_requires_plan: bool = field(default_factory=lambda: _env("CONNECT_REQUIRES_PLAN", "0") not in ("0", "false", "no"))
     # A sign-in for an app store's reviewer, who cannot receive our codes: for the
     # e-mail addresses in REVIEW_ADDRESSES (comma-separated) a code request sends nothing and
     # answers as if it had, and /v1/auth/verify accepts exactly REVIEW_CODE (six digits) —

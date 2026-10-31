@@ -51,7 +51,7 @@ def test_the_menu_is_the_operators_three_tariffs(monkeypatch=None):
     assert menu["lika"]["price_rub"] == 590 and menu["lika"]["discount_pct"] == 10
     assert menu["lika"]["connect"] is True
     assert menu["lika-plus"]["price_rub"] == 1490 and menu["lika-plus"]["connect"] is True
-    assert menu["team"]["price_rub"] == 3900 and menu["team"]["discount_pct"] == 30
+    assert menu["team"]["price_rub"] == 3900 and menu["team"]["discount_pct"] == 20
     assert all(row["days"] == 30 for row in menu.values())
 
 
@@ -90,7 +90,7 @@ def test_the_discount_is_what_the_tariff_says():
     cloud.plan_buy(team, "team")
     assert cloud.discount(1000, plain) == 1000
     assert cloud.discount(1000, lika) == 900
-    assert cloud.discount(1000, team) == 700
+    assert cloud.discount(1000, team) == 800
     # a spend smaller than a hundred is still a spend
     assert cloud.discount(3, lika) == 3
 
@@ -116,16 +116,14 @@ def test_without_the_switch_every_account_connects_as_before():
     assert cloud.connect_state(me["account"]["id"])["required"] is False
 
 
-def test_the_hub_refuses_a_connection_only_when_the_tariff_is_the_key():
-    client, _cloud, sender = stack(connect_requires_plan=True)
+def test_the_hub_is_open_to_every_tariff():
+    # Owner's decision (2026-11-01): connectivity is included in every tariff. An account
+    # without a plan meets its devices; the plans only change the discount.
+    client, _cloud, sender = stack()
     key, _me = sign_up(client, sender)
-    with pytest.raises(WebSocketDisconnect) as refused:
-        with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
-            ws.send_json(HELLO)
-            frame = ws.receive_json()
-            assert frame["code"] == "connect_limited" and frame["open_from_rub"] == 590
-            ws.receive_json()
-    assert refused.value.code == 4004 and refused.value.reason == "connect_limited"
+    with client.websocket_connect("/v1/hub", headers={"Authorization": f"Bearer {key}"}) as ws:
+        ws.send_json(HELLO)
+        assert ws.receive_json()["type"] == "welcome"
 
 
 def test_a_tariff_that_opens_it_lets_the_devices_meet():
