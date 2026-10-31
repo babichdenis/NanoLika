@@ -728,6 +728,7 @@ _MODEL_FIELDS = (
     "priced_as",
     "upstream",
     "last_request",
+    "cost_offer",
     "first_seen",
     "new_model",
     "reference",
@@ -960,6 +961,35 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     "configured": {"provider": spec.provider, "model": spec.upstream},
                     "basis": "цена за единицу из снимка прайсов",
                 }
+        # Медиа в конфиге часто описано только токенами за штуку, без рублёвой
+        # закупки. Если поставщик дал цену за изображение/секунду/минуту/1000
+        # знаков, показываем самую дешёвую как закупку, а не прочерк.
+        for row, spec in zip(models, settings.models, strict=True):
+            if spec.kind == "chat":
+                continue
+            offers = (row.get("routing") or {}).get("offers") or []
+            best: dict[str, tuple[float, dict]] = {}
+            for offer in offers:
+                unit = str(offer.get("unit") or "")
+                try:
+                    price = float(offer.get("price_rub"))
+                except (TypeError, ValueError):
+                    continue
+                if price <= 0:
+                    continue
+                if unit == "1M символов":
+                    unit, price = "1000 символов", price / 1000
+                elif unit == "запрос" and spec.kind == "image":
+                    unit = "изображение"
+                if unit not in {"изображение", "секунда", "1000 символов", "минута"}:
+                    continue
+                if unit not in best or price < best[unit][0]:
+                    best[unit] = (price, offer)
+            mapping = {"изображение": "rub_image", "секунда": "rub_second", "1000 символов": "rub_speech", "минута": "rub_minute"}
+            for unit, (price, offer) in best.items():
+                row["cost"][mapping[unit]] = round(price, 4)
+                row["cost_source"] = "provider_snapshot"
+                row["cost_offer"] = {"provider": offer.get("provider"), "unit": unit, "price": round(price, 4)}
         reference = _attach_reference(models, list(settings.models), prices)
         actuals = {}
         if cloud is not None:
@@ -994,7 +1024,16 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 commerce = model_pricing.describe(cloud, spec)
                 row["commerce"] = commerce
                 rates = commerce["rates_rub"]
-                row["sell"].update(rub_in=rates["input"], rub_out=rates["output"], rub_cached_in=rates["cached_input"])
+                row["sell"].update(
+                    rub_in=rates["input"],
+                    rub_out=rates["output"],
+                    rub_cached_in=rates["cached_input"],
+                    rub_image=rates.get("image"),
+                    rub_image_2k=rates.get("image_2k"),
+                    rub_second=rates.get("second"),
+                    rub_speech=rates.get("speech"),
+                    rub_minute=rates.get("minute"),
+                )
                 # Наценка считается от РОЗНИЦЫ, а розница только что сменилась: без
                 # этого пересчёта после массовой правки колонка показывала старые числа.
                 if spec.kind == "chat":

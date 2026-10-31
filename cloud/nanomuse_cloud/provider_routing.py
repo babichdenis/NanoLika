@@ -41,6 +41,11 @@ ALIASES = {
     "~deepseek/deepseek-v4-flash-latest": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash-1017": FLASH_FAMILY,
     "deepseek-v4.1-flash-1017": FLASH_FAMILY,
+    # Yandex models are named differently by RouterAI and Polza; one customer
+    # position must route to both, not appear twice in the menu.
+    "yandex/yandexgpt-5-lite": "yandex/gpt-lite-5",
+    "yandex/yandexgpt-5-pro": "yandex/gpt-pro-5",
+    "yandex/yandexgpt-5.1-pro": "yandex/gpt-pro-5.1",
 }
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
 # Names with an implemented authenticated model-catalog and priced chat-route adapter.
@@ -66,7 +71,12 @@ def identity(model: str) -> str:
 # Only the customer-facing alias routes across the DeepSeek Flash family. A
 # version-specific spec (0423, 0731, 1017, vision-exp, latest) must use its own
 # offers: otherwise the admin says 1.49 while the client asked for 0423.
-FAMILY_ANCHORS = {"deepseekflash"}
+FAMILY_ANCHORS = {
+    "deepseekflash",
+    "yandexgptlite5",
+    "yandexgptpro5",
+    "yandexgptpro51",
+}
 
 
 def model_key(value: str) -> str:

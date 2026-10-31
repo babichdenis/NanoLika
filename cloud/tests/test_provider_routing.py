@@ -94,6 +94,20 @@ def test_version_specific_flash_does_not_take_a_family_sibling(monkeypatch):
     assert candidates[0].body["model"] == "deepseek/deepseek-v4-flash"
 
 
+def test_yandex_duplicate_names_route_as_one_family(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("yandex-gpt-pro-5", "YandexGPT Pro 5", "yandex/gpt-pro-5", provider="routerai")
+    r.offers = {
+        "routerai": [replace(quote("routerai", 1560, 1560), model="yandex/gpt-pro-5")],
+        "polza": [replace(quote("polza", 1704, 1704), model="yandex/yandexgpt-5-pro")],
+    }
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
+
+    routes = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+
+    assert [route.provider for route in routes] == ["routerai", "polza"]
+
+
 def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monkeypatch):
     r = setup_router(monkeypatch)
     spec = ModelSpec("deepseek-flash", "DeepSeek Flash", "deepseek-v4.1-flash")

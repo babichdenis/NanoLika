@@ -419,11 +419,29 @@ def fetch_bothub() -> list[dict]:
         name = model.get("label") or model.get("id")
         if not name:
             continue
+        features = model.get("features") or []
+        generation_unit = (
+            "изображение" if "TEXT_TO_IMAGE" in features else "видео" if "TEXT_TO_VIDEO" in features else ""
+        )
+        generation = [
+            float(price["rub"])
+            for price in model.get("generationPrices") or []
+            if isinstance(price.get("rub"), (int, float)) and float(price["rub"]) > 0
+        ]
+        if generation_unit and generation:
+            # `generationPrices` — это реальная цена за готовую картинку/клип
+            # (1K/2K/4K, размеры). `per_image` у Bothub бывает базовой ставкой
+            # вроде 0,0002 ₽ и к реальному счёту отношения не имеет.
+            offers.append(
+                dict(model=str(name), unit=generation_unit, price=round(min(generation), 4), currency="RUB")
+            )
         for price in model.get("prices") or []:
             unit = BOTHUB_UNITS.get((price.get("unit"), price.get("key")))
             if unit is None:
                 unit = BOTHUB_UNITS.get((price.get("unit"), None))
             if unit is None:
+                continue
+            if generation_unit and generation and unit == generation_unit:
                 continue
             rub = price.get("rub")
             if not isinstance(rub, (int, float)) or rub <= 0:

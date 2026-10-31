@@ -220,10 +220,11 @@ function purchaseTitle(model) {
   const exactLine = exact && normalizedModel(exact.model) !== normalizedModel(routing.selected_model) && exact.input_rub != null
     ? `\nТочная версия ${model.upstream}: ${providerLabel(exact.provider)} ${fmt(exact.input_rub)} / ${fmt(exact.output_rub)}${exact.eligible ? "" : " (только сверка)"}`
     : "";
-  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${selected}`;
-  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${selected}`;
-  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${selected}`;
-  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${selected}`;
+  const source = model.cost_offer?.provider ? ` · ${providerLabel(model.cost_offer.provider)}` : "";
+  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${source}${selected}`;
+  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${source}${selected}`;
+  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${source}${selected}`;
+  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${source}${selected}`;
   if (cost.rub_in != null || cost.rub_out != null) {
     return `Закупка выбранного маршрута${selected}: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M${exactLine}`;
   }
@@ -233,6 +234,10 @@ function purchaseTitle(model) {
 /** Наша цена клиенту: у текста ставка за 1M, у медиа — подпись тарифа. */
 function clientText(model) {
   const sell = model.sell || {};
+  if (sell.rub_image) return `${fmt(sell.rub_image)} ₽ / шт.`;
+  if (sell.rub_second) return `${fmt(sell.rub_second)} ₽ / сек.`;
+  if (sell.rub_speech) return `${fmt(sell.rub_speech)} ₽ / 1000 зн.`;
+  if (sell.rub_minute) return `${fmt(sell.rub_minute)} ₽ / мин.`;
   if (sell.rub_in || sell.rub_out) return `${fmt(sell.rub_in)} / ${fmt(sell.rub_out)}`;
   if (sell.hint) return sell.hint;
   return "—";
@@ -1363,9 +1368,7 @@ function openPriceDialog(group) {
   const model = group.primary;
   const rates = (model.rates && model.rates.rates_rub) || {};
   const draft = model.draft || null;
-  const fields = rateFields(group, rates).filter(
-    (key) => Number(rates[key]) > 0 || (draft && draft.changed && key in draft.changed),
-  );
+  const fields = rateFields(group, rates);
   if (!fields.length && !(draft && Object.keys(draft.changed || {}).length)) {
     setNote("У этой модели нет ставок, которые можно изменить этим диалогом.");
     return;
