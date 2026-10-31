@@ -115,9 +115,10 @@ export function filterCounts(cards, { favourites = new Set(), selected = new Set
     counts.set(key, (counts.get(key) || 0) + 1);
     if (isCoding(card)) counts.set('__code', (counts.get('__code') || 0) + 1);
   }
+  // One list for every cabinet and app: the account's starred favourites. The old
+  // "chosen" counter was a second, differently stored list and only confused people.
   const items = [
     ['__fav', '★ Избранное', cards.filter((card) => favourites.has(card.id)).length],
-    ['__mine', 'Выбранные', cards.filter((card) => selected.has(card.id)).length],
     ...SECTION_LABELS.map(([key, label]) => [key, label, counts.get(key) || 0]),
   ];
   return items.filter(([, , count]) => count > 0);
@@ -136,8 +137,6 @@ export function filterCards(cards, { kind = '', vendor = '', query = '', favouri
   return cards.filter((card) => {
     if (kind === '__fav') {
       if (!favourites?.has(card.id)) return false;
-    } else if (kind === '__mine') {
-      if (!selected?.has(card.id)) return false;
     } else if (kind === '__code') {
       if (!isCoding(card)) return false;
     } else if (kind === 'speech' || kind === 'transcribe' || kind === 'music') {
@@ -160,7 +159,7 @@ export function installModelSheet({onPick,api,session,onFavourites,pickKind='cha
  document.body.append(sheet);const el=id=>sheet.querySelector('#'+id);
  const state={cards:[],kind:'',vendor:'',query:'',picked:'',context:0,sort:'recommended',favourites:new Set(),selected:new Set()};let favouritesDirty=false;
  let owner='',key='',version=0,previousFocus=null,queue=Promise.resolve();
- function paintKinds(){const box=el('ms-kinds');box.replaceChildren();const items=[['','Все модели',state.cards.length],...filterCounts(state.cards,{favourites:state.favourites,selected:state.selected})];if(!items.some(item=>item[0]===state.kind))state.kind='';for(const [kind,label,count] of items){const b=document.createElement('button');b.type='button';b.className='model-kind-btn';b.setAttribute('aria-pressed',String(kind===state.kind));const title=document.createElement('span');title.textContent=label;const badge=document.createElement('b');badge.textContent=String(count);b.append(title,badge);b.dataset.kind=kind;b.onclick=()=>{state.kind=kind;paint();};box.append(b);}}
+ function paintKinds(){const box=el('ms-kinds');box.replaceChildren();const items=[['','Все',state.cards.length],...filterCounts(state.cards,{favourites:state.favourites,selected:state.selected})];if(!items.some(item=>item[0]===state.kind))state.kind='';for(const [kind,label,count] of items){const b=document.createElement('button');b.type='button';b.className='model-kind-btn';b.setAttribute('aria-pressed',String(kind===state.kind));const title=document.createElement('span');title.textContent=label;const badge=document.createElement('b');badge.textContent=String(count);b.append(title,badge);b.dataset.kind=kind;b.onclick=()=>{state.kind=kind;paint();};box.append(b);}}
  function paintVendors(){const box=el('ms-vendors');box.replaceChildren();for(const row of [{name:'',count:state.cards.length},...vendorRows(state.cards)]){const b=document.createElement('button');b.type='button';b.className='model-vendor-row';b.textContent=(row.name||'Все производители')+' · '+row.count;b.setAttribute('aria-pressed',String(state.vendor===row.name));b.onclick=()=>{state.vendor=row.name;paint();};box.append(b);}}
  function persist(){const identity=session(),ids=[...state.favourites];queue=queue.catch(()=>{}).then(async()=>{if(session()?.key!==identity?.key)return;try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:ids})});onFavourites?.();}catch{el('ms-status').textContent='Избранное не сохранилось. Обновите список и попробуйте ещё раз.';}});}
  function paintCards(){

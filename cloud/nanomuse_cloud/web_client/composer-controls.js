@@ -1,4 +1,4 @@
-import {allModels,chatModel,chatModels} from './catalog.js?v=20261030-izob';
+import {allModels,chatModel,chatModels} from './catalog.js?v=20261031-ui2';
 import {openModelPicker} from './model-picker.js?v=20261030-izob';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
 export function installComposerControls({form,message,select,refresh,status,session,api,words,storage=localStorage}){
@@ -11,9 +11,9 @@ export function installComposerControls({form,message,select,refresh,status,sess
  select.parentNode.insertBefore(wrap,select);wrap.append(select);select.hidden=true;
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-label','Выбрать модель');
  wrap.append(trigger);
- function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?'Модели · '+m.name:'Модель';}
+ function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?m.name:'Модель';}
  function chosenModels(){return allChat.filter(m=>favSet.has(m.id));}
- async function saveFavourites(){const ownerId=session()?.owner||'';try{localStorage.setItem('nl.web.favourites.'+ownerId,JSON.stringify([...favSet]));}catch{}try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});}catch{}}
+ async function saveFavourites(){try{const data=await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});const echoed=data?.shelf?.favourites;if(Array.isArray(echoed))favSet=new Set(echoed);}catch{}}
  trigger.onclick=async()=>{
   // Новые модели на сервере должны появляться в открытом списке без перезагрузки
   // страницы: перед открытием перечитываем каталог, старый список оставляем,
@@ -48,21 +48,35 @@ export function installComposerControls({form,message,select,refresh,status,sess
    const shelfModels=Array.isArray(shelf?.models)?shelf.models:[];
    const lockedIds=new Set(shelfModels.filter(m=>m.plan_locked).map(m=>m.id));
    if(shelfModels.length){const known=new Set(allVisible.map(m=>m.id));const extra=allModels({data:shelfModels}).filter(m=>!known.has(m.id));for(const m of extra)m.locked=lockedIds.has(m.id);allVisible=allVisible.concat(extra);for(const m of allVisible)if(lockedIds.has(m.id))m.locked=true;allChat=allVisible.filter(m=>m.forChat);}
-   const favourites=new Set(shelf?.shelf?.favourites||[]);try{const raw=localStorage.getItem('nl.web.favourites.'+identity.owner);if(raw!==null){for(const id of JSON.parse(raw)||[])favourites.add(id);}}catch{}const enabledChat=new Set((shelf?.shelf?.enabled||{}).chat||[]);
+   /* Один список избранного на весь аккаунт: только сервер, без локальных добавок.
+      Раньше браузер подмешивал своё избранное из localStorage — отсюда разные списки
+      в вебе, приложении и кабинете, и мусор возвращался на сервер при сохранении. */
+   const favourites=new Set(shelf?.shelf?.favourites||[]);const enabledChat=new Set((shelf?.shelf?.enabled||{}).chat||[]);
    const preferred=allChat.filter(m=>favourites.has(m.id)||enabledChat.has(m.id));favSet=favourites;enabledSet=enabledChat;
    all=preferred.length?preferred:allChat;
    const chat=chatModels(data);
    let saved='';try{saved=storage.getItem(key())||'';}catch{}
-   selected=(chat.some(row=>row.id===(selected||saved))?(selected||saved):(chatModel(data)||''))||'';
+   /* По умолчанию — модель по умолчанию из аккаунта, и только из избранного (или
+      включённого на полке): список везде должен совпадать. */
+   const shelfDefault=(shelf?.shelf?.default||{}).chat||'';
+   const onShelf=id=>!favourites.size||favourites.has(id)||enabledChat.has(id);
+   selected=[selected,saved,shelfDefault].find(id=>id&&chat.some(row=>row.id===id)&&onShelf(id))||chatModel(data)||'';
    applyFilters();return selected;
   }catch(error){if(generation===version){status.textContent=words.error;}throw error;}finally{if(generation===version){pending=null;paint();}}})();
   pending=task;paint();return task;
  }
  refresh.addEventListener('click',()=>{load().catch(()=>{});});
+ /**
+  * Видит ли выбранная модель картинки: 'yes' | 'no' | 'unknown'.
+  * По этому флагу веб-клиент не отправляет изображение текстовой модели:
+  * релей отфильтровал бы всех поставщиков и ответил 503.
+  */
+ function modelVision(){const row=allVisible.find(m=>m.id===selected)||allChat.find(m=>m.id===selected);if(!row)return 'unknown';return row.vision===true?'yes':row.vision===false?'no':'unknown';}
  return {load,selectModel(id){kind="chat";query="";selected=id;applyFilters();select.dispatchEvent(new Event("change"));},setBusy(value){busy=value;paint();},
   /** Фильтры списка: тип модели и кусок названия. */
   setKind(value){kind=value||'chat';applyFilters();},
   setQuery(value){query=value||'';applyFilters();},
   kinds(){const set=new Set(all.map(m=>m.kind));return ['chat','image','video','audio'].filter(k=>set.has(k));},
-  async model(){const identity=session();if(owner!==identity?.owner||!selected)await load();if(!selected)throw new Error(words.empty);return selected;}};
+  async model(){const identity=session();if(owner!==identity?.owner||!selected)await load();if(!selected)throw new Error(words.empty);return selected;},
+  modelVision};
 }

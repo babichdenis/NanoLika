@@ -44,7 +44,7 @@ def test_pure_helpers():
     assert cut_text("short") == ("short", False)
     assert cut_text(None) == ("", False)
     assert clean_attachments([{"name": "a.pdf", "mime": "application/pdf", "size": "1234"}, "junk", {}]) == [
-        {"name": "a.pdf", "mime": "application/pdf", "size": 1234}
+        {"name": "a.pdf", "mime": "application/pdf", "size": 1234, "url": ""}
     ]
 
 
@@ -69,7 +69,7 @@ async def test_state_is_on_by_default_and_round_trips_changes():
         "device": "phone-1",
         "conversations": [conv(cid, "main", "Main")],
         "messages": [
-            msg(m1, cid, "user", "hi", attachments=[{"name": "a.pdf", "mime": "application/pdf", "size": 1234}]),
+            msg(m1, cid, "user", "hi", attachments=[{"name": "a.pdf", "mime": "application/pdf", "size": 1234, "url": ""}]),
             msg(m2, cid, "assistant", "hello", created_at=1738000051),
         ],
     }
@@ -84,7 +84,7 @@ async def test_state_is_on_by_default_and_round_trips_changes():
     c0 = out["conversations"][0]
     assert c0["kind"] == "main" and c0["title"] == "Main" and c0["device"] == "phone-1" and c0["seq"] == 1 and c0["deleted"] is False
     assert [m["mid"] for m in out["messages"]] == [m1, m2]
-    assert out["messages"][0]["attachments"] == [{"name": "a.pdf", "mime": "application/pdf", "size": 1234}]
+    assert out["messages"][0]["attachments"] == [{"name": "a.pdf", "mime": "application/pdf", "size": 1234, "url": ""}]
     assert out["messages"][0]["truncated"] is False and out["messages"][1]["role"] == "assistant"
     # the cursor moves the window: nothing after 3, only the second message after 2
     assert (await client.get("/v1/sync/changes?since=3", headers=auth(key))).json()["messages"] == []

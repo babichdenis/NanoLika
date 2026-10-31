@@ -716,6 +716,15 @@ class Settings:
     # since 0.20: a computer-use turn carries a few screenshots, and the apps now keep at most
     # four and scale them down, so a body that still passes this is a bug on their side.
     max_request_bytes: int = field(default_factory=lambda: _int("MAX_REQUEST_BYTES", 16 * 1024 * 1024))
+    # Вложения из веб-клиента: файл кладётся в общий бакет S3 (тот же, что у приложения)
+    # и отдаётся presigned-ссылкой. Пустые ключи выключают загрузку — релей работает как раньше.
+    s3_endpoint: str = field(default_factory=lambda: _env("S3_ENDPOINT", "https://s3.regru.cloud"))
+    s3_region: str = field(default_factory=lambda: _env("S3_REGION", "us-east-1"))
+    s3_bucket: str = field(default_factory=lambda: _env("S3_BUCKET", "nanolika"))
+    s3_access_key: str = field(default_factory=lambda: _env("S3_ACCESS_KEY"))
+    s3_secret_key: str = field(default_factory=lambda: _env("S3_SECRET_KEY"))
+    # Ссылка на вложение живёт неделю: чат читают и позже, а объект в бакете — 30 дней.
+    s3_link_seconds: int = field(default_factory=lambda: _int("S3_LINK_SECONDS", 7 * 24 * 60 * 60))
     # Whose X-Forwarded-For to believe: the proxy in front (Caddy on the same box or network,
     # a tailnet). Comma-separated addresses or networks; empty = every loopback, private,
     # link-local and shared (100.64/10) address. A relay reached straight from the internet

@@ -42,6 +42,7 @@ export function allModels(catalogue){
           context:Number(facts.context_length||row.context_length||0),
           price:priceOf(facts,kind),
           locked:Boolean(row.plan_locked||facts.plan_locked||row.locked||facts.locked),
+          vision:row.architecture?.input_modalities?.includes?.('image')===true||facts.vision===true||row.input_modalities?.includes?.('image')===true,
           forChat:Array.isArray(facts.for)?facts.for.includes('chat'):kind==='chat'};
  });
 }

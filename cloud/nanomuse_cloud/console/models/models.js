@@ -14,7 +14,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       title: 'Модели', eyebrow: 'nanoLika · Ваш кабинет',
       intro: 'Выберите, какие модели будут в приложении, и какая из них отвечает по умолчанию. Цены со скидкой вашего тарифа и возможности видны у каждой модели.',
       balance: 'Баланс', noLimit: 'без ограничения',
-      search: 'Быстрый поиск моделей', all: 'Все модели', mine: 'Выбранные', favouritesShort: '★ Избранное',
+      search: 'Быстрый поиск моделей', all: 'Все модели', favouritesShort: '★ Избранное',
       sort: 'Сортировка', sortRecommended: 'По рекомендации', sortPrice: 'Сначала дешевле', sortContext: 'Сначала большой контекст', sortName: 'По названию',
       availability: 'Доступ', available: 'Доступные мне', higherPlan: 'На старшем тарифе', publicCatalog: 'Открытый каталог',
       allVendors: 'Все производители', otherVendors: 'Другие', vendorFilter: 'Производитель',
@@ -47,7 +47,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       title: 'Models', eyebrow: 'nanoLika · Your account',
       intro: 'Pick what the app should offer and which model answers by default. Your discounted retail prices and model capabilities are shown on every row.',
       balance: 'Balance', noLimit: 'no limit',
-      search: 'Search models', all: 'All models', mine: 'My picks', favouritesShort: '★ Favourites',
+      search: 'Search models', all: 'All models', favouritesShort: '★ Favourites',
       sort: 'Sort', sortRecommended: 'Recommended', sortPrice: 'Lowest price', sortContext: 'Largest context', sortName: 'Name',
       availability: 'Access', available: 'Available to me', higherPlan: 'Higher plan', publicCatalog: 'Public catalogue',
       allVendors: 'All makers', otherVendors: 'Other', vendorFilter: 'Maker',
@@ -81,7 +81,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       title: '模型', eyebrow: 'nanoLika · 账户',
       intro: '选择应用里要提供哪些模型，以及哪一个默认回答。每行显示套餐折扣价和模型能力。',
       balance: '余额', noLimit: '无限制',
-      search: '快速搜索模型', all: '全部模型', mine: '已选', favouritesShort: '★ 收藏',
+      search: '快速搜索模型', all: '全部模型', favouritesShort: '★ 收藏',
       sort: '排序', sortRecommended: '推荐', sortPrice: '价格从低到高', sortContext: '上下文从大到小', sortName: '名称',
       allVendors: '全部制造商', otherVendors: '其他', vendorFilter: '制造商',
       planNote: (n) => `${n} 个模型需要更高套餐。`,
@@ -207,7 +207,7 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
 
   /** Полка ведётся по видам, поэтому у звука и музыки один вид: «ключ полки». */
   const SHELF_KINDS = ['chat', 'image', 'video', 'audio'];
-  const SECTION_KEYS = new Set(['all', 'favourites', 'mine', 'code', ...SECTIONS.map((spec) => spec.key)]);
+  const SECTION_KEYS = new Set(['all', 'favourites', 'code', ...SECTIONS.map((spec) => spec.key)]);
   const readPref = (key, fallback) => {
     try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; }
   };
@@ -220,6 +220,8 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
   let availability='';
   let contextMin=0;let favouriteWrites=Promise.resolve();
   let section = readPref('nm.models.section', 'all'); // какой раздел открыт
+  // One list for every cabinet: the account's starred favourites (the old "mine" list is gone).
+  if (section === 'mine') section = 'favourites';
   if (!SECTION_KEYS.has(section)) section = 'all';
   let needle = ''; // что в поиске
   let vendorFilter = readPref('nm.models.vendor', ''); // один провайдер или все
@@ -364,7 +366,6 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
       else if (vendorFilter && vendorBucket(model.vendor) !== vendorFilter) return false;
       if(contextMin && Number(model.context_length||0)<contextMin)return false;
       if(section==='favourites')return (loaded.shelf?.favourites||[]).includes(model.id);
-      if (section === 'mine') return !model.plan_locked && SHELF_KINDS.some((k) => draft.enabled[k].has(model.id));
       if (section === 'code') return isCoding(model);
       if (!spec) return true;
       if (spec.sub) return model.kind === 'audio' && (model.audio || {}).kind === spec.sub;
@@ -436,7 +437,6 @@ import {installPaymentDialog} from '/web/account/payments.js?v=20261030-standard
     const chips = [
       ['all', T.all, all.length],
       ['favourites', T.favouritesShort, (loaded.shelf?.favourites||[]).length],
-      ['mine', T.mine, all.filter((m) => !m.plan_locked && SHELF_KINDS.some((k) => draft.enabled[k].has(m.id))).length],
       ['code', T.code, all.filter(isCoding).length],
       ...SECTIONS.map((spec) => [spec.key, T[spec.title], ofKind(spec)]),
     ];

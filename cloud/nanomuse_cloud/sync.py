@@ -98,12 +98,17 @@ def clean_attachments(value: object) -> list[dict]:
             continue
         name = str(a.get("name") or "")[:200]
         mime = str(a.get("mime") or "")[:100]
+        # Веб-клиент кладёт вложение в S3 и присылает ссылку: только https и только наш бакет,
+        # чтобы через синхронизацию нельзя было протащить чужой адрес.
+        url = str(a.get("url") or "")[:2000]
+        if not url.startswith("https://") or "/nanolika/files/" not in url:
+            url = ""
         try:
             size = max(0, int(a.get("size") or 0))
         except (TypeError, ValueError):
             size = 0
         if name or mime or size:
-            out.append({"name": name, "mime": mime, "size": size})
+            out.append({"name": name, "mime": mime, "size": size, "url": url})
     return out
 
 
@@ -261,7 +266,23 @@ class SyncStore:
 
     def _device_names(self, c: sqlite3.Connection, account_id: str) -> dict[str, str]:
         rows = c.execute("SELECT id, name FROM devices WHERE account_id=?", (account_id,)).fetchall()
-        return {str(r["id"]): str(r["name"]) for r in rows}
+        names = {str(r["id"]): str(r["name"]) for r in rows}
+        # Browsers are not persisted in `devices` (the hub keeps them ephemeral), so their
+        # rows would otherwise carry an empty name and the transcript would show the raw
+        # `tg-…`/`max-…`/`web-…` id. The prefix is the channel the person came through.
+        channel_names = {"tg-": "Telegram", "max-": "MAX", "web-": "Web"}
+        for table in ("sync_messages", "sync_conversations"):
+            for row in c.execute(
+                f"SELECT DISTINCT device FROM {table} WHERE account_id=? "
+                "AND (device LIKE 'tg-%' OR device LIKE 'max-%' OR device LIKE 'web-%')",
+                (account_id,),
+            ):
+                device = str(row["device"] or "")
+                for prefix, label in channel_names.items():
+                    if device.startswith(prefix):
+                        names.setdefault(device, label)
+                        break
+        return names
 
     def changes(self, account_id: str, since: int = 0, limit: int = DEFAULT_PAGE, scope: str = "all", tail: int = 0) -> dict:
         """Everything with a seq after `since`, in seq order, at most `limit` rows; `more`
@@ -413,6 +434,11 @@ class SyncStore:
                     raise CloudError(409, "conversation_busy", "Another device is answering in this chat", {"holder": holder})
                 return {"ok": False, "holder": holder}
             name = self._device_names(c, account_id).get(device, "")
+            if not name:
+                for prefix, label in (("tg-", "Telegram"), ("max-", "MAX"), ("web-", "Web")):
+                    if str(device).startswith(prefix):
+                        name = label
+                        break
             c.execute(
                 "INSERT INTO sync_leases(account_id, cid, device, device_name, turn, taken_at, expires_at) "
                 "VALUES (?,?,?,?,?,?,?) ON CONFLICT(account_id, cid) DO UPDATE SET "
@@ -684,6 +710,9 @@ class SyncStore:
                     continue
                 text, truncated = cut_text(msg.get("text"))
                 seq = self._next_seq(c, account_id)
+                # A message may name its own device: the bot publishes a Telegram turn as
+                # `tg-…` and a MAX turn as `max-…`, while the conversation stays the bot's.
+                msg_device = str(msg.get("device") or device)[:80]
                 c.execute(
                     "INSERT INTO sync_messages(account_id, mid, cid, seq, device, role, text, truncated, attachments, created_at, deleted, deleted_at) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -692,7 +721,7 @@ class SyncStore:
                         mid,
                         cid,
                         seq,
-                        device,
+                        msg_device,
                         role,
                         "" if deleted else text,
                         0 if deleted else (1 if truncated else 0),

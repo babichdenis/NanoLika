@@ -134,7 +134,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
-from . import __version__, catalog_routes, model_pricing
+from . import __version__, catalog_routes, model_pricing, s3_files
 from . import client as client_info
 from . import search as web_search
 from .browser_auth import SESSION_COOKIE, browser_marker, browser_sign_in
@@ -1925,6 +1925,41 @@ def create_app(
             content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": {"charged": charged}},
             headers={"x-nanomuse-charged": str(charged)},
         )
+
+    @app.post("/v1/attachments")
+    async def attachments(caller: Caller = Depends(caller_dep), file: UploadFile = File(...)) -> dict:
+        """Вложение из веб-клиента: файл ложится в общий бакет, наружу — presigned-ссылка.
+
+        Ссылка идёт в тексте сообщения, поэтому её получают и другие устройства, и
+        мессенджеры: бот скачивает объект и отправляет его в чат файлом.
+        """
+        if not s3_files.enabled(settings):
+            raise CloudError(503, "attachments_unconfigured", "File storage is not configured on this relay")
+        name = (file.filename or "file")[:200]
+        mime = (file.content_type or "application/octet-stream")[:100]
+        data = await file.read(settings.max_request_bytes + 1)
+        if len(data) > settings.max_request_bytes:
+            raise CloudError(413, "too_large", "The file is larger than this relay accepts")
+        allowed = mime.startswith(("image/", "text/")) or mime in {
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }
+        if not allowed:
+            raise CloudError(400, "bad_type", "Attach an image or a text document")
+        try:
+            key, url = await s3_files.store(settings, data, mime, name)
+        except Exception as exc:  # noqa: BLE001 — the vendor's words stay out of the answer
+            logging.getLogger("nanomuse_cloud.api").warning("attachments: S3 refused the file: %s", exc)
+            raise CloudError(502, "storage_unavailable", "File storage did not accept the file") from exc
+        return {
+            "name": name,
+            "mime": mime,
+            "size": len(data),
+            "key": key,
+            "url": url,
+            "expires_in": settings.s3_link_seconds,
+        }
 
     # -- звук: озвучка текста и распознавание записи -------------------------------------------
     # Кабинет и будущие клиенты говорят на языке OpenAI: POST /v1/audio/speech превращает

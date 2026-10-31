@@ -1,6 +1,12 @@
 /* Shared metadata everywhere; bodies and read marks belong to the selected visible chat. */
 export class ChatSync {
- constructor({session,getChats,setChats,current,save,remove,onChange}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.account='';let id;try{id=localStorage.getItem('nl.web.chat-client');if(!id){id='web-'+crypto.randomUUID();localStorage.setItem('nl.web.chat-client',id);}}catch{id='web-'+crypto.randomUUID();}this.device=id;this.catalogETag='';this.catalogRows=[];this.started=false;this.socket=null;this.socketOpen=false;this.reconnectTimer=null;this.wakeTimer=null;this.pollTimer=null;this.retry=0;}
+ constructor({session,getChats,setChats,current,save,remove,onChange}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.account='';let channel='web';try{channel=localStorage.getItem('nl.web.channel')||'web';}catch{}
+  if(!['telegram','max','web'].includes(channel))channel='web';
+  this.channel=channel;
+  const prefix=channel==='telegram'?'tg':channel==='max'?'max':'web';
+  this.deviceName=channel==='telegram'?'Telegram':channel==='max'?'MAX':'Web';
+  const deviceKey='nl.web.chat-client.'+prefix;
+  let id;try{id=localStorage.getItem(deviceKey);if(!id&&prefix==='web')id=localStorage.getItem('nl.web.chat-client');if(!id){id=prefix+'-'+crypto.randomUUID();localStorage.setItem(deviceKey,id);}}catch{id=prefix+'-'+crypto.randomUUID();}this.device=id;this.catalogETag='';this.catalogRows=[];this.started=false;this.socket=null;this.socketOpen=false;this.reconnectTimer=null;this.wakeTimer=null;this.pollTimer=null;this.retry=0;}
  run(fn){const task=this.queue.then(fn);this.queue=task.catch(()=>{});return task;}
  async request(path,options={},session){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(path,{...options,signal:controller.signal,cache:'no-store',headers:{...(options.headers||{}),Authorization:'Bearer '+session.key,'Content-Type':'application/json'}});if(r.headers.get('etag'))this.catalogETag=r.headers.get('etag');if(r.status===304||r.status===204)return null;const data=await r.json();if(!r.ok||data?.ok===false){const e=new Error(data?.error?.message||'Chat sync unavailable');e.status=r.status;e.code=data?.error?.code||data?.reason;throw e;}return data;}finally{clearTimeout(timer);}}
  valid(session){const now=this.session();return now?.key===session?.key&&now?.owner===session?.owner;}
@@ -11,7 +17,9 @@ export class ChatSync {
  saveMain(session,cid){try{localStorage.setItem(this.mainKey(session.owner),cid);}catch{}}
  async upload(chat,session,{force=false,adopted=false}={}){
   if(chat.deleted||chat.local||!session?.key||chat.owner!==session.owner||!this.valid(session))return;
-  const pending=chat.messages.filter(m=>!m.shared&&m.content&&(m.role==='user'||!m.interrupted));
+  /* An interrupted answer still holds what the model said before the stream broke:
+   publish it too, otherwise the other devices see the question and never the reply. */
+  const pending=chat.messages.filter(m=>!m.shared&&m.content);
   if(!pending.length&&!chat.syncCid&&!force)return;
   const fresh=!chat.syncCid;
   if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}
@@ -25,7 +33,10 @@ export class ChatSync {
   await this.save(chat);
   for(let offset=0;offset<Math.max(1,pending.length);offset+=200){
    if(!this.valid(session))return;
-   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:m.content,created_at:Math.floor(m.at/1000),attachments:[]}))};
+   /* Файлы остаются в браузере, но в тексте для других устройств и мессенджеров
+      честно сказано, что было вложено: иначе там видно только подпись. */
+   const syncedText=m=>{const names=(m.files||[]).map(file=>file.name).filter(Boolean);return names.length?`${m.content||''}${m.content?'\n\n':''}[вложение: ${names.join(', ')}]`:(m.content||'')};
+   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:syncedText(m),created_at:Math.floor(m.at/1000),attachments:(m.files||[]).map(file=>({name:file.name,mime:file.mime,size:file.size,url:file.url||''}))}))};
    const result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);
    const clash=(result.rejected||[]).find(r=>r.reason==='main_exists'&&r.cid_main&&r.cid===chat.syncCid);
    if(clash&&!adopted){
@@ -74,7 +85,7 @@ export class ChatSync {
   const session=this.session();if(!session?.key||!session.owner){this.scheduleReconnect(15000);return;}
   let socket;try{socket=new WebSocket(new URL('/v1/hub',location.origin).href.replace(/^http/,'ws'));}catch{this.scheduleReconnect(30000);return;}
   this.socket=socket;
-  socket.onopen=()=>{if(this.socket!==socket)return;this.socketOpen=true;this.retry=0;socket.send(JSON.stringify({type:'hello',key:session.key,device:{id:this.device,name:'nanoLika Web',kind:'web',actions:[]}}));this.refresh().catch(()=>{});};
+  socket.onopen=()=>{if(this.socket!==socket)return;this.socketOpen=true;this.retry=0;socket.send(JSON.stringify({type:'hello',key:session.key,device:{id:this.device,name:this.deviceName,kind:'web',actions:[]}}));this.refresh().catch(()=>{});};
   socket.onmessage=event=>{let frame;try{frame=JSON.parse(event.data);}catch{return;}if(frame.type==='sync'){this.wake();}else if(frame.type==='working'){this.onChange({working:frame});}else if(frame.type==='error'&&['bad_key','signed_out'].includes(frame.code)){/* the key is gone: stop asking */this.stop();}};
   socket.onerror=()=>{};
   socket.onclose=()=>{if(this.socket===socket)this.socketOpen=false;this.scheduleReconnect();};
