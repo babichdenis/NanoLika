@@ -122,6 +122,10 @@ class ConversationSync:
             "enabled": bool(svc.settings.cloud.sync),
             # C9: this device's side chats too (and the other devices'); off = main only
             "side_chats": bool(svc.settings.sync.side_chats),
+            # C9/S3: the side-chat switch went on and the older history is not read yet;
+            # the second value is the last page read, so a restart resumes instead of repeating
+            "backfill": False,
+            "backfill_cursor": 0,
             "cids": {},  # thread id → cid
             "titles": {},  # thread id → the title last pushed
             # C10: thread id → the account (`account.id`) it was synced with; absent = none
@@ -168,7 +172,15 @@ class ConversationSync:
         except (OSError, ValueError):
             return
         if isinstance(data, dict):
-            for key in ("account_id", "cursor", "enabled", "side_chats", "catalog_mode"):
+            for key in (
+                "account_id",
+                "cursor",
+                "enabled",
+                "side_chats",
+                "catalog_mode",
+                "backfill",
+                "backfill_cursor",
+            ):
                 if key in data:
                     self.state[key] = data[key]
             loaded = data.get("cursors")
@@ -512,12 +524,17 @@ class ConversationSync:
 
     def set_side_chats(self, on: bool) -> dict[str, Any]:
         """Data controls → *Also sync side chats* (C9). On: this device's side chats go up
-        (oldest first, with the next push) and one pull from zero with ``scope=all&tail=300``
-        brings the other devices'. Off: they stop moving; what was synced stays."""
+        (oldest first, with the next push) and the account's history is read once from the
+        start, page by page — a ``tail`` would leave everything older than its limit behind
+        forever (S3). Off: they stop moving; what was synced stays."""
         on = bool(on)
         if on == self.side_chats:
             return self.view()
         self.state["side_chats"] = on
+        # the flag outlives the process: a switch thrown while signed out, or a backfill
+        # cut by a restart, continues on the next pull instead of quietly staying a tail
+        self.state["backfill"] = on
+        self.state["backfill_cursor"] = 0
         self._save()
         if on and self.active:
             self._pull_from_zero = True
@@ -1152,12 +1169,23 @@ class ConversationSync:
             self.last_error = ""
             return lazy
         applied = 0
-        # C9: a fresh device (cursor 0) asks for the tail of its scope, not the whole store;
-        # side chats just turned on ask once more from zero, for everything, as a tail too
-        from_zero = self._pull_from_zero or self.cursor == 0
+        # C9: a fresh device (cursor 0) asks for the tail of its scope, not the whole store.
+        # S3: side chats just turned on ask for everything from zero, without a tail — the
+        # old cursor says nothing about rows the main-only scope never handed out.
+        backfill = bool(self.state.get("backfill"))
+        from_zero = (not backfill) and (self._pull_from_zero or self.cursor == 0)
         self._pull_from_zero = False
+        try:
+            start = max(0, int(self.state.get("backfill_cursor") or 0))
+        except (TypeError, ValueError):
+            start = 0
+        since = start if backfill else (0 if from_zero else self.cursor)
+        if backfill:
+            logger.info("sync: side chats on, reading the account's history from the start")
         for _page in range(MAX_ROUNDS):
-            if from_zero:
+            if backfill:
+                out = await self.client.changes(since, PAGE, scope=self.scope)
+            elif from_zero:
                 out = await self.client.changes(0, PAGE, scope=self.scope, tail=TAIL)
                 from_zero = False
                 skipped = int(out.get("skipped") or 0)
@@ -1168,7 +1196,7 @@ class ConversationSync:
                         skipped,
                     )
             else:
-                out = await self.client.changes(self.cursor, PAGE, scope=self.scope)
+                out = await self.client.changes(since, PAGE, scope=self.scope)
             # The page's conversations first, then its messages, each in seq order: a rename
             # puts a conversation's seq above its messages, and the relay sends every
             # message's conversation along with the page so none of them is an orphan.
@@ -1187,8 +1215,19 @@ class ConversationSync:
             finally:
                 self._applying = False
             self._advance_cursor(out.get("cursor"))
+            try:
+                since = max(since, int(out.get("cursor") or 0))
+            except (TypeError, ValueError):
+                pass
+            if backfill:
+                self.state["backfill_cursor"] = since
             self._save()
             if not out.get("more"):
+                if backfill:
+                    self.state["backfill"] = False
+                    self.state["backfill_cursor"] = 0
+                    self._save()
+                    logger.info("sync: side chats backfilled; the older history is here")
                 break
         self.last_pull_at = now_iso()
         self.last_error = ""

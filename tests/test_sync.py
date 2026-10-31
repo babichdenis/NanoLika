@@ -917,9 +917,13 @@ def test_sync_state_survives_a_restart(settings: Settings, tmp_path: Path) -> No
     service.sync.state["cids"][MAIN_THREAD] = "abc"
     service.sync.state["cursor"] = 7
     service.sync.state["cursors"] = {"main": 7, "all": 7}
+    service.sync.state["backfill"] = True
+    service.sync.state["backfill_cursor"] = 250
     service.sync._save()
     again = MuseService(settings, llm=MockLLM([]))
     assert again.sync.cid_of(MAIN_THREAD) == "abc" and again.sync.cursor == 7
+    assert again.sync.state["backfill"] is True
+    assert again.sync.state["backfill_cursor"] == 250
     assert again.sync.thread_of("abc") is again.threads[MAIN_THREAD]
 
 
@@ -994,8 +998,9 @@ def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -
     n_pulls = len(relay.pulls)
     st = client.put("/api/sync/state", json={"side_chats": True}).json()
     assert st["side_chats"] is True and service.sync.state["side_chats"] is True
-    # one pull from zero, everything, as a tail — the phone's side chat is here now
-    bootstrap = {"since": 0, "limit": 500, "scope": "all", "tail": 300}
+    # one full read from zero, no tail — the phone's side chat is here now, and nothing
+    # older than a tail's limit is left behind on the relay (S3)
+    bootstrap = {"since": 0, "limit": 500, "scope": "all", "tail": 0}
     # A main-only poll can already be in flight when the settings request arrives.
     # Wait for the transition's own pull rather than whichever request finishes first.
     wait_for(lambda: bootstrap in relay.pulls[n_pulls:])
@@ -1020,6 +1025,40 @@ def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -
     assert client.put("/api/sync/state", json={}).status_code == 400
     again = MuseService(settings=service.settings, llm=MockLLM([]))
     assert again.sync.side_chats is False
+
+
+def test_turning_side_chats_on_backfills_history_older_than_the_tail(main_only) -> None:
+    """S3: the switch used to ask for the newest 300 rows; everything older in a side chat
+    stayed on the relay forever. The backfill reads from zero, page by page, without a tail."""
+    client, service, llm, relay = main_only
+    wait_for(lambda: relay.pulls)
+    theirs = str(uuid.uuid4())
+    relay.add_conversation(theirs, "side", "Long phone side")
+    for i in range(700):
+        relay.add_message(theirs, "user", f"side {i:04d}")
+    client.post("/api/sync/pull")
+    assert "Long phone side" not in [t["title"] for t in client.get("/api/threads").json()]
+    n_pulls = len(relay.pulls)
+    client.put("/api/sync/state", json={"side_chats": True})
+    wait_for(
+        lambda: "Long phone side"
+        in [t["title"] for t in client.get("/api/threads").json()]
+    )
+    tid = next(
+        t["id"]
+        for t in client.get("/api/threads").json()
+        if t["title"] == "Long phone side"
+    )
+    wait_for(lambda: service.sync.state["backfill"] is False)
+    assert service.sync.state["backfill_cursor"] == 0
+    events = client.get(f"/api/threads/{tid}/events?limit=1000").json()["events"]
+    texts = [e["text"] for e in events if e.get("type") == "user"]
+    assert texts[0] == "side 0000" and texts[-1] == "side 0699"
+    assert len(texts) == 700
+    all_pulls = [p for p in relay.pulls[n_pulls:] if p["scope"] == "all"]
+    assert all_pulls[0] == {"since": 0, "limit": 500, "scope": "all", "tail": 0}
+    assert any(p["since"] == 500 for p in all_pulls)
+    wait_for(lambda: service.sync.state["backfill"] is False)
 
 
 def test_working_goes_up_with_the_turn_and_comes_down_from_the_hub(main_only) -> None:

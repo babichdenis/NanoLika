@@ -1006,15 +1006,15 @@ export class SyncEngine {
 
   /**
    * "Also sync side chats" (C9), this device's setting. On: the side chats here go up (oldest
-   * first, as the history did) after one pull of the account's newest side turns
-   * (`since=0&scope=all&tail=300`, idempotent by mid and cid). Off: side chats stop going
-   * up and coming down; what was synced stays where it is.
+   * first, as the history did) after one full read of the account from zero, page by page —
+   * a tail would leave everything older than its limit in a side chat behind forever (S3).
+   * Off: side chats stop going up and coming down; what was synced stays where it is.
    */
   async setSideChats(on: boolean): Promise<SyncView> {
     if (on === this.state.sideChats) return this.view()
     this.state.sideChats = on
     await this.save()
-    if (on) void this.pullTail().then(() => this.pushAllSoon())
+    if (on) void this.pullFull().then(() => this.pushAllSoon())
     this.changed()
     return this.view()
   }
@@ -1447,8 +1447,12 @@ export class SyncEngine {
 
   /** What the other devices pushed since our cursor, applied in order; how many rows. One at a time. */
   pull(tail = false): Promise<number> {
+    return this.pullMode(tail ? 'tail' : 'normal')
+  }
+
+  private pullMode(mode: 'normal' | 'tail' | 'full'): Promise<number> {
     const run = (): Promise<number> => {
-      const p = this.pullNow(tail)
+      const p = this.pullNow(mode)
         .catch((error: unknown) => {
           this.noteError(error)
           throw error
@@ -1462,9 +1466,14 @@ export class SyncEngine {
     return this.pulling ? this.pulling.then(run, run) : run()
   }
 
-  /** The side-chat switch went on: the account's newest side turns, once, from the start (C9). */
+  /** The chat's cloud went on: the account's newest turns, once, from the start (C9). */
   private pullTail(): Promise<number> {
-    return this.pull(true).catch(() => 0)
+    return this.pullMode('tail').catch(() => 0)
+  }
+
+  /** The side-chat switch went on: the whole account from zero, page by page (S3). */
+  private pullFull(): Promise<number> {
+    return this.pullMode('full').catch(() => 0)
   }
 
   private syncPaused(sessionId: string): boolean { return this.state.clouds[sessionId] === 'local' }
@@ -1540,7 +1549,7 @@ export class SyncEngine {
     return applied
   }
 
-  private async pullNow(tail: boolean): Promise<number> {
+  private async pullNow(mode: 'normal' | 'tail' | 'full'): Promise<number> {
     if (!(await this.active())) return 0
     const token = await this.options.token()
     if (!token) return 0
@@ -1552,10 +1561,12 @@ export class SyncEngine {
     const notes = new Map<string, RemoteLine[]>()
     const scope = this.state.sideChats || Object.entries(this.state.clouds).some(([sid, mark]) => mark !== 'local' && sid !== this.state.mainSession) ? 'all' : 'main'
     const cursors = this.state.cursors ?? { main: 0, all: this.state.cursor }
+    let since = mode === 'normal' ? (cursors[scope] ?? this.state.cursor) : 0
     for (let page = 0; page < 50; page++) {
-      // the first pull after sign-in asks for the newest 300 of the scope (C9): the chat shows before the history
-      const since = tail ? 0 : (cursors[scope] ?? this.state.cursor)
-      const out = await this.options.relay.changes(token, since, PAGE, scope, since === 0 ? TAIL : 0)
+      // the first pull after sign-in (and a chat's cloud going on) asks for the newest 300
+      // of the scope (C9); a full backfill asks from zero without a tail (S3)
+      const tail = mode !== 'full' && since === 0 ? TAIL : 0
+      const out = await this.options.relay.changes(token, since, PAGE, scope, tail)
       // The page's conversations first, then its messages, each in seq order: a rename puts
       // a conversation's seq above its messages, and the relay sends every message's
       // conversation along with the page so none of them is an orphan.
@@ -1571,7 +1582,10 @@ export class SyncEngine {
       this.state.cursors = cursors
       this.state.cursor = Math.max(cursors.main ?? 0, cursors.all ?? 0)
       await this.save()
-      if (!out.more || tail) break
+      if (!out.more || mode === 'tail') break
+      // A page that says "more" without moving forward would spin forever.
+      if (out.cursor <= since) break
+      since = out.cursor
     }
     this.lastError = ''
     for (const [sessionId, lines] of notes) {

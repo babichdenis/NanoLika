@@ -529,13 +529,13 @@ test('C9: side chats stay local by default — only the main conversation goes u
   e.turnEnded('s-side')
   await tick(30)
   assert.equal(relay.pushes.length, pushes)
-  // on: one pull from zero for the newest side turns, then this device's side chats go up oldest first
+  // on: one full read from zero (no tail — S3), then this device's side chats go up oldest first
   relay.gets.length = 0
   const on = await e.setSideChats(true)
   assert.equal(on.sideChats, true)
   assert.equal(saved().sideChats, true)
   await until(() => [...relay.msgs.values()].some((m) => m.text === 'side question'))
-  assert.deepEqual(relay.gets[0], { since: 0, limit: 500, scope: 'all', tail: TAIL })
+  assert.deepEqual(relay.gets[0], { since: 0, limit: 500, scope: 'all', tail: 0 })
   assert.equal(sessions.created, 1)
   const sid = [...sessions.rows.keys()].find((id) => sessions.rows.get(id).title === 'Dinner plans')
   assert.deepEqual(sessions.remote(sid).map((l) => l.text), ['book a table', 'Booked for 7'])
@@ -560,6 +560,31 @@ test('C9: side chats stay local by default — only the main conversation goes u
   await e.accountChanged('acct-2')
   assert.equal(e.state.sideChats, false)
   assert.equal(migrate({ accountId: 'a', cursor: 1, enabled: true, mainSession: '', cids: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }).sideChats, false)
+  e.stop()
+})
+
+test('C9/S3: turning side chats on reads the whole history from zero, not only a 300-row tail', async (t) => {
+  const relay = fakeRelay()
+  relay.add('old-side', 'side', 'Long before')
+  for (let i = 0; i < 700; i++) relay.say('old-side', 'user', `side ${String(i).padStart(4, '0')}`)
+  const sessions = fakeSessions()
+  const { engine: e } = engine(relay, sessions, { sideChats: false })
+  t.after(() => e.stop())
+  await e.start()
+  await until(() => e.state.cursor === relay.seq)
+  assert.ok(![...sessions.rows.values()].some((r) => r.title === 'Long before'))
+  relay.gets.length = 0
+  await e.setSideChats(true)
+  await until(() => [...sessions.rows.values()].some((r) => r.title === 'Long before'))
+  const sid = [...sessions.rows.entries()].find(([, r]) => r.title === 'Long before')?.[0]
+  assert.ok(sid)
+  await until(() => sessions.remote(sid).length === 700)
+  const lines = sessions.remote(sid)
+  assert.equal(lines.length, 700)
+  assert.equal(lines[0].text, 'side 0000')
+  assert.equal(lines.at(-1).text, 'side 0699')
+  assert.deepEqual(relay.gets[0], { since: 0, limit: 500, scope: 'all', tail: 0 })
+  assert.ok(relay.gets.some((g) => g.since === 500))
   e.stop()
 })
 
