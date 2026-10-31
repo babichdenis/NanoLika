@@ -21,6 +21,7 @@ const LABELS = {
 };
 
 const SPLIT_KEY = "nm.providers.split";
+const COL_WIDTH_KEY = "nm.providers.col-widths";
 
 let ROOT = null;
 let API = null;
@@ -31,6 +32,7 @@ let loading = false;
 let error = "";
 let timer = null;
 let updatedAt = 0;
+let COL_WIDTHS = null;
 
 const $ = (id) => (ROOT ? ROOT.querySelector("#" + id) : null);
 const el = (tag, cls, text) => {
@@ -331,6 +333,97 @@ function setupSplit() {
   });
 }
 
+const savedWidths = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || "null");
+    const count = ROOT ? ROOT.querySelectorAll("#pt-models thead th").length : 0;
+    if (Array.isArray(raw) && raw.length === count && raw.every((value) => Number.isFinite(Number(value)) && Number(value) >= 48)) {
+      return raw.map((value) => Math.round(Number(value)));
+    }
+  } catch (_) { /* private mode */ }
+  return null;
+};
+
+function tableCols() {
+  return [...(ROOT ? ROOT.querySelectorAll("#pt-models colgroup col") : [])];
+}
+
+function applyColumnWidths() {
+  const table = $("pt-models");
+  const cols = tableCols();
+  if (!table || !cols.length) return;
+  if (!COL_WIDTHS) {
+    cols.forEach((col) => { col.style.width = ""; });
+    table.style.width = "";
+    return;
+  }
+  let total = 0;
+  cols.forEach((col, index) => {
+    const width = COL_WIDTHS[index];
+    col.style.width = width ? `${width}px` : "";
+    if (width) total += width;
+  });
+  table.style.width = total ? `${total}px` : "";
+}
+
+function startColumnResize(event, index) {
+  const table = $("pt-models");
+  if (!table) return;
+  const headers = [...table.querySelectorAll("thead th")];
+  if (!COL_WIDTHS) COL_WIDTHS = headers.map((th) => Math.round(th.getBoundingClientRect().width));
+  if (!COL_WIDTHS[index]) return;
+  const grip = event.currentTarget;
+  const startX = event.clientX;
+  const startWidth = COL_WIDTHS[index];
+  try { grip.setPointerCapture?.(event.pointerId); } catch (_) { /* synthetic or gone */ }
+  document.body.classList.add("mt-col-resizing");
+  const move = (moveEvent) => {
+    COL_WIDTHS[index] = Math.max(48, Math.min(720, Math.round(startWidth + moveEvent.clientX - startX)));
+    applyColumnWidths();
+  };
+  const stop = () => {
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", stop);
+    grip.removeEventListener("pointercancel", stop);
+    document.body.classList.remove("mt-col-resizing");
+    try { localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(COL_WIDTHS)); } catch (_) { /* private mode */ }
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", stop);
+  grip.addEventListener("pointercancel", stop);
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function setupColumnResize() {
+  const table = $("pt-models");
+  if (!table) return;
+  let group = table.querySelector("colgroup");
+  if (!group) {
+    group = el("colgroup");
+    table.prepend(group);
+  }
+  const headers = [...table.querySelectorAll("thead th")];
+  group.replaceChildren(...headers.map(() => el("col")));
+  headers.forEach((th, index) => {
+    if (index === headers.length - 1 || th.querySelector(".mt-col-resize")) return;
+    const grip = el("span", "mt-col-resize");
+    grip.title = "Потяните, чтобы изменить ширину; двойной клик — сбросить";
+    grip.setAttribute("aria-hidden", "true");
+    grip.onpointerdown = (event) => startColumnResize(event, index);
+    grip.ondblclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      COL_WIDTHS = null;
+      try { localStorage.removeItem(COL_WIDTH_KEY); } catch (_) { /* private mode */ }
+      applyColumnWidths();
+    };
+    th.append(grip);
+  });
+  COL_WIDTHS = savedWidths();
+  applyColumnWidths();
+}
+
 async function load(force = true) {
   if (loading) return;
   loading = true;
@@ -403,7 +496,8 @@ const TEMPLATE = `
       <a class="pt-link" id="pt-open-models" href="#models">Открыть в таблице моделей →</a>
     </div>
     <div class="mt-wrap">
-      <table>
+      <table id="pt-models">
+        <colgroup></colgroup>
         <thead><tr>
           <th>Модель</th>
           <th>Тип</th>
@@ -427,6 +521,7 @@ export function mount(root, ctx) {
   const button = $("pt-refresh");
   if (button) button.onclick = () => void load(true);
   setupSplit();
+  setupColumnResize();
   splitVisible(false);
   if (DATA) draw();
   void load(true);
