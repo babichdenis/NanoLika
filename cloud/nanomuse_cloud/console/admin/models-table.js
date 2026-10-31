@@ -69,6 +69,14 @@ function fmt(value, digits = 2) {
   return Number(value).toLocaleString("ru-RU", { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 }
 
+/** Цена без лишних нулей, но с точностью для мелких ставок (0,0146). */
+function priceText(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  const digits = number > 0 && number < 0.1 ? 4 : number > 0 && number < 1 ? 3 : 2;
+  return fmt(number, digits);
+}
+
 function ctxText(value) {
   const n = Number(value) || 0;
   if (!n) return "—";
@@ -97,10 +105,15 @@ function referenceModel(group) {
   return group.models.find((model) => model.reference) || null;
 }
 
-function usdText(value, digits = 3) {
+function usdNumber(value, digits = 3) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return "—";
-  return "$" + number.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  return number.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+}
+
+function usdText(value, digits = 3) {
+  const text = usdNumber(value, digits);
+  return text === "—" ? text : "$" + text;
 }
 
 function officialText(group) {
@@ -174,14 +187,28 @@ function groupLabel(id) {
   return found ? found[1] : "Другое";
 }
 
-/** Наша закупка: текст — за 1M токенов, медиа — за штуку/секунду/1000 знаков. */
+/** Наша закупка: в ячейке только числа, размерность — в шапке и подсказке. */
 function purchaseText(model) {
   const cost = model.cost || {};
-  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ / картинка`;
-  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ / секунда`;
-  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ / 1000 знаков`;
+  if (cost.rub_image != null) return fmt(cost.rub_image);
+  if (cost.rub_second != null) return fmt(cost.rub_second);
+  if (cost.rub_speech != null) return fmt(cost.rub_speech);
+  if (cost.rub_minute != null) return fmt(cost.rub_minute);
   if (cost.rub_in != null || cost.rub_out != null) return `${fmt(cost.rub_in)} / ${fmt(cost.rub_out)}`;
   return "—";
+}
+
+/** Полная размерность закупки — во всплывающей подсказке, а не в каждой ячейке. */
+function purchaseTitle(model) {
+  const cost = model.cost || {};
+  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение`;
+  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду`;
+  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков`;
+  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту`;
+  if (cost.rub_in != null || cost.rub_out != null) {
+    return `Закупка выбранного маршрута: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M`;
+  }
+  return "Закупка неизвестна: поставщик не дал цену";
 }
 
 /** Наша цена клиенту: у текста ставка за 1M, у медиа — подпись тарифа. */
@@ -203,14 +230,84 @@ function offersOf(model) {
   return (model.routing && model.routing.offers) || [];
 }
 
-function bestOffer(offers) {
+/**
+ * Базовая единица медиа: поставщики считают одну и ту же работу по-разному
+ * (Polza — за 1M символов, Bothub — за 1000). Сравнивать сырые числа нельзя,
+ * поэтому сначала приводим к одной единице, а в подсказке показываем исходную.
+ */
+function mediaBaseUnit(group) {
+  const units = new Set((group.offers || []).map((offer) => String(offer.unit || "")));
+  if (group.group === "image") {
+    if (units.has("изображение")) return "изображение";
+    if (units.has("запрос")) return "запрос";
+  }
+  if (group.group === "video" && units.has("секунда")) return "секунда";
+  if (group.group === "audio") {
+    if (units.has("1000 символов") || units.has("1M символов")) return "1000 символов";
+    if (units.has("минута")) return "минута";
+  }
+  return [...units][0] || "";
+}
+
+function unitPhrase(unit) {
+  return {
+    секунда: "секунду",
+    минута: "минуту",
+  }[unit] || unit;
+}
+
+function mediaUnitPrice(offer, base) {
+  const price = Number(offer.price_rub);
+  const unit = String(offer.unit || "");
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (unit === base) return price;
+  if (base === "1000 символов" && unit === "1M символов") return price / 1000;
+  if (base === "изображение" && unit === "запрос") return price;
+  if (base === "запрос" && unit === "изображение") return price;
+  return null;
+}
+
+function bestOffer(group) {
+  const media = group.group !== "text" && group.group !== "code";
+  const base = media ? mediaBaseUnit(group) : "";
   let best = null;
-  for (const offer of offers || []) {
-    const price = offerEstimate(offer);
-    if (price === null) continue;
-    if (!best || price < offerEstimate(best)) best = offer;
+  let bestPrice = null;
+  for (const offer of group.offers || []) {
+    // Сравниваем ровно то число, которое печатаем: вход для текста, цену за
+    // базовую единицу для медиа. Иначе «дешевле всех» выбирался бы по оценке
+    // запроса, а в ячейке стояла цена входа другого поставщика.
+    const price = media ? mediaUnitPrice(offer, base) : Number(offer.input_rub) || null;
+    if (price === null || price <= 0) continue;
+    if (bestPrice === null || price < bestPrice) {
+      best = offer;
+      bestPrice = price;
+    }
   }
   return best;
+}
+
+function bestPriceOf(group, offer) {
+  const media = group.group !== "text" && group.group !== "code";
+  return media ? mediaUnitPrice(offer, mediaBaseUnit(group)) : Number(offer.input_rub);
+}
+
+/** Поставщик и полная размерность — в подсказке; в ячейке только число. */
+function bestTitle(group, offer) {
+  const media = group.group !== "text" && group.group !== "code";
+  if (media) {
+    const base = mediaBaseUnit(group);
+    const price = mediaUnitPrice(offer, base);
+    const lines = [`Дешевле всех: ${providerLabel(offer.provider)} · ${priceText(price)} ₽ за ${unitPhrase(base)}`];
+    if (String(offer.unit || "") !== base) {
+      lines.push(`В прайсе: ${priceText(offer.price_rub)} ₽ за ${unitPhrase(offer.unit)}`);
+    }
+    for (const other of group.offers) {
+      if (other === offer) continue;
+      lines.push(`${providerLabel(other.provider)}: ${priceText(other.price_rub)} ₽ за ${unitPhrase(other.unit || "единицу")}`);
+    }
+    return lines.join("\n");
+  }
+  return `Дешевле всех: ${providerLabel(offer.provider)} · вход ${fmt(offer.input_rub)} ₽/1M · выход ${fmt(offer.output_rub)} ₽/1M`;
 }
 
 /** Одна строка — одно название: закреплённая версия и её latest-алиас склеиваются. */
@@ -285,12 +382,12 @@ const COLUMNS = [
   { key: "kind", label: "Тип", numeric: false },
   { key: "firstSeen", label: "Появилась", numeric: true },
   { key: "context", label: "Контекст", numeric: true },
-  { key: "purchase", label: "Закупка", sub: "вход / выход", numeric: true },
-  { key: "client", label: "Клиенту", sub: "вход / выход", numeric: true },
+  { key: "purchase", label: "Закупка", sub: "₽/1M · за ед.", numeric: true },
+  { key: "client", label: "Клиенту", sub: "₽/1M · медиа в токенах", numeric: true },
   { key: "official", label: "Официально", sub: "$ за 1M", numeric: true },
   { key: "markupIn", label: "Наценка вход", numeric: true },
   { key: "markupOut", label: "Наценка выход", numeric: true },
-  { key: "best", label: "Дешевле всех", numeric: true },
+  { key: "best", label: "Дешевле всех", sub: "вход, ₽/1M · за ед.", numeric: true },
   { key: "offers", label: "Предложений", numeric: true },
 ];
 
@@ -329,8 +426,8 @@ function columnText(group, key) {
     case "markupIn": return ratioText(model.ratio?.in);
     case "markupOut": return ratioText(model.ratio?.out);
     case "best": {
-      const best = bestOffer(group.offers);
-      return best ? `${fmt(best.input_rub)} ₽ ${providerLabel(best.provider)}` : "—";
+      const best = bestOffer(group);
+      return best ? `${priceText(bestPriceOf(group, best))} ${providerLabel(best.provider)}` : "—";
     }
     case "offers": return String(group.offers.length);
     default: return "";
@@ -348,7 +445,7 @@ function columnNumber(group, key) {
     case "context": return Number(model.context) || null;
     case "purchase": {
       const cost = model.cost || {};
-      return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? null;
+      return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? cost.rub_minute ?? null;
     }
     case "client": return Number(model.sell?.rub_in) || null;
     case "official": {
@@ -358,8 +455,8 @@ function columnNumber(group, key) {
     case "markupIn": return Number(model.ratio?.in) > 0 ? Number(model.ratio.in) : null;
     case "markupOut": return Number(model.ratio?.out) > 0 ? Number(model.ratio.out) : null;
     case "best": {
-      const best = bestOffer(group.offers);
-      return best ? Number(best.input_rub) : null;
+      const best = bestOffer(group);
+      return best ? bestPriceOf(group, best) : null;
     }
     case "offers": return group.offers.length;
     default: return null;
@@ -638,7 +735,7 @@ function drawModels(rows) {
   const frag = document.createDocumentFragment();
   for (const group of rows) {
     const model = group.primary;
-    const best = bestOffer(group.offers);
+    const best = bestOffer(group);
     const offers = group.offers;
     const active = group.models.some((item) => item.id === state.sel);
     const tr = el("tr", "mt-row" + (group.listed ? "" : " mt-off") + (active ? " mt-active" : ""));
@@ -681,7 +778,9 @@ function drawModels(rows) {
     }
     tr.append(contextCell);
 
-    tr.append(textCell("num", purchaseText(model)));
+    const purchaseCell = el("td", "num", purchaseText(model));
+    purchaseCell.title = purchaseTitle(model);
+    tr.append(purchaseCell);
 
     const clientCell = el("td", "num mt-client");
     clientCell.append(el("span", "mt-now", clientText(model)));
@@ -713,7 +812,7 @@ function drawModels(rows) {
     const refModel = referenceModel(group);
     const ref = refModel && refModel.reference;
     if (ref) {
-      officialCell.append(el("span", "", `${usdText(ref.input_usd)} / ${usdText(ref.output_usd)}`));
+      officialCell.append(el("span", "", `${usdNumber(ref.input_usd)} / ${usdNumber(ref.output_usd)}`));
       const status = String(ref.status || "ga");
       if (status !== "ga") {
         const label = { preview: "превью", deprecated: "устарела", sunset: "снята", beta: "бета" }[status] || status;
@@ -750,8 +849,8 @@ function drawModels(rows) {
 
     const bestCell = el("td", "mt-best");
     if (best) {
-      bestCell.append(el("b", "", `${fmt(best.input_rub)} ₽`));
-      bestCell.append(el("span", "fine", " вход · " + providerLabel(best.provider)));
+      bestCell.append(el("b", "", priceText(bestPriceOf(group, best))));
+      bestCell.title = bestTitle(group, best);
     } else {
       bestCell.append(el("span", "fine", "—"));
     }
@@ -799,7 +898,7 @@ function drawOfferHead(media) {
   if (!row) return;
   row.replaceChildren();
   const labels = media
-    ? ["Поставщик", "Модель", "Цена", "Единица", "Состояние"]
+    ? ["Поставщик", "Модель", "Цена, ₽", "Единица", "Состояние"]
     : ["Поставщик", "Модель", "Тариф", "Вход, ₽/1M", "Выход, ₽/1M", "Кэш, ₽/1M", "Контекст", "Состояние"];
   for (const label of labels) {
     const th = el("th", label.startsWith("Вход") || label.startsWith("Выход") || label.startsWith("Кэш") || label === "Цена" ? "num" : "", label);
@@ -828,9 +927,10 @@ function drawOffers() {
     const ids = group.models.map((model) => model.id).join(" · ");
     meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} предложений`;
   }
+  const base = media ? mediaBaseUnit(group) : "";
   const offers = group.offers.slice().sort((a, b) => {
-    const left = media ? Number(a.price_rub ?? Infinity) : (offerEstimate(a) ?? Infinity);
-    const right = media ? Number(b.price_rub ?? Infinity) : (offerEstimate(b) ?? Infinity);
+    const left = media ? (mediaUnitPrice(a, base) ?? Infinity) : (offerEstimate(a) ?? Infinity);
+    const right = media ? (mediaUnitPrice(b, base) ?? Infinity) : (offerEstimate(b) ?? Infinity);
     return left - right;
   });
   if (!offers.length) {
@@ -868,7 +968,7 @@ function drawOffers() {
       tr.append(el("td", "num", offer.cached_rub == null ? "—" : fmt(offer.cached_rub)));
       tr.append(el("td", "num", ctxText(offer.context_length)));
     } else {
-      tr.append(el("td", "num", `${fmt(offer.price_rub)} ₽`));
+      tr.append(el("td", "num", fmt(offer.price_rub)));
       tr.append(el("td", "mt-unit", offer.unit || "—"));
     }
     let status = "только сверка";
