@@ -274,6 +274,8 @@ function draw() {
 
     const wallet = el("td", "num");
     wallet.append(document.createTextNode(money(provider.balance)));
+    const cash = provider.balance;
+    if (cash && cash.currency !== "RUB" && cash.rub_estimate != null) wallet.append(el("div", "fine", `≈ ₽${fmt(cash.rub_estimate)}`));
     const note = walletNote(provider.balance, BAL);
     if (note) wallet.append(el("div", "fine " + note.cls, note.text));
     tr.append(wallet);
