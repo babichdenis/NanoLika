@@ -106,6 +106,7 @@ class FakeMac:
 
 
 # ------------------------------------------------------------------ pure logic
+@pytest.mark.skipif(mw.available()[0], reason="window mode is available here (pyobjc is installed)")
 def test_the_module_imports_without_pyobjc_and_says_so() -> None:
     # On Linux and Windows the reason is the platform; on a Mac without pyobjc it is the package.
     ok, why = mw.available()
@@ -376,14 +377,16 @@ async def test_open_app_sets_the_target_and_computer_target_reports(
     # computer_screen with `app` looks at that window
     look = await ComputerScreen(link=link).execute(app="Safari")
     assert look.ok and "window of Safari" in look.output
-    # without window mode (Linux, no adapter) computer_target keeps the hands on the screen
-    plain = ComputerLink(HandsSettings(enabled=True, settle_s=0.0), backend=FakeHands())
-    r = await ComputerAct(link=plain, gui=GUISettings()).execute(
-        action="computer_target", app="Notes"
-    )
-    assert r.ok and "Window mode is not available here" in r.output
-    assert "macOS" in r.output or "pyobjc" in r.output
-    assert not plain.in_window_mode()
+    # without window mode (Linux, no adapter) computer_target keeps the hands on the screen;
+    # on a Mac with pyobjc the adapter exists, and that path is covered by the fake above.
+    if not mw.available()[0]:
+        plain = ComputerLink(HandsSettings(enabled=True, settle_s=0.0), backend=FakeHands())
+        r = await ComputerAct(link=plain, gui=GUISettings()).execute(
+            action="computer_target", app="Notes"
+        )
+        assert r.ok and "Window mode is not available here" in r.output
+        assert "macOS" in r.output or "pyobjc" in r.output
+        assert not plain.in_window_mode()
 
 
 # ------------------------------------------------------------------ through the helper

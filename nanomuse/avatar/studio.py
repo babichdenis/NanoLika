@@ -78,6 +78,11 @@ CLIP_MAX_WAIT_S = 8 * 60
 # pictures in flight at once, and the pauses before a 429 is tried again
 IMAGE_AT_ONCE = 2
 IMAGE_PAUSES = (3.0, 6.0, 12.0)
+
+
+async def _pause(seconds: float) -> None:
+    """The one place the studio sleeps; tests patch this, not asyncio everywhere."""
+    await asyncio.sleep(seconds)
 # video tasks in flight at once (the provider allows an account a couple), and the pauses
 # before a refused task is submitted again
 CLIPS_AT_ONCE = 2
@@ -407,7 +412,7 @@ class AvatarStudio:
                 if r.status_code != 429 or pause is None:
                     return r
                 logger.info("image provider busy (429); again in {:.0f}s", pause)
-                await asyncio.sleep(pause)
+                await _pause(pause)
             return r  # pragma: no cover — the loop returns
 
     async def close(self) -> None:
@@ -1050,7 +1055,7 @@ class AvatarStudio:
             if cr.status_code != 429 or pause is None:
                 break
             logger.info("video provider busy (429); again in {:.0f}s", pause)
-            await asyncio.sleep(pause)
+            await _pause(pause)
         if cr.status_code >= 400:
             raise StudioError(self._http_error(cr))
         task = str(((cr.json() or {}).get("output") or {}).get("task_id") or "")

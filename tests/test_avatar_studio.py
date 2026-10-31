@@ -310,12 +310,13 @@ def test_a_busy_provider_is_waited_out_two_pictures_at_a_time(studio_server, mon
 
     real_sleep = asyncio.sleep
 
-    async def no_sleep(seconds: float) -> None:
+    async def no_pause(seconds: float) -> None:
         naps.append(seconds)
         await real_sleep(0)
 
-    # (the studio's `asyncio` is the module itself: this patches sleep everywhere for the test)
-    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    # Only the studio's own pauses are counted: background loops (the hub, the profile
+    # push, the feed) sleep too, and patching asyncio everywhere counted their naps.
+    monkeypatch.setattr(studio_mod, "_pause", no_pause)
     fake.busy = 3
     client.post("/api/threads/main/send", json={"text": "new avatar: a robot owl"})
     ev = _wait(lambda: _avatar_event(client))

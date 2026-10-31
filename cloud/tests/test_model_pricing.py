@@ -71,8 +71,11 @@ async def test_public_menu_exposes_current_retail_rates_without_account_or_provi
         assert rows["text"]["context_length"] == 200000
         assert rows["text"]["max_output"] == 10000
         for row in rows.values():
+            # `plan_locked` is not an account's data: the public menu marks what a
+            # signed-out person cannot open yet, and the site draws its lock badges from
+            # it. Everything that names a price, a provider or a key stays out.
             assert not (
-                {"price_in", "price_out", "price_image", "upstream", "provider", "api_key", "enabled", "default", "plan_locked"}
+                {"price_in", "price_out", "price_image", "upstream", "provider", "api_key", "enabled", "default"}
                 & row.keys()
             )
         assert "shelf" not in response.json()

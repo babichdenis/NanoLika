@@ -495,7 +495,10 @@ class ChannelManager(ChannelBus):
             return
         word = text.lower().strip(" .!。！")
         selected = self.picker.selected(msg.channel, msg.chat_id)
-        if selected and self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
+        # Только там, где у канала есть темы: слово без кнопки может уйти не в ту тему.
+        # В обычном чате (MAX, личка) человек отвечает словом, и это законно.
+        topic_channel = bool(getattr(self.channels.get(msg.channel), "topics_enabled", False))
+        if topic_channel and selected and self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
             await self._send(
                 msg.channel,
                 msg.chat_id,
@@ -656,6 +659,12 @@ class ChannelManager(ChannelBus):
             hit = await probe(device_id, device)
             if hit is not None:
                 return hit
+        # A new cloud chat has no computer of its own: "cloud" in the evidence is the
+        # server, not a machine, and pulling an unrelated desktop into it is wrong. A
+        # browser's id is a device the hub knows, and the fallback below is for those.
+        evidence = [item for item in preferred if item]
+        if not evidence or set(evidence) <= {"cloud"}:
+            return primary
         # A browser's id can be the thread's origin or the last answer's `via_device`:
         # it is never a computer, so the preferred list may name no computer at all.
         # Then try every online computer that advertises the shared chat, best effort.
