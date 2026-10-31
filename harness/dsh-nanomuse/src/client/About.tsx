@@ -17,8 +17,6 @@ import { DOCS_URL, ISSUES_URL, REPO_URL } from './panels.ts'
 import { Sheet } from './ui.tsx'
 import { useWindowsUpdates, updatePresentation, requestWindowsUpdate } from './windows-updates.ts'
 
-export const RELEASES_URL = 'https://github.com/nano-muse/nanoMuse/releases'
-
 interface AppInfo {
   version: string
   platform: string
@@ -135,15 +133,6 @@ export function makeAboutSheet(t: Translate, bundle: string) {
         h('div', { className: 'nm-row' },
           h('div', { className: 'nm-row-main' },
             h('span', { className: 'nm-row-title' }, t('legalLicense')),
-            h('span', { className: 'nm-row-sub nm-wrap' }, t('legalLicenseText'))))),
-      h('div', { className: 'nm-card' },
-        // the source, the docs and the issue tracker live in the Help section once; here only
-        // what belongs to this build: where the releases are
-        link(t('abReleases'), RELEASES_URL)))
+            h('span', { className: 'nm-row-sub nm-wrap' }, t('legalLicenseText'))))))
   }
-}
-
-function link(label: string, url: string, onClick: () => void = () => openLink(url)): ReactNode {
-  return h('button', { type: 'button', className: 'nm-row nm-row-button', onClick },
-    h('div', { className: 'nm-row-main' }, h('span', { className: 'nm-row-title' }, label), h('span', { className: 'nm-row-sub' }, url.replace(/^https:\/\//, ''))))
 }
