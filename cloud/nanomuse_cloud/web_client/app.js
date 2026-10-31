@@ -5,7 +5,7 @@ import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js?v=20261031-ui2';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
-import {installComposerControls} from './composer-controls.js?v=20261031-pick2';
+import {installComposerControls} from './composer-controls.js?v=20261031-pick3';
 import {installModelSheet} from './model-sheet.js?v=20261030-remote';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 // The entry bridge names the channel; a plain /web/ visit is just Web.
@@ -216,7 +216,7 @@ window.addEventListener('online',()=>{updateStatus();notice('');});window.addEve
 const chatSync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;if(current&&!rows.some(c=>c.key===current.key))current=null;},current:()=>current,save:chat=>db.save('chats',chat),remove:key=>db.remove('chats',key),onChange:change=>{renderChats();if(change?.messages)renderConversation();}});
 const channelOpener=new ConversationOpener({session:()=>session,device:chatSync.device,language:()=>lang});
 
-const composerControls=installComposerControls({form:$('composer'),message:$('message'),select:$('model-select'),refresh:$('models-refresh'),status:$('model-status'),session:()=>session,api,words:{loading:t('modelsLoading'),empty:t('modelsEmpty'),error:t('modelsError')}});
+const composerControls=installComposerControls({form:$('composer'),message:$('message'),select:$('model-select'),refresh:$('models-refresh'),status:$('model-status'),session:()=>session,api,words:{loading:t('modelsLoading'),empty:t('modelsEmpty'),error:t('modelsError')},onOtherPicked:(kind,name,ok)=>{if(!ok){notice(t('requestError'));return;}const label={image:t('pickedImage'),video:t('pickedVideo'),audio:t('pickedAudio')}[kind]||t('pickedModel');notice(label+' '+name);}});
 // Фильтры списка моделей: тип и поиск по названию. Список показывает все типы, чтобы
 // рисующие модели было видно и можно было проверить, что они есть.
 {const search=$('model-search'),kind=$('model-kind');

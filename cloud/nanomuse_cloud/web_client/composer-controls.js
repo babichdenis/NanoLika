@@ -1,8 +1,8 @@
 import {allModels,chatModel,chatModels} from './catalog.js?v=20261031-ui2';
-import {openModelPicker} from './model-picker.js?v=20261030-izob';
+import {openModelPicker} from './model-picker.js?v=20261031-pick3';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
-export function installComposerControls({form,message,select,refresh,status,session,api,words,storage=localStorage}){
- let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),selected='',owner='',pending=null,busy=false,generation=0;
+export function installComposerControls({form,message,select,refresh,status,session,api,words,onOtherPicked,storage=localStorage}){
+ let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),enabledByKind={},selected='',owner='',pending=null,busy=false,generation=0;
  let kind='chat',query='';
  const key=()=> 'nl.web.model.'+owner;
  const paint=()=>{select.disabled=busy||!rows.length;refresh.disabled=busy||!!pending;};
@@ -12,6 +12,18 @@ export function installComposerControls({form,message,select,refresh,status,sess
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-label','Выбрать модель');
  wrap.append(trigger);
  function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?m.name:'Модель';}
+ /* Картинка/видео/аудио из избранного: назначаем моделью для этого дела, текстовую
+    модель чата не трогаем. Так выбор в пикере что-то делает, а не просто серый текст. */
+ async function chooseOther(id,kind){
+  if(!id||!kind)return;
+  const list=[...(enabledByKind[kind]||[])];if(!list.includes(id))list.push(id);
+  try{
+   const data=await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{[kind]:list},default:{[kind]:id}})});
+   if(data?.shelf?.enabled&&typeof data.shelf.enabled==='object')enabledByKind=data.shelf.enabled;
+   const row=allVisible.find(m=>m.id===id);
+   onOtherPicked?.(kind,row?.name||id,true);
+  }catch{onOtherPicked?.(kind,id,false);}
+ }
  function chosenModels(){return allVisible.filter(m=>favSet.has(m.id)).sort((a,b)=>Number(b.forChat)-Number(a.forChat)||a.name.localeCompare(b.name));}
  async function saveFavourites(){try{const data=await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});const echoed=data?.shelf?.favourites;if(Array.isArray(echoed))favSet=new Set(echoed);}catch{}}
  trigger.onclick=async()=>{
@@ -19,7 +31,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
   // страницы: перед открытием перечитываем каталог, старый список оставляем,
   // если сеть не ответила.
   try{await load();}catch{}
-  openModelPicker({models:chosenModels(),favourites:favSet,selected,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
+  openModelPicker({models:chosenModels(),favourites:favSet,selected,onPickOther:chooseOther,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
  };
  const applyFilters=()=>{
   const q=query.trim().toLowerCase();
@@ -51,7 +63,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
    /* Один список избранного на весь аккаунт: только сервер, без локальных добавок.
       Раньше браузер подмешивал своё избранное из localStorage — отсюда разные списки
       в вебе, приложении и кабинете, и мусор возвращался на сервер при сохранении. */
-   const favourites=new Set(shelf?.shelf?.favourites||[]);const enabledChat=new Set((shelf?.shelf?.enabled||{}).chat||[]);
+   const favourites=new Set(shelf?.shelf?.favourites||[]);enabledByKind=(shelf?.shelf?.enabled&&typeof shelf.shelf.enabled==='object')?shelf.shelf.enabled:{};const enabledChat=new Set(enabledByKind.chat||[]);
    const preferred=allChat.filter(m=>favourites.has(m.id)||enabledChat.has(m.id));favSet=favourites;enabledSet=enabledChat;
    all=preferred.length?preferred:allChat;
    const chat=chatModels(data);

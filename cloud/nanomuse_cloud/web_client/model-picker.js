@@ -30,7 +30,7 @@ function categoryOf(model) {
 
 /**
  * openModelPicker({models, favourites, selected, title, searchPlaceholder,
- *                  onPick(id), onToggleFavourite(id, next)}) → Promise<id|null>
+ *                  onPick(id), onPickOther(id, kind), onToggleFavourite(id, next)}) → Promise<id|null>
  * Модалка сверху не влияет на разметку хоста: <dialog> живёт в top layer.
  */
 export function openModelPicker({
@@ -40,6 +40,7 @@ export function openModelPicker({
   title = "Выбор модели",
   searchPlaceholder = "Поиск модели",
   onPick,
+  onPickOther,
   onToggleFavourite,
   onManage,
   payUrl = '/web/account/?pay=1&plan=lika-plus&source=models',
@@ -155,11 +156,23 @@ export function openModelPicker({
           pick.type = "button";
           pick.className = "mp-item" + (model.id === selected ? " on" : "");
           pick.textContent = model.name;
-          pick.disabled = !model.forChat || Boolean(model.locked);
+          // Модель другого вида не отвечает текстом, но её можно назначить для её дела:
+          // картинки — рисовать, видео — снимать. Без обработчика строка остаётся серой.
+          const other = !model.forChat;
+          pick.disabled = Boolean(model.locked) || (other && !onPickOther);
           if (model.locked) pick.title = "Доступно на другом тарифе";
-          else if (!model.forChat) pick.title = "Только для изображений, видео или аудио";
+          else if (other) {
+            pick.title = onPickOther
+              ? "Назначить моделью для «" + label.toLowerCase() + "»"
+              : "Только для изображений, видео или аудио";
+          }
           pick.onclick = () => {
-            if (!model.forChat) return;
+            if (model.locked) return;
+            if (other) {
+              onPickOther?.(model.id, model.kind);
+              finish(model.id);
+              return;
+            }
             selected = model.id;
             onPick?.(model.id);
             finish(model.id);
