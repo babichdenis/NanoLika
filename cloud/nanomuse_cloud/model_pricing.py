@@ -22,6 +22,7 @@ FIELDS = {
     "second",
     "speech",
     "minute",
+    "track",
 }
 
 
@@ -44,12 +45,15 @@ def policy(cloud: Any, spec: Any) -> dict:
         "second": to_rub(spec.price_second),
         "speech": to_rub(spec.price_speech),
         "minute": to_rub(spec.price_minute),
+        "track": spec.sell_track or to_rub(spec.price_track),
     }
     rates.update(row.get("rates_rub") or {})
     return {
         "revision": int(row.get("revision") or 0),
         "rates_rub": rates,
-        "source": "operator" if row or (spec.kind == "chat" and spec.sells_at_own_rate()) else "legacy_cost",
+        "source": "operator"
+        if row or spec.sell_track or (spec.kind == "chat" and spec.sells_at_own_rate())
+        else "legacy_cost",
     }
 
 
@@ -78,7 +82,9 @@ def describe(cloud: Any, spec: Any, caller: Any = None) -> dict:
         effective_rub={k: round(v * (100 - pct) / 100, 6) for k, v in result["rates_rub"].items()},
         context_length=spec.context_length,
         max_output=spec.max_output,
-        unit={"chat": "million_tokens", "image": "image", "video": "second"}.get(spec.kind, spec.audio_kind),
+        unit={"chat": "million_tokens", "image": "image", "video": "second"}.get(
+            spec.kind, "track" if spec.audio_kind == "music" else spec.audio_kind
+        ),
         controls=controls(spec),
     )
     return result
@@ -128,6 +134,8 @@ def controls(spec: Any) -> list[dict]:
         return [{"key": "characters", "label": "Знаков текста", "type": "number", "default": 1000}]
     if spec.audio_kind == "transcribe":
         return [{"key": "seconds", "label": "Длительность, сек.", "type": "number", "default": 60}]
+    if spec.audio_kind == "music":
+        return [{"key": "tracks", "label": "Треков", "type": "number", "default": 1}]
     return []
 
 
@@ -186,6 +194,8 @@ def amount(cloud: Any, spec: Any, params: dict, caller: Any = None) -> dict:
         rub = rates["speech"] * max(1, math.ceil(num("characters", 1000) / 1000))
     elif spec.audio_kind == "transcribe":
         rub = rates["minute"] * max(1, math.ceil(num("seconds", 60) / 60))
+    elif spec.audio_kind == "music":
+        rub = rates["track"] * max(1, num("tracks", 1, 10))
     else:
         raise CloudError(400, "bad_quote", "This generation is not connected")
     pct = cloud.spend_discount_pct(caller.account_id) if caller else 0
@@ -202,6 +212,8 @@ def amount(cloud: Any, spec: Any, params: dict, caller: Any = None) -> dict:
             base_uy = round(spec.price_speech * max(1, math.ceil(num("characters", 1000) / 1000)) * 1_000_000)
         elif spec.audio_kind == "transcribe":
             base_uy = round(spec.price_minute * max(1, math.ceil(num("seconds", 60) / 60)) * 1_000_000)
+        elif spec.audio_kind == "music":
+            base_uy = round(spec.price_track * max(1, num("tracks", 1, 10)) * 1_000_000)
 
     sale_uy = cloud.discount(base_uy, caller.account_id) if caller else base_uy
     return {

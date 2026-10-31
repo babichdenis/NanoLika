@@ -133,6 +133,7 @@ def _models(settings: Any, cny_rub: float) -> list[dict]:
                 "recommended": bool(spec.recommended),
                 "listed": bool(spec.listed),
                 "available": bool(getattr(spec, "available", True)),
+                "audio_kind": getattr(spec, "audio_kind", ""),
                 "default_on": bool(spec.default_on),
                 "priced_as": getattr(spec, "priced_as", ""),
                 "context": getattr(spec, "context_length", 0),
@@ -149,6 +150,7 @@ def _models(settings: Any, cny_rub: float) -> list[dict]:
                     "rub_image": rub(getattr(spec, "price_image", 0)),
                     "rub_second": rub(getattr(spec, "price_second", 0)),
                     "rub_speech": rub(getattr(spec, "price_speech", 0)),
+                    "rub_track": rub(getattr(spec, "price_track", 0)),
                 },
                 "sell": {
                     "rub_in": sell_in,
@@ -721,6 +723,7 @@ _MODEL_FIELDS = (
     "kind",
     "listed",
     "available",
+    "audio_kind",
     "default_on",
     "recommended",
     "context",
@@ -773,7 +776,7 @@ def _compact(payload: dict) -> dict:
 
 
 # Поля прайса, которые можно пересчитать пачкой: ключ API → поле в rates_rub.
-_BULK_RATE_FIELDS = ("input", "output", "cached_input", "image", "image_2k", "image_input", "second", "speech", "minute")
+_BULK_RATE_FIELDS = ("input", "output", "cached_input", "image", "image_2k", "image_input", "second", "speech", "minute", "track")
 
 
 def _bulk_rates(item: dict, multiplier: float) -> dict:
@@ -797,7 +800,7 @@ def _bulk_rates(item: dict, multiplier: float) -> dict:
 # Цена за 1M токенов картинки и «запрос» сюда не входят: первую нельзя
 # перевести в штуку без числа токенов на картинку, вторая — это web_search
 # RouterAI, а не цена изображения.
-_MEDIA_UNITS = {"изображение", "видео", "секунда", "1000 символов", "минута", "1M символов"}
+_MEDIA_UNITS = {"изображение", "видео", "секунда", "1000 символов", "минута", "1M символов", "запрос"}
 _TASK_SUFFIX = re.compile(r"-(?:text-to-image|image-to-image|text-to-video|image-to-video|preview)$")
 
 
@@ -978,6 +981,8 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             candidates.discard("")
             offers = []
             for offer in (item for key in candidates for item in (media.get(key) or [])):
+                if offer["unit"] == "запрос" and spec.audio_kind != "music":
+                    continue
                 if any(item["provider"] == offer["provider"] and item["unit"] == offer["unit"] for item in offers):
                     continue
                 offers.append(dict(offer))
@@ -1007,11 +1012,19 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     continue
                 if unit == "1M символов":
                     unit, price = "1000 символов", price / 1000
-                if unit not in {"изображение", "секунда", "1000 символов", "минута"}:
+                if unit == "запрос" and spec.audio_kind == "music":
+                    unit = "трек"
+                if unit not in {"изображение", "секунда", "1000 символов", "минута", "трек"}:
                     continue
                 if unit not in best or price < best[unit][0]:
                     best[unit] = (price, offer)
-            mapping = {"изображение": "rub_image", "секунда": "rub_second", "1000 символов": "rub_speech", "минута": "rub_minute"}
+            mapping = {
+                "изображение": "rub_image",
+                "секунда": "rub_second",
+                "1000 символов": "rub_speech",
+                "минута": "rub_minute",
+                "трек": "rub_track",
+            }
             for unit, (price, offer) in best.items():
                 row["cost"][mapping[unit]] = round(price, 4)
                 row["cost_source"] = "provider_snapshot"
@@ -1059,6 +1072,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     rub_second=rates.get("second"),
                     rub_speech=rates.get("speech"),
                     rub_minute=rates.get("minute"),
+                    rub_track=rates.get("track"),
                 )
                 # Наценка считается от РОЗНИЦЫ, а розница только что сменилась: без
                 # этого пересчёта после массовой правки колонка показывала старые числа.
@@ -1076,6 +1090,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                         ("rub_second", "секунда"),
                         ("rub_speech", "1000 знаков"),
                         ("rub_minute", "минута"),
+                        ("rub_track", "трек"),
                     ):
                         cost, sell = row["cost"].get(field), row["sell"].get(field)
                         if cost and sell:

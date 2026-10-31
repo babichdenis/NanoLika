@@ -91,6 +91,7 @@ class ModelSpec:
     sell_in: float = 0.0
     sell_cached_in: float = 0.0
     sell_out: float = 0.0
+    sell_track: float = 0.0  # rubles per generated music track
     # A model priced by the hour (DeepSeek on Model Studio): what a token costs in the
     # idle hours, `idle_hours` (start, end) in Beijing time, the provider's clock — 0 means
     # the day price all day. A request is priced at the hour it is charged (the reply in).
@@ -109,6 +110,7 @@ class ModelSpec:
     price_second: float = 0.0
     price_speech: float = 0.0  # 元 for every 1000 characters said
     price_minute: float = 0.0  # 元 for every minute of a recording heard
+    price_track: float = 0.0  # 元 for one generated music track
     # Per output second at the resolutions above the base one, by the provider's name for
     # them (("720P", 0.2), ("1080P", 0.48); a JSON object in CLOUD_MODELS); `price_second`
     # is the base, the resolution the apps ask for (480P).
@@ -228,6 +230,7 @@ class ModelSpec:
                     "per_second_res": dict(self.price_second_res),
                     "per_speech": self.price_speech,
                     "per_minute": self.price_minute,
+                    "per_track": self.price_track,
                 },
             },
         }

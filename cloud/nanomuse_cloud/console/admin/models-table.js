@@ -25,7 +25,7 @@ const state = {
   sellOnly: false,
   ours: false,   // только российские модели (GigaChat, Yandex, Alice…)
   jumps: false,  // только модели, где следующий поставщик дороже в 1.8+ раза
-  mergeNames: false, // склеивать одинаковые названия в одну строку (по умолчанию — как у клиентов)
+  mergeNames: true, // одинаковые названия — одна строка: клиент не должен видеть дубль
   duplicates: false, // только строки, у которых есть видимый тёзка
   allVariants: false, // в нижней таблице показывать все варианты семьи, а не по одному на поставщика
   sort: "name",
@@ -138,6 +138,7 @@ const RATE_LABELS = {
   second: "секунда",
   speech: "1000 знаков",
   minute: "минута",
+  track: "трек",
 };
 
 const RATE_UNITS = {
@@ -150,6 +151,7 @@ const RATE_UNITS = {
   second: "₽ / сек.",
   speech: "₽ / 1000 зн.",
   minute: "₽ / мин.",
+  track: "₽ / трек",
 };
 
 function rateLabel(key) {
@@ -169,7 +171,12 @@ function rateFields(group, rates) {
   if (group.group === "text" || group.group === "code") return ["input", "output", "cached_input"];
   if (group.group === "image") return ["image", "image_2k", "image_input"];
   if (group.group === "video") return ["second"];
-  if (group.group === "audio") return ["speech", "minute"];
+  if (group.group === "audio") {
+    const kind = String(group.primary?.audio_kind || group.primary?.commerce?.unit || "");
+    if (kind === "music" || kind === "track") return ["track"];
+    if (kind === "transcribe") return ["minute"];
+    return ["speech"];
+  }
   return Object.keys(rates).filter((key) => Number(rates[key]) > 0);
 }
 
@@ -198,6 +205,7 @@ function purchaseText(model) {
   if (cost.rub_second != null) return fmt(cost.rub_second);
   if (cost.rub_speech != null) return fmt(cost.rub_speech);
   if (cost.rub_minute != null) return fmt(cost.rub_minute);
+  if (cost.rub_track != null) return fmt(cost.rub_track);
   if (cost.rub_in != null || cost.rub_out != null) return `${fmt(cost.rub_in)} / ${fmt(cost.rub_out)}`;
   return "—";
 }
@@ -235,6 +243,7 @@ function purchaseTitle(model) {
   if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${source}${selected}${others}`;
   if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${source}${selected}${others}`;
   if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${source}${selected}${others}`;
+  if (cost.rub_track != null) return `${fmt(cost.rub_track)} ₽ за трек${source}${selected}${others}`;
   if (cost.rub_in != null || cost.rub_out != null) {
     return `Закупка выбранного маршрута${selected}: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M${exactLine}`;
   }
@@ -248,6 +257,7 @@ function clientText(model) {
   if (sell.rub_second) return `${fmt(sell.rub_second)} ₽ / сек.`;
   if (sell.rub_speech) return `${fmt(sell.rub_speech)} ₽ / 1000 зн.`;
   if (sell.rub_minute) return `${fmt(sell.rub_minute)} ₽ / мин.`;
+  if (sell.rub_track) return `${fmt(sell.rub_track)} ₽ / трек`;
   if (sell.rub_in || sell.rub_out) return `${fmt(sell.rub_in)} / ${fmt(sell.rub_out)}`;
   if (sell.hint) return sell.hint;
   return "—";
@@ -276,6 +286,8 @@ function mediaBaseUnit(group) {
   if (group.group === "audio") {
     if (units.has("1000 символов") || units.has("1M символов")) return "1000 символов";
     if (units.has("минута")) return "минута";
+    if (units.has("запрос")) return "запрос";
+    if (units.has("трек")) return "трек";
   }
   return [...units][0] || "";
 }
@@ -348,10 +360,13 @@ function groupKeyOf(model) {
 }
 
 function modelRank(model) {
+  // В одной строке побеждает та версия, которую клиент реально видит:
+  // недоступная заглушка не должна подменять цену рабочей модели.
+  if (model.available === false) return 9;
+  if (!model.listed) return 8;
   if (model.default_on) return 0;
   if (model.recommended) return 1;
-  if (model.listed) return 2;
-  return 3;
+  return 2;
 }
 
 function normalizedModel(value) {
@@ -629,7 +644,7 @@ function columnNumber(group, key) {
     case "context": return Number(model.context) || null;
     case "purchase": {
       const cost = model.cost || {};
-      return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? cost.rub_minute ?? null;
+      return cost.rub_in ?? cost.rub_image ?? cost.rub_second ?? cost.rub_speech ?? cost.rub_minute ?? cost.rub_track ?? null;
     }
     case "client": return Number(model.sell?.rub_in) || null;
     case "official": {
@@ -679,7 +694,7 @@ function readFilters() {
   state.sellOnly = p.get("sell") === "1";
   state.ours = p.get("ru") === "1";
   state.jumps = p.get("jump") === "1";
-  state.mergeNames = p.get("merge") === "1";
+  state.mergeNames = p.get("merge") !== "0";
   state.duplicates = p.get("dup") === "1";
   state.allVariants = p.get("var") === "1";
   const sort = OLD_SORT[p.get("s")] || p.get("s") || "name";
@@ -696,7 +711,7 @@ function saveFilters() {
   if (state.sellOnly) p.set("sell", "1");
   if (state.ours) p.set("ru", "1");
   if (state.jumps) p.set("jump", "1");
-  if (state.mergeNames) p.set("merge", "1");
+  if (!state.mergeNames) p.set("merge", "0");
   if (state.duplicates) p.set("dup", "1");
   if (state.allVariants) p.set("var", "1");
   if (state.sort !== "name") p.set("s", state.sort);

@@ -2394,9 +2394,8 @@ class Cloud:
         free_terms = self.plan_terms("")
         anonymous = type("_PublicCaller", (), {"account_id": ""})()
         context = measured_context()
-        for spec in self.s.models:
-            if not self.model_visible(spec):
-                continue
+        visible = [spec for spec in self.s.models if self.model_visible(spec)]
+        for spec in self._dedupe_menu(visible):
             models.append(
                 {
                     "id": spec.id,
@@ -2419,6 +2418,7 @@ class Cloud:
                         "in": getattr(spec, "sell_in", 0.0),
                         "cached_in": getattr(spec, "sell_cached_in", 0.0),
                         "out": getattr(spec, "sell_out", 0.0),
+                        "track": getattr(spec, "sell_track", 0.0),
                     },
                 }
             )
@@ -2437,9 +2437,8 @@ class Cloud:
         # a locked row is a fair "this is what a bigger plan gives", while the direct
         # call stays refused by `model_for`. The app's pickers still read only what the
         # tariff allows (`/v1/models` → `visible_models`).
-        for spec in self.s.public_models:
-            if not self.model_visible(spec):
-                continue
+        visible = [spec for spec in self.s.public_models if self.model_visible(spec)]
+        for spec in self._dedupe_menu(visible):
             allowed = self.plan_allows(caller, spec, terms)
             models.append(
                 {
@@ -2860,9 +2859,61 @@ class Cloud:
         choices = saved[0] if saved and isinstance(saved[0], dict) else {}
         return bool(choices.get(spec.id, spec.listed)) and bool(spec.available)
 
+    @staticmethod
+    def _menu_name(spec: ModelSpec) -> tuple[str, str]:
+        """Одно имя — одна строка: «GigaChat-3-Pro» и «GigaChat 3 Pro» это дубль."""
+        name = re.sub(r"[-_\s]+", " ", str(spec.name or spec.id).strip().lower()).strip()
+        return spec.kind, name
+
+    def _menu_rate(self, spec: ModelSpec) -> float:
+        rates = model_pricing.policy(self, spec)["rates_rub"]
+        key = (
+            ("input", "output")
+            if spec.kind == "chat"
+            else ("image",)
+            if spec.kind == "image"
+            else ("second",)
+            if spec.kind == "video"
+            else ("speech",)
+            if spec.audio_kind == "speech"
+            else ("minute",)
+            if spec.audio_kind == "transcribe"
+            else ("track",)
+        )
+        total = sum(float(rates.get(field) or 0) for field in key)
+        return total if total > 0 else math.inf
+
+    def _dedupe_menu(self, models: list[ModelSpec]) -> list[ModelSpec]:
+        """Одна модель — одна строка, даже если в каталоге два spec с одним именем.
+
+        Клиент не различает «GigaChat-3-Pro» и «GigaChat 3 Pro»; показываем более
+        дешёвый вариант (при равенстве — рекомендованный/включённый по умолчанию).
+        Скрытые дубли остаются доступны по id через `model_for`.
+        """
+        groups: dict[tuple[str, str], list[ModelSpec]] = {}
+        for spec in models:
+            groups.setdefault(self._menu_name(spec), []).append(spec)
+        chosen: list[ModelSpec] = []
+        for group in groups.values():
+            if len(group) == 1:
+                chosen.append(group[0])
+                continue
+            group.sort(
+                key=lambda spec: (
+                    self._menu_rate(spec),
+                    0 if spec.recommended else 1,
+                    0 if spec.default_on else 1,
+                    len(spec.id),
+                )
+            )
+            chosen.append(group[0])
+        order = {id(spec): index for index, spec in enumerate(models)}
+        return sorted(chosen, key=lambda spec: order[id(spec)])
+
     def visible_models(self, caller: Caller | None = None) -> list[ModelSpec]:
         """The menu: globally visible, and for a signed-in caller, open on the tariff."""
-        return [m for m in self.s.public_models if self.model_visible(m) and (caller is None or self.plan_allows(caller, m))]
+        models = [m for m in self.s.public_models if self.model_visible(m) and (caller is None or self.plan_allows(caller, m))]
+        return self._dedupe_menu(models)
 
     def set_model_visibility(self, model_id: str, visible: bool) -> None:
         with self.db.tx() as conn:
@@ -3102,6 +3153,19 @@ class Cloud:
         charged = model.per_minute * minutes
         cost = round(model.price_minute * minutes * 1_000_000)
         sale = model_pricing.amount(self, model, {"seconds": seconds}, caller)["sale_uy"]
+        self.db.charge(
+            caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
+        )
+        self.settle_invite(caller.account_id)
+        return charged
+
+    def charge_music(self, caller: Caller, model: ModelSpec, request_id: str, tracks: int = 1) -> int:
+        """One or more generated tracks: the grant pays `per_clip` each, the money
+        is the track rate in force when the provider finished."""
+        tracks = max(1, min(int(tracks), 10))
+        charged = model.per_clip * tracks
+        cost = round(model.price_track * tracks * 1_000_000)
+        sale = model_pricing.amount(self, model, {"tracks": tracks}, caller)["sale_uy"]
         self.db.charge(
             caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
         )

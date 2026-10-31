@@ -11,10 +11,10 @@ import json
 import httpx
 import pytest
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from nanomuse_cloud.api import create_app
-from nanomuse_cloud.config import ProviderSpec, Settings
+from nanomuse_cloud.config import ModelSpec, ProviderSpec, Settings
 from nanomuse_cloud.db import Database
 from nanomuse_cloud.identifiers import BadIdentifier, parse
 from nanomuse_cloud.senders import LogSender
@@ -225,6 +225,19 @@ def fake_upstream() -> FastAPI:
         body = await request.json()
         up.state.requests.append(("polza_video", dict(request.headers), body))
         return {"id": "polza-task-1", "status": "pending"}
+
+    @up.get("/v1/media/{task_id}")
+    async def polza_media_status(task_id: str):
+        return {
+            "id": task_id,
+            "status": "completed",
+            "data": [{"url": "https://s3.polza.ai/track.mp3", "duration": 2, "title": "test"}],
+            "usage": {"output_units": 1, "cost_rub": 2},
+        }
+
+    @up.get("/track.mp3")
+    async def music_file():
+        return Response(content=b"ID3test-track", media_type="audio/mpeg")
 
     @up.post("/v1/videos")
     async def aitunnel_video(request: Request):
@@ -2652,3 +2665,76 @@ def test_upstream_budget_refusals_are_not_bad_keys():
         assert relay_error_body(403, body)["error"]["code"] == "upstream_auth"
     assert relay_error_body(401, b'{"error":{"code":"insufficient_quota"}}')["error"]["code"] == "upstream_auth"
     assert relay_error_body(429, b'{"error":{"message":"Rate limit exceeded"}}')["error"]["code"] == "upstream_busy"
+
+
+async def test_music_endpoint_returns_audio_and_charges_one_track(monkeypatch):
+    monkeypatch.setenv("POLZA_TEST_KEY", "sk-polza-test")
+    up = fake_upstream()
+    music = ModelSpec(
+        "music-test",
+        "Test track",
+        "suno/sounds",
+        kind="audio",
+        provider="polza",
+        output_modalities=("audio",),
+        audio_kind="music",
+        per_clip=1000,
+        price_track=0.175,
+        sell_track=3.5,
+    )
+    settings = Settings(
+        database=":memory:",
+        secret="test-secret",
+        admin_token="admin",
+        upstream_base="http://upstream/compat/v1",
+        upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1",
+        public_base="http://cloud.test",
+        rub_per_usd=80.0,
+        usd_cny=8.0,
+        topup_fee_pct=0.0,
+        providers={"polza": ProviderSpec(base="http://api.polza.test", key_env="POLZA_TEST_KEY")},
+        models=(music,),
+    )
+    sender = LogSender()
+    cloud = Cloud(settings, Database(":memory:"), sender)
+    app = create_app(settings, cloud, upstream_transport=httpx.ASGITransport(app=up))
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://cloud.test")
+    try:
+        data = await sign_up(client, sender)
+        headers = {"Authorization": f"Bearer {data['api_key']}"}
+        await client.post(
+            "/v1/admin/grant",
+            headers={"X-Admin-Token": "admin"},
+            json={"identifier": "13800138000", "tokens": 2_000_000},
+        )
+        r = await client.post(
+            "/v1/audio/music", headers=headers, json={"model": "music-test", "prompt": "calm piano"}
+        )
+        assert r.status_code == 200, r.text
+        assert r.content == b"ID3test-track"
+        assert r.headers["content-type"].startswith("audio/mpeg")
+        assert r.headers["x-nanomuse-tracks"] == "1"
+        call = next(row for row in up.state.requests if row[0] == "polza_video")
+        assert call[1]["authorization"] == "Bearer sk-polza-test"
+        assert call[2]["model"] == "suno/sounds"
+        assert call[2]["input"]["prompt"] == "calm piano"
+    finally:
+        await client.aclose()
+
+
+def test_two_specs_with_one_name_are_one_menu_row():
+    """GigaChat-3-Pro и GigaChat 3 Pro — один клиентский пункт, не два."""
+    cheaper = ModelSpec("sber-test", "GigaChat-3-Pro", "sber/test", sell_in=100, sell_out=200)
+    dearer = ModelSpec("gigachat-test", "GigaChat 3 Pro", "gigachat/test", sell_in=120, sell_out=240)
+    settings = Settings(
+        database=":memory:",
+        secret="test-secret",
+        admin_token="admin",
+        upstream_base="http://upstream/compat/v1",
+        upstream_key="sk-upstream",
+        dashscope_base="http://upstream/ds/api/v1",
+        models=(dearer, cheaper),
+    )
+    cloud = Cloud(settings, Database(":memory:"), LogSender())
+    assert [spec.id for spec in cloud.visible_models()] == ["sber-test"]

@@ -40,6 +40,7 @@
     GET  /v1/models/{id}      ?kind=chat                        → one model, or a member's typed id checked (listed, priced_as)
     POST /v1/chat/completions                                   → forwarded; stream or not
     POST /v1/images/generations                                 → DashScope native, returned as b64_json
+    POST /v1/audio/music       {model, prompt}                  → one music track (Polza), charged per track
     POST /v1/images/edits     multipart                         → same, with the picture
     POST /api/v1/services/aigc/video-generation/video-synthesis → DashScope's async video API, relayed
     GET  /api/v1/tasks/{id}                                     → its task poll (own tasks only)
@@ -2055,6 +2056,103 @@ def create_app(
         if sound_seconds:
             headers["x-nanomuse-seconds"] = f"{sound_seconds:.2f}"
         return Response(content=sound, media_type=sound_type, headers=headers)
+
+    MUSIC_WAIT_S = 300.0
+    MUSIC_PAUSE = 4.0
+    MUSIC_FIELDS = ("style", "title", "instrumental", "customMode", "duration", "vocalGender", "version")
+
+    async def _polza_music(base: str, key: str, spec: ModelSpec, prompt: str, options: dict) -> tuple[bytes, str]:
+        """Трек у Polza: POST /v1/media, затем GET /v1/media/{id}, пока не completed."""
+        if not base or not key:
+            raise CloudError(500, "misconfigured", "The music provider is not configured")
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        payload = {"model": spec.upstream, "input": {"prompt": prompt}}
+        for field in MUSIC_FIELDS:
+            if field in options and options[field] is not None:
+                payload["input"][field] = options[field]
+        try:
+            r = await http.post(f"{base}/v1/media", headers=headers, content=dumps(payload))
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "The music provider did not answer") from e
+        if r.status_code >= 400:
+            log.warning("polza music HTTP %s: %s", r.status_code, r.text[:300])
+            raise CloudError(502, "upstream", f"The music provider refused ({r.status_code})")
+        try:
+            task = str((r.json() or {}).get("id") or "")
+        except ValueError as e:
+            raise CloudError(502, "upstream", "The music provider sent no task") from e
+        if not task:
+            raise CloudError(502, "upstream", "The music provider sent no task")
+        deadline = time.monotonic() + MUSIC_WAIT_S
+        url = ""
+        while True:
+            await asyncio.sleep(MUSIC_PAUSE)
+            try:
+                r = await http.get(f"{base}/v1/media/{task}", headers=headers)
+                status = (r.json() or {})
+            except (httpx.HTTPError, ValueError) as e:
+                raise CloudError(502, "upstream", "The music provider stopped answering") from e
+            state = str(status.get("status", "")).lower()
+            if state in ("failed", "error", "cancelled"):
+                raise CloudError(502, "upstream", "The music provider could not make this track")
+            if state in ("completed", "succeeded"):
+                data = status.get("data") or {}
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                url = str((data or {}).get("url") or "")
+                break
+            if time.monotonic() > deadline:
+                raise CloudError(504, "upstream", "The music provider is taking too long; try again")
+        if not url:
+            raise CloudError(502, "upstream", "The music provider sent no track")
+        host = (urlsplit(url).hostname or "").lower()
+        if not (host == "polza.ai" or host.endswith(".polza.ai")):
+            log.warning("polza music URL off the provider's hosts: %s", str(url)[:120])
+            raise CloudError(502, "upstream", "The music provider sent a track from somewhere unexpected")
+        try:
+            audio = await http.get(url)
+        except httpx.HTTPError as e:
+            raise CloudError(502, "upstream", "Could not fetch the track") from e
+        if audio.status_code >= 400 or not audio.content:
+            raise CloudError(502, "upstream", "Could not fetch the track")
+        media_type = audio.headers.get("content-type", "").split(";")[0].strip().lower()
+        if not media_type.startswith("audio/"):
+            media_type = "audio/mpeg"
+        return audio.content, media_type
+
+    @app.post("/v1/audio/music")
+    async def audio_music(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
+        """Один трек по описанию. Счёт — за трек, не за секунду: провайдер берёт за генерацию."""
+        body = await _json(request)
+        spec = cloud.model_for(str(body.get("model", "")), "audio", caller)
+        if spec.audio_kind != "music":
+            raise CloudError(400, "bad_request", f"{spec.id} is not a music model")
+        prompt = str(body.get("prompt") or body.get("input") or "").strip()
+        if not prompt:
+            raise CloudError(400, "bad_request", "prompt is required")
+        if len(prompt) > 5000:
+            raise CloudError(400, "bad_request", "prompt is longer than 5000 characters")
+        provider, base, key = settings.route(spec)
+        if provider != "polza":
+            raise CloudError(501, "unsupported", "Music lives only with the provider of its own")
+        request_id = uuid.uuid4().hex[:16]
+        cloud.check_budget(
+            caller,
+            minimum=spec.per_clip,
+            cost_uy=model_pricing.amount(cloud, spec, {"tracks": 1}, caller)["sale_uy"],
+            request_id=request_id,
+            place=client_place(request),
+        )
+        try:
+            audio, media_type = await _polza_music(base, key, spec, prompt, body)
+            charged = cloud.charge_music(caller, spec, request_id, 1)
+        finally:
+            cloud.settle(caller, request_id)
+        return Response(
+            content=audio,
+            media_type=media_type,
+            headers={"x-nanomuse-charged": str(charged), "x-nanomuse-tracks": "1"},
+        )
 
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(

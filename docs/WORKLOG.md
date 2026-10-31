@@ -1,3 +1,48 @@
+## 2026-10-31 · Музыка: endpoint, трек как единица и дубли в меню
+
+**Музыка подключена.** Добавил `POST /v1/audio/music {model, prompt}`: релей
+отправляет Polza `POST /v1/media`, ждёт `GET /v1/media/{id}`, забирает MP3 и
+отдаёт его байтами. Счёт — **за трек**, не за секунду: провайдер берёт за
+генерацию. В `ModelSpec` появились `price_track`/`sell_track`, в
+`model_pricing` — ставка `track`, отдельный `charge_music`, в админке — поле
+«₽ / трек» и подпись «Клиенту … ₽ / трек».
+
+Три рабочие модели добавлены в `/opt/nanomuse/cloud/models/api/media.json`:
+`music-suno-track` (Suno Generate, закупка 15 ₽, клиенту 25 ₽),
+`music-sounds-track` (Suno Sounds, 2 → 3,5 ₽), `music-lyria-track` (Lyria 3
+Clip, 4 → 7 ₽). Старые `music-suno`/`music-sounds`/`music-lyria` из
+`CLOUD_MODELS` остались с `available:false` и в меню не попадают; админка
+группирует их с новыми в одну строку. Проверка API: `suno/sounds` вернул два
+варианта по 2 секунды, `usage.cost_rub` = 2; тест
+`tests/test_cloud.py::test_music_endpoint_returns_audio_and_charges_one_track`
+проходит. Живой endpoint зарегистрирован: `/openapi.json` → `/v1/audio/music`.
+
+**ElevenLabs.** Старые `bh-eleven-*` так и не работают: Bothub отвечает
+`404 DeploymentNotFound` на `eleven_flash_v2`, `eleven_v3`,
+`eleven_multilingual_v2` даже с настоящим voice id. Зато Polza отдаёт
+`elevenlabs/eleven-v4`: проверено с голосом `21m00Tcm4TlvDq8ikWAM` (Rachel),
+200 и звук. Добавил `voice-eleven-v4` («ElevenLabs v4 (Rachel)»): закупка
+2,28 ₽/1000 знаков, клиенту 3,5 ₽/1000. Старые Bothub-Eleven остаются
+«Не подключена», новая модель включается галочкой.
+
+**Дубли.** В публичном меню осталось 0 одинаковых названий (было 3 группы).
+`service._dedupe_menu` схлопывает spec'и с одним названием и типом, оставляя
+более дешёвый; `GigaChat-3-Pro` и `GigaChat 3 Pro` теперь один пункт —
+`sber-gigachat-3-pro` (122,69 против 145,18). Скрытые дубли по-прежнему
+доступны по id. В админке «склеивать названия» включено по умолчанию: строк
+стало 477 вместо 497, `GigaChat-3-Pro` — одна строка с двумя spec'ами, музыка —
+одна строка с новой ценой. На публичной странице `models.js` тоже отбрасывает
+одинаковые `kind|name` на случай, если сервер отдаст дубль.
+
+Версии: `admin.js?v=20261031-music1`, `models-table.js?v=20261031-music1`,
+`models.js?v=20261031-music2`. Снимок публичной страницы — 412 моделей,
+`fetched_at 2026-10-31 16:20`. Тесты: `test_cloud.py` 60/60 (включая музыку и
+дедуп), `test_prices_admin.py` 13/14 (прежнее падение plan discount),
+`test_price_drafts.py` 7/7, `test_provider_prices.py` 5/5,
+`test_model_log.py` 2/2.
+
+Не сделано: в веб-кабинете и приложении нет кнопки «Сгенерировать трек» —
+endpoint и модель в меню есть, но UI музыки ещё нет. Это следующая тема.
 ## 2026-10-31 · Публичный каталог, галочки медиа и замер токенных картинок
 
 **Публичная страница моделей показывала два «Gemini 4 Argon» и старые цены.**
