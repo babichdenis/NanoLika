@@ -45,10 +45,12 @@ Bothub 10,31, Polza 22,79; Whisper 1 — Polza 0,43 и Bothub 1,01 за мину
 `tests/test_price_drafts.py` 7/7, `tests/test_model_log.py` 2/2. Живые mount'ы:
 `provider_prices.py`, `models-table.js` — базовые; `prices_admin.py`, `admin.js`,
 `index.html`, `console/prices/*` — `auto-routing-20261025`. Версии
-`admin.js?v=20261031-media-all2`, `models-table.js?v=20261031-media-all2`,
-`prices.js?v=20261031-jiugx1`. Снимок поставщиков пересобран: polza 891,
+`admin.js?v=20261031-media-all5`, `models-table.js?v=20261031-media-all3`,
+`providers-table.js?v=20261031-jiugx2`, `prices.js?v=20261031-jiugx1`. Снимок поставщиков пересобран: polza 891,
 routerai 1369, proxyapi 789, bothub 985, jiugx 117, deepseek 12, openrouter 403.
-Коммит `eb8cf6e8`.
+Коммиты `eb8cf6e8`, `aed8d2d0`. Jiugx виден в «Поставщиках» как
+«без кошелька · 19 с ценой»: ручки остатка у него нет, но предложения уже
+сравниваются в таблице моделей.
 
 Не сделано и важно:
 
