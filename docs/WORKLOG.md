@@ -131,6 +131,26 @@ Jiugx (九霄, `https://jiugx.com`, OpenAI-совместимый шлюз) до
 
 Версия `models-table.js?v=20261031-footer1`, коммит `0c0fdc04`.
 
+Версионные модели теперь не уходят в соседнюю ревизию. Семейный маршрут остался
+только у customer-facing алиаса `deepseek-flash`; все конкретные версии (0423,
+0731, 1017, vision-exp, latest, pro-0813) матчатся по своему model id. В
+`provider_routing.routes` появился `family=False`: точный режим сравнивает
+`offer.model`, семейный — `canonical_model`. `prices_admin` для таблицы зовёт
+`family=True`, чтобы видеть варианты семьи, но `cost` и `selected` берёт из
+точного вызова.
+
+Проверено на живом релее: у `deepseek-deepseek-v4-flash` (0423) закупка стала
+Polza 5,62 / 11,23 (точная версия), выбранный маршрут — Polza 0423, а не
+OpenRouter 1017. Продажа 2,08, ratio ×0,37 — ниже закупки, как и предполагалось;
+цена правится в колонке наценки. У `deepseek-flash` (общий алиас) осталась
+закупка 1017 1,49 / 15,19. У 1017 — своя 1,49 / 15,19.
+
+Важно для выкладки: живой `provider_routing.py` монтируется из
+`overrides/deepseek-routing-20261027`, а не из `auto-routing-20261025`. Файл
+выложен туда, релей перезапущен. Тесты `test_provider_routing.py` +
+`test_deepseek_routing.py` — 77/77, `test_cloud.py` + `test_price_drafts.py` —
+62/62. Коммит `a5bd671a`.
+
 Следующее — «Сводка» (новинки, цены без ставки, проблемы поставщиков, письма
 клиентов) на базе `site_inbox.py`; для почты нужен ящик `denis@nanolika.ru` на
 хостинге reg.ru и пароль в `.env`.
