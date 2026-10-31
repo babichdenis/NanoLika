@@ -1860,7 +1860,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (PROVIDERS_MOD) return run(PROVIDERS_MOD);
-    import("/web/providers-table.js?v=20261031-providers").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
+    import("/web/providers-table.js?v=20261031-providers2").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Карта поставщиков не загрузилась: ${e.message}`)); });
   }
 
