@@ -442,14 +442,19 @@ class MuseAgent:
         addendum = (self.prompt_addendum() if self.prompt_addendum is not None else "").strip()
         if addendum:
             extra += f"\n## This conversation\n{addendum}\n"
-        capabilities = self.capabilities_section()
+        # The stable part goes first and the volatile one last: providers cache a prefix,
+        # so the minute and the per-turn facts must not sit in the middle of the prompt.
         return prompts.SYSTEM_PROMPT.format(
             name=a.name,
             language_rule=language_rule,
-            now=datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%A, UTC%z)"),
+            now=datetime.now().astimezone().strftime("%Y-%m-%d %H:00 (%A, UTC%z)"),
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
             tool_names=", ".join(t.name for t in self.tools),
+            capabilities=self.capabilities_section(),
+            skills=self.skills_section(),
+            connectors=self.connectors_section(),
+            store=self.store_section(),
             user_profile=profile,
             memories=memories,
             goals=goals
@@ -457,11 +462,7 @@ class MuseAgent:
             + self.device_section()
             + self.phone_section()
             + self.computer_section()
-            + self.devices_section()
-            + self.skills_section()
-            + self.connectors_section()
-            + self.store_section(),
-            capabilities=capabilities,
+            + self.devices_section(),
             extra=extra,
         )
 

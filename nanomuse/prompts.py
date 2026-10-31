@@ -39,11 +39,12 @@ SYSTEM_PROMPT = """You are {name}, a personal AI agent built on NanoLika. You do
 - When the file is ready, show it in the chat and state the actual charge.
 
 ## Context
-- Current date/time: {now}
 - File paths in tool calls are relative to the active conversation workspace.
 - {sandbox}
 {contacts}- Available tools: {tool_names}
-{user_profile}{memories}{goals}{capabilities}{extra}"""
+{capabilities}{skills}{connectors}{store}
+- Current date/time: {now}
+{user_profile}{memories}{goals}{extra}"""
 
 # Naming the detected language explicitly matters: a generic "reply in the user's language"
 # rule made DeepSeek flip to Chinese after tool results about half the time in our tests,

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -87,6 +90,39 @@ def test_system_prompt_hides_private_workspace_path_and_sentinel_mode(settings: 
     assert str(settings.agent.workspace.resolve()) not in prompt
     assert "Sentinel mode:" not in prompt
     assert "relative to the active conversation workspace" in prompt
+
+
+def test_system_prompt_is_cacheable_between_minutes(settings: Settings, monkeypatch: pytest.MonkeyPatch):
+    """A provider caches a prefix: two turns in the same hour must send the same prompt,
+    and a new hour may only change the volatile tail, not the middle of the prompt."""
+    agent, *_ = make_agent(settings, [])
+
+    class Clock(datetime):
+        current = datetime(2026, 10, 31, 12, 5, tzinfo=UTC)
+
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return cls.current.astimezone(tz) if tz is not None else cls.current
+
+    monkeypatch.setattr("nanomuse.agent.core.datetime", Clock)
+    first = agent.build_system_prompt("hi")
+    Clock.current = datetime(2026, 10, 31, 12, 6, tzinfo=UTC)
+    second = agent.build_system_prompt("hi")
+    assert first == second
+    Clock.current = datetime(2026, 10, 31, 13, 6, tzinfo=UTC)
+    third = agent.build_system_prompt("hi")
+    common = os.path.commonprefix([first, third])
+    assert len(common) >= int(0.8 * len(first))
+    assert "Current date/time:" in third
+    assert third.index("Current date/time:") > int(0.7 * len(third))
+    assert re.search(r"Current date/time: \d{4}-\d\d-\d\d \d\d:00", third)
+
+
+def test_capabilities_section_appears_once(settings: Settings):
+    agent, *_ = make_agent(settings, [])
+    prompt = agent.build_system_prompt("hi")
+    section = agent.capabilities_section()
+    assert section and prompt.count(section) == 1
 
 
 async def test_memories_and_legacy_history_are_redacted_before_model_and_reply(settings: Settings):
