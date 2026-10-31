@@ -577,6 +577,7 @@ class ChannelManager(ChannelBus):
             "files": paths or None,
             "language": self.menu.language(msg),
             "customer_scope": customer_scope,
+            "via_channel": msg.channel,
         }
         # Most linked chats use the bot's configured account and need no per-chat key.
         # Keep that path compatible with older installed MuseService versions, whose
@@ -589,10 +590,11 @@ class ChannelManager(ChannelBus):
             self.svc.send(thread_id, text, **send_options)
         except TypeError as exc:
             # A linked runtime can be older than the account-scoped workspace API. Preserve
-            # that compatibility when it only lacks this new optional argument.
-            if "unexpected keyword argument 'customer_scope'" not in str(exc):
+            # that compatibility when it only lacks these optional arguments.
+            if "unexpected keyword argument" not in str(exc):
                 raise
-            send_options.pop("customer_scope", None)
+            for key in ("customer_scope", "via_channel"):
+                send_options.pop(key, None)
             self.svc.send(thread_id, text, **send_options)
         except (ValueError, PermissionError) as exc:
             await self._send(msg.channel, msg.chat_id, _short(exc))
@@ -629,14 +631,11 @@ class ChannelManager(ChannelBus):
             if event.get("type") == "assistant"
         )
         preferred.append(str(getattr(thread, "origin_device", "") or ""))
-        for device_id in dict.fromkeys(preferred):
-            device = devices.get(device_id)
-            if device is None:
-                continue
+        async def probe(device_id: str, device: dict[str, Any]) -> dict[str, Any] | None:
             try:
                 result = await hub.call(device_id, "shared_chat", {"cid": cid}, timeout=12)
             except (HubError, CloudError, TimeoutError):
-                continue
+                return None
             if result.get("cid") == cid and result.get("sessionId"):
                 # Early desktop builds implemented the handshake but omitted its marker
                 # from hello. Trust the successful CID-specific probe, not a version guess.
@@ -644,6 +643,28 @@ class ChannelManager(ChannelBus):
                     **device,
                     "actions": list(set(device.get("actions") or []) | {"shared_chat"}),
                 }
+            return None
+
+        tried: set[str] = set()
+        for device_id in dict.fromkeys(preferred):
+            if not device_id:
+                continue
+            tried.add(device_id)
+            device = devices.get(device_id)
+            if device is None:
+                continue
+            hit = await probe(device_id, device)
+            if hit is not None:
+                return hit
+        # A browser's id can be the thread's origin or the last answer's `via_device`:
+        # it is never a computer, so the preferred list may name no computer at all.
+        # Then try every online computer that advertises the shared chat, best effort.
+        for device_id, device in devices.items():
+            if device_id in tried:
+                continue
+            hit = await probe(device_id, device)
+            if hit is not None:
+                return hit
         return None
 
     def _shared_runtime_context(self, thread_id: str) -> None:
@@ -1532,7 +1553,7 @@ class ChannelManager(ChannelBus):
             return
         if shared_cid and "shared_chat" not in (device.get("actions") or []):
             if fallback:
-                self.svc.send(thread, text, language=self.menu.language(msg))
+                self.svc.send(thread, text, language=self.menu.language(msg), via_channel=msg.channel)
             else:
                 await self._finish(
                     thread,
@@ -1648,7 +1669,7 @@ class ChannelManager(ChannelBus):
                         ),
                     )
                 try:
-                    self.svc.send(thread, text, language=self.menu.language(msg))
+                    self.svc.send(thread, text, language=self.menu.language(msg), via_channel=msg.channel)
                 except (ValueError, PermissionError) as error:
                     await self._send(msg.channel, msg.chat_id, _short(error))
                 return
@@ -1675,7 +1696,15 @@ class ChannelManager(ChannelBus):
         if msg.channel not in {"telegram", "max"}:
             return
         tid = thread_id or self._thread_for(msg)
-        self.svc.ui.emit({"type": "user", "thread": tid, "text": msg.text, "channel_static": True})
+        self.svc.ui.emit(
+            {
+                "type": "user",
+                "thread": tid,
+                "text": msg.text,
+                "channel_static": True,
+                "via_channel": msg.channel,
+            }
+        )
         event = self.svc.ui.emit(
             {
                 "type": "assistant",
@@ -1683,6 +1712,7 @@ class ChannelManager(ChannelBus):
                 "text": answer,
                 "final": True,
                 "channel_static": True,
+                "via_channel": msg.channel,
             }
         )
         thread = self.svc.threads[tid]
@@ -1794,7 +1824,17 @@ class ChannelManager(ChannelBus):
             body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
         # A desktop answer may carry a share link. For a small object the channel gets the
         # file itself first and the link after it; a big one stays just the link.
-        shared_files = await self._shared_files(body) if role == "assistant" else []
+        # A user message from the web or the app can carry an uploaded attachment: the sync
+        # event names its S3 link, and the channel gets the file itself, not just the name.
+        if role == "assistant":
+            shared_files = await self._shared_files(body)
+        else:
+            urls = " ".join(
+                str(item.get("url") or "")
+                for item in (event.get("files") or [])
+                if isinstance(item, dict) and item.get("url")
+            )
+            shared_files = await self._shared_files(urls) if urls else []
         try:
             for channel, chat in targets:
                 if self.picker.topics.defer(thread, (channel, chat), event):
@@ -1873,7 +1913,11 @@ class ChannelManager(ChannelBus):
         out: list[tuple[str, str]] = []
         site = str(cfg.settings.get("site_url") or "").strip()
         invite = str(cfg.settings.get("invite_url") or "").strip()
-        webapp = str(cfg.settings.get("webapp_url") or "").strip()
+        if channel == "max":
+            # MAX has no Telegram initData: the browser names the channel itself.
+            webapp = str(cfg.settings.get("webapp_url_max") or "https://cloud.nanolika.ru/web/?channel=max").strip()
+        else:
+            webapp = str(cfg.settings.get("webapp_url") or "").strip()
         if site:
             out.append((self.say("Website", "网站", "Сайт"), site))
         if invite:

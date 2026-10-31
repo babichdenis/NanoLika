@@ -825,9 +825,25 @@ class ConversationSync:
                 )
         return out
 
+    def _channel_device(self, channel: str) -> str:
+        """The device id a channel turn is published under: ``tg-…``, ``max-…``.
+
+        The relay labels a device by its prefix, so a reply the Muse wrote from a
+        Telegram topic shows there as Telegram on every other device, not as the
+        computer that happens to run the bot.
+        """
+        prefix = {"telegram": "tg", "max": "max", "web": "web"}.get(str(channel or ""))
+        if not prefix:
+            return ""
+        stem = str(self.svc.hub.device_id or "")
+        if stem.startswith("pc-"):
+            stem = stem[3:]
+        return f"{prefix}-{stem}"[:80] if stem else ""
+
     def _unsynced(self, thread: Thread, cid: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
         """(event, wire message) for every user / final assistant text not yet on the relay."""
         out: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        channel = ""
         for ev in thread.timeline.events:
             kind = ev.get("type")
             if kind not in ("user", "assistant") or ev.get("synced") or ev.get("quiet"):
@@ -837,6 +853,10 @@ class ConversationSync:
                 continue
             if kind == "assistant" and not ev.get("final"):
                 continue
+            if kind == "user":
+                # each turn carries its own origin: a desktop message after a Telegram one
+                # must not inherit the channel's label
+                channel = str(ev.get("via_channel") or "")
             text = str(ev.get("text") or "")
             attachments = self._attachments(ev)
             if not text.strip() and not attachments:
@@ -852,6 +872,9 @@ class ConversationSync:
                 "text": text,
                 "created_at": _unix(ev.get("ts")),
             }
+            device = self._channel_device(channel)
+            if device:
+                wire["device"] = device
             if attachments:
                 wire["attachments"] = attachments
             out.append((ev, wire))
@@ -1311,6 +1334,7 @@ class ConversationSync:
                     "size": int(a.get("size") or 0),
                     "mime": str(a.get("mime") or ""),
                     "path": "",
+                    "url": str(a.get("url") or ""),
                     "kind": "remote",
                 }
                 for a in attachments
