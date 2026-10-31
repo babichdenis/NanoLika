@@ -15,7 +15,7 @@ def world(tmp_path):
         catalog=SimpleNamespace(supported=True, rows={"shared": {"archived": False}}),
     )
     manager = SimpleNamespace(
-        svc=SimpleNamespace(data_dir=tmp_path, sync=sync),
+        svc=SimpleNamespace(data_dir=tmp_path, sync=sync, threads={"main": SimpleNamespace(title="Main")}),
         menu=SimpleNamespace(
             private_owner=lambda msg: msg.sender_id == "42", inherit_access=lambda *a: None
         ),
@@ -48,11 +48,15 @@ def message(chat="42|10", sender="42", text="continue"):
     return InboundMessage(channel="telegram", chat_id=chat, sender_id=sender, text=text)
 
 
-def test_last_topic_survives_a_bot_restart(tmp_path):
+def test_a_plain_message_stays_general_and_the_last_topic_is_remembered(tmp_path):
+    # Telegram shows topics now, so the client names the topic on every message: a message
+    # outside any topic is General, and guessing the last topic here is the bug this
+    # replaced. The last explicit topic is still remembered for the menu.
     _, picker, topics = world(tmp_path)
     topics.remember(message())
+    assert topics.last_file.load()
     restarted = TelegramTopics(picker)
-    assert restarted.resume(message("42")).chat_id == "42|10"
+    assert restarted.resume(message("42")).chat_id == "42"
     assert restarted.resume(message("42", text="/chats")).chat_id == "42"
 
 

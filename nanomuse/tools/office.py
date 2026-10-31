@@ -707,7 +707,7 @@ class OfficeXlsm(BaseTool):
         return ToolResult(
             output=(
                 f"{dst.name}: лист «{title}», {len(rows)} строк, макрос и кнопка «{caption}». "
-                f"Команд у кнопки: {count}. Откройте файл в Excel и разрешите макросы — "
+                f"Команд у кнопки: {count}. Откройте файл в Excel и разрешите макросы: "
                 "кнопка появится под таблицей."
             )
         )

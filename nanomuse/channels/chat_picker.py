@@ -207,7 +207,7 @@ class ChatPicker:
         # A thread the account no longer has (a deleted side chat, an old runtime) is not a
         # selection: the chat's own thread is used and remembered by the manager, instead of
         # a dead id quietly blocking every synced delivery here.
-        return thread if thread in self.m.svc.threads else ""
+        return thread if thread in getattr(self.m.svc, "threads", {}) else ""
 
     def bind(self, msg: Any, thread: str, *, fresh: bool = False) -> None:
         data = dict(self.file.load())
@@ -274,7 +274,8 @@ class ChatPicker:
         return expires > time.monotonic()
 
     def targets(self, thread: str) -> list[tuple[str, str]]:
-        thread_row = self.m.svc.threads.get(thread)
+        threads = getattr(self.m.svc, "threads", {})
+        thread_row = threads.get(thread)
         origin = conversation_origin(thread, getattr(thread_row, "title", ""))
         result = []
         for channel in ("telegram", "max"):
