@@ -111,6 +111,51 @@ function officialText(group) {
   return ref.status && ref.status !== "ga" ? `${price} · ${ref.status}` : price;
 }
 
+const RATE_LABELS = {
+  input: "вход",
+  output: "выход",
+  cached_input: "кэш",
+  image: "картинка",
+  image_2k: "картинка 2K",
+  image_input: "вход картинки",
+  second: "секунда",
+  speech: "1000 знаков",
+  minute: "минута",
+};
+
+const RATE_UNITS = {
+  input: "₽ / 1M",
+  output: "₽ / 1M",
+  cached_input: "₽ / 1M",
+  image: "₽ / шт.",
+  image_2k: "₽ / шт. 2K",
+  image_input: "₽ / шт. вход",
+  second: "₽ / сек.",
+  speech: "₽ / 1000 зн.",
+  minute: "₽ / мин.",
+};
+
+function rateLabel(key) {
+  return RATE_LABELS[key] || key;
+}
+
+function rateUnit(key) {
+  return RATE_UNITS[key] || "₽";
+}
+
+function rateValueText(key, value) {
+  return `${fmt(value)} ${rateUnit(key)}`;
+}
+
+/** Какие ставки показывать в диалоге: только те, что есть у этого типа модели. */
+function rateFields(group, rates) {
+  if (group.group === "text" || group.group === "code") return ["input", "output", "cached_input"];
+  if (group.group === "image") return ["image", "image_2k", "image_input"];
+  if (group.group === "video") return ["second"];
+  if (group.group === "audio") return ["speech", "minute"];
+  return Object.keys(rates).filter((key) => Number(rates[key]) > 0);
+}
+
 function groupOf(model) {
   const kind = String(model.kind || "chat");
   if (kind === "chat" || kind === "responses" || kind === "completion") {
@@ -466,8 +511,10 @@ const TEMPLATE = `
         <label class="field">наценка ×
           <input id="mt-k" type="number" min="0.1" max="20" step="0.05" value="1.3" />
         </label>
-        <button class="chip" id="mt-apply-k" type="button">Поставить цену</button>
+        <button class="chip" id="mt-apply-k" type="button">Отложить цену</button>
         <span class="sp"></span>
+        <button class="chip mt-publish" id="mt-publish" type="button" hidden>Опубликовать</button>
+        <button class="chip" id="mt-discard" type="button" hidden>Сбросить черновики</button>
         <button class="chip" id="mt-show" type="button">Показать</button>
         <button class="chip" id="mt-hide" type="button">Скрыть</button>
       </div>
@@ -635,7 +682,32 @@ function drawModels(rows) {
     tr.append(contextCell);
 
     tr.append(textCell("num", purchaseText(model)));
-    tr.append(textCell("num", clientText(model)));
+
+    const clientCell = el("td", "num mt-client");
+    clientCell.append(el("span", "mt-now", clientText(model)));
+    if (model.draft) {
+      const draft = el("span", "mt-draft");
+      draft.append(el("span", "mt-draft-arrow", "→"));
+      const parts = Object.entries(model.draft.changed || {}).map(([key, value]) => rateValueText(key, value));
+      draft.append(el("span", "", parts.join(" · ")));
+      const badge = el("span", "mt-draft-badge" + (model.draft.stale ? " is-stale" : ""), model.draft.stale ? "конфликт" : "черновик");
+      badge.title = model.draft.stale
+        ? "Опубликованная цена изменилась после черновика: снимите его и задайте заново"
+        : "Клиенты увидят цену после «Опубликовать»";
+      draft.append(badge);
+      clientCell.append(draft);
+      clientCell.title = "Черновик: " + Object.entries(model.draft.changed || {}).map(([key, value]) => `${rateLabel(key)} ${fmt(value)}`).join(", ");
+    }
+    const edit = el("button", "mt-edit", "✎");
+    edit.type = "button";
+    edit.title = "Изменить цену клиенту";
+    edit.setAttribute("aria-label", "Изменить цену клиенту: " + group.name);
+    edit.onclick = (event) => {
+      event.stopPropagation();
+      openPriceDialog(group);
+    };
+    clientCell.append(edit);
+    tr.append(clientCell);
 
     const officialCell = el("td", "num mt-official");
     const refModel = referenceModel(group);
@@ -816,8 +888,21 @@ function drawCounts(rows) {
   const models = rows.reduce((sum, group) => sum + group.models.length, 0);
   const apply = $("mt-apply-k");
   if (apply) {
-    apply.textContent = `Поставить цену (${rows.length})`;
-    apply.title = `Закупка × множитель для ${models} моделей в отфильтрованных строках`;
+    apply.textContent = `Отложить цену (${rows.length})`;
+    apply.title = `Закупка × множитель → черновик для ${models} моделей в отфильтрованных строках`;
+  }
+  const drafts = (DATA && DATA.price_drafts && DATA.price_drafts.count) || 0;
+  const stale = (DATA && DATA.models ? DATA.models : []).filter((model) => model.draft && model.draft.stale).length;
+  const publish = $("mt-publish");
+  if (publish) {
+    publish.hidden = !drafts;
+    publish.textContent = `Опубликовать (${drafts})`;
+    publish.title = stale ? `${stale} черновиков устарели и не опубликуются` : "Показать клиентам черновики цен";
+  }
+  const discard = $("mt-discard");
+  if (discard) {
+    discard.hidden = !drafts;
+    discard.textContent = `Сбросить черновики (${drafts})`;
   }
   const show = $("mt-show");
   if (show) show.textContent = `Показать (${rows.length})`;
@@ -893,19 +978,155 @@ async function bulkPricing() {
     const newOut = cost.rub_out ? fmt(cost.rub_out * multiplier) : "—";
     return `• ${group.name}: ${oldIn} / ${oldOut} → ${newIn} / ${newOut}`;
   }).join("\n");
-  if (!confirm(`Поставить цену клиенту = закупка × ${multiplier} для ${rows.length} строк (${items.length} моделей)?\n\n${sample}\n\nПрайс изменится сразу.`)) return;
+  if (!confirm(`Отложить цену клиенту = закупка × ${multiplier} для ${rows.length} строк (${items.length} моделей)?\n\n${sample}\n\nЭто черновик: клиенты увидят цены после «Опубликовать».`)) return;
   const button = $("mt-apply-k");
   if (button) button.disabled = true;
-  setNote("Записываем цены…");
+  setNote("Считаем и откладываем в черновик…");
   try {
     const result = await API("POST", "/v1/admin/prices/bulk/pricing", { multiplier, items });
     await load(true);
     const failed = (result.failed || []).length;
-    setNote(`Цены обновлены: ${result.updated} из ${result.total}${failed ? `, не удалось: ${failed}` : ""}.`);
+    setNote(`В черновике: ${result.staged ?? result.updated} из ${result.total}${failed ? `, не удалось: ${failed}` : ""}. Нажмите «Опубликовать», чтобы показать клиентам.`);
   } catch (e) {
     setNote(`Не удалось: ${e.message}`);
   } finally {
     if (button) button.disabled = false;
+  }
+}
+
+/** Диалог одной модели: правим клиентские ставки и кладём их в черновик. */
+function openPriceDialog(group) {
+  const model = group.primary;
+  const rates = (model.rates && model.rates.rates_rub) || {};
+  const draft = model.draft || null;
+  const fields = rateFields(group, rates).filter(
+    (key) => Number(rates[key]) > 0 || (draft && draft.changed && key in draft.changed),
+  );
+  if (!fields.length && !(draft && Object.keys(draft.changed || {}).length)) {
+    setNote("У этой модели нет ставок, которые можно изменить этим диалогом.");
+    return;
+  }
+  let dialog = $("mt-price");
+  if (!dialog) {
+    dialog = el("dialog", "mt-dialog");
+    dialog.id = "mt-price";
+    if (ROOT) ROOT.append(dialog);
+  }
+  dialog.replaceChildren();
+  const form = el("form", "mt-price-form");
+  form.method = "dialog";
+  form.addEventListener("submit", (event) => event.preventDefault());
+  form.append(el("h3", "", "Цена клиенту"));
+  form.append(el("p", "fine", `${model.id} · опубликовано: ревизия ${(model.rates && model.rates.revision) || 0}`));
+  if (group.models.length > 1) {
+    form.append(el("p", "fine", `В строке ещё ${group.models.length - 1} модель(ей): правка относится только к ${model.id}.`));
+  }
+  const grid = el("div", "mt-price-grid");
+  for (const key of fields) {
+    const label = el("label", "field");
+    label.append(el("span", "", `${rateLabel(key)}, ${rateUnit(key)}`));
+    const input = el("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "0.0001";
+    input.inputMode = "decimal";
+    const value = draft && draft.changed && key in draft.changed ? draft.changed[key] : rates[key];
+    input.value = Number(value) > 0 ? String(value) : "";
+    input.dataset.rate = key;
+    label.append(input);
+    grid.append(label);
+  }
+  form.append(grid);
+  if (draft) {
+    const stale = draft.stale
+      ? "Опубликованная цена изменилась после черновика — публикация не пройдёт, задайте цену заново."
+      : `В черновике: ${Object.entries(draft.changed || {}).map(([key, value]) => `${rateLabel(key)} ${fmt(value)} ${rateUnit(key)}`).join(", ")}`;
+    form.append(el("p", "fine mt-draft-note" + (draft.stale ? " is-stale" : ""), stale));
+  }
+  const actions = el("div", "mt-dialog-actions");
+  const cancel = el("button", "chip", "Отмена");
+  cancel.type = "button";
+  cancel.onclick = () => dialog.close();
+  actions.append(cancel);
+  if (draft) {
+    const drop = el("button", "chip", "Убрать черновик");
+    drop.type = "button";
+    drop.onclick = async () => {
+      drop.disabled = true;
+      try {
+        await API("DELETE", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/draft`);
+        dialog.close();
+        await load(true);
+        setNote("Черновик снят.");
+      } catch (e) {
+        setNote(`Не удалось: ${e.message}`);
+        drop.disabled = false;
+      }
+    };
+    actions.append(drop);
+  }
+  const save = el("button", "chip mt-primary", "В черновик");
+  save.type = "button";
+  save.onclick = async () => {
+    const values = {};
+    for (const input of grid.querySelectorAll("input[data-rate]")) {
+      const value = Number(input.value);
+      if (Number.isFinite(value) && value > 0) values[input.dataset.rate] = value;
+    }
+    if (!Object.keys(values).length) {
+      setNote("Укажите хотя бы одну цену больше нуля.");
+      return;
+    }
+    save.disabled = true;
+    try {
+      await API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/draft`, { rates_rub: values });
+      dialog.close();
+      await load(true);
+      setNote("Цена в черновике. Нажмите «Опубликовать», чтобы показать её клиентам.");
+    } catch (e) {
+      setNote(`Не удалось: ${e.message}`);
+      save.disabled = false;
+    }
+  };
+  actions.append(save);
+  form.append(actions);
+  dialog.append(form);
+  dialog.showModal();
+}
+
+async function publishDrafts() {
+  const count = (DATA && DATA.price_drafts && DATA.price_drafts.count) || 0;
+  if (!count) return;
+  const stale = (DATA.models || []).filter((model) => model.draft && model.draft.stale).length;
+  const question = stale
+    ? `В черновике ${count} моделей, из них ${stale} устарели. Опубликовать остальные?`
+    : `Опубликовать ${count} черновиков? Клиенты увидят новые цены сразу.`;
+  if (!confirm(question)) return;
+  const button = $("mt-publish");
+  if (button) button.disabled = true;
+  setNote("Публикуем…");
+  try {
+    const result = await API("POST", "/v1/admin/prices/drafts/publish", {});
+    await load(true);
+    const failed = (result.failed || []).length;
+    setNote(`Опубликовано: ${result.published} из ${result.total}${failed ? `, не удалось: ${failed}` : ""}.`);
+  } catch (e) {
+    setNote(`Не удалось: ${e.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function discardDrafts() {
+  const count = (DATA && DATA.price_drafts && DATA.price_drafts.count) || 0;
+  if (!count) return;
+  if (!confirm(`Сбросить ${count} черновиков? Опубликованные цены не изменятся.`)) return;
+  try {
+    const result = await API("POST", "/v1/admin/prices/drafts/discard", {});
+    await load(true);
+    setNote(`Сброшено черновиков: ${result.removed}.`);
+  } catch (e) {
+    setNote(`Не удалось: ${e.message}`);
   }
 }
 
@@ -1086,11 +1307,12 @@ function draw() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Обычная загрузка — из кэша релея, без походов на сайты поставщиков. */
-async function load(force = false) {
+async function load(force = false, reference = false) {
   if (loading) return;
   loading = true;
   const query = new URLSearchParams({ compact: "1" });
   if (force) query.set("refresh", "1");
+  if (reference) query.set("reference", "1");
   try {
     const data = await API("GET", "/v1/admin/prices?" + query.toString());
     DATA = data || {};
@@ -1125,8 +1347,8 @@ async function refreshPrices() {
       const snapshot = await API("GET", "/v1/admin/provider-prices").catch(() => null);
       if (snapshot && snapshot.generated_at && snapshot.generated_at !== was) break;
     }
-    await load(true);
-    setNote(`Цены обновлены: ${(DATA && DATA.generated_at) || "—"}.`);
+    await load(true, true);
+    setNote(`Цены и справочник обновлены: ${(DATA && DATA.generated_at) || "—"}.`);
   } catch (e) {
     setNote(`Не удалось обновить: ${e.message}`);
   } finally {
@@ -1145,6 +1367,10 @@ function wire() {
   if (refresh) refresh.onclick = refreshPrices;
   const apply = $("mt-apply-k");
   if (apply) apply.onclick = bulkPricing;
+  const publish = $("mt-publish");
+  if (publish) publish.onclick = publishDrafts;
+  const discard = $("mt-discard");
+  if (discard) discard.onclick = discardDrafts;
   const show = $("mt-show");
   if (show) show.onclick = () => bulkVisibility(true);
   const hide = $("mt-hide");

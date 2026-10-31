@@ -28,7 +28,7 @@ from typing import Any
 
 from fastapi import Depends, HTTPException
 
-from . import model_pricing
+from . import model_pricing, price_drafts
 from .provider_routing import ROUTING_CATALOG_PROVIDERS, identity
 
 try:  # справочник необязателен: без него страница цен работает как раньше
@@ -723,6 +723,8 @@ _MODEL_FIELDS = (
     "reference",
     "context_source",
     "output_source",
+    "rates",
+    "draft",
 )
 _OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason", "unit", "price_rub")
 
@@ -751,6 +753,7 @@ def _compact(payload: dict) -> dict:
         "plan_discounts": payload.get("plan_discounts"),
         "providers": payload.get("providers"),
         "reference": payload.get("reference"),
+        "price_drafts": payload.get("price_drafts"),
         "models": models,
     }
 
@@ -818,17 +821,18 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
     """Включает страницу цен в релей."""
 
     @app.get("/v1/admin/prices", dependencies=[Depends(admin_dep)])
-    async def admin_prices(refresh: int = 0, compact: int = 0) -> dict:
-        now = time.time()
-        if not refresh and _CACHE["full"] is not None and now - _CACHE["at"] <= _CACHE_TTL:
-            return _CACHE["compact"] if compact else _CACHE["full"]
-        if refresh and reference_catalog is not None:
-            # «Обновить цены» — единственный момент, когда админка ходит в GitHub
-            # за справочником: страница открывается часто и ждать 5 секунд нельзя.
+    async def admin_prices(refresh: int = 0, compact: int = 0, reference: int = 0) -> dict:
+        if reference and reference_catalog is not None:
+            # Только кнопка «Обновить цены»: страница открывается часто, а
+            # справочник весит 5 МБ и обновляется раз в неделю.
             try:
                 reference_catalog.refresh(force=True)
             except Exception:  # справочник не должен ломать обновление прайсов
                 pass
+            refresh = 1
+        now = time.time()
+        if not refresh and _CACHE["full"] is not None and now - _CACHE["at"] <= _CACHE_TTL:
+            return _CACHE["compact"] if compact else _CACHE["full"]
         prices = _read("prices.json")
         rate = _rate(settings, prices)
         models = _models(settings, float(rate["cny_rub"] or 0))
@@ -970,7 +974,9 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 }
         for row in models:
             row["last_request"] = actuals.get(row["id"])
+        draft_rows: dict[str, dict[str, Any]] = {}
         if cloud is not None:
+            draft_rows = price_drafts.all_rows(cloud)
             for row in models:
                 spec = settings.model(row["id"])
                 commerce = model_pricing.describe(cloud, spec)
@@ -993,6 +999,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     if spec.kind == "chat"
                     else commerce["source"] == "legacy_cost"
                 )
+        for row in models:
+            commerce = row.get("commerce") or {}
+            row["rates"] = {
+                "revision": int(commerce.get("revision") or 0),
+                "rates_rub": commerce.get("rates_rub") or {},
+                "unit": commerce.get("unit") or "",
+            }
+            row["draft"] = price_drafts.describe(commerce, draft_rows.get(row["id"]))
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]
@@ -1014,6 +1028,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
             "providers": _providers(settings, prices),
             "retail": _retail(),
             "drafts": drafts,
+            "price_drafts": {"count": len(draft_rows), "models": sorted(draft_rows)[:2000]},
         }
         _CACHE["full"] = payload
         _CACHE["compact"] = _compact(payload)
@@ -1057,15 +1072,14 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 preview.append({"id": model_id, "rates_rub": rates})
                 updated += 1
                 continue
-            revision = model_pricing.policy(cloud, spec)["revision"]
             try:
-                model_pricing.save(cloud, spec, {"revision": revision, "rates_rub": rates})
+                price_drafts.stage(cloud, spec, rates, note=f"наценка ×{multiplier}")
                 updated += 1
             except Exception as error:  # noqa: BLE001
                 failed.append({"id": model_id, "error": str(error)[:160]})
         if not dry_run:
             _CACHE["at"] = 0.0
-        return {"updated": updated, "total": len(items), "failed": failed[:20], "preview": preview[:10]}
+        return {"updated": updated, "staged": updated, "total": len(items), "failed": failed[:20], "preview": preview[:10]}
 
     @app.post("/v1/admin/prices/bulk/visibility", dependencies=[Depends(admin_dep)])
     async def bulk_visibility(body: dict) -> dict:
@@ -1099,6 +1113,54 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         if cloud is None or spec is None:
             raise HTTPException(404, "Unknown model")
         return model_pricing.save(cloud, spec, body)
+
+    @app.put("/v1/admin/prices/models/{model_id}/draft", dependencies=[Depends(admin_dep)])
+    async def stage_model_price(model_id: str, body: dict) -> dict:
+        """Цена в черновик: клиенты увидят её только после публикации."""
+        spec = settings.model(model_id)
+        if cloud is None or spec is None:
+            raise HTTPException(404, "Unknown model")
+        draft = price_drafts.stage(
+            cloud,
+            spec,
+            body.get("rates_rub"),
+            note=str(body.get("note") or "правка строки"),
+        )
+        _CACHE["at"] = 0.0
+        return {"id": spec.id, "draft": draft}
+
+    @app.delete("/v1/admin/prices/models/{model_id}/draft", dependencies=[Depends(admin_dep)])
+    async def drop_model_draft(model_id: str) -> dict:
+        if cloud is None:
+            raise HTTPException(503, "Model pricing storage is unavailable")
+        removed = price_drafts.drop(cloud, model_id)
+        _CACHE["at"] = 0.0
+        return {"id": model_id, "removed": removed}
+
+    @app.post("/v1/admin/prices/drafts/publish", dependencies=[Depends(admin_dep)])
+    async def publish_price_drafts(body: dict | None = None) -> dict:
+        """Опубликовать черновики: проверка ревизий, запись, очистка."""
+        if cloud is None:
+            raise HTTPException(503, "Model pricing storage is unavailable")
+        body = body or {}
+        ids = body.get("ids")
+        if ids is not None and (not isinstance(ids, list) or not all(isinstance(item, str) for item in ids)):
+            raise HTTPException(422, "ids must be a list of model ids")
+        result = price_drafts.publish(cloud, settings, ids)
+        _CACHE["at"] = 0.0
+        return result
+
+    @app.post("/v1/admin/prices/drafts/discard", dependencies=[Depends(admin_dep)])
+    async def discard_price_drafts(body: dict | None = None) -> dict:
+        if cloud is None:
+            raise HTTPException(503, "Model pricing storage is unavailable")
+        body = body or {}
+        ids = body.get("ids")
+        if ids is not None and not isinstance(ids, list):
+            raise HTTPException(422, "ids must be a list of model ids")
+        removed = price_drafts.discard(cloud, [str(item) for item in ids] if ids is not None else None)
+        _CACHE["at"] = 0.0
+        return {"removed": removed}
 
     @app.put("/v1/admin/prices/models/{model_id}/visibility", dependencies=[Depends(admin_dep)])
     async def model_visibility(model_id: str, body: dict) -> dict:
