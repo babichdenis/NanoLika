@@ -1,3 +1,40 @@
+## 2026-11-01 · Изоляция: аудит v2 — сверка с деревом и shared_chat
+
+**Сверка.** Аудит писался по старому срезу: почти всё, что в нём названо
+дефектом, в текущем дереве уже сделано и покрыто тестами.
+
+- I15/I15b (застывший инвентарь возможностей и дубль блока) — кэша
+  `_capabilities` нет, `capabilities_section()` считается на каждый промпт,
+  вызов один. `tests/test_capabilities.py` и `test_phone.py` зелёные.
+- I16 (`presence_scope`/`delivery_note`) — оба поля есть в
+  `nanomuse/tools/devices.py`; `tests/test_presence_scope.py` зелёный.
+- I18 (промпт с абсолютным путём, режимом Sentinel и чужой памятью) — промпт
+  говорит «пути относительно workspace», память выдаётся через
+  `memory_scope`, `_redact` чистит ответы, стрим и каналы.
+- Старые P0: workspace на тред (`workspace_for_thread`), область видимости
+  памяти (`memory_scope`/`MemoryStoreRouter`), `full-access` не снимает taint
+  (`scoped_decision`), TTL на тред (`_sweep_thread_workspaces`), корень путей
+  хаба (`_file_path(root=...)`), `info` с приватными полями только по гранту,
+  nonce/sent_at в кадре хаба — всё в коде, тесты
+  `test_server.py`, `test_memory_scopes.py`, `test_sentinel.py`,
+  `test_vault.py`, `test_hub.py` зелёные.
+
+**Что действительно осталось (I17).** Python-рантайм умел *просить*
+`shared_chat`, но не отвечал на него и не объявлял в hello. Добавлено:
+- `HubService._shared_chat()` — read-only проба `{cid}` → `{cid, sessionId}`;
+  сначала ищет локальную привязку, при её отсутствии один раз обновляет sync;
+  отказывает при выключенном sync, чужом аккаунте и архиве;
+- `_extra_actions()` теперь объявляет `shared_chat` и `channel_permissions`
+  (обработчик второго уже был, но capability не рекламировалась);
+- тесты `test_shared_chat_probe_resolves_a_locally_mapped_conversation`,
+  `test_shared_chat_probe_refuses_an_unknown_conversation`,
+  `test_runtime_advertises_the_capabilities_it_answers`; docs/hub.md
+  поправлен: пробу принимает и Python-рантайм.
+
+**Тест.** `test_shared_execution.py` подправлен под новый `state` движка
+синхронизации. Полный прогон: **1115 passed, 7 skipped, 73 subtests** —
+красных из аудита не воспроизводится ни одного.
+
 ## 2026-10-31 · Синхронизация: аудит v2 — P0 ленивого каталога
 
 **Сверка с деревом.** Аудит писался по срезу без последних правок: S2

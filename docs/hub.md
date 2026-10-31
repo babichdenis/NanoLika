@@ -454,9 +454,10 @@ reported as a provider that stopped answering midway through a response.
 
 ### Shared conversation continuation from messengers
 
-A desktop advertising `shared_chat` accepts a read-only `shared_chat {cid}` probe.
-It returns the existing `{cid, sessionId}` only after a successful cloud refresh,
-for the current account and an active conversation whose cloud switch is enabled.
+A desktop or Python runtime advertising `shared_chat` accepts a read-only
+`shared_chat {cid}` probe. It returns the existing `{cid, sessionId}` only after a
+successful cloud refresh, for the current account and an active conversation whose
+cloud switch is enabled.
 Early builds advertising `chat.open_desktop` may also be probed; a successful
 CID-specific response negotiates the missing capability for that request.
 

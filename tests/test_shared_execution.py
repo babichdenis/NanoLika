@@ -98,6 +98,7 @@ async def test_successful_catalogue_pull_clears_a_previous_transport_error():
         client=SimpleNamespace(cloud=SimpleNamespace(api_key="")),
         svc=SimpleNamespace(hub=SimpleNamespace(_key=lambda: "fixture-key")),
         catalog=SimpleNamespace(pull=AsyncMock(return_value=0)),
+        state={"backfill": False},
         last_error="http_502",
         last_pull_at=None,
     )

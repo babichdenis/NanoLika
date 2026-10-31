@@ -141,6 +141,8 @@ class HubService:
             "task",
             "stop",
             "approve",
+            "shared_chat",
+            "channel_permissions",
             "memory.add",
             "memory.search",
             "memory.forget",
@@ -757,6 +759,9 @@ class HubService:
         if call.action == "task":
             await self._task(call)
             return
+        if call.action == "shared_chat":
+            await self._shared_chat(call)
+            return
         if call.action == "channel_permissions":
             await self._channel_permissions(call)
             return
@@ -1053,6 +1058,37 @@ class HubService:
         self.svc._save_index()
         self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         return thread
+
+    async def _shared_chat(self, call: IncomingCall) -> None:
+        """Answer whether this computer can continue a shared conversation, and under which
+        local thread. The caller (`channels/manager.py`) probes this before sending the
+        `task`; a mapped chat is enough — the task itself hydrates the history."""
+        cid = str(call.args.get("cid") or "").strip()
+        if not cid:
+            await call.fail("usage", "cid is required")
+            return
+        sync = self.svc.sync
+        if not sync.active:
+            await call.fail("not_allowed", "conversation sync is not active on this computer")
+            return
+        thread = sync.thread_of(cid)
+        if thread is None:
+            # Not seen here yet: refresh once. The catalogue may be unreachable; a mapping
+            # made while it was up still lets the task try.
+            with contextlib.suppress(CloudError):
+                await sync.pull()
+            thread = sync.thread_of(cid)
+        if thread is None or not sync._mine(thread):
+            await call.fail("not_allowed", "this shared chat is unavailable")
+            return
+        catalog = getattr(sync, "catalog", None)
+        mark = (catalog.rows.get(cid) if catalog is not None else None) or sync.state.get(
+            "conversation_marks", {}
+        ).get(cid) or {}
+        if mark.get("archived") or mark.get("deleted"):
+            await call.fail("not_allowed", "this shared chat is archived")
+            return
+        await call.result({"cid": cid, "sessionId": thread.id})
 
     async def _channel_permissions(self, call: IncomingCall) -> None:
         """Apply an explicit messenger access choice to this device's private task thread."""

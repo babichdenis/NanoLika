@@ -31,6 +31,7 @@ from nanomuse.llm import MockLLM
 from nanomuse.memory import account_scope, memory_scope
 from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
+from nanomuse.server.events import MAIN_THREAD
 from nanomuse.server.service import MuseService
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="posix shell in the tests")
@@ -815,6 +816,45 @@ def test_messenger_access_mode_is_applied_to_the_callers_private_task_thread(hub
     thread = next(t for t in service.threads.values() if t.remote_from)
     assert thread.remote_from["device"] == "phone-1"
     assert service.channels.menu.preferences.mode(thread.id) == "read-only"
+
+
+def test_runtime_advertises_the_capabilities_it_answers(hub_server) -> None:
+    """I18: every capability the runtime serves is in its hello, so another device can
+    choose it without a failed call first."""
+    _, service, _, _ = hub_server
+    served = set(actions.ACTIONS) | set(service.hub._extra_actions())
+    assert {"task", "stop", "approve", "shared_chat", "channel_permissions"} <= served
+
+
+def test_shared_chat_probe_resolves_a_locally_mapped_conversation(hub_server) -> None:
+    """I17: the runtime must be able to *answer* the shared-chat probe, not only ask it.
+    A computer that has the conversation mapped can continue it through `task`."""
+    client, service, _llm, relay = hub_server
+    sign_in(client)
+    wait_for(lambda: client.get("/api/hub").json()["state"] == "connected")
+    service.settings.hub.remote_control = True
+    service.sync.state["cids"][MAIN_THREAD] = "cid-shared"
+    service.sync.state["owners"][MAIN_THREAD] = "acct-test"
+    service.sync.catalog.rows["cid-shared"] = {"archived": False, "deleted": False}
+
+    relay.call_runtime("shared_chat", {"cid": "cid-shared"}, "shared-1")
+    result = relay.next_frame("result")
+
+    assert result["id"] == "shared-1" and result["ok"] is True
+    assert result["body"] == {"cid": "cid-shared", "sessionId": MAIN_THREAD}
+
+
+def test_shared_chat_probe_refuses_an_unknown_conversation(hub_server) -> None:
+    client, service, _llm, relay = hub_server
+    sign_in(client)
+    wait_for(lambda: client.get("/api/hub").json()["state"] == "connected")
+    service.settings.hub.remote_control = True
+
+    relay.call_runtime("shared_chat", {"cid": "cid-unknown"}, "shared-2")
+    result = relay.next_frame("result")
+
+    assert result["id"] == "shared-2" and result["ok"] is False
+    assert result["error"] == "not_allowed"
 
 
 def test_remote_conversations_from_different_devices_do_not_share_a_thread(hub_server) -> None:
