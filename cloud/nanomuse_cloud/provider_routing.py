@@ -63,6 +63,17 @@ def identity(model: str) -> str:
     return ALIASES.get(model.lower(), model)
 
 
+# Only the customer-facing alias routes across the DeepSeek Flash family. A
+# version-specific spec (0423, 0731, 1017, vision-exp, latest) must use its own
+# offers: otherwise the admin says 1.49 while the client asked for 0423.
+FAMILY_ANCHORS = {"deepseekflash"}
+
+
+def model_key(value: str) -> str:
+    """Bare model id for exact matching: `deepseek/deepseek-v4-flash` → `deepseekv4flash`."""
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower().rsplit("/", 1)[-1])
+
+
 def number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
@@ -534,7 +545,16 @@ class ProviderRouter:
             payload["provider"] = policy
         return payload
 
-    def routes(self, spec: Any, body: dict, url: str, headers: dict, *, include_all: bool = False) -> list[Route]:
+    def routes(
+        self,
+        spec: Any,
+        body: dict,
+        url: str,
+        headers: dict,
+        *,
+        include_all: bool = False,
+        family: bool = False,
+    ) -> list[Route]:
         clean_body = {k: v for k, v in body.items() if k not in {"provider", "models", "route"}}
         configured = Route(spec.provider or "", url, headers, self._supplier_body(spec.provider or "", clean_body))
         if not self.enabled:
@@ -551,8 +571,10 @@ class ProviderRouter:
         candidates = []
         inventory = []
         now = time.time()
-        wanted = identity(spec.upstream)
-        if spec.provider:
+        anchor = model_key(getattr(spec, "id", "")) in FAMILY_ANCHORS or model_key(spec.upstream) in FAMILY_ANCHORS
+        use_family = bool(family or anchor)
+        wanted = identity(spec.upstream) if use_family else model_key(spec.upstream)
+        if spec.provider and use_family:
             configured_offer = next((o for o in self.offers.get(spec.provider, []) if o.model == spec.upstream), None)
             if configured_offer:
                 wanted = identity(configured_offer.canonical_model or configured_offer.model)
@@ -575,7 +597,11 @@ class ProviderRouter:
                     continue
                 provider_reasons.append("баланс ниже рабочего порога")
             for offer in offers:
-                if identity(offer.canonical_model or offer.model) != wanted:
+                # canonical_model is the customer-facing family alias; exact mode
+                # must compare the provider's own model id, not that alias.
+                offer_model = (offer.canonical_model or offer.model) if use_family else offer.model
+                matched = identity(offer_model) == wanted if use_family else model_key(offer_model) == wanted
+                if not matched:
                     continue
                 exclusions = list(provider_reasons)
                 if now - offer.updated > self.max_age:
@@ -646,7 +672,11 @@ class ProviderRouter:
         routes = [item[2] for item in candidates]
         # Only the explicitly configured route is allowed as an unpriced last resort.
         # Never send the model to arbitrary known providers or a different model version.
-        has_quote = any(identity(o.canonical_model or o.model) == wanted for offers in self.offers.values() for o in offers)
+        has_quote = any(
+            (identity(o.canonical_model or o.model) == wanted if use_family else model_key(o.model) == wanted)
+            for offers in self.offers.values()
+            for o in offers
+        )
         balance = self.balances.get(configured.provider, {})
         blocked = self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300
         if (

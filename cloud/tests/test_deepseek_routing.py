@@ -114,14 +114,14 @@ def test_direct_deepseek_survives_aggregator_quarantine_and_handles_vision_tools
     r.offers["aitunnel"] = [replace(ds, provider="aitunnel", model="deepseek-v4.1-flash", input_rub=1, output_rub=1)]
     r.quarantined["aitunnel", "deepseek-v4.1-flash"] = time.time() + 1800
     body = {
-        "model": "deepseek-v4.1-flash",
+        "model": "deepseek-flash",
         "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://example.test/fixture.png"}}]}],
         "tools": [{"type": "function", "function": {"name": "fixture"}}],
         "max_tokens": 64,
         "enable_thinking": False,
         "reasoning_effort": "none",
     }
-    routes = r.routes(SimpleNamespace(upstream="deepseek-v4.1-flash", provider="aitunnel"), body, "", {})
+    routes = r.routes(SimpleNamespace(upstream="deepseek-flash", provider="aitunnel"), body, "", {})
     assert len(routes) == 1 and routes[0].provider == "deepseek"
     assert routes[0].body["model"] == "deepseek-flash"
     assert routes[0].body["thinking"] == {"type": "disabled"}

@@ -60,9 +60,9 @@ def test_total_request_cost_not_cheapest_input(monkeypatch):
     assert routes(r, messages=[{"role": "user", "content": "a" * 30000}], max_tokens=1)[0].provider == "polza"
 
 
-def test_flash_revision_joins_family_and_routes_by_lowest_live_quote(monkeypatch):
+def test_flash_anchor_joins_family_and_routes_by_lowest_live_quote(monkeypatch):
     r = setup_router(monkeypatch)
-    spec = ModelSpec("flash", "DeepSeek V4.1 Flash", "deepseek-v4.1-flash", provider="routerai")
+    spec = ModelSpec("deepseek-flash", "DeepSeek V4.1 Flash", "deepseek-flash", provider="routerai")
     r.offers = {
         "routerai": [replace(quote("routerai", 11, 17), model="deepseek-v4.1-flash")],
         "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4.1-flash-1017")],
@@ -77,6 +77,21 @@ def test_flash_revision_joins_family_and_routes_by_lowest_live_quote(monkeypatch
     assert all(
         route.routing_eligible for route in r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
     )
+
+
+def test_version_specific_flash_does_not_take_a_family_sibling(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("flash-0423", "DeepSeek V4 Flash 0423", "deepseek/deepseek-v4-flash", provider="routerai")
+    r.offers = {
+        "routerai": [replace(quote("routerai", 10, 20), model="deepseek/deepseek-v4-flash")],
+        "openrouter": [replace(quote("openrouter", 1, 1), model="deepseek/deepseek-v4.1-flash-1017")],
+    }
+    body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
+
+    candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+
+    assert [route.provider for route in candidates] == ["routerai"]
+    assert candidates[0].body["model"] == "deepseek/deepseek-v4-flash"
 
 
 def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monkeypatch):
@@ -168,7 +183,7 @@ def test_admin_inventory_keeps_supplier_quotes_below_balance_floor(monkeypatch):
     r.balances = {
         "openrouter": {"amount": 0.0068, "currency": "USD", "rub_estimate": 0.68, "checked": now, "error": None},
     }
-    spec = ModelSpec("flash", "DeepSeek Flash", "deepseek-v4.1-flash")
+    spec = ModelSpec("deepseek-flash", "DeepSeek Flash", "deepseek-flash")
     body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 512}
 
     runtime = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})

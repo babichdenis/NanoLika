@@ -866,7 +866,9 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 body = {"model": spec.upstream, "messages": [{"role": "user", "content": "a" * 3000}], "max_tokens": 512}
                 routes = router.routes(spec, body, "", {})
                 selected_route = routes[0] if routes else None
-                all_quotes = router.routes(spec, body, "", {}, include_all=True)
+                # Для таблицы показываем и родственные версии, но закупку и
+                # выбранный маршрут берём из точного вызова выше.
+                all_quotes = router.routes(spec, body, "", {}, include_all=True, family=True)
                 info_route = selected_route or next(
                     (candidate for candidate in all_quotes if candidate.offer and candidate.routing_eligible), None
                 )
