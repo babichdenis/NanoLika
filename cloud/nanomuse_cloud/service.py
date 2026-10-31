@@ -3135,11 +3135,10 @@ class Cloud:
         return charged
 
     def charge_speech(self, caller: Caller, model: ModelSpec, characters: int, request_id: str) -> int:
-        """What a text says: the model is paid for every thousand characters, rounded up,
-        and never less than one thousand."""
-        thousands = max(1, -(-max(0, characters) // 1000))
-        charged = model.per_speech * thousands
-        cost = round(model.price_speech * thousands * 1_000_000)
+        """What a text says: every 100 characters, rounded up, at least one."""
+        hundreds = max(1, -(-max(0, characters) // 100))
+        charged = max(1, round(model.per_speech * hundreds / 10))
+        cost = round(model.price_speech * hundreds / 10 * 1_000_000)
         sale = model_pricing.amount(self, model, {"characters": characters}, caller)["sale_uy"]
         self.db.charge(
             caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash
@@ -3148,10 +3147,10 @@ class Cloud:
         return charged
 
     def charge_transcribe(self, caller: Caller, model: ModelSpec, seconds: float, request_id: str) -> int:
-        """What a recording said: paid for every started minute, one minute at the least."""
-        minutes = max(1, -(-int(max(0.0, seconds)) // 60))
-        charged = model.per_minute * minutes
-        cost = round(model.price_minute * minutes * 1_000_000)
+        """What a recording said: every started 5 seconds, at least one unit."""
+        units = max(1, math.ceil(max(0.0, seconds) / 5))
+        charged = max(1, round(model.per_minute * units / 12))
+        cost = round(model.price_minute * units / 12 * 1_000_000)
         sale = model_pricing.amount(self, model, {"seconds": seconds}, caller)["sale_uy"]
         self.db.charge(
             caller.account_id, "audio", model.id, 0, 0, charged, request_id, cost_uy=cost, sale_uy=sale, key_hash=caller.key_hash

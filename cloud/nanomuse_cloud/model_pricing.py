@@ -191,9 +191,11 @@ def amount(cloud: Any, spec: Any, params: dict, caller: Any = None) -> dict:
             raise CloudError(400, "bad_quote", "Resolution is not priced")
         rub = second * num("seconds", spec.clip_seconds, 300)
     elif spec.audio_kind == "speech":
-        rub = rates["speech"] * max(1, math.ceil(num("characters", 1000) / 1000))
+        # 100 знаков — минимальная единица: короткая реплика не стоит как абзац.
+        rub = rates["speech"] * max(1, math.ceil(num("characters", 1000) / 100)) / 10
     elif spec.audio_kind == "transcribe":
-        rub = rates["minute"] * max(1, math.ceil(num("seconds", 60) / 60))
+        # 5 секунд — минимальная единица: голосовое на три секунды не стоит минуты.
+        rub = rates["minute"] * max(1, math.ceil(num("seconds", 60) / 5)) / 12
     elif spec.audio_kind == "music":
         rub = rates["track"] * max(1, num("tracks", 1, 10))
     else:
@@ -209,9 +211,9 @@ def amount(cloud: Any, spec: Any, params: dict, caller: Any = None) -> dict:
         elif spec.kind == "video":
             base_uy = spec.video_cost_uy(num("seconds", spec.clip_seconds, 300), str(params.get("resolution") or "480P"))
         elif spec.audio_kind == "speech":
-            base_uy = round(spec.price_speech * max(1, math.ceil(num("characters", 1000) / 1000)) * 1_000_000)
+            base_uy = round(spec.price_speech * max(1, math.ceil(num("characters", 1000) / 100)) / 10 * 1_000_000)
         elif spec.audio_kind == "transcribe":
-            base_uy = round(spec.price_minute * max(1, math.ceil(num("seconds", 60) / 60)) * 1_000_000)
+            base_uy = round(spec.price_minute * max(1, math.ceil(num("seconds", 60) / 5)) / 12 * 1_000_000)
         elif spec.audio_kind == "music":
             base_uy = round(spec.price_track * max(1, num("tracks", 1, 10)) * 1_000_000)
 

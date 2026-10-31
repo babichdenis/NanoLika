@@ -1972,8 +1972,32 @@ def create_app(
         "opus": "audio/ogg",
         "aac": "audio/aac",
         "flac": "audio/flac",
-        "pcm": "audio/wave",
+        "pcm": "audio/wav",
     }
+
+    #: Запись из мессенджера — это минуты, а не часы; 25 МБ покрывают два часа mp3.
+    AUDIO_MAX_BYTES = 25 * 1024 * 1024
+    AUDIO_MAX_SECONDS = 2 * 60 * 60
+
+    def _recording_seconds(data: bytes, mime: str) -> float:
+        """Сколько примерно длится запись: WAV считаем точно по заголовку, сжатые —
+        по байтам и типичному битрейту. Лучше пяти секунд ошибки, чем минута счёта
+        за трёхсекундное голосовое."""
+        if len(data) > 44 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+            try:
+                byte_rate = int.from_bytes(data[28:32], "little")
+                data_size = int.from_bytes(data[40:44], "little")
+                if byte_rate > 0 and data_size > 0:
+                    return data_size / byte_rate
+            except ValueError:
+                pass
+        bitrate = {
+            "audio/ogg": 32_000,
+            "audio/webm": 32_000,
+            "audio/mp4": 128_000,
+            "audio/mpeg": 128_000,
+        }.get(mime, 96_000)
+        return len(data) * 8 / bitrate
 
     def _audio_model(model_id: str, audio_kind: str, caller: Caller) -> ModelSpec:
         """The audio model asked for, and one that really does this (`speech` says words,
@@ -1983,10 +2007,14 @@ def create_app(
             raise CloudError(400, "bad_request", f"{spec.id} is not a model that can {audio_kind}")
         return spec
 
-    async def _polza_speech(base: str, key: str, spec: ModelSpec, text: str, voice: str, fmt: str) -> tuple[bytes, str, float]:
+    async def _polza_speech(
+        base: str, key: str, spec: ModelSpec, text: str, voice: str, fmt: str, speed: float | None = None
+    ) -> tuple[bytes, str, float]:
         """Голос у провайдера: он отвечает либо звуком как есть, либо письмом
         `{"audio": <base64>, "contentType": "audio/wav", "duration": 3.32}` — разбираем оба."""
         payload = {"model": spec.upstream, "input": text, "response_format": fmt, "voice": voice}
+        if speed:
+            payload["speed"] = speed
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         # у Bothub база уже кончается на /v1, у Polza — нет
         path = "/audio/speech" if base.rstrip("/").endswith("/v1") else "/v1/audio/speech"
@@ -2071,6 +2099,12 @@ def create_app(
         voice = str(body.get("voice") or spec.voice or "").strip()
         if not voice:
             raise CloudError(400, "bad_request", f"voice is required: {spec.id} has no voice of its own by default")
+        try:
+            speed = float(body.get("speed") or 0) or None
+        except (TypeError, ValueError):
+            raise CloudError(400, "bad_request", "speed is a number from 0.25 to 4") from None
+        if speed is not None and not 0.25 <= speed <= 4:
+            raise CloudError(400, "bad_request", "speed is a number from 0.25 to 4")
         provider, base, key = settings.route(spec)
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
@@ -2083,7 +2117,7 @@ def create_app(
         try:
             if not provider:
                 raise CloudError(501, "unsupported", "This voice lives only with the provider of its own")
-            sound, sound_type, sound_seconds = await _polza_speech(base, key, spec, text, voice, fmt)
+            sound, sound_type, sound_seconds = await _polza_speech(base, key, spec, text, voice, fmt, speed)
             charged = cloud.charge_speech(caller, spec, len(text), request_id)
         finally:
             cloud.settle(caller, request_id)
@@ -2198,9 +2232,18 @@ def create_app(
         caller: Caller = Depends(caller_dep),
     ) -> Response:
         spec = _audio_model(model, "transcribe", caller)
-        data = await file.read()
+        data = await file.read(AUDIO_MAX_BYTES + 1)
         if not data:
             raise CloudError(400, "bad_request", "the recording is empty")
+        if len(data) > AUDIO_MAX_BYTES:
+            raise CloudError(
+                413,
+                "too_large",
+                f"The recording is larger than {AUDIO_MAX_BYTES // (1024 * 1024)} MB",
+            )
+        estimated = _recording_seconds(data, _recording_type(file.filename or "", file.content_type))
+        if estimated > AUDIO_MAX_SECONDS:
+            raise CloudError(413, "too_large", "The recording is longer than two hours")
         provider, base, key = settings.route(spec)
         request_id = uuid.uuid4().hex[:16]
         cloud.check_budget(
@@ -2218,13 +2261,19 @@ def create_app(
                 seconds = float(said.get("duration") or 0.0)
             except (TypeError, ValueError):
                 seconds = 0.0
-            # без длительности от провайдера считаем одну минуту — меньше записи не бывает
-            charged = cloud.charge_transcribe(caller, spec, seconds or 60.0, request_id)
+            # Провайдер не сказал длительность — считаем её по байтам и формату, а не
+            # «минута на всякий случай»: голосовое на три секунды не стоит минуты.
+            if seconds <= 0:
+                seconds = estimated
+            charged = cloud.charge_transcribe(caller, spec, seconds, request_id)
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={**said, "nanomuse": {"charged": charged}},
-            headers={"x-nanomuse-charged": str(charged)},
+            content={**said, "nanomuse": {"charged": charged, "seconds": round(seconds, 2)}},
+            headers={
+                "x-nanomuse-charged": str(charged),
+                "x-nanomuse-seconds": f"{seconds:.2f}",
+            },
         )
 
     # -- video: the provider's asynchronous API, relayed under its own paths ------------------------
