@@ -6,6 +6,7 @@ from nanomuse.tools.email_tool import ReadEmails, SendEmail
 from nanomuse.tools.files import Files
 from nanomuse.tools.goal_tools import Goals
 from nanomuse.tools.mcp_tools import MCPManager, MCPTool
+from nanomuse.tools.media import Media
 from nanomuse.tools.memory_tools import Forget, Recall, Remember
 from nanomuse.tools.office import OfficeConvert, OfficeVba, OfficeXlsm
 from nanomuse.tools.reminder_tools import Reminders
@@ -28,6 +29,7 @@ __all__ = [
     "Goals",
     "MCPManager",
     "MCPTool",
+    "Media",
     "OfficeConvert",
     "OfficeVba",
     "OfficeXlsm",

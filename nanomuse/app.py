@@ -38,6 +38,7 @@ from nanomuse.tools import (
     Forget,
     Goals,
     MCPManager,
+    Media,
     OfficeConvert,
     OfficeVba,
     OfficeXlsm,
@@ -341,6 +342,7 @@ class NanoMuseApp:
             OfficeConvert(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeVba(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
+            Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=lambda: self.hub.cloud),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:

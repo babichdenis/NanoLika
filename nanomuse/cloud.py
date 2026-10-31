@@ -277,6 +277,73 @@ class CloudClient:
         # "&" or a space in one cannot change the question asked
         return await self._request("GET", "/v1/estimate?" + urlencode(params))
 
+    async def _audio(
+        self,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        data: dict[str, str] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+        timeout: float = 180.0,
+    ) -> httpx.Response:
+        """Один вызов звука: сырой ответ или CloudError с кодом релея."""
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            response = await self._client.post(
+                self.base_url + path, json=json, data=data, files=files, headers=headers, timeout=timeout
+            )
+        except httpx.TimeoutException:
+            raise CloudError(0, "timeout", f"{self.base_url} did not answer in time") from None
+        except httpx.HTTPError as exc:
+            raise CloudError(0, "offline", f"Cannot reach {self.base_url}: {exc}") from None
+        if response.status_code >= 400:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            err = body.get("error") if isinstance(body, dict) else None
+            if not isinstance(err, dict):
+                err = {}
+            raise CloudError(
+                response.status_code,
+                str(err.get("code") or f"http_{response.status_code}"),
+                str(err.get("message") or response.text[:200]),
+                extra={k: v for k, v in err.items() if k not in ("code", "message", "type")},
+            )
+        return response
+
+    async def speech(
+        self, model: str, text: str, *, voice: str = "", fmt: str = "mp3", speed: float | None = None
+    ) -> tuple[bytes, str, dict[str, str]]:
+        """Текст в звук: байты, тип содержимого и заголовки с фактическим списанием."""
+        payload: dict[str, Any] = {"model": model, "input": text, "response_format": fmt}
+        if voice:
+            payload["voice"] = voice
+        if speed:
+            payload["speed"] = speed
+        response = await self._audio("/v1/audio/speech", json=payload)
+        media = (response.headers.get("content-type") or "audio/mpeg").split(";")[0].strip()
+        return response.content, media, dict(response.headers)
+
+    async def transcribe(
+        self, model: str, filename: str, data: bytes, mime: str, *, language: str = ""
+    ) -> dict[str, Any]:
+        """Запись в текст: ответ релея как есть (text, duration, nanomuse)."""
+        form: dict[str, str] = {"model": model}
+        if language:
+            form["language"] = language
+        response = await self._audio(
+            "/v1/audio/transcriptions",
+            data=form,
+            files={"file": (filename or "recording.webm", data, mime or "audio/webm")},
+            timeout=300.0,
+        )
+        try:
+            said = response.json()
+        except ValueError:
+            raise CloudError(502, "upstream", "The transcription provider sent no words") from None
+        return said if isinstance(said, dict) else {"text": ""}
+
     @staticmethod
     def models_for(models: list[dict[str, Any]], purpose: str = "chat") -> list[dict[str, Any]]:
         """The relay's models meant for ``purpose`` — ``chat`` or ``gui`` (contract C4).

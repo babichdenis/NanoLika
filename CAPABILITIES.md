@@ -61,6 +61,7 @@
 ## Everything else - остальное
 
 - `ask_user`: Ask the user a clarifying question and wait for the answer.
+- `media`: Sound through the account's NanoLika Cloud key.
 - `office_xlsm`: Make an Excel workbook with a working macro and a button, without Microsoft Office: data goes to a sheet, the macro reads commands from the hidden _cfg sheet (format, filter, sort, pdf, refresh, stamp, clear) and draws a button on open.
 - `terminate`: Finish the current task.
 
