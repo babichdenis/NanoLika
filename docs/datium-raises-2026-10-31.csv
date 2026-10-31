@@ -1,0 +1,86 @@
+id,name,old,output,datium_name,datium_id
+anthropic-claude-fable-5,Claude Fable 5,6515.38,7308.0,Claude Fable 5,anthropic/claude-fable-5
+anthropic-claude-fable-5-1,Claude Fable 5.1,6515.38,7308.0,Claude Fable 5.1,anthropic/claude-fable-5.1
+anthropic-claude-opus-5,Claude Opus 5,3257.69,3654.0,Claude Opus 5,anthropic/claude-opus-5
+anthropic-claude-opus-5-5,Claude Opus 5.5,2606.15,2923.0,Claude Opus 5.5,anthropic/claude-opus-5.5
+anthropic-claude-sonnet-5-5,Claude Sonnet 5.5,1303.08,1462.0,Claude Sonnet 5.5,anthropic/claude-sonnet-5.5
+bytedance-seed-seed-1-6-flash,Seed 1.6 Flash,43.98,44.0,Seed 1.6 Flash,bytedance-seed/seed-1.6-flash
+cohere-command-r7b-12-2024,Command R7B (12-2024),21.99,22.0,Command R7B (12-2024),cohere/command-r7b-12-2024
+deepseek-deepseek-chat,DeepSeek V3,130.49,150.0,DeepSeek V3,deepseek/deepseek-chat
+deepseek-deepseek-v3-2,DeepSeek V3.2,45.39,56.0,DeepSeek V3.2,deepseek/deepseek-v3.2
+deepseek-deepseek-v4-flash-0731,DeepSeek V4 Flash 0731,21.27,35.0,DeepSeek V4 Flash 0731,deepseek/deepseek-v4-flash-0731
+deepseek-deepseek-v4-flash-vision-exp,DeepSeek V4 Flash Vision Exp,21.27,95.0,DeepSeek V4 Flash Vision Exp,deepseek/deepseek-v4-flash-vision-exp
+deepseek-pro,DeepSeek V4 Pro,307.89,468.0,DeepSeek v4 pro,deepseek/deepseek-v4-pro
+deepseek-deepseek-v4-pro-0813,DeepSeek V4 Pro 0813,246.31,289.0,DeepSeek V4 Pro 0813,deepseek/deepseek-v4-pro-0813
+deepseek-flash,DeepSeek V4.1 Flash,21.27,73.0,DeepSeek V4.1 Flash,deepseek/deepseek-v4.1-flash
+deepseek-deepseek-v4-1-flash-1017,DeepSeek V4.1 Flash 1017,21.27,88.0,DeepSeek V4.1 Flash 1017,deepseek/deepseek-v4.1-flash-1017
+google-gemini-3-flash-preview,Gemini 3 Flash Preview,244.34,438.0,Gemini 3 Flash Preview,google/gemini-3-flash-preview
+google-gemini-3-1-flash-lite,Gemini 3.1 Flash Lite,122.17,219.0,Gemini 3.1 Flash Lite,google/gemini-3.1-flash-lite
+google-gemini-3-1-pro-preview,Gemini 3.1 Pro Preview,1061.58,1754.0,Gemini 3.1 Pro Preview,google/gemini-3.1-pro-preview
+google-gemini-3-5-flash,Gemini 3.5 Flash,733.02,1315.0,Gemini 3.5 Flash,google/gemini-3.5-flash
+google-gemini-3-5-flash-lite,Gemini 3.5 Flash-Lite,203.62,365.0,Gemini 3.5 Flash Lite,google/gemini-3.5-flash-lite
+google-gemini-3-6-flash,Gemini 3.6 Flash,305.42,548.0,Gemini 3.6 Flash,google/gemini-3.6-flash
+google-gemini-3-7-flash,Gemini 3.7 Flash,305.42,548.0,Gemini 3.7 Flash,google/gemini-3.7-flash
+google-gemini-3-8-flash,Gemini 3.8 Flash,305.42,603.0,Gemini 3.8 flash,google/gemini-3.8-flash
+gemini-argon,Gemini 4 Argon,814.46,1462.0,Gemini 4 Argon,google/gemini-4-argon
+google-gemma-3-12b-it,Gemma 3 12B,21.99,22.0,Gemma 3 12B,google/gemma-3-12b-it
+google-gemma-3-27b-it,Gemma 3 27B,23.46,51.0,Gemma 3 27B,google/gemma-3-27b-it
+google-gemma-3-4b-it,Gemma 3 4B,7.33,15.0,Gemma 3 4B,google/gemma-3-4b-it
+google-gemma-4-26b-a4b-it,Gemma 4 26B A4B,4.4,33.0,Gemma 4 26B A4B,google/gemma-4-26b-a4b-it
+google-gemma-4-31b-it,Gemma 4 31B,49.85,58.0,Gemma 4 31B,google/gemma-4-31b-it
+ibm-granite-granite-4-2-8b,Granite 4.2 8B,21.99,22.0,Granite 4.2 8B,ibm-granite/granite-4.2-8b
+inception-mercury-2,Mercury 2,109.96,110.0,Mercury 2,inception/mercury-2
+inception-mercury-2-5,Mercury 2.5,21.99,22.0,Mercury 2.5,inception/mercury-2.5
+inclusionai-ling-3-1-flash,Ling 3.1 Flash,32.99,33.0,Ling 3.1 Flash,inclusionai/ling-3.1-flash
+meta-llama-llama-3-3-70b-instruct,Llama 3.3 70B Instruct,46.92,47.0,Llama 3.3 70B Instruct,meta-llama/llama-3.3-70b-instruct
+meta-llama-llama-4-scout,Llama 4 Scout,43.98,44.0,Llama 4 Scout,meta-llama/llama-4-scout
+minimax-minimax-m2-7,MiniMax M2.7,123.16,175.0,MiniMax M2.7,minimax/minimax-m2.7
+minimax-minimax-m3,MiniMax M3,140.75,175.0,MiniMax M3,minimax/minimax-m3
+minimax-minimax-m3-1-flash,MiniMax M3.1 Flash,29.32,88.0,MiniMax M3.1 Flash,minimax/minimax-m3.1-flash
+mistralai-codestral-2508,Codestral 2508,131.95,132.0,Codestral 2508,mistralai/codestral-2508
+mistralai-ministral-3b-2512,Ministral 3 3B 2512,14.66,15.0,Ministral 3 3B 2512,mistralai/ministral-3b-2512
+mistralai-ministral-8b-2512,Ministral 3 8B 2512,21.99,22.0,Ministral 3 8B 2512,mistralai/ministral-8b-2512
+mistralai-mistral-small-24b-instruct-2501,Mistral Small 3,11.73,12.0,Mistral Small 3,mistralai/mistral-small-24b-instruct-2501
+mistralai-mistral-small-2603,Mistral Small 4,87.97,88.0,Mistral Small 4,mistralai/mistral-small-2603
+mistralai-mistral-saba,Saba,87.97,88.0,Saba,mistralai/mistral-saba
+mistralai-voxtral-small-24b-2507,Voxtral Small 24B 2507,43.98,44.0,Voxtral Small 24B 2507,mistralai/voxtral-small-24b-2507
+moonshotai-kimi-k2-6,Kimi K2.6,240.45,498.0,Kimi K2.6,moonshotai/kimi-k2.6
+moonshotai-kimi-k2-7-code,Kimi K2.7 Code,439.84,512.0,Kimi K2.7 Code,moonshotai/kimi-k2.7-code
+moonshotai-kimi-k3,Kimi K3,1022.63,2192.0,Kimi K3,moonshotai/kimi-k3
+nvidia-nemotron-3-nano-30b-a3b,Nemotron 3 Nano 30B A3B,29.32,35.0,Nemotron 3 Nano 30B A3B,nvidia/nemotron-3-nano-30b-a3b
+nvidia-nemotron-3-super-120b-a12b,Nemotron 3 Super,58.65,351.0,Nemotron 3 Super,nvidia/nemotron-3-super-120b-a12b
+nvidia-nemotron-3-ultra-550b-a55b,Nemotron 3 Ultra,322.55,351.0,Nemotron 3 Ultra,nvidia/nemotron-3-ultra-550b-a55b
+nvidia-nemotron-3-5-lightning,Nemotron 3.5 Lightning,17.59,29.0,Nemotron 3.5 Lightning,nvidia/nemotron-3.5-lightning
+nvidia-nemotron-3-5-super-vl,Nemotron 3.5 Super VL,51.31,73.0,Nemotron 3.5 Super VL,nvidia/nemotron-3.5-super-vl
+openai-gpt-4o-mini,GPT-4o-mini,87.97,88.0,GPT-4o Mini,openai/gpt-4o-mini
+openai-gpt-5-2,GPT-5.2,1061.58,2046.0,GPT-5.2,openai/gpt-5.2
+openai-gpt-oss-120b,gpt-oss-120b,21.99,88.0,gpt-oss-120b,openai/gpt-oss-120b
+openai-gpt-oss-safeguard-20b,gpt-oss-safeguard-20b,43.98,44.0,gpt-oss-safeguard-20b,openai/gpt-oss-safeguard-20b
+qwen-qwen3-14b,Qwen3 14B,32.26,35.0,Qwen3 14B,qwen/qwen3-14b
+qwen-qwen3-235b-a22b-thinking-2507,Qwen3 235B A22B Thinking 2507,442.11,512.0,Qwen3 235B A22B Thinking 2507,qwen/qwen3-235b-a22b-thinking-2507
+qwen-qwen3-30b-a3b-instruct-2507,Qwen3 30B A3B Instruct 2507,36.84,44.0,Qwen3 30B A3B Instruct 2507,qwen/qwen3-30b-a3b-instruct-2507
+qwen-qwen3-coder-flash,Qwen3 Coder Flash,142.95,143.0,Qwen3 Coder Flash,qwen/qwen3-coder-flash
+qwen-qwen3-vl-235b-a22b-instruct,Qwen3 VL 235B A22B Instruct,129.02,278.0,Qwen3 VL 235B A22B Instruct,qwen/qwen3-vl-235b-a22b-instruct
+qwen-qwen3-vl-30b-a3b-instruct,Qwen3 VL 30B A3B Instruct,87.97,88.0,Qwen3 VL 30B A3B Instruct,qwen/qwen3-vl-30b-a3b-instruct
+qwen-qwen3-5-397b-a17b,Qwen3.5 397B A17B,343.08,526.0,Qwen3.5 397B A17B,qwen/qwen3.5-397b-a17b
+qwen-qwen3-5-27b,Qwen3.5-27B,228.72,380.0,Qwen3.5-27B,qwen/qwen3.5-27b
+qwen-qwen3-5-35b-a3b,Qwen3.5-35B-A3B,109.96,146.0,Qwen3.5-35B-A3B,qwen/qwen3.5-35b-a3b
+qwen-qwen3-5-9b,Qwen3.5-9B,6.74,37.0,Qwen3.5-9B,qwen/qwen3.5-9b
+qwen-qwen3-6-27b,Qwen3.6 27B,293.23,395.0,Qwen3.6 27B,qwen/qwen3.6-27b
+qwen-qwen3-6-35b-a3b,Qwen3.6 35B A3B,102.63,132.0,Qwen3.6 35B A3B,qwen/qwen3.6-35b-a3b
+qwen-qwen3-8-flash,Qwen3.8 Flash,68.91,69.0,Qwen3.8 Flash,qwen/qwen3.8-flash
+qwen-qwen3-8-omni-flash,Qwen3.8 Omni Flash,68.91,69.0,Qwen3.8 Omni Flash,qwen/qwen3.8-omni-flash
+reka-reka-edge,Reka Edge,14.66,15.0,Reka Edge,rekaai/reka-edge
+tencent-hy3-preview,Hy3 preview,87.97,88.0,Hy3 preview,tencent/hy3-preview
+xiaomi-mimo-v2-5,MiMo-V2.5,34.89,292.0,MiMo-V2.5,xiaomi/mimo-v2.5
+xiaomi-mimo-v2-5-pro,MiMo-V2.5-Pro,89.29,263.0,MiMo-V2.5-Pro,xiaomi/mimo-v2.5-pro
+xiaomi-mimo-v2-6-flash,MiMo-V2.6-Flash,27.42,41.0,MiMo-V2.6-Flash,xiaomi/mimo-v2.6-flash
+xiaomi-mimo-v2-6-pro,MiMo-V2.6-Pro,108.42,127.0,MiMo-V2.6-Pro,xiaomi/mimo-v2.6-pro
+z-ai-glm-4-6,GLM 4.6,256.57,292.0,GLM 4.6,z-ai/glm-4.6
+z-ai-glm-4-6v,GLM 4.6V,131.95,132.0,GLM 4.6V,z-ai/glm-4.6v
+z-ai-glm-4-7,GLM 4.7,256.57,289.0,GLM 4.7,z-ai/glm-4.7
+z-ai-glm-5,GLM 5,281.5,468.0,GLM 5,z-ai/glm-5
+z-ai-glm-5-1,GLM 5.1,414.16,643.0,GLM 5.1,z-ai/glm-5.1
+z-ai-glm-5-2,GLM 5.2,205.26,1023.0,GLM 5.2,z-ai/glm-5.2
+z-ai-glm-5-3,GLM 5.3,129.02,205.0,GLM 5.3,z-ai/glm-5.3
+z-ai-glm-5-3-flash,GLM 5.3 Flash,5.73,18.0,GLM 5.3 Flash,z-ai/glm-5.3-flash

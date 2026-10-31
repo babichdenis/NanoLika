@@ -1161,6 +1161,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 failed.append(str(model_id))
                 continue
             cloud.set_model_visibility(spec.id, visible)
+            cloud.db.audit_add("console", "model.visibility", spec.id, json.dumps({"visible": visible, "bulk": True}))
             updated += 1
         cloud.note("", "model.visibility.bulk", f"{updated} моделей: {'показать' if visible else 'скрыть'}")
         _CACHE["at"] = 0.0
@@ -1233,5 +1234,6 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         if body["visible"] and not spec.available:
             raise HTTPException(409, "This model is unavailable")
         cloud.set_model_visibility(spec.id, body["visible"])
+        cloud.db.audit_add("console", "model.visibility", spec.id, json.dumps({"visible": bool(body["visible"])}))
         cloud.note("", "model.visibility", f"{spec.id}: {body['visible']}")
         return {"id": spec.id, "visible": cloud.model_visible(spec)}

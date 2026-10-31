@@ -953,6 +953,15 @@ function drawModels(rows) {
       badge.title = `У клиентов то же название ещё у: ${twins.filter((item) => item.id !== model.id).map((item) => item.id).join(", ")}`;
       name.append(badge);
     }
+    const logButton = el("button", "mt-log-btn", "лог");
+    logButton.type = "button";
+    logButton.title = "История модели: появление, изменения цены, видимость и заметки";
+    logButton.setAttribute("aria-label", "История модели " + group.name);
+    logButton.onclick = (event) => {
+      event.stopPropagation();
+      openModelLog(group);
+    };
+    name.append(logButton);
     tr.append(name);
 
     const textCell = (cls, text) => {
@@ -1459,6 +1468,122 @@ function openPriceDialog(group) {
   form.append(actions);
   dialog.append(form);
   dialog.showModal();
+}
+
+function logTime(seconds) {
+  const date = new Date(Number(seconds) * 1000);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function logDialog() {
+  let dialog = $("mt-log");
+  if (dialog) return dialog;
+  dialog = el("dialog", "mt-log-dialog");
+  dialog.id = "mt-log";
+  dialog.innerHTML = `
+    <div class="mt-log-head">
+      <div><h3 id="mt-log-title">История модели</h3><p class="fine" id="mt-log-sub"></p></div>
+      <button class="mt-log-close" id="mt-log-close" type="button" aria-label="Закрыть">×</button>
+    </div>
+    <div class="mt-log-body">
+      <div class="mt-log-top">
+        <table id="mt-log">
+          <thead><tr><th>Когда</th><th>Тип</th><th>Событие</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="mt-log-bottom">
+        <div class="mt-log-detail" id="mt-log-detail">Выберите запись</div>
+        <form class="mt-log-note" id="mt-log-form">
+          <textarea id="mt-log-note" rows="3" placeholder="Добавить заметку по модели…"></textarea>
+          <button class="chip mt-primary" type="submit">Добавить</button>
+        </form>
+      </div>
+    </div>`;
+  ROOT.append(dialog);
+  dialog.querySelector("#mt-log-close").onclick = () => dialog.close();
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  return dialog;
+}
+
+function selectLogEvent(dialog, event, row) {
+  for (const item of dialog.querySelectorAll(".mt-log-row.mt-active")) item.classList.remove("mt-active");
+  if (row) row.classList.add("mt-active");
+  const detail = dialog.querySelector("#mt-log-detail");
+  const author = event.author ? ` · ${event.author}` : "";
+  const kind = event.kind === "note" ? "Заметка" : "Система";
+  detail.textContent = `${logTime(event.at)} · ${kind}${author}\n\n${event.body || event.title}`;
+}
+
+async function refreshModelLog(group, dialog) {
+  const model = group.primary;
+  const body = dialog.querySelector("#mt-log tbody");
+  const detail = dialog.querySelector("#mt-log-detail");
+  body.replaceChildren();
+  detail.textContent = "Загрузка…";
+  let data;
+  try {
+    data = await API("GET", `/v1/admin/models/${encodeURIComponent(model.id)}/log`);
+  } catch (error) {
+    detail.textContent = `Не удалось загрузить историю: ${error.message}`;
+    return;
+  }
+  const events = data.events || [];
+  let first = null;
+  for (const event of events) {
+    const row = el("tr", "mt-log-row " + (event.kind === "note" ? "is-note" : "is-system"));
+    row.append(el("td", "mt-log-when", logTime(event.at)));
+    const kind = el("td");
+    kind.append(el("span", "mt-log-type " + (event.kind === "note" ? "is-note" : "is-system"), event.kind === "note" ? "заметка" : "система"));
+    row.append(kind);
+    const what = el("td", "mt-log-what");
+    what.append(el("span", "mt-log-title", event.title));
+    if (event.body) what.append(el("span", "mt-log-preview", String(event.body).split("\n")[0].slice(0, 140)));
+    row.append(what);
+    row.onclick = () => selectLogEvent(dialog, event, row);
+    body.append(row);
+    if (!first) first = { event, row };
+  }
+  if (first) selectLogEvent(dialog, first.event, first.row);
+  else detail.textContent = "Событий пока нет. Добавьте заметку ниже.";
+}
+
+async function openModelLog(group) {
+  const dialog = logDialog();
+  const model = group.primary;
+  dialog.querySelector("#mt-log-title").textContent = `История · ${group.name}`;
+  dialog.querySelector("#mt-log-sub").textContent = model.id;
+  const form = dialog.querySelector("#mt-log-form");
+  const note = dialog.querySelector("#mt-log-note");
+  note.value = "";
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const text = note.value.trim();
+    if (!text) return;
+    const button = form.querySelector("button");
+    button.disabled = true;
+    try {
+      await API("POST", `/v1/admin/models/${encodeURIComponent(model.id)}/notes`, { body: text });
+      note.value = "";
+      await refreshModelLog(group, dialog);
+      setNote("Заметка добавлена.");
+    } catch (error) {
+      setNote(`Заметка не сохранена: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  dialog.showModal();
+  await refreshModelLog(group, dialog);
 }
 
 async function publishDrafts() {

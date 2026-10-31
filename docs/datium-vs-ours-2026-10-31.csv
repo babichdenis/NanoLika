@@ -1,0 +1,222 @@
+datium_name,datium_id,datium_in,datium_out,our_id,our_name,our_in,our_out,match,in_pct,out_pct
+Nova 2 Lite,amazon/nova-2-lite-v1,44.0,365.0,amazon-nova-2-lite-v1,Nova 2 Lite,43.98,366.54,name,-0.0,0.4
+Nova Lite 1.0,amazon/nova-lite-v1,9.0,35.0,amazon-nova-lite-v1,Nova Lite 1.0,8.8,35.19,name,-2.3,0.5
+Nova Micro 1.0,amazon/nova-micro-v1,5.0,20.0,amazon-nova-micro-v1,Nova Micro 1.0,5.13,20.53,name,2.6,2.6
+Nova Premier 1.0,amazon/nova-premier-v1,365.0,1827.0,amazon-nova-premier-v1,Nova Premier 1.0,366.54,1832.68,name,0.4,0.3
+Nova Pro 1.0,amazon/nova-pro-v1,117.0,468.0,amazon-nova-pro-v1,Nova Pro 1.0,117.29,469.17,name,0.2,0.2
+Claude Fable 5,anthropic/claude-fable-5,1462.0,7308.0,anthropic-claude-fable-5,Claude Fable 5,1303.08,6515.38,name,-10.9,-10.8
+Claude Fable 5.1,anthropic/claude-fable-5.1,1462.0,7308.0,anthropic-claude-fable-5-1,Claude Fable 5.1,1303.08,6515.38,name,-10.9,-10.8
+Claude Haiku 4.5,anthropic/claude-haiku-4.5,146.0,731.0,anthropic-claude-haiku-4-5,Claude Haiku 4.5,146.61,733.07,name,0.4,0.3
+Claude Haiku 5.5,anthropic/claude-haiku-5.5,15.0,73.0,anthropic-claude-haiku-5-5,Claude Haiku 5.5,14.66,73.31,name,-2.3,0.4
+Claude Opus 4.1,anthropic/claude-opus-4.1,2192.0,10962.0,anthropic-claude-opus-4-1,Claude Opus 4.1,2199.21,10996.07,name,0.3,0.3
+Claude Opus 4.5,anthropic/claude-opus-4.5,731.0,3654.0,anthropic-claude-opus-4-5,Claude Opus 4.5,733.07,3665.36,name,0.3,0.3
+Claude Opus 4.6,anthropic/claude-opus-4.6,731.0,3654.0,anthropic-claude-opus-4-6,Claude Opus 4.6,733.07,3665.36,name,0.3,0.3
+Claude Opus 4.7,anthropic/claude-opus-4.7,731.0,3654.0,anthropic-claude-opus-4-7,Claude Opus 4.7,733.07,3665.36,name,0.3,0.3
+Claude Opus 4.8,anthropic/claude-opus-4.8,731.0,3654.0,anthropic-claude-opus-4-8,Claude Opus 4.8,733.07,3665.36,name,0.3,0.3
+Claude Opus 5,anthropic/claude-opus-5,731.0,3654.0,anthropic-claude-opus-5,Claude Opus 5,651.54,3257.69,name,-10.9,-10.8
+Claude Opus 5.5,anthropic/claude-opus-5.5,585.0,2923.0,anthropic-claude-opus-5-5,Claude Opus 5.5,521.23,2606.15,name,-10.9,-10.8
+Claude Sonnet 4.5,anthropic/claude-sonnet-4.5,438.0,2192.0,anthropic-claude-sonnet-4-5,Claude Sonnet 4.5,439.84,2199.21,name,0.4,0.3
+Claude Sonnet 5,anthropic/claude-sonnet-5,292.0,1462.0,anthropic-claude-sonnet-5,Claude Sonnet 5,293.23,1466.14,name,0.4,0.3
+Claude Sonnet 5.5,anthropic/claude-sonnet-5.5,292.0,1462.0,anthropic-claude-sonnet-5-5,Claude Sonnet 5.5,260.62,1303.08,name,-10.7,-10.9
+Seed 1.6,bytedance-seed/seed-1.6,37.0,292.0,bytedance-seed-seed-1-6,Seed 1.6,36.65,293.23,name,-0.9,0.4
+Seed 1.6 Flash,bytedance-seed/seed-1.6-flash,11.0,44.0,bytedance-seed-seed-1-6-flash,Seed 1.6 Flash,11.0,43.98,name,-0.0,-0.0
+Seed 2.1 Turbo,bytedance-seed/seed-2-1-turbo,73.0,365.0,bytedance-seed-seed-2-1-turbo,Seed 2.1 Turbo,73.31,366.54,name,0.4,0.4
+Seed-2.0-Code,bytedance-seed/seed-2.0-code,73.0,438.0,bytedance-seed-seed-2-0-code,Seed-2.0-Code,73.31,439.84,name,0.4,0.4
+Seed-2.0-Lite,bytedance-seed/seed-2.0-lite,37.0,292.0,bytedance-seed-seed-2-0-lite,Seed-2.0-Lite,36.65,293.23,name,-0.9,0.4
+Seed-2.0-Mini,bytedance-seed/seed-2.0-mini,15.0,58.0,bytedance-seed-seed-2-0-mini,Seed-2.0-Mini,14.66,58.65,name,-2.3,1.1
+Command A,cohere/command-a,365.0,1462.0,cohere-command-a,Command A,366.54,1466.14,name,0.4,0.3
+Command A+,cohere/command-a-plus,44.0,219.0,cohere-command-a,Command A,366.54,1466.14,name,733.0,569.5
+Command R7B (12-2024),cohere/command-r7b-12-2024,5.0,22.0,cohere-command-r7b-12-2024,Command R7B (12-2024),5.5,21.99,name,10.0,-0.0
+DeepSeek V3,deepseek/deepseek-chat,38.0,150.0,deepseek-deepseek-chat,DeepSeek V3,46.92,130.49,name,23.5,-13.0
+DeepSeek V3.1,deepseek/deepseek-chat-v3.1,37.0,139.0,deepseek-deepseek-chat-v3-1,DeepSeek V3.1,36.65,139.28,name,-0.9,0.2
+DeepSeek V3.1 Terminus,deepseek/deepseek-v3.1-terminus,39.0,146.0,deepseek-deepseek-v3-1-terminus,DeepSeek V3.1 Terminus,39.59,146.61,name,1.5,0.4
+DeepSeek V3.2,deepseek/deepseek-v3.2,38.0,56.0,deepseek-deepseek-v3-2,DeepSeek V3.2,30.61,45.39,name,-19.4,-18.9
+DeepSeek V3.2 Exp,deepseek/deepseek-v3.2-exp,39.0,60.0,deepseek-deepseek-v3-2-exp,DeepSeek V3.2 Exp,39.59,60.11,name,1.5,0.2
+DeepSeek V4 Flash 0731,deepseek/deepseek-v4-flash-0731,17.0,35.0,deepseek-deepseek-v4-flash-0731,DeepSeek V4 Flash 0731,2.08,21.27,name,-87.7,-39.2
+DeepSeek v4 pro,deepseek/deepseek-v4-pro,234.0,468.0,deepseek-pro,DeepSeek V4 Pro,85.8,307.89,name,-63.3,-34.2
+DeepSeek V4.1 Flash,deepseek/deepseek-v4.1-flash,7.0,73.0,deepseek-flash,DeepSeek V4.1 Flash,2.08,21.27,name,-70.2,-70.9
+DeepSeek V4.1 Flash 1017,deepseek/deepseek-v4.1-flash-1017,22.0,88.0,deepseek-deepseek-v4-1-flash-1017,DeepSeek V4.1 Flash 1017,2.08,21.27,name,-90.5,-75.8
+Gemini 2.5 Flash,google/gemini-2.5-flash,44.0,365.0,google-gemini-2-5-flash,Gemini 2.5 Flash,43.98,366.54,name,-0.0,0.4
+Gemini 2.5 Flash Lite,google/gemini-2.5-flash-lite,15.0,58.0,google-gemini-2-5-flash-lite,Gemini 2.5 Flash Lite,14.66,58.65,name,-2.3,1.1
+Gemini 2.5 Pro,google/gemini-2.5-pro,183.0,1462.0,google-gemini-2-5-pro,Gemini 2.5 Pro,184.62,1477.0,name,0.9,1.0
+Gemini 2.5 Pro Preview 06-05,google/gemini-2.5-pro-preview,183.0,1462.0,google-gemini-2-5-pro-preview,Gemini 2.5 Pro Preview 06-05,183.27,1466.14,name,0.1,0.3
+Gemini 3 Flash Preview,google/gemini-3-flash-preview,73.0,438.0,google-gemini-3-flash-preview,Gemini 3 Flash Preview,40.72,244.34,name,-44.2,-44.2
+Gemini 3.1 Flash Lite,google/gemini-3.1-flash-lite,37.0,219.0,google-gemini-3-1-flash-lite,Gemini 3.1 Flash Lite,20.36,122.17,name,-45.0,-44.2
+Gemini 3.1 Flash Lite Preview,google/gemini-3.1-flash-lite-preview,37.0,219.0,google-gemini-3-1-flash-lite-preview,Gemini 3.1 Flash Lite Preview,36.65,219.92,name,-0.9,0.4
+Gemini 3.1 Pro Preview,google/gemini-3.1-pro-preview,292.0,1754.0,google-gemini-3-1-pro-preview,Gemini 3.1 Pro Preview,151.65,1061.58,name,-48.1,-39.5
+Gemini 3.1 Pro Preview Custom Tools,google/gemini-3.1-pro-preview-customtools,292.0,1754.0,google-gemini-3-1-pro-preview-customtools,Gemini 3.1 Pro Preview Custom Tools,293.23,1759.37,name,0.4,0.3
+Gemini 3.5 Flash,google/gemini-3.5-flash,219.0,1315.0,google-gemini-3-5-flash,Gemini 3.5 Flash,122.17,733.02,name,-44.2,-44.3
+Gemini 3.5 Flash Lite,google/gemini-3.5-flash-lite,44.0,365.0,google-gemini-3-5-flash-lite,Gemini 3.5 Flash-Lite,24.43,203.62,name,-44.5,-44.2
+Gemini 3.6 Flash,google/gemini-3.6-flash,110.0,548.0,google-gemini-3-6-flash,Gemini 3.6 Flash,61.08,305.42,name,-44.5,-44.3
+Gemini 3.7 Flash,google/gemini-3.7-flash,110.0,548.0,google-gemini-3-7-flash,Gemini 3.7 Flash,61.08,305.42,name,-44.5,-44.3
+Gemini 3.8 flash,google/gemini-3.8-flash,121.0,603.0,google-gemini-3-8-flash,Gemini 3.8 Flash,61.08,305.42,name,-49.5,-49.3
+Gemini 4 Argon,google/gemini-4-argon,292.0,1462.0,gemini-argon,Gemini 4 Argon,162.89,814.46,name,-44.2,-44.3
+Gemma 3 12B,google/gemma-3-12b-it,7.0,22.0,google-gemma-3-12b-it,Gemma 3 12B,7.33,21.99,name,4.7,-0.0
+Gemma 3 27B,google/gemma-3-27b-it,12.0,51.0,google-gemma-3-27b-it,Gemma 3 27B,11.73,23.46,name,-2.3,-54.0
+Gemma 3 4B,google/gemma-3-4b-it,7.0,15.0,google-gemma-3-4b-it,Gemma 3 4B,5.86,7.33,name,-16.2,-51.1
+Gemma 4 26B A4B,google/gemma-4-26b-a4b-it,10.0,33.0,google-gemma-4-26b-a4b-it,Gemma 4 26B A4B,1.47,4.4,name,-85.3,-86.7
+Gemma 4 31B,google/gemma-4-31b-it,29.0,58.0,google-gemma-4-31b-it,Gemma 4 31B,14.66,49.85,name,-49.4,-14.1
+Granite 4.2 8B,ibm-granite/granite-4.2-8b,9.0,22.0,ibm-granite-granite-4-2-8b,Granite 4.2 8B,8.8,21.99,name,-2.3,-0.0
+Mercury 2,inception/mercury-2,37.0,110.0,inception-mercury-2,Mercury 2,36.65,109.96,name,-0.9,-0.0
+Mercury 2.5,inception/mercury-2.5,6.0,22.0,inception-mercury-2-5,Mercury 2.5,5.86,21.99,name,-2.3,-0.0
+Mercury 3,inception/mercury-3,15.0,51.0,inception-mercury-3,Mercury 3,14.66,51.31,name,-2.3,0.6
+Ling 3.0 Flash,inclusionai/ling-3.0-flash,3.0,9.0,inclusionai-ling-3-0-flash,Ling 3.0 Flash,3.08,9.24,name,2.6,2.6
+Ling 3.0 Flash VL,inclusionai/ling-3.0-flash-vl,9.0,26.0,inclusionai-ling-3-0-flash-vl,Ling 3.0 Flash VL,8.86,26.59,name,-1.5,2.3
+Ling 3.1 Flash,inclusionai/ling-3.1-flash,11.0,33.0,inclusionai-ling-3-1-flash,Ling 3.1 Flash,11.0,32.99,name,-0.0,-0.0
+LFM2.5-24B-A2B,liquid/lfm-2.5-24b-a2b,7.0,102.0,liquid-lfm-2-5-24b-a2b,LFM2.5-24B-A2B,7.33,102.63,name,4.7,0.6
+LongCat 2.0,meituan/longcat-2.0,44.0,175.0,meituan-longcat-2-0,LongCat 2.0,43.98,175.94,name,-0.0,0.5
+Llama 3.3 70B Instruct,meta-llama/llama-3.3-70b-instruct,15.0,47.0,meta-llama-llama-3-3-70b-instruct,Llama 3.3 70B Instruct,14.66,46.92,name,-2.3,-0.2
+Llama 4 Scout,meta-llama/llama-4-scout,15.0,44.0,meta-llama-llama-4-scout,Llama 4 Scout,14.66,43.98,name,-2.3,-0.0
+Llama Guard 4 12B,meta-llama/llama-guard-4-12b,26.0,26.0,meta-llama-llama-guard-4-12b,Llama Guard 4 12B,26.39,26.39,name,1.5,1.5
+Muse Spark 1.2 Contributor,meta/muse-spark-1.2-contributor,15.0,29.0,meta-muse-spark-1-2-contributor,Muse Spark 1.2 Contributor,14.66,29.32,name,-2.3,1.1
+MiniMax M1,minimax/minimax-m1,80.0,322.0,minimax-minimax-m1,MiniMax M1,58.65,322.55,name,-26.7,0.2
+MiniMax M2,minimax/minimax-m2,37.0,149.0,minimax-minimax-m2,MiniMax M2,37.39,149.55,name,1.0,0.4
+MiniMax M2.1,minimax/minimax-m2.1,44.0,175.0,minimax-minimax-m2-1,MiniMax M2.1,43.98,175.94,name,-0.0,0.5
+MiniMax M2.5,minimax/minimax-m2.5,39.0,139.0,minimax-minimax-m2-5,MiniMax M2.5,39.59,139.28,name,1.5,0.2
+MiniMax M2.7,minimax/minimax-m2.7,44.0,175.0,minimax-minimax-m2-7,MiniMax M2.7,30.79,123.16,name,-30.0,-29.6
+MiniMax M3,minimax/minimax-m3,44.0,175.0,minimax-minimax-m3,MiniMax M3,33.72,140.75,name,-23.4,-19.6
+MiniMax M3.1 Flash,minimax/minimax-m3.1-flash,22.0,88.0,minimax-minimax-m3-1-flash,MiniMax M3.1 Flash,7.33,29.32,name,-66.7,-66.7
+MiniMax-01,minimax/minimax-01,29.0,161.0,minimax-minimax-01,MiniMax-01,29.32,161.28,name,1.1,0.2
+Codestral 2508,mistralai/codestral-2508,44.0,132.0,mistralai-codestral-2508,Codestral 2508,43.98,131.95,name,-0.0,-0.0
+Devstral 2 2512,mistralai/devstral-2512,58.0,292.0,mistralai-devstral-2512,Devstral 2 2512,58.65,293.23,name,1.1,0.4
+Ministral 3 14B 2512,mistralai/ministral-14b-2512,29.0,29.0,mistralai-ministral-14b-2512,Ministral 3 14B 2512,29.32,29.32,name,1.1,1.1
+Ministral 3 3B 2512,mistralai/ministral-3b-2512,15.0,15.0,mistralai-ministral-3b-2512,Ministral 3 3B 2512,14.66,14.66,name,-2.3,-2.3
+Ministral 3 8B 2512,mistralai/ministral-8b-2512,22.0,22.0,mistralai-ministral-8b-2512,Ministral 3 8B 2512,21.99,21.99,name,-0.0,-0.0
+Mistral Large 2407,mistralai/mistral-large-2407,292.0,877.0,mistralai-mistral-large-2407,Mistral Large 2407,293.23,879.69,name,0.4,0.3
+Mistral Large 3 2512,mistralai/mistral-large-2512,73.0,219.0,mistralai-mistral-large-2512,Mistral Large 3 2512,73.31,219.92,name,0.4,0.4
+Mistral Large 4,mistralai/mistral-large-4-0,102.0,307.0,mistralai-mistral-large-4-0,Mistral Large 4,102.63,307.89,name,0.6,0.3
+Mistral Medium 3,mistralai/mistral-medium-3,58.0,292.0,mistralai-mistral-medium-3,Mistral Medium 3,58.65,293.23,name,1.1,0.4
+Mistral Medium 3.1,mistralai/mistral-medium-3.1,58.0,292.0,mistralai-mistral-medium-3-1,Mistral Medium 3.1,58.65,293.23,name,1.1,0.4
+Mistral Medium 3.5,mistralai/mistral-medium-3-5,219.0,1096.0,mistralai-mistral-medium-3-5,Mistral Medium 3.5,219.92,1099.61,name,0.4,0.3
+Mistral Small 3.1 24B,mistralai/mistral-small-3.1-24b-instruct,51.0,81.0,mistralai-mistral-small-3-1-24b-instruct,Mistral Small 3.1 24B,51.46,81.37,name,0.9,0.5
+Mistral Small 3.2 24B,mistralai/mistral-small-3.2-24b-instruct,11.0,29.0,mistralai-mistral-small-3-2-24b-instruct,Mistral Small 3.2 24B,11.0,29.32,name,-0.0,1.1
+Mistral Small 4,mistralai/mistral-small-2603,22.0,88.0,mistralai-mistral-small-2603,Mistral Small 4,21.99,87.97,name,-0.0,-0.0
+Kimi K2 0711,moonshotai/kimi-k2,83.0,336.0,moonshotai-kimi-k2,Kimi K2 0711,83.57,337.21,name,0.7,0.4
+Kimi K2 0905,moonshotai/kimi-k2-0905,88.0,365.0,moonshotai-kimi-k2-0905,Kimi K2 0905,87.97,366.54,name,-0.0,0.4
+Kimi K2 Thinking,moonshotai/kimi-k2-thinking,88.0,365.0,moonshotai-kimi-k2-thinking,Kimi K2 Thinking,87.97,366.54,name,-0.0,0.4
+Kimi K2.5,moonshotai/kimi-k2.5,73.0,365.0,moonshotai-kimi-k2-5,Kimi K2.5,71.84,366.54,name,-1.6,0.4
+Kimi K2.6,moonshotai/kimi-k2.6,95.0,498.0,moonshotai-kimi-k2-6,Kimi K2.6,57.11,240.45,name,-39.9,-51.7
+Kimi K2.7 Code,moonshotai/kimi-k2.7-code,88.0,512.0,moonshotai-kimi-k2-7-code,Kimi K2.7 Code,87.97,439.84,name,-0.0,-14.1
+Kimi K3,moonshotai/kimi-k3,28.0,2192.0,moonshotai-kimi-k3,Kimi K3,34.31,1022.63,name,22.5,-53.3
+Kimi K3.1 Pro,moonshotai/kimi-k3.1-pro,292.0,1462.0,moonshotai-kimi-k3-1-pro,Kimi K3.1 Pro,293.23,1466.14,name,0.4,0.3
+Hermes 4 405B,nousresearch/hermes-4-405b,146.0,438.0,nousresearch-hermes-4-405b,Hermes 4 405B,146.61,439.84,name,0.4,0.4
+Nemotron 3 Nano 30B A3B,nvidia/nemotron-3-nano-30b-a3b,9.0,35.0,nvidia-nemotron-3-nano-30b-a3b,Nemotron 3 Nano 30B A3B,7.33,29.32,name,-18.5,-16.2
+Nemotron 3 Super,nvidia/nemotron-3-super-120b-a12b,44.0,351.0,nvidia-nemotron-3-super-120b-a12b,Nemotron 3 Super,12.46,58.65,name,-71.7,-83.3
+Nemotron 3 Ultra,nvidia/nemotron-3-ultra-550b-a55b,88.0,351.0,nvidia-nemotron-3-ultra-550b-a55b,Nemotron 3 Ultra,73.31,322.55,name,-16.7,-8.1
+Nemotron 3.5 Content Safety,nvidia/nemotron-3.5-content-safety,29.0,29.0,nvidia-nemotron-3-5-content-safety,Nemotron 3.5 Content Safety,29.32,29.32,name,1.1,1.1
+Nemotron 3.5 Lightning,nvidia/nemotron-3.5-lightning,10.0,29.0,nvidia-nemotron-3-5-lightning,Nemotron 3.5 Lightning,3.67,17.59,name,-63.3,-39.3
+Nemotron 3.5 Super VL,nvidia/nemotron-3.5-super-vl,22.0,73.0,nvidia-nemotron-3-5-super-vl,Nemotron 3.5 Super VL,8.8,51.31,name,-60.0,-29.7
+GPT 5.6 Luna,openai/gpt-5.6-luna,29.0,175.0,openai-gpt-5-6-luna,GPT-5.6 Luna,29.32,175.94,name,1.1,0.5
+GPT 5.6 Sol,openai/gpt-5.6-sol,585.0,2923.0,openai-gpt-5-6-sol,GPT-5.6 Sol,586.46,2932.29,name,0.2,0.3
+GPT 5.6 Terra,openai/gpt-5.6-terra,292.0,1754.0,openai-gpt-5-6-terra,GPT-5.6 Terra,293.23,1759.37,name,0.4,0.3
+GPT 6 Astra,openai/gpt-6-astra,1462.0,7308.0,openai-gpt-6-astra,GPT-6 Astra,1466.14,7330.71,name,0.3,0.3
+GPT Chat Latest,openai/gpt-chat-latest,731.0,4385.0,openai-gpt-chat-latest,GPT Chat Latest,733.07,4398.43,name,0.3,0.3
+GPT-4.1,openai/gpt-4.1,292.0,1169.0,openai-gpt-4-1,GPT-4.1,293.23,1172.91,name,0.4,0.3
+GPT-4.1 Mini,openai/gpt-4.1-mini,58.0,234.0,openai-gpt-4-1-mini,GPT-4.1 Mini,58.65,234.58,name,1.1,0.2
+GPT-4.1 Nano,openai/gpt-4.1-nano,15.0,58.0,openai-gpt-4-1-nano,GPT-4.1 Nano,14.77,59.08,name,-1.5,1.9
+GPT-4o (2024-11-20),openai/gpt-4o-2024-11-20,365.0,1462.0,openai-gpt-4o-2024-11-20,GPT-4o (2024-11-20),366.54,1466.14,name,0.4,0.3
+GPT-4o Mini,openai/gpt-4o-mini,22.0,88.0,openai-gpt-4o-mini,GPT-4o-mini,21.99,87.97,name,-0.0,-0.0
+GPT-5 Mini,openai/gpt-5-mini,37.0,292.0,openai-gpt-5-mini,GPT-5 Mini,36.65,293.23,name,-0.9,0.4
+GPT-5 Nano,openai/gpt-5-nano,7.0,58.0,openai-gpt-5-nano,GPT-5 Nano,7.33,58.65,name,4.7,1.1
+GPT-5 Pro,openai/gpt-5-pro,2192.0,17539.0,openai-gpt-5-pro,GPT-5 Pro,2199.21,17593.71,name,0.3,0.3
+GPT-5.1 Codex,openai/gpt-5.1-codex,183.0,1462.0,openai-gpt-5-1-codex,GPT-5.1-Codex,183.27,1466.14,name,0.1,0.3
+GPT-5.1-Codex-Max,openai/gpt-5.1-codex-max,183.0,1462.0,openai-gpt-5-1-codex-max,GPT-5.1-Codex-Max,183.27,1466.14,name,0.1,0.3
+GPT-5.1-Codex-Mini,openai/gpt-5.1-codex-mini,37.0,292.0,openai-gpt-5-1-codex-mini,GPT-5.1-Codex-Mini,36.65,293.23,name,-0.9,0.4
+GPT-5.2,openai/gpt-5.2,256.0,2046.0,openai-gpt-5-2,GPT-5.2,133.46,1061.58,name,-47.9,-48.1
+GPT-5.2 Chat,openai/gpt-5.2-chat,256.0,2046.0,openai-gpt-5-2-chat,GPT-5.2 Chat,256.57,2052.6,name,0.2,0.3
+GPT-5.2 Pro,openai/gpt-5.2-pro,3069.0,24555.0,openai-gpt-5-2-pro,GPT-5.2 Pro,3078.9,24631.2,name,0.3,0.3
+GPT-5.2-Codex,openai/gpt-5.2-codex,256.0,2046.0,openai-gpt-5-2-codex,GPT-5.2-Codex,256.57,2052.6,name,0.2,0.3
+GPT-5.3-Codex,openai/gpt-5.3-codex,256.0,2046.0,openai-gpt-5-3-codex,GPT-5.3-Codex,256.57,2052.6,name,0.2,0.3
+GPT-5.4,openai/gpt-5.4,365.0,2192.0,openai-gpt-5-4,GPT-5.4,366.54,2199.21,name,0.4,0.3
+GPT-5.4 Mini,openai/gpt-5.4-mini,110.0,658.0,openai-gpt-5-4-mini,GPT-5.4 Mini,109.96,659.76,name,-0.0,0.3
+GPT-5.4 Nano,openai/gpt-5.4-nano,29.0,183.0,openai-gpt-5-4-nano,GPT-5.4 Nano,29.54,184.62,name,1.9,0.9
+GPT-5.4 Pro,openai/gpt-5.4-pro,4385.0,26309.0,openai-gpt-5-4-pro,GPT-5.4 Pro,4431.0,26586.0,name,1.0,1.1
+GPT-5.5,openai/gpt-5.5,731.0,4385.0,openai-gpt-5-5,GPT-5.5,733.07,4398.43,name,0.3,0.3
+GPT-5.5 Pro,openai/gpt-5.5-pro,4385.0,26309.0,openai-gpt-5-5-pro,GPT-5.5 Pro,4431.0,26586.0,name,1.0,1.1
+GPT-5.6 Luna Pro,openai/gpt-5.6-luna-pro,29.0,175.0,openai-gpt-5-6-luna-pro,GPT-5.6 Luna Pro,29.32,175.94,name,1.1,0.5
+GPT-5.6 Sol Pro,openai/gpt-5.6-sol-pro,585.0,2923.0,openai-gpt-5-6-sol-pro,GPT-5.6 Sol Pro,590.8,2954.0,name,1.0,1.1
+GPT-5.6 Terra Pro,openai/gpt-5.6-terra-pro,292.0,1754.0,openai-gpt-5-6-terra-pro,GPT-5.6 Terra Pro,295.4,1772.4,name,1.2,1.0
+GPT-6 Astra Pro,openai/gpt-6-astra-pro,1462.0,7308.0,openai-gpt-6-astra-pro,GPT-6 Astra Pro,1466.14,7330.71,name,0.3,0.3
+GPT-6 Luna,openai/gpt-6-luna,15.0,73.0,openai-gpt-6-luna,GPT-6 Luna,14.66,73.31,name,-2.3,0.4
+GPT-6 Luna Pro,openai/gpt-6-luna-pro,15.0,73.0,openai-gpt-6-luna-pro,GPT-6 Luna Pro,14.66,73.31,name,-2.3,0.4
+GPT-6 Sol,openai/gpt-6-sol,292.0,1462.0,openai-gpt-6-sol,GPT-6 Sol,293.23,1466.14,name,0.4,0.3
+GPT-6 Sol Pro,openai/gpt-6-sol-pro,292.0,1462.0,openai-gpt-6-sol-pro,GPT-6 Sol Pro,293.23,1466.14,name,0.4,0.3
+GPT-6.1 Sol,openai/gpt-6.1-sol,292.0,1462.0,gpt-sol,GPT-6.1 Sol,293.23,1466.14,name,0.4,0.3
+GPT-6.1 Sol Pro,openai/gpt-6.1-sol-pro,292.0,1462.0,openai-gpt-6-1-sol-pro,GPT-6.1 Sol Pro,293.23,1466.14,name,0.4,0.3
+gpt-oss-120b,openai/gpt-oss-120b,22.0,88.0,openai-gpt-oss-120b,gpt-oss-120b,4.4,21.99,name,-80.0,-75.0
+gpt-oss-20b,openai/gpt-oss-20b,3.0,13.0,openai-gpt-oss-20b,gpt-oss-20b,2.64,13.2,name,-12.0,1.5
+gpt-oss-safeguard-20b,openai/gpt-oss-safeguard-20b,11.0,44.0,openai-gpt-oss-safeguard-20b,gpt-oss-safeguard-20b,11.0,43.98,name,-0.0,-0.0
+o3,openai/o3,292.0,1169.0,openai-o3,o3,293.23,1172.91,name,0.4,0.3
+o3 Pro,openai/o3-pro,2923.0,11693.0,openai-o3-pro,o3 Pro,2954.0,11816.0,name,1.1,1.1
+Sonar,perplexity/sonar,146.0,146.0,perplexity-sonar,Sonar,146.61,146.61,name,0.4,0.4
+Sonar Deep Research,perplexity/sonar-deep-research,292.0,1169.0,perplexity-sonar-deep-research,Sonar Deep Research,293.23,1172.91,name,0.4,0.3
+Sonar Pro,perplexity/sonar-pro,438.0,2192.0,perplexity-sonar-pro,Sonar Pro,439.84,2199.21,name,0.4,0.3
+Sonar Pro Search,perplexity/sonar-pro-search,438.0,2192.0,perplexity-sonar-pro-search,Sonar Pro Search,439.84,2199.21,name,0.4,0.3
+Sonar Reasoning Pro,perplexity/sonar-reasoning-pro,292.0,1169.0,perplexity-sonar-reasoning-pro,Sonar Reasoning Pro,293.23,1172.91,name,0.4,0.3
+Qwen 3.6 flash,qwen/qwen3.6-flash,27.0,164.0,qwen-qwen3-6-flash,Qwen3.6 Flash,27.49,164.94,name,1.8,0.6
+Qwen 3.7 Plus,qwen/qwen3.7-plus,47.0,187.0,qwen-qwen3-7-plus,Qwen3.7 Plus,46.92,187.67,name,-0.2,0.4
+Qwen-Plus,qwen/qwen-plus,38.0,114.0,qwen-qwen-plus,Qwen-Plus,38.12,114.36,name,0.3,0.3
+Qwen2.5 Coder 32B Instruct,qwen/qwen-2.5-coder-32b-instruct,96.0,146.0,qwen-qwen-2-5-coder-32b-instruct,Qwen2.5 Coder 32B Instruct,96.77,146.61,name,0.8,0.4
+Qwen2.5 VL 72B Instruct,qwen/qwen2.5-vl-72b-instruct,117.0,146.0,qwen-qwen2-5-vl-72b-instruct,Qwen2.5 VL 72B Instruct,117.29,146.61,name,0.2,0.4
+Qwen3 235B A22B Thinking 2507,qwen/qwen3-235b-a22b-thinking-2507,66.0,512.0,qwen-qwen3-235b-a22b-thinking-2507,Qwen3 235B A22B Thinking 2507,44.21,442.11,name,-33.0,-13.7
+Qwen3 30B A3B Instruct 2507,qwen/qwen3-30b-a3b-instruct-2507,15.0,44.0,qwen-qwen3-30b-a3b-instruct-2507,Qwen3 30B A3B Instruct 2507,9.14,36.84,name,-39.1,-16.3
+Qwen3 32B,qwen/qwen3-32b,12.0,41.0,qwen-qwen3-32b,Qwen3 32B,11.73,41.05,name,-2.3,0.1
+Qwen3 Coder 30B A3B Instruct,qwen/qwen3-coder-30b-a3b-instruct,10.0,41.0,qwen-qwen3-coder-30b-a3b-instruct,Qwen3 Coder 30B A3B Instruct,10.26,41.05,name,2.6,0.1
+Qwen3 Coder 480B A35B,qwen/qwen3-coder,44.0,146.0,qwen-qwen3-coder,Qwen3 Coder 480B A35B,43.98,146.61,name,-0.0,0.4
+Qwen3 Coder Flash,qwen/qwen3-coder-flash,29.0,143.0,qwen-qwen3-coder-flash,Qwen3 Coder Flash,28.59,142.95,name,-1.4,-0.0
+Qwen3 Coder Next,qwen/qwen3-coder-next,18.0,117.0,qwen-qwen3-coder-next,Qwen3 Coder Next,17.59,117.29,name,-2.3,0.2
+Qwen3 Next 80B A3B Instruct,qwen/qwen3-next-80b-a3b-instruct,13.0,161.0,qwen-qwen3-next-80b-a3b-instruct,Qwen3 Next 80B A3B Instruct,13.2,161.28,name,1.5,0.2
+Qwen3 VL 235B A22B Instruct,qwen/qwen3-vl-235b-a22b-instruct,31.0,278.0,qwen-qwen3-vl-235b-a22b-instruct,Qwen3 VL 235B A22B Instruct,29.32,129.02,name,-5.4,-53.6
+Qwen3 VL 30B A3B Instruct,qwen/qwen3-vl-30b-a3b-instruct,22.0,88.0,qwen-qwen3-vl-30b-a3b-instruct,Qwen3 VL 30B A3B Instruct,21.99,87.97,name,-0.0,-0.0
+Qwen3 VL 30B A3B Thinking,qwen/qwen3-vl-30b-a3b-thinking,42.0,146.0,qwen-qwen3-vl-30b-a3b-thinking,Qwen3 VL 30B A3B Thinking,42.52,146.61,name,1.2,0.4
+Qwen3 VL 8B Instruct,qwen/qwen3-vl-8b-instruct,37.0,110.0,qwen-qwen3-vl-8b-instruct,Qwen3 VL 8B Instruct,29.47,114.95,name,-20.3,4.5
+Qwen3.5 397B A17B,qwen/qwen3.5-397b-a17b,73.0,526.0,qwen-qwen3-5-397b-a17b,Qwen3.5 397B A17B,57.18,343.08,name,-21.7,-34.8
+Qwen3.5 Plus 2026-02-15,qwen/qwen3.5-plus-02-15,38.0,228.0,qwen-qwen3-5-plus-02-15,Qwen3.5 Plus 2026-02-15,38.12,228.72,name,0.3,0.3
+Qwen3.5 Plus 2026-04-20,qwen/qwen3.5-plus-20260420,44.0,263.0,qwen-qwen3-5-plus-20260420,Qwen3.5 Plus 2026-04-20,43.98,263.91,name,-0.0,0.3
+Qwen3.5-122B-A10B,qwen/qwen3.5-122b-a10b,38.0,304.0,qwen-qwen3-5-122b-a10b,Qwen3.5-122B-A10B,38.12,304.96,name,0.3,0.3
+Qwen3.5-27B,qwen/qwen3.5-27b,38.0,380.0,qwen-qwen3-5-27b,Qwen3.5-27B,28.59,228.72,name,-24.8,-39.8
+Qwen3.5-35B-A3B,qwen/qwen3.5-35b-a3b,20.0,146.0,qwen-qwen3-5-35b-a3b,Qwen3.5-35B-A3B,9.53,109.96,name,-52.4,-24.7
+Qwen3.5-Flash,qwen/qwen3.5-flash-02-23,10.0,38.0,qwen-qwen3-5-flash-02-23,Qwen3.5-Flash,9.53,38.12,name,-4.7,0.3
+Qwen3.6 27B,qwen/qwen3.6-27b,66.0,395.0,qwen-qwen3-6-27b,Qwen3.6 27B,36.65,293.23,name,-44.5,-25.8
+Qwen3.6 35B A3B,qwen/qwen3.6-35b-a3b,15.0,132.0,qwen-qwen3-6-35b-a3b,Qwen3.6 35B A3B,7.33,102.63,name,-51.1,-22.3
+Qwen3.6 Plus,qwen/qwen3.6-plus,48.0,285.0,qwen-qwen3-6-plus,Qwen3.6 Plus,47.65,285.9,name,-0.7,0.3
+Qwen3.7 Flash,qwen/qwen3.7-flash,4.0,19.0,qwen-qwen3-7-flash,Qwen3.7 Flash,4.4,19.06,name,10.0,0.3
+Qwen3.7 Max,qwen/qwen3.7-max,216.0,647.0,qwen-qwen3-7-max,Qwen3.7 Max,216.26,648.77,name,0.1,0.3
+Qwen3.8 2.4T A95B,qwen/qwen3.8-2.4t-a95b,292.0,877.0,qwen-qwen3-8-2-4t-a95b,Qwen3.8 2.4T A95B,293.23,879.69,name,0.4,0.3
+Qwen3.8 Flash,qwen/qwen3.8-flash,22.0,69.0,qwen-qwen3-8-flash,Qwen3.8 Flash,21.99,68.91,name,-0.0,-0.1
+Qwen3.8 Max (0902),qwen/qwen3.8-max-0902,292.0,877.0,qwen-qwen3-8-max-0902,Qwen3.8 Max (0902),293.23,879.69,name,0.4,0.3
+Qwen3.8 Max Prime,qwen/qwen3.8-max-prime,585.0,1754.0,qwen-qwen3-8-max-prime,Qwen3.8 Max Prime,586.46,1759.37,name,0.2,0.3
+Qwen3.8 Omni Flash,qwen/qwen3.8-omni-flash,22.0,69.0,qwen-qwen3-8-omni-flash,Qwen3.8 Omni Flash,21.99,68.91,name,-0.0,-0.1
+Hunyuan A13B Instruct,tencent/hunyuan-a13b-instruct,20.0,83.0,tencent-hunyuan-a13b-instruct,Hunyuan A13B Instruct,20.53,83.57,name,2.6,0.7
+Hy3,tencent/hy3,19.0,77.0,tencent-hy3,Hy3,19.35,77.41,name,1.9,0.5
+Hy3 preview,tencent/hy3-preview,26.0,88.0,tencent-hy3-preview,Hy3 preview,26.39,87.97,name,1.5,-0.0
+Hy4 preview,tencent/hy4-preview,122.0,366.0,tencent-hy4-preview,Hy4 preview,122.28,366.68,name,0.2,0.2
+Inkling,thinkingmachines/inkling,146.0,592.0,thinkingmachines-inkling,Inkling,146.61,593.79,name,0.4,0.3
+Inkling Small,thinkingmachines/inkling-small,66.0,175.0,thinkingmachines-inkling-small,Inkling Small,65.98,175.94,name,-0.0,0.5
+Palmyra X5,writer/palmyra-x5,88.0,877.0,writer-palmyra-x5,Palmyra X5,87.97,879.69,name,-0.0,0.3
+Grok 4.20,x-ai/grok-4.20,183.0,365.0,x-ai-grok-4-20,Grok 4.20,183.27,366.54,name,0.1,0.4
+Grok 4.20 Multi-Agent,x-ai/grok-4.20-multi-agent,183.0,365.0,x-ai-grok-4-20-multi-agent,Grok 4.20 Multi-Agent,183.27,366.54,name,0.1,0.4
+Grok 4.3,x-ai/grok-4.3,183.0,365.0,x-ai-grok-4-3,Grok 4.3,184.62,369.25,name,0.9,1.2
+Grok 4.5,x-ai/grok-4.5,292.0,877.0,x-ai-grok-4-5,Grok 4.5,295.4,886.2,name,1.2,1.0
+Grok 4.6,x-ai/grok-4.6,292.0,877.0,x-ai-grok-4-6,Grok 4.6,293.23,879.69,name,0.4,0.3
+Grok 4.7,x-ai/grok-4.7,292.0,877.0,x-ai-grok-4-7,Grok 4.7,293.23,879.69,name,0.4,0.3
+Grok Build 0.1,x-ai/grok-build-0.1,146.0,292.0,x-ai-grok-build-0-1,Grok Build 0.1,146.61,293.23,name,0.4,0.4
+MiMo-V2.5,xiaomi/mimo-v2.5,58.0,292.0,xiaomi-mimo-v2-5,MiMo-V2.5,17.45,34.89,name,-69.9,-88.0
+MiMo-V2.5-Pro,xiaomi/mimo-v2.5-pro,70.0,263.0,xiaomi-mimo-v2-5-pro,MiMo-V2.5-Pro,44.64,89.29,name,-36.2,-66.1
+MiMo-V2.6-Flash,xiaomi/mimo-v2.6-flash,20.0,41.0,xiaomi-mimo-v2-6-flash,MiMo-V2.6-Flash,12.76,27.42,name,-36.2,-33.1
+MiMo-V2.6-Pro,xiaomi/mimo-v2.6-pro,64.0,127.0,xiaomi-mimo-v2-6-pro,MiMo-V2.6-Pro,54.21,108.42,name,-15.3,-14.6
+GLM 4.5,z-ai/glm-4.5,88.0,322.0,z-ai-glm-4-5,GLM 4.5,87.97,322.55,name,-0.0,0.2
+GLM 4.5 Air,z-ai/glm-4.5-air,19.0,124.0,z-ai-glm-4-5-air,GLM 4.5 Air,19.06,124.62,name,0.3,0.5
+GLM 4.6,z-ai/glm-4.6,73.0,292.0,z-ai-glm-4-6,GLM 4.6,63.04,256.57,name,-13.6,-12.1
+GLM 4.6V,z-ai/glm-4.6v,44.0,132.0,z-ai-glm-4-6v,GLM 4.6V,43.98,131.95,name,-0.0,-0.0
+GLM 4.7,z-ai/glm-4.7,79.0,289.0,z-ai-glm-4-7,GLM 4.7,58.65,256.57,name,-25.8,-11.2
+GLM 4.7 Flash,z-ai/glm-4.7-flash,9.0,58.0,z-ai-glm-4-7-flash,GLM 4.7 Flash,8.87,58.65,name,-1.4,1.1
+GLM 5,z-ai/glm-5,146.0,468.0,z-ai-glm-5,GLM 5,87.97,281.5,name,-39.7,-39.9
+GLM 5 Turbo,z-ai/glm-5-turbo,175.0,585.0,z-ai-glm-5-turbo,GLM 5 Turbo,175.94,586.46,name,0.5,0.2
+GLM 5.1,z-ai/glm-5.1,205.0,643.0,z-ai-glm-5-1,GLM 5.1,131.78,414.16,name,-35.7,-35.6
+GLM 5.2,z-ai/glm-5.2,1.0,1023.0,z-ai-glm-5-2,GLM 5.2,12.61,205.26,name,1160.9,-79.9
+GLM 5.3,z-ai/glm-5.3,10.0,205.0,z-ai-glm-5-3,GLM 5.3,41.05,129.02,name,310.5,-37.1
+GLM 5.3 Flash,z-ai/glm-5.3-flash,3.0,18.0,z-ai-glm-5-3-flash,GLM 5.3 Flash,2.77,5.73,name,-7.5,-68.2
+GLM 5.3 FlashX,z-ai/glm-5.3-flashx,54.0,183.0,z-ai-glm-5-3-flashx,GLM 5.3 FlashX,54.65,184.62,name,1.2,0.9
+GLM 5.3 Prime,z-ai/glm-5.3-prime,409.0,1286.0,z-ai-glm-5-3-prime,GLM 5.3 Prime,410.52,1290.21,name,0.4,0.3
+GLM 5V Turbo,z-ai/glm-5v-turbo,175.0,585.0,z-ai-glm-5v-turbo,GLM 5V Turbo,175.94,586.46,name,0.5,0.2

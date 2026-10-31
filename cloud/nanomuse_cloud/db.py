@@ -317,6 +317,17 @@ CREATE TABLE IF NOT EXISTS control_audit (
     target        TEXT NOT NULL DEFAULT '',   -- the switch's key or the rule's id
     detail        TEXT NOT NULL DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS control_audit_target ON control_audit(target, id);
+-- Operator notes in the model log. Price/visibility changes come from control_audit;
+-- these are the human lines, shown light green in the two-pane log.
+CREATE TABLE IF NOT EXISTS model_notes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id      TEXT NOT NULL,
+    at            INTEGER NOT NULL,
+    body          TEXT NOT NULL,
+    author        TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS model_notes_model ON model_notes(model_id, id);
 -- 0.1.40: the hashes of the keys a deleted account had, for DELETED_KEYS_TTL_S, so a device
 -- that still holds one hears `account_deleted` rather than `bad_key` and knows there is
 -- nothing to come back to. A hash of a dead key names nobody; no account id is kept with it.
@@ -809,6 +820,30 @@ class Database:
     def audit_recent(self, limit: int = 200) -> list[sqlite3.Row]:
         with self._lock:
             return self._conn.execute("SELECT * FROM control_audit ORDER BY id DESC LIMIT ?", (max(1, min(limit, 1000)),)).fetchall()
+
+    def audit_for_target(self, target: str, limit: int = 200) -> list[sqlite3.Row]:
+        """One model's history: the operator's price/visibility actions, newest first."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM control_audit WHERE target=? ORDER BY id DESC LIMIT ?",
+                (str(target)[:80], max(1, min(limit, 1000))),
+            ).fetchall()
+
+    def model_notes(self, model_id: str, limit: int = 200) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM model_notes WHERE model_id=? ORDER BY id DESC LIMIT ?",
+                (str(model_id)[:80], max(1, min(limit, 1000))),
+            ).fetchall()
+
+    def model_note_add(self, model_id: str, body: str, author: str = "оператор") -> sqlite3.Row:
+        at = now()
+        with self.tx() as c:
+            cur = c.execute(
+                "INSERT INTO model_notes(model_id, at, body, author) VALUES (?,?,?,?)",
+                (str(model_id)[:80], at, str(body)[:4000], str(author)[:80]),
+            )
+            return c.execute("SELECT * FROM model_notes WHERE id=?", (cur.lastrowid,)).fetchone()
 
     def seed_allowances(self, allowance_uy: int) -> int:
         """Accounts from before the allowance_uy column: the allowance of the day is what

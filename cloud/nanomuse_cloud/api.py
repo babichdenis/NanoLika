@@ -2727,6 +2727,10 @@ def create_app(
     from .prices_admin import install as install_prices_admin
 
     install_prices_admin(app, settings, admin_dep, cloud=cloud, router=router)
+
+    from .model_log import install as install_model_log
+
+    install_model_log(app, settings, admin_dep, cloud=cloud)
     install_autopay(app, cloud, caller_dep)
 
     from .site_inbox import install as install_site_inbox
