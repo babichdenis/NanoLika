@@ -502,6 +502,57 @@ function ratioText(value) {
   return "×" + fmt(number, 2);
 }
 
+/** Наценка строки: клик открывает поле, Enter кладёт новую цену в черновик. */
+function editMarkup(cell, group, key, value) {
+  if (cell.querySelector("input")) return;
+  const model = group.primary;
+  const cost = Number(key === "in" ? model.cost?.rub_in : model.cost?.rub_out);
+  if (!cost) {
+    setNote("У этой модели нет закупки — наценку считать не от чего.");
+    return;
+  }
+  cell.replaceChildren();
+  const input = el("input", "mt-markup-input");
+  input.type = "number";
+  input.min = "0.1";
+  input.max = "20";
+  input.step = "0.05";
+  input.value = Number(value).toFixed(2);
+  input.title = "Enter — сохранить в черновик, Esc — отмена";
+  cell.append(input);
+  input.focus();
+  input.select();
+  input.onclick = (event) => event.stopPropagation();
+  input.onkeydown = (event) => {
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      draw();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const markup = Number(input.value);
+    if (!Number.isFinite(markup) || markup < 0.1 || markup > 20) {
+      setNote("Наценка должна быть от 0,1 до 20.");
+      input.focus();
+      return;
+    }
+    const rates = key === "in"
+      ? { input: cost * markup, cached_input: cost * 0.1 * markup }
+      : { output: cost * markup };
+    input.disabled = true;
+    API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/draft`, { rates_rub: rates })
+      .then(() => load(true))
+      .then(() => setNote(`Наценка ${key === "in" ? "входа" : "выхода"} ×${fmt(markup, 2)} — в черновике.`))
+      .catch((error) => {
+        setNote(`Не удалось: ${error.message}`);
+        input.disabled = false;
+        input.focus();
+      });
+  };
+}
+
 function columnText(group, key) {
   const model = group.primary;
   switch (key) {
@@ -916,6 +967,11 @@ function drawModels(rows) {
     tr.append(purchaseCell);
 
     const clientCell = el("td", "num mt-client");
+    clientCell.title = "✎ — изменить цену клиенту; двойной клик по ячейке открывает тот же диалог";
+    clientCell.ondblclick = (event) => {
+      event.stopPropagation();
+      openPriceDialog(group);
+    };
     clientCell.append(el("span", "mt-now", clientText(model)));
     if (model.draft) {
       const draft = el("span", "mt-draft");
@@ -928,7 +984,7 @@ function drawModels(rows) {
         : "Клиенты увидят цену после «Опубликовать»";
       draft.append(badge);
       clientCell.append(draft);
-      clientCell.title = "Черновик: " + Object.entries(model.draft.changed || {}).map(([key, value]) => `${rateLabel(key)} ${fmt(value)}`).join(", ");
+      clientCell.title = "Черновик: " + Object.entries(model.draft.changed || {}).map(([key, value]) => `${rateLabel(key)} ${fmt(value)}`).join(", ") + " · ✎ изменить";
     }
     const edit = el("button", "mt-edit", "✎");
     edit.type = "button";
@@ -971,14 +1027,30 @@ function drawModels(rows) {
     }
     tr.append(officialCell);
 
-    const markupCell = (value) => {
-      const cell = el("td", "num", ratioText(value));
+    const markupCell = (key, value) => {
+      const cell = el("td", "num mt-markup");
       const number = Number(value);
+      const draft = model.draft && model.draft.ratio ? Number(model.draft.ratio[key]) : null;
+      cell.append(el("span", "mt-markup-now", ratioText(number)));
+      if (Number.isFinite(draft) && draft > 0 && (!Number.isFinite(number) || Math.abs(draft - number) > 0.005)) {
+        cell.append(el("span", "mt-markup-draft", "→ " + ratioText(draft)));
+        cell.classList.add("mt-has-draft");
+      }
       if (Number.isFinite(number) && number > 0 && number < 1.5) cell.classList.add("mt-low");
+      if (Number.isFinite(number) && number > 0) {
+        cell.classList.add("mt-editable");
+        cell.title = `Наценка ${key === "in" ? "входа" : "выхода"} ${ratioText(number)}`
+          + (Number.isFinite(draft) && draft > 0 ? ` → ${ratioText(draft)} в черновике` : "")
+          + ". Нажмите, чтобы изменить";
+        cell.onclick = (event) => {
+          event.stopPropagation();
+          editMarkup(cell, group, key, Number.isFinite(draft) && draft > 0 ? draft : number);
+        };
+      }
       return cell;
     };
-    tr.append(markupCell(model.ratio?.in));
-    tr.append(markupCell(model.ratio?.out));
+    tr.append(markupCell("in", model.ratio?.in));
+    tr.append(markupCell("out", model.ratio?.out));
 
     const bestCell = el("td", "mt-best");
     if (best) {

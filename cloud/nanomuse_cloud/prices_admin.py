@@ -1016,7 +1016,15 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                 "rates_rub": commerce.get("rates_rub") or {},
                 "unit": commerce.get("unit") or "",
             }
-            row["draft"] = price_drafts.describe(commerce, draft_rows.get(row["id"]))
+            draft = price_drafts.describe(commerce, draft_rows.get(row["id"]))
+            row["draft"] = draft
+            if draft and row.get("kind") == "chat":
+                cost = row.get("cost") or {}
+                wanted = draft.get("rates_rub") or {}
+                draft["ratio"] = {
+                    "in": (wanted["input"] / cost["rub_in"]) if cost.get("rub_in") and wanted.get("input") else None,
+                    "out": (wanted["output"] / cost["rub_out"]) if cost.get("rub_out") and wanted.get("output") else None,
+                }
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]

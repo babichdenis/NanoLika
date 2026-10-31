@@ -69,10 +69,17 @@ def stage(cloud: Any, spec: Any, values: Any, *, note: str = "") -> dict[str, An
     clean = _clean(values)
     current = model_pricing.policy(cloud, spec)
     rates = current["rates_rub"]
-    changed = {key: value for key, value in clean.items() if abs(float(rates.get(key) or 0) - value) > 1e-9}
     with cloud.db.tx() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key=?", (KEY,)).fetchone()
         data = json.loads(row[0]) if row else {}
+        old = data.get(spec.id) if isinstance(data.get(spec.id), dict) else {}
+        # Правки строки приходят по одной (сначала вход, потом выход). Накладываем
+        # их на уже существующий черновик, а не на опубликованную цену: иначе
+        # вторая правка молча выбрасывала первую.
+        same_base = old and int(old.get("base_revision") or 0) == int(current["revision"])
+        changed = dict(old.get("changed") or {}) if same_base else {}
+        changed.update(clean)
+        changed = {key: value for key, value in changed.items() if abs(float(rates.get(key) or 0) - value) > 1e-9}
         if not changed:
             data.pop(spec.id, None)
             conn.execute(

@@ -98,6 +98,28 @@ async def test_stale_draft_does_not_overwrite_a_newer_price():
         assert model_pricing.policy(cloud, cloud.s.model("text"))["rates_rub"]["input"] == 90
 
 
+async def test_single_field_edits_accumulate_in_one_draft():
+    client, cloud = await stack()
+    async with opened(client):
+        first = await client.put(
+            "/v1/admin/prices/models/text/draft",
+            headers=ADMIN,
+            json={"rates_rub": {"input": 100}},
+        )
+        assert first.status_code == 200, first.text
+        second = await client.put(
+            "/v1/admin/prices/models/text/draft",
+            headers=ADMIN,
+            json={"rates_rub": {"output": 150}},
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["draft"]["changed"] == {"input": 100.0, "output": 150.0}
+
+        admin = (await client.get("/v1/admin/prices", headers=ADMIN)).json()
+        row = next(row for row in admin["models"] if row["id"] == "text")
+        assert row["draft"]["changed"] == {"input": 100.0, "output": 150.0}
+
+
 async def test_bulk_multiplier_stages_instead_of_publishing():
     client, cloud = await stack()
     async with opened(client):

@@ -387,6 +387,13 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
   background: var(--fill); color: var(--ink); font: inherit; font-size: 11px; }
 .admin .mt th .mt-col:focus { outline: none; box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.22); }
 .admin .mt td.mt-low { color: var(--warn); font-weight: 600; }
+.admin .mt td.mt-markup { white-space: nowrap; }
+.admin .mt td.mt-markup.mt-editable { cursor: text; }
+.admin .mt td.mt-markup.mt-editable:hover { background: rgba(10, 102, 228, 0.06); }
+.admin .mt .mt-markup-draft { display: block; color: var(--action); font-size: 10.5px; }
+.admin .mt .mt-markup-input { width: 58px; padding: 2px 4px; border: 0; border-radius: 6px; background: var(--fill);
+  color: var(--ink); font: inherit; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.admin .mt .mt-markup-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(10, 102, 228, 0.22); }
 .admin .mt #mt-models { table-layout: fixed; min-width: 1392px; }
 .admin .mt #mt-models th.mt-pick { width: 96px; }
 .admin .mt #mt-models th.mt-model { width: 236px; }
@@ -443,7 +450,7 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt td.mt-client { white-space: normal; line-height: 1.35; }
 .admin .mt .mt-now { display: inline; }
 .admin .mt .mt-edit { margin-left: 5px; padding: 0 3px; border: 0; background: none; color: var(--ink-3); font-size: 12px;
-  line-height: 1; cursor: pointer; opacity: .45; }
+  line-height: 1; cursor: pointer; opacity: .65; }
 .admin .mt tr:hover .mt-edit, .admin .mt .mt-edit:focus-visible { opacity: 1; }
 .admin .mt .mt-draft { display: block; margin-top: 2px; font-size: 11px; color: var(--action); }
 .admin .mt .mt-draft-arrow { margin-right: 4px; font-weight: 700; }
