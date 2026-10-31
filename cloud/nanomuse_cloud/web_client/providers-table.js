@@ -1,13 +1,12 @@
-// «Поставщики»: обратная сторона таблицы моделей.
+// «Поставщики»: та же связка, что в «Моделях», только наоборот.
 //
-// В «Моделях» выбираешь модель и видишь, кто её отдаёт. Здесь наоборот:
-// одна строка — один поставщик; нажал — видно, какие модели мы берём у него
-// сейчас, какие стоят у него по умолчанию и по каким моделям был последний
-// фактический запрос. Источник — тот же /v1/admin/prices (compact), поэтому
-// выбранный маршрут и последний запрос всегда рядом.
+// Сверху — привычная таблица кошельков поставщиков. Нажал на строку — снизу
+// открылась связанная таблица моделей, которые мы берём у этого поставщика:
+// выбранный маршрут, модели по умолчанию (в основном медиа) и последний
+// фактический запрос. Перегородку можно тянуть, как в «Моделях».
 //
-// Данные обновляются на сервере: кнопка «Обновить» и автообновление раз в
-// минуту, пока вкладка открыта.
+// Источник — /v1/admin/prices?compact=1 (там есть routing и last_request) и
+// /v1/admin/provider-balances. Автообновление раз в минуту, пока вкладка открыта.
 
 const LABELS = {
   polza: "Polza",
@@ -21,8 +20,9 @@ const LABELS = {
   own: "Свой ключ",
 };
 
+const SPLIT_KEY = "nm.providers.split";
+
 let ROOT = null;
-let CTX = null;
 let API = null;
 let DATA = null;
 let BAL = null;
@@ -96,9 +96,9 @@ const money = (entry) => {
   return `₽${fmt(amount, 2)}`;
 };
 
-const walletNote = (entry, bal) => {
-  if (!entry) return null;
-  if (entry.error) return { text: entry.error, cls: "warn" };
+const stateOf = (entry, bal) => {
+  if (!entry) return { text: "нет данных", cls: "fine" };
+  if (entry.error) return { text: entry.error, cls: "bad" };
   if (entry.disabled_until) return { text: "приостановлен", cls: "warn" };
   const floor = entry.currency === "USD" ? bal?.minimum_balance_usd : bal?.minimum_balance_rub;
   const value = entry.currency === "CAPS" ? entry.rub_estimate : entry.amount;
@@ -106,42 +106,18 @@ const walletNote = (entry, bal) => {
   return { text: "можно тратить", cls: "ok" };
 };
 
-const STATUS = (provider) => {
-  if (provider.connected) return provider.routing_supported ? "подключён · маршрутизация" : "подключён · без маршрутизации";
-  if (provider.known?.key_configured) return provider.routing_supported ? "ключ есть · маршрутизация" : "ключ есть · без маршрутизации";
-  return "не подключён";
-};
-
-/** Один проход по моделям: кто выбран сейчас, кто стоит по умолчанию, где был последний запрос. */
-function buildProviders(data, balances) {
-  const rows = new Map();
-  const known = new Map((data.providers?.known || []).map((row) => [row.name, row]));
-  const connected = new Set(data.providers?.connected || []);
-  const wallet = balances?.balances || {};
+/** Сводка по моделям: кто выбран, кто стоит по умолчанию и где был последний запрос. */
+function statsFor(data) {
+  const map = new Map();
   const ensure = (id) => {
     if (!id) return null;
-    let row = rows.get(id);
+    let row = map.get(id);
     if (!row) {
-      row = {
-        id,
-        known: known.get(id) || null,
-        connected: connected.has(id),
-        routing_supported: Boolean(known.get(id)?.routing_supported),
-        balance: wallet[id] || null,
-        selected: [],
-        configured: [],
-        last: [],
-        offerModels: new Set(),
-        offers: 0,
-      };
-      rows.set(id, row);
+      row = { selected: [], configured: [], last: [], offerModels: new Set() };
+      map.set(id, row);
     }
     return row;
   };
-
-  for (const id of known.keys()) ensure(id);
-  for (const id of Object.keys(wallet)) ensure(id);
-
   for (const model of data.models || []) {
     const routing = model.routing || {};
     const selected = routing.selected || "";
@@ -152,31 +128,50 @@ function buildProviders(data, balances) {
     if (last) ensure(last).last.push(model);
     for (const offer of routing.offers || []) {
       const row = ensure(offer.provider);
-      if (!row) continue;
-      row.offerModels.add(model.id);
-      row.offers += 1;
+      if (row) row.offerModels.add(model.id);
     }
   }
+  return map;
+}
 
-  return [...rows.values()]
-    .filter((row) => row.connected || row.known?.key_configured || row.selected.length || row.configured.length || row.last.length || row.balance)
-    .sort((a, b) => b.selected.length - a.selected.length || b.configured.length - a.configured.length || providerLabel(a.id).localeCompare(providerLabel(b.id), "ru"));
+const emptyStats = () => ({ selected: [], configured: [], last: [], offerModels: new Set() });
+const statsOf = (stats, id) => stats.get(id) || emptyStats();
+
+/** Строки верхней таблицы: привычные кошельки, плюс поставщики без кошелька, если они что-то раздают. */
+function walletRows(stats) {
+  const balances = BAL?.balances || {};
+  const rows = Object.entries(balances).map(([id, entry]) => ({ id, entry, stats: statsOf(stats, id) }));
+  const seen = new Set(rows.map((row) => row.id));
+  for (const [id, row] of stats) {
+    if (seen.has(id)) continue;
+    if (row.selected.length || row.configured.length || row.last.length) rows.push({ id, entry: null, stats: row });
+  }
+  const rub = (row) => Number(row.entry?.rub_estimate ?? row.entry?.amount ?? 0) || 0;
+  return rows.sort((a, b) => rub(b) - rub(a) || b.stats.selected.length - a.stats.selected.length || providerLabel(a.id).localeCompare(providerLabel(b.id), "ru"));
+}
+
+function countLine(row) {
+  const parts = [];
+  if (row.stats.selected.length) parts.push(`${row.stats.selected.length} сейчас`);
+  if (row.stats.configured.length) parts.push(`${row.stats.configured.length} по умолчанию`);
+  if (row.stats.last.length) parts.push(`${row.stats.last.length} последних`);
+  return parts.join(" · ");
 }
 
 /** Все модели поставщика без повторов, с пометками, почему она здесь. */
-function detailModels(provider) {
+function detailModels(row) {
   const map = new Map();
   const add = (model, field) => {
-    let row = map.get(model.id);
-    if (!row) {
-      row = { model, selected: false, configured: false, last: false };
-      map.set(model.id, row);
+    let item = map.get(model.id);
+    if (!item) {
+      item = { model, selected: false, configured: false, last: false };
+      map.set(model.id, item);
     }
-    row[field] = true;
+    item[field] = true;
   };
-  for (const model of provider.selected) add(model, "selected");
-  for (const model of provider.configured) add(model, "configured");
-  for (const model of provider.last) add(model, "last");
+  for (const model of row.selected) add(model, "selected");
+  for (const model of row.configured) add(model, "configured");
+  for (const model of row.last) add(model, "last");
   return [...map.values()].sort((a, b) => Number(b.selected) - Number(a.selected) || Number(b.configured) - Number(a.configured) || String(a.model.name || a.model.id).localeCompare(String(b.model.name || b.model.id), "ru"));
 }
 
@@ -199,9 +194,8 @@ function modelRow(item, provider) {
   const last = model.last_request;
   const lastCell = el("td", "fine");
   if (last) {
-    const same = last.provider === provider.id;
     lastCell.textContent = `${when(last.at)} · ${providerLabel(last.provider)}${last.cost_rub != null ? ` · ${fmt(last.cost_rub)} ₽` : ""}`;
-    if (!same) lastCell.classList.add("pt-fallback");
+    if (last.provider !== provider.id) lastCell.classList.add("pt-fallback");
   } else {
     lastCell.textContent = "—";
   }
@@ -209,80 +203,72 @@ function modelRow(item, provider) {
   return tr;
 }
 
-function detail(provider) {
-  const tr = el("tr", "pt-detail");
-  const td = el("td");
-  td.colSpan = 6;
-  const box = el("div", "pt-detail-inner");
-  const head = el("div", "pt-detail-head");
-  head.append(el("b", "", providerLabel(provider.id)));
-  head.append(el("span", "fine", `${provider.selected.length} сейчас · ${provider.configured.length} по умолчанию · ${provider.last.length} последних`));
-  const link = el("a", "pt-link", "Открыть в таблице моделей →");
-  link.href = "#models?p=" + encodeURIComponent(provider.id);
-  link.onclick = (event) => event.stopPropagation();
-  head.append(link);
-  box.append(head);
-
-  const models = detailModels(provider);
-  if (!models.length) {
-    box.append(el("p", "pt-empty", provider.offerModels.size
-      ? `Сейчас в маршруте нет моделей. В таблице моделей у поставщика ${provider.offerModels.size} предложений.`
-      : "У поставщика нет моделей в текущем маршруте."));
-  } else {
-    const table = el("table", "pt-models");
-    const thead = el("thead");
-    const hr = el("tr");
-    for (const label of ["Модель", "Тип", "Как берём", "Закупка, ₽", "Клиенту, ₽", "Контекст", "Последний запрос"]) {
-      hr.append(el("th", label.startsWith("Закупка") || label.startsWith("Клиенту") || label === "Контекст" ? "num" : "", label));
-    }
-    thead.append(hr);
-    const tbody = el("tbody");
-    for (const item of models) tbody.append(modelRow(item, provider));
-    table.append(thead, tbody);
-    const wrap = el("div", "pt-models-wrap");
-    wrap.append(table);
-    box.append(wrap);
+function drawModels(row) {
+  const bottom = $("pt-bottom-pane");
+  const body = $("pt-models-body");
+  const title = $("pt-sel-name");
+  const meta = $("pt-sel-meta");
+  const link = $("pt-open-models");
+  if (!bottom || !body) return;
+  if (!row) {
+    splitVisible(false);
+    return;
   }
-  td.append(box);
-  tr.append(td);
-  return tr;
+  splitVisible(true);
+  if (title) title.textContent = providerLabel(row.id);
+  if (meta) {
+    meta.textContent = `${row.stats.selected.length} сейчас · ${row.stats.configured.length} по умолчанию · ${row.stats.last.length} последних`;
+  }
+  if (link) link.href = "#models?p=" + encodeURIComponent(row.id);
+  body.replaceChildren();
+
+  const models = detailModels(row.stats);
+  if (!models.length) {
+    const tr = el("tr");
+    const td = el("td", "fine", row.stats.offerModels.size
+      ? `Сейчас в маршруте нет моделей. В таблице моделей у поставщика ${row.stats.offerModels.size} предложений.`
+      : "У поставщика нет моделей в текущем маршруте.");
+    td.colSpan = 7;
+    tr.append(td);
+    body.append(tr);
+    return;
+  }
+  for (const item of models) body.append(modelRow(item, row));
 }
 
 function draw() {
   const body = $("pt-rows");
   if (!body) return;
-  const providers = buildProviders(DATA || {}, BAL || {});
-  if (open && !providers.some((row) => row.id === open)) open = "";
+  const stats = statsFor(DATA || {});
+  const rows = walletRows(stats);
+  if (open && !rows.some((row) => row.id === open)) open = "";
   body.replaceChildren();
 
-  for (const provider of providers) {
-    const tr = el("tr", "pt-row" + (provider.selected.length ? " is-live" : ""));
+  for (const row of rows) {
+    const tr = el("tr", "pt-row" + (row.id === open ? " mt-active" : ""));
     tr.onclick = () => {
-      open = open === provider.id ? "" : provider.id;
+      open = open === row.id ? "" : row.id;
       draw();
     };
     const name = el("td");
-    name.append(el("span", "pt-provider", providerLabel(provider.id)));
-    name.append(el("span", "pt-sub", `${provider.id} · ${STATUS(provider)}`));
+    name.append(el("span", "pt-provider", providerLabel(row.id)));
+    const sub = [row.entry ? stateOf(row.entry, BAL).text : "без кошелька", countLine(row), row.stats.offerModels.size ? `${row.stats.offerModels.size} с ценой` : ""].filter(Boolean).join(" · ");
+    name.append(el("div", "pt-sub", sub));
     tr.append(name);
 
-    const count = (value, cls = "") => el("td", "num " + cls, value ? String(value) : "—");
-    tr.append(count(provider.selected.length, provider.selected.length ? "ok" : ""));
-    tr.append(count(provider.configured.length));
-    tr.append(count(provider.last.length));
-    tr.append(count(provider.offerModels.size));
-
-    const wallet = el("td", "num");
-    wallet.append(document.createTextNode(money(provider.balance)));
-    const cash = provider.balance;
-    if (cash && cash.currency !== "RUB" && cash.rub_estimate != null) wallet.append(el("div", "fine", `≈ ₽${fmt(cash.rub_estimate)}`));
-    const note = walletNote(provider.balance, BAL);
-    if (note) wallet.append(el("div", "fine " + note.cls, note.text));
-    tr.append(wallet);
-
+    tr.append(el("td", "num", money(row.entry)));
+    const rub = row.entry?.rub_estimate;
+    tr.append(el("td", "num hide-sm", rub == null ? "—" : `₽${fmt(rub)}`));
+    tr.append(el("td", "hide-sm fine", when(row.entry?.checked)));
+    const state = stateOf(row.entry, BAL);
+    const stateCell = el("td");
+    stateCell.append(el("span", state.cls, state.text));
+    tr.append(stateCell);
     body.append(tr);
-    if (open === provider.id) body.append(detail(provider));
   }
+
+  const selected = rows.find((row) => row.id === open) || null;
+  drawModels(selected);
 
   const updated = $("pt-updated");
   if (updated) updated.textContent = updatedAt ? `обновлено ${new Date(updatedAt).toLocaleTimeString("ru-RU")}` : "";
@@ -290,9 +276,59 @@ function draw() {
   if (note) {
     note.textContent = error
       ? `Не удалось обновить: ${error}`
-      : "Сейчас — выбранный маршрут; по умолчанию — модели без динамического маршрута (в основном медиа); последний запрос — что реально ответило. Автообновление раз в минуту.";
+      : "Кошельки поставщиков. Нажми на строку — снизу откроются модели, которые мы берём у этого поставщика: сейчас, по умолчанию и последний запрос. Автообновление раз в минуту.";
     note.classList.toggle("warn", Boolean(error));
   }
+}
+
+function splitVisible(show) {
+  const bottom = $("pt-bottom-pane");
+  const split = $("pt-split");
+  const box = $("pt");
+  if (bottom) bottom.hidden = !show;
+  if (split) split.hidden = !show;
+  if (box) box.classList.toggle("mt-single", !show);
+}
+
+function setupSplit() {
+  const box = $("pt");
+  const split = $("pt-split");
+  const top = $("pt-top-pane");
+  if (!box || !split || !top) return;
+  try {
+    const saved = Number(localStorage.getItem(SPLIT_KEY));
+    if (Number.isFinite(saved) && saved > 0) top.style.flexBasis = `${saved}px`;
+  } catch (_) { /* private mode */ }
+  let drag = false;
+  const clamp = (value) => Math.max(150, Math.min(value, box.getBoundingClientRect().height - 150));
+  const move = (event) => {
+    if (!drag) return;
+    const rect = box.getBoundingClientRect();
+    top.style.flexBasis = `${Math.round(clamp(event.clientY - rect.top))}px`;
+  };
+  const stop = () => {
+    if (!drag) return;
+    drag = false;
+    document.body.classList.remove("mt-resizing");
+    try { localStorage.setItem(SPLIT_KEY, String(Math.round(top.getBoundingClientRect().height))); } catch (_) { /* nothing */ }
+  };
+  split.addEventListener("pointerdown", (event) => {
+    drag = true;
+    split.setPointerCapture(event.pointerId);
+    document.body.classList.add("mt-resizing");
+    event.preventDefault();
+  });
+  split.addEventListener("pointermove", move);
+  split.addEventListener("pointerup", stop);
+  split.addEventListener("pointercancel", stop);
+  split.addEventListener("keydown", (event) => {
+    const step = event.key === "ArrowUp" ? -40 : event.key === "ArrowDown" ? 40 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const current = top.getBoundingClientRect().height;
+    top.style.flexBasis = `${Math.round(clamp(current + step))}px`;
+    try { localStorage.setItem(SPLIT_KEY, String(Math.round(clamp(current + step)))); } catch (_) { /* nothing */ }
+  });
 }
 
 async function load(force = true) {
@@ -334,39 +370,64 @@ function startTimer() {
 }
 
 const TEMPLATE = `
-<div class="mt pt">
-  <div class="mt-top">
-    <div class="mt-toolbar">
-      <strong>Карта поставщиков</strong>
-      <span class="fine" id="pt-updated"></span>
-      <span class="sp"></span>
-      <button class="chip" id="pt-refresh" type="button">Обновить</button>
+<div class="mt pt" id="pt">
+  <div class="mt-pane mt-pane-top" id="pt-top-pane">
+    <div class="mt-top">
+      <div class="mt-toolbar">
+        <strong>Поставщики</strong>
+        <span class="fine" id="pt-updated"></span>
+        <span class="sp"></span>
+        <button class="chip" id="pt-refresh" type="button">Обновить</button>
+      </div>
+      <p class="fine" id="pt-note"></p>
     </div>
-    <p class="fine" id="pt-note"></p>
+    <div class="mt-wrap">
+      <table>
+        <thead><tr>
+          <th>Поставщик</th>
+          <th class="num">Доступно</th>
+          <th class="num hide-sm">Оценка, ₽</th>
+          <th class="hide-sm">Проверено</th>
+          <th>Состояние</th>
+        </tr></thead>
+        <tbody id="pt-rows"></tbody>
+      </table>
+    </div>
   </div>
-  <div class="mt-wrap">
-    <table>
-      <thead><tr>
-        <th>Поставщик</th>
-        <th class="num">Сейчас</th>
-        <th class="num hide-sm">По умолчанию</th>
-        <th class="num hide-sm">Последние</th>
-        <th class="num hide-sm">Моделей с ценой</th>
-        <th class="num">Кошелёк</th>
-      </tr></thead>
-      <tbody id="pt-rows"></tbody>
-    </table>
+  <div class="mt-split" id="pt-split" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Высота таблицы поставщиков"><span></span></div>
+  <div class="mt-pane mt-pane-bottom" id="pt-bottom-pane" hidden>
+    <div class="mt-linked-head">
+      <h3 id="pt-sel-name">Модели поставщика</h3>
+      <span class="fine" id="pt-sel-meta"></span>
+      <span class="sp"></span>
+      <a class="pt-link" id="pt-open-models" href="#models">Открыть в таблице моделей →</a>
+    </div>
+    <div class="mt-wrap">
+      <table>
+        <thead><tr>
+          <th>Модель</th>
+          <th>Тип</th>
+          <th>Как берём</th>
+          <th class="num">Закупка, ₽</th>
+          <th class="num">Клиенту, ₽</th>
+          <th class="num">Контекст</th>
+          <th>Последний запрос</th>
+        </tr></thead>
+        <tbody id="pt-models-body"></tbody>
+      </table>
+    </div>
   </div>
 </div>`;
 
 export function mount(root, ctx) {
   if (!root) return;
   ROOT = root;
-  CTX = ctx;
   API = ctx.api;
   root.innerHTML = TEMPLATE;
   const button = $("pt-refresh");
   if (button) button.onclick = () => void load(true);
+  setupSplit();
+  splitVisible(false);
   if (DATA) draw();
   void load(true);
   startTimer();

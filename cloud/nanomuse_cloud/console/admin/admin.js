@@ -942,7 +942,74 @@
         h("div", { class: "s" }, [`${T.dtLength} ${T.dur(length)}`, T.usedLine(v), v.reason ? `${T.dtWhy} ${v.reason}` : "", v.ua ? (platformOf(v.ua) === "browser" ? browserOf(v.ua) : clientLine(v.ua)) : ""].filter(Boolean).join(" · "), v.ip ? [" · ", ipChip(v.ip, v.visitor)] : null)),
       h("code", { class: "fine" }, v.id));
   }
+  const platformOf = (ua) => { ua = String(ua || ""); if (ua.startsWith("nanoMuse-Android")) return "android"; if (ua.startsWith("nanoMuse/")) { const m = /\(([^)]*)\)/.exec(ua); return { windows: "windows", darwin: "macos", linux: "linux" }[(m ? m[1] : "").toLowerCase()] || "runtime"; } return ua.startsWith("Mozilla/") ? "browser" : "other"; };
+  const versionOf = (ua) => { const m = /^nanoMuse(?:-Android)?\/([0-9][^\s(]*)/.exec(String(ua || "")); return m ? m[1] : ""; };
+  const clientLine = (ua) => { if (!ua) return ""; const p = T.dPlatforms[platformOf(ua)] || ""; const v = versionOf(ua); return [p, v ? `v${v}` : ""].filter(Boolean).join(" "); };
   const browserOf = (ua) => { ua = String(ua || ""); const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Windows/.test(ua) ? "Windows" : /Mac OS/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : ""; const b = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : ""; return [os, b].filter(Boolean).join(" ") || ua.split(" ")[0]; };
+  const ipChip = (ip, fromAccount) => {
+    if (!ip) return null;
+    const p = placeOf(ip), txt = placeText(p);
+    const chip = h("code", { class: "ip tap", title: T.atAddress(ip), onclick: (e) => { e.stopPropagation(); openAddress(ip, fromAccount); } }, ip);
+    return txt ? h("span", { class: "ipp" }, chip, h("span", { class: "place", title: p.isp || "" }, txt)) : chip;
+  };
+  /** Everything a kept message holds, in order: text parts, omitted parts named, tool calls with their arguments. */
+  const msgText = (m) => !m ? "" : typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((p) => p && p.type === "text" ? p.text : p && p.omitted ? `[${p.type} ${T.omitted}]` : "").filter(Boolean).join("\n") : "";
+  function messageBlock(m) {
+    const role = (m && m.role) || "?";
+    const parts = [h("b", { class: "role " + role }, (T.roles[role] || role) + ": ")];
+    const txt = msgText(m);
+    if (m && m.omitted && !txt) parts.push(h("i", { class: "fine" }, T.omitted)); else parts.push(txt);
+    for (const c of Array.isArray(m && m.tool_calls) ? m.tool_calls : []) {
+      const f = c && c.function ? c.function : {};
+      parts.push(h("div", { class: "toolcall" }, h("span", { class: "pill violet" }, T.toolCall), " ", h("code", {}, f.name || ""), f.arguments ? h("pre", {}, typeof f.arguments === "string" ? f.arguments : JSON.stringify(f.arguments, null, 1)) : null));
+    }
+    return h("div", { class: "msg " + role }, ...parts);
+  }
+  /** One kept turn: the header line, then the last thing the person said and the reply in full — and the
+      whole exchange (every message, every tool call) when expanded. `who` adds the account's hint and a tap into it. */
+  function sampleRow(smp, opts = {}) {
+    const msgs = Array.isArray(smp.request) ? smp.request : [];
+    const lastUser = [...msgs].reverse().find((m) => m && m.role === "user");
+    const meta = smp.meta || {};
+    let open = false;
+    const body = h("div", {});
+    const toggle = h("button", { class: "btn quiet sm", style: "margin-top:6px", onclick: (e) => { e.stopPropagation(); open = !open; paint(); } });
+    const paint = () => {
+      toggle.textContent = open ? T.collapse : `${T.expand} · ${T.lengthNote(msgs.length + 1)}`;
+      body.replaceChildren(...(open
+        ? [...msgs.map(messageBlock), messageBlock({ role: "assistant", content: String(smp.response || "") })]
+        : [messageBlock({ role: "user", content: msgText(lastUser) }), messageBlock({ role: "assistant", content: String(smp.response || "") })]));
+    };
+    paint();
+    const head = h("div", { class: "s" }, when(smp.ts), opts.who && smp.hint ? [" · ", h("span", { class: "tap", onclick: (e) => { e.stopPropagation(); openAccount(smp.account_id); } }, identOf(smp.account_id, smp.hint))] : null,
+      " · ", h("code", {}, smp.model || ""), ` · ${T.inOut(smp.prompt_tokens, smp.completion_tokens)}`, meta.ua ? ` · ${clientLine(meta.ua) || String(meta.ua).split(" ")[0]}` : "", meta.lang ? ` · ${meta.lang}` : "", smp.cut ? ` · ${T.cut}` : "");
+    return h("div", { class: "row sample", style: "align-items:flex-start" }, h("div", { class: "txt", style: "white-space:pre-wrap;word-break:break-word;min-width:0" }, head, body, toggle));
+  }
+  /** The relay's own series: sign-ins, accounts, invites, the data switch, calls — and the devices and nanoMuse Web as they stand. */
+  function trendsPanel(sr) {
+    const rows = sr.days || [];
+    const dayOf = (r) => day(r.day);
+    const dev = sr.devices || [];
+    const byKind = {};
+    for (const d of dev) { const k = byKind[d.kind] || (byKind[d.kind] = { n: 0, os: [] }); k.n += d.count; k.os.push(`${d.os || "?"} ${fmt(d.count)}`); }
+    return h("div", { class: "panel" },
+      h("h2", {}, T.trends(days)),
+      h("div", { class: "sparks" },
+        sparkRow(T.mSignIns, rows, "sign_ins", "blue", dayOf), sparkRow(T.mNew, rows, "new_accounts", "ok", dayOf), sparkRow(T.mActive, rows, "active_accounts", "cyan", dayOf),
+        sparkRow(T.mInvites, rows, "invites_used", "violet", dayOf), sparkRow(T.mContribute, rows, "contribute_on", "violet", dayOf), sparkRow(T.mCalls, rows, "calls", "ok", dayOf),
+        sparkRow(T.mRefused, rows, "budget_refusals", "warn", dayOf), sparkRow(T.mErrors, rows, "upstream_errors", "warn", dayOf), sparkRow(T.mContentRejected, rows, "content_rejected", "grey", dayOf)),
+      h("div", { class: "kv" },
+        h("b", {}, T.devices), h("span", {}, Object.keys(byKind).length ? Object.entries(byKind).map(([k, v]) => h("div", {}, h("span", { class: "pill", style: "margin-right:6px" }, `${T.devKinds[k] || k} ${fmt(v.n)}`), h("span", { class: "fine" }, v.os.join(" · ")))) : T.none),
+        h("b", {}, T.invitesTitle), h("span", {}, T.invitesLine({ with_code: 0, inviters: 0, invited: 0, ...(sr.invites || {}) }), " · ", h("a", { class: "more-link", href: "#invites" }, T.invSeeRanking)),
+        h("b", {}, T.webTitle), h("span", {}, sr.web && sr.web.enabled === false ? T.webOff : T.webLine(sr.web))));
+  }
+  function eventRow(e, withWho, accountId) {
+    const [tone, icon] = EVENT_STYLE[e.kind] || ["grey", ICON.person];
+    return h("div", { class: "row" + (withWho && e.account_id ? " tap" : ""), onclick: withWho && e.account_id ? () => openAccount(e.account_id) : null },
+      h("span", { class: "tile " + tone, html: icon }),
+      h("div", { class: "txt" }, h("div", { class: "t" }, T.eventName[e.kind] || e.kind, withWho && (e.hint || e.identifier) ? [" · ", h("span", { style: "color:var(--ink-2);font-weight:400" }, e.identifier || identOf(e.account_id, e.hint))] : null),
+        h("div", { class: "s" }, [when(e.ts), e.detail, e.ua ? clientLine(e.ua) : ""].filter(Boolean).join(" · "), e.ip ? [" · ", ipChip(e.ip, accountId || e.account_id)] : null)));
+  }
   const deviceIcon = (k) => (k === "phone" ? ICON.phone : k === "web" ? ICON.web : ICON.computer);
   const download = (blob, name) => {
     const url = URL.createObjectURL(blob);
@@ -1805,71 +1872,20 @@
   function dataView() { const dv = need("data"); return [!dv ? loadingPanel(T.data(days)) : dv._error ? failedPanel(T.data(days), "data", dv._error) : dataPanel(dv), syncPanel()]; }
   function siteView() { const tr = need("traffic"); return [siteVisitsPanel(), githubPanel(), !tr ? loadingPanel(T.site(days)) : tr._error ? failedPanel(T.site(days), "traffic", tr._error) : sitePanel(tr)]; }
   function trafficView() { return siteTrafficView(); }
-  /** Кошельки поставщиков над таблицей цен: видно, на что ещё хватит маршрута. */
-  function balancesPanel() {
-    const title = L3("Балансы поставщиков", "Provider balances", "供应商余额");
-    const bv = need("balances");
-    if (!bv) return loadingPanel(title);
-    if (bv._error) return failedPanel(title, "balances", bv._error);
-    const names = {
-      aitunnel: "AITUNNEL", polza: "Polza", proxyapi: "ProxyAPI",
-      "proxyapi-openai": "ProxyAPI OpenAI", routerai: "RouterAI",
-      deepseek: "DeepSeek", openrouter: "OpenRouter", bothub: "Bothub",
-    };
-    const money = (e) => e.amount == null ? "—"
-      : e.currency === "USD" ? `$${fmt(Math.round(Number(e.amount) * 100) / 100)}`
-      : e.currency === "CAPS" ? `${fmt(Math.round(Number(e.amount)))} CAPS`
-      : `₽${fmt(Math.round(Number(e.amount) * 100) / 100)}`;
-    const state = (e) => {
-      if (e.error) return h("span", { class: "bad" }, e.error);
-      if (e.disabled_until) return L3("приостановлен", "paused", "已暂停");
-      const value = e.currency === "CAPS" ? e.rub_estimate : e.amount;
-      const floor = e.currency === "USD" ? bv.minimum_balance_usd : bv.minimum_balance_rub;
-      if (Number.isFinite(Number(floor)) && Number(value) <= Number(floor)) return h("span", { class: "warn" }, L3("ниже порога", "below the floor", "低于阈值"));
-      return h("span", { class: "ok" }, L3("можно тратить", "can spend", "可使用"));
-    };
-    const rows = Object.entries(bv.balances || {}).sort((a, b) => (Number(b[1].rub_estimate ?? b[1].amount) || 0) - (Number(a[1].rub_estimate ?? a[1].amount) || 0));
-    return panel([title, h("span", { class: "fine" }, ` · ${L3("порог", "floor", "阈值")} ${fmt(bv.minimum_balance_rub)} ₽`)],
-      h("div", { class: "fine", style: "padding:10px 16px 0" },
-        L3("Остатки кошельков поставщиков; долларовые отдельно от рублёвых. Ошибка проверки не означает ноль. Порог — ниже него маршрут не выбирается.",
-          "Provider wallets; dollars apart from rubles. A failed check is not zero. A route below the floor is not chosen.",
-          "供应商钱包；美元与卢布分开。检查失败不等于归零。低于阈值时不会选择该路由。")),
-      rows.length ? h("div", { class: "ledger", style: "margin:10px 16px" }, h("table", {},
-        h("thead", {}, h("tr", {},
-          h("th", {}, L3("Поставщик", "Provider", "供应商")),
-          h("th", { class: "num" }, L3("Доступно", "Available", "可用")),
-          h("th", { class: "num hide-sm" }, L3("Оценка, ₽", "Rubles", "卢布")),
-          h("th", { class: "hide-sm" }, L3("Проверено", "Checked", "检查于")),
-          h("th", {}, L3("Состояние", "State", "状态")))),
-        h("tbody", {}, ...rows.map(([id, e]) => h("tr", {},
-          h("td", {}, names[id] || id,
-            e.plan ? h("div", { class: "fine" }, `${e.plan} · ${fmt(Number(e.rate_rub_per_million) || 0)} ₽/1M CAPS · ${L3("сегодня", "today", "今日")} ${fmt(Number(e.spent_today_rub) || 0)} ₽`) : null),
-          h("td", { class: "num" }, money(e)),
-          h("td", { class: "num hide-sm" }, e.rub_estimate == null ? "" : `${fmt(Math.round(Number(e.rub_estimate) * 100) / 100)} ₽`),
-          h("td", { class: "hide-sm fine" }, when(e.checked)),
-          h("td", {}, state(e)))))))
-        : h("div", { class: "empty" }, L3("Балансы ещё не проверялись.", "Balances have not been checked yet.", "尚未检查余额。")),
-      h("p", { class: "foot" }, L3("Кабинеты: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile. Проверка обновляется сама; кнопка «Обновить данные» ниже перечитывает и цены.",
-        "Cabinets: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile. The check refreshes itself; “Refresh” below re-reads prices too.",
-        "后台：polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile。检查会自动更新；下面的“刷新”也会重读价格。")));
-  }
-  /** «Поставщики»: карта моделей по поставщикам и кошельки под ней. */
+  /** «Поставщики»: кошельки сверху, связанные модели выбранного поставщика снизу. */
   let PROVIDERS_MOD = null;
   function mountProviders() {
     const el = document.getElementById("pt-root");
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (PROVIDERS_MOD) return run(PROVIDERS_MOD);
-    import("/web/providers-table.js?v=20261031-providers2").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
+    import("/web/providers-table.js?v=20261031-providers4").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Карта поставщиков не загрузилась: ${e.message}`)); });
   }
 
   function providersView() {
     setTimeout(mountProviders, 0);
-    return [
-      h("div", { class: "panel mt-panel" }, h("div", { id: "pt-root" })),
-      balancesPanel(),
-    ];
+    return [h("div", { class: "panel mt-panel" }, h("div", { id: "pt-root" }))];
   }
 
   /** «Модели»: список моделей (одна модель — одна строка) и связанная с ним
@@ -1881,7 +1897,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (MODELS_MOD) return run(MODELS_MOD);
-    import("./models-table.js?v=20261031-providers").then((mod) => { MODELS_MOD = mod; run(mod); },
+    import("./models-table.js?v=20261031-resize2").then((mod) => { MODELS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Таблица не загрузилась: ${e.message}`)); });
   }
 

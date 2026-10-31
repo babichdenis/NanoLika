@@ -450,28 +450,23 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt td.mt-unit { font-size: 11.5px; color: var(--ink-3); }
 .admin .mt .mt-jump { margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--warn); cursor: help; }
 
-/* «Поставщики»: обратная карта моделей — нажал на поставщика, видно, что берём у него. */
-.admin .pt.mt { height: auto; max-height: calc(100vh - 210px); }
-.admin .pt .mt-wrap { max-height: 56vh; }
-.admin .pt .pt-row.is-live td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+/* «Поставщики»: сверху кошельки, снизу связанные модели выбранного поставщика. */
+.admin .pt.mt { height: calc(100vh - 175px); }
 .admin .pt .pt-provider { font-weight: 600; }
 .admin .pt .pt-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-3); font-weight: 400; }
 .admin .pt .pt-badge { display: inline-block; margin: 0 4px 4px 0; padding: 1px 7px; border-radius: 999px; background: var(--fill); color: var(--ink-2); font-size: 10.5px; }
 .admin .pt .pt-badge.is-now { background: rgba(52, 199, 89, 0.14); color: var(--ok); font-weight: 600; }
 .admin .pt .pt-badge.is-last { background: rgba(10, 102, 228, 0.10); color: var(--action); }
-.admin .pt .pt-detail > td { padding: 0; background: var(--fill); }
-.admin .pt .pt-detail-inner { padding: 10px 14px 14px 28px; }
-.admin .pt .pt-detail-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.admin .pt .pt-detail-head b { font-size: 13px; }
-.admin .pt .pt-link { margin-left: auto; font-size: 12px; color: var(--action); text-decoration: none; }
-.admin .pt .pt-link:hover { text-decoration: underline; }
-.admin .pt .pt-models { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface); border-radius: 10px; overflow: hidden; }
-.admin .pt .pt-models th, .admin .pt .pt-models td { padding: 6px 9px; border-bottom: 1px solid var(--hairline); text-align: left; white-space: nowrap; }
-.admin .pt .pt-models th { background: var(--fill); color: var(--ink-3); font-size: 11px; font-weight: 500; }
-.admin .pt .pt-models tr:last-child td { border-bottom: 0; }
-.admin .pt .pt-models .num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin .pt .mt-linked-head .pt-link { margin-left: auto; font-size: 12px; color: var(--action); text-decoration: none; }
+.admin .pt .mt-linked-head .pt-link:hover { text-decoration: underline; }
 .admin .pt .pt-model-name { font-weight: 600; }
 .admin .pt .pt-model-id { display: block; font-size: 10.5px; color: var(--ink-3); font-weight: 400; }
-.admin .pt .pt-empty { padding: 8px 10px; color: var(--ink-3); font-size: 12.5px; }
 .admin .pt .pt-fallback { color: var(--warn); }
-.admin .pt .pt-models-wrap { max-height: 42vh; overflow: auto; border-radius: 10px; }
+.admin .pt #pt-bottom-pane .mt-wrap { border-top: 1px solid var(--hairline); }
+
+/* «Модели»: ширину столбцов можно тянуть за правый край заголовка. */
+.admin .mt #mt-models { table-layout: fixed; }
+.admin .mt .mt-col-resize { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
+.admin .mt .mt-col-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; }
+.admin .mt .mt-col-resize:hover::after, body.mt-col-resizing .mt-col-resize::after { background: var(--action); opacity: .65; }
+body.mt-col-resizing { cursor: col-resize; user-select: none; }

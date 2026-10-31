@@ -15,6 +15,9 @@ let DATA = null;
 let loading = false;
 let error = "";
 
+const COL_WIDTH_KEY = "nm.models.col-widths";
+let COL_WIDTHS = null;
+
 const state = {
   group: "all",
   visibility: "all", // all | visible | hidden
@@ -425,6 +428,7 @@ const TEMPLATE = `
     </div>
     <div class="mt-wrap">
       <table id="mt-models">
+        <colgroup></colgroup>
         <thead>
           <tr></tr>
         </thead>
@@ -823,7 +827,7 @@ function drawHead() {
   const row = ROOT.querySelector("#mt-models thead tr");
   if (!row) return;
   row.replaceChildren();
-  for (const column of COLUMNS) {
+  for (const [index, column] of COLUMNS.entries()) {
     const th = el("th", column.cls || "");
     const line = el("div", "mt-th");
     const input = el("input", "mt-col");
@@ -845,8 +849,97 @@ function drawHead() {
     line.append(input, button);
     th.append(line);
     if (column.sub) th.append(el("small", "", column.sub));
+    if (index < COLUMNS.length - 1) {
+      const grip = el("span", "mt-col-resize");
+      grip.title = "Потяните, чтобы изменить ширину; двойной клик — сбросить";
+      grip.setAttribute("aria-hidden", "true");
+      grip.onpointerdown = (event) => startColumnResize(event, index);
+      grip.ondblclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        COL_WIDTHS = null;
+        try { localStorage.removeItem(COL_WIDTH_KEY); } catch (_) { /* private mode */ }
+        applyColumnWidths();
+      };
+      th.append(grip);
+    }
     row.append(th);
   }
+  applyColumnWidths();
+}
+
+const savedWidths = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || "null");
+    if (Array.isArray(raw) && raw.length === COLUMNS.length && raw.every((value) => Number.isFinite(Number(value)) && Number(value) >= 48)) {
+      return raw.map((value) => Math.round(Number(value)));
+    }
+  } catch (_) { /* private mode */ }
+  return null;
+};
+
+function tableCols() {
+  return [...(ROOT ? ROOT.querySelectorAll("#mt-models colgroup col") : [])];
+}
+
+function applyColumnWidths() {
+  const table = $("mt-models");
+  const cols = tableCols();
+  if (!table || !cols.length) return;
+  if (!COL_WIDTHS) {
+    cols.forEach((col) => { col.style.width = ""; });
+    table.style.width = "";
+    return;
+  }
+  let total = 0;
+  cols.forEach((col, index) => {
+    const width = COL_WIDTHS[index];
+    col.style.width = width ? `${width}px` : "";
+    if (width) total += width;
+  });
+  table.style.width = total ? `${total}px` : "";
+}
+
+function setupColumnResize() {
+  const table = $("mt-models");
+  if (!table) return;
+  let group = table.querySelector("colgroup");
+  if (!group) {
+    group = el("colgroup");
+    table.prepend(group);
+  }
+  group.replaceChildren(...COLUMNS.map(() => el("col")));
+  COL_WIDTHS = savedWidths();
+  applyColumnWidths();
+}
+
+function startColumnResize(event, index) {
+  const table = $("mt-models");
+  if (!table) return;
+  const headers = [...table.querySelectorAll("thead th")];
+  if (!COL_WIDTHS) COL_WIDTHS = headers.map((th) => Math.round(th.getBoundingClientRect().width));
+  if (!COL_WIDTHS[index]) return;
+  const grip = event.currentTarget;
+  const startX = event.clientX;
+  const startWidth = COL_WIDTHS[index];
+  try { grip.setPointerCapture?.(event.pointerId); } catch (_) { /* synthetic or already gone */ }
+  document.body.classList.add("mt-col-resizing");
+  const move = (moveEvent) => {
+    COL_WIDTHS[index] = Math.max(48, Math.min(720, Math.round(startWidth + moveEvent.clientX - startX)));
+    applyColumnWidths();
+  };
+  const stop = () => {
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", stop);
+    grip.removeEventListener("pointercancel", stop);
+    document.body.classList.remove("mt-col-resizing");
+    try { localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(COL_WIDTHS)); } catch (_) { /* private mode */ }
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", stop);
+  grip.addEventListener("pointercancel", stop);
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function drawBody() {
@@ -994,6 +1087,7 @@ export function mount(root, ctx) {
   root.innerHTML = TEMPLATE;
   splitVisible(Boolean(state.sel));
   setupSplit();
+  setupColumnResize();
   wire();
   syncControls();
   drawGroups();
