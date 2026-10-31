@@ -1588,7 +1588,10 @@ export default class NanomuseCloud extends Service {
 
   /** Choose the hands model (`provider` an own row's id, or the account); the hands' MCP client is remounted with it (`hands-tools.ts`). */
   async setHandsModel(id: string, provider = PROVIDER_ID): Promise<void> {
-    if (id && !this.handsOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a hands model of the account or of an own key')
+    if (id && !this.handsOptions().some((o) => o.id === id && o.provider === provider)) {
+      if (provider === PROVIDER_ID) await this.refreshCloudModels()
+      if (!this.handsOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a hands model of the account or of an own key')
+    }
     this.state = { ...this.state, ...(id ? { handsModel: id } : {}), ...(id && provider !== PROVIDER_ID ? { handsProvider: provider } : {}) }
     if (!id) delete this.state.handsModel
     if (!id || provider === PROVIDER_ID) delete this.state.handsProvider
@@ -2289,7 +2292,10 @@ export default class NanomuseCloud extends Service {
    * person has not chosen them, so the hands' environment is written again.
    */
   async setChatModel(id: string, provider = PROVIDER_ID): Promise<void> {
-    if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a chat model of the account or of an own key')
+    if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) {
+      if (provider === PROVIDER_ID) await this.refreshCloudModels()
+      if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a chat model of the account or of an own key')
+    }
     const svc = this.defaultModelService()
     if (!svc) throw new RelayError(503, 'no_models', 'Not available yet')
     await svc.saveSelection({ provider, model: id })
@@ -2727,7 +2733,10 @@ export default class NanomuseCloud extends Service {
 
   /** Settings → Models → Making pictures: the image model and where it lives (`nanomuse` or an own row). */
   async setImageModel(id: string, provider = PROVIDER_ID): Promise<void> {
-    if (id && !this.imageOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not an image model of the account or of an own key')
+    if (id && !this.imageOptions().some((o) => o.id === id && o.provider === provider)) {
+      if (provider === PROVIDER_ID) await this.refreshCloudModels()
+      if (!this.imageOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not an image model of the account or of an own key')
+    }
     const next: MediaState = { ...this.state.media }
     if (id) {
       next.imageModel = id
@@ -2748,7 +2757,11 @@ export default class NanomuseCloud extends Service {
       next.videoModel = VIDEO_OFF
       delete next.videoProvider
     } else if (id) {
-      const options = await this.videoOptions()
+      let options = await this.videoOptions()
+      if (!options.some((o) => o.id === id && o.provider === provider) && provider === PROVIDER_ID) {
+        await this.refreshCloudModels()
+        options = await this.videoOptions()
+      }
       if (!options.some((o) => o.id === id && o.provider === provider) && !(provider !== PROVIDER_ID && this.state.providers?.[provider] && (looksLikeVideoModel(id) || KNOWN_DASHSCOPE_MODELS.includes(id)))) {
         throw new RelayError(400, 'bad_model', 'Not a video model of the account or of an own key')
       }
@@ -3154,6 +3167,25 @@ export default class NanomuseCloud extends Service {
       this.broadcast()
       return this.status()
     })
+  }
+
+  /**
+   * Re-read `/v1/models` without a full account refresh. A model added on the relay
+   * after this app started must be selectable without a restart: the picker page is
+   * served by the relay and already shows it, but every setter validates against the
+   * cached list. Called only when the chosen id is not in that cache.
+   */
+  private async refreshCloudModels(): Promise<void> {
+    const token = await this.token()
+    if (!token) return
+    const models = await this.relay.models(token)
+    const changed = !sameModels(models, this.state.models ?? [])
+    this.state = { ...this.state, models }
+    if (changed) {
+      await this.writeProvider(models).catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: provider row not rewritten: %s', message(error)))
+      await this.writeState()
+      this.broadcast()
+    }
   }
 
   /** Data controls: flip the switch on the relay and keep the account row current. */

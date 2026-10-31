@@ -14,7 +14,13 @@ export function installComposerControls({form,message,select,refresh,status,sess
  function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?'Модели · '+m.name:'Модель';}
  function chosenModels(){return allChat.filter(m=>favSet.has(m.id));}
  async function saveFavourites(){const ownerId=session()?.owner||'';try{localStorage.setItem('nl.web.favourites.'+ownerId,JSON.stringify([...favSet]));}catch{}try{await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});}catch{}}
- trigger.onclick=()=>openModelPicker({models:chosenModels(),favourites:favSet,selected,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
+ trigger.onclick=async()=>{
+  // Новые модели на сервере должны появляться в открытом списке без перезагрузки
+  // страницы: перед открытием перечитываем каталог, старый список оставляем,
+  // если сеть не ответила.
+  try{await load();}catch{}
+  openModelPicker({models:chosenModels(),favourites:favSet,selected,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
+ };
  const applyFilters=()=>{
   const q=query.trim().toLowerCase();
   rows=all.filter(m=>(kind==='all'||m.kind===kind)&&(!q||m.name.toLowerCase().includes(q)||m.id.toLowerCase().includes(q)));
