@@ -40,6 +40,7 @@ from nanomuse.tools import (
     MCPManager,
     OfficeConvert,
     OfficeVba,
+    OfficeXlsm,
     PythonExecute,
     ReadEmails,
     Recall,
@@ -339,6 +340,7 @@ class NanoMuseApp:
             Triggers(store=self.triggers, available=self.trigger_kinds),
             OfficeConvert(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeVba(workspace=ws, extra_roots=list(s.agent.extra_roots)),
+            OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:

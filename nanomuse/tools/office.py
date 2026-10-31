@@ -25,7 +25,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
@@ -567,6 +567,152 @@ class OfficeConvert(BaseTool):
         )
 
 
+class OfficeXlsm(BaseTool):
+    """A macro-enabled workbook from the built-in seed: data, a config sheet, a button.
+
+    The seed carries one universal VBA module: it draws a button on open and runs the
+    commands written on the hidden ``_cfg`` sheet (format, filter, sort, pdf, refresh,
+    stamp, clear). ``openpyxl`` fills the data and the commands with ``keep_vba`` and
+    the project stays byte for byte, so no Office and no COM are needed — macOS and
+    Windows both work. The button appears when the person opens the file and allows
+    macros; the file is never run by the agent itself.
+    """
+
+    name: str = "office_xlsm"
+    description: str = (
+        "Make an Excel workbook with a working macro and a button, without Microsoft "
+        "Office: data goes to a sheet, the macro reads commands from the hidden _cfg "
+        "sheet (format, filter, sort, pdf, refresh, stamp, clear) and draws a button on "
+        "open. Use this when someone asks for an Excel file with a small macro or a "
+        "button. `rows` is a list of lists (first row = header), `commands` is a list of "
+        "{\"action\", \"target\", \"param\"}; `target` is a range like Sheet1!A1:C20, "
+        "`param` is the sort column, \"field|value\" for filter, or a date format for "
+        "stamp. `caption` is the button text. The result is a .xlsm at `out`."
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "out": {"type": "string", "description": "Where to write the .xlsm"},
+            "sheet": {"type": "string", "description": "Name of the data sheet (default Данные)"},
+            "rows": {
+                "type": "array",
+                "items": {"type": "array", "items": {}},
+                "description": "Rows of cells; the first one is the header",
+            },
+            "commands": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["format", "filter", "sort", "pdf", "refresh", "stamp", "clear"],
+                        },
+                        "target": {"type": "string"},
+                        "param": {"type": "string"},
+                    },
+                    "required": ["action"],
+                },
+                "description": "What the button does, in order",
+            },
+            "caption": {"type": "string", "description": "Button text (default Обновить)"},
+        },
+        "required": ["out", "rows"],
+    }
+    risk: RiskLevel = RiskLevel.MODERATE
+    workspace: Path = Path(".")
+    extra_roots: list[Path] = []
+
+    SEED: ClassVar[Path] = Path(__file__).resolve().parents[1] / "assets" / "office" / "nanolika-seed.xlsm"
+
+    def _resolve(self, raw: str, must_exist: bool = True, *, write: bool = False) -> Path:
+        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=write)
+
+    def assess(self, args: dict[str, Any]) -> CallAssessment:
+        return CallAssessment(
+            risk=RiskLevel.MODERATE,
+            summary=f"office_xlsm {args.get('out', '')}",
+            warnings=["the workbook contains a macro the person may run later"],
+        )
+
+    async def execute(
+        self,
+        out: str = "",
+        sheet: str = "Данные",
+        rows: list[list[Any]] | None = None,
+        commands: list[dict[str, Any]] | None = None,
+        caption: str = "Обновить",
+        **_: Any,
+    ) -> ToolResult:
+        if not out.strip() or not rows:
+            return ToolResult.fail("office_xlsm needs an out path and at least one row")
+        try:
+            dst = self._resolve(out, must_exist=False, write=True)
+        except PermissionError as exc:
+            return ToolResult.fail(str(exc))
+        if dst.suffix.lower() != ".xlsm":
+            dst = dst.with_suffix(".xlsm")
+        if not self.SEED.exists():
+            return ToolResult.fail("the Excel template is missing from this build")
+        try:
+            import openpyxl
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        except ImportError:
+            return ToolResult.fail("openpyxl is not installed")
+        title = (sheet or "Данные").strip()[:31] or "Данные"
+        if title == "_cfg":
+            return ToolResult.fail("'_cfg' is reserved for the macro settings")
+        try:
+            wb = openpyxl.load_workbook(self.SEED, keep_vba=True)
+            ws = wb.active
+            ws.title = title
+            if ws.max_row:
+                ws.delete_rows(1, ws.max_row)
+            for row in rows:
+                ws.append(["" if cell is None else cell for cell in row])
+            # A readable table before the button is pressed; the macro re-applies this.
+            if rows:
+                width = max(len(row) for row in rows)
+                thin = Side(style="thin", color="D6D2C5")
+                for column in range(1, width + 1):
+                    head = ws.cell(row=1, column=column)
+                    head.font = Font(bold=True)
+                    head.fill = PatternFill("solid", fgColor="E4E8D8")
+                    head.alignment = Alignment(vertical="center")
+                    for line in range(1, len(rows) + 1):
+                        ws.cell(row=line, column=column).border = Border(
+                            left=thin, right=thin, top=thin, bottom=thin
+                        )
+                for column in range(1, width + 1):
+                    letter = openpyxl.utils.get_column_letter(column)
+                    longest = max(len(str(ws.cell(row=line, column=column).value or "")) for line in range(1, len(rows) + 1))
+                    ws.column_dimensions[letter].width = min(48, max(10, longest + 2))
+                ws.freeze_panes = "A2"
+            if "_cfg" in wb.sheetnames:
+                del wb["_cfg"]
+            cfg = wb.create_sheet("_cfg")
+            cfg.append(["action", "range", "param"])
+            for command in commands or []:
+                action = str(command.get("action") or "").strip().lower()
+                if not action:
+                    continue
+                cfg.append([action, str(command.get("target") or ""), str(command.get("param") or "")])
+            cfg["F1"] = caption or "Обновить"
+            cfg.sheet_state = "hidden"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(dst)
+        except Exception as exc:  # noqa: BLE001 — the caller needs the reason, not a traceback
+            return ToolResult.fail(f"could not build the workbook: {exc}")
+        count = len(commands or [])
+        return ToolResult(
+            output=(
+                f"{dst.name}: лист «{title}», {len(rows)} строк, макрос и кнопка «{caption}». "
+                f"Команд у кнопки: {count}. Откройте файл в Excel и разрешите макросы — "
+                "кнопка появится под таблицей."
+            )
+        )
+
+
 class OfficeVba(BaseTool):
     name: str = "office_vba"
     description: str = (
@@ -690,6 +836,7 @@ class OfficeVba(BaseTool):
 __all__ = [
     "OfficeConvert",
     "OfficeVba",
+    "OfficeXlsm",
     "com_available",
     "convert_with_office",
     "convert_with_soffice",

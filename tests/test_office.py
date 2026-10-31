@@ -126,3 +126,33 @@ async def test_vba_falls_back_to_a_bas_file(tmp_path: Path):
         .read_text(encoding="utf-8")
         .startswith('Attribute VB_Name = "Hello"')
     )
+
+
+def test_office_xlsm_builds_a_macro_workbook_from_the_seed(tmp_path: Path):
+    """The seed's VBA project survives the data write, and the config sheet is hidden."""
+    import asyncio
+
+    from nanomuse.tools.office import OfficeXlsm
+
+    out = tmp_path / "book.xlsm"
+    tool = OfficeXlsm(workspace=tmp_path, extra_roots=[])
+    result = asyncio.run(
+        tool.execute(
+            out=str(out),
+            sheet="Данные",
+            rows=[["Товар", "Цена"], ["Ручка", 120]],
+            commands=[{"action": "format", "target": "Данные!A1:B2"}],
+            caption="Обновить",
+        )
+    )
+    assert result.ok, result.error
+    assert has_vba_project(out)
+    with zipfile.ZipFile(out) as book, zipfile.ZipFile(OfficeXlsm.SEED) as seed:
+        assert book.read("xl/vbaProject.bin") == seed.read("xl/vbaProject.bin")
+    import openpyxl
+
+    workbook = openpyxl.load_workbook(out, keep_vba=True)
+    assert workbook.sheetnames == ["Данные", "_cfg"]
+    assert workbook["_cfg"].sheet_state == "hidden"
+    assert workbook["_cfg"]["F1"].value == "Обновить"
+    assert workbook["Данные"]["A2"].value == "Ручка"
