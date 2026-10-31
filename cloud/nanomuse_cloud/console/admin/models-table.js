@@ -325,20 +325,66 @@ function modelRank(model) {
   return 3;
 }
 
+function normalizedModel(value) {
+  return String(value || "").toLowerCase().split("/").pop().replace(/[^a-z0-9]+/g, "");
+}
+
+function compareRank(left, right) {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * Один поставщик — одна строка. Релей отдаёт все варианты семейства
+ * (1017, 0731, vision, latest), чтобы был failover, но в таблице модели это
+ * выглядело как несколько одинаковых поставщиков. Оставляем лучший вариант:
+ * сначала совпадающий с upstream самой модели, потом выбранный маршрут,
+ * потом доступный, потом дешёвый.
+ */
 function unionOffers(models) {
-  const seen = new Set();
-  const out = [];
+  const kind = models.length ? groupOf(models[0]) : "text";
+  const media = kind !== "text" && kind !== "code";
+  const upstreams = new Set();
   for (const model of models) {
-    for (const offer of offersOf(model)) {
-      // одна и та же цена у pinned-версии и latest-алиаса — одна строка
-      const key = `${offer.provider}|${offer.input_rub}|${offer.output_rub}|${offer.cached_rub}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      offer._from = model.id;
-      out.push(offer);
+    for (const value of [model.upstream, model.priced_as, model.id]) {
+      const key = normalizedModel(value);
+      if (key) upstreams.add(key);
     }
   }
-  return out;
+  const collected = [];
+  for (const model of models) {
+    for (const offer of offersOf(model)) {
+      collected.push({ offer, from: model.id, exact: upstreams.has(normalizedModel(offer.model)) });
+    }
+  }
+  const base = media ? mediaBaseUnit({ group: kind, offers: collected.map((item) => item.offer) }) : "";
+  // Если у модели есть свои точные версии у двух и более поставщиков, чужие
+  // поколения (0731, v4-flash, latest) в этой строке не показываем: это уже
+  // другая модель, а не альтернатива. Для общего алиаса без версии оставляем
+  // всё семейство — иначе у «DeepSeek V4.1 Flash» остался бы один поставщик.
+  const exactProviders = new Set(collected.filter((item) => item.exact).map((item) => item.offer.provider));
+  const exactOnly = exactProviders.size >= 2;
+  const byProvider = new Map();
+  for (const item of collected) {
+    if (exactOnly && !item.exact) continue;
+    const price = media ? mediaUnitPrice(item.offer, base) : Number(item.offer.input_rub);
+    const rank = [
+      media && base && !Number.isFinite(price) ? 1 : 0,
+      item.exact ? 0 : 1,
+      item.offer.selected ? 0 : 1,
+      item.offer.eligible ? 0 : 1,
+      Number.isFinite(price) && price > 0 ? price : Infinity,
+    ];
+    const key = String(item.offer.provider || "");
+    const old = byProvider.get(key);
+    if (!old || compareRank(rank, old.rank) < 0) byProvider.set(key, { ...item, rank });
+  }
+  return [...byProvider.values()].map(({ offer, from }) => {
+    offer._from = from;
+    return offer;
+  });
 }
 
 function allGroups() {
@@ -388,7 +434,7 @@ const COLUMNS = [
   { key: "markupIn", label: "Наценка вход", numeric: true },
   { key: "markupOut", label: "Наценка выход", numeric: true },
   { key: "best", label: "Дешевле всех", sub: "вход, ₽/1M · за ед.", numeric: true },
-  { key: "offers", label: "Предложений", numeric: true },
+  { key: "offers", label: "Поставщиков", numeric: true },
 ];
 
 const SORT_KEYS = new Set(COLUMNS.map((column) => column.key));
@@ -866,7 +912,7 @@ function drawModels(rows) {
 
     const count = el("td", "num");
     count.append(el("b", "", offers.length ? String(offers.length) : "—"));
-    if (offers.length) count.append(el("span", "fine", ` · ${new Set(offers.map((o) => o.provider)).size} пост.`));
+    count.title = offers.length ? `${offers.length} поставщиков, по одному предложению на каждого` : "Поставщики цену не публикуют";
     tr.append(count);
 
     tr.onclick = () => select(model.id);
@@ -925,7 +971,8 @@ function drawOffers() {
   if (title) title.textContent = group.name;
   if (meta) {
     const ids = group.models.map((model) => model.id).join(" · ");
-    meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} предложений`;
+    const word = group.offers.length === 1 ? "поставщик" : "поставщиков";
+    meta.textContent = `${ids} · ${groupLabel(group.group)} · ${group.offers.length} ${word}`;
   }
   const base = media ? mediaBaseUnit(group) : "";
   const offers = group.offers.slice().sort((a, b) => {
