@@ -410,7 +410,12 @@ async def test_account_deletion_takes_the_store_and_admin_sees_totals_only():
     assert r.status_code == 200
     out = r.json()
     assert out["accounts_enabled"] == 1 and out["accounts_disabled"] == 1 and out["accounts_with_data"] == 1
-    assert out["conversations"] == 1 and out["messages"] == 1 and out["bytes"] == len("secret words")
+    assert out["conversations"] == 1 and out["messages"] == 1
+    # The stored bytes are ciphertext now: larger than the words themselves, never the
+    # words. The database holds no plaintext to leak.
+    assert out["bytes"] >= len("secret words")
+    row = cloud.db._conn.execute("SELECT text FROM sync_messages WHERE deleted=0").fetchone()
+    assert row is not None and "secret words" not in str(row["text"])
     assert "secret words" not in r.text.replace("secret words", "") and "text" not in out
     assert (await client.post("/v1/auth/delete", headers=auth(key))).status_code == 204
     out = (await client.get("/v1/admin/sync", headers={"X-Admin-Token": "admin"})).json()

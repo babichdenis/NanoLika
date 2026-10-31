@@ -1174,7 +1174,7 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
         try:
             multiplier = float(body.get("multiplier"))
         except (TypeError, ValueError):
-            raise HTTPException(422, "multiplier must be a number")
+            raise HTTPException(422, "multiplier must be a number") from None
         if not 0.1 <= multiplier <= 20:
             raise HTTPException(422, "multiplier must be between 0.1 and 20")
         items = body.get("items")

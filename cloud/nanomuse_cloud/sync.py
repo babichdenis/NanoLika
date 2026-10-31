@@ -148,7 +148,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
     }
 
 
-def _message_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
+def _message_row(r: sqlite3.Row, names: dict[str, str], unseal: Any = None) -> dict:
     try:
         attachments = json.loads(r["attachments"] or "[]")
     except ValueError:
@@ -160,7 +160,7 @@ def _message_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "device": r["device"],
         "device_name": names.get(r["device"], ""),
         "role": r["role"],
-        "text": r["text"],
+        "text": unseal(r["text"]) if unseal is not None else r["text"],
         "truncated": bool(r["truncated"]),
         "attachments": attachments if isinstance(attachments, list) else [],
         "created_at": int(r["created_at"]),
@@ -215,9 +215,24 @@ class SyncStore:
     """The account's synced conversations over the relay's database. Every public method is
     one transaction; `push` is the only one with rules worth reading (above)."""
 
-    def __init__(self, db: Database, presence: Presence | None = None):
+    def __init__(self, db: Database, presence: Presence | None = None, crypto: Any = None):
         self.db = db
         self.presence = presence if presence is not None else Presence()
+        # Текст сообщений лежит на релее; с ключом он шифруется (AES-GCM, как
+        # идентификаторы), и копия базы без CLOUD_SECRET его не читает.
+        self.crypto = crypto
+
+    def _seal(self, account_id: str, text: str) -> str:
+        if not text or self.crypto is None:
+            return text
+        return "enc1:" + self.crypto.encrypt(account_id, text)
+
+    def _unseal(self, account_id: str, text: str) -> str:
+        if not text or not str(text).startswith("enc1:"):
+            return text
+        if self.crypto is None:
+            return ""
+        return self.crypto.decrypt(account_id, str(text)[5:]) or ""
 
     # -- state --
 
@@ -373,7 +388,11 @@ class SyncStore:
             "cursor": cursor,
             "more": more,
             "conversations": [_conversation_row(r, names) for r in conversations],
-            "messages": [_message_row(r, names) for _, k, r in rows if k == "m"],
+            "messages": [
+                _message_row(r, names, lambda value: self._unseal(account_id, value))
+                for _, k, r in rows
+                if k == "m"
+            ],
         }
         if skipped is not None:
             out["skipped"] = skipped
@@ -729,7 +748,7 @@ class SyncStore:
                         seq,
                         msg_device,
                         role,
-                        "" if deleted else text,
+                        "" if deleted else self._seal(account_id, text),
                         0 if deleted else (1 if truncated else 0),
                         "[]" if deleted else json.dumps(clean_attachments(msg.get("attachments")), ensure_ascii=False),
                         _ts(msg.get("created_at"), t),

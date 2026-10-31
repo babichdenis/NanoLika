@@ -64,8 +64,6 @@ def stage(cloud: Any, spec: Any, values: Any, *, note: str = "") -> dict[str, An
     Если после наложения ничего не изменилось, черновик снимается: держать
     «изменение», равное текущей цене, значит показывать оператору ложный сигнал.
     """
-    from .service import CloudError
-
     clean = _clean(values)
     current = model_pricing.policy(cloud, spec)
     rates = current["rates_rub"]

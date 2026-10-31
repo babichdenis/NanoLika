@@ -121,7 +121,10 @@ class ChatCatalog:
             return {
                 "account_id": account,
                 "cid": cid,
-                "messages": [_message_row(r, names) for r in rows],
+                "messages": [
+                    _message_row(r, names, lambda value: self.store._unseal(account, value))
+                    for r in rows
+                ],
                 "cursor": int(rows[-1]["seq"]) if more else snapshot,
                 "more": more,
                 "has_older": has_older,

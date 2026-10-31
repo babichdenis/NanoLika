@@ -361,13 +361,13 @@ def fetch_polza(limit: int = 0, workers: int = 12) -> list[dict]:
             continue
         kind = str(model.get("type") or "")
 
-        def add(unit: str, raw: Any) -> None:
+        def add(unit: str, raw: Any, model_slug: str = slug) -> None:
             try:
                 price = float(str(raw).replace(",", "."))
             except (TypeError, ValueError):
                 return
             if price > 0:
-                offers.append(dict(model=slug, unit=unit, price=round(price, 4), currency="RUB"))
+                offers.append(dict(model=model_slug, unit=unit, price=round(price, 4), currency="RUB"))
 
         for field, unit in units:
             add(unit, pricing.get(field))

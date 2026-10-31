@@ -111,8 +111,8 @@ import secrets
 import time
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -1057,7 +1057,7 @@ def create_app(
 
     # -- conversation sync (0.19, sync.py): the same chats on every device of the account -----------
 
-    sync_store = SyncStore(cloud.db)
+    sync_store = SyncStore(cloud.db, crypto=cloud.crypto)
     app.state.sync = sync_store
 
     def sync_dep(caller: Caller = Depends(caller_dep)) -> Caller:

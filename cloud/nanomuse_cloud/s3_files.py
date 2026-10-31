@@ -15,7 +15,7 @@ import hashlib
 import hmac
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -50,7 +50,7 @@ def _signing_key(secret: str, day: str, region: str) -> bytes:
 
 
 def _now() -> tuple[str, str]:
-    iso = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    iso = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return iso, iso[:8]
 
 
