@@ -52,6 +52,7 @@ const PROVIDER_LABELS = {
   proxyapi: "ProxyAPI",
   "proxyapi-openai": "ProxyAPI OpenAI",
   bothub: "Bothub",
+  jiugx: "Jiugx",
   deepseek: "DeepSeek",
   openrouter: "OpenRouter",
   own: "Свой ключ",
@@ -201,15 +202,30 @@ function purchaseText(model) {
   return "—";
 }
 
+/** Короткая метка выбранного варианта: 1017, 0731, latest. */
+function routeLabel(value) {
+  const bare = String(value || "").split("/").pop();
+  const tail = bare.match(/(\d{3,4}|latest|vision|exp)$/);
+  return tail ? tail[1] : bare.slice(0, 14);
+}
+
 /** Полная размерность закупки — во всплывающей подсказке, а не в каждой ячейке. */
 function purchaseTitle(model) {
   const cost = model.cost || {};
-  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение`;
-  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду`;
-  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков`;
-  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту`;
+  const routing = model.routing || {};
+  const selected = routing.selected_model
+    ? ` · маршрут: ${providerLabel(routing.selected)} ${routing.selected_model}`
+    : "";
+  const exact = (routing.offers || []).find((offer) => normalizedModel(offer.model) === normalizedModel(model.upstream));
+  const exactLine = exact && normalizedModel(exact.model) !== normalizedModel(routing.selected_model) && exact.input_rub != null
+    ? `\nТочная версия ${model.upstream}: ${providerLabel(exact.provider)} ${fmt(exact.input_rub)} / ${fmt(exact.output_rub)}`
+    : "";
+  if (cost.rub_image != null) return `${fmt(cost.rub_image)} ₽ за изображение${selected}`;
+  if (cost.rub_second != null) return `${fmt(cost.rub_second)} ₽ за секунду${selected}`;
+  if (cost.rub_speech != null) return `${fmt(cost.rub_speech)} ₽ за 1000 знаков${selected}`;
+  if (cost.rub_minute != null) return `${fmt(cost.rub_minute)} ₽ за минуту${selected}`;
   if (cost.rub_in != null || cost.rub_out != null) {
-    return `Закупка выбранного маршрута: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M`;
+    return `Закупка выбранного маршрута${selected}: вход ${fmt(cost.rub_in)} ₽/1M, выход ${fmt(cost.rub_out)} ₽/1M${exactLine}`;
   }
   return "Закупка неизвестна: поставщик не дал цену";
 }
@@ -787,6 +803,7 @@ const TEMPLATE = `
       <h3 id="mt-sel-name">Поставщики модели</h3>
       <label class="switch mt-variants"><input id="mt-variants" type="checkbox" /> все варианты семьи</label>
       <span class="fine" id="mt-sel-meta"></span>
+      <button class="chip mt-collapse" id="mt-collapse" type="button" title="Свернуть таблицу поставщиков и вернуть место основной таблице">Свернуть</button>
     </div>
     <div class="mt-wrap">
       <table id="mt-offers">
@@ -964,6 +981,12 @@ function drawModels(rows) {
 
     const purchaseCell = el("td", "num", purchaseText(model));
     purchaseCell.title = purchaseTitle(model);
+    const selectedModel = model.routing?.selected_model;
+    if (selectedModel && normalizedModel(selectedModel) !== normalizedModel(model.upstream)) {
+      const badge = el("span", "mt-route-badge", routeLabel(selectedModel));
+      badge.title = `Закупка — от выбранного маршрута ${providerLabel(model.routing.selected)} ${selectedModel}, не от ${model.upstream}`;
+      purchaseCell.append(badge);
+    }
     tr.append(purchaseCell);
 
     const clientCell = el("td", "num mt-client");
@@ -1708,6 +1731,12 @@ function wire() {
   if (sell) sell.onchange = () => { state.sellOnly = sell.checked; draw(); };
   const variants = $("mt-variants");
   if (variants) variants.onchange = () => { state.allVariants = variants.checked; draw(); };
+  const collapse = $("mt-collapse");
+  if (collapse) collapse.onclick = () => {
+    state.sel = "";
+    saveFilters();
+    draw();
+  };
   const refresh = $("mt-refresh");
   if (refresh) refresh.onclick = refreshPrices;
   const apply = $("mt-apply-k");

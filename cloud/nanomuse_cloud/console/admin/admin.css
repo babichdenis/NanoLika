@@ -310,7 +310,7 @@ html[data-theme="dark"] .admin { --ink-3:#aeb7a2; }
 .admin .mt-panel { padding: 0; overflow: hidden; }
 .admin .mt { display: flex; flex-direction: column; height: calc(100vh - 175px); min-height: 520px; }
 .admin .mt-pane { display: flex; flex-direction: column; min-height: 0; }
-.admin .mt-pane-top { flex: 0 0 58%; }
+.admin .mt-pane-top { flex: 0 0 66%; }
 .admin .mt-pane-bottom { flex: 1 1 auto; border-top: 1px solid var(--hairline); }
 .admin .mt-top { display: grid; gap: 8px; padding: 10px 14px 6px; }
 .admin .mt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -443,10 +443,13 @@ body.mt-resizing { cursor: row-resize; user-select: none; }
 .admin .mt .mt-ref-status.is-dead { background: rgba(255, 59, 48, 0.12); color: var(--bad); }
 .admin .mt .mt-dup-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: rgba(255, 159, 10, 0.14);
   color: var(--warn); font-size: 10px; font-weight: 600; }
+.admin .mt .mt-route-badge { margin-left: 5px; padding: 1px 5px; border-radius: 999px; background: var(--fill);
+  color: var(--ink-3); font-size: 9.5px; font-weight: 600; }
 .admin .mt .mt-family { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--fill);
   color: var(--ink-3); font-size: 10px; font-weight: 600; }
 .admin .mt .mt-variants { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--ink-3);
   font-size: 11px; white-space: nowrap; cursor: pointer; }
+.admin .mt .mt-collapse { margin-left: 8px; padding: 3px 10px; font-size: 11px; }
 .admin .mt td.mt-client { white-space: normal; line-height: 1.35; }
 .admin .mt .mt-now { display: inline; }
 .admin .mt .mt-edit { margin-left: 5px; padding: 0 3px; border: 0; background: none; color: var(--ink-3); font-size: 12px;
