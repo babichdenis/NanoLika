@@ -1042,6 +1042,19 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                         "in": round(rates["input"] / cost_in, 6) if cost_in else None,
                         "out": round(rates["output"] / cost_out, 6) if cost_out else None,
                     }
+                else:
+                    # Медиа продаётся за штуку/секунду/минуту/1000 знаков: одна
+                    # наценка на единицу, а не вход/выход.
+                    for field, unit in (
+                        ("rub_image", "изображение"),
+                        ("rub_second", "секунда"),
+                        ("rub_speech", "1000 знаков"),
+                        ("rub_minute", "минута"),
+                    ):
+                        cost, sell = row["cost"].get(field), row["sell"].get(field)
+                        if cost and sell:
+                            row["ratio"] = {"in": round(sell / cost, 6), "out": None, "unit": unit, "field": field}
+                            break
                 row["below_cost"] = (
                     any(
                         row["cost"].get("rub_" + side) and rates[field] * (100 - max_discount_pct) / 100 < row["cost"]["rub_" + side]
@@ -1066,6 +1079,19 @@ def install(app: Any, settings: Any, admin_dep: Any, *, cloud: Any = None, route
                     "in": (wanted["input"] / cost["rub_in"]) if cost.get("rub_in") and wanted.get("input") else None,
                     "out": (wanted["output"] / cost["rub_out"]) if cost.get("rub_out") and wanted.get("output") else None,
                 }
+            elif draft:
+                current_ratio = row.get("ratio") or {}
+                field = current_ratio.get("field")
+                rate_key = {"rub_image": "image", "rub_second": "second", "rub_speech": "speech", "rub_minute": "minute"}.get(field, field)
+                cost = (row.get("cost") or {}).get(field) if field else None
+                wanted = (draft.get("rates_rub") or {}).get(rate_key) if field else None
+                if cost and wanted:
+                    draft["ratio"] = {
+                        "in": wanted / cost,
+                        "out": None,
+                        "unit": current_ratio.get("unit") or "",
+                        "field": field,
+                    }
         drafts = _read("drafts.json")
         chats = [m for m in models if m["kind"] == "chat"]
         with_sell = [m for m in models if m["sell"]["rub_in"] or m["sell"]["rub_out"]]

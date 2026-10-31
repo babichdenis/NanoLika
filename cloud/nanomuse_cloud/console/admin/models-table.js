@@ -527,11 +527,24 @@ function ratioText(value) {
 function editMarkup(cell, group, key, value) {
   if (cell.querySelector("input")) return;
   const model = group.primary;
-  const cost = Number(key === "in" ? model.cost?.rub_in : model.cost?.rub_out);
+  const ratioField = model.ratio?.field;
+  const field = ratioField
+    ? { rub_image: "image", rub_second: "second", rub_speech: "speech", rub_minute: "minute" }[ratioField] || "input"
+    : key === "in" ? "input" : "output";
+  const costField = {
+    input: "rub_in",
+    output: "rub_out",
+    image: "rub_image",
+    second: "rub_second",
+    speech: "rub_speech",
+    minute: "rub_minute",
+  }[field];
+  const cost = Number(model.cost?.[costField]);
   if (!cost) {
     setNote("У этой модели нет закупки — наценку считать не от чего.");
     return;
   }
+  const label = model.ratio?.unit ? `за ${model.ratio.unit}` : key === "in" ? "входа" : "выхода";
   cell.replaceChildren();
   const input = el("input", "mt-markup-input");
   input.type = "number";
@@ -559,13 +572,12 @@ function editMarkup(cell, group, key, value) {
       input.focus();
       return;
     }
-    const rates = key === "in"
-      ? { input: cost * markup, cached_input: cost * 0.1 * markup }
-      : { output: cost * markup };
+    const rates = { [field]: cost * markup };
+    if (field === "input") rates.cached_input = cost * 0.1 * markup;
     input.disabled = true;
     API("PUT", `/v1/admin/prices/models/${encodeURIComponent(model.id)}/draft`, { rates_rub: rates })
       .then(() => load(true))
-      .then(() => setNote(`Наценка ${key === "in" ? "входа" : "выхода"} ×${fmt(markup, 2)} — в черновике.`))
+      .then(() => setNote(`Наценка ${label} ×${fmt(markup, 2)} — в черновике.`))
       .catch((error) => {
         setNote(`Не удалось: ${error.message}`);
         input.disabled = false;
@@ -1075,8 +1087,9 @@ function drawModels(rows) {
       }
       if (Number.isFinite(number) && number > 0 && number < 1.5) cell.classList.add("mt-low");
       if (Number.isFinite(number) && number > 0) {
+        const unitLabel = model.ratio?.unit ? `за ${model.ratio.unit}` : key === "in" ? "входа" : "выхода";
         cell.classList.add("mt-editable");
-        cell.title = `Наценка ${key === "in" ? "входа" : "выхода"} ${ratioText(number)}`
+        cell.title = `Наценка ${unitLabel} ${ratioText(number)}`
           + (Number.isFinite(draft) && draft > 0 ? ` → ${ratioText(draft)} в черновике` : "")
           + ". Нажмите, чтобы изменить";
         cell.onclick = (event) => {

@@ -120,6 +120,24 @@ async def test_single_field_edits_accumulate_in_one_draft():
         assert row["draft"]["changed"] == {"input": 100.0, "output": 150.0}
 
 
+async def test_media_markup_is_one_ratio_per_unit():
+    client, cloud = await stack()
+    async with opened(client):
+        await client.put(
+            "/v1/admin/prices/models/image/draft",
+            headers=ADMIN,
+            json={"rates_rub": {"image": 250}},
+        )
+        await client.post("/v1/admin/prices/drafts/publish", headers=ADMIN, json={})
+
+        admin = (await client.get("/v1/admin/prices", headers=ADMIN)).json()
+        row = next(row for row in admin["models"] if row["id"] == "image")
+        assert row["ratio"]["in"] == round(row["sell"]["rub_image"] / row["cost"]["rub_image"], 6)
+        assert row["ratio"]["out"] is None
+        assert row["ratio"]["unit"] == "изображение"
+        assert row["ratio"]["field"] == "rub_image"
+
+
 async def test_bulk_multiplier_stages_instead_of_publishing():
     client, cloud = await stack()
     async with opened(client):
