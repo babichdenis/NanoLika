@@ -167,6 +167,9 @@ max_steps            = 0               # 0 = 不限制每项任务的工具调�
 extra_roots          = []              # directories outside the workspace the files tool may read and write, e.g. ["~/Documents/notes"]; writable inside the sandbox too
 language             = "auto"          # or a fixed language: "English", "中文", ...
 max_context_messages = 80
+max_context_chars    = 240000          # 单次请求的文本上限
+tool_age_steps       = 3               # 更早的工具结果换成引用；0 表示保留
+tool_age_min_chars   = 800             # 更短的结果保留比换成引用更便宜
 max_context_images   = 4               # screenshots kept in the request: the newest N; 0 keeps all
 show_thinking        = false
 user_profile         = ""              # free text injected into the system prompt
@@ -178,6 +181,8 @@ instructions         = ""              # extra rules appended to the system prom
 `max_context_images` 是给手用的。在屏幕上跑一次任务，每一步都会追加一张截图，而整段对话每一步都要重新上传，所以十几张全尺寸图片曾经超过中继的请求体上限（413 `too_large`，0.1.37）。现在只带最新的四张，每张缩到最多两百万像素；更早的换成一行说明，模型仍然知道那里有过一张截图。桌面版的 harness 在它那一侧守着同样的预算。
 
 `max_context_messages` 尽量从用户消息的边界开始保留近期历史。如果单轮对话就填满了窗口，运行时会保留最新消息，并补全截断位置的整组工具调用与结果，因此消息数可能略高于配置值。已保存的对话历史不受影响。
+
+`max_context_chars` 独立于消息条数，限制单次请求的文本量：几条很大的工具结果可能塞得进八十条消息，却塞不进模型的上下文窗口。先丢弃最旧的整轮对话，当前这一轮永远不丢。早于 `tool_age_steps` 步、且不短于 `tool_age_min_chars` 的工具结果，在请求里换成一行引用；完整结果保存在对话工作区的 `.nanomuse/context/` 下，可以用 `files` 读回。这样窗口保持小，但内容仍然可恢复。桌面版 harness 在它那一侧有同样的预算。
 
 ## `[sync]` {#sync}
 

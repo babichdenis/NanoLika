@@ -66,9 +66,11 @@ class BaseLLM(ABC):
 
     def roomier_max_tokens(self) -> int:
         """A budget for a second try when the first answer was cut off: four times the
-        configured one, 16k at least — enough for a reasoning model to think and answer."""
+        configured one, at least 4k and never above 8k — a reasoning model gets room to
+        think, while one answer cannot cost the 16k the old ceiling allowed."""
         configured = getattr(getattr(self, "settings", None), "max_tokens", None) or 0
-        return max(16384, 4 * int(configured))
+        room = 4 * int(configured) if configured else 8192
+        return min(8192, max(4096, room))
 
     async def ask_complete(self, messages: list[Message], **kwargs: Any) -> LLMResponse:
         """``ask``, tried once more with room when the answer was cut off.

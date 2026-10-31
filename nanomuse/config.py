@@ -240,6 +240,16 @@ class AgentSettings(BaseModel):
     # "auto" → answer in the user's language; or force e.g. "zh" / "en".
     language: str = "auto"
     max_context_messages: int = 80
+    # A cap on the text sent in one request, not only on the number of messages: a few
+    # unlimited tool dumps fit the message limit but not any model's context window. The
+    # oldest exchanges go first; a large tool result is replaced by a reference to the
+    # full text saved in the conversation workspace.
+    max_context_chars: int = 240_000
+    # A tool result older than this many steps is sent as a short reference; the full text
+    # stays in the workspace and is readable through `files`. 0 = never age.
+    tool_age_steps: int = 3
+    # Results shorter than this are cheaper to keep than to replace by a reference.
+    tool_age_min_chars: int = 800
     # How many of the newest image-bearing messages keep their pictures in a model request.
     # A computer- or phone-hands session adds a screenshot or two per step, and the whole
     # conversation goes up again on every step: a dozen 4K screenshots passed the relay's

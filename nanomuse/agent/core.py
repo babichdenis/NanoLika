@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
@@ -26,7 +28,7 @@ from nanomuse.sentinel import AuditLog, Sentinel
 from nanomuse.skills import SkillLibrary
 from nanomuse.tools.base import ToolCollection
 from nanomuse.ui import UI
-from nanomuse.workspace_context import active_file_path
+from nanomuse.workspace_context import active_file_path, active_workspace
 
 
 class Incoming:
@@ -97,6 +99,9 @@ class MuseAgent:
         # before the next model call instead of waiting for the current run to finish.
         self.inbox: asyncio.Queue[str | Incoming] | None = None
         self._told_no_vision = False
+        # tool message id → the workspace-relative file holding its full text, once it was
+        # replaced by a short reference in the model's window
+        self._context_files: dict[str, str] = {}
         # The language of the screens the person reads this conversation on, from the latest
         # message that said (a BCP-47 tag); the language rule names it ahead of the script
         # of one message. "" means no client has said, and the script decides.
@@ -467,12 +472,102 @@ class MuseAgent:
         )
 
     # ------------------------------------------------------------------ context window
+    @staticmethod
+    def _message_chars(message: Message) -> int:
+        size = len(message.content or "")
+        for call in message.tool_calls or []:
+            size += len(call.function.arguments or "")
+        return size
+
+    def _context_size(self, messages: list[Message]) -> int:
+        return sum(self._message_chars(message) for message in messages)
+
+    def _age_tool_result(
+        self,
+        message: Message,
+        label: int,
+        age: int,
+        current_age: int,
+        *,
+        force: bool = False,
+    ) -> None:
+        """Replace a large tool result in the **copy** sent to the model with a short
+        reference; the full text stays in the conversation workspace (S3: no silent cut)."""
+        text = message.content or ""
+        if message.meta.get("aged"):
+            return
+        minimum = max(1, int(self.settings.agent.tool_age_min_chars))
+        if len(text) < minimum:
+            return
+        age_steps = int(self.settings.agent.tool_age_steps)
+        if not force and (age_steps <= 0 or current_age - age <= age_steps):
+            return
+        key = message.tool_call_id or f"step-{label}-{message.name or 'tool'}"
+        relative = self._context_files.get(key)
+        if relative is None:
+            safe = re.sub(r"[^a-zA-Z0-9_.-]+", "_", message.name or "tool")[:40]
+            digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
+            relative = f".nanomuse/context/step-{label:03d}-{safe}-{digest}.txt"
+            try:
+                target = active_workspace(self.settings.agent.workspace) / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(self._redact(text) or "", "utf-8")
+                self._context_files[key] = relative
+            except OSError as exc:
+                logger.debug("context: the full tool result was not kept: {}", exc)
+                return
+        message.content = (
+            f"[step {label} · {message.name or 'tool'}: {len(text):,} chars, full text at "
+            f"`{relative}`; read it with `files` if you need the exact output]"
+        )
+        message.meta["aged"] = True
+
+    def _fit_context_budget(
+        self, clean: list[Message], labels: list[int], ages: list[int]
+    ) -> list[Message]:
+        """Keep one request under ``max_context_chars``: age the oldest tool results first,
+        then the largest ones, then drop whole oldest exchanges — never the current turn."""
+        cap = max(1_000, int(self.settings.agent.max_context_chars))
+        if self._context_size(clean) <= cap:
+            return clean
+        current_age = max(ages, default=0)
+        tool_indexes = [
+            i
+            for i, message in enumerate(clean)
+            if message.role == Role.TOOL and len(message.content or "") >= int(
+                self.settings.agent.tool_age_min_chars
+            )
+        ]
+        # Old first, then by size: a current result stays as long as it fits.
+        tool_indexes.sort(key=lambda i: (ages[i], -len(clean[i].content or "")))
+        for index in tool_indexes:
+            self._age_tool_result(
+                clean[index], labels[index], ages[index], current_age, force=True
+            )
+            if self._context_size(clean) <= cap:
+                return clean
+        # Still too big: one exchange at a time, from the oldest end.
+        while self._context_size(clean) > cap:
+            users = [i for i, message in enumerate(clean) if message.role == Role.USER]
+            if len(users) < 2:
+                logger.warning(
+                    "context: one turn is {} chars, over the {} cap; sending it whole",
+                    self._context_size(clean),
+                    cap,
+                )
+                break
+            clean = clean[users[1] :]
+            labels = labels[users[1] :]
+            ages = ages[users[1] :]
+        return clean
+
     def context_messages(self) -> list[Message]:
         """The window the model sees: the newest ``max_context_messages`` (never starting
-        inside a tool exchange), with pictures only on the newest ``max_context_images``
-        image-bearing messages — a hands session would otherwise send every screenshot of
-        the run on every step (C9). Copies where a picture was dropped; the history itself
-        keeps them."""
+        inside a tool exchange), under ``max_context_chars``, with pictures only on the
+        newest ``max_context_images`` image-bearing messages — a hands session would
+        otherwise send every screenshot of the run on every step (C9). Large old tool
+        results become references to files in the conversation workspace; the history
+        itself keeps the full text."""
         limit = self.settings.agent.max_context_messages
         msgs = self.messages
         if len(msgs) <= limit:
@@ -490,7 +585,17 @@ class MuseAgent:
                     cutoff -= 1
             window = list(msgs[cutoff:])
         clean: list[Message] = []
-        for message in keep_newest_images(window, self.settings.agent.max_context_images):
+        labels: list[int] = []
+        ages: list[int] = []
+        assistants = 0
+        for message in window:
+            if message.role == Role.ASSISTANT:
+                assistants += 1
+            label = (
+                int(message.meta.get("step") or assistants)
+                if message.role in (Role.ASSISTANT, Role.TOOL)
+                else assistants
+            )
             copy = message.model_copy(deep=True)
             copy.content = self._redact(copy.content)
             copy.reasoning = self._redact(copy.reasoning)
@@ -498,6 +603,14 @@ class MuseAgent:
                 for call in copy.tool_calls:
                     call.function.arguments = self._redact(call.function.arguments) or "{}"
             clean.append(copy)
+            labels.append(label)
+            ages.append(assistants)
+        current_age = assistants
+        for message, label, age in zip(clean, labels, ages, strict=False):
+            if message.role == Role.TOOL:
+                self._age_tool_result(message, label, age, current_age)
+        clean = self._fit_context_budget(clean, labels, ages)
+        clean = keep_newest_images(clean, self.settings.agent.max_context_images)
         return clean
 
     # ------------------------------------------------------------------ stuck detection
@@ -646,7 +759,9 @@ class MuseAgent:
                     else:
                         result = await self.sentinel.guard(call, tool)
                     self.ui.on_tool_result(ui_call, result)
-                    self.messages.append(Message.tool(result.for_model(), call.id, call.name))
+                    tool_message = Message.tool(result.for_model(), call.id, call.name)
+                    tool_message.meta["step"] = step
+                    self.messages.append(tool_message)
                     if result.images:
                         pictures.extend(result.images)
                     if result.stop:

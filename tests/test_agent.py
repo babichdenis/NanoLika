@@ -19,6 +19,7 @@ from nanomuse.tools import Goals, Remember, Terminate, ToolCollection
 from nanomuse.tools.base import BaseTool
 from nanomuse.ui import HeadlessUI
 from nanomuse.vault import CredentialVault
+from nanomuse.workspace_context import workspace_context
 
 
 class Adder(BaseTool):
@@ -123,6 +124,52 @@ def test_capabilities_section_appears_once(settings: Settings):
     prompt = agent.build_system_prompt("hi")
     section = agent.capabilities_section()
     assert section and prompt.count(section) == 1
+
+
+def test_old_tool_results_become_references(settings: Settings):
+    agent, *_ = make_agent(settings, [])
+    settings.agent.tool_age_steps = 1
+    settings.agent.tool_age_min_chars = 100
+    old = Message.tool("A" * 2000, "call-1", "files")
+    old.meta["step"] = 1
+    new = Message.tool("B" * 2000, "call-2", "files")
+    new.meta["step"] = 3
+    answer = Message.assistant("done")
+    answer.meta["step"] = 3
+    agent.messages = [
+        Message.user("first question"),
+        old,
+        Message.assistant("working"),
+        Message.user("second question"),
+        new,
+        answer,
+    ]
+    workspace = settings.agent.workspace
+    workspace.mkdir(parents=True, exist_ok=True)
+    with workspace_context("thread-1", workspace):
+        clean = agent.context_messages()
+    assert clean[1].content.startswith("[step 1 · files: 2,000 chars")
+    files = list((workspace / ".nanomuse/context").glob("step-001-files-*.txt"))
+    assert len(files) == 1
+    assert f"`{files[0].relative_to(workspace).as_posix()}`" in clean[1].content
+    assert clean[4].content == "B" * 2000
+    assert files[0].read_text() == "A" * 2000
+    # the stored history is untouched: the file is the full copy, not a replacement
+    assert agent.messages[1].content == "A" * 2000
+
+
+def test_context_budget_drops_old_exchanges_not_the_current_turn(settings: Settings):
+    agent, *_ = make_agent(settings, [])
+    settings.agent.max_context_chars = 1000
+    agent.messages = [
+        Message.user("old " * 200),
+        Message.assistant("old answer " * 80),
+        Message.user("current question"),
+        Message.assistant("current answer"),
+    ]
+    clean = agent.context_messages()
+    assert [m.content for m in clean if m.role == Role.USER] == ["current question"]
+    assert [m.content for m in clean if m.role == Role.ASSISTANT] == ["current answer"]
 
 
 async def test_memories_and_legacy_history_are_redacted_before_model_and_reply(settings: Settings):

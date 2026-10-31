@@ -255,7 +255,19 @@ async def test_ask_complete_tries_again_with_room_when_the_reply_was_cut_off():
     )
     resp = await llm.ask_complete([Message.user("list")], tools=None)
     assert resp.content == "[]"
-    assert llm.calls[0]["max_tokens"] is None and llm.calls[1]["max_tokens"] == 16384
+    assert llm.calls[0]["max_tokens"] is None and llm.calls[1]["max_tokens"] == 8192
     # a complete answer is not asked twice
     llm.script.append(LLMResponse(content="done", finish_reason="stop"))
     assert (await llm.ask_complete([Message.user("x")])).content == "done" and len(llm.calls) == 3
+
+
+def test_roomier_budget_is_bounded():
+    from types import SimpleNamespace
+
+    from nanomuse.llm.mock import MockLLM
+
+    llm = MockLLM([])
+    llm.settings = SimpleNamespace(max_tokens=100_000)
+    assert llm.roomier_max_tokens() == 8192
+    llm.settings = SimpleNamespace(max_tokens=100)
+    assert llm.roomier_max_tokens() == 4096

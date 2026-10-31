@@ -167,6 +167,9 @@ max_steps            = 0               # 0 = no per-task tool-call cap; set a po
 extra_roots          = []              # directories outside the workspace the files tool may read and write, e.g. ["~/Documents/notes"]; writable inside the sandbox too
 language             = "auto"          # or a fixed language: "English", "中文", ...
 max_context_messages = 80
+max_context_chars    = 240000          # cap on the text of one request
+tool_age_steps       = 3               # older tool results become a reference; 0 keeps them
+tool_age_min_chars   = 800             # shorter results are cheaper to keep than to reference
 max_context_images   = 4               # screenshots kept in the request: the newest N; 0 keeps all
 show_thinking        = false
 user_profile         = ""              # free text injected into the system prompt
@@ -178,6 +181,8 @@ With `language = "auto"` the system prompt names the reply language and tells th
 `max_context_images` is for the hands. A run on a screen appends a screenshot per step and the whole conversation goes up again on every step, so a dozen full-size pictures had passed the relay's body limit (413 `too_large`, 0.1.37). Only the newest four travel now, each downscaled to at most two megapixels; the older ones are replaced by a one-line note so the model still knows a screenshot was there. The desktop app's harness keeps the same budget on its side.
 
 `max_context_messages` trims older history at a user-message boundary when possible. If a single turn fills the window, the runtime keeps the newest messages plus the complete tool exchange at the cutoff. This can exceed the configured message count by the messages needed to retain that exchange. Stored conversation history is unchanged.
+
+`max_context_chars` caps the text of one request independently of the message count: a few large tool dumps fit eighty messages but not a model's context window. The oldest exchanges are dropped first; the current turn is never dropped. A tool result older than `tool_age_steps` (and at least `tool_age_min_chars` long) is replaced in the request by a one-line reference; the full result is saved under `.nanomuse/context/` in the conversation workspace and can be read back with `files`. This keeps the model's window small without losing recoverability. The dsh harness keeps its own equivalent budget.
 
 ## `[sync]`
 

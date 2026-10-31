@@ -86,6 +86,13 @@ max_steps = 30
 extra_roots = []                # e.g. ["~/Documents/notes"]
 language = "auto"               # "auto" | "zh" | "en" | ...
 max_context_messages = 80
+# A cap on the text of one request, not only on the number of messages.
+max_context_chars = 240000
+# A tool result older than this many steps is sent as a reference; the full text
+# stays in the conversation workspace and is readable through `files`. 0 = never age.
+tool_age_steps = 3
+# Results shorter than this are cheaper to keep than to replace by a reference.
+tool_age_min_chars = 800
 # Screenshots kept in the request: the newest N, older ones replaced by a note.
 # A long run of the hands sends the conversation again on every step; a dozen
 # full-size screenshots went past the relay's body limit (413). 0 keeps all.
