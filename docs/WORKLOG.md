@@ -46,7 +46,7 @@ supported`).
 
 Версии: `admin.js?v=20261031-media-all6`, `models-table.js?v=20261031-media-all4`.
 Caddyfile — репозиторий `cloud/Caddyfile` и живой `/opt/nanomuse/cloud/Caddyfile`,
-бэкап `Caddyfile.bak-cors-*`. Тесты: 25/26 (прежнее падение plan discount).
+бэкап `Caddyfile.bak-cors-*`. Тесты: 25/26 (прежнее падение plan discount). Коммит `7902c610`.
 ## 2026-10-31 · Цены: медиа у всех поставщиков, ProxyAPI и Jiugx
 
 Причина жалобы «по картинкам и видео опять один Bothub»: каталог медиа собран из
