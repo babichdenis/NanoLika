@@ -116,7 +116,7 @@
     catalog: "模型目录", catalogNote: "key 下能用的模型（菜单之外）：relay 向每个模型各问一句话、再给一张品红色小图，确认它能回答、能不能看图；答案保存 7 天。客户端拿到的「能看图」就是这里的结果。", catalogOff: "模型目录未开启（CLOUD_CATALOG=0）。", catalogNames: "按名字推断，未逐个验证（CLOUD_CATALOG_PROBE=0）。", catalogProbing: "正在验证…", catalogPending: (n) => `${fmt(n)} 个待验证`, catalogFetched: (t) => `列表更新于 ${t}`, catalogError: (e) => `读取列表失败：${e}`,
     cModel: "模型", cKind: "类型", cSees: "看图", cVerified: "已验证", cYes: "是", cNo: "否", cUnusable: "服务商拒绝的模型（不出现在客户端）", cNoUnusable: "没有被拒绝的模型。", cCount: (n, v) => `${fmt(n)} 个对话模型 · ${fmt(v)} 个能看图`,
     // 0.14: the page in pages
-    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", providers: "供应商", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", traffic: "访问", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
+    nav: { overview: "总览", people: "用户", invites: "邀请", places: "地区", money: "花费", providers: "供应商", grandet: "Grandet", grandetStats: "Grandet 统计", activity: "动态", demo: "在线体验", data: "数据控制", site: "官网", traffic: "访问", models: "模型", health: "服务状态", stats: "统计", controls: "控制", settings: "配置", payments: "支付" },
     // 0.22: the Controls page, the Stats page, the GitHub series
     ctl: {
       title: "控制", note: "每个开关立刻生效、重启后保持；谁在何时改了什么记在下面的日志里。关闭前会先说明确切后果。",
@@ -261,7 +261,7 @@
     pCountry: "Country / region", pProvince: "Province / state", pAccounts: "Accounts", pNew: "New", pSignins: "Sign-ins", pRequests: "Requests", pDemo: "Demo visitors", pUnknown: "unknown", pLocal: "local network", pNone: "No visits recorded yet.", pAccountsNote: "accounts by their latest address",
     catalog: "Model catalog", catalogNote: "The models under the key beyond the menu: the relay asks each one a one-word question and then shows it a small magenta picture, to learn whether it answers and whether it sees; the answers stand for seven days. The “sees pictures” the apps show is what is here.", catalogOff: "The catalog is off (CLOUD_CATALOG=0).", catalogNames: "Guessed from names, not checked one by one (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Checking…", catalogPending: (n) => `${fmt(n)} to check`, catalogFetched: (t) => `list read ${t}`, catalogError: (e) => `The list could not be read: ${e}`,
     cModel: "Model", cKind: "Kind", cSees: "Sees pictures", cVerified: "Checked", cYes: "yes", cNo: "no", cUnusable: "Models the provider refuses (not offered to the apps)", cNoUnusable: "None refused.", cCount: (n, v) => `${fmt(n)} chat models · ${fmt(v)} see pictures`,
-    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", providers: "Providers", activity: "Activity", demo: "Demo", data: "Data", site: "Site", traffic: "Visits", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
+    nav: { overview: "Overview", people: "People", invites: "Invites", places: "Places", money: "Spend", providers: "Providers", grandet: "Grandet", grandetStats: "Grandet stats", activity: "Activity", demo: "Demo", data: "Data", site: "Site", traffic: "Visits", models: "Models", health: "Health", stats: "Stats", controls: "Controls", settings: "Settings", payments: "Payments" },
     ctl: {
       title: "Controls", note: "Each switch applies at once and survives a restart; who changed what, and when, is in the log below. A switch says exactly what turning it off does before it flips.",
       names: { free_allowance: "Free allowance", signups: "Sign-ups", cloud_service: "Cloud service", sync: "Conversation sync", hub: "Device hub" },
@@ -413,7 +413,7 @@
     pCountry: "Страна / регион", pProvince: "Провинция / штат", pAccounts: "Аккаунты", pNew: "Новые", pSignins: "Входы", pRequests: "Запросы", pDemo: "Посетители демо", pUnknown: "неизвестно", pLocal: "локальная сеть", pNone: "Визитов пока не записано.", pAccountsNote: "аккаунты по последнему адресу",
     catalog: "Каталог моделей", catalogNote: "Модели под ключом помимо меню: релей задаёт каждой однословный вопрос, затем показывает маленькую маджентовую картинку, чтобы выяснить, отвечает ли она и видит ли; ответы действуют семь дней. «Видит картинки» в приложениях — то, что собрано здесь.", catalogOff: "Каталог выключен (CLOUD_CATALOG=0).", catalogNames: "Угадано по именам, поштучно не проверялось (CLOUD_CATALOG_PROBE=0).", catalogProbing: "Проверяем…", catalogPending: (n) => `к проверке: ${fmt(n)}`, catalogFetched: (t) => `список прочитан ${t}`, catalogError: (e) => `Не удалось прочитать список: ${e}`,
     cModel: "Модель", cKind: "Тип", cSees: "Видит картинки", cVerified: "Проверена", cYes: "да", cNo: "нет", cUnusable: "Модели, от которых отказывается провайдер (приложениям не предлагаются)", cNoUnusable: "Таких нет.", cCount: (n, v) => `${fmt(n)} чат-моделей · ${fmt(v)} видят картинки`,
-    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", providers: "Поставщики", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", traffic: "Посещения", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
+    nav: { overview: "Обзор", people: "Люди", invites: "Приглашения", places: "География", money: "Расход", providers: "Поставщики", grandet: "Grandet", grandetStats: "Grandet · статистика", activity: "Активность", demo: "Демо", data: "Данные", site: "Сайт", traffic: "Посещения", models: "Модели", health: "Здоровье", stats: "Статистика", controls: "Управление", settings: "Настройки", payments: "Платежи" },
     ctl: {
       title: "Управление", note: "Каждый переключатель действует сразу и переживает перезапуск; кто, что и когда менял — в журнале ниже. Перед переключением переключатель точно описывает, что отключит.",
       names: { free_allowance: "Бесплатный баланс", signups: "Регистрации", cloud_service: "Облачный сервис", sync: "Синхронизация диалогов", hub: "Хаб устройств" },
@@ -525,6 +525,8 @@
     places: svg('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>'),
     money: svg('<circle cx="12" cy="12" r="9"/><path d="M9 8.5l3 4 3-4M12 12.5V17M9.5 14.5h5"/>'),
     providers: svg('<path d="M4 6h6v12H4zM14 6h6v7h-6z"/><path d="M7 10h0M17 9h0"/>'),
+    grandet: svg('<path d="M4 19V9M10 19V5M16 19v-7M22 19V3"/>'),
+    grandetStats: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="M7 8l4-3 4 4 4-5"/>'),
     activity: svg('<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>'),
     demo: ICON.phone,
     data: svg('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>'),
@@ -543,7 +545,7 @@
     "control.switch": ["warn", ICON.warn], "control.rule": ["warn", ICON.warn],
   };
   const FILTERS = [["", "all"], ["sign_in.code,sign_in.password,sign_in.session,sign_in.failed,account.created", "signIns"], ["budget.refused", "refusals"], ["upstream.error", "errors"], ["content.rejected", "contentChecks"], ["call.ended", "calls"], ["password.set,password.changed,password.cleared", "passwords"]];
-  const VIEWS = ["overview", "people", "invites", "places", "money", "providers", "activity", "demo", "data", "site", "traffic", "models", "health", "stats", "controls", "settings", "payments"];
+  const VIEWS = ["overview", "people", "invites", "places", "money", "providers", "grandet", "grandetStats", "activity", "demo", "data", "site", "traffic", "models", "health", "stats", "controls", "settings", "payments"];
   const PAGE = 50;
 
   // ── state ──────────────────────────────────────────────────────
@@ -635,8 +637,9 @@
     siteCounter: () => "/v1/admin/site-counter",
     providers: () => "/v1/admin/provider-prices",
     balances: () => "/v1/admin/provider-balances",
+    grandet: () => "/v1/admin/grandet-prices",
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances", "grandet"]);
   const CACHE = new Map();
   const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}${key === "payments" ? ":" + SOURCES.payments(days) : ""}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
@@ -1850,9 +1853,23 @@
         "Cabinets: polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile. The check refreshes itself; “Refresh” below re-reads prices too.",
         "后台：polza.ai/dashboard · api.proxyapi.ru · routerai.ru · aitunnel.ru · bothub.chat/ru/profile。检查会自动更新；下面的“刷新”也会重读价格。")));
   }
-  /** «Поставщики» — только кошельки: у кого сколько денег и можно ли тратить. */
+  /** «Поставщики»: карта моделей по поставщикам и кошельки под ней. */
+  let PROVIDERS_MOD = null;
+  function mountProviders() {
+    const el = document.getElementById("pt-root");
+    if (!el) return;
+    const run = (mod) => mod.mount(el, { api, params });
+    if (PROVIDERS_MOD) return run(PROVIDERS_MOD);
+    import("/web/providers-table.js?v=20261031-providers").then((mod) => { PROVIDERS_MOD = mod; run(mod); },
+      (e) => { el.replaceChildren(h("div", { class: "empty" }, `Карта поставщиков не загрузилась: ${e.message}`)); });
+  }
+
   function providersView() {
-    return [balancesPanel()];
+    setTimeout(mountProviders, 0);
+    return [
+      h("div", { class: "panel mt-panel" }, h("div", { id: "pt-root" })),
+      balancesPanel(),
+    ];
   }
 
   /** «Модели»: список моделей (одна модель — одна строка) и связанная с ним
@@ -1864,7 +1881,7 @@
     if (!el) return;
     const run = (mod) => mod.mount(el, { api, params });
     if (MODELS_MOD) return run(MODELS_MOD);
-    import("./models-table.js").then((mod) => { MODELS_MOD = mod; run(mod); },
+    import("./models-table.js?v=20261031-providers").then((mod) => { MODELS_MOD = mod; run(mod); },
       (e) => { el.replaceChildren(h("div", { class: "empty" }, `Таблица не загрузилась: ${e.message}`)); });
   }
 
@@ -1873,6 +1890,270 @@
     // Только таблица цен: каталог под ключом сюда не выводим, чтобы не было
     // второй простыни под поставщиками.
     return [h("div", { class: "panel mt-panel" }, h("div", { id: "mt-root" }))];
+  }
+
+  // ── Grandet: где та же модель дешевле нашей закупки ───────────────────
+  // Снимок строит provider_prices.grandet_collect: официальные цены вендоров,
+  // цены агрегаторов и заявленные цены чужих релеев. Для релеев экономия —
+  // оценка (кредиты Grandet считаем 1:1 к валюте), это написано под таблицей.
+  let gBusy = false;
+  let gOpen = "";
+  const gDate = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString(localeTag, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+  const gPct = (value) => value == null ? "—" : `${value > 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
+  const gKind = (category) => category === "relay" ? L3("релей", "relay", "中转") : category === "official" ? L3("официально", "official", "官方") : "OpenRouter";
+  const providerHref = (name, url) => {
+    if (url) return url;
+    const clean = String(name || "").trim();
+    return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(clean) ? `https://${clean}/` : "";
+  };
+  const providerLink = (name, url) => {
+    const href = providerHref(name, url);
+    return href
+      ? h("a", { href, target: "_blank", rel: "noopener noreferrer", onclick: (event) => event.stopPropagation() }, name || href)
+      : (name || "—");
+  };
+
+  async function grandetRefresh(before) {
+    if (gBusy) return;
+    gBusy = true;
+    draw();
+    try {
+      await api("POST", "/v1/admin/grandet-prices/refresh");
+      for (let i = 0; i < 180; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const value = await api("GET", SOURCES.grandet()).catch(() => null);
+        if (value && value.generated_at && value.generated_at !== before) break;
+      }
+    } catch (error) { /* снимок останется прежним; кнопка снова доступна */ }
+    forget("grandet");
+    gBusy = false;
+    draw();
+  }
+
+  function grandetView() {
+    const title = L3("Grandet: рынок моделей", "Grandet: model market", "Grandet：模型市场");
+    const gv = need("grandet");
+    if (!gv) return [loadingPanel(title)];
+    if (gv._error) return failedPanel(title, "grandet", gv._error);
+
+    const models = (gv.models || []).filter((m) => m.kind === "chat");
+    const stats = gv.stats || [];
+    const providerUrls = new Map(models.filter((m) => m.best && m.best.provider).map((m) => [m.best.provider, m.best.source_url]));
+    const wins = models.filter((m) => m.best && m.best.savings_pct > 0);
+    const average = wins.length ? wins.reduce((sum, m) => sum + m.best.savings_pct, 0) / wins.length : 0;
+    const best = wins.slice().sort((a, b) => b.best.savings_pct - a.best.savings_pct)[0];
+    const outdated = gv.generated_at ? ago(Math.floor(new Date(gv.generated_at).getTime() / 1000)) : "";
+
+    const head = h("h2", {},
+      title,
+      h("span", { class: "sp" }),
+      h("span", { class: "fine" }, gv.generated_at
+        ? L3(`снимок ${outdated} · ${gDate(gv.generated_at)}`, `snapshot ${outdated} · ${gDate(gv.generated_at)}`, `快照 ${outdated} · ${gDate(gv.generated_at)}`)
+        : L3("ещё не собран", "not collected yet", "尚未采集")),
+      h("button", { class: "btn quiet sm", disabled: gBusy ? "" : null, onclick: () => grandetRefresh(gv.generated_at || "") },
+        gBusy ? L3("Собираем…", "Collecting…", "采集中…") : L3("Обновить рынок", "Refresh market", "刷新市场")));
+
+    const flags = (offer) => {
+      const list = [];
+      for (const item of offer.risk_signals || []) list.push(String(item).toLowerCase());
+      for (const item of offer.review_reasons || []) list.push(String(item).toLowerCase());
+      for (const item of (offer.listing || {}).usage || []) list.push(String(item).toLowerCase());
+      return list;
+    };
+    const line = (label, value) => h("div", {}, h("b", {}, label + ": "), value);
+
+    const detail = (m) => {
+      const parts = [];
+      parts.push(line(L3("Модель", "Model", "模型"),
+        `${m.selector} · ${L3("контекст", "context", "上下文")} ${fmt(m.context_length || 0)} · ${L3("выход", "output", "输出")} ${fmt(m.max_output || 0)} · ${(m.input_modalities || []).join("/") || "text"} → ${(m.output_modalities || []).join("/") || "text"}${m.recommended ? " · ★" : ""}`));
+      if ((m.official || []).length) {
+        parts.push(line(L3("Официально", "Official", "官方"), h("div", {}, ...m.official.map((row) =>
+          h("div", { class: "fine" }, `${row.vendor} · ${row.currency} ${moneyN(row.input)}/${moneyN(row.output)} · ${gDate(row.observed_at)}${(row.conditions || []).length ? " · " + row.conditions.join(", ") : ""}`)))));
+      }
+      if ((m.inference || []).length) {
+        parts.push(line(L3("Агрегаторы", "Aggregators", "聚合器"), h("div", {}, ...m.inference.map((row) =>
+          h("div", { class: "fine" }, `${row.vendor} · ${row.currency} ${moneyN(row.input)}/${moneyN(row.output)} · ${gDate(row.observed_at)}${row.aggregator ? " · aggregator" : ""}`)))));
+      }
+      for (const board of m.market || []) {
+        const rows = [...(board.lowest || []).map((r) => ["lowest", r]), ...(board.gated || []).map((r) => ["gated", r]), ...(board.reference || []).map((r) => ["reference", r])];
+        if (!rows.length) continue;
+        parts.push(line(`${board.unit}`, h("div", {}, ...rows.map(([kind, row]) =>
+          h("div", { class: "fine" },
+            `${kind} · ${row.source_id} · ${row.plan} · ${moneyN(row.input)}/${moneyN(row.output)} · ${(row.endpoint_types || []).join(",") || "—"} · ${gDate(row.observed_at)}${(row.listing || {}).hint ? " · " + row.listing.hint : ""}${(row.risk_signals || []).length ? " · ⚠ " + row.risk_signals.join(",") : ""}${row.integration && row.integration.base_url ? " · " + row.integration.base_url : ""}${row.integration && row.integration.token_group ? " · " + row.integration.token_group : ""}`)))));
+      }
+      if (!parts.length) parts.push(h("div", { class: "fine" }, L3("Подробностей нет.", "No details.", "没有详细信息。")));
+      return h("tr", {}, h("td", { colspan: "6", style: "padding:8px 16px" }, ...parts));
+    };
+
+    const modelRows = [];
+    for (const m of models) {
+      const offer = m.best || {};
+      const saving = offer.savings_pct;
+      const warn = flags(offer);
+      modelRows.push(h("tr", { style: "cursor:pointer", onclick: () => { gOpen = gOpen === m.key ? "" : m.key; draw(); } },
+        h("td", {}, h("b", {}, m.name || m.key),
+          h("div", { class: "fine" }, `${m.selector} · ${fmt(m.context_length || 0)} ctx · ${(m.input_modalities || []).join("/") || "text"}${m.recommended ? " · ★" : ""}`)),
+        h("td", { class: "num" }, `${moneyN(m.our_in)} / ${moneyN(m.our_out)} ¥`),
+        h("td", {}, providerLink(offer.provider, offer.source_url),
+          offer.category ? h("div", { class: "fine" }, gKind(offer.category) + ((offer.endpoint_types || []).length ? " · " + offer.endpoint_types.join("/") : "")) : null,
+          warn.length ? h("div", { class: "fine warn" }, "⚠ " + warn.slice(0, 2).join(", ")) : null),
+        h("td", { class: "num" }, offer.cny_in == null ? "—" : `${moneyN(offer.cny_in)} / ${moneyN(offer.cny_out)} ¥`),
+        h("td", { class: "num " + (saving > 0 ? "ok" : "warn") }, saving == null ? "—" : gPct(saving)),
+        h("td", { class: "hide-sm fine" }, offer.observed_at ? gDate(offer.observed_at) : "—")));
+      if (gOpen === m.key) modelRows.push(detail(m));
+    }
+
+    const statRows = stats.map((row) => h("tr", {},
+      h("td", {}, h("b", {}, providerLink(row.provider, row.url || providerUrls.get(row.provider))), h("div", { class: "fine" }, gKind(row.category))),
+      h("td", { class: "num" }, fmt(row.wins)),
+      h("td", { class: "num hide-sm " + (row.clean_wins === row.wins ? "ok" : "warn") }, fmt(row.clean_wins == null ? row.wins : row.clean_wins)),
+      h("td", { class: "num ok" }, gPct(row.avg_savings_pct)),
+      h("td", { class: "num hide-sm" }, gPct(row.max_savings_pct)),
+      h("td", { class: "fine" }, (row.models || []).join(", "))));
+
+    return [
+      h("div", { class: "panel" }, head,
+        h("div", { class: "kpis in-panel" },
+          flatKpi(L3("Моделей в меню", "Menu models", "菜单模型"), fmt(models.length)),
+          flatKpi(L3("Дешевле нас", "Cheaper than us", "比我们便宜"), fmt(wins.length), L3(`из ${fmt(models.length)}`, `of ${fmt(models.length)}`, `共 ${fmt(models.length)}`)),
+          flatKpi(L3("Средняя экономия", "Average saving", "平均节省"), `${average.toFixed(1)}%`),
+          flatKpi(L3("Лучший вариант", "Best option", "最佳选择"), best ? best.best.provider : "—", best ? gPct(best.best.savings_pct) : "")),
+        h("p", { class: "fine", style: "padding:0 16px 8px" },
+          L3("Наша закупка — цена из меню в юанях за 1M токенов. Кандидаты: официальные цены вендоров, агрегаторы и релеи Grandet. Для релеев цена в юанях — оценка по заявленному курсу кредита, не подтверждённый счёт.",
+            "Our purchase is the menu price in yuan per 1M tokens. Candidates are vendor list prices, aggregators and Grandet relays. For relays the yuan price is an estimate from the listed credit rate, not a confirmed invoice.",
+            "我们的采购价是菜单中的每百万 token 人民币价格。候选包括厂商官方价、聚合器和 Grandet 中转。中转的人民币价格按标称额度估算，不是确认账单。")),
+        modelRows.length ? h("div", { class: "ledger", style: "max-height:520px;overflow:auto" }, h("table", {},
+          h("thead", {}, h("tr", {},
+            h("th", {}, L3("Модель", "Model", "模型")),
+            h("th", { class: "num" }, L3("Наша закупка ¥/1M", "Our purchase ¥/1M", "采购价 ¥/1M")),
+            h("th", {}, L3("Куда подключиться", "Where to connect", "建议接入")),
+            h("th", { class: "num" }, L3("Их цена ¥/1M", "Their price ¥/1M", "对方价格 ¥/1M")),
+            h("th", { class: "num" }, L3("Экономия", "Saving", "节省")),
+            h("th", { class: "hide-sm" }, L3("Цена от", "Price from", "报价时间")))),
+          h("tbody", {}, ...modelRows)))
+          : h("div", { class: "empty" }, L3("Снимка ещё нет: нажмите «Обновить рынок».", "No snapshot yet: press Refresh market.", "暂无快照：点击刷新市场。"))),
+      h("div", { class: "panel" },
+        h("h2", {}, L3("Статистика: кто выигрывает", "Stats: who wins", "统计：谁胜出")),
+        statRows.length
+          ? h("div", { class: "ledger", style: "max-height:420px;overflow:auto" }, h("table", {},
+              h("thead", {}, h("tr", {},
+                h("th", {}, L3("Провайдер", "Provider", "供应商")),
+                h("th", { class: "num" }, L3("Моделей выигрывает", "Models won", "胜出模型数")),
+                h("th", { class: "num hide-sm" }, L3("Чистых", "Clean", "无警告")),
+                h("th", { class: "num" }, L3("Средняя экономия", "Average saving", "平均节省")),
+                h("th", { class: "num hide-sm" }, L3("Максимум", "Maximum", "最大")),
+                h("th", {}, L3("Модели", "Models", "模型")))),
+              h("tbody", {}, ...statRows)))
+          : h("div", { class: "empty" }, L3("Пока никто не дешевле нашей закупки.", "Nobody is cheaper than our purchase yet.", "目前没有比我们采购价更低的选项。")),
+        h("p", { class: "foot" }, L3("Подключайтесь постепенно: сначала провайдеры с наибольшим числом выигранных моделей и без предупреждений. Один и тот же вендор может стоять в нескольких категориях.",
+          "Connect gradually: start with providers that win the most models and have no warnings. The same vendor can appear in several categories.",
+          "逐步接入：先选胜出模型最多且没有警告的供应商。同一厂商可能出现在多个类别中。"))),
+    ];
+  }
+
+  // ── Grandet · статистика: кто выигрывает и на скольких моделях ────────
+  function grandetStatsView() {
+    const title = L3("Grandet: статистика провайдеров", "Grandet: provider stats", "Grandet：供应商统计");
+    const gv = need("grandet");
+    if (!gv) return [loadingPanel(title)];
+    if (gv._error) return failedPanel(title, "grandet", gv._error);
+
+    const models = (gv.models || []).filter((m) => m.kind === "chat");
+    const stats = (gv.stats || []).slice();
+    const providerUrls = new Map(models.filter((m) => m.best && m.best.provider).map((m) => [m.best.provider, m.best.source_url]));
+    const won = models.filter((m) => m.best && m.best.savings_pct > 0);
+    const cleanModels = won.filter((m) => {
+      const best = m.best || {};
+      return !(best.risk_signals || []).length && !(best.review_reasons || []).length && !((best.listing || {}).usage || []).length;
+    });
+    const category = params.get("gc") || "all";
+    const onlyClean = params.get("gon") === "1";
+    const shown = stats.filter((row) => {
+      if (category !== "all" && row.category !== category) return false;
+      if (onlyClean && (row.clean_wins || 0) !== row.wins) return false;
+      return true;
+    });
+    shown.sort((a, b) => (b.clean_wins || 0) - (a.clean_wins || 0) || b.wins - a.wins);
+    const weighted = won.length ? won.reduce((sum, m) => sum + m.best.savings_pct, 0) / won.length : 0;
+    const bestClean = stats.slice().sort((a, b) => (b.clean_wins || 0) - (a.clean_wins || 0))[0];
+
+    const buckets = [[0, 25], [25, 50], [50, 75], [75, 100.01]];
+    const distribution = buckets.map(([from, to]) => {
+      const rows = won.filter((m) => m.best.savings_pct >= from && m.best.savings_pct < to);
+      return { from, to, count: rows.length, providers: new Set(rows.map((m) => m.best.provider)).size };
+    });
+    const topModels = won.slice().sort((a, b) => b.best.savings_pct - a.best.savings_pct).slice(0, 15);
+
+    const statRows = shown.map((row) => h("tr", {},
+      h("td", {}, h("b", {}, providerLink(row.provider, row.url || providerUrls.get(row.provider))), h("div", { class: "fine" }, gKind(row.category))),
+      h("td", { class: "num" }, fmt(row.wins)),
+      h("td", { class: "num " + ((row.clean_wins || 0) === row.wins ? "ok" : "warn") }, fmt(row.clean_wins == null ? row.wins : row.clean_wins)),
+      h("td", { class: "num ok" }, gPct(row.avg_savings_pct)),
+      h("td", { class: "num hide-sm" }, gPct(row.max_savings_pct)),
+      h("td", { class: "fine" }, (row.models || []).slice(0, 6).join(", ") + ((row.models || []).length > 6 ? " …" : ""))));
+
+    const topRows = topModels.map((m) => {
+      const best = m.best || {};
+      const clean = cleanModels.includes(m);
+      return h("tr", {},
+        h("td", {}, h("b", {}, m.name || m.key), h("div", { class: "fine" }, m.selector)),
+        h("td", {}, providerLink(best.provider, best.source_url), h("div", { class: "fine" }, gKind(best.category))),
+        h("td", { class: "num ok" }, gPct(best.savings_pct)),
+        h("td", { class: "num" }, clean ? "✓" : "⚠"));
+    });
+
+    return [
+      h("div", { class: "panel" },
+        h("h2", {}, title, h("span", { class: "sp" }),
+          h("span", { class: "fine" }, gv.generated_at ? L3(`снимок ${gDate(gv.generated_at)}`, `snapshot ${gDate(gv.generated_at)}`, `快照 ${gDate(gv.generated_at)}`) : "")),
+        h("div", { class: "kpis in-panel" },
+          flatKpi(L3("Провайдеров в рейтинге", "Providers ranked", "供应商数量"), fmt(stats.length)),
+          flatKpi(L3("Без предупреждений", "Without warnings", "无警告"), fmt(stats.filter((r) => (r.clean_wins || 0) === r.wins).length)),
+          flatKpi(L3("Моделей дешевле нас", "Models cheaper", "更便宜的模型"), fmt(won.length), L3(`из ${fmt(models.length)}`, `of ${fmt(models.length)}`, `共 ${fmt(models.length)}`)),
+          flatKpi(L3("Средняя экономия", "Average saving", "平均节省"), `${weighted.toFixed(1)}%`),
+          flatKpi(L3("Лидер по чистым победам", "Clean wins leader", "无警告胜出领先"), bestClean ? bestClean.provider : "—", bestClean ? fmt(bestClean.clean_wins) + " " + L3("моделей", "models", "模型") : "")),
+        h("div", { style: "padding:8px 16px" },
+          chips([["all", L3("Все", "All", "全部")], ["relay", L3("Релеи", "Relays", "中转")], ["official", L3("Официальные", "Official", "官方")], ["inference", L3("Агрегаторы", "Aggregators", "聚合器")]], category, (value) => setParams({ gc: value === "all" ? "" : value })),
+          h("button", { class: "btn quiet sm", onclick: () => setParams({ gon: onlyClean ? "" : "1" }) }, onlyClean ? L3("Только чистые: вкл", "Clean only: on", "仅无警告：开") : L3("Только чистые: выкл", "Clean only: off", "仅无警告：关"))),
+        statRows.length ? h("div", { class: "ledger", style: "max-height:480px;overflow:auto" }, h("table", {},
+          h("thead", {}, h("tr", {},
+            h("th", {}, L3("Провайдер", "Provider", "供应商")),
+            h("th", { class: "num" }, L3("Моделей выигрывает", "Models won", "胜出模型数")),
+            h("th", { class: "num" }, L3("Чистых", "Clean", "无警告")),
+            h("th", { class: "num" }, L3("Средняя экономия", "Average saving", "平均节省")),
+            h("th", { class: "num hide-sm" }, L3("Максимум", "Maximum", "最大")),
+            h("th", {}, L3("Модели", "Models", "模型")))),
+          h("tbody", {}, ...statRows)))
+          : h("div", { class: "empty" }, L3("Под фильтр никто не попал.", "No provider matches the filter.", "没有符合筛选的供应商。"))),
+      h("div", { class: "panel" },
+        h("h2", {}, L3("Распределение экономии", "Savings distribution", "节省分布")),
+        h("div", { class: "ledger" }, h("table", {},
+          h("thead", {}, h("tr", {},
+            h("th", {}, L3("Экономия", "Saving", "节省")),
+            h("th", { class: "num" }, L3("Моделей", "Models", "模型")),
+            h("th", { class: "num" }, L3("Провайдеров", "Providers", "供应商")))),
+          h("tbody", {}, ...distribution.map((row) => h("tr", {},
+            h("td", {}, `${row.from}–${row.to > 100 ? 100 : row.to}%`),
+            h("td", { class: "num" }, fmt(row.count)),
+            h("td", { class: "num" }, fmt(row.providers))))))
+        )),
+      h("div", { class: "panel" },
+        h("h2", {}, L3("Топ моделей по экономии", "Top models by saving", "按节省排序的模型")),
+        topRows.length ? h("div", { class: "ledger", style: "max-height:420px;overflow:auto" }, h("table", {},
+          h("thead", {}, h("tr", {},
+            h("th", {}, L3("Модель", "Model", "模型")),
+            h("th", {}, L3("Провайдер", "Provider", "供应商")),
+            h("th", { class: "num" }, L3("Экономия", "Saving", "节省")),
+            h("th", { class: "num" }, L3("Чисто", "Clean", "无警告")))),
+          h("tbody", {}, ...topRows))) : h("div", { class: "empty" }, L3("Пока нечего показывать.", "Nothing to show yet.", "暂无可显示。")),
+        h("p", { class: "foot" }, L3("«Чисто» — без риск-флагов Grandet и ограничений сайта (только чат, без инструментов). Для релеев экономия оценочная: кредиты не равны деньгам.",
+          "Clean means no Grandet risk flags and no site restrictions (chat only, no tool calls). Relay savings are estimates: credits are not cash.",
+          "“无警告”指没有 Grandet 风险标记和站点限制（仅聊天、不支持工具）。中转的节省为估算：额度不等于现金。")))
+    ];
   }
 
   function healthView() {
@@ -2228,7 +2509,7 @@
         h("div", {}, h("h3", {}, T.gh.releases), rankRows((latest.releases || []).map((r) => ({ name: r.tag, hits: r.downloads }))))),
       h("div", { class: "fine", style: "padding:0 16px 12px" }, T.gh.note));
   }
-  const RENDER = { overview: overviewView, providers: providersView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, traffic: trafficView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
+  const RENDER = { overview: overviewView, providers: providersView, grandet: grandetView, grandetStats: grandetStatsView, people: peopleView, invites: invitesView, places: placesView, money: moneyView, activity: activityView, demo: demoView, data: dataView, site: siteView, traffic: trafficView, models: modelsView, health: healthView, stats: statsView, controls: controlsView, settings: settingsView, payments: paymentsView };
 
   // ── the shell: bar, nav, one view ──────────────────────────────
   function drawMain() {

@@ -612,7 +612,22 @@ def _extra_offers(prices: dict, connected: set[str]) -> dict[str, dict[str, dict
 _CACHE: dict[str, Any] = {"at": 0.0, "full": None, "compact": None}
 _CACHE_TTL = 300.0
 
-_MODEL_FIELDS = ("id", "name", "kind", "listed", "default_on", "recommended", "context", "max_output", "cost", "sell", "ratio", "priced_as", "upstream")
+_MODEL_FIELDS = (
+    "id",
+    "name",
+    "kind",
+    "listed",
+    "default_on",
+    "recommended",
+    "context",
+    "max_output",
+    "cost",
+    "sell",
+    "ratio",
+    "priced_as",
+    "upstream",
+    "last_request",
+)
 _OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason", "unit", "price_rub")
 
 
@@ -626,6 +641,7 @@ def _compact(payload: dict) -> dict:
             item["routing"] = {
                 "selected": routing.get("selected"),
                 "selected_model": routing.get("selected_model"),
+                "configured": routing.get("configured"),
                 "offers": [
                     {key: offer.get(key) for key in _OFFER_FIELDS}
                     for offer in routing.get("offers") or []

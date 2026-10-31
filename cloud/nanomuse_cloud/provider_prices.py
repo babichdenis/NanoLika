@@ -21,6 +21,7 @@ JSON и показывает кнопку «Обновить данные».
 from __future__ import annotations
 
 import concurrent.futures as cf
+import gzip
 import html
 import json
 import os
@@ -28,10 +29,13 @@ import re
 import sys
 import threading
 import time
+import traceback
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 TIMEOUT = 25
@@ -774,9 +778,21 @@ def install_provider_prices(app, admin_dep) -> None:
     async def admin_provider_prices() -> dict:
         return read_snapshot()
 
+    def menu_specs() -> tuple:
+        settings = getattr(app.state, "settings", None)
+        return tuple(getattr(settings, "models", ()) or ())
+
     @app.post("/v1/admin/provider-prices/refresh", dependencies=[Depends(admin_dep)])
     async def admin_provider_prices_refresh() -> dict:
-        return {"started": refresh_async()}
+        return {"started": refresh_async(), "grandet_started": refresh_grandet_async(menu_specs())}
+
+    @app.get("/v1/admin/grandet-prices", dependencies=[Depends(admin_dep)])
+    async def admin_grandet_prices() -> dict:
+        return read_grandet()
+
+    @app.post("/v1/admin/grandet-prices/refresh", dependencies=[Depends(admin_dep)])
+    async def admin_grandet_prices_refresh() -> dict:
+        return {"started": refresh_grandet_async(menu_specs())}
 
 
 # Черновые поставщики: парсеры написаны, но сверка цен показывает систематические
@@ -790,6 +806,365 @@ def active_fetchers() -> dict:
     if os.environ.get("PRICE_DRAFT_PROVIDERS", "").strip() in ("1", "true", "yes"):
         return dict(FETCHERS)
     return {name: v for name, v in FETCHERS.items() if name not in DRAFT}
+
+
+# ── рынок Grandet ──────────────────────────────────────────────────────
+# Grandet знает чужие релеи и официальные цены вендоров. Снимок считает, где та же
+# модель дешевле нашей закупки: официально, у агрегатора или у чужого релея.
+GRANDET_BOARD = "https://grandet.ai/api/v1/board"
+GRANDET_UA = "grandet-skill/0.3.0 (nanomuse-cloud)"
+GRANDET_SKILL_VERSION = "0.3.0"
+GRANDET_SKILL_BUILD = "grandet-skill-0.3.0-build.20261018b"
+GRANDET_FALLBACK_CNY = 12.5
+GRANDET_LOCK = threading.Lock()
+GRANDET_RUNNING = False
+
+
+def cny_rub() -> float:
+    """Рубли за юань по ЦБ; недоступен ЦБ — запасной курс."""
+    try:
+        data = json.loads(get(CBR_URL, 15))
+        row = data["Valute"]["CNY"]
+        nominal = float(row.get("Nominal") or 1) or 1
+        val = float(row["Value"]) / nominal
+        if 5 < val < 40:
+            return round(val, 4)
+    except Exception:  # noqa: BLE001
+        pass
+    return GRANDET_FALLBACK_CNY
+
+
+def grandet_path() -> Path:
+    """Снимок рядом с prices.json: в проде это смонтированный каталог."""
+    base = Path(os.environ.get("PRICES_DATA_DIR") or SNAPSHOT.parent)
+    return base / "grandet.json"
+
+
+def grandet_json(url: str, timeout: int = 40) -> dict:
+    """GET с gzip: без него Cloudflare отдаёт большие ответы рывками."""
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": GRANDET_UA, "Accept": "application/json", "Accept-Encoding": "gzip"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        body = response.read()
+    if body[:2] == b"\x1f\x8b":
+        body = gzip.decompress(body)
+    return json.loads(body)
+
+
+def grandet_models(specs: Any) -> list[dict[str, Any]]:
+    """Модели меню: id, upstream и наша закупка в юанях за 1M токенов."""
+    rows = []
+    for spec in specs or ():
+        if str(getattr(spec, "kind", "chat")) != "chat":
+            continue
+        rows.append(
+            {
+                "key": str(getattr(spec, "id", "")),
+                "name": str(getattr(spec, "name", "") or getattr(spec, "id", "")),
+                "selector": str(getattr(spec, "upstream", "") or getattr(spec, "id", "")),
+                "kind": str(getattr(spec, "kind", "chat")),
+                "provider": str(getattr(spec, "provider", "") or ""),
+                "context_length": int(getattr(spec, "context_length", 0) or 0),
+                "max_output": int(getattr(spec, "max_output", 0) or 0),
+                "input_modalities": list(getattr(spec, "input_modalities", ()) or ()),
+                "output_modalities": list(getattr(spec, "output_modalities", ()) or ()),
+                "lanes": list(getattr(spec, "for_", ()) or ()),
+                "recommended": bool(getattr(spec, "recommended", False)),
+                "our_in": float(getattr(spec, "price_in", 0) or 0),
+                "our_out": float(getattr(spec, "price_out", 0) or 0),
+            }
+        )
+    return [row for row in rows if row["key"] and row["selector"]]
+
+
+def _grandet_money(value: Any) -> float | None:
+    try:
+        return round(float(value), 6)
+    except (TypeError, ValueError):
+        return None
+
+
+def _grandet_rows(data: dict, field: str) -> list[dict]:
+    rows = data.get("official") if field == "official" else (data.get("listings") or {}).get("inference")
+    out = []
+    for row in rows or []:
+        currency = str(row.get("currency") or "").upper()
+        inp, outp = _grandet_money(row.get("input")), _grandet_money(row.get("output"))
+        if inp is None or outp is None:
+            continue
+        out.append(
+            {
+                "vendor": row.get("vendor"),
+                "model_group_id": row.get("modelGroupId"),
+                "price_kind": row.get("priceKind"),
+                "currency": currency,
+                "input": inp,
+                "output": outp,
+                "cache_read": _grandet_money(row.get("cacheRead")),
+                "cache_write": _grandet_money(row.get("cacheWrite")),
+                "conditions": row.get("conditions") or [],
+                "condition_notes": row.get("conditionNotes") or [],
+                "pricing_axis": row.get("pricingAxis"),
+                "context_tier": row.get("contextTier"),
+                "processing_mode": row.get("processingMode"),
+                "aggregator": bool(row.get("aggregator")),
+                "comparison_eligible": row.get("comparisonEligible"),
+                "cash_percent_vs_official": row.get("cashPercentVsOfficial"),
+                "effective_from": row.get("effectiveFrom"),
+                "effective_until": row.get("effectiveUntil"),
+                "source_url": row.get("sourceUrl"),
+                "observed_at": row.get("observedAt"),
+            }
+        )
+    return out
+
+
+def _grandet_cny(rows: list[dict], usd_cny: float) -> list[dict]:
+    """Пересчёт в юани: наша закупка тоже в юанях, так сравнение честнее."""
+    out = []
+    for row in rows:
+        rate = 1.0 if row["currency"] == "CNY" else usd_cny if row["currency"] == "USD" else None
+        if not rate:
+            continue
+        out.append(dict(row, cny_in=round(row["input"] * rate, 4), cny_out=round(row["output"] * rate, 4)))
+    return out
+
+
+def _grandet_market(data: dict, usd_cny: float) -> list[dict]:
+    """Доски Grandet: до двух самых дешёвых, с условиями, рисками и интеграцией.
+
+    Кредиты Grandet не равны валюте: цена в юанях у релеев — оценка по
+    заявленному курсу (1 кредит = 1 единица валюты), а не подтверждённый счёт.
+    """
+    out = []
+    for board in data.get("boards") or []:
+        unit = board.get("unit")
+        rate = 1.0 if unit == "CNY_CREDIT" else usd_cny if unit == "USD_CREDIT" else None
+        listings = board.get("listings") or {}
+
+        def one(row: dict, rate: float | None = rate) -> dict:
+            inp, outp = _grandet_money(row.get("input")), _grandet_money(row.get("output"))
+            cache = _grandet_money(row.get("cacheRead"))
+            cache_write = _grandet_money(row.get("cacheWrite"))
+            integration = row.get("integration") or {}
+            listing = row.get("listing") or {}
+            return {
+                "source_id": row.get("sourceId"),
+                "operator": row.get("operator"),
+                "model_name": row.get("modelName"),
+                "plan": row.get("plan") or row.get("planEn"),
+                "provider_category": row.get("providerCategory"),
+                "aggregator": bool(row.get("aggregator")),
+                "endpoint_types": row.get("endpointTypes") or [],
+                "input": inp,
+                "output": outp,
+                "cache_read": cache,
+                "cache_write": cache_write,
+                "blended": _grandet_money(row.get("blended")),
+                "cny_in": round(inp * rate, 4) if rate and inp is not None else None,
+                "cny_out": round(outp * rate, 4) if rate and outp is not None else None,
+                "ratio_to_median": row.get("ratioToMedian"),
+                "risk_signals": row.get("riskSignals") or [],
+                "review_reasons": row.get("reviewReasons") or [],
+                "freshness": row.get("freshness"),
+                "observed_at": row.get("observedAt"),
+                "source_url": row.get("sourceUrl"),
+                "board_url": row.get("boardUrl"),
+                "listing": {
+                    "action": listing.get("action"),
+                    "kind": listing.get("kind"),
+                    "hint": listing.get("hintEn") or listing.get("hint"),
+                    "usage": listing.get("usage") or [],
+                },
+                "integration": {
+                    "base_url": integration.get("baseUrl"),
+                    "token_group": integration.get("tokenGroup"),
+                    "endpoint_type": integration.get("endpointType"),
+                    "profile_id": integration.get("profileId"),
+                    "configuration_path": integration.get("configurationPath"),
+                    "compatibility": integration.get("compatibility"),
+                    "platforms": integration.get("platforms") or [],
+                    "docs_url": integration.get("docsUrl"),
+                },
+                "rank": row.get("rank"),
+                "exposure": row.get("exposure"),
+                "row_cycle": row.get("rowCycle"),
+            }
+
+        out.append(
+            {
+                "unit": unit,
+                "basis": board.get("basis"),
+                "status": board.get("status"),
+                "totals": listings.get("totals") or {},
+                "counts": listings.get("counts") or {},
+                "folded": listings.get("folded") or [],
+                "lowest": [one(row) for row in (listings.get("lowest") or [])[:2]],
+                "gated": [one(row) for row in (listings.get("gated") or [])[:2]],
+                "reference": [one(row) for row in (listings.get("reference") or [])[:2]],
+            }
+        )
+    return out
+
+
+def _grandet_best(model: dict, candidates: list[dict]) -> dict | None:
+    """Самое выгодное предложение из тех, что в валюте, и экономия против нашей закупки."""
+    if model["kind"] != "chat" or not model["our_in"] or not model["our_out"]:
+        return None
+    our = model["our_in"] * 1000 + model["our_out"] * 512
+    best = None
+    for row in candidates:
+        cost = row["cny_in"] * 1000 + row["cny_out"] * 512
+        if cost <= 0:
+            continue
+        if best is None or cost < best["raw_cost"]:
+            best = dict(row, raw_cost=cost, cost_cny=round(cost / 1_000_000, 6))
+    if best is None:
+        return None
+    best.pop("raw_cost", None)
+    best["our_cny"] = round(our / 1_000_000, 6)
+    best["savings_pct"] = round((1 - best["cost_cny"] / best["our_cny"]) * 100, 1) if best["our_cny"] else None
+    return best
+
+
+def _grandet_one(model: dict, usd_cny: float) -> tuple[dict, dict | None]:
+    """Одна модель: официальные цены, агрегаторы и лучший релей."""
+    item = dict(model)
+    try:
+        url = (
+            GRANDET_BOARD
+            + "?"
+            + urllib.parse.urlencode(
+                {
+                    "model": model["selector"],
+                    "lang": "en",
+                    "limit": 5,
+                    "view": "compact",
+                    "host": "opencode",
+                    "targetApp": "opencode",
+                    "skillVersion": GRANDET_SKILL_VERSION,
+                    "skillBuild": GRANDET_SKILL_BUILD,
+                }
+            )
+        )
+        data = grandet_json(url)
+        if data.get("code") or data.get("error"):
+            item["note"] = f"{data.get('code')}: {str(data.get('message'))[:160]}"
+            return item, None
+        official = _grandet_cny(_grandet_rows(data, "official"), usd_cny)
+        inference = _grandet_cny(_grandet_rows(data, "inference"), usd_cny)
+        item["official"] = official
+        item["inference"] = inference
+        item["market"] = _grandet_market(data, usd_cny)
+        item["coverage"] = data.get("coverage") or {}
+        item["assumptions"] = data.get("assumptions") or []
+        item["notices"] = data.get("notices") or []
+        candidates = [dict(row, category="official", provider=row.get("vendor")) for row in official]
+        candidates += [dict(row, category="inference", provider=row.get("vendor")) for row in inference]
+        candidates += [
+            dict(row, category="relay", estimated=True, provider=row.get("source_id"))
+            for board in item["market"]
+            for row in board.get("lowest") or []
+            if row.get("cny_in") and row.get("cny_out")
+        ]
+        best = _grandet_best(model, candidates)
+        if best:
+            item["best"] = best
+        return item, None
+    except Exception as error:  # noqa: BLE001
+        return item, {"key": model["key"], "selector": model["selector"], "error": str(error)[:200]}
+
+
+def grandet_collect(specs: Any) -> dict:
+    """Собрать рынок по моделям меню. Курсы ЦБ, ошибки не роняют весь снимок."""
+    models = grandet_models(specs)
+    usd, usd_source = usd_rub()
+    cny = cny_rub()
+    usd_cny = round(usd / cny, 4) if cny else 0
+    workers = max(1, min(6, len(models)))
+    with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(lambda model: _grandet_one(model, usd_cny), models))
+    out_models, errors = [], []
+    stats: dict[tuple[str, str], dict] = {}
+    for item, error in results:
+        if error:
+            errors.append(error)
+            continue
+        out_models.append(item)
+        best = item.get("best") or {}
+        if best.get("savings_pct") and best["savings_pct"] > 0:
+            key = (str(best.get("provider")), str(best.get("category")))
+            entry = stats.setdefault(
+                key,
+                {"provider": key[0], "category": key[1], "wins": 0, "clean_wins": 0, "savings": [], "models": []},
+            )
+            warned = bool(best.get("risk_signals") or best.get("review_reasons"))
+            warned = warned or bool((best.get("listing") or {}).get("usage"))
+            entry["wins"] += 1
+            entry["clean_wins"] += 0 if warned else 1
+            entry["savings"].append(best["savings_pct"])
+            entry["models"].append(item["key"])
+            if not entry.get("url") and best.get("source_url"):
+                entry["url"] = best["source_url"]
+            if not entry.get("board_url") and best.get("board_url"):
+                entry["board_url"] = best["board_url"]
+    stats_rows = []
+    for entry in stats.values():
+        savings = entry.pop("savings")
+        stats_rows.append(
+            dict(
+                entry,
+                avg_savings_pct=round(sum(savings) / len(savings), 1) if savings else None,
+                max_savings_pct=max(savings) if savings else None,
+            )
+        )
+    stats_rows.sort(key=lambda row: (-row["wins"], row["provider"] or ""))
+    return {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "rates": {"usd_rub": usd, "cny_rub": cny, "usd_cny": usd_cny, "source": usd_source},
+        "models": out_models,
+        "stats": stats_rows,
+        "errors": errors,
+    }
+
+
+def read_grandet() -> dict:
+    try:
+        return json.loads(grandet_path().read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {"generated_at": "", "models": [], "stats": [], "errors": [], "pending": GRANDET_RUNNING}
+
+
+def refresh_grandet_now(specs: Any) -> dict:
+    payload = grandet_collect(specs)
+    path = grandet_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+    return payload
+
+
+def refresh_grandet_async(specs: Any) -> bool:
+    global GRANDET_RUNNING
+    with GRANDET_LOCK:
+        if GRANDET_RUNNING:
+            return False
+        GRANDET_RUNNING = True
+
+    def work() -> None:
+        global GRANDET_RUNNING
+        try:
+            refresh_grandet_now(specs)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+        finally:
+            GRANDET_RUNNING = False
+
+    threading.Thread(target=work, name="grandet-prices", daemon=True).start()
+    return True
 
 
 def main(argv: list[str]) -> int:

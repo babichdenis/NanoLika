@@ -482,7 +482,10 @@ function drawGroups() {
 function drawProviderFilter() {
   const select = $("mt-provider");
   if (!select) return;
-  const providers = ((DATA && DATA.providers && DATA.providers.connected) || []).slice();
+  // Пока данные не пришли, не сбрасываем фильтр из адреса: иначе ссылка
+  // «Открыть в таблице моделей» из карты поставщиков теряет `p=`.
+  if (!DATA) return;
+  const providers = ((DATA.providers && DATA.providers.connected) || []).slice();
   select.replaceChildren(el("option", "", "любой"));
   select.firstChild.value = "";
   for (const name of providers) {
