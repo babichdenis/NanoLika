@@ -12,7 +12,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-label','Выбрать модель');
  wrap.append(trigger);
  function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?m.name:'Модель';}
- function chosenModels(){return allChat.filter(m=>favSet.has(m.id));}
+ function chosenModels(){return allVisible.filter(m=>favSet.has(m.id)).sort((a,b)=>Number(b.forChat)-Number(a.forChat)||a.name.localeCompare(b.name));}
  async function saveFavourites(){try{const data=await api('/v1/me/models',{method:'PUT',body:JSON.stringify({enabled:{},favourites:[...favSet]})});const echoed=data?.shelf?.favourites;if(Array.isArray(echoed))favSet=new Set(echoed);}catch{}}
  trigger.onclick=async()=>{
   // Новые модели на сервере должны появляться в открытом списке без перезагрузки

@@ -5,7 +5,7 @@ import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js?v=20261031-ui2';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
-import {installComposerControls} from './composer-controls.js?v=20261031-pick1';
+import {installComposerControls} from './composer-controls.js?v=20261031-pick2';
 import {installModelSheet} from './model-sheet.js?v=20261030-remote';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 // The entry bridge names the channel; a plain /web/ visit is just Web.
@@ -34,7 +34,10 @@ function translate(){document.documentElement.lang=lang;document.querySelectorAl
 function updateStatus(){composerControls.setBusy(!!controller||sending);setAvatarMood(controller?'working':'idle');$('status').textContent=t(controller?'working':'ready');$('offline').hidden=navigator.onLine;}
 function updateAuth(){$('code-label').hidden=authMode!=='code'||!codeSent;$('password-label').hidden=authMode!=='password';$('code').required=authMode==='code'&&codeSent;$('password').required=authMode==='password';$('auth-submit').textContent=t(authMode==='code'&&!codeSent?'sendCode':'signin');$('auth-mode').textContent=t(authMode==='code'?'usePassword':'useCode');}
 function showAuth(){location.href='/app/?signin=1&next='+encodeURIComponent(location.origin+location.pathname+location.search);}
-async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',cache:'no-store',headers:{...(body?{'Content-Type':'application/json'}:{}),...(session?.key?{Authorization:'Bearer '+session.key}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=r.status===204?null:await r.json();if(!r.ok){const e=new Error(data?.error?.message||t('requestError'));e.code=data?.error?.code;e.status=r.status;throw e;}return data;}
+/* Два вида вызова: api(path, body) — POST с телом, и api(path, {method, body}) — как
+   зовут общие компоненты (пикер, лист моделей): там нужен PUT, а старый помощник
+   всегда слал POST и молча не сохранял избранное. */
+async function api(path,body){const opts=body&&typeof body==='object'&&typeof body.method==='string'?body:null;const method=opts?String(opts.method).toUpperCase():(body?'POST':'GET');let payload=opts?(typeof opts.body==='string'?(opts.body?JSON.parse(opts.body):null):opts.body):body;const r=await fetch(path,{method,cache:'no-store',headers:{...(payload?{'Content-Type':'application/json'}:{}),...(session?.key?{Authorization:'Bearer '+session.key}:{})},...(payload?{body:JSON.stringify(payload)}:{})});const data=r.status===204?null:await r.json();if(!r.ok){const e=new Error(data?.error?.message||t('requestError'));e.code=data?.error?.code;e.status=r.status;throw e;}return data;}
 async function loadChats(){if(!authenticated()){chats=[];current=null;renderChats();return;}try{chats=(await db.list('chats',session.owner)).sort((a,b)=>b.updated-a.updated);if(current?.owner!==session.owner)current=null;renderChats();}catch{notice(t('storageBlocked'));}}
 async function persist(chat){try{await db.save('chats',chat);if(session?.owner===chat.owner){const i=chats.findIndex(c=>c.key===chat.key);if(i<0)chats.unshift(chat);else chats[i]=chat;chats.sort((a,b)=>b.updated-a.updated);renderChats();}}catch{notice(t('storageError'));}}
 let chatListSignature='';
