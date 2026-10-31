@@ -48,9 +48,9 @@
 - `remember`: Save a durable fact about the user or their preferences for future sessions (e.g.
 - `recall`: Search long-term memory for facts about the user relevant to `query`.
 - `forget`: Delete memories. Provide `memory_id` (e.g. m_1a2b3c4d) to delete one, or `query` to delete every memory containing that text. Use when the user asks you to forget something.
-- `goals`: Manage the user's long-term goals and their step-by-step plans (persisted across sessions).
-- `reminders`: Schedule something for later, on the user's behalf.
-- `triggers`: Do something whenever an event happens, on the user's behalf, the other half of `reminders`, which fire at a time.
+- `goals`: Manage long-term goals and their step plans.
+- `reminders`: Schedule something for later.
+- `triggers`: Do something whenever an event happens.
 
 ## Skills, store, bots - навыки, склад, боты
 

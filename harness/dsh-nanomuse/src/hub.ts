@@ -115,6 +115,8 @@ interface Pending {
 const OPEN = 1
 /** How long to wait after the relay closed with `hub_paused`: its operator switched the hub off for a while. */
 const PAUSED_RETRY_MS = 120_000
+/** A connection that lived this long is healthy again: the next drop starts the backoff over. */
+const STABLE_CONNECTION_MS = 30_000
 
 export class HubClient {
   /** The relay's list, refreshed on every `devices` frame. */
@@ -131,6 +133,7 @@ export class HubClient {
   /** Counts `connect()` attempts; an attempt that finds a newer one when its key arrives gives up. */
   private generation = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  private stableTimer: ReturnType<typeof setTimeout> | undefined
   private connectTimer: ReturnType<typeof setTimeout> | undefined
   private pingTimer: ReturnType<typeof setInterval> | undefined
   /** Whether any frame arrived since the last ping went out (the pong, or anything else). */
@@ -154,6 +157,7 @@ export class HubClient {
     if (this.running) return
     this.running = true
     this.attempt = 0
+    this.clearStable()
     void this.connect()
   }
 
@@ -161,6 +165,7 @@ export class HubClient {
   stop(reason = 'stopped'): void {
     this.running = false
     this.clearReconnect()
+    this.clearStable()
     this.closeSocket(1000, reason)
     this.failPending(new HubError('disconnected', reason))
     this.devices = []
@@ -171,6 +176,7 @@ export class HubClient {
   restart(): void {
     if (!this.running) return this.start()
     this.clearReconnect()
+    this.clearStable()
     this.closeSocket(1000, 'restart')
     // The old socket's close event is ignored once it is replaced, so its work ends here:
     // calls in flight fail now rather than at their timeout, and `connected` is false
@@ -340,6 +346,7 @@ export class HubClient {
       if (this.socket !== socket) return
       this.socket = undefined
       this.clearConnectTimer()
+      this.clearStable()
       this.clearPing()
       const code = event.code ?? 1006
       const wasConnected = this.connected
@@ -387,8 +394,13 @@ export class HubClient {
         this.clearConnectTimer()
         this.deviceId = String(frame.device_id ?? this.options.device().id)
         this.devices = toDevices(frame.devices)
-        this.attempt = 0
         this.lastError = undefined
+        this.clearStable()
+        this.stableTimer = setTimeout(() => {
+          this.stableTimer = undefined
+          this.attempt = 0
+        }, STABLE_CONNECTION_MS)
+        this.stableTimer.unref?.()
         this.setConnected(true)
         this.startPing()
         this.log('info', `hub: connected as ${this.deviceId}; ${this.devices.length} device(s) on the account`)
@@ -512,6 +524,11 @@ export class HubClient {
   private clearReconnect(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.reconnectTimer = undefined
+  }
+
+  private clearStable(): void {
+    if (this.stableTimer) clearTimeout(this.stableTimer)
+    this.stableTimer = undefined
   }
 
   /**

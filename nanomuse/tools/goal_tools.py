@@ -12,17 +12,11 @@ from nanomuse.tools.base import BaseTool, CallAssessment
 class Goals(BaseTool):
     name: str = "goals"
     description: str = (
-        "Manage the user's long-term goals and their step-by-step plans (persisted across sessions). "
-        "Actions: `create` (title, description, steps[], category, due, check_in), "
-        "`list` (status, category optional), `get` (goal_id), "
-        "`update` (goal_id + any of title, description, category, due, check_in; '' clears), "
-        "`update_step` (goal_id, step_index, status, note), `add_step` (goal_id, title), "
-        "`propose` (goal_id, note=why, steps=revised remaining steps; the user accepts or dismisses "
-        "in the app; never silently rewrite a plan), "
-        "`set_status` (goal_id, status: active|paused|done|cancelled), `note` (goal_id, note). "
-        "Create a goal whenever the user gives you a multi-step or long-running objective, then "
-        "keep steps up to date as you work. Pick the category and, if the user gave one, the "
-        "target date; offer a check-in cadence when a goal is a habit or needs regular nudges."
+        "Manage long-term goals and their step plans. Actions: `create` (title, description, "
+        "steps[], category, due, check_in), `list`, `get`, `update` (fields; '' clears), "
+        "`update_step` (step_index, status, note), `add_step`, `propose` (revised remaining "
+        "steps; the user accepts or dismisses, never rewrite silently), `set_status`, `note`. "
+        "Create a goal for a multi-step or long-running objective and keep steps current."
     )
     parameters: dict[str, Any] = {
         "type": "object",

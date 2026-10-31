@@ -13,16 +13,10 @@ from nanomuse.tools.base import BaseTool, CallAssessment
 class Reminders(BaseTool):
     name: str = "reminders"
     description: str = (
-        "Schedule something for later, on the user's behalf. Two kinds: kind=`remind`, at that "
-        'time you simply tell the user the text ("call mum", "the parking runs out"); '
-        'kind=`task`, at that time you do the work described and report the result ("summarise '
-        'unread email", "check the weather for the ride"). Actions: `create` (text, kind, and '
-        "either `at` = 'YYYY-MM-DD HH:MM' local time for a one-off, or `repeat` = 'daily 08:00' | "
-        "'weekdays 07:30' | 'weekly mon 09:00' | 'monthly 1 09:00' for a routine), `list`, "
-        "`cancel` (reminder_id). Work out the exact time from the current date/time in your "
-        "context ('tomorrow morning' → tomorrow 09:00; 'in 20 minutes' → now + 20 min). Use this "
-        "whenever the user says remind me / every morning / at 6pm / later today; it fires whether "
-        "or not the app is open, and shows in the app under Upcoming."
+        "Schedule something for later. `remind` tells the user the text at that time; `task` "
+        "does the work and reports the result. Actions: `create` (text, kind, and either `at` "
+        "for a one-off or `repeat` for a routine), `list`, `cancel` (reminder_id). Work out "
+        "the exact time from the current date/time. It fires whether or not the app is open."
     )
     parameters: dict[str, Any] = {
         "type": "object",

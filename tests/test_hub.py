@@ -517,6 +517,36 @@ def test_a_paused_hub_is_waited_out_not_hammered(monkeypatch: pytest.MonkeyPatch
     assert state == "disconnected" and wait == 1.0
 
 
+def test_repeated_clean_closes_back_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A session that returns without an exception is still a failed connection if it
+    never became stable: the next wait must grow, not reset to one second every time."""
+    async def scenario() -> list[float]:
+        client = HubClient("wss://relay.test/v1/hub", "k", "pc-1", "Desk", actions=["info"])
+        waits: list[float] = []
+
+        async def clean() -> None:
+            return None
+
+        async def spy(aw, timeout):  # noqa: ANN001
+            waits.append(timeout)
+            if len(waits) >= 3:
+                client._stop.set()
+            aw.close()
+
+        monkeypatch.setattr(client, "_session", clean)
+        monkeypatch.setattr("nanomuse.hub.client.asyncio.wait_for", spy)
+        client.start()
+        for _ in range(100):
+            if client._stop.is_set():
+                break
+            await asyncio.sleep(0.02)
+        await client.stop()
+        return waits
+
+    waits = asyncio.run(scenario())
+    assert waits[:3] == [1.0, 2.0, 4.0]
+
+
 def test_a_certificate_failure_is_a_disconnect_not_a_refusal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

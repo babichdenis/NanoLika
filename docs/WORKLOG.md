@@ -1,3 +1,62 @@
+## 2026-11-01 · Связь: backoff после failed и сжатые схемы
+
+**Переподключение.** Раньше клиент рантайма сбрасывал паузу на 1 с после любого
+возврата сессии, включая чистый обрыв: если релей принимал `welcome` и сразу
+закрывал сокет, это был вечный цикл раз в секунду. Теперь пауза растёт
+1 → 2 → 4 → … → 60 с на каждом неудачном подключении и сбрасывается только
+после 30 с стабильной связи (`STABLE_CONNECTION_S`). В dsh-харнессе `attempt`
+больше не обнуляется на `welcome` сразу: через 30 с стабильной связи, иначе
+следующий обрыв продолжает растущую паузу. Три живых SSE-потока в клиенте
+(облако, комнаты, coding) тоже переподключаются 3 → 6 → 12 → … → 60 с вместо
+фиксированных 3 с. Тест `test_repeated_clean_closes_back_off`; 34 теста hub и
+12 тестов dsh-hub зелёные.
+
+**Схемы.** Поджаты описания `goals`, `reminders`, `triggers`: убраны повторы,
+примеры и длинные перечисления из main description; форматы `at`/`repeat`/
+`check_in` остались в описаниях полей. `CAPABILITIES.md` перегенерирован,
+тесты `test_capabilities`, `test_reminders`, `test_triggers`, `test_memory_goals`
+— 72 passed.
+
+## 2026-11-01 · Скины: каталог, мост переменных, «О NanoLika» без релизов
+
+**Каталог скинов.** Замысел Дениса: как в opencode — раздел с горой скинов,
+всё лежит на сервере, выбрал и скин подхватился. Сделано:
+- `publish/skins/themes/*.json` — 26 тем (paper, forest, ocean, grape, sand,
+  mint, ember, steel, sakura, nord, gruv, solar, drk, tokyo, latte, one, mono,
+  aurora, slate, lava, moss, ice, plum, clay, midnight, rose), у каждой
+  светлая и тёмная палитра;
+- `publish/skins/index.json` версии 2 и `publish/skins/index.html` — страница
+  каталога с превью панели для каждого скина (раньше `/skins/` отдавал 403
+  без листинга);
+- приложение читает список с `https://nanolika.ru/skins/index.json`
+  (`SKINS_URL` в `src/cloud.ts`, `skinsList()`, маршрут `/skins/list`),
+  фильтрует `kind === 'theme'` со светлой и тёмной половиной; добавление
+  скина = положить JSON, дописать запись в `index.json`, задеплоить —
+  переустановка не нужна;
+- деплой сайта: `~/Dev/.venvs/nm/bin/python deploy.py` из `~/Dev/nanoLika`.
+  Проверено на живом сайте: 26 тем, контраст текста ≥3.0.
+
+**Почему скин не красил поле ввода и пузыри человека.** Скины задают только
+`--nm-*` и `--dsw-alias-*`, а Muse рисует поле ввода и пузырь пользователя
+через `--dsw-specific-input-major` / `--dsw-specific-bubble`. Добавлен мост в
+`themeCss()` (`src/client/styles.ts`): `--nm-field → --dsw-specific-input-major`,
+`--nm-base → --dsw-specific-sidebar-fill`,
+`--nm-agent-bubble → --dsw-specific-bubble`,
+`--nm-selected → --dsw-specific-bubble-highlight`.
+
+**Раздел «О NanoLika».** Убрана строка «Выпуски» со ссылкой
+`github.com/nano-muse/nanoMuse/releases` (`RELEASES_URL` удалён из
+`About.tsx`, ключ `abReleases` из en/zh/ru). Источник, документация и трекер
+остались в «Помощи» один раз.
+
+**Коммиты.** `3c8aa83b`, `417d5eb7`, затем удаление строки релизов; собрано
+(`npm run build`), задеплоено rsync в установленный плагин. Проверено по
+бандлу: `abReleases`, `RELEASES_URL`, `nano-muse/nanoMuse/releases` — 0
+вхождений, `dswBridge` — 3.
+
+**Осталось.** Живая проверка цвета поля ввода и пузырей после перезапуска
+приложения; вопрос Дениса «выбор моделей пропал» не диагностирован.
+
 ## 2026-11-01 · Токены: кэшируемый префикс промпта
 
 **Сверка с планом.** T1 (двойной раздел возможностей) в текущем дереве уже

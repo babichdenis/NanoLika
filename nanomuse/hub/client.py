@@ -27,6 +27,10 @@ from nanomuse.logger import logger
 
 PING_EVERY_S = 25.0
 MAX_FRAME = 16 * 1024 * 1024
+# A connection that lived this long is healthy again: the next drop starts the backoff
+# over instead of inheriting the pauses of an earlier bad network.
+STABLE_CONNECTION_S = 30.0
+MAX_BACKOFF_S = 60.0
 
 
 class HubError(Exception):
@@ -127,6 +131,8 @@ class HubClient:
         self.state = "stopped"
         self.state_detail = ""
         self.last_error = ""
+        # when the relay's welcome arrived; None while the socket has not been accepted
+        self._connected_at: float | None = None
         self._ws: Any = None
         self._pending: dict[str, _Pending] = {}
         self._task: asyncio.Task[None] | None = None
@@ -171,9 +177,9 @@ class HubClient:
     async def _run(self) -> None:
         delay = 1.0
         while not self._stop.is_set():
+            stable = False
             try:
                 await self._session()
-                delay = 1.0
             except ConnectionClosed as exc:
                 self.last_error = str(exc)
                 code = exc.rcvd.code if exc.rcvd else None
@@ -217,13 +223,23 @@ class HubClient:
                 logger.exception("hub session")
                 self._set_state("disconnected", str(exc))
             finally:
+                stable = self._stable_connection()
+                self._connected_at = None
                 self.connected.clear()
                 self._fail_all("disconnected", "the hub connection dropped")
+            if stable:
+                delay = 1.0
             if self._stop.is_set():
                 break
             with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(self._stop.wait(), delay)
-            delay = min(delay * 2, 30.0)
+            delay = min(delay * 2, MAX_BACKOFF_S)
+
+    def _stable_connection(self) -> bool:
+        return (
+            self._connected_at is not None
+            and time.monotonic() - self._connected_at >= STABLE_CONNECTION_S
+        )
 
     async def _session(self) -> None:
         self._set_state("connecting", self.url)
@@ -286,6 +302,7 @@ class HubClient:
         kind = frame.get("type")
         if kind == "welcome":
             self.devices = list(frame.get("devices") or [])
+            self._connected_at = time.monotonic()
             self.connected.set()
             self._set_state("connected", str(frame.get("device_id") or self.device_id))
             self._devices_changed()

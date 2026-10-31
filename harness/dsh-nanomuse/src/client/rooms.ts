@@ -231,6 +231,8 @@ export const EVENTS_URL = `${API}/events`
 
 let snapshot: Rooms = INITIAL
 let source: EventSource | undefined
+// A closed stream is retried with a growing pause; a healthy open resets it.
+let retryMs = 3000
 let langSent = false
 const listeners = new Set<() => void>()
 
@@ -243,6 +245,9 @@ function open(): void {
   if (source || typeof EventSource === 'undefined') return
   const es = new EventSource(EVENTS_URL)
   source = es
+  es.onopen = () => {
+    retryMs = 3000
+  }
   es.onmessage = (event: MessageEvent<string>) => {
     try {
       const data = JSON.parse(event.data) as Omit<Rooms, 'streaming'>
@@ -263,10 +268,12 @@ function open(): void {
     if (snapshot.streaming) publish({ ...snapshot, streaming: false })
     if (es.readyState === 2) {
       source = undefined
-      // only while someone still listens: the last unsubscribe may land inside these 3 s
+      const wait = retryMs
+      retryMs = Math.min(retryMs * 2, 60_000)
+      // only while someone still listens: the last unsubscribe may land inside the pause
       setTimeout(() => {
         if (listeners.size > 0) open()
-      }, 3000)
+      }, wait)
     }
   }
 }
@@ -279,6 +286,7 @@ function subscribe(listener: () => void): () => void {
     if (listeners.size === 0 && source) {
       source.close()
       source = undefined
+      retryMs = 3000
     }
   }
 }
