@@ -110,6 +110,33 @@ often one asks. A tool that ignores all three is not one we ship as the default.
 - First task: `browse` that returns the text of a JavaScript-heavy page, with the session
   partition and the wait made explicit, and one test page that `web_fetch` cannot read.
 
+### Settings that update without a release
+
+Half of the desktop's Settings is account data drawn from the relay: models, the plan and
+payments, devices, usage, the avatar. Their screens ship inside the app bundle today, so a
+wording fix or a new column waits for a release on three platforms. The model picker already
+proves the other way works: it is a page the relay serves (`/web/picker/manage/`) inside an
+iframe, opened with a short-lived session key, and a change there reaches every installed app
+the next time it opens.
+
+The same shape for everything that is only account data: one `/web/settings/` page with tabs
+(Account · Devices · Usage · Models · Avatar · Support) opened from the app, while the parts
+that need the machine (permissions, files, dictation, connectors, computer use, the chat
+itself) stay native.
+
+The avatar studio goes first because it is the most self-contained and the most expensive to
+change by hand: the drawn face already lives in the cloud profile (`PUT /v1/me/profile`,
+`face: {mood: base64 WebP}`), so a web studio saves it once and every device picks it up.
+The drawing itself is four candidates plus four mood edits through `/v1/images/generations`
+and `/v1/images/edits`, downscaled to 512 px WebP in the browser.
+
+- Module: `cloud/nanomuse_cloud/web_client/picker/` (the pattern), `web_client/account/` and
+  `web_client/studio/` (new), `harness/dsh-nanomuse/src/client/RemoteModelPicker.ts` (the
+  iframe and the session), `nanomuse/avatar/studio.py` (the prompts the web page mirrors).
+- Read: [desktop-muse.md](desktop-muse.md), the Models page and the picker.
+- First task: `/web/studio/` that draws, saves the face to the profile, and is opened from
+  the desktop through a session key; then the account and device tabs move to the same page.
+
 ## Next
 
 - **An open evaluation suite.** The hands' failures above, turned into a fixed set of phone and computer tasks anyone can run, with the simulated phone from the showcase ([showcase.md](showcase.md), `demo/mobilegym/`) as the harness. A number per release, not an impression.
