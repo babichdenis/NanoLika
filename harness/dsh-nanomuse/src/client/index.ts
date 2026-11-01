@@ -11,7 +11,7 @@
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
-import { closeTopModal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { closeTopModal, IconTrashOutlineRegular, MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useRef, type ReactNode } from 'react'
 import { call, type Skin, type Translate } from './api.ts'
 import { Avatar, BrandName, type Mood } from './Avatar.tsx'
@@ -45,6 +45,7 @@ import { IconPanelLeft, IconPlus } from './icons.tsx'
 import { makeInviteButton } from './Invite.tsx'
 import { makeUsagePill } from './UsagePill.tsx'
 import { makeCloudModelPill } from './CloudModelPill.tsx'
+import { useSyncList } from './MuseChats.tsx'
 import { useLive, subscribeLive } from './live.ts'
 import { en, ru, zh } from './locales.ts'
 import type { ChatActions } from './MuseChats.tsx'
@@ -407,6 +408,17 @@ export function apply(ctx: ClientContext): void {
     renameSession,
     openArchived: () => { shell.openSection('archived-sessions') },
   }
+  /**
+   * Delete a chat here and in the account (C11): the relay tombstones the conversation and
+   * drops its texts, the copy here leaves both columns (the harness column lists sessions,
+   * so archiving is how a row leaves it; the nanoMuse column hides it by the host's `gone`).
+   * The session file stays — dsh keeps logs.
+   */
+  const deleteEverywhere = async (sessionId: string): Promise<void> => {
+    if (!window.confirm(t('chDeleteForeverConfirm'))) return
+    await call('sync/delete-conversation', { sessionId }).catch(() => undefined)
+    await workspaces.archiveSession(sessionId, { stopActivity: true }).catch(() => undefined)
+  }
   // A room opened from the rail fills the main area; the split (a room beside
   // the chat) ends with it.
   const selectPanel = (id: string | null): void => {
@@ -433,6 +445,26 @@ export function apply(ctx: ClientContext): void {
     },
     hooks: { panels, shortcuts: shortcuts.catalog },
   })
+  // The harness column's own "..." menu (Pin, Rename, Fork, Archive): the delete row lives
+  // there too, because that is the column the person actually uses on macOS and Windows.
+  slots.inject('sidebar.workspaces.session.menu.item', () => slots.register({
+    name: 'sidebar.workspaces.session.menu.item',
+    id: 'nanomuse-delete',
+    order: 500,
+    locale: 'nanomuse',
+  }, ({ sessionId, useMenuOpenState }: { sessionId: string; useMenuOpenState: () => [boolean, (open: boolean) => void] }) => {
+    const sync = useSyncList()
+    const [, closeMenu] = useMenuOpenState()
+    // the account's main conversation cannot go (the account keeps exactly one)
+    if (sync.mainSession === sessionId) return null
+    return h(MenuItemButton, {
+      danger: true,
+      separatorBefore: true,
+      icon: h(IconTrashOutlineRegular, { size: 14 }),
+      onSelect: () => { closeMenu(false); void deleteEverywhere(sessionId) },
+      children: t('chDeleteForever'),
+    })
+  }))
   slots.inject('sidebar', () => slots.register({
     name: 'sidebar',
     locale: 'nanomuse',
