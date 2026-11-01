@@ -75,7 +75,10 @@ export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', m
     const clip = motion.clips[mood]
     return clip ? `nanomuse/avatar/motion/${mood}.mp4?v=${clip.v}` : null
   }
-  return `nanomuse/assets/dragon-${mood}.mp4?v=${BUILTIN_AVATAR_REVISION}`
+  // The bundled dragon clips carry an opaque beige background; the still is transparent,
+  // and the surrounding face still breathes and sways. Own clips and drawn faces keep
+  // their video above.
+  return null
 }
 
 /**
