@@ -980,15 +980,54 @@ function lazyRelay() {
     }
     const match = u.pathname.match(/^\/v1\/sync\/conversations\/([^/]+)\/(messages|read)$/)
     if (match?.[2] === 'messages') {
-      const cid = match[1], after = Number(u.searchParams.get('after') || 0)
+      const cid = match[1]
+      const after = Number(u.searchParams.get('after') || 0)
+      const before = Number(u.searchParams.get('before') || 0)
+      const limit = Number(u.searchParams.get('limit') || 300)
       bodies.push(cid)
-      return reply({ cid, messages: [...relay.msgs.values()].filter(m => m.cid === cid && m.seq > after), cursor: relay.seq, through_seq: relay.seq, more: false })
+      const all = [...relay.msgs.values()].filter(m => m.cid === cid).sort((a, b) => a.seq - b.seq)
+      let rows = all
+      let more = false
+      let hasOlder = false
+      let cursor = relay.seq
+      if (before > 0) {
+        const older = all.filter(m => m.seq < before)
+        rows = older.slice(-limit)
+        hasOlder = older.length > limit
+      } else if (after > 0) {
+        const newer = all.filter(m => m.seq > after)
+        rows = newer.slice(0, limit)
+        more = newer.length > limit
+        cursor = rows.length ? rows[rows.length - 1].seq : relay.seq
+      } else {
+        rows = all.slice(-limit)
+        hasOlder = all.length > limit
+      }
+      return reply({ cid, messages: rows, cursor, through_seq: relay.seq, more, has_older: hasOlder })
     }
     if (match?.[2] === 'read') { const body = JSON.parse(init.body); seen.set(match[1], Math.max(seen.get(match[1]) || 0, body.through_seq)); return reply({}) }
     return base(url, init)
   }
   return relay
 }
+
+test('opening a long shared chat walks older pages, not only the newest', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('long-chat', 'side', 'Long chat')
+  for (let i = 0; i < 700; i++) relay.say('long-chat', 'user', `line ${i}`)
+  const { engine: e } = engine(relay, sessions, { sideChats: false })
+  await e.pull()
+  const sid = [...sessions.rows.entries()].find(([, row]) => row.title === 'Long chat')?.[0]
+  assert.ok(sid)
+  await e.selectSessions([sid])
+  await until(() => sessions.remote(sid).length === 700)
+  const texts = new Set(sessions.remote(sid).map((line) => line.text))
+  assert.ok(texts.has('line 0') && texts.has('line 699'))
+  assert.equal(texts.size, 700)
+  assert.deepEqual(e.state.historyBefore, {})
+  e.stop()
+})
+
 
 test('shared catalogue lists closed chats with unread counts but downloads only the selected history', async () => {
   const relay = lazyRelay(), sessions = fakeSessions()

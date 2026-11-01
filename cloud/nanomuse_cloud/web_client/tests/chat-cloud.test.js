@@ -63,6 +63,19 @@ test('older pages come down too, so a long chat is not cut at the last page',asy
  assert.equal(r.deletes().length,1);
 });
 
+test('opening a long chat pulls older pages, not only the newest',async()=>{
+ const pages={};
+ let one=chat();
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'Long',device:'phone',updated_at:10,unread:0,message_count:4}],deleted:[]},
+  current:()=>one,
+  messages:path=>path.includes('before=')?(pages.older=true,{messages:[row('m1',1,'one'),row('m2',2,'two')],has_older:false,cursor:4,through_seq:4}):(pages.newest=true,{messages:[row('m3',3,'three'),row('m4',4,'four')],has_older:true,cursor:4,through_seq:4})});
+ await r.sync.open(one);
+ assert.equal(pages.newest,true);
+ assert.equal(pages.older,true);
+ assert.ok(r.calls.some(c=>c.path.includes('before=3')));
+ assert.equal(one.messages.length,4);
+});
+
 test('a chat that came from another device leaves the cloud and keeps its text here',async()=>{
  const r=relay({catalog:{complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'Из мессенджера',device:'telegram',updated_at:10,unread:0,message_count:1}],deleted:[]},messages:()=>({messages:[row('m1',1,'привет')],has_older:false})});
  const one=chat({title:'Из мессенджера',device:'telegram'});

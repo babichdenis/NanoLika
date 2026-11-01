@@ -11,6 +11,8 @@ from nanomuse.cloud import CloudError
 # passes instead of being cut at an arbitrary page count.
 CATALOG_BUDGET_S = 2.0
 CATALOG_MAX_APPLIED = 1500
+# How many messages one page of the per-chat endpoint carries.
+CATALOG_PAGE = 500
 
 
 class LazyCatalog:
@@ -45,6 +47,7 @@ class LazyCatalog:
             e.state["conversation_marks"] = {}
             e.state["catalog_mode"] = False
             e.state["pending_cids"] = []
+            e.state["history_before"] = {}
             self.selected.clear()
         if not hasattr(e.client, "catalog"):
             if e.state.get("catalog_mode") or e.state.get("pending_cids"):
@@ -89,8 +92,11 @@ class LazyCatalog:
         cursors = e.state.setdefault("message_cursors", {})
         # A chat leaves the catalogue (deleted, archived away, another account): its
         # per-chat cursor goes with it instead of growing the state file forever.
+        history = e.state.setdefault("history_before", {})
         for stale in [cid for cid in cursors if cid not in rows]:
             cursors.pop(stale, None)
+        for stale in [cid for cid in history if cid not in rows]:
+            history.pop(stale, None)
         selected = set(self.selected.values())
         picker = getattr(getattr(e.svc, "channels", None), "picker", None)
         if picker is not None:
@@ -108,38 +114,83 @@ class LazyCatalog:
                 cid = e.cid_of(tid)
                 if cid:
                     pending.discard(cid)
+                    history.pop(cid, None)
                 continue
             cid = e.cid_of(tid)
             if cid not in rows:
                 pending.discard(cid)
+                history.pop(cid, None)
                 continue
             if cid in pending and time.monotonic() >= deadline:
                 continue
+            mode = "older" if int(history.get(cid) or 0) else (
+                "after" if int(cursors.get(cid) or 0) else "newest"
+            )
             while True:
                 if applied >= CATALOG_MAX_APPLIED or time.monotonic() >= deadline:
                     pending.add(cid)
                     break
-                after = int(cursors.get(cid) or 0)
                 if e.account_id != account:
                     return 0
-                page = await e.client.messages(cid, after)
+                if mode == "older":
+                    before = int(history.get(cid) or 0)
+                    page = await e.client.messages(cid, before=before, limit=CATALOG_PAGE)
+                else:
+                    after = int(cursors.get(cid) or 0)
+                    page = await e.client.messages(
+                        cid, after=0 if mode == "newest" else after, limit=CATALOG_PAGE
+                    )
                 if e.account_id != account or (
                     page.get("account_id") and page["account_id"] != account
                 ):
                     return 0
+                current = [row for row in page.get("messages", []) if isinstance(row, dict)]
+                quiet = tid in self.quiet_threads or mode != "after"
                 e._applying = True
                 try:
-                    for row in page.get("messages", []):
-                        if not after or tid in self.quiet_threads:
+                    for row in current:
+                        if quiet:
                             row = {**row, "quiet": True}
                         e._apply_message(row)
                         applied += 1
                 finally:
                     e._applying = False
+                if mode == "older":
+                    oldest = min((int(row.get("seq") or 0) for row in current), default=0)
+                    if page.get("has_older") and oldest > 0:
+                        history[cid] = oldest
+                        pending.add(cid)
+                        continue
+                    history.pop(cid, None)
+                    # The older part is here; now catch up on anything newer than the
+                    # cursor that arrived while the history was being walked.
+                    await e.client.read(
+                        cid, e.svc.hub.device_id, int(page.get("through_seq") or 0)
+                    )
+                    self.unread[cid] = 0
+                    pending.discard(cid)
+                    mode = "after"
+                    continue
+                if mode == "newest":
+                    through = int(page.get("through_seq") or 0)
+                    cursors[cid] = through
+                    await e.client.read(cid, e.svc.hub.device_id, through)
+                    self.unread[cid] = 0
+                    oldest = min((int(row.get("seq") or 0) for row in current), default=0)
+                    if page.get("has_older") and oldest > 0:
+                        history[cid] = oldest
+                        pending.add(cid)
+                        mode = "older"
+                        continue
+                    pending.discard(cid)
+                    break
+                # after: forward pages from the cursor
                 next_cursor = max(after, int(page.get("cursor") or 0))
                 cursors[cid] = next_cursor
                 if not page.get("more"):
-                    await e.client.read(cid, e.svc.hub.device_id, int(page.get("through_seq") or 0))
+                    await e.client.read(
+                        cid, e.svc.hub.device_id, int(page.get("through_seq") or 0)
+                    )
                     self.unread[cid] = 0
                     pending.discard(cid)
                     break

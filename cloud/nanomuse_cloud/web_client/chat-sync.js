@@ -97,12 +97,31 @@ export class ChatSync {
  async open(chat){return this.run(async()=>{const session=this.session();if(!session?.key||chat.owner!==session.owner)return;if(chat.local||!chat.syncCid)return;this.selected=chat.syncCid;const changed=await this.pull(chat,session);if(this.valid(session))this.onChange({messages:changed});});}
  async pull(chat,session){
   const cid=chat.syncCid;let changed=false;
+  let before=Number(chat.historyBefore||0);
+  let after=this.cursors.get(cid)||0;
+  let mode=before?'before':after?'after':'newest';
   for(let round=0;round<50;round++){
-   const page=await this.request('/v1/sync/conversations/'+encodeURIComponent(cid)+'/messages?after='+(this.cursors.get(cid)||0),{},session);
+   const query=mode==='before'?'?before='+before+'&limit=300':'?after='+(mode==='newest'?0:after)+'&limit=300';
+   const page=await this.request('/v1/sync/conversations/'+encodeURIComponent(cid)+'/messages'+query,{},session);
    if(!this.valid(session)||(page.account_id&&page.account_id!==session.owner)||this.current()?.key!==chat.key||document.visibilityState==='hidden')return;
    changed=this.merge(chat,page.messages)||changed;
+   if(mode==='before'){
+    const oldest=Math.min(...(page.messages||[]).map(m=>Number(m.seq)||0));
+    if(page.has_older&&oldest>0&&oldest<before){before=oldest;chat.historyBefore=oldest;this.cursors.set(cid,page.through_seq);await this.save(chat);continue;}
+    delete chat.historyBefore;
+    mode='after';after=page.through_seq||after;
+    await this.request('/v1/sync/conversations/'+encodeURIComponent(cid)+'/read',{method:'POST',body:JSON.stringify({client:this.device,through_seq:page.through_seq})},session);chat.unread=0;await this.save(chat);
+    continue;
+   }
+   if(mode==='newest'){
+    this.cursors.set(cid,page.through_seq);await this.save(chat);
+    const oldest=Math.min(...(page.messages||[]).map(m=>Number(m.seq)||0));
+    if(page.has_older&&oldest>0){before=oldest;chat.historyBefore=oldest;mode='before';await this.save(chat);continue;}
+    await this.request('/v1/sync/conversations/'+encodeURIComponent(cid)+'/read',{method:'POST',body:JSON.stringify({client:this.device,through_seq:page.through_seq})},session);chat.unread=0;await this.save(chat);break;
+   }
    this.cursors.set(cid,page.cursor);await this.save(chat);
    if(!page.more){await this.request('/v1/sync/conversations/'+encodeURIComponent(cid)+'/read',{method:'POST',body:JSON.stringify({client:this.device,through_seq:page.through_seq})},session);chat.unread=0;await this.save(chat);break;}
+   if(page.cursor<=after)break;after=page.cursor;
   }
   return changed;
  }

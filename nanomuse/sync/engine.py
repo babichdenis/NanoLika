@@ -126,6 +126,8 @@ class ConversationSync:
             # the second value is the last page read, so a restart resumes instead of repeating
             "backfill": False,
             "backfill_cursor": 0,
+            # cid → the oldest message still to fetch when a long chat is opened
+            "history_before": {},
             "cids": {},  # thread id → cid
             "titles": {},  # thread id → the title last pushed
             # C10: thread id → the account (`account.id`) it was synced with; absent = none
@@ -199,6 +201,13 @@ class ConversationSync:
             for key in ("conversation_marks", "local_archives"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = data[key]
+            history = data.get("history_before")
+            if isinstance(history, dict):
+                self.state["history_before"] = {
+                    str(k): int(v)
+                    for k, v in history.items()
+                    if type(v) is int and v > 0
+                }
             if isinstance(data.get("pending_cids"), list):
                 self.state["pending_cids"] = [str(cid) for cid in data["pending_cids"] if isinstance(cid, str)]
             cursors = data.get("message_cursors", {})

@@ -195,10 +195,11 @@ export class SyncRelay {
     return data
   }
 
-  async chatMessages(apiKey: string, cid: string, after: number): Promise<{ account_id?: string; cursor: number; through_seq: number; more: boolean; messages: WireMessage[] }> {
-    const res = await this.fetchImpl(`${this.origin}/v1/sync/conversations/${encodeURIComponent(cid)}/messages?after=${after}`, { headers: this.auth(apiKey) })
+  async chatMessages(apiKey: string, cid: string, after: number, before = 0, limit = 300): Promise<{ account_id?: string; cursor: number; through_seq: number; more: boolean; has_older: boolean; messages: WireMessage[] }> {
+    const query = before > 0 ? `before=${before}&limit=${limit}` : `after=${after}&limit=${limit}`
+    const res = await this.fetchImpl(`${this.origin}/v1/sync/conversations/${encodeURIComponent(cid)}/messages?${query}`, { headers: this.auth(apiKey) })
     if (!res.ok) await fail(res)
-    return await res.json() as { account_id?: string; cursor: number; through_seq: number; more: boolean; messages: WireMessage[] }
+    return await res.json() as { account_id?: string; cursor: number; through_seq: number; more: boolean; has_older: boolean; messages: WireMessage[] }
   }
 
   async markRead(apiKey: string, cid: string, client: string, through_seq: number): Promise<void> {
@@ -510,6 +511,8 @@ export interface SyncedOutcome extends SyncView {
 
 export interface SyncState {
   messageCursors?: Record<string, number>
+  /** cid → the oldest message still to fetch when a long chat is opened; absent when complete. */
+  historyBefore?: Record<string, number>
   /** The last signed-in account (`/v1/me` → `account.id`, opaque); kept through a sign-out so a change is known (C10). */
   accountId: string
   cursor: number
@@ -545,7 +548,7 @@ export interface SyncState {
 }
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }
+  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
 }
 
 /**
@@ -562,6 +565,7 @@ export function migrate(state: SyncState | undefined): SyncState {
   if (!state) return emptyState()
   const next: SyncState = { ...emptyState(), ...state, sideChats: state.sideChats === true, clouds: { ...(state.clouds ?? {}) }, owners: { ...(state.owners ?? {}) } }
   next.cursors = state.cursors ?? { main: 0, all: next.sideChats ? state.cursor : 0 }
+  next.historyBefore = state.historyBefore ?? {}
   // 0.29's `synced` map under this state's own key, dropped once it has been read
   const legacy = (next as unknown as { synced?: Record<string, boolean> }).synced
   if (legacy && typeof legacy === 'object') {
@@ -593,7 +597,7 @@ export function migrate(state: SyncState | undefined): SyncState {
  * longer the main chat here.
  */
 export function forAccount(state: SyncState, accountId: string): SyncState {
-  const next: SyncState = { ...state, accountId, cursor: 0, cursors: { main: 0, all: 0 }, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {} }
+  const next: SyncState = { ...state, accountId, cursor: 0, cursors: { main: 0, all: 0 }, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {}, historyBefore: {} }
   const mainOwner = state.owners[state.mainSession]
   if (mainOwner && mainOwner !== accountId) next.mainSession = ''
   return next
@@ -683,6 +687,7 @@ export class SyncEngine {
   private readonly selectedSessions = new Set<string>()
   private readonly viewSelections = new Map<string, { ids: string[]; until: number }>()
   private readonly messageCursors = new Map<string, number>()
+  private readonly historyBefore = new Map<string, number>()
   private readonly preparingSessions = new Set<string>()
   private readonly unread = new Map<string, number>()
   private catalogueSignature = ''
@@ -737,6 +742,7 @@ export class SyncEngine {
     // a state from before the per-chat cloud (C11): what is in the account already keeps its cloud
     if (loaded && !('clouds' in loaded)) this.reconcileClouds()
     for (const [cid, seq] of Object.entries(this.state.messageCursors ?? {})) if (Number.isSafeInteger(seq) && seq >= 0) this.messageCursors.set(cid, seq)
+    for (const [cid, seq] of Object.entries(this.state.historyBefore ?? {})) if (Number.isSafeInteger(seq) && seq > 0) this.historyBefore.set(cid, seq)
   }
 
   get enabled(): boolean {
@@ -844,6 +850,7 @@ export class SyncEngine {
       this.viewSelections.clear()
       this.preparingSessions.clear()
       this.messageCursors.clear()
+      this.historyBefore.clear()
       this.unread.clear()
       this.catalogueIds.clear()
       this.catalogueSignature = ''
@@ -1522,13 +1529,56 @@ export class SyncEngine {
     const visible = this.refreshSelections()
     this.selectedSessions.clear()
     visible.forEach(id => this.selectedSessions.add(id))
+    // One catalogue pass may serve several chats; a long history is walked over
+    // several passes. The newest page comes first, then older pages through `before`.
+    const deadline = Date.now() + 2000
     for (const sessionId of new Set([...this.selectedSessions, ...this.preparingSessions])) {
       const cid = this.cidOf(sessionId)
       if (!this.owns(sessionId) || !cid || !ids.has(cid) || this.state.clouds[sessionId] === 'local') continue
-      for (let round = 0; round < 50; round++) {
-        const page = await this.options.relay.chatMessages(token, cid, this.messageCursors.get(cid) ?? 0)
+      let mode: 'newest' | 'older' | 'after' = this.historyBefore.has(cid) ? 'older' : this.messageCursors.has(cid) ? 'after' : 'newest'
+      while (true) {
+        if (applied >= 1500 || Date.now() >= deadline) break
+        const before = this.historyBefore.get(cid) ?? 0
+        const after = this.messageCursors.get(cid) ?? 0
+        const page = mode === 'older'
+          ? await this.options.relay.chatMessages(token, cid, 0, before, 300)
+          : await this.options.relay.chatMessages(token, cid, mode === 'newest' ? 0 : after, 0, 300)
         if (account !== this.state.accountId || (page.account_id && page.account_id !== account) || this.syncPaused(sessionId) || (!this.selectedSessions.has(sessionId) && !this.preparingSessions.has(sessionId))) break
-        for (const m of page.messages) { await this.applyMessage(m, notes); applied++ }
+        const collectNotes = mode === 'after'
+        for (const m of page.messages) {
+          await this.applyMessage(m, collectNotes ? notes : new Map(), mode !== 'older')
+          applied++
+        }
+        if (mode === 'older') {
+          const oldest = page.messages.length ? Math.min(...page.messages.map((m) => m.seq)) : 0
+          if (page.has_older && oldest > 0) {
+            this.historyBefore.set(cid, oldest)
+            continue
+          }
+          this.historyBefore.delete(cid)
+          if (this.selectedSessions.has(sessionId)) {
+            await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            if (this.unread.get(cid)) changed = true
+            this.unread.set(cid, 0)
+          }
+          mode = 'after'
+          continue
+        }
+        if (mode === 'newest') {
+          this.messageCursors.set(cid, page.through_seq)
+          if (this.selectedSessions.has(sessionId)) {
+            await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            if (this.unread.get(cid)) changed = true
+            this.unread.set(cid, 0)
+          }
+          const oldest = page.messages.length ? Math.min(...page.messages.map((m) => m.seq)) : 0
+          if (page.has_older && oldest > 0) {
+            this.historyBefore.set(cid, oldest)
+            mode = 'older'
+            continue
+          }
+          break
+        }
         this.messageCursors.set(cid, page.cursor)
         if (!page.more) {
           if (this.selectedSessions.has(sessionId)) {
@@ -1538,11 +1588,14 @@ export class SyncEngine {
           }
           break
         }
+        if (page.cursor <= after) break
       }
     }
     if (account !== this.state.accountId) return 0
     this.state.cursor = data.cursor
     this.state.messageCursors = Object.fromEntries(this.messageCursors)
+    for (const cid of [...this.historyBefore.keys()]) if (!ids.has(cid)) this.historyBefore.delete(cid)
+    this.state.historyBefore = Object.fromEntries(this.historyBefore)
     await this.save()
     for (const [sid, lines] of notes) await this.options.sessions.inject(sid, meanwhileNote(lines)).catch(() => undefined)
     if (changed || applied) this.changed()
@@ -1703,7 +1756,7 @@ export class SyncEngine {
     }
   }
 
-  private async applyMessage(m: WireMessage, notes: Map<string, RemoteLine[]>): Promise<void> {
+  private async applyMessage(m: WireMessage, notes: Map<string, RemoteLine[]>, allowPromote = true): Promise<void> {
     const mappedSession = this.sessionOf(m.cid)
     if (mappedSession && this.state.clouds[mappedSession] === 'local') return
     if (m.deleted) {
@@ -1729,7 +1782,7 @@ export class SyncEngine {
     if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
     const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
-    if (m.role === 'user' && this.options.sessions.promote) {
+    if (m.role === 'user' && allowPromote && this.options.sessions.promote) {
       const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
       if (promoted) {
         this.state.pulled[m.mid] = sessionId

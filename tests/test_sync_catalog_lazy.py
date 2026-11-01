@@ -54,19 +54,38 @@ class FakeClient:
             "complete": True,
         }
 
-    async def messages(self, cid: str, after: int) -> dict[str, Any]:
-        self.message_calls.append(after)
-        seq = after + 1
-        more = seq < self.pages
+    async def messages(
+        self, cid: str, after: int = 0, before: int = 0, limit: int = 100
+    ) -> dict[str, Any]:
+        self.message_calls.append({"after": after, "before": before, "limit": limit})
+        seqs = list(range(1, self.pages + 1))
+        if after:
+            rest = [seq for seq in seqs if seq > after]
+            rows = rest[:limit]
+            more = len(rest) > limit
+            has_older = False
+            cursor = rows[-1] if more and rows else self.pages
+        elif before:
+            older = [seq for seq in seqs if seq < before]
+            rows = older[-limit:]
+            more = False
+            has_older = len(older) > limit
+            cursor = self.pages
+        else:
+            rows = seqs[-limit:]
+            more = False
+            has_older = len(seqs) > limit
+            cursor = self.pages
         return {
             "account_id": "acc",
             "cid": cid,
             "messages": [
                 {"cid": cid, "mid": f"m{seq:04d}", "role": "assistant", "text": f"m{seq}", "seq": seq}
+                for seq in rows
             ],
-            "cursor": seq,
+            "cursor": cursor,
             "more": more,
-            "has_older": False,
+            "has_older": has_older,
             "through_seq": self.pages,
         }
 
@@ -144,26 +163,31 @@ def test_catalog_missing_cursor_does_not_reset_state() -> None:
 def test_long_history_is_not_truncated_at_50_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(catalog_mod, "CATALOG_BUDGET_S", 60.0)
     monkeypatch.setattr(catalog_mod, "CATALOG_MAX_APPLIED", 10_000)
-    fake = engine(FakeClient(pages=61))
+    monkeypatch.setattr(catalog_mod, "CATALOG_PAGE", 5)
+    fake = engine(FakeClient(pages=305))  # 61 pages of five
     applied = asyncio.run(fake.catalog.pull())
-    assert applied == 61
-    assert fake.applied[-1] == "m0061"
-    assert fake.client.reads == [61]
+    assert applied == 305
+    assert set(fake.applied) == {f"m{i:04d}" for i in range(1, 306)}
+    assert fake.client.reads and set(fake.client.reads) == {305}
     assert fake.state["pending_cids"] == []
+    assert fake.state["history_before"] == {}
 
 
 def test_long_history_resumes_from_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(catalog_mod, "CATALOG_BUDGET_S", 60.0)
     monkeypatch.setattr(catalog_mod, "CATALOG_MAX_APPLIED", 10)
+    monkeypatch.setattr(catalog_mod, "CATALOG_PAGE", 5)
     fake = engine(FakeClient(pages=25))
     first = asyncio.run(fake.catalog.pull())
     assert first == 10
     assert fake.state["pending_cids"] == ["cid1"]
+    assert fake.state["history_before"] == {"cid1": 16}
     monkeypatch.setattr(catalog_mod, "CATALOG_MAX_APPLIED", 10_000)
     second = asyncio.run(fake.catalog.pull())
     assert second == 15
     assert fake.state["pending_cids"] == []
-    assert fake.client.reads == [25]
+    assert fake.state["history_before"] == {}
+    assert fake.client.reads and set(fake.client.reads) == {25}
 
 
 def test_catalog_mode_clears_when_unsupported() -> None:
