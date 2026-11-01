@@ -315,6 +315,17 @@ class NanoMuseApp:
         return create_llm(merged, data_dir=self.settings.data_dir)
 
     # ------------------------------------------------------------------ tools
+    def _cloud_client(self) -> object | None:
+        """The account's Cloud client, when a server holds the hub.
+
+        The chat apps (Telegram, MAX, the phone) run inside the server, which creates the
+        hub after this app; the CLI has no hub at all. A tool asking for the client must get
+        ``None`` in that case — not an AttributeError deep inside a turn ("сбой модуля
+        связи" is what the person saw when it did).
+        """
+        hub = getattr(self, "hub", None)
+        return getattr(hub, "cloud", None) if hub is not None else None
+
     def _build_tools(self) -> ToolCollection:
         s = self.settings
         ws: Path = s.agent.workspace
@@ -343,8 +354,8 @@ class NanoMuseApp:
             OfficeConvert(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeVba(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
-            Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=lambda: self.hub.cloud),
-            Picture(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=lambda: self.hub.cloud),
+            Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
+            Picture(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:

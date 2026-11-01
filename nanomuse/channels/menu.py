@@ -327,7 +327,16 @@ class ChatMenu:
         ]
         if channel.name == "telegram":
             await channel._call("setMyCommands", {"commands": commands})
-            await channel._call("setChatMenuButton", {"menu_button": {"type": "commands"}})
+            # The menu button in the chat is the app itself when the channel names it: a
+            # person looking for "where is the menu" should find Lika, not a list of commands.
+            # The commands stay on "/" either way.
+            webapp = str(getattr(channel, "settings", {}).get("webapp_url") or "").strip()
+            button = (
+                {"type": "web_app", "text": "Лика", "web_app": {"url": webapp}}
+                if webapp.startswith("https://")
+                else {"type": "commands"}
+            )
+            await channel._call("setChatMenuButton", {"menu_button": button})
         else:
             await channel._call(
                 "PATCH",
@@ -538,8 +547,19 @@ class ChatMenu:
                 rows = []
             else:
                 every = [m for m in (data.get("models") or []) if m.get("kind") == "chat"]
+                # The shelf first: what the person starred is what the menu offers, the same
+                # list the app and the cabinet show. The current model stays even unstarred,
+                # and a chat with no stars still gets the whole menu.
+                shelf = data.get("shelf") or {}
+                favourites = [str(item) for item in (shelf.get("favourites") or [])]
+                current = (shelf.get("default") or {}).get("chat") or ""
+                if favourites:
+                    starred = [
+                        m for m in every
+                        if str(m.get("id")) in favourites or str(m.get("id")) == str(current)
+                    ]
+                    every = starred or every
                 models = [m for m in every if m.get("available", True)]
-                current = ((data.get("shelf") or {}).get("default") or {}).get("chat") or ""
                 pages = max(1, (len(models) + per_page - 1) // per_page)
                 page_no = min(max(1, page_no), pages)
                 start = (page_no - 1) * per_page

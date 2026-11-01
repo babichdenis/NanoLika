@@ -439,6 +439,9 @@ class MuseService:
         self.connections = Connections(self)
         # this computer on the hub: the Cloud account, the other devices, their side chats
         self.hub = HubService(self)
+        # The tools that spend the account's Cloud key (media, picture) reach it through the
+        # app: the hub lives here, and the app is built before it.
+        self.app.hub = self.hub
         # the same conversations on every device of the account (contract C7; docs/every-device.md)
         self.sync = ConversationSync(self)
         # when the app may ask for a star on GitHub: the relay's policy, a day at a time
