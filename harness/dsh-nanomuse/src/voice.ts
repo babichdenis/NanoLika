@@ -50,7 +50,12 @@ export function spoken(text: string, maxChars: number): string {
   return stop >= maxChars / 2 ? cut.slice(0, stop + 1) : cut
 }
 
-/** Start the platform's own voice on `text`; resolves when it has finished. */
+/** How long one answer may take to be said: a slow voice must not wedge the turn. */
+function speechLimitMs(text: string): number {
+  return Math.max(20_000, Math.ceil(text.length / 8) * 1_000)
+}
+
+/** Start the platform's own voice on `text`; resolves when it has finished or timed out. */
 function say(text: string, config: Config): Promise<void> {
   const voice = config.voice ? ['-v', config.voice] : []
   const rate = process.platform === 'darwin' ? ['-r', String(config.rate)] : []
@@ -62,9 +67,39 @@ function say(text: string, config: Config): Promise<void> {
     const command = process.platform === 'darwin' ? 'say' : 'spd-say'
     const args = process.platform === 'darwin' ? [...voice, ...rate, '--', text] : ['--', text]
     const child = spawn(command, args, { stdio: 'ignore' })
-    child.once('error', reject)
-    child.once('close', (code) => (code === 0 ? resolve() : reject(new Error(`${command} exited with ${code ?? 'no code'}`))))
+    let done = false
+    const finish = (error?: Error): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve()
+    }
+    // A voice that hangs (a missing voice, a busy audio device) ends here, not a turn later.
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        // the child is already gone
+      }
+      finish()
+    }, speechLimitMs(text))
+    child.once('error', (error) => finish(error))
+    child.once('close', (code) => finish(code === 0 ? undefined : new Error(`${command} exited with ${code ?? 'no code'}`)))
   })
+}
+
+/**
+ * One voice at a time: an answer waits for the previous one to end instead of two `say`
+ * processes talking over each other.
+ */
+let speaking: Promise<void> = Promise.resolve()
+
+function enqueue(text: string, config: Config): Promise<void> {
+  const run = (): Promise<void> => say(text, config)
+  const next = speaking.then(run, run)
+  speaking = next.catch(() => undefined)
+  return next
 }
 
 /** Windows speaks from a file, so that quotes and apostrophes in the text stay text. */
@@ -104,7 +139,10 @@ export function apply(ctx: Context, config: Config): void {
           async execute(args) {
             const text = spoken(args.text, config.maxChars)
             if (!text) return { spoken: '' }
-            await say(text, config)
+            // The turn ends as soon as the voice starts: waiting for the last word made
+            // every spoken answer as slow as the sentence itself. The queue keeps one
+            // voice at a time and a timeout keeps a hung device from wedging it.
+            void enqueue(text, config).catch(() => undefined)
             return { spoken: text.slice(0, 200) }
           },
           presentCall: () => ({ card: 'generic', title: 'Speak', kind: 'other', rawInput: {} }),
