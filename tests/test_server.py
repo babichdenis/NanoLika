@@ -378,6 +378,27 @@ def test_feed_posts_written_for_the_user(server):
     ]
 
 
+def test_feed_never_uses_a_default_persona_name(server):
+    """A router behind the model may keep its own assistant persona. The feed is written
+    by the person's agent, so a stray "Jason" is replaced with the agent's name and the
+    request carries an explicit identity instead of relying on the user turn alone."""
+    client, service, llm = server
+    client.put("/api/feed/instructions", json={"instructions": "Short."})
+    llm.script.append(
+        LLMResponse(
+            content='[{"title": "Jason plans the week", "body": "Jason here. Jason can help with that.", "area": "planning"}]'
+        )
+    )
+    data = client.post("/api/feed/posts/refresh").json()
+    post = data["posts"][0]
+    assert post["title"] == "NanoLika plans the week"
+    assert "Jason" not in post["body"]
+    assert post["body"].startswith("NanoLika here.")
+    first = llm.calls[-1]["messages"][0]
+    assert first.role == "system"
+    assert "Never call yourself Jason" in first.content
+
+
 def test_feed_is_written_in_the_language_of_the_persons_screens(server):
     """With the reply language on `auto`, a batch follows the language the main chat last
     heard from a client; before any message, the language Start was pressed in; a language

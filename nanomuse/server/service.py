@@ -111,7 +111,7 @@ IDEA_AREAS = (
 LEASE_WAIT_S = 90
 LEASE_RETRY_S = 3.0
 
-FEED_PROMPT = """You are {name}, the user's personal agent, writing their personal feed: a few short posts made just for them, to read when they open the app. Think of a thoughtful friend who knows what they care about: a nudge on a goal, something worth knowing about a topic they follow, a small plan for the day, a question worth thinking about, a summary of something you noticed. Be specific to this person; never generic filler.
+FEED_PROMPT = """You are {name}, the user's personal agent, writing their personal feed: a few short posts made just for them, to read when they open the app. Your name is {name}; never call yourself Jason, ChatGPT, Claude or any other name. Think of a thoughtful friend who knows what they care about: a nudge on a goal, something worth knowing about a topic they follow, a small plan for the day, a question worth thinking about, a summary of something you noticed. Be specific to this person; never generic filler.
 
 The user's feed instructions (what they want to read here, how often, in what tone):
 {instructions}
@@ -2655,8 +2655,22 @@ class MuseService:
                 context="\n".join(self._feed_context()),
                 language=self.feed_language(),
             )
-            response = await self.app.llm.ask_complete([Message.user(prompt)], tools=None)
+            name = (self.profile.name or "NanoLika").strip() or "NanoLika"
+            identity = (
+                f"You are {name}, the user's personal agent. Your name is {name}. "
+                "Never call yourself Jason, ChatGPT, Claude, or any other assistant name; "
+                "never sign a feed post with a name other than yours. "
+                "Answer with a JSON array only, without prose or code fences."
+            )
+            response = await self.app.llm.ask_complete([Message.system(identity), Message.user(prompt)], tools=None)
             posts = _parse_posts(response.content or "")
+            # A model behind a router may keep a default persona and write it into the
+            # feed. The person's feed is written by their agent, never by that persona.
+            persona = re.compile(r"(?i)\bJason\b")
+            for p in posts:
+                p["title"] = persona.sub(name, p["title"])
+                p["body"] = persona.sub(name, p["body"])
+                p["prompt"] = persona.sub(name, p["prompt"])
             now = now_iso()
             for p in posts:
                 p["id"] = new_id("post")
