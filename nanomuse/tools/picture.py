@@ -54,12 +54,14 @@ class Picture(BaseTool):
         return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=not must_exist)
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
+        # No warning on purpose: the person asked for the picture, and the charge is in the
+        # result. A warning here turned every drawing into an approval card in the chats,
+        # where the person had just said "нарисуй".
         return CallAssessment(
             risk=RiskLevel.MODERATE,
             egress=True,
             egress_target="cloud",
             summary="picture",
-            warnings=["the prompt goes to the relay and is charged as one picture"],
         )
 
     async def _model(self, client: Any, wanted: str) -> str:

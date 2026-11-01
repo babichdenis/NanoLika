@@ -63,14 +63,13 @@ class Media(BaseTool):
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         action = str(args.get("action") or "")
+        # Speaking a text or hearing a recording is the request itself; a warning here only
+        # added a card to a chat where the person had already asked for the sound.
         return CallAssessment(
             risk=RiskLevel.MODERATE,
             egress=action == "speech",
             egress_target="cloud",
             summary=f"media {action}",
-            warnings=["the text or the recording goes to the relay's audio provider"]
-            if action
-            else [],
         )
 
     async def _model(self, kind: str) -> str:
