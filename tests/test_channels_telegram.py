@@ -381,3 +381,133 @@ async def test_details_edit_original_card_with_buttons_below(tg: FakeTelegram):
         assert not any(b["callback_data"].startswith("a:d:") for row in buttons for b in row)
     finally:
         await ch.stop()
+
+
+async def test_a_reply_quotes_the_question_once(tg: FakeTelegram):
+    """M3: the answer points at the message it answers — the first message only."""
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    await ch.send("1001", "первая\n\nвторая", reply_to="7")
+    sent = tg.of("sendMessage")
+    assert sent[0]["reply_parameters"] == {
+        "message_id": 7,
+        "allow_sending_without_reply": True,
+    }
+    # a reply to a message that is gone still goes: Telegram drops the link, not the words
+    await ch.send("1001", "ответ", reply_to="404")
+    assert tg.of("sendMessage")[-1]["reply_parameters"]["message_id"] == 404
+    # no id, no quote
+    await ch.send("1001", "просто")
+    assert "reply_parameters" not in tg.of("sendMessage")[-1]
+    # the streaming message is the one that carries it; the edits do not repeat it
+    await ch.stream("1001", "s1", "пишу", done=False, reply_to="8")
+    assert tg.of("sendMessage")[-1]["reply_parameters"]["message_id"] == 8
+    await ch.stream("1001", "s1", "написала", done=True, reply_to="8")
+    assert "reply_parameters" not in tg.of("editMessageText")[-1]
+    await ch.stop()
+
+
+async def test_a_long_answer_grows_into_more_messages_while_it_is_written(tg: FakeTelegram):
+    """п.10: the reply no longer freezes at its first 4 000 characters."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    first = "первый абзац\n\n" * 160
+    second = "второй абзац\n\n" * 160
+    await ch.stream("1001", "s1", first, done=False)
+    assert len(tg.of("sendMessage")) == 1
+    await ch.stream("1001", "s1", first + second, done=False)
+    # the tail got its own message while the turn was still running
+    assert len(tg.of("sendMessage")) == 2
+    await ch.stream("1001", "s1", first + second, done=True)
+    assert len(tg.of("sendMessage")) == 2
+    assert ch._stream_messages == {}
+    await ch.stop()
+
+
+async def test_a_chat_action_follows_the_step(tg: FakeTelegram):
+    """п.6: "sending a photo" while a picture is made, not a permanent "typing…"."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    await ch.typing("1001", True, "photo")
+    await until(lambda: tg.of("sendChatAction"))
+    assert tg.of("sendChatAction")[-1]["action"] == "upload_photo"
+    await ch.typing("1001", False)
+    await ch.typing("1001", True)
+    await until(lambda: tg.of("sendChatAction")[-1]["action"] == "typing")
+    await ch.typing("1001", False)
+    await ch.stop()
+
+
+async def test_a_reaction_marks_the_persons_message(tg: FakeTelegram):
+    """п.11: 👀 when taken into work, ✅ when done — no extra line in the chat."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    await ch.react("1001", "7", "working")
+    assert tg.of("setMessageReaction")[-1] == {
+        "chat_id": "1001",
+        "message_id": 7,
+        "reaction": [{"type": "emoji", "emoji": "👀"}],
+    }
+    await ch.react("1001", "7", "done")
+    assert tg.of("setMessageReaction")[-1]["reaction"][0]["emoji"] == "✅"
+    # nothing to mark, and nothing to break
+    await ch.react("1001", "", "done")
+    await ch.stop()
+
+
+async def test_the_approval_card_is_pinned_until_answered(tg: FakeTelegram):
+    """п.8: the question blocks the turn, so it stays in sight."""
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    await ch.ask_scoped("1001", "ap-2", "May I?", "ru", ["once"])
+    card = ch._approval_cards[("1001", "ap-2")][0]
+    assert tg.of("pinChatMessage")[-1] == {
+        "chat_id": "1001",
+        "message_id": int(card),
+        "disable_notification": True,
+    }
+    tg.push(
+        {
+            "update_id": 11,
+            "callback_query": {
+                "id": "cq2",
+                "from": {"id": 1001},
+                "data": "a:y:ap-2",
+                "message": {"message_id": int(card), "chat": {"id": 1001}},
+            },
+        }
+    )
+    await until(lambda: bus.actions)
+    await until(lambda: tg.of("unpinChatMessage"))
+    assert tg.of("unpinChatMessage")[-1]["message_id"] == int(card)
+    await ch.stop()
+
+
+async def test_an_empty_turn_takes_its_placeholder_away(tg: FakeTelegram):
+    """п.9: no answer, no "…" left behind as if the Muse were still thinking."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    await ch.stream("1001", "s9", "_Работаю: shell_", done=False)
+    placeholder = tg.of("sendMessage")[-1]
+    await ch.discard("1001", "s9")
+    assert tg.of("deleteMessage")[-1] == {"chat_id": "1001", "message_id": 101}
+    assert "Работаю: shell" in placeholder["text"]
+    assert ch._stream_messages == {}
+    await ch.stop()
+
+
+async def test_a_card_answered_elsewhere_loses_its_buttons(tg: FakeTelegram):
+    """п.9: the app answered it, so the chat should not keep a question waiting."""
+    ch = channel(tg)
+    await ch.start(Bus())
+    await ch.ask_scoped("1001", "ap-3", "May I?", "ru", ["once", "always"])
+    card = ch._approval_cards[("1001", "ap-3")][0]
+    await ch.retire_approval("1001", "ap-3")
+    assert tg.of("editMessageReplyMarkup")[-1]["reply_markup"] == {"inline_keyboard": []}
+    assert tg.of("unpinChatMessage")[-1]["message_id"] == int(card)
+    assert ("1001", "ap-3") not in ch._approval_cards
+    # an approval that is not here is not an error
+    await ch.retire_approval("1001", "gone")
+    await ch.stop()

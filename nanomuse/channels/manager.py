@@ -30,8 +30,9 @@ from urllib.parse import unquote, urlsplit
 import httpx
 
 from nanomuse.background import keep_task
+from nanomuse.channels import telegram_format, voice_note
 from nanomuse.channels.approval_copy import approval_details, readable_approval
-from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundMessage
+from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundFile, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 from nanomuse.channels.chat_picker import ChatPicker
 from nanomuse.channels.desktop_request import computer_request, select_computer
@@ -148,6 +149,31 @@ _TOOL_LABELS = {
 }
 
 
+#: what a messenger's recording is, by its suffix: the relay needs the type, not a guess
+_AUDIO_MIME = {
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".webm": "audio/webm",
+}
+
+# what the chat's own activity line can say while a step runs; empty means "thinking"
+_TOOL_ACTIONS = {
+    "files": "document",
+    "office_convert": "document",
+    "office_xlsm": "document",
+    "office_vba": "document",
+    "media": "audio",
+    "computer_screen": "photo",
+}
+
+
 def thread_id_for(channel: str, chat_id: str) -> str:
     """The conversation a chat maps to. Letters, digits, ``_ . -`` only: the id names a file
     in the threads folder, and a colon in a file name breaks on Windows."""
@@ -168,6 +194,8 @@ class _Live:
     sent_at: float = 0.0
     handle: asyncio.TimerHandle | None = None
     flushing: asyncio.Task[None] | None = None
+    # the message this turn answers, when the channel can draw a reply link
+    reply_to: str = ""
 
 
 class ChannelManager(ChannelBus):
@@ -178,6 +206,13 @@ class ChannelManager(ChannelBus):
         self.types: dict[str, type[Channel]] = {c.name: c for c in CHANNEL_TYPES}
         self.channels: dict[str, Channel] = {}
         self.status: dict[str, ChannelStatus] = {n: ChannelStatus() for n in self.types}
+        # thread id -> the step shown in the chat ("photo", "document", …)
+        self._typing_action: dict[str, str] = {}
+        # thread id -> (base, key): the chat spoke in voice, so the answer is said too
+        self._voice_turns: dict[str, tuple[str, str]] = {}
+        # thread id -> (channel, chat_id, message id): the message that started the turn.
+        # A reply quotes it where the channel can, so a group keeps the thread.
+        self._answer_to: dict[str, tuple[str, str, str]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._queue: asyncio.Queue[dict[str, Any]] | None = None
         self._pump: asyncio.Task[None] | None = None
@@ -424,6 +459,10 @@ class ChannelManager(ChannelBus):
         if await self.menu.inbound(msg):
             return
         origin_thread = self._thread_for(msg)
+        if msg.message_id:
+            # Which message this turn answers: the reply quotes it, so a group keeps the
+            # thread and a long chat shows what is being answered.
+            self._answer_to[origin_thread] = (msg.channel, msg.chat_id, msg.message_id)
         text = msg.text.strip()
         if text.lower().split("@")[0].split()[0:1] == ["/start"]:
             await self._greet(msg.channel, msg.chat_id)
@@ -537,6 +576,29 @@ class ChannelManager(ChannelBus):
             return
         await self._echo_selected_user(thread_id, msg, text)
         self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
+        # an account of its own in the relay when the chat is on Cloud, and `"!"` when that
+        # account cannot be reached: then this turn is refused, never paid for by this machine
+        cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
+        if cloud_key == "!":
+            return
+        # A recording is words once it is heard: from then on it travels like typed text, so a
+        # chat that lives on a computer still gets it. Listening costs the same as in the app.
+        heard: list[str] = []
+        voice_base = voice_key = ""
+        if any(item.kind == "audio" for item in msg.files):
+            voice_base, voice_key = self._voice_key(msg.channel, cloud_key)
+            for item in msg.files:
+                if item.kind != "audio":
+                    continue
+                words = await self._hear_one(item, voice_base, voice_key)
+                if words:
+                    heard.append(words)
+            if heard:
+                # an opaque ogg would only confuse a text model, and the hearing is paid once
+                msg.files = [item for item in msg.files if item.kind != "audio"]
+                # what was said, then what was typed: the model sees one message in order
+                text = "\n\n".join(heard + ([text] if text else []))
+                self._voice_turns[thread_id] = (voice_base, voice_key)
         device = await self._shared_execution_device(thread_id) if text and not msg.files else None
         if device is not None:
             self._spawn(
@@ -550,11 +612,6 @@ class ChannelManager(ChannelBus):
                     else "",
                 )
             )
-            return
-        # an account of its own in the relay when the chat is on Cloud, and `"!"` when that
-        # account cannot be reached: then this turn is refused, never paid for by this machine
-        cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
-        if cloud_key == "!":
             return
         self._shared_runtime_context(thread_id)
         linked_owner = self.svc.sync.owner_of(thread_id) if not msg.is_group else ""
@@ -886,9 +943,20 @@ class ChannelManager(ChannelBus):
             return None
         live = self._live.get(thread)
         if live is None:
-            live = _Live(channel=route[0], chat_id=route[1])
+            live = _Live(
+                channel=route[0], chat_id=route[1], reply_to=self._reply_to(thread, *route)
+            )
             self._live[thread] = live
         return live
+
+    def _reply_to(self, thread: str, channel: str, chat_id: str) -> str:
+        """The message id this chat answers, or ``""`` — most channels cannot show one."""
+        entry = self._answer_to.get(thread)
+        if not entry or entry[0] != channel or entry[1] != chat_id:
+            return ""
+        if not getattr(self.channels.get(channel), "supports_reply", False):
+            return ""
+        return entry[2]
 
     def _schedule_flush(self, thread: str) -> None:
         live = self._live.get(thread)
@@ -913,13 +981,19 @@ class ChannelManager(ChannelBus):
         channel = self.channels.get(live.channel) if live else None
         if live is None or channel is None or not channel.supports_edit:
             return
-        content = live.text or (f"_{live.status}_" if live.status else "")
+        if live.text and live.status:
+            # The step stays under the words while the turn is still running: a long job
+            # should say what it is doing instead of looking finished and stalled.
+            content = f"{live.text}\n\n_{live.status}_"
+        else:
+            content = live.text or (f"_{live.status}_" if live.status else "")
         content = self._redact_outbound(content)
         if not content.strip() or content == live.shown:
             return
         live.sent_at = time.monotonic()
         try:
-            await channel.stream(live.chat_id, live.stream_id, content, done=False)
+            options = {"reply_to": live.reply_to} if live.reply_to else {}
+            await channel.stream(live.chat_id, live.stream_id, content, done=False, **options)
             live.shown = content
         except Exception as exc:  # noqa: BLE001
             logger.debug("channel {}: live update failed: {}", live.channel, exc)
@@ -962,31 +1036,90 @@ class ChannelManager(ChannelBus):
                 if files:
                     await channel.send(route[1], "", files=files)
             elif text.strip() or files:
-                await channel.send(route[1], display_text, files=files)
+                options = {"reply_to": live.reply_to} if live and live.reply_to else {}
+                await channel.send(route[1], display_text, files=files, **options)
         except Exception as exc:  # noqa: BLE001
             logger.warning("channel {}: reply to {} failed: {}", route[0], route[1], exc)
             self._set(route[0], "error", _short(exc))
         primary = (live.channel, live.chat_id) if live is not None else route
+        await self._say_back(thread, primary, channel, text)
         targets = set(self.picker.targets(thread)) | self.picker.pins.pop(thread, set())
         for other in targets - {primary}:
             if text.strip():
                 await self._send(other[0], other[1], self.picker.reply_text(thread, other, text))
 
-    async def _set_typing(self, thread: str, on: bool) -> None:
+    async def _say_back(
+        self, thread: str, route: tuple[str, str], channel: Channel, text: str
+    ) -> None:
+        """The answer in the person's own medium: a voice bubble after the words.
+
+        Only when the chat spoke — an answer typed into a chat is read, not listened to.
+        A relay that cannot say it, or does not have the model, leaves the words as they are.
+        """
+        base, key = self._voice_turns.pop(thread, ("", ""))
+        if not (base and key) or not text.strip():
+            return
+        if not getattr(channel, "supports_voice", False):
+            return
+        spoken = telegram_format.plain(telegram_format.render(text)).strip()
+        if not spoken or len(spoken) > voice_note.TEXT_LIMIT:
+            return
+        try:
+            sound, mime = await voice_note.say(spoken, base=base, key=key)
+        except Exception as exc:  # noqa: BLE001 — a spoken copy is a bonus, never the turn
+            logger.warning("channels: the answer was not said: {}", type(exc).__name__)
+            return
+        with tempfile.TemporaryDirectory() as folder:
+            # Telegram wants OGG/Opus for a voice bubble; anything else goes as audio
+            suffix = ".ogg" if "ogg" in (mime or "") or "opus" in (mime or "") else ".mp3"
+            path = Path(folder) / f"voice{suffix}"
+            path.write_bytes(sound)
+            try:
+                await channel.send_voice(route[1], str(path))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("channels: the voice answer was not sent: {}", type(exc).__name__)
+
+    async def _retire_card(self, channel: str, chat_id: str, approval_id: str) -> None:
+        ch = self.channels.get(channel)
+        retire = getattr(ch, "retire_approval", None)
+        if not callable(retire):
+            return
+        try:
+            await retire(chat_id, approval_id)
+        except Exception as exc:  # noqa: BLE001 — an old card must never stop a turn
+            logger.debug("channel {}: the old card was not retired: {}", channel, exc)
+
+    async def _set_typing(self, thread: str, on: bool, action: str = "") -> None:
         route = self.routes.get(thread)
         channel = self.channels.get(route[0]) if route else None
         if route is None or channel is None:
             return
         if on and thread in self._typing:
-            return
+            if not action or self._typing_action.get(thread, "") == action:
+                return
+            # the step changed (a picture after a command): the chat should say so
         if not on and thread not in self._typing:
             return
         if on:
             self._typing.add(thread)
+            self._typing_action[thread] = action
         else:
             self._typing.discard(thread)
+            self._typing_action.pop(thread, None)
+        options = {"action": action} if action and getattr(channel, "supports_action", False) else {}
         with contextlib.suppress(Exception):
-            await channel.typing(route[1], on)
+            await channel.typing(route[1], on, **options)
+
+    async def _mark(self, thread: str, mark: str) -> None:
+        """A reaction on the message that started the turn: taken into work, then done."""
+        entry = self._answer_to.get(thread)
+        if entry is None:
+            return
+        channel = self.channels.get(entry[0])
+        if channel is None or not getattr(channel, "supports_reactions", False):
+            return
+        with contextlib.suppress(Exception):
+            await channel.react(entry[1], entry[2], mark)
 
     # ------------------------------------------------------------------ the bus
     async def _pump_loop(self) -> None:
@@ -1020,7 +1153,10 @@ class ChannelManager(ChannelBus):
                 if status.get("state") == "idle":
                     await self._run_ended(thread)
                 else:
-                    await self._set_typing(thread, status.get("state") == "working")
+                    working = status.get("state") == "working"
+                    if working and thread not in self._typing:
+                        await self._mark(thread, "working")
+                    await self._set_typing(thread, working)
             return
         if kind == "sync":
             await self.picker.topics.discover()
@@ -1040,6 +1176,8 @@ class ChannelManager(ChannelBus):
                 for card in list(self._approval_scopes):
                     if card[2] == event.get("id"):
                         self._approval_scopes.pop(card, None)
+                        # answered in the app or on another device: the card here is stale
+                        await self._retire_card(card[0], card[1], card[2])
                 for asks in self._asks.values():
                     if event.get("id") in asks:
                         asks.remove(event["id"])
@@ -1076,7 +1214,7 @@ class ChannelManager(ChannelBus):
                 await self._send_to_thread(thread, text)
             return
         if kind == "tool" and ours and (event.get("status") == "running"):
-            await self._set_typing(thread, True)
+            await self._set_typing(thread, True, _TOOL_ACTIONS.get(str(event.get("tool") or ""), ""))
             live = self._live_for(thread)
             if live is not None:
                 live.status = self._tool_label(event)
@@ -1131,9 +1269,15 @@ class ChannelManager(ChannelBus):
             await self._finish(thread, live.text or live.shown, files=paths or None)
         else:
             self._live.pop(thread, None)
+            stale = self.channels.get(live.channel) if live is not None and live.shown else None
+            if stale is not None and live is not None:
+                # nothing came of the turn: "…" or "Работаю: …" should not stay as a reply
+                with contextlib.suppress(Exception):
+                    await stale.discard(live.chat_id, live.stream_id)
             if paths:
                 await self._finish(thread, "", files=paths)
         await self._set_typing(thread, False)
+        await self._mark(thread, "done")
 
     def _tool_label(self, event: dict[str, Any]) -> str:
         title = str(event.get("title") or "").strip()
@@ -1397,12 +1541,50 @@ class ChannelManager(ChannelBus):
         self.picker.title_first_request(thread, text)
         label = self.types[msg.channel].label
         for endpoint in self.picker.targets(thread):
-            if endpoint != (msg.channel, msg.chat_id):
-                await self._send(
-                    endpoint[0],
-                    endpoint[1],
-                    label + " · " + self.say("You", "你", "Вы") + "\n" + text,
-                )
+            if endpoint == (msg.channel, msg.chat_id):
+                continue
+            channel = self.channels.get(endpoint[0])
+            echo = getattr(channel, "echo", None)
+            if callable(echo):
+                # A channel that can show it as an echo does: a dot, the device's name and
+                # the person's words in a quote, silently. Everything else gets the line.
+                try:
+                    await echo(endpoint[1], label, text)
+                    continue
+                except Exception:  # noqa: BLE001 — an echo must never stop the turn
+                    pass
+            await self._send(
+                endpoint[0],
+                endpoint[1],
+                label + " · " + self.say("You", "你", "Вы") + "\n" + text,
+            )
+
+    def _voice_key(self, channel: str, cloud_key: str) -> tuple[str, str]:
+        """Who pays for hearing and saying in this chat: its own Cloud account when it has
+        one (the same key its turns spend), this machine's account otherwise."""
+        if cloud_key and cloud_key != "!":
+            settings = self.store.resolved(self.store.config(channel))
+            url = str(settings.get("cloud_url") or "").strip().rstrip("/")
+            return url, cloud_key
+        cloud = getattr(self.svc.settings, "cloud", None)
+        base = str(getattr(cloud, "base_url", "") or "").strip().rstrip("/")
+        key = ""
+        hub = getattr(self.svc, "hub", None)
+        if hub is not None:
+            with contextlib.suppress(Exception):
+                key = str(hub._key() or "")
+        return base, key
+
+    async def _hear_one(self, item: InboundFile, base: str, key: str) -> str:
+        """The words of one recording, or ``""``: a voice message never breaks the turn."""
+        if not (base and key) or not item.data:
+            return ""
+        mime = _AUDIO_MIME.get(Path(item.name).suffix.lower(), "audio/ogg")
+        try:
+            return await voice_note.hear(item.data, item.name, mime, base=base, key=key)
+        except Exception as exc:  # noqa: BLE001 — hearing is a bonus, not the turn
+            logger.warning("channels: the voice message was not heard: {}", type(exc).__name__)
+            return ""
 
     async def _cloud_key_for(self, channel: str, msg: InboundMessage) -> tuple[str, str]:
         """The Cloud key and model this chat spends with, if the chat is on Cloud.
@@ -1815,6 +1997,23 @@ class ChannelManager(ChannelBus):
             return
         await self.picker.topics.ensure_for_event(event)
         targets = set(self.picker.targets(thread))
+        # MAX has no topics. Without this, a message from another cloud chat is simply lost
+        # there; the MAX chat follows the conversation and the person replies in the same one.
+        # Only for a conversation that really lives in the cloud: a chat tied to this machine
+        # keeps its own thread, and a message of one bot never lands in another.
+        if (
+            "max" in self.channels
+            and self.store.config("max").enabled
+            and self.svc.sync.cid_of(thread)
+        ):
+            for sender, entry in self.pairing.approved("max").items():
+                chat = str(entry.get("chat_id") or sender)
+                if (
+                    self.picker.selected("max", chat) != thread
+                    and thread_id_for("max", chat) != thread
+                ):
+                    self.picker.follow("max", chat, thread)
+                    targets.add(("max", chat))
         # Existing fixed chats remain paired until their owner explicitly chooses another.
         for channel in ("telegram", "max"):
             if channel not in self.channels or not self.store.config(channel).enabled:

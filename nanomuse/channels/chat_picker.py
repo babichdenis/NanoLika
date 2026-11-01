@@ -165,12 +165,17 @@ class ChatPicker:
         picker = self
 
         async def send(
-            channel: Any, chat_id: str, text: str, *, files: list[str] | None = None
+            channel: Any,
+            chat_id: str,
+            text: str,
+            *,
+            files: list[str] | None = None,
+            reply_to: str = "",
         ) -> str:
             physical, topic_id = split_chat(chat_id)
             if topic_id and picker.is_feed_destination(physical, topic_id):
                 text = format_feed_json(text) or text
-            return await original(channel, chat_id, text, files=files)
+            return await original(channel, chat_id, text, files=files, reply_to=reply_to)
 
         send._nanolika_feed_renderer = True  # type: ignore[attr-defined]
         channel_type.send = send
@@ -208,6 +213,21 @@ class ChatPicker:
         # selection: the chat's own thread is used and remembered by the manager, instead of
         # a dead id quietly blocking every synced delivery here.
         return thread if thread in getattr(self.m.svc, "threads", {}) else ""
+
+    def follow(self, channel: str, chat: str, thread: str) -> None:
+        """Bind a chat to a conversation without the menu side effects.
+
+        MAX has no topics: a synced message from another cloud chat would be dropped there,
+        so the MAX chat follows the conversation the message came from and the person
+        answers in the same one. Telegram keeps its topic mapping.
+        """
+        data = dict(self.file.load())
+        data[self.reader(channel, chat)] = {
+            "thread": thread,
+            "account": self.m.svc.sync.account_id,
+            "fresh_title": False,
+        }
+        self.file.save(data)
 
     def bind(self, msg: Any, thread: str, *, fresh: bool = False) -> None:
         data = dict(self.file.load())

@@ -33,6 +33,9 @@ COPY = {
         "expired": "Кнопка устарела. Открыла новое меню; выберите действие ещё раз.",
         "private_only": "Настройки и баланс доступны в личном чате с Ликой. Откройте его и отправьте /start.",
         "menu": "Меню Лики",
+        "help": "Помощь",
+        "status": "Статус",
+        "rename": "Переименовать беседу",
         "permissions": "Разрешения",
         "balance": "Баланс",
         "models": "Модели",
@@ -96,6 +99,9 @@ COPY = {
         "expired": "This button expired. A new menu is open; choose the action again.",
         "private_only": "Open a private chat with Lika and send /start to use settings and balance.",
         "menu": "Lika menu",
+        "help": "Help",
+        "status": "Status",
+        "rename": "Rename this chat",
         "permissions": "Permissions",
         "balance": "Balance",
         "models": "Models",
@@ -159,6 +165,9 @@ COPY = {
         "expired": "按钮已过期，已打开新菜单，请重新选择。",
         "private_only": "请在与 Lika 的私聊中发送 /start，然后使用设置和余额。",
         "menu": "Lika 菜单",
+        "help": "帮助",
+        "status": "状态",
+        "rename": "重命名对话",
         "permissions": "权限",
         "balance": "余额",
         "models": "模型",
@@ -299,9 +308,22 @@ class ChatMenu:
             return
         lang = self.m.lang if self.m.lang in COPY else "ru"
         c = COPY[lang]
+        # Every command the manager answers, not just the three the bot used to show:
+        # a person should not have to guess that /balance or /permissions exist.
         commands = [
             {"command": key, "description": c[label]}
-            for key, label in (("chats", "chats"), ("new", "new"), ("menu", "menu"))
+            for key, label in (
+                ("chats", "chats"),
+                ("new", "new"),
+                ("menu", "menu"),
+                ("help", "help"),
+                ("status", "status"),
+                ("balance", "balance"),
+                ("model", "models"),
+                ("permissions", "permissions"),
+                ("rename", "rename"),
+                ("unlink", "unlink"),
+            )
         ]
         if channel.name == "telegram":
             await channel._call("setMyCommands", {"commands": commands})

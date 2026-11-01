@@ -89,7 +89,12 @@ class Tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_manager_approval_call_accepts_language(self):
         await self.ch.ask("fixture-chat", "approval-fixture", "Confirm action", "ru")
-        request = self.calls[-1]
+        # the card first, then the pin that keeps it in sight
+        cards = [
+            r for r in self.calls
+            if r.url.path == "/messages" and r.method == "POST"
+        ]
+        request = cards[-1]
         body = json.loads(request.content)
         self.assertEqual(body["text"], "Confirm action")
         self.assertEqual(body["attachments"][0]["type"], "inline_keyboard")
@@ -229,7 +234,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
             for r in self.calls
             if r.url.path == "/messages" and r.method == "POST"
         ]
-        self.assertEqual(sent[-3], {"text": "caption"})
+        self.assertEqual(sent[-3], {"text": "caption", "format": "html"})
         self.assertEqual(sent[-2]["attachments"][0]["type"], "image")
         self.assertEqual(sent[-2]["attachments"][0]["payload"]["token"], "image-token")
         self.assertEqual(sent[-1]["attachments"][0]["type"], "video")
@@ -343,3 +348,139 @@ class InlineApprovalTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             all(json.loads(b["payload"])["decision"] != "details" for row in rows for b in row)
         )
+
+
+class MarkupTests(unittest.IsolatedAsyncioTestCase):
+    """M1: the answer is sent as HTML, and a plain-text fallback keeps the words."""
+
+    async def asyncSetUp(self):
+        self.max = m.MaxChannel({"bot_token": "t", "webhook_secret": "s"})
+        self.sent: list[dict] = []
+        self.refuse = False
+
+        async def call(method, path, **kwargs):
+            self.sent.append(dict(kwargs.get("json") or {}))
+            if self.refuse and (kwargs.get("json") or {}).get("format"):
+                raise m.MaxError("MAX request failed (HTTP 400)")
+            return {"message": {"body": {"mid": "m1"}}}
+
+        self.max._call = call
+
+    async def test_markdown_becomes_html(self):
+        await self.max.send("19", "**жирный** и `код`")
+        self.assertEqual(self.sent[-1]["format"], "html")
+        self.assertIn("<b>жирный</b>", self.sent[-1]["text"])
+        self.assertIn("<code>код</code>", self.sent[-1]["text"])
+
+    async def test_a_refused_markup_falls_back_to_plain_words(self):
+        self.refuse = True
+        await self.max.send("19", "**жирный**")
+        self.assertEqual(self.sent[-1], {"text": "жирный"})
+
+    async def test_links_are_buttons(self):
+        await self.max.links("19", [("Сайт", "https://nanolika.ru")], "Где всё лежит")
+        body = self.sent[-1]
+        self.assertEqual(body["text"], "Где всё лежит")
+        button = body["attachments"][0]["payload"]["buttons"][0][0]
+        self.assertEqual(button, {"type": "link", "text": "Сайт", "url": "https://nanolika.ru"})
+
+
+class ReplyTests(unittest.IsolatedAsyncioTestCase):
+    """M3: the answer points at the question; the rest of the parts follow it."""
+
+    async def asyncSetUp(self):
+        self.max = m.MaxChannel({"bot_token": "t", "webhook_secret": "s"})
+        self.sent: list[dict] = []
+
+        async def call(method, path, **kwargs):
+            self.sent.append(dict(kwargs.get("json") or {}))
+            return {"message": {"body": {"mid": "m1"}}}
+
+        self.max._call = call
+
+    async def test_the_first_message_quotes_the_question(self):
+        await self.max.send("19", "ответ", reply_to="42")
+        self.assertEqual(self.sent[-1]["link"], {"type": "reply", "mid": "42"})
+
+    async def test_no_question_means_no_link(self):
+        await self.max.send("19", "ответ")
+        self.assertNotIn("link", self.sent[-1])
+
+    async def test_the_streamed_answer_carries_the_link_once(self):
+        await self.max.stream("19", "s1", "пишу", done=False, reply_to="42")
+        self.assertEqual(self.sent[-1]["link"], {"type": "reply", "mid": "42"})
+        await self.max.stream("19", "s1", "написала", done=True)
+        self.assertNotIn("link", self.sent[-1])
+
+
+class StreamAndStepTests(unittest.IsolatedAsyncioTestCase):
+    """п.6 and п.10: the activity line names the step, and a long answer keeps growing."""
+
+    async def asyncSetUp(self):
+        self.max = m.MaxChannel({"bot_token": "t", "webhook_secret": "s"})
+        self.posts: list[dict] = []
+        self.edits: list[dict] = []
+        self.actions: list[str] = []
+
+        async def call(method, path, **kwargs):
+            body = dict(kwargs.get("json") or {})
+            if method == "POST" and path == "/messages":
+                self.posts.append(body)
+                return {"message": {"body": {"mid": f"m{len(self.posts)}"}}}
+            if method == "PUT" and path == "/messages":
+                self.edits.append(body)
+                return {"ok": True}
+            if path.endswith("/actions"):
+                self.actions.append(str(body.get("action") or ""))
+                return {"ok": True}
+            return {}
+
+        self.max._call = call
+
+    async def test_a_long_answer_grows_into_a_second_message(self):
+        first = "абзац\n\n" * 200
+        await self.max.stream("19", "s1", first, done=False)
+        self.assertEqual(len(self.posts), 1)
+        await self.max.stream("19", "s1", first * 3, done=False)
+        self.assertEqual(len(self.posts), 2)
+        self.assertEqual(self.max._streams, {"s1": ["m1", "m2"]})
+        await self.max.stream("19", "s1", first * 3, done=True)
+        self.assertEqual(self.max._streams, {})
+
+    async def test_the_activity_line_names_the_step(self):
+        import asyncio
+
+        await self.max.typing("19", True, "photo")
+        await asyncio.sleep(0.05)
+        await self.max.typing("19", False)
+        self.assertIn("sending_photo", self.actions)
+        await self.max.typing("19", True)
+        await asyncio.sleep(0.05)
+        await self.max.typing("19", False)
+        self.assertEqual(self.actions[-1], "typing_on")
+
+
+class CleanupTests(unittest.IsolatedAsyncioTestCase):
+    """п.9: an unused placeholder and an answered card do not stay in the chat."""
+
+    async def asyncSetUp(self):
+        self.max = m.MaxChannel({"bot_token": "t", "webhook_secret": "s"})
+        self.calls: list[tuple[str, str, dict]] = []
+
+        async def call(method, path, **kwargs):
+            self.calls.append((method, path, dict(kwargs.get("json") or {})))
+            return {"message": {"body": {"mid": "m1"}}}
+
+        self.max._call = call
+
+    async def test_an_empty_turn_deletes_its_message(self):
+        await self.max.stream("19", "s1", "…", done=False)
+        await self.max.discard("19", "s1")
+        self.assertEqual(self.calls[-1][:2], ("DELETE", "/messages"))
+        self.assertEqual(self.max._streams, {})
+
+    async def test_an_answered_card_keeps_no_buttons(self):
+        await self.max.ask_scoped("19", "ap-9", "May I?", "ru", ["once"])
+        await self.max.retire_approval("19", "ap-9")
+        assert self.calls[-2][2] == {"attachments": []}
+        assert ("19", "ap-9") not in self.max._approval_cards

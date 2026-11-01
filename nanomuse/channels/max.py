@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException, Request
 
+from nanomuse.channels import telegram_format
 from nanomuse.channels.approval_choices import choices
 from nanomuse.channels.base import (
     Channel,
@@ -76,11 +77,23 @@ def _uploaded_token(data: dict[str, Any]) -> str:
     return ""
 
 
+# what the chat's own activity line says while a step runs
+_ACTIONS = {
+    "photo": "sending_photo",
+    "video": "sending_video",
+    "audio": "sending_audio",
+    "document": "sending_file",
+}
+
+
 class MaxError(RuntimeError):
     pass
 
 
 class MaxChannel(Channel):
+    supports_reply = True
+    supports_action = True
+    supports_voice = True
     name = "max"
     label = "MAX"
     sdk_module = ""
@@ -103,7 +116,7 @@ class MaxChannel(Channel):
         self._media_http: httpx.AsyncClient | None = None
         self._seen: set[str] = set()
         self._order: deque[str] = deque()
-        self._streams: dict[str, str] = {}
+        self._streams: dict[str, list[str]] = {}
         self._typing: dict[str, asyncio.Task[None]] = {}
         self._approval_cards: dict[tuple[str, str], tuple[str, str, list]] = {}
         # the relay's linking calls (link_code.py), made on the first code a chat sends
@@ -223,6 +236,40 @@ class MaxChannel(Channel):
             self._http = None
         self._streams.clear()
 
+    def _retire_card(self, chat_id: str, mid: str) -> None:
+        if not mid:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._clear_card(chat_id, mid))
+        self._media_tasks.add(task)
+        task.add_done_callback(self._media_tasks.discard)
+
+    async def _clear_card(self, chat_id: str, mid: str) -> None:
+        # `attachments: []` clears the keyboard; `null` would leave it as it was.
+        with suppress(MaxError):
+            await self._call("PUT", "/messages", params={"message_id": mid}, json={"attachments": []})
+        with suppress(MaxError):
+            await self._call("DELETE", f"/chats/{chat_id}/pin", params={"message_id": mid})
+
+    def _answer_note(self, callback: dict) -> dict:
+        """What the tap says back: a short line above the chat, in the chat's language."""
+        try:
+            value = json.loads(callback.get("payload") or "{}")
+        except (ValueError, TypeError):
+            return {}
+        if not isinstance(value, dict) or "approval" not in value:
+            return {}
+        lang = self._lang()
+        decision = str(value.get("decision") or "")
+        words = {
+            "ru": {"allow": "Разрешено", "deny": "Запрещено", "details": "Подробности"},
+            "zh": {"allow": "已允许", "deny": "已拒绝", "details": "详情"},
+        }.get(lang, {"allow": "Allowed", "deny": "Denied", "details": "Details"})
+        return {"notification": words.get(decision, "")} if decision in words else {}
+
     def _duplicate(self, key: str) -> bool:
         if key in self._seen:
             return True
@@ -287,6 +334,11 @@ class MaxChannel(Channel):
             ):
                 if "menu" in value:
                     value["_menu_message_id"] = str(body.get("mid") or "")
+                answered = "approval" in value and value.get("decision") != "details"
+                if answered:
+                    # A question that has an answer keeps no buttons and no pin: a dead card
+                    # in the chat looks like the bot is still waiting.
+                    self._retire_card(chat, str(body.get("mid") or ""))
                 bus.action(self.name, chat, sender, value)
             return
         if kind != "message_created":
@@ -489,7 +541,7 @@ class MaxChannel(Channel):
         with suppress(MaxError):
             await self.send(msg.chat_id, answer)
 
-    async def typing(self, chat_id: str, on: bool) -> None:
+    async def typing(self, chat_id: str, on: bool, action: str = "") -> None:
         current = self._typing.get(chat_id)
         if on and current is not None and not current.done():
             return
@@ -498,31 +550,66 @@ class MaxChannel(Channel):
             current.cancel()
             await asyncio.gather(current, return_exceptions=True)
         if on:
-            self._typing[chat_id] = asyncio.create_task(self._typing_loop(chat_id))
+            self._typing[chat_id] = asyncio.create_task(self._typing_loop(chat_id, action))
 
-    async def _typing_loop(self, chat_id: str) -> None:
+    async def _typing_loop(self, chat_id: str, action: str = "") -> None:
         # Activity expires on MAX; refresh only while the manager reports working.
+        shown = _ACTIONS.get(action, "typing_on")
         while True:
             with suppress(MaxError):
-                await self._call("POST", f"/chats/{chat_id}/actions", json={"action": "typing_on"})
+                await self._call("POST", f"/chats/{chat_id}/actions", json={"action": shown})
             await asyncio.sleep(4.5)
 
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    def _lang(self) -> str:
+        return str(getattr(self.bus, "lang", "") or "")
+
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         last = ""
-        for start in range(0, len(text), 4000):
-            result = await self._call(
-                "POST",
-                "/messages",
-                params={"chat_id": chat_id},
-                json={"text": text[start : start + 4000]},
-            )
-            last = str(((result.get("message") or {}).get("body") or {}).get("mid") or "")
+        # MAX принимает HTML в теле сообщения: тот же рендерер, что у Telegram, и тот же
+        # текстовый фолбэк, если разметку не приняли. Цитата вопроса — только у первой
+        # части: остальные идут следом, а не каждая со ссылкой на одно и то же.
+        for index, part in enumerate(telegram_format.parts(text, lang=self._lang(), limit=4000)):
+            last = await self._send_part(chat_id, part, reply_to if index == 0 else "")
         for item in files or []:
             path = Path(item)
             if not path.is_file():
                 continue
             last = await self._send_file(chat_id, path) or last
         return last
+
+    async def _send_part(
+        self, chat_id: str, part: telegram_format.Part, reply_to: str = ""
+    ) -> str:
+        """One already-rendered part of an answer, as HTML with a plain-text fallback."""
+        link = {"link": {"type": "reply", "mid": reply_to}} if reply_to else {}
+        try:
+            result = await self._call(
+                "POST",
+                "/messages",
+                params={"chat_id": chat_id},
+                json={"text": part.html, "format": "html", **link},
+            )
+        except MaxError:
+            result = await self._call(
+                "POST",
+                "/messages",
+                params={"chat_id": chat_id},
+                json={"text": telegram_format.plain(part.html), **link},
+            )
+        return str(((result.get("message") or {}).get("body") or {}).get("mid") or "")
+
+    async def discard(self, chat_id: str, stream_id: str) -> None:
+        for mid in self._streams.pop(stream_id, []):
+            with suppress(MaxError):
+                await self._call("DELETE", "/messages", params={"message_id": mid})
+
+    async def retire_approval(self, chat_id: str, approval_id: str) -> None:
+        card = self._approval_cards.pop((chat_id, approval_id), None)
+        if card is None or not card[0]:
+            return
+        await self._clear_card(chat_id, card[0])
 
     async def _send_file(self, chat_id: str, path: Path) -> str:
         """Upload one file and send it as an attachment of its own message.
@@ -577,31 +664,60 @@ class MaxChannel(Channel):
                 raise MaxError(f"MAX request failed (HTTP {response.status_code})")
         raise MaxError("MAX attachment was not ready")
 
-    async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
+    async def stream(
+        self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""
+    ) -> None:
+        """The answer as it is written. Before, everything past 4 000 characters waited for
+        the turn to end; now each part has its own message and is edited as it grows."""
         if not text.strip():
             return
-        if len(text) > 4000:
-            if done:
-                if stream_id in self._streams:
-                    await self._call(
-                        "PUT",
-                        "/messages",
-                        params={"message_id": self._streams.pop(stream_id)},
-                        json={"text": text[:4000]},
-                    )
-                    await self.send(chat_id, text[4000:])
-                else:
-                    await self.send(chat_id, text)
-            return
-        mid = self._streams.get(stream_id)
-        if mid:
-            await self._call("PUT", "/messages", params={"message_id": mid}, json={"text": text})
-        else:
-            mid = await self.send(chat_id, text)
-            if mid:
-                self._streams[stream_id] = mid
+        parts = telegram_format.parts(text, lang=self._lang(), limit=4000)
+        shown = self._streams.setdefault(stream_id, [])
+        for index, part in enumerate(parts):
+            if index < len(shown) and shown[index]:
+                await self._edit(shown[index], part)
+            else:
+                mid = await self._send_part(chat_id, part, reply_to if index == 0 else "")
+                if index < len(shown):
+                    shown[index] = mid
+                elif mid:
+                    shown.append(mid)
         if done:
             self._streams.pop(stream_id, None)
+
+    async def _edit(self, mid: str, part: telegram_format.Part) -> None:
+        try:
+            await self._call(
+                "PUT",
+                "/messages",
+                params={"message_id": mid},
+                json={"text": part.html, "format": "html"},
+            )
+        except MaxError:
+            await self._call(
+                "PUT",
+                "/messages",
+                params={"message_id": mid},
+                json={"text": telegram_format.plain(part.html)},
+            )
+
+    async def links(self, chat_id: str, buttons: list[tuple[str, str]], text: str = "") -> None:
+        rows = [
+            [{"type": "link", "text": label[:64], "url": url}]
+            for label, url in buttons
+            if url.startswith(("https://", "http://"))
+        ]
+        if not rows:
+            return
+        await self._call(
+            "POST",
+            "/messages",
+            params={"chat_id": chat_id},
+            json={
+                "text": text or "…",
+                "attachments": [{"type": "inline_keyboard", "payload": {"buttons": rows}}],
+            },
+        )
 
     async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         await self.ask_scoped(chat_id, approval_id, text, lang, ["once"])
@@ -645,11 +761,15 @@ class MaxChannel(Channel):
             },
         )
 
-        self._approval_cards[(chat_id, approval_id)] = (
-            str(((result.get("message") or {}).get("body") or {}).get("mid") or ""),
-            text,
-            rows,
-        )
+        card_mid = str(((result.get("message") or {}).get("body") or {}).get("mid") or "")
+        if card_mid:
+            # The card blocks the turn: pinning keeps it at the top of a busy chat until the
+            # answer comes. Without the right to pin the card is still there to be tapped.
+            with suppress(MaxError):
+                await self._call(
+                    "PUT", f"/chats/{chat_id}/pin", json={"message_id": card_mid}
+                )
+        self._approval_cards[(chat_id, approval_id)] = (card_mid, text, rows)
         while len(self._approval_cards) > 256:
             self._approval_cards.pop(next(iter(self._approval_cards)))
 
@@ -701,7 +821,12 @@ async def receive_webhook(channel: MaxChannel | None, request: Request) -> dict:
             key = str(callback.get("callback_id") or "")
             if key:
                 with suppress(Exception):
-                    await channel._call("POST", "/answers", params={"callback_id": key}, json={})
+                    await channel._call(
+                        "POST",
+                        "/answers",
+                        params={"callback_id": key},
+                        json=channel._answer_note(callback),
+                    )
         channel.handle_update(data)
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(400, "Malformed MAX update") from None

@@ -247,9 +247,12 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
             call.args[1]["commands"] if vendor == "telegram" else call.kwargs["json"]["commands"]
         )
         field = "command" if vendor == "telegram" else "name"
-        # the vendor command list is the three doors into the menu; permissions, balance,
-        # pay and language are inline buttons inside it, so they are not registered here
-        assert {row[field] for row in commands} == {"menu", "new", "chats"}
+        # every command the manager answers is in the vendor's menu: a person should not
+        # have to guess that /balance or /permissions exist
+        assert {row[field] for row in commands} == {
+            "menu", "new", "chats", "help", "status", "balance",
+            "model", "permissions", "rename", "unlink",
+        }
 
 
 @pytest.mark.asyncio

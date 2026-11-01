@@ -888,3 +888,118 @@ def test_details_does_not_approve_and_is_bound_to_chat(chan):
     assert any("Fixture technical details" in text for text in fake.texts())
     assert decisions == []
     assert "detail-fixture" in manager._asks["fake:chat1"]
+
+
+@pytest.mark.asyncio
+async def test_another_device_gets_an_echo_not_a_plain_line(tmp_path):
+    """M5: a channel that can draw the echo does; the plain line stays the fallback."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from nanomuse.channels.base import InboundMessage
+    from nanomuse.channels.manager import ChannelManager
+
+    manager = ChannelManager.__new__(ChannelManager)
+    manager.picker = SimpleNamespace(
+        targets=lambda thread: [("fake", "other")],
+        title_first_request=lambda *a: None,
+    )
+    manager.types = {"fake": SimpleNamespace(label="Fake")}
+    manager.say = lambda en, zh, ru: ru
+    sent: list[tuple] = []
+
+    async def send(*args):
+        sent.append(args)
+
+    manager._send = send
+    echo = AsyncMock()
+    manager.channels = {"fake": SimpleNamespace(echo=echo)}
+    message = InboundMessage(channel="fake", chat_id="here", sender_id="u1", text="привет")
+
+    await manager._echo_selected_user("main", message, "привет")
+
+    echo.assert_awaited_once_with("other", "Fake", "привет")
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_the_reply_points_at_the_question_only_where_the_channel_can_draw_one():
+    """M3: the live message of a turn quotes the message that started it."""
+    from types import SimpleNamespace
+
+    from nanomuse.channels.manager import ChannelManager
+
+    manager = ChannelManager.__new__(ChannelManager)
+    manager._answer_to = {
+        "t1": ("telegram", "1001", "7"),
+        "t2": ("fake", "1", "9"),
+        "t3": ("telegram", "1001", "8"),
+    }
+    manager.channels = {
+        "telegram": SimpleNamespace(supports_reply=True),
+        "fake": SimpleNamespace(),
+    }
+    assert manager._reply_to("t1", "telegram", "1001") == "7"
+    # another chat of the same channel is not the one being answered
+    assert manager._reply_to("t3", "telegram", "2002") == ""
+    # a channel that cannot show a reply link is not given an id it would reject
+    assert manager._reply_to("t2", "fake", "1") == ""
+    assert manager._reply_to("nothing", "telegram", "1001") == ""
+    manager.routes = {"t1": ("telegram", "1001")}
+    manager._live = {}
+    assert manager._live_for("t1").reply_to == "7"
+
+
+@pytest.mark.asyncio
+async def test_the_step_stays_under_the_answer_and_the_step_name_restarts_the_indicator():
+    """п.6 and п.7: a long job says what it is doing while the words are already there."""
+    from types import SimpleNamespace
+
+    from nanomuse.channels.manager import ChannelManager, _Live
+
+    calls: list[tuple] = []
+
+    class Ch:
+        supports_action = True
+        supports_reactions = True
+        supports_edit = True
+
+        async def typing(self, chat_id, on, action=""):
+            calls.append(("typing", chat_id, on, action))
+
+        async def react(self, chat_id, message_id, mark):
+            calls.append(("react", chat_id, message_id, mark))
+
+        async def stream(self, chat_id, stream_id, text, *, done, reply_to=""):
+            calls.append(("stream", text, done))
+
+    manager = ChannelManager.__new__(ChannelManager)
+    manager.channels = {"telegram": Ch()}
+    manager.routes = {"t1": ("telegram", "1001")}
+    manager._typing = set()
+    manager._typing_action = {}
+    manager._answer_to = {"t1": ("telegram", "1001", "7")}
+    manager._redact_outbound = lambda text: text
+    manager._live = {"t1": _Live(channel="telegram", chat_id="1001", reply_to="7")}
+
+    await manager._set_typing("t1", True, "photo")
+    # the same step again is already shown; another step must be said
+    await manager._set_typing("t1", True, "photo")
+    await manager._set_typing("t1", True, "document")
+    assert calls == [
+        ("typing", "1001", True, "photo"),
+        ("typing", "1001", True, "document"),
+    ]
+
+    live = manager._live["t1"]
+    live.text = "готово наполовину"
+    live.status = "Читаю файл"
+    await manager._flush("t1")
+    assert calls[-1] == ("stream", "готово наполовину\n\n_Читаю файл_", False)
+
+    await manager._mark("t1", "working")
+    await manager._mark("t1", "done")
+    assert calls[-2:] == [
+        ("react", "1001", "7", "working"),
+        ("react", "1001", "7", "done"),
+    ]

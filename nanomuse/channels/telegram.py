@@ -58,6 +58,15 @@ _FILE_MAX = 50 * 1024 * 1024
 # dot in that colour and a quote block under it, quiet (see :meth:`TelegramChannel.echo`).
 LIKA_COLOR = "#52694e"
 ECHO_MARK = "🟢"
+# what the chat's own activity line says while a step runs
+_ACTIONS = {
+    "photo": "upload_photo",
+    "video": "upload_video",
+    "audio": "record_voice",
+    "document": "upload_document",
+}
+# the marks on the person's message: taken into work, then done
+_REACTIONS = {"working": "👀", "done": "✅"}
 
 
 class TelegramError(RuntimeError):
@@ -65,6 +74,10 @@ class TelegramError(RuntimeError):
 
 
 class TelegramChannel(Channel):
+    supports_reply = True
+    supports_action = True
+    supports_reactions = True
+    supports_voice = True
     name = "telegram"
     label = "Telegram"
     sdk_module = ""
@@ -87,7 +100,7 @@ class TelegramChannel(Channel):
         self.topics_enabled = False
         self._bot_id = 0
         self._username = ""
-        self._stream_messages: dict[str, int] = {}
+        self._stream_messages: dict[str, list[int]] = {}
         # the relay's linking calls (link_code.py), made on the first code a chat sends
         self._chat_link: ChatLink | None = None
 
@@ -415,6 +428,12 @@ class TelegramChannel(Channel):
                             "reply_markup": {"inline_keyboard": []},
                         },
                     )
+                # answered: the card no longer blocks the turn and gives up the pin
+                with suppress(Exception):
+                    await self._call(
+                        "unpinChatMessage",
+                        {"chat_id": chat_id, "message_id": message["message_id"]},
+                    )
 
     async def _download(self, file_id: Any, name: str, kind: str) -> InboundFile | None:
         if not file_id or self._http is None:
@@ -439,13 +458,22 @@ class TelegramChannel(Channel):
     def _lang(self) -> str:
         return str(getattr(self.bus, "lang", "") or "")
 
-    async def _say(self, chat_id: str, part: telegram_format.Part) -> Any:
+    async def _say(self, chat_id: str, part: telegram_format.Part, reply_to: str = "") -> Any:
         """One message of a reply, as HTML; a refused parse sends the same words bare."""
+        params: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": part.html,
+            "parse_mode": "HTML",
+        }
+        if reply_to:
+            # A quote of the question, so a group keeps the thread: who is answered and what
+            # about. Telegram forgets the link when the message is gone, hence the fallback.
+            params["reply_parameters"] = {
+                "message_id": int(reply_to),
+                "allow_sending_without_reply": True,
+            }
         try:
-            return await self._call(
-                "sendMessage",
-                {"chat_id": chat_id, "text": part.html, "parse_mode": "HTML"},
-            )
+            return await self._call("sendMessage", params)
         except TelegramError as exc:
             if "parse entities" not in str(exc).lower():
                 raise
@@ -473,12 +501,15 @@ class TelegramChannel(Channel):
                 "editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": text}
             )
 
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         """A reply from the model: Markdown becomes HTML, and a long answer becomes a few
-        messages cut where no tag is left open (telegram_format)."""
+        messages cut where no tag is left open (telegram_format). The first message quotes
+        the question; the rest follow it, so the thread is not a stack of quotes."""
         message_id = ""
-        for part in telegram_format.parts(text, lang=self._lang()):
-            result = await self._say(chat_id, part)
+        for index, part in enumerate(telegram_format.parts(text, lang=self._lang())):
+            result = await self._say(chat_id, part, reply_to if index == 0 else "")
             message_id = str(result.get("message_id") or "")
         for item in files or []:
             path = Path(item)
@@ -516,6 +547,51 @@ class TelegramChannel(Channel):
         result = await self._call("sendMessage", params)
         return str(result.get("message_id") or "")
 
+    async def discard(self, chat_id: str, stream_id: str) -> None:
+        for message_id in self._stream_messages.pop(stream_id, []):
+            if message_id:
+                with suppress(Exception):
+                    await self._call(
+                        "deleteMessage", {"chat_id": chat_id, "message_id": message_id}
+                    )
+
+    async def retire_approval(self, chat_id: str, approval_id: str) -> None:
+        card = self._approval_cards.pop((chat_id, approval_id), None)
+        if card is None or not card[0]:
+            return
+        with suppress(Exception):
+            await self._call(
+                "editMessageReplyMarkup",
+                {
+                    "chat_id": chat_id,
+                    "message_id": int(card[0]),
+                    "reply_markup": {"inline_keyboard": []},
+                },
+            )
+        with suppress(Exception):
+            await self._call(
+                "unpinChatMessage", {"chat_id": chat_id, "message_id": int(card[0])}
+            )
+
+    async def send_voice(self, chat_id: str, path: str) -> str:
+        """A voice bubble: Telegram plays OGG/Opus in the chat, without opening a player."""
+        if self._http is None:
+            raise TelegramError("Not connected.")
+        physical, topic = split_chat(chat_id)
+        destination: dict[str, Any] = {"chat_id": physical}
+        if topic:
+            destination["message_thread_id"] = topic
+        with Path(path).open("rb") as fh:
+            response = await self._http.post(
+                "/sendVoice",
+                data=destination,
+                files={"voice": (Path(path).name, fh, "audio/ogg")},
+            )
+        data = json_object(response)
+        if not data.get("ok"):
+            raise TelegramError(str(data.get("description") or f"HTTP {response.status_code}"))
+        return str((data.get("result") or {}).get("message_id") or "")
+
     async def _send_file(self, chat_id: str, path: Path) -> None:
         """A file from the agent: a picture, a clip that plays in the chat, a voice take,
         or a document. Telegram's own players are used where the type has one; anything
@@ -549,26 +625,32 @@ class TelegramChannel(Channel):
         if not data.get("ok"):
             raise TelegramError(str(data.get("description") or f"HTTP {response.status_code}"))
 
-    async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
-        """The reply as it is written: the first message is edited in place, and whatever
-        did not fit is sent once the answer is complete."""
+    async def stream(
+        self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""
+    ) -> None:
+        """The reply as it is written: every part of it is edited in place, and a part that
+        did not exist yet gets its own message. A long answer therefore grows instead of
+        waiting for its first 4 000 characters to be complete."""
         parts = telegram_format.parts(text, lang=self._lang())
-        wait = telegram_format.Part(html="…", text="…")
-        shown = parts[0] if parts else wait
-        message_id = self._stream_messages.get(stream_id)
-        if message_id is None:
-            result = await self._say(chat_id, shown)
-            self._stream_messages[stream_id] = int(result.get("message_id") or 0)
-        else:
-            try:
-                await self._edit(chat_id, message_id, shown)
-            except TelegramError as exc:
-                if "not modified" not in str(exc):
-                    raise
+        if not parts:
+            parts = [telegram_format.Part(html="…", text="…")]
+        shown = self._stream_messages.setdefault(stream_id, [])
+        for index, part in enumerate(parts):
+            if index < len(shown) and shown[index]:
+                try:
+                    await self._edit(chat_id, shown[index], part)
+                except TelegramError as exc:
+                    if "not modified" not in str(exc):
+                        raise
+            else:
+                result = await self._say(chat_id, part, reply_to if index == 0 else "")
+                message_id = int(result.get("message_id") or 0)
+                if index < len(shown):
+                    shown[index] = message_id
+                else:
+                    shown.append(message_id)
         if done:
             self._stream_messages.pop(stream_id, None)
-            for part in parts[1:]:
-                await self._say(chat_id, part)
 
     async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         await self.ask_scoped(chat_id, approval_id, text, lang, ["once"])
@@ -600,6 +682,19 @@ class TelegramChannel(Channel):
             text,
             rows,
         )
+        if result.get("message_id"):
+            # The card blocks the turn, so it stays at the top until it is answered: in a
+            # busy chat the question must not scroll away. A bot without the right to pin
+            # is not an error; the card is still there to be tapped.
+            with suppress(Exception):
+                await self._call(
+                    "pinChatMessage",
+                    {
+                        "chat_id": chat_id,
+                        "message_id": int(result["message_id"]),
+                        "disable_notification": True,
+                    },
+                )
         while len(self._approval_cards) > 256:
             self._approval_cards.pop(next(iter(self._approval_cards)))
 
@@ -650,19 +745,37 @@ class TelegramChannel(Channel):
             },
         )
 
-    async def typing(self, chat_id: str, on: bool) -> None:
+    async def typing(self, chat_id: str, on: bool, action: str = "") -> None:
         current = self._typing.pop(chat_id, None)
         if current is not None:
             current.cancel()
         if on:
-            self._typing[chat_id] = asyncio.create_task(self._typing_loop(chat_id))
+            self._typing[chat_id] = asyncio.create_task(self._typing_loop(chat_id, action))
 
-    async def _typing_loop(self, chat_id: str) -> None:
-        # Telegram shows "typing…" for ~5 s per call
+    async def _typing_loop(self, chat_id: str, action: str = "") -> None:
+        # Telegram shows an activity for ~5 s per call; the words are the same as the step
+        # ("sending a photo" while a picture is made) so the chat says what is happening.
+        shown = _ACTIONS.get(action, "typing")
         for _ in range(60):
             with suppress(Exception):
-                await self._call("sendChatAction", {"chat_id": chat_id, "action": "typing"})
+                await self._call("sendChatAction", {"chat_id": chat_id, "action": shown})
             await asyncio.sleep(4.5)
+
+    async def react(self, chat_id: str, message_id: str, mark: str) -> None:
+        """👀 while the answer is made, ✅ when it is done: the cheapest way to show a
+        person the bot has their message, without another line in the chat."""
+        emoji = _REACTIONS.get(mark)
+        if not emoji or not str(message_id).isdigit():
+            return
+        with suppress(Exception):
+            await self._call(
+                "setMessageReaction",
+                {
+                    "chat_id": chat_id,
+                    "message_id": int(message_id),
+                    "reaction": [{"type": "emoji", "emoji": emoji}],
+                },
+            )
 
 
 def _html(text: str) -> str:

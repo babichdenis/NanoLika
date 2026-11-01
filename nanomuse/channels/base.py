@@ -129,6 +129,14 @@ class Channel:
     fields: tuple[Field, ...] = ()
     # can a message be edited after it was sent (the reply streams in place)?
     supports_edit: bool = False
+    # does `send` take a `reply_to` message id (the reply points at the question)?
+    supports_reply: bool = False
+    # does `typing` take an `action` naming the step ("photo", "document", "audio")?
+    supports_action: bool = False
+    # can a reaction be put on the person's own message ("working", then "done")?
+    supports_reactions: bool = False
+    # can the answer be sent as a voice bubble, the way the person spoke?
+    supports_voice: bool = False
     # the vendor's console, for the setup walkthrough
     console_url: str = ""
 
@@ -165,9 +173,13 @@ class Channel:
         """Close the connection. Must be safe to call twice."""
 
     # ------------------------------------------------------------------ outbound
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         """Send text (and files, by path) to a chat; returns the vendor's message id or ``""``.
-        Raise on failure — the manager logs it and tells the person in the app."""
+        Raise on failure — the manager logs it and tells the person in the app.
+        ``reply_to`` is the message being answered; only channels with ``supports_reply``
+        get one, and they draw the link themselves."""
         raise NotImplementedError
 
     async def links(self, chat_id: str, buttons: list[tuple[str, str]], text: str = "") -> None:
@@ -182,14 +194,36 @@ class Channel:
         lines = [f"{label}: {url}" for label, url in buttons]
         await self.send(chat_id, "\n".join(([text] if text else []) + lines))
 
-    async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
+    async def stream(
+        self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""
+    ) -> None:
         """A reply that grows: the first call sends a message, later calls update it in place,
         ``done`` is the last. Channels that cannot edit send once, when done."""
         if done and text.strip():
             await self.send(chat_id, text)
 
-    async def typing(self, chat_id: str, on: bool) -> None:
-        """Show that the Muse is working on it (a typing indicator, a reaction). Optional."""
+    async def typing(self, chat_id: str, on: bool, action: str = "") -> None:
+        """Show that the Muse is working on it (a typing indicator, a reaction). Optional.
+        ``action`` names the step where the channel can show one — ``photo``, ``video``,
+        ``audio`` or ``document``; empty means the ordinary "thinking"."""
+
+    async def discard(self, chat_id: str, stream_id: str) -> None:
+        """The turn ended with nothing to say: take the "…" away instead of leaving it.
+
+        A channel that cannot delete simply leaves the placeholder; it costs nothing.
+        """
+
+    async def retire_approval(self, chat_id: str, approval_id: str) -> None:
+        """The approval was answered somewhere else (the app, another device): take the
+        buttons off the card here too, so the chat does not show a question still waiting."""
+
+    async def send_voice(self, chat_id: str, path: str) -> str:
+        """A spoken answer as a voice bubble; a channel with only files sends the file."""
+        return await self.send(chat_id, "", files=[path])
+
+    async def react(self, chat_id: str, message_id: str, mark: str) -> None:
+        """A short mark on the person's own message: ``working`` when the turn starts,
+        ``done`` when it ends. Channels without reactions say nothing."""
 
     async def ask(self, chat_id: str, approval_id: str, text: str, lang: str = "") -> None:
         """An approval the run is waiting for. ``text`` already explains the reply words

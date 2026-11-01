@@ -9,7 +9,7 @@
  * installed. A relay voice of our own would cost money per word, so it stays a
  * later question (docs/roadmap.md).
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,6 +50,59 @@ export function spoken(text: string, maxChars: number): string {
   return stop >= maxChars / 2 ? cut.slice(0, stop + 1) : cut
 }
 
+/**
+ * The language of the words: a Russian answer read by the English default voice is
+ * gibberish, and that is exactly what "the talk is wrong" sounds like. Only the
+ * language is detected here — the voice for it comes from the machine's own list.
+ */
+export function languageOf(text: string): '' | 'ru' | 'zh' {
+  if (/[\u0400-\u04ff]/.test(text)) return 'ru'
+  if (/[\u3400-\u9fff]/.test(text)) return 'zh'
+  return ''
+}
+
+/** The voices the machine has, asked once and remembered: `say -v '?' | grep`. */
+const VOICE_LIST = 'ru_RU:Milena\nzh_CN:Tingting'
+let installedVoices: { name: string; locale: string }[] | null = null
+
+function voices(): { name: string; locale: string }[] {
+  if (installedVoices) return installedVoices
+  const found: { name: string; locale: string }[] = []
+  try {
+    const listed = spawnSync('say', ['-v', '?'], { encoding: 'utf8', timeout: 5_000 })
+    for (const line of (listed.stdout || '').split('\n')) {
+      const match = /^(\S[^\t]*?)\s{2,}([a-z]{2}_[A-Z]{2})\b/.exec(line)
+      const name = (match?.[1] ?? '').trim()
+      const locale = match?.[2] ?? ''
+      if (name && locale) found.push({ name, locale })
+    }
+  } catch {
+    // a machine without `say` falls back to the names below
+  }
+  installedVoices = found.length
+    ? found
+    : VOICE_LIST.split('\n').flatMap((row) => {
+        const [locale, name] = row.split(':')
+        return locale && name ? [{ name, locale }] : []
+      })
+  return installedVoices!
+}
+
+/** The first voice that speaks this language, or `''` for the system's own default. */
+export function voiceFor(text: string, configured: string): string {
+  if (configured) return configured
+  const language = languageOf(text)
+  if (!language) return ''
+  const all = voices()
+  // the mainland voice first where there is one: a Cantonese or Taiwan voice reading a
+  // Mandarin answer is understandable but wrong, and the person hears the difference
+  const preferred = language === 'ru' ? 'ru_RU' : language === 'zh' ? 'zh_CN' : ''
+  const exact = preferred ? all.find((voice) => voice.locale === preferred) : undefined
+  if (exact) return exact.name
+  const match = all.find((voice) => voice.locale.toLowerCase().startsWith(language))
+  return match ? match.name : ''
+}
+
 /** How long one answer may take to be said: a slow voice must not wedge the turn. */
 function speechLimitMs(text: string): number {
   return Math.max(20_000, Math.ceil(text.length / 8) * 1_000)
@@ -57,7 +110,8 @@ function speechLimitMs(text: string): number {
 
 /** Start the platform's own voice on `text`; resolves when it has finished or timed out. */
 function say(text: string, config: Config): Promise<void> {
-  const voice = config.voice ? ['-v', config.voice] : []
+  const chosen = voiceFor(text, config.voice)
+  const voice = chosen ? ['-v', chosen] : []
   const rate = process.platform === 'darwin' ? ['-r', String(config.rate)] : []
   return new Promise<void>((resolve, reject) => {
     if (process.platform === 'win32') {
