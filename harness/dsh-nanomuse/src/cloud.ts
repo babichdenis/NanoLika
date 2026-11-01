@@ -28,7 +28,7 @@ import { TurnBudget, type TurnView } from './turn-budget.ts'
  * (`/events`) carrying the live state — registered when the web server is
  * present; the headless and SDK profiles get the service without routes.
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ApprovalDesk, appOf, checkForUpdate, compareVersions, DEVICE_GRANT_PREFIX, HoldDesk, modelFor, pickChatModel, pickHandsModel, REMOTE_CONTROL_GRANT_ID, sharedConnectors, standingGrants, takesImages, UPDATE_RETRY_MS, updateCacheFresh, type Grant, type Hold, type HoldTool, type PendingApproval, type StandingGrant, type UpdateInfo } from './desk.ts'
 import { arch, homedir, hostname, release, type, userInfo } from 'node:os'
@@ -978,6 +978,13 @@ export default class NanomuseCloud extends Service {
         log: (level, text) => this.ctx.logger[level](text),
       })
       this.sync = sync
+      // A chat deleted here ("delete everywhere") must not come back with the next start:
+      // whatever the state still lists as gone is removed from this computer again.
+      ctx.effect(() => {
+        const gone = [...(sync.state.gone ?? [])]
+        if (gone.length) void (async () => { for (const id of gone) await this.purgeSession(id).catch(() => undefined) })()
+        return () => undefined
+      }, 'nanomuse cloud: gone chats stay gone')
       ctx.effect(() => this.hub.handle('chat.open_desktop', async (args) => {
         const account = this.state.account?.id
         const cid = typeof args.cid === 'string' ? args.cid : ''
@@ -2409,6 +2416,46 @@ export default class NanomuseCloud extends Service {
     const slot = this.defaultModelService()?.currentSelection()
     await ctx.sessionController.selectModel({ sessionId: sessionId as SessionId, provider, model: id })
     if (slot) await this.defaultModelService()?.saveSelection(slot).catch(() => undefined)
+  }
+
+  /**
+   * Remove a session from this computer for good (C11, "delete everywhere"): the harness has
+   * no delete of its own — a session is an append-only log — so the files themselves go. The
+   * chat is archived and stopped first (its turn must not be writing into a directory that is
+   * about to disappear), and the account's conversation is tombstoned by the caller. Refused
+   * for the main chat and for a running turn.
+   */
+  async purgeSession(sessionId: string): Promise<{ ok: boolean; reason?: string }> {
+    const id = sessionId.trim()
+    if (!/^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return { ok: false, reason: 'unknown-session' }
+    if (id === this.sync?.state.mainSession) return { ok: false, reason: 'main' }
+    const ctx = this.sessionCtx
+    if (ctx) {
+      const resolved = await ctx.sessionController.resolveAgent(id as SessionId).catch(() => undefined)
+      if (resolved && !('error' in resolved) && resolved.agent.status === 'running') return { ok: false, reason: 'running' }
+    }
+    const home = process.env.DSH_HOME || join(homedir(), '.nanolika', 'desktop')
+    const root = join(home, 'sessions')
+    let removed = false
+    for (const folder of await readdir(root).catch(() => [] as string[])) {
+      const path = join(root, folder, id)
+      try {
+        await rm(path, { recursive: true, force: true })
+        removed = true
+      } catch {
+        // a folder that cannot be read is not this session's
+      }
+    }
+    await rm(join(home, 'storages', 'session_projcache', 'sessions', `${id}.json`), { force: true }).catch(() => undefined)
+    // tell the browser half the row is gone: the harness's own delete event, the one its
+    // session controller emits when a session leaves the list
+    try {
+      ;(this.ctx as unknown as { emit(name: string, ...args: unknown[]): void }).emit('api-session/removed', id)
+    } catch {
+      // an older harness without the event: the row goes on the next start
+    }
+    this.ctx.logger.info('nanomuse cloud: session %s deleted from this computer: %s', id, removed ? 'files gone' : 'no files found')
+    return { ok: true }
   }
 
   /**
@@ -4191,6 +4238,12 @@ export default class NanomuseCloud extends Service {
           // that does nothing.
           const body = await json(req)
           return send(res, 200, await sync.setSynced(String(body.sessionId ?? ''), body.on === true))
+        }
+        if (req.method === 'POST' && route === '/sync/purge') {
+          // "delete everywhere": the account's copy is tombstoned by /sync/delete-conversation,
+          // this removes the session itself (the harness has no delete of its own)
+          const body = await json(req)
+          return send(res, 200, await this.purgeSession(String(body.sessionId ?? '')))
         }
         if (req.method === 'POST' && route === '/sync/delete-conversation') {
           // C11: a chat that came from the cloud cannot be made local, only deleted from the account

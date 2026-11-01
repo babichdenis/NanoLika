@@ -416,7 +416,12 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   const cloudOff = (id: string) => {
     if (!window.confirm(t('chCloudDeleteConfirm'))) return
     void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
-      .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
+      .then((reply) => {
+        if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason))
+        // the harness has no delete of its own: the session's files go too, so the row is gone
+        // from every column, not only from the nanoMuse one
+        return call('sync/purge', { sessionId: id }).catch(() => undefined)
+      })
       .catch((err: unknown) => say(failureText(t, err)))
   }
   /** What the row's cloud item does; the host's `rev` moves on success, which re-reads the view. */

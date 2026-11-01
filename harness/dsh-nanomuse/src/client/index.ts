@@ -418,6 +418,9 @@ export function apply(ctx: ClientContext): void {
     if (!window.confirm(t('chDeleteForeverConfirm'))) return
     await call('sync/delete-conversation', { sessionId }).catch(() => undefined)
     await workspaces.archiveSession(sessionId, { stopActivity: true }).catch(() => undefined)
+    // the harness keeps sessions as logs and has no delete: the files themselves go, so the
+    // row leaves the column too (a running turn is refused by the host)
+    await call('sync/purge', { sessionId }).catch(() => undefined)
   }
   // A room opened from the rail fills the main area; the split (a room beside
   // the chat) ends with it.

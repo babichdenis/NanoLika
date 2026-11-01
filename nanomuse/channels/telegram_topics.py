@@ -211,6 +211,72 @@ class TelegramTopics:
                 result.add(thread.id)
         return result
 
+    async def _delete_topic(self, row: dict[str, Any]) -> None:
+        """Take a topic off Telegram: its chat is gone from the account (or the topic was a
+        duplicate), so the place to continue it is gone too."""
+        try:
+            await self.m.channels["telegram"]._call(
+                "deleteForumTopic",
+                {"chat_id": row["chat"], "message_thread_id": row["topic"]},
+            )
+            logger.info("telegram: topic {} deleted ({})", row.get("topic"), row.get("name") or "")
+        except Exception as exc:  # noqa: BLE001 - a topic already gone is the same result
+            if "not found" not in str(exc).lower() and "not_modified" not in str(exc).lower():
+                logger.warning("telegram: topic delete failed ({})", type(exc).__name__)
+
+    async def _reconcile(self) -> None:
+        """One topic per account chat, and no topic for a chat the account no longer has.
+
+        The topic list used to grow: every rename or replay could leave a second topic for the
+        same conversation, and a conversation deleted in the app kept its topic here. This pass
+        keeps the topic bound to the live thread (or the first one), deletes its duplicates, and
+        deletes the topics of chats that are gone from the catalogue — archived chats keep theirs
+        (the caller renames them)."""
+        sync = self.m.svc.sync
+        catalog = getattr(sync, "catalog", None)
+        if not catalog or catalog.supported is not True:
+            return
+        live = dict(catalog.rows)
+        marks = sync.state.get("conversation_marks") or {}
+        thread_of = {cid: sync.thread_of(cid) for cid in live}
+        rows = dict(self.file.load())
+        groups: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+        for key, row in rows.items():
+            if not isinstance(row, dict) or not self._valid(row):
+                continue
+            groups.setdefault(str(row.get("cid") or ""), []).append((key, row))
+        for cid, group in groups.items():
+            if not cid:
+                # a topic that never became an account chat: it stays while its thread lives
+                for key, row in group:
+                    thread = str(row.get("thread") or "")
+                    if thread and thread in self.m.svc.threads:
+                        continue
+                    await self._delete_topic(row)
+                    rows.pop(key, None)
+                    self.file.save(rows)
+                continue
+            if cid in live:
+                bound = thread_of.get(cid)
+                keeper = next(
+                    ((k, r) for k, r in group if bound and r.get("thread") == bound),
+                    group[0],
+                )
+                for key, row in group:
+                    if key == keeper[0]:
+                        continue
+                    await self._delete_topic(row)
+                    rows.pop(key, None)
+                    self.file.save(rows)
+                continue
+            mark = marks.get(cid) or {}
+            if mark.get("archived") and not mark.get("deleted"):
+                continue
+            for key, row in group:
+                await self._delete_topic(row)
+                rows.pop(key, None)
+                self.file.save(rows)
+
     async def discover(self) -> None:
         """Reconcile topic state from the account catalogue without loading all transcripts."""
         if not self.enabled() or not self.m.store.config("telegram").enabled:
@@ -223,6 +289,7 @@ class TelegramTopics:
         if not catalog or catalog.supported is not True:
             await self._discover_legacy()
             return
+        await self._reconcile()
         # Retain old topics and their messages, but close topics whose account chat was retired.
         for key, row in list(self.file.load().items()):
             if not isinstance(row, dict) or not self._valid(row) or not row.get("cid"):
