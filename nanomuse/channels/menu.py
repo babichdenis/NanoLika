@@ -551,7 +551,7 @@ class ChatMenu:
                 # and a chat with no stars still gets the whole menu.
                 shelf = data.get("shelf") or {}
                 favourites = [str(item) for item in (shelf.get("favourites") or [])]
-                thread = self.m.svc.threads.get(self.m._thread_for(msg))
+                thread = self._thread_now(msg)
                 current = str(getattr(thread, "model", "") or (shelf.get("default") or {}).get("chat") or "")
                 if favourites:
                     starred = [
@@ -949,12 +949,13 @@ class ChatMenu:
             return c["models_bad"]
 
         model_id = str(chosen.get("id"))
-        thread_id = self.m._thread_for(msg)
-        thread = self.m.svc.threads.get(thread_id)
+        thread = self._thread_now(msg)
         if thread is None:
             return c["models_error"]
         thread.model = model_id
-        self.m.svc._save_index()
+        save_index = getattr(self.m.svc, "_save_index", None)
+        if save_index is not None:
+            save_index()
         # the same choice on every device of the account, when this chat is synced
         sync = getattr(self.m.svc, "sync", None)
         if sync is not None:
@@ -964,6 +965,13 @@ class ChatMenu:
                 logging.getLogger(__name__).exception("model pick: could not push the chat")
         self.m.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         return c["models_saved"] + "\n" + str(chosen.get("name") or model_id)
+
+    def _thread_now(self, msg: InboundMessage):
+        """The conversation this chat is showing, when this runtime knows it."""
+        try:
+            return self.m.svc.threads.get(self.m._thread_for(msg))
+        except Exception:
+            return None
 
     def _cid_now(self, msg: InboundMessage) -> str:
         """The id of the conversation this chat is showing, from the sync store."""
