@@ -106,6 +106,41 @@ async def test_state_is_on_by_default_and_round_trips_changes():
     assert r.json()["conversations"] == [] and r.json()["messages"] == [] and r.json()["cursor"] == 0
 
 
+async def test_a_conversation_keeps_its_own_model():
+    """Per-chat model: a device sets it on the conversation, every other device learns it
+    from `changes`/`catalog`, and a later push without the field keeps it."""
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    cid = uid()
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, model="vision-model")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
+    assert out["conversations"][0]["model"] == "vision-model"
+    # a rename without the model field is not a silent reset
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, title="Renamed")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
+    assert out["conversations"][0]["title"] == "Renamed"
+    assert out["conversations"][0]["model"] == "vision-model"
+    # a new model is a change with its own seq
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, model="text-model")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
+    assert out["conversations"][0]["model"] == "text-model"
+
+
 async def test_device_names_are_filled_from_the_hub_devices():
     app, client, sender, up, cloud, settings = make()
     key = await signed_in(client, sender)

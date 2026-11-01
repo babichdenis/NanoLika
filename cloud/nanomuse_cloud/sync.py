@@ -144,6 +144,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "updated_at": int(r["updated_at"]),
         "deleted": bool(r["deleted"]),
         "archived": bool(r["archived"]) if "archived" in r.keys() else False,
+        "model": str(r["model"] or "") if "model" in r.keys() else "",
         "seq": int(r["seq"]),
     }
 
@@ -651,8 +652,8 @@ class SyncStore:
                             continue
                     seq = self._next_seq(c, account_id)
                     c.execute(
-                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             account_id,
                             cid,
@@ -665,6 +666,7 @@ class SyncStore:
                             t if deleted else None,
                             seq,
                             1 if archived and not deleted else 0,
+                            str(conv.get("model") or "")[:160],
                         ),
                     )
                     accepted += 1
@@ -680,14 +682,17 @@ class SyncStore:
                     # with its own time, so a device whose clock lags can still rename. A
                     # timestamp that did not move is not a change, however new the push is.
                     title_changed = bool(title) and title != str(row["title"])
-                    if title_changed or next_archived != bool(row["archived"]):
+                    model = str(conv.get("model") or "")[:160] if "model" in conv else str(row["model"] or "")
+                    model_changed = "model" in conv and model != str(row["model"] or "")
+                    if title_changed or next_archived != bool(row["archived"]) or model_changed:
                         seq = self._next_seq(c, account_id)
                         c.execute(
-                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, seq=? WHERE account_id=? AND cid=?",
+                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, seq=? WHERE account_id=? AND cid=?",
                             (
                                 title if title_changed else row["title"],
                                 t,
                                 1 if next_archived else 0,
+                                model,
                                 seq,
                                 account_id,
                                 cid,
