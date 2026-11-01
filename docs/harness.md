@@ -50,6 +50,14 @@ linked into a profile created from dsh's own web template:
   wins over the global one, so the bundle declares a preset `nanomuse` (the same plugin
   list as dsh's *Standard* with nanoMuse's persona) and makes it the default. The
   person can still pick *Standard*, *PTC* or *Minimal*.
+- **Live conversation: a second bundle, `nanomuse-listen`**
+  ([`harness/nanomuse-listen/`](../harness/nanomuse-listen/)). Continuous listening in
+  the composer (a waveform button, not a one-take recording): `AudioContext` →
+  phrase split by loudness → the harness's own Whisper (or the relay's recognizer) →
+  the words are typed into the composer and sent. The same button reads answers aloud
+  through the system voice, Piper, or the relay, sentence by sentence, and the
+  microphone is deaf while an answer is playing. `dsh-nanomuse` carries a smaller
+  listener of its own and steps aside when this bundle is installed.
 - **Hands, the first of our capabilities as a plugin.** The preset mounts dsh's MCP
   client on `nanomuse mcp` ([cli.md](cli.md#audit-and-config)): the runtime's
   `computer_screen` and `computer_act` served over stdio, with their own descriptions

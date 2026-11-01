@@ -159,11 +159,33 @@ export function apply(ctx: ClientContext): void {
       try {
         return body()
       } catch (error) {
-        console.error(`[nanomuse] seat "${name}" did not register:`, error)
+        // Another bundle already filled this seat (the external `nanomuse-listen` brings
+        // its own microphone button and dictation page). That is not a failure: the first
+        // one keeps the seat, and this bundle is the fallback when it is not installed.
+        if (!String(error).includes('already has an entry')) {
+          console.error(`[nanomuse] seat "${name}" did not register:`, error)
+        }
         return () => undefined
       }
     }),
   }
+  /**
+   * A seat another bundle already filled: the external `nanomuse-listen` plugin brings its
+   * own microphone button and its own dictation page, and two of each is a bug. The first
+   * one to register keeps the seat; this bundle steps aside, and stays the fallback when
+   * that plugin is not installed.
+   */
+  const taken = (slot: string, id: string): boolean =>
+    slots.entriesOfSlot(slot).some((entry) => (entry.options as { id?: string } | undefined)?.id === id)
+  /**
+   * The external voice bundle, when the app carries it: its client entry is in the boot
+   * list. It owns the microphone button and the dictation page, so this bundle must not
+   * draw a second one — and its pages are the ones people already use.
+   */
+  const externalVoice = (): boolean =>
+    ((globalThis as { __DSH_BOOT__?: { entries?: Array<{ name?: string }> } }).__DSH_BOOT__?.entries ?? []).some(
+      (entry) => String(entry?.name ?? '').includes('nanomuse-listen'),
+    )
   const locale = (ctx as unknown as { locale: LocaleTable }).locale
   const layout = (ctx as unknown as { layout: LayoutService }).layout
   const workspaces = (ctx as unknown as { get(name: string): unknown }).get('uiWorkspace') as WorkspaceNavigation
@@ -540,7 +562,9 @@ export function apply(ctx: ClientContext): void {
   // кнопка там просто не отрисуется.
   const VoiceListen = makeVoiceListen(t)
   slots.inject('conversation.input.right', () =>
-    slots.register({ name: 'conversation.input.right', id: 'nanomuse-listen', order: -10, locale: 'nanomuse' }, VoiceListen))
+    externalVoice() || taken('conversation.input.right', 'nanomuse-listen')
+      ? () => undefined
+      : slots.register({ name: 'conversation.input.right', id: 'nanomuse-listen', order: -10, locale: 'nanomuse' }, VoiceListen))
   const QuoteAction = makeQuoteAction(t)
   slots.inject('conversation.chat.assistant-actions', () =>
     slots.register({ name: 'conversation.chat.assistant-actions', id: 'nanomuse.quote', order: -10, locale: 'nanomuse' }, QuoteAction))
@@ -742,7 +766,9 @@ export function apply(ctx: ClientContext): void {
     slots.register({ name: 'settings.section', id: FILES_SECTION, order: 23, label: () => t('navFiles'), locale: 'nanomuse' }, FilesSection))
   const DictationSection = makeDictationSection(t, (id) => layout.selectPanel(id))
   slots.inject('settings.section', () =>
-    slots.register({ name: 'settings.section', id: DICTATION_SECTION, order: 24, label: () => t('navDictation'), locale: 'nanomuse' }, DictationSection))
+    externalVoice() || taken('settings.section', DICTATION_SECTION)
+      ? () => undefined
+      : slots.register({ name: 'settings.section', id: DICTATION_SECTION, order: 24, label: () => t('navDictation'), locale: 'nanomuse' }, DictationSection))
   const PermissionsSection = makePermissionsSection(t)
   slots.inject('settings.section', () =>
     slots.register({ name: 'settings.section', id: PERMISSIONS_SECTION, order: 31, label: () => t('navPermissions'), locale: 'nanomuse' }, PermissionsSection))
