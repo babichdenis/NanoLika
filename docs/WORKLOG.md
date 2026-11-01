@@ -28,6 +28,32 @@
   `test_a_side_chat_backfill_skips_the_catalogue` был флаки и падал через раз).
 - Мёртвый ключ локали `mpPriceMillion` убран (тест «every key is used» был красным).
 
+**Выложено и проверено живьём.**
+
+- **Релей.** На 151.248.123.86 код релея живёт файловыми оверрайдами: обновил
+  `overrides/chat-state-sync-20261028/nanomuse_cloud/sync.py` и
+  `overrides/connection-state-20261027/nanomuse_cloud/db.py` (они отличались от ветки
+  ровно нашими правками — сверено diff'ом), бэкапы `*.bak-20261101T152647`,
+  `docker restart cloud-relay-1`. Миграция добавила `sync_conversations.model`
+  (проверено `PRAGMA table_info`).
+- **Веб-чат.** `app.js`, `index.html` (в базовом каталоге и в оверрайде
+  `cabinet-compact-20261027` — они были байт в байт как в репозитории),
+  `composer-controls.js`, `chat-sync.js`; бэкапы `*.bak-20261101T152722`. Проверено:
+  `https://cloud.nanolika.ru/web/app.js` — наш файл, `index.html` зовёт
+  `app.js?v=20261101-chatmodel`.
+- **Бот (Telegram/MAX).** `/opt/nanomuse-bot` переведён на `f7d04bfe`, образ
+  `nanomuse:bot-20261101b`, `docker-compose.new.yml` (бэкап `*.bak-20261101T…`),
+  контейнер пересоздан, health 200. Внутри: `thread_model_llm` есть, меню пишет
+  `thread.model`. Главный чат бота уже подтянул `openai-gpt-5-6-luna-pro` из релея —
+  сквозной путь «десктоп → релей → бот» работает.
+- **Десктоп.** Плагин пересобран и положен в `payload/.../dsh-nanomuse/lib` и
+  `~/.nanolika/desktop/plugins/dsh-nanomuse/lib` (бэкапы `lib.bak-…`), приложение
+  перезапущено. Живая проверка через CDP: `POST /nanomuse/cloud/chat-model` с
+  `sessionId` ставит модель **этого** чата (`sync.models[session]`), дефолт не
+  меняется; в `cloud.json` у разговора появился `model`, релей его принял.
+- Замечание: в десктопе чат без сессии (пустой экран «новый чат») по-прежнему меняет
+  дефолт — это и есть модель, с которой начнётся новый чат.
+
 ## 2026-11-01 · Модель на чат: протокол релея
 
 Начал сквозную привязку модели к разговору. Шаг 1 — хранилище и протокол:

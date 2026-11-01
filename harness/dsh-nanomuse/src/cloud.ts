@@ -2367,7 +2367,16 @@ export default class NanomuseCloud extends Service {
     const svc = this.defaultModelService()
     if (!svc) throw new RelayError(503, 'no_models', 'Not available yet')
     await svc.saveSelection({ provider, model: id })
-    await this.mainChatFollows(provider, id).catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: the main chat did not follow the chat model: %s', message(error)))
+    const followed = await this.mainChatFollows(provider, id).catch((error: unknown) => {
+      this.ctx.logger.warn('nanomuse cloud: the main chat did not follow the chat model: %s', message(error))
+      return false
+    })
+    // the main chat is the account's conversation, not only this window's: what it answers
+    // with goes to the relay, so the browser and the messengers see the same model for it
+    if (followed && provider === PROVIDER_ID) {
+      const main = this.syncMainSession()
+      if (main) this.sync?.modelPicked(main, id)
+    }
     await this.writeHands().catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: hands model not written: %s', message(error)))
     this.broadcast()
   }
