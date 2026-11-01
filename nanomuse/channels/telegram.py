@@ -547,25 +547,6 @@ class TelegramChannel(Channel):
         result = await self._call("sendMessage", params)
         return str(result.get("message_id") or "")
 
-    async def web_app_button(self, chat_id: str, url: str, label: str, text: str) -> None:
-        """A keyboard under the input with one button that opens the web app inside Telegram.
-
-        Telegram shows such a keyboard only in a private chat, never in a forum topic; the
-        caller sends a plain link there instead. `label` is the button, `text` the line above.
-        """
-        await self._call(
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": text,
-                "reply_markup": {
-                    "keyboard": [[{"text": label, "web_app": {"url": url}}]],
-                    "resize_keyboard": True,
-                    "is_persistent": True,
-                },
-            },
-        )
-
     async def discard(self, chat_id: str, stream_id: str) -> None:
         for message_id in self._stream_messages.pop(stream_id, []):
             if message_id:

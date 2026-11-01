@@ -250,7 +250,7 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
         # every command the manager answers is in the vendor's menu: a person should not
         # have to guess that /balance or /permissions exist
         assert {row[field] for row in commands} == {
-            "menu", "new", "chats", "help", "status", "balance",
+            "start", "menu", "new", "chats", "help", "status", "balance",
             "model", "permissions", "rename", "unlink",
         }
 

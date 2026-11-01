@@ -33,6 +33,7 @@ COPY = {
         "expired": "Кнопка устарела. Открыла новое меню; выберите действие ещё раз.",
         "private_only": "Настройки и баланс доступны в личном чате с Ликой. Откройте его и отправьте /start.",
         "menu": "Меню Лики",
+        "start": "Начать",
         "help": "Помощь",
         "status": "Статус",
         "rename": "Переименовать беседу",
@@ -99,6 +100,7 @@ COPY = {
         "expired": "This button expired. A new menu is open; choose the action again.",
         "private_only": "Open a private chat with Lika and send /start to use settings and balance.",
         "menu": "Lika menu",
+        "start": "Start",
         "help": "Help",
         "status": "Status",
         "rename": "Rename this chat",
@@ -165,6 +167,7 @@ COPY = {
         "expired": "按钮已过期，已打开新菜单，请重新选择。",
         "private_only": "请在与 Lika 的私聊中发送 /start，然后使用设置和余额。",
         "menu": "Lika 菜单",
+        "start": "开始",
         "help": "帮助",
         "status": "状态",
         "rename": "重命名对话",
@@ -313,6 +316,7 @@ class ChatMenu:
         commands = [
             {"command": key, "description": c[label]}
             for key, label in (
+                ("start", "start"),
                 ("chats", "chats"),
                 ("new", "new"),
                 ("menu", "menu"),
@@ -327,16 +331,11 @@ class ChatMenu:
         ]
         if channel.name == "telegram":
             await channel._call("setMyCommands", {"commands": commands})
-            # The menu button in the chat is the app itself when the channel names it: a
-            # person looking for "where is the menu" should find Lika, not a list of commands.
-            # The commands stay on "/" either way.
-            webapp = str(getattr(channel, "settings", {}).get("webapp_url") or "").strip()
-            button = (
-                {"type": "web_app", "text": "Лика", "web_app": {"url": webapp}}
-                if webapp.startswith("https://")
-                else {"type": "commands"}
-            )
-            await channel._call("setChatMenuButton", {"menu_button": button})
+            # Two independent doors, the way Telegram itself splits them: the Mini App is
+            # launched from the bot's card (Main Mini App in @BotFather), and the button in
+            # the chat is the ordinary command menu. A WebApp button here would be a third
+            # door to the same room, and the one people complained about.
+            await channel._call("setChatMenuButton", {"menu_button": {"type": "commands"}})
         else:
             await channel._call(
                 "PATCH",
@@ -615,6 +614,7 @@ class ChatMenu:
         command = msg.text.split()[0].lower().split("@")[0] if msg.text.strip() else ""
         pages = {
             "/menu": "home",
+            "/settings": "home",
             "/chats": "chats",
             "/chat": "chats",
             "/new": "chat:new",

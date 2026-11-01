@@ -2196,41 +2196,6 @@ class ChannelManager(ChannelBus):
             )
         except Exception as exc:
             logger.warning("channel {}: could not send links: {}", channel, exc)
-        await self._web_app_keyboard(channel, ch, chat_id)
-
-    async def _web_app_keyboard(self, channel: str, ch: Any, chat_id: str) -> None:
-        """The button that opens the app from the chat, where the channel can draw one.
-
-        Telegram has no other way to put the web app under the input: a reply keyboard with
-        a `web_app` button, private chats only (a forum topic gets a plain link instead). The
-        URL is the channel's own `webapp_url`, so nothing is invented here.
-        """
-        if channel != "telegram":
-            return
-        cfg = self.store.config(channel)
-        url = str(cfg.settings.get("webapp_url") or "").strip()
-        if not url.startswith("https://"):
-            return
-        button = getattr(ch, "web_app_button", None)
-        if not callable(button):
-            return
-        from nanomuse.channels.telegram_topics import split_chat
-
-        physical, topic = split_chat(chat_id)
-        try:
-            if topic:
-                await self._send(
-                    channel, chat_id, self.say("Open the app", "打开应用", "Открыть приложение") + ": " + url
-                )
-                return
-            await button(
-                physical,
-                url,
-                self.say("Open Lika", "打开莉卡", "Открыть Лику"),
-                self.say("The app is one tap away:", "一键打开应用：", "Приложение — в один тап:"),
-            )
-        except Exception as exc:  # noqa: BLE001 — a keyboard is never worth a failed greeting
-            logger.warning("channel {}: web app keyboard failed: {}", channel, exc)
 
     def greeting(self) -> str:
         """An introduction without model calls or claims about connected services."""
