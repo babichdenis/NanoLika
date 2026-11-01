@@ -122,7 +122,7 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const video = useRef<HTMLVideoElement | null>(null)
   const standard = profile?.avatar !== 'face' && profile?.avatar !== 'emoji' && !live.ownClip && !live.ownClips?.[mood]
   const operator = useOperatorAvatar(standard)
-  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? operator?.clips[mood] ?? clipUrl(profile, mood, live.motion, live.stillLook === true)
+  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion, live.stillLook === true) ?? operator?.clips[mood]
   const clip = candidate && !noClip.has(candidate) ? candidate : null
   const plain = profile?.plain === true
   const localPoster = stillUrl(profile, mood, live.ownClip, live.ownClips)
