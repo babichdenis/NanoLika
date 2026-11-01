@@ -130,6 +130,8 @@ class ConversationSync:
             "history_before": {},
             "cids": {},  # thread id → cid
             "titles": {},  # thread id → the title last pushed
+            # thread id → the chat's own model (a Cloud id) last pushed or applied (C7)
+            "models": {},
             # C10: thread id → the account (`account.id`) it was synced with; absent = none
             "owners": {},
             # C10: account id → the thread that holds that account's main chat while another
@@ -215,7 +217,7 @@ class ConversationSync:
                 self.state["message_cursors"] = {
                     str(k): v for k, v in cursors.items() if type(v) is int and v >= 0
                 }
-            for key in ("cids", "titles", "owners", "mains"):
+            for key in ("cids", "titles", "models", "owners", "mains"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = {str(k): str(v) for k, v in data[key].items()}
 
@@ -941,16 +943,19 @@ class ConversationSync:
                 if not self._eligible(thread):
                     continue
                 cid = self._cid_for(thread)
-                if self.state["titles"].get(thread.id) != thread.title:
-                    conversations.append(
-                        {
-                            "cid": cid,
-                            "kind": "main" if thread.id == MAIN_THREAD else "side",
-                            "title": thread.title,
-                            "created_at": _unix(thread.created_at),
-                            "updated_at": _unix(thread.updated_at),
-                        }
-                    )
+                model = (thread.model or "").strip()[:120]
+                model_changed = bool(model) and self.state["models"].get(thread.id) != model
+                if self.state["titles"].get(thread.id) != thread.title or model_changed:
+                    row: dict[str, Any] = {
+                        "cid": cid,
+                        "kind": "main" if thread.id == MAIN_THREAD else "side",
+                        "title": thread.title,
+                        "created_at": _unix(thread.created_at),
+                        "updated_at": _unix(thread.updated_at),
+                    }
+                    if model_changed:
+                        row["model"] = model
+                    conversations.append(row)
                 for ev, wire in self._unsynced(thread, cid):
                     if len(messages) >= BATCH:
                         break
@@ -997,6 +1002,8 @@ class ConversationSync:
                     for tid, cid in self.state["cids"].items():
                         if cid == c["cid"]:
                             self.state["titles"][tid] = c["title"]
+                            if c.get("model"):
+                                self.state["models"][tid] = str(c["model"])
             self._save()
             if len(messages) < BATCH and not redirect:
                 break
@@ -1315,11 +1322,13 @@ class ConversationSync:
                 self._clear_thread_marks(main)
                 self._save()
                 self._adopt(MAIN_THREAD)
+            self._apply_thread_model(main, row)
             return
         if thread is not None:
             if title and title != thread.title:
                 self.state["titles"][thread.id] = title
                 self.svc.rename_thread(thread.id, title)
+            self._apply_thread_model(thread, row)
             return
         device = str(row.get("device") or "")
         if device and device == self.svc.hub.device_id and not self.state.get("catalog_mode"):
@@ -1334,8 +1343,24 @@ class ConversationSync:
         self.state["titles"][created.id] = created.title
         self._save()
         self._adopt(created.id)
+        self._apply_thread_model(created, row)
         self.svc._save_index()
         self.svc.bus.publish({"kind": "thread", "thread": created.meta()})
+
+    def _apply_thread_model(self, thread: Thread, row: dict[str, Any]) -> None:
+        """The chat's own model from the relay (C7): another device's pick, kept here too.
+
+        The id is remembered as already applied, so the same value is not pushed back as a
+        change of this device's own."""
+        model = str(row.get("model") or "").strip()[:120]
+        if not model:
+            return
+        if self.state["models"].get(thread.id) == model and thread.model == model:
+            return
+        thread.model = model
+        self.state["models"][thread.id] = model
+        self.svc._save_index()
+        self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
 
     def _find_event(self, thread: Thread, mid: str) -> dict[str, Any] | None:
         for ev in thread.timeline.events:

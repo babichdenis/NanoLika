@@ -178,8 +178,8 @@ export interface Live {
   ownClips?: Partial<Record<'idle' | 'working' | 'waiting' | 'happy' | 'error', LiveOwnClip>>
   /** When the hands last saw an all-black screen (macOS: Screen Recording missing or granted after launch); 0 when never. */
   blackScreenAt: number
-  /** Conversation sync (C8): `rev` moves with every change; the session that is the account's main conversation. Absent on an older host. */
-  sync?: { rev: number; mainSession: string } | undefined
+  /** Conversation sync (C8): `rev` moves with every change; the session that is the account's main conversation; the chat's own model per session. Absent on an older host. */
+  sync?: { rev: number; mainSession: string; models?: Record<string, string> } | undefined
   /** Own keys and the ChatGPT sign-in (C11): how many rows, what everything configured can do, where the sign-in stands. Absent on an older host. */
   ownKeys?: LiveOwnKeys | undefined
   /** The hands' trajectory (0.1.40): `rev` moves with every step; the sessions with a run to look back at. Absent on an older host. */

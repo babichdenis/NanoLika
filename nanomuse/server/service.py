@@ -355,6 +355,9 @@ class Thread:
     customer_scope: str = ""
     # stable partition for files; memory ownership can narrow or change independently
     workspace_scope: str = ""
+    # the chat's own Cloud model (contract C7): a pick made here or on another device, so a
+    # picture model chosen in one chat never follows the person into the next one
+    model: str = ""
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -376,6 +379,8 @@ class Thread:
             meta["origin_device_name"] = self.origin_device_name
         if self.main_of:
             meta["main_of"] = self.main_of
+        if self.model:
+            meta["model"] = self.model
         return meta
 
 
@@ -841,6 +846,8 @@ class MuseService:
                 thread.customer_scope = str(m["customer_scope"])
             if m.get("workspace_scope"):
                 thread.workspace_scope = str(m["workspace_scope"])
+            if m.get("model"):
+                thread.model = str(m["model"])
         self._save_index()
 
     def _save_index(self) -> None:
@@ -866,6 +873,8 @@ class MuseService:
                 m["customer_scope"] = t.customer_scope
             if t.workspace_scope:
                 m["workspace_scope"] = t.workspace_scope
+            if t.model:
+                m["model"] = t.model
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -1334,6 +1343,26 @@ class MuseService:
             else self.memory_scope_for_current_account()
         )
 
+    def thread_model_llm(self, model: str) -> tuple[BaseLLM | None, str]:
+        """The client a chat's own Cloud model answers with (contract C7).
+
+        ``(None, model)`` when the configured client already is that model, ``(None, "")``
+        when this device has no account key — then the configured model answers, exactly as
+        before the chat chose one. The chat's choice is a Cloud model: the account pays for
+        the turn it took, the same way the app's own chats do."""
+        model = str(model or "").strip()
+        if not model:
+            return None, ""
+        if self.app.llm_is_cloud() and self.settings.llm.model == model:
+            return None, model
+        key = self.app.vault.get(CLOUD_KEY) or ""
+        if not key:
+            return None, ""
+        try:
+            return self.cloud_once(key, model)
+        except CloudError:
+            return None, ""
+
     def cloud_once(self, key: str = "", model: str = "") -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
@@ -1459,6 +1488,14 @@ class MuseService:
                     # *Use NanoLika Cloud this time*: this turn on the account's model, the
                     # configured client back when it ends (or whatever a switch meanwhile set)
                     thread.agent.llm = incoming.llm
+                elif thread.model:
+                    # the chat's own model (C7): a picture model picked in one chat never
+                    # answers the next one; the client is the turn's and goes after it
+                    held, used = self.thread_model_llm(thread.model)
+                    if held is not None:
+                        thread.agent.llm = held
+                    if used:
+                        incoming.model = used
                 self.bus.publish({"kind": "thread", "thread": thread.meta()})
                 # No sentence of its own: each client words the pause between steps
                 # itself ("On it: <the request>") in its language.

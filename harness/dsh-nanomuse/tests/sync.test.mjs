@@ -33,7 +33,7 @@ function fakeRelay() {
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   const state = () => ({ enabled: r.enabled, cursor: r.seq, counts: { conversations: [...r.convs.values()].filter((c) => !c.deleted).length, messages: r.msgs.size }, limits: {}, working: [...r.presence.values()] })
   r.add = (cid, kind, title, device = 'phone-1', name = 'Pixel 8') => {
-    r.convs.set(cid, { cid, kind, title, device, device_name: name, created_at: 1738000000, updated_at: 1738000000, deleted: false, seq: next() })
+    r.convs.set(cid, { cid, kind, title, device, device_name: name, created_at: 1738000000, updated_at: 1738000000, deleted: false, model: '', seq: next() })
   }
   r.say = (cid, role, text, device = 'phone-1', name = 'Pixel 8', at = 1738000050) => {
     const mid = `m-${r.seq + 1}`
@@ -103,11 +103,15 @@ function fakeRelay() {
             const main = [...r.convs.values()].find((x) => x.kind === 'main' && !x.deleted)
             if (main) { redirected.set(c.cid, main.cid); rejected.push({ cid: c.cid, reason: 'main_exists', cid_main: main.cid }); continue }
           }
-          r.convs.set(c.cid, { cid: c.cid, kind: c.kind ?? 'side', title: c.title ?? '', device: body.device, device_name: 'Desk', created_at: c.created_at ?? 0, updated_at: c.updated_at ?? 0, deleted: false, seq: next() })
+          r.convs.set(c.cid, { cid: c.cid, kind: c.kind ?? 'side', title: c.title ?? '', device: body.device, device_name: 'Desk', created_at: c.created_at ?? 0, updated_at: c.updated_at ?? 0, deleted: false, model: c.model ?? '', seq: next() })
           accepted++
-        } else if (c.title !== r.convs.get(c.cid).title) {
-          Object.assign(r.convs.get(c.cid), { title: c.title, seq: next() })
-          accepted++
+        } else {
+          // a rename and the chat's own model (C7) are one row of the conversation
+          const known = r.convs.get(c.cid)
+          let changed = false
+          if (c.title !== known.title) { known.title = c.title; changed = true }
+          if (c.model !== undefined && c.model !== known.model) { known.model = c.model; changed = true }
+          if (changed) { known.seq = next(); accepted++ }
         }
       }
       for (const m of body.messages ?? []) {
@@ -157,6 +161,9 @@ function fakeSessions() {
     inject: async (id, text) => { s.injected.push([id, text]) },
   }
   s.forgotAll = 0
+  /** The chat's own model as another device's pull applied it here (C7). */
+  s.models = []
+  s.api.model = async (id, model) => { s.models.push([id, model]) }
   /** What one session shows from elsewhere, in the order it was kept. */
   s.remote = (id) => s.appended.filter(([sid]) => sid === id).map(([, line]) => line)
   return s
@@ -220,6 +227,36 @@ test('the person’s words go up when sent, the model’s at the turn’s end; t
   sessions.rows.get('s-main').title = 'Greetings'
   e.sessionRenamed('s-main')
   await until(() => relay.convs.get(main.cid).title === 'Greetings')
+  e.stop()
+})
+
+test('C7: a chat’s own model goes up with it and comes down to this device once', async () => {
+  const relay = fakeRelay()
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [], 1738000000000)
+  sessions.add('s-side', 'Pictures', [], 1738000001000)
+  const { engine: e, saved } = engine(relay, sessions)
+  assert.equal(await e.setMain('s-main'), 's-main')
+  await tick(20)
+  // a pick in one chat: applied here (the session answers with it) and told to the account
+  e.modelPicked('s-side', 'picture-model')
+  await until(() => [...relay.convs.values()].some((c) => c.model === 'picture-model'))
+  const side = [...relay.convs.values()].find((c) => c.cid === saved().cids['s-side'])
+  assert.equal(side.model, 'picture-model')
+  assert.equal(saved().models['s-side'], 'picture-model')
+  // another device picks a text model for the main chat: this device applies it once
+  const main = [...relay.convs.values()].find((c) => c.kind === 'main')
+  main.model = 'text-model'
+  main.seq = ++relay.seq
+  await e.pull()
+  assert.deepEqual(sessions.models, [['s-main', 'text-model']])
+  // applied, not met as a change of ours: the next pulls send nothing back
+  const pushes = relay.pushes.length
+  await e.pull()
+  await tick(30)
+  assert.deepEqual(sessions.models, [['s-main', 'text-model']])
+  assert.equal(relay.pushes.length, pushes)
+  assert.equal(relay.convs.get(main.cid).model, 'text-model')
   e.stop()
 })
 

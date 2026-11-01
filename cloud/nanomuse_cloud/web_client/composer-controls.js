@@ -1,8 +1,8 @@
 import {allModels,chatModel,chatModels} from './catalog.js?v=20261101-notip';
 import {openModelPicker} from './model-picker.js?v=20261101-notip';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
-export function installComposerControls({form,message,select,refresh,status,session,api,words,onOtherPicked,storage=localStorage}){
- let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),enabledByKind={},selected='',owner='',pending=null,busy=false,generation=0;
+export function installComposerControls({form,message,select,refresh,status,session,api,words,onOtherPicked,onPick,storage=localStorage}){
+ let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),enabledByKind={},selected='',chatModel='',owner='',pending=null,busy=false,generation=0;
  let kind='chat',query='';
  const key=()=> 'nl.web.model.'+owner;
  const paint=()=>{select.disabled=busy||!rows.length;refresh.disabled=busy||!!pending;};
@@ -46,7 +46,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
   paint();
  };
  message.addEventListener('keydown',event=>{if(enterSends(event)){event.preventDefault();form.requestSubmit();}});
- select.addEventListener('change',()=>{if(busy||!rows.some(row=>row.id===select.value))return;selected=select.value;try{storage.setItem(key(),selected);}catch{}});
+ select.addEventListener('change',()=>{if(busy||!rows.some(row=>row.id===select.value))return;selected=select.value;chatModel=selected;try{storage.setItem(key(),selected);}catch{}onPick?.(selected);});
  async function load(){
   const identity=session();if(!identity?.owner||!identity.key)return '';
   if(owner!==identity.owner){owner=identity.owner;rows=[];selected='';generation++;pending=null;}
@@ -72,7 +72,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
       включённого на полке): список везде должен совпадать. */
    const shelfDefault=(shelf?.shelf?.default||{}).chat||'';
    const onShelf=id=>!favourites.size||favourites.has(id)||enabledChat.has(id);
-   selected=[selected,saved,shelfDefault].find(id=>id&&chat.some(row=>row.id===id)&&onShelf(id))||chatModel(data)||'';
+   selected=[chatModel,selected,saved,shelfDefault].find(id=>id&&chat.some(row=>row.id===id)&&onShelf(id))||chatModel(data)||'';
    applyFilters();return selected;
   }catch(error){if(generation===version){status.textContent=words.error;}throw error;}finally{if(generation===version){pending=null;paint();}}})();
   pending=task;paint();return task;
@@ -90,5 +90,18 @@ export function installComposerControls({form,message,select,refresh,status,sess
   setQuery(value){query=value||'';applyFilters();},
   kinds(){const set=new Set(all.map(m=>m.kind));return ['chat','image','video','audio'].filter(k=>set.has(k));},
   async model(){const identity=session();if(owner!==identity?.owner||!selected)await load();if(!selected)throw new Error(words.empty);return selected;},
+  /* The model of the chat on screen ('' = nothing chosen there, follow the account
+     default). Called on every chat switch: a picture model picked in one chat must not
+     follow the person into the next one. */
+  setChatModel(id){
+   chatModel=String(id||'');
+   if(!chatModel){paintTrigger();return;}
+   const row=allChat.find(m=>m.id===chatModel)||allVisible.find(m=>m.id===chatModel);
+   if(row){selected=chatModel;select.value=chatModel;paintTrigger();return;}
+   /* The catalogue is not here yet (a chat opened before the first load, or a model
+      this browser has not seen): ask again and settle on it when the rows arrive. */
+   Promise.resolve().then(()=>load()).then(()=>{if(chatModel&&(allChat.some(m=>m.id===chatModel)||allVisible.some(m=>m.id===chatModel))){selected=chatModel;select.value=chatModel;paintTrigger();}}).catch(()=>{});
+  },
+  chatModel:()=>chatModel,
   modelVision};
 }

@@ -331,8 +331,8 @@ export interface LiveState {
   ownClips?: Partial<Record<OwnClipMood, OwnClipView>>
   /** When the hands last saw an all-black screen (macOS: Screen Recording missing, or granted after the app started); 0 when they have not. */
   blackScreenAt: number
-  /** Conversation sync (C8): `rev` moves with every change pulled or pushed; the session that is the account's main conversation. */
-  sync: { rev: number; mainSession: string }
+  /** Conversation sync (C8): `rev` moves with every change pulled or pushed; the session that is the account's main conversation; the chat's own model per session. */
+  sync: { rev: number; mainSession: string; models: Record<string, string> }
   /** Own keys and the ChatGPT sign-in (C11): how many rows, what the sign-in is doing, whether its proxy is up. */
   ownKeys: { count: number; capabilities: Capability[]; chatgpt: { signedIn: boolean; label: string; proxy: boolean; login: LoginView } }
   /** The hands' trajectory (0.1.40): `rev` moves with every step; the sessions that have a run to look back at. The runs themselves are `GET /trajectory?session=`. */
@@ -953,6 +953,11 @@ export default class NanomuseCloud extends Service {
           forgetAll: async () => {
             kept.clear()
             this.logCache.clear()
+          },
+          // another device chose this chat's model (C7): the session answers with it from the
+          // next turn on; the slot (the default for new chats) is left alone
+          model: async (sessionId, model) => {
+            await this.selectSessionModel(sessionId, model, PROVIDER_ID)
           },
           inject: async (sessionId, text) => {
             const resolved = await ctx.sessionController.resolveAgent(sessionId as SessionId)
@@ -2368,6 +2373,47 @@ export default class NanomuseCloud extends Service {
   }
 
   /**
+   * One chat's own model (C7): the session answers with it from the next turn on, and the
+   * slot — the default for chats that never chose — is not touched, so a picture model
+   * picked here does not follow the person into the next chat. The model must be one this
+   * device can route: an account chat model or an own row's.
+   */
+  async selectSessionModel(sessionId: string, id: string, provider = PROVIDER_ID): Promise<void> {
+    if (!sessionId) throw new RelayError(400, 'bad_chat', 'Choose a chat first')
+    if (!id) throw new RelayError(400, 'bad_model', 'A model is required')
+    if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) {
+      if (provider === PROVIDER_ID) await this.refreshCloudModels()
+      if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a chat model of the account or of an own key')
+    }
+    const ctx = this.sessionCtx
+    if (!ctx) throw new RelayError(503, 'not_ready', 'The session API is not up yet')
+    const resolved = await ctx.sessionController.resolveAgent(sessionId as SessionId)
+    if ('error' in resolved) throw new RelayError(404, 'not_found', String(resolved.error))
+    // The registry's own call records the choice in the session's log (it answers with it next
+    // turn) and leaves the default alone; an older harness only has the Remote, whose selection
+    // dsh turns into the default — the slot is put back right after.
+    const agents = (ctx as unknown as { get(name: string): unknown }).get('agents') as { selectForNextRequest?(agent: unknown, selection: { provider: string; model: string }): void } | undefined
+    if (agents?.selectForNextRequest) {
+      agents.selectForNextRequest(resolved.agent, { provider, model: id })
+      return
+    }
+    const slot = this.defaultModelService()?.currentSelection()
+    await ctx.sessionController.selectModel({ sessionId: sessionId as SessionId, provider, model: id })
+    if (slot) await this.defaultModelService()?.saveSelection(slot).catch(() => undefined)
+  }
+
+  /**
+   * The chat's model picked in this app: applied here and, for an account model, told to the
+   * relay at once so the same chat answers the same way in the browser, Telegram and MAX.
+   */
+  async setSessionChatModel(sessionId: string, id: string, provider = PROVIDER_ID): Promise<{ provider: string; model: string }> {
+    await this.selectSessionModel(sessionId, id, provider)
+    if (provider === PROVIDER_ID) this.sync?.modelPicked(sessionId, id)
+    this.broadcast()
+    return { provider, model: id }
+  }
+
+  /**
    * The main chat follows the chat slot. Every session keeps the model it was given, and the
    * slot (`agentDefaultModel`) is the default for new ones; but the main chat is the one
    * conversation the Chat tab always shows and is never new, so on 0.1.41 the Models page could
@@ -2559,7 +2605,7 @@ export default class NanomuseCloud extends Service {
       ownClip: this.ownClip.view(),
       ownClips: this.ownClip.moods(),
       blackScreenAt: this.blackScreenAt,
-      sync: this.sync ? { rev: this.sync.view().rev, mainSession: this.sync.state.mainSession } : { rev: 0, mainSession: '' },
+      sync: this.sync ? { rev: this.sync.view().rev, mainSession: this.sync.state.mainSession, models: this.sync.view().models } : { rev: 0, mainSession: '', models: {} },
       ownKeys: {
         count: Object.keys(this.state.providers ?? {}).length,
         capabilities: this.capabilities(),
@@ -4223,7 +4269,13 @@ export default class NanomuseCloud extends Service {
       }
       if (req.method === 'POST' && route === '/chat-model') {
         const body = await json(req)
-        await this.setChatModel(String(body.model ?? ''), typeof body.provider === 'string' && body.provider ? body.provider : PROVIDER_ID)
+        const provider = typeof body.provider === 'string' && body.provider ? body.provider : PROVIDER_ID
+        // with a chat: that chat's own model only (the default stays where the person put it);
+        // without one: Settings → Models → Chat, the default for new chats
+        if (typeof body.sessionId === 'string' && body.sessionId) {
+          return send(res, 200, await this.setSessionChatModel(body.sessionId, String(body.model ?? ''), provider))
+        }
+        await this.setChatModel(String(body.model ?? ''), provider)
         return send(res, 200, this.chatChoice())
       }
       if (req.method === 'POST' && route === '/hands-model') {

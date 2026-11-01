@@ -49,6 +49,12 @@ class LazyCatalog:
             e.state["pending_cids"] = []
             e.state["history_before"] = {}
             self.selected.clear()
+        if e.state.get("backfill"):
+            # A backfill is owed: the catalogue hands out bodies only for the chats someone
+            # opens, and reading it now would report success with the history still on the
+            # relay. The flag can be set while this pull is between its awaits — hence the
+            # check here, at the call, and not only where the pull began (S3).
+            return None
         if not hasattr(e.client, "catalog"):
             if e.state.get("catalog_mode") or e.state.get("pending_cids"):
                 e.state["catalog_mode"] = False

@@ -133,6 +133,7 @@ class FakeSyncRelay:
             "created_at": 1738000000,
             "updated_at": 1738000000,
             "deleted": False,
+            "model": "",
             "seq": self._next(),
         }
 
@@ -348,15 +349,27 @@ class FakeSyncRelay:
                     "created_at": c.get("created_at", 0),
                     "updated_at": c.get("updated_at", 0),
                     "deleted": bool(c.get("deleted")),
+                    "model": c.get("model", ""),
                     "seq": self._next(),
                 }
                 accepted += 1
             elif c.get("deleted"):
                 self.tombstone_conversation(cid)
                 accepted += 1
-            elif c.get("title") != self.convs[cid]["title"]:
-                self.convs[cid].update(title=c.get("title", ""), seq=self._next())
-                accepted += 1
+            else:
+                # a rename and a chat's own model (C7) are one row of the conversation; the
+                # relay takes either, and a change bumps the seq, so a device that was
+                # offline learns of it on its next pull
+                changed = False
+                if c.get("title") != self.convs[cid]["title"]:
+                    self.convs[cid]["title"] = c.get("title", "")
+                    changed = True
+                if "model" in c and c["model"] != self.convs[cid].get("model", ""):
+                    self.convs[cid]["model"] = c["model"]
+                    changed = True
+                if changed:
+                    self.convs[cid]["seq"] = self._next()
+                    accepted += 1
         for m in messages:
             if m["cid"] in redirected:
                 rejected.append(
@@ -463,6 +476,29 @@ def test_a_finished_turn_is_pushed_as_the_main_conversation(synced) -> None:
     client.delete(f"/api/threads/{side['id']}")
     wait_for(lambda: relay.convs[cid]["deleted"])
     assert service.sync.cid_of(side["id"]) is None
+
+
+def test_a_chat_keeps_its_own_model_everywhere(synced) -> None:
+    """C7: the model belongs to the conversation. Chosen here it goes up with the chat;
+    chosen on another device it comes down and the chat answers with it — and this device
+    does not push its old value back."""
+    client, service, llm, relay = synced
+    main = service.threads[MAIN_THREAD]
+    main.model = "picture-model"
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    cid = service.sync.cid_of(MAIN_THREAD)
+    wait_for(lambda: relay.convs[cid].get("model") == "picture-model")
+    assert relay.convs[cid]["model"] == "picture-model"
+    # another device picks a text model for the same chat
+    relay.convs[cid].update(model="text-model", seq=relay._next())
+    client.post("/api/sync/pull")
+    wait_for(lambda: main.model == "text-model")
+    assert main.model == "text-model"
+    # it was applied, not met as a change of ours: no push follows the pull that learned it
+    pushes = len(relay.pushes)
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    assert len(relay.pushes) == pushes
+    assert relay.convs[cid]["model"] == "text-model"
 
 
 def test_channel_context_is_rebuilt_from_the_relay_transcript(synced) -> None:
@@ -1066,6 +1102,17 @@ def test_a_side_chat_backfill_skips_the_catalogue(main_only) -> None:
     went through it would return success and leave the rest of the history on the relay."""
     client, service, llm, relay = main_only
     wait_for(lambda: relay.pulls)
+    # A push made at start-up queues a second pull of its own; it runs on the event loop's
+    # thread while this one edits the state below. Let both finish first, so the only pull
+    # the catalogue can see is the backfill this test asks for.
+    def idle() -> bool:
+        for name in ("_pull_task", "_push_task"):
+            task = getattr(service.sync, name, None)
+            if task is not None and not task.done():
+                return False
+        return True
+
+    wait_for(idle)
     catalog_calls: list[str] = []
 
     async def catalog(device: str, client_id: str) -> dict[str, Any]:

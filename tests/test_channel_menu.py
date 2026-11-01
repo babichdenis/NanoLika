@@ -367,3 +367,33 @@ async def test_a_chat_without_stars_gets_the_whole_model_menu(tmp_path):
     await menu.show(msg("telegram"), page="models")
     sent = str(m.channels["telegram"]._call.call_args)
     assert "Alpha" in sent and "Beta" in sent
+
+
+@pytest.mark.asyncio
+async def test_a_model_pick_belongs_to_that_chat_only(tmp_path):
+    """C7: the pick saves on the conversation, not on the account's default.
+
+    A picture model chosen in one chat used to move the model of every other chat with the
+    shelf's `default.chat`. Now the choice is the thread's own and goes to the relay with
+    it; nothing else is written."""
+    m = manager(tmp_path)
+    thread = SimpleNamespace(model="", id="channel-telegram-chat", meta=lambda: {"id": "channel-telegram-chat"})
+    m.svc.threads = {"channel-telegram-chat": thread}
+    m.svc._save_index = lambda: None
+    m.svc.bus = SimpleNamespace(publish=lambda event: None)
+    pushed: list[str] = []
+    m.svc.sync = SimpleNamespace(thread_changed=lambda th: pushed.append(th.id))
+    menu = ChatMenu(m)
+    menu._shelf = AsyncMock(
+        return_value={
+            "models": [
+                {"id": "alpha", "name": "Alpha", "kind": "chat", "available": True},
+                {"id": "picture", "name": "Picture", "kind": "chat", "available": True},
+            ],
+            "shelf": {"favourites": [], "default": {"chat": "alpha"}},
+        }
+    )
+    answer = await menu.model_pick(msg("telegram"), "2")
+    assert "Picture" in answer
+    assert thread.model == "picture"
+    assert pushed == ["channel-telegram-chat"]

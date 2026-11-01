@@ -424,3 +424,31 @@ def test_cloud_models_off_is_refused_while_the_chat_model_is_the_account(
         assert llm["cloud"] is True
         assert settings.cloud.models is True
         assert client.get("/api/cloud").json()["models"] is True
+
+
+def test_a_chat_with_its_own_model_answers_on_it(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C7: the model belongs to the conversation. A chat that chose one answers with it
+    under the account's key, whatever the runtime's own ``[llm]`` says; a chat that chose
+    nothing keeps the configured model, and a signed-out runtime cannot spend an account
+    it does not have."""
+    _sign_in(settings, monkeypatch)
+    client, service = _make(settings)
+    with client:
+        service.app.vault.set("NANOMUSE_CLOUD_KEY", "cloud-key")
+        settings.llm.base_url = model_url(RELAY)
+        settings.llm.api_key = "{{vault:NANOMUSE_CLOUD_KEY}}"
+        settings.llm.model = "deepseek-v4.1-flash"
+        # nothing chosen there: the configured client answers, as before
+        assert service.thread_model_llm("") == (None, "")
+        # the configured model already is that model: no second client
+        assert service.thread_model_llm("deepseek-v4.1-flash") == (None, "deepseek-v4.1-flash")
+        # another model of the account: its own client, and the turn names it
+        llm, used = service.thread_model_llm("qwen-image-3.0")
+        assert used == "qwen-image-3.0" and llm is not None
+        assert getattr(llm, "settings").model == "qwen-image-3.0"
+        client.portal.call(llm.close)
+        # signed out: no account key, so the configured model answers
+        service.app.vault.delete("NANOMUSE_CLOUD_KEY")
+        assert service.thread_model_llm("qwen-image-3.0") == (None, "")
