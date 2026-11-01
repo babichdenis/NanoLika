@@ -552,6 +552,18 @@ class ChannelManager(ChannelBus):
             approval_id = self._asks[key][-1]
             await self._decide(msg.channel, msg.chat_id, approval_id, word in ALLOW_WORDS)
             return
+        if command.startswith("/") and re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,31}", command):
+            # A slash word nobody handles: a menu command that did not land, a typo, a
+            # command of another bot. Sending it to the model made it answer "what did you
+            # write there?" — a chat is not the place to guess at commands.
+            answer = self.say(
+                "I do not know that command. The menu at the slash shows the ones I have.",
+                "我不认识这个命令。用 / 打开的命令菜单看看我有哪些。",
+                "Такой команды я не знаю. Список моих — в меню по «/».",
+            )
+            await self._send(msg.channel, msg.chat_id, answer)
+            self._record_channel_reply(msg, answer, thread_id=origin_thread)
+            return
         delivered = self._questions.get(key)
         if (
             delivered
@@ -581,6 +593,11 @@ class ChannelManager(ChannelBus):
         cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
         if cloud_key == "!":
             return
+        # the chat's own model comes first (C7): a model picked in this conversation — here
+        # or in the app — answers it, not the account's recommended one
+        chosen_thread = self.svc.threads.get(thread_id)
+        if chosen_thread is not None and getattr(chosen_thread, "model", ""):
+            cloud_model = chosen_thread.model
         # A recording is words once it is heard: from then on it travels like typed text, so a
         # chat that lives on a computer still gets it. Listening costs the same as in the app.
         heard: list[str] = []

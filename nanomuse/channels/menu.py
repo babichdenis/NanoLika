@@ -551,7 +551,8 @@ class ChatMenu:
                 # and a chat with no stars still gets the whole menu.
                 shelf = data.get("shelf") or {}
                 favourites = [str(item) for item in (shelf.get("favourites") or [])]
-                current = (shelf.get("default") or {}).get("chat") or ""
+                thread = self.m.svc.threads.get(self.m._thread_for(msg))
+                current = str(getattr(thread, "model", "") or (shelf.get("default") or {}).get("chat") or "")
                 if favourites:
                     starred = [
                         m for m in every
@@ -656,7 +657,13 @@ class ChatMenu:
             pages[command] = "model:" + msg.text.split()[1]
         if command == "/rename" and len(msg.text.split()) > 1:
             pages[command] = "chat-rename:" + " ".join(msg.text.split()[1:])
-        if msg.is_group or not self.owner(msg):
+        if msg.is_group and (not self.owner(msg) or command not in {"/model", "/models"}):
+            # In a group the menu stays private: balance, the account and the switches have
+            # no business on a shared screen. The model picker is the exception — a topic is
+            # a conversation of its own, and the model it answers with is chosen right here.
+            await self.m._send(msg.channel, msg.chat_id, COPY[self.language(msg)]["private_only"])
+            return True
+        if not msg.is_group and not self.owner(msg):
             await self.m._send(msg.channel, msg.chat_id, COPY[self.language(msg)]["private_only"])
             return True
         logger.info("channel {}: private menu command received ({})", msg.channel, command)
@@ -914,14 +921,13 @@ class ChatMenu:
         return "\n".join(lines)
 
     async def model_pick(self, msg: InboundMessage, raw: str) -> str:
-        """Pick a model by id (a button) or by number (`/model 3`), then write it back.
+        """Pick this chat's model by id (a button) or by number (`/model 3`).
 
-        The write sends both halves the relay wants: the chat list that stays on the shelf
-        and the one answering by default. A refusal is logged with its reason instead of
-        being reported as "could not load" — that lie cost an evening once."""
+        The choice lives on the conversation, not on the account: a picture model chosen in
+        one chat must not answer the next one. It goes to the relay with the conversation,
+        so the app, the browser and the other messengers see the same model for the same
+        chat. The account's own default (the shelf) is left alone."""
         import logging
-
-        import httpx
 
         c = COPY[self.language(msg)]
         raw = str(raw or "").strip()
@@ -942,31 +948,21 @@ class ChatMenu:
         if chosen is None:
             return c["models_bad"]
 
-        key, base = await self._cloud_access(msg)
-        if not key or not base:
-            return c["models_error"]
-        shelf = data.get("shelf") or {}
-        enabled = {kind: list(ids) for kind, ids in (shelf.get("enabled") or {}).items()}
-        chat_ids = list(enabled.get("chat") or [])
         model_id = str(chosen.get("id"))
-        if model_id not in chat_ids:
-            chat_ids.append(model_id)
-        body = {"enabled": {"chat": chat_ids}, "default": {"chat": model_id}}
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                answer = await client.put(
-                    base + "/v1/me/models",
-                    headers={"Authorization": "Bearer " + key},
-                    json=body,
-                )
-                if answer.status_code >= 400:
-                    logging.getLogger(__name__).warning(
-                        "model pick refused: %s %s", answer.status_code, answer.text[:200]
-                    )
-                    return c["models_error"]
-        except Exception:
-            logging.getLogger(__name__).exception("model pick failed")
+        thread_id = self.m._thread_for(msg)
+        thread = self.m.svc.threads.get(thread_id)
+        if thread is None:
             return c["models_error"]
+        thread.model = model_id
+        self.m.svc._save_index()
+        # the same choice on every device of the account, when this chat is synced
+        sync = getattr(self.m.svc, "sync", None)
+        if sync is not None:
+            try:
+                sync.thread_changed(thread)
+            except Exception:
+                logging.getLogger(__name__).exception("model pick: could not push the chat")
+        self.m.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         return c["models_saved"] + "\n" + str(chosen.get("name") or model_id)
 
     def _cid_now(self, msg: InboundMessage) -> str:
