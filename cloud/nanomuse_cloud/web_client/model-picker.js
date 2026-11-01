@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261101-all', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-scope', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -77,6 +77,44 @@ export function openModelPicker({
     notice.setAttribute("role", "status");
     notice.hidden = true;
 
+    // «Все модели / Избранные» — над поиском, справа. Показываем, только если список
+    // действительно шире избранного: в композере веба он и так состоит из избранного.
+    const bars = document.createElement("div");
+    bars.className = "mp-bars";
+    const favCount = models.filter((model) => favourites.has(model.id)).length;
+    const hasOthers = favCount < models.length;
+    let scope = "all";
+    try {
+      const kept = localStorage.getItem("nm.picker.scope");
+      if (kept === "fav" && favCount > 0) scope = "fav";
+    } catch (_) { /* приватное окно молчит */ }
+    const scopeButtons = [];
+    const paintScope = () => {
+      for (const button of scopeButtons) {
+        const on = button.dataset.scope === scope;
+        button.className = "mp-scope" + (on ? " on" : "");
+        button.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    };
+    if (hasOthers) {
+      for (const [value, label] of [["all", "Все модели"], ["fav", "Избранные"]]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "mp-scope";
+        button.dataset.scope = value;
+        button.textContent = label;
+        button.onclick = () => {
+          scope = value;
+          try { localStorage.setItem("nm.picker.scope", value); } catch (_) { /* тихо */ }
+          paintScope();
+          render();
+        };
+        scopeButtons.push(button);
+        bars.append(button);
+      }
+      paintScope();
+    }
+
     const search = document.createElement("input");
     search.type = "search";
     search.className = "mp-search";
@@ -90,7 +128,7 @@ export function openModelPicker({
     manage.className = "mp-manage";
     manage.textContent = "Управление моделями";
     manage.onclick = () => { finish(null); onManage?.(); };
-    dialog.append(head, notice, search, list, manage);
+    dialog.append(head, notice, hasOthers ? bars : document.createElement("span"), search, list, manage);
     if (inPage) container.append(dialog); else document.body.append(dialog);
     const tip = document.createElement("div");
     tip.className = "mp-tip";
@@ -130,14 +168,18 @@ export function openModelPicker({
       add("Изготовитель", model.vendor || "—");
       add("Контекст", contextText(model.context));
       add("Тип", (CATEGORIES.find(([key]) => key === categoryOf(model)) || ["", "Другое"])[1]);
-      const price = model.price
-        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(model.price.value) + " ₽ / " + model.price.unit
+      const money = (price) => price
+        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(price.value) + " ₽ / " + price.unit
         : "—";
-      add("Цена", price);
+      // У текстовых моделей цена входа и выхода разная: показывать только вход — значит
+      // обещать половину счёта.
+      add("Цена", model.kind === "chat" && model.priceOut
+        ? "вход " + money(model.price) + " · выход " + money(model.priceOut)
+        : money(model.price));
       const rect = row.getBoundingClientRect();
       const dialogRect = dialog.getBoundingClientRect();
       tip.hidden = false;
-      const width = 258;
+      const width = 300;
       let left = dialogRect.right + 12;
       if (left + width > window.innerWidth - 8) left = dialogRect.left - width - 12;
       tip.style.left = Math.max(8, left) + "px";
@@ -146,10 +188,11 @@ export function openModelPicker({
     let scrolledToSelected = false;
     const render = () => {
       const query = search.value.trim().toLowerCase();
+      const source = scope === "fav" ? models.filter((model) => favourites.has(model.id)) : models;
       list.replaceChildren();
       for (const [kind, label] of CATEGORIES) {
         if (Array.isArray(kinds) && !kinds.includes(kind)) continue;
-        const items = models.filter(
+        const items = source.filter(
           (model) =>
             categoryOf(model) === kind &&
             (!query || model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query)),
@@ -230,7 +273,7 @@ export function openModelPicker({
       if (!list.children.length) {
         const empty = document.createElement("p");
         empty.className = "mp-empty";
-        empty.textContent = models.length ? "Ничего не нашлось" : "Нет избранных моделей";
+        empty.textContent = scope === "fav" ? "В избранном пока пусто — отметьте модель звездой." : "Ничего не нашлось";
         list.append(empty);
       }
     };

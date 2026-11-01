@@ -10,6 +10,11 @@
 :is(.mp-dialog,.mp-embed) .mp-search{flex:0 0 auto;width:100%;box-sizing:border-box;margin:0 0 6px;padding:9px 11px;border:1px solid var(--line,#d8d1c1);border-radius:9px;background:var(--paper,#f7f1e6);color:var(--ink,#38372f);font:inherit;font-size:14px}
 .mp-list{display:block;flex:1 1 auto;min-height:0;overflow:auto}
 /* «Взяли» — под шапкой, на виду: под карточкой строку срезает узкое окно. */
+/* «Все модели / Избранные»: пилюли над поиском, справа. */
+.mp-bars{display:flex;justify-content:flex-end;gap:6px;padding:0 4px 8px;flex:0 0 auto}
+.mp-scope{border:0;border-radius:999px;padding:5px 12px;background:var(--chip,#f1f0ea);color:var(--muted,#66675b);font:inherit;font-size:12px;cursor:pointer}
+.mp-scope:hover{background:var(--chip-hover,#e8e7df)}
+.mp-scope.on{background:var(--accent,#0f9d8f);color:#fff}
 .mp-notice{margin:0 4px 8px;padding:8px 10px;border-radius:10px;background:rgba(15,157,143,.12);color:var(--fg,#1d1d1b);font-size:12px;line-height:1.35}
 .mp-row{display:flex;align-items:center;gap:2px;width:100%}
 :is(.mp-dialog,.mp-embed) .mp-item{display:flex;align-items:center;flex:1 1 auto;min-width:0;text-align:left;border:0;background:none;color:var(--ink,#38372f);border-radius:7px;padding:8px 9px;font:inherit;font-size:14px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -26,9 +31,9 @@
 :is(.mp-dialog,.mp-embed) .mp-plan{flex:0 0 auto;padding:2px 8px;border-radius:999px;background:var(--fill,#e7eadc);color:var(--action,#52694e);font-size:10px;font-weight:700;letter-spacing:.04em;text-decoration:none;white-space:nowrap}
 :is(.mp-dialog,.mp-embed) .mp-plan:hover{background:var(--action,#52694e);color:#fffdf4}
 .mp-dialog[open]{display:flex}
-.mp-tip{position:fixed;z-index:5;width:258px;padding:11px 13px;border:1px solid var(--line,#d8d1c1);border-radius:10px;background:var(--surface,#fffdf8);box-shadow:0 14px 34px rgba(40,35,20,.16);font-size:12px;line-height:1.55;color:var(--ink-2,#66675b);pointer-events:none}
+.mp-tip{position:fixed;z-index:5;width:300px;padding:11px 13px;border:1px solid var(--line,#d8d1c1);border-radius:10px;background:var(--surface,#fffdf8);box-shadow:0 14px 34px rgba(40,35,20,.16);font-size:12px;line-height:1.55;color:var(--ink-2,#66675b);pointer-events:none}
 .mp-tip b{display:block;margin-bottom:5px;font-size:13px;line-height:1.35;color:var(--ink,#38372f)}
-.mp-tip span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-tip span{display:block;white-space:normal} /* цена входа и выхода в одну строку не влезает — пусть переносится */
 .mp-tip em{font-style:normal;color:var(--muted,#8a8a7b)}
 .mp-embed{display:flex;flex-direction:column;max-width:560px;height:100%;min-height:0;box-sizing:border-box;padding:12px 12px calc(12px + env(safe-area-inset-bottom));border:1px solid var(--line,#d8d1c1);border-radius:16px;background:var(--surface,#fffdf8);box-shadow:0 18px 44px rgba(40,35,20,.12);color:var(--ink,#38372f)}
 .mp-embed .mp-head{flex:0 0 auto}

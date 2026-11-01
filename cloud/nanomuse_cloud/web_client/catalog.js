@@ -29,6 +29,12 @@ function priceOf(facts, kind){
  if(kind==='audio')return one(rates.speech,'1000 знаков')||one(rates.minute,'минута');
  return one(rates.input,'М. ток')||one(rates.output,'М. ток');
 }
+/** Цена выхода отдельно: у текста она своя, и без неё подсказка обещает половину счёта. */
+function priceOutOf(facts, kind){
+ const rates=(facts.commerce&&facts.commerce.rates_rub)||{};
+ const out=Number(rates.output);
+ return kind==='chat'&&out>0?{value:out,unit:'М. ток'}:null;
+}
 export function allModels(catalogue){
  const seen=new Set();return (catalogue.data||[]).filter(row=>{
   const facts=row.nanomuse||row;
@@ -41,6 +47,7 @@ export function allModels(catalogue){
           vendor:facts.vendor||row.vendor||'',
           context:Number(facts.context_length||row.context_length||0),
           price:priceOf(facts,kind),
+          priceOut:priceOutOf(facts,kind),
           locked:Boolean(row.plan_locked||facts.plan_locked||row.locked||facts.locked),
           vision:row.architecture?.input_modalities?.includes?.('image')===true||facts.vision===true||row.input_modalities?.includes?.('image')===true,
           forChat:Array.isArray(facts.for)?facts.for.includes('chat'):kind==='chat'};
