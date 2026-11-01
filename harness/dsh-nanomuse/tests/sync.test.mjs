@@ -1206,6 +1206,9 @@ test('C11: a cloud chat can pause sync without deleting shared history', async (
   assert.equal(e.state.clouds[sid], 'local')
   assert.ok(sessions.rows.has(sid), 'the chat stays on this computer')
   assert.ok(!e.view().sessions.includes(sid))
+  // "delete everywhere" hides it in the column too (the session file itself stays: dsh keeps logs)
+  assert.ok(e.view().gone.includes(sid))
+  assert.equal(e.state.gone.filter((id) => id === sid).length, 1)
   // a turn here no longer reaches the account
   sessions.lines.set(sid, [{ id: 'u7', role: 'user', text: 'said after leaving the account', at: 1738000300000 }])
   sessions.rows.get(sid).blank = false

@@ -51,8 +51,10 @@ interface SyncList {
    * but in `sessions`; the main chat is in the cloud whether it is listed or not.
    */
   synced: Set<string>
+  /** Chats deleted everywhere here: hidden (the account has a tombstone, the file stays). */
+  gone: Set<string>
 }
-const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set() }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set() }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -61,8 +63,8 @@ export function useSyncList(): SyncList {
   useEffect(() => {
     let alive = true
     const load = () => {
-      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; unread?: Record<string, number> }>('sync/state')
-        .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []) }) })
+      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number> }>('sync/state')
+        .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []) }) })
         .catch(() => undefined)
     }
     void load()
@@ -212,9 +214,11 @@ interface RowProps {
   /** C11: where this chat's cloud stands (`chatCloud`) and what its item does there: on, off, or nothing (the main chat). */
   cloud: ChatCloud
   onCloud(action: CloudAction): void
+  /** Delete everywhere (the account too); one confirmation in the parent. */
+  onDelete(): void
 }
 
-function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain, cloud, onCloud }: RowProps): ReactNode {
+function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain, cloud, onCloud, onDelete }: RowProps): ReactNode {
   const live = useLive()
   const status = typeof useSessionStatus === 'function' ? useSessionStatus((map) => map.get(chat.id)) : undefined
   const running = status?.running ?? chat.running
@@ -260,6 +264,7 @@ function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useS
     ...(main ? [] : [{ id: 'archive', label: t('chArchive'), onSelect: () => { void actions.archiveSession(chat.id).catch(() => undefined) } }]),
     cloudEntry,
     ...(main ? [] : [{ id: 'main', label: t('chMakeMain'), onSelect: onMakeMain }]),
+    ...(main ? [] : [{ id: 'delete', label: t('chDeleteForever'), danger: true, hint: t('chDeleteForeverHint'), onSelect: () => onDelete() }]),
   ]
 
   return h('div', { className: `nm-chat-row${selected ? ' nm-selected' : ''}${main ? ' nm-main' : ''}`, 'data-session-id': chat.id },
@@ -330,12 +335,12 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   // harness's session list does not carry the still-empty session yet: the row is built from
   // the sync view, so the MAX chat cannot be invisible on the computer while the web sees it.
   const syncedOnly = [...sync.sessions]
-    .filter((id) => (!state.ids.includes(id) || !state.byId[id]) && !sync.foreign.has(id) && !archivedSet.has(id))
+    .filter((id) => (!state.ids.includes(id) || !state.byId[id]) && !sync.foreign.has(id) && !sync.gone.has(id) && !archivedSet.has(id))
     .map((id): ChatSummary => state.byId[id] ?? ({ id, displayTitle: sync.titles[id] || t('chBlank'), running: false, retainedBy: {}, blank: false, updatedAt: Date.now() }))
   const allById: Record<string, ChatSummary> = { ...state.byId, ...Object.fromEntries(syncedOnly.map((row) => [row.id, row])) }
   const visible = [...state.ids, ...syncedOnly.map((row) => row.id)]
     .map((id) => allById[id])
-    .filter((s): s is ChatSummary => s !== undefined && s.origin !== 'subagent' && !s.parentId && !archivedSet.has(s.id) && !sync.foreign.has(s.id) && !batches.has(s.id))
+    .filter((s): s is ChatSummary => s !== undefined && s.origin !== 'subagent' && !s.parentId && !archivedSet.has(s.id) && !sync.foreign.has(s.id) && !sync.gone.has(s.id) && !batches.has(s.id))
   const current = Object.values(allById).find((s) => (s.retainedBy.mainView ?? 0) > 0)?.id
 
   // The main chat: the one the account's main conversation lives in (C8) while it exists, else
@@ -419,6 +424,13 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     if (action === 'on') toggleCloud(id, true)
     else if (action === 'off') cloudOff(id)
   }
+  /** Delete a chat here and in the account: one confirmation, then it is gone from every device. */
+  const deleteEverywhere = (id: string) => {
+    if (!window.confirm(t('chDeleteForeverConfirm'))) return
+    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
+      .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
+      .catch((err: unknown) => say(failureText(t, err)))
+  }
   const headItems: MenuItem[] = [
     { id: 'archived', label: t('chArchived'), onSelect: actions.openArchived },
   ]
@@ -433,7 +445,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     h('div', { className: 'nm-chats-list' },
       mainMatches
         ? (main
-            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, cloud: 'main', onCloud: () => undefined })
+            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, cloud: 'main', onCloud: () => undefined, onDelete: () => undefined })
             : h('div', { className: 'nm-chat-row nm-main' },
                 h('button', { type: 'button', className: 'nm-chat-open', onClick: openMain }, h('span', { className: 'nm-chat-title' }, t('chMain')))))
         : null,
@@ -455,6 +467,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
             actions,
             cloud: chatCloud(sync, chat.id, false),
             onCloud: (action) => runCloud(chat.id, action),
+            onDelete: () => deleteEverywhere(chat.id),
             // the host has the last word: while the account's main conversation lives in a session, that one stays the main chat
             onMakeMain: () => {
               void call<{ sessionId?: string } | undefined>('sync/main', { sessionId: chat.id })

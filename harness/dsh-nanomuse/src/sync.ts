@@ -555,13 +555,16 @@ export interface SyncState {
   mirrors?: Record<string, unknown>
   /** The "all chats" default this state has been moved to (2 since 2026-11); absent = before that. */
   sideChatsVersion?: number
+  /** Sessions the person deleted here ("delete everywhere"): the account's copy is a tombstone and
+   * the local session is hidden from the chats column; the file itself stays (dsh keeps logs). */
+  gone?: string[]
 }
 
 /** The version of "all chats" this build defaults to; an older state is moved over once. */
 const SIDE_CHATS_VERSION = 2
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: true, sideChatsVersion: SIDE_CHATS_VERSION, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
+  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: true, sideChatsVersion: SIDE_CHATS_VERSION, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, gone: [], conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
 }
 
 /**
@@ -580,6 +583,7 @@ export function migrate(state: SyncState | undefined): SyncState {
   next.cursors = state.cursors ?? { main: 0, all: next.sideChats ? state.cursor : 0 }
   next.historyBefore = state.historyBefore ?? {}
   next.models = { ...(state.models ?? {}) }
+  next.gone = Array.isArray(state.gone) ? state.gone.filter((id) => typeof id === 'string') : []
   // 2026-11: the desktop used to sync the main conversation only, and the switch was off
   // by default. Every chat belongs to the account now (the person can still turn the switch
   // off); the marker keeps that one move from undoing a later choice.
@@ -668,6 +672,8 @@ export interface SyncView {
   titles: Record<string, string>
   /** The chat's own model (a Cloud id) per session; a session not listed follows the default. */
   models: Record<string, string>
+  /** Chats deleted everywhere on this device: hidden in the column (the session file itself stays). */
+  gone: string[]
   /** Sessions that belong to another account than the one signed in (C10): hidden by the browser half, not deleted; empty when signed out. */
   foreign: string[]
   /** mids of rows deleted elsewhere: hidden in the transcript. */
@@ -797,6 +803,7 @@ export class SyncEngine {
       models: Object.fromEntries(
         Object.entries(this.state.models).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
       ),
+      gone: [...(this.state.gone ?? [])],
       foreign: this.foreign(),
       hidden: [...this.state.hidden],
       toArchive: this.state.toArchive.filter(sid => this.state.clouds[sid] !== 'local' || !this.state.cids[sid]),
@@ -1090,6 +1097,9 @@ export class SyncEngine {
     if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return { ...this.view(), ok: false, reason: 'main' }
     if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return { ...this.view(), ok: false, reason: 'not-synced-account' }
     await this.cloudOff(sessionId)
+    const gone = new Set(this.state.gone ?? [])
+    gone.add(sessionId)
+    this.state.gone = [...gone]
     await this.save()
     this.changed()
     return { ...this.view(), ok: true }
@@ -1257,6 +1267,7 @@ export class SyncEngine {
    */
   private syncs(sessionId: string): boolean {
     if (!this.owns(sessionId)) return false
+    if ((this.state.gone ?? []).includes(sessionId)) return false
     if (this.options.isTaskSession?.(sessionId) === true) return true
     if (sessionId === this.state.mainSession) return true
     const mark = this.state.clouds[sessionId]
