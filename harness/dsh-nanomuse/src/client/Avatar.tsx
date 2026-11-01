@@ -1,13 +1,13 @@
 /**
  * The agent's face where the harness shows a brand: the sidebar mark, the
  * sidebar name, the hero mark above a blank session, the capsule, the header.
- * The face is the account's — the dragon by default, an emoji on a colour, or
+ * The face is the account's — Lika by default, an emoji on a colour, or
  * one drawn in the avatar studio on the phone whose stills the host pulled —
  * and its mood follows what the agent is doing, the way the Android app's
  * `AgentAvatarDisc` and the web app's `Avatar` do: idle, working, waiting (for
  * the person), happy, error.
  *
- * The dragon moves: a short looping clip per mood — a head shake at rest,
+ * Lika moves: a short looping clip per mood — a head shake at rest,
  * headphones and a laptop while working, a crystal ball while waiting, a star
  * when pleased — the same clips the phone and the web app play. A drawn face
  * moves too once this computer has drawn its clips (`motion.ts`, Settings →
@@ -41,7 +41,7 @@ const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia 
 
 /**
  * Document-relative, so it resolves under whatever mount served the page. With `ownClip`
- * and no drawn face, the own clip's first frame stands in for the dragon.
+ * and no drawn face, the own clip's first frame stands in for Lika.
  */
 export function stillUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', ownClip?: LiveOwnClip | null, ownClips?: Partial<Record<Mood, LiveOwnClip>>): string {
   // «Без образа»: nothing to load at all, so the mark is a letter and not a picture
@@ -50,7 +50,7 @@ export function stillUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', 
   const override = ownClips?.[mood]
   if (override?.poster) return `nanomuse/avatar/own-clip-${mood}.png?v=${override.v}`
   if (ownClip?.poster) return `nanomuse/avatar/own-clip.png?v=${ownClip.v}`
-  return `nanomuse/assets/dragon-${mood}.webp?v=${BUILTIN_AVATAR_REVISION}`
+  return `nanomuse/assets/lika-${mood}.webp?v=${BUILTIN_AVATAR_REVISION}`
 }
 
 /** The person's own clip, when one is set: the same for every mood, keyed by its mtime. */
@@ -75,10 +75,9 @@ export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', m
     const clip = motion.clips[mood]
     return clip ? `nanomuse/avatar/motion/${mood}.mp4?v=${clip.v}` : null
   }
-  // The bundled dragon clips carry an opaque beige background; the still is transparent,
-  // and the surrounding face still breathes and sways. Own clips and drawn faces keep
-  // their video above.
-  return null
+  // The bundled clips are VP9 with an alpha channel: the beige studio background is
+  // gone, and the face still breathes and sways around the video.
+  return `nanomuse/assets/lika-${mood}.webm?v=${BUILTIN_AVATAR_REVISION}`
 }
 
 /**

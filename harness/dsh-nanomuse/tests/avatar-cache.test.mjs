@@ -12,14 +12,14 @@ test('a same-version artwork replacement changes the browser cache key', async (
   const dir = await mkdtemp(join(tmpdir(), 'lika-artwork-'))
   try {
     for (const mood of ['idle', 'working', 'waiting', 'happy', 'error']) {
-      for (const ext of mood === 'error' ? ['webp'] : ['webp', 'mp4']) {
-        await writeFile(join(dir, `dragon-${mood}.${ext}`), `${mood}.${ext}`)
+      for (const ext of mood === 'error' ? ['webp'] : ['webp', 'webm']) {
+        await writeFile(join(dir, `lika-${mood}.${ext}`), `${mood}.${ext}`)
       }
     }
     const folder = pathToFileURL(`${dir}/`)
     const old = avatarRevision(folder)
     assert.equal(avatarRevision(folder), old)
-    await writeFile(join(dir, 'dragon-idle.mp4'), 'replacement Lika animation')
+    await writeFile(join(dir, 'lika-idle.webm'), 'replacement Lika animation')
     assert.notEqual(avatarRevision(folder), old)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
@@ -28,7 +28,7 @@ test('bundled avatars are revalidated instead of retaining a day-old face', asyn
   const server = createServer((req, res) => { void serveAsset(req, res) })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   try {
-    const url = `http://127.0.0.1:${server.address().port}/nanomuse/assets/dragon-idle.webp?v=test`
+    const url = `http://127.0.0.1:${server.address().port}/nanomuse/assets/lika-idle.webp?v=test`
     const res = await fetch(url)
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('cache-control'), 'no-cache')

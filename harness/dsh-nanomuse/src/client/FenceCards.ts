@@ -135,7 +135,7 @@ function card(t: Translate, fence: Fence): HTMLElement {
       face.className = 'nm-fence-face'
       face.alt = ''
       face.src = stillUrl(peekLive().profile, 'happy')
-      face.onerror = () => { face.src = 'nanomuse/assets/dragon-happy.webp' }
+      face.onerror = () => { face.src = 'nanomuse/assets/lika-happy.webp' }
       row.append(face)
       const main = el('div', 'nm-fence-main')
       main.append(el('div', 'nm-fence-kind', t('fcNewLook')))

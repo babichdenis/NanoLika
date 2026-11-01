@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 export function avatarRevision(folder) {
   const hash = createHash('sha256')
   for (const mood of ['idle', 'working', 'waiting', 'happy', 'error']) {
-    for (const ext of mood === 'error' ? ['webp'] : ['webp', 'mp4']) {
-      const name = `dragon-${mood}.${ext}`
+    for (const ext of mood === 'error' ? ['webp'] : ['webp', 'webm']) {
+      const name = `lika-${mood}.${ext}`
       hash.update(name)
       hash.update(readFileSync(new URL(name, folder)))
     }

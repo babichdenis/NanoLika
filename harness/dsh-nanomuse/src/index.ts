@@ -45,7 +45,7 @@ export const Config: z<Config> = z.object({ speech: speechConfig })
 export const ASSETS_PREFIX = '/nanomuse/assets'
 
 const ASSETS_DIR = packageAssetsDir(import.meta.url)
-const TYPES: Record<string, string> = { '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.mp4': 'video/mp4' }
+const TYPES: Record<string, string> = { '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm' }
 const FACE = /^\/face\/([a-f0-9]{6,40})\/([a-z]+)\.(webp|mp4)$/
 
 /**

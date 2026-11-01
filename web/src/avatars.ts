@@ -1,7 +1,7 @@
 /**
  * The agent's face. Muse gives its agent a plush doll; NanoLika has its fairy — five stills,
- * one per mood (public/avatars/dragon-*.webp) and four short clips that move them (idle,
- * working, waiting, happy — dragon-*.mp4, the same clips the Android app plays) — or a face the
+ * one per mood (public/avatars/lika-*.webp) and four short clips that move them (idle,
+ * working, waiting, happy — lika-*.webm, the same clips the Android app plays) — or a face the
  * person had drawn for them in the avatar studio (served from the runtime's files, stills and,
  * where the video model made them, clips), or an emoji on a colour for anyone who prefers it.
  * `profile.avatar` names the face; "" means the emoji.
@@ -10,7 +10,7 @@
 import { fileUrl } from "./api";
 import { BUILTIN_AVATAR_REVISION } from "./avatar-revision";
 
-/** The built-in Lika fairy; dragon remains the compatibility ID. */
+/** The built-in Lika fairy; `dragon` remains the compatibility ID in old profiles. */
 export const DRAGON = "dragon";
 export type DragonMood = "idle" | "working" | "waiting" | "happy" | "error";
 
@@ -36,7 +36,7 @@ export function studioUrl(id: string, mood: string): string {
 
 export function dragonUrl(mood: string): string {
   const still: DragonMood = mood === "working" || mood === "waiting" || mood === "happy" || mood === "error" ? mood : "idle";
-  return `/avatars/dragon-${still}.webp?v=${BUILTIN_AVATAR_REVISION}`;
+  return `/avatars/lika-${still}.webp?v=${BUILTIN_AVATAR_REVISION}`;
 }
 
 /** The moods that move; "error" is a still, on the phone too. */
@@ -46,10 +46,10 @@ function clipMood(mood: string): ClipMood {
   return mood === "working" || mood === "waiting" || mood === "happy" ? mood : "idle";
 }
 
-/** The dragon's clip for a mood — a few seconds, looping, back in the starting pose at the end. */
+/** Lika's clip for a mood — a few seconds, looping, back in the starting pose at the end. */
 export function dragonClipUrl(mood: string): string | null {
   if (mood === "error") return null;
-  return `/avatars/dragon-${clipMood(mood)}.mp4?v=${BUILTIN_AVATAR_REVISION}`;
+  return `/avatars/lika-${clipMood(mood)}.webm?v=${BUILTIN_AVATAR_REVISION}`;
 }
 
 /**
