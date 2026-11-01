@@ -50,7 +50,9 @@ export function makeCloudModelPill(t: Translate) {
       const place = (): void => {
         const pill = button.current?.getBoundingClientRect()
         if (!pill) return
-        const width = Math.min(860, window.innerWidth - 24)
+        // Wide enough for the card and the model's tip beside it: at 860 the tip had nowhere
+        // to go but over the list, which is what made it look like it hid the choice.
+        const width = Math.min(940, window.innerWidth - 24)
         const height = Math.min(780, window.innerHeight - 24)
         let left = Math.round(pill.left - 16)
         left = Math.min(left, window.innerWidth - width - 12)

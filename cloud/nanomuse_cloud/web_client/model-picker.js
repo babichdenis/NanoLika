@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261101-inline', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-tip', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -191,11 +191,21 @@ export function openModelPicker({
         : money(model.price));
       const rect = row.getBoundingClientRect();
       const dialogRect = dialog.getBoundingClientRect();
+      const width = 280;
+      // Сбоку от карточки, а не поверх списка: в окне приложения карточка стоит слева и
+      // место есть справа, в веб-модалке — слева. Нет места вовсе — подсказка молчит,
+      // но строки не закрывает.
+      const toRight = dialogRect.right + 12;
+      const toLeft = dialogRect.left - width - 12;
+      const x = toRight + width <= window.innerWidth - 8
+        ? toRight
+        : toLeft >= 8 ? toLeft : null;
+      if (x === null) {
+        tip.hidden = true;
+        return;
+      }
       tip.hidden = false;
-      const width = 300;
-      let left = dialogRect.right + 12;
-      if (left + width > window.innerWidth - 8) left = dialogRect.left - width - 12;
-      tip.style.left = Math.max(8, left) + "px";
+      tip.style.left = x + "px";
       tip.style.top = Math.max(8, Math.min(rect.top, window.innerHeight - 170)) + "px";
     };
     let scrolledToSelected = false;
@@ -284,12 +294,10 @@ export function openModelPicker({
             render();
           };
           row.append(star);
-          if (!inPage) {
-            row.addEventListener("mouseenter", () => showTip(model, row));
-            row.addEventListener("mouseleave", hideTip);
-            pick.addEventListener("focus", () => showTip(model, row));
-            pick.addEventListener("blur", hideTip);
-          }
+          row.addEventListener("mouseenter", () => showTip(model, row));
+          row.addEventListener("mouseleave", hideTip);
+          pick.addEventListener("focus", () => showTip(model, row));
+          pick.addEventListener("blur", hideTip);
           list.append(row);
         }
       }
