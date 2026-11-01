@@ -85,6 +85,9 @@ function makeSpeechSplitter(onUtterance: (samples: Float32Array) => void, settin
   let silence = 0
   let voicing = false
   let rate = 0
+  // the room's own noise, learned while nobody speaks: a television or a fan raises the bar
+  let floor = 0.006
+  let muted = false
   const collect = (): Float32Array => {
     const total = parts.reduce((sum, part) => sum + part.length, 0)
     const all = new Float32Array(total)
@@ -102,13 +105,21 @@ function makeSpeechSplitter(onUtterance: (samples: Float32Array) => void, settin
     voicing = false
   }
   return {
+    /** Deaf for a while: the answer being spoken, or a turn already running. */
+    mute(on: boolean): void {
+      muted = on
+      if (on) reset()
+    },
     push(samples: Float32Array, sampleRate: number): void {
+      if (muted) return
       rate = sampleRate
       let sum = 0
       for (let i = 0; i < samples.length; i += 1) sum += samples[i]! * samples[i]!
       const rms = Math.sqrt(sum / samples.length)
-      // порог грубый, но для речи в тихой комнате его достаточно; шум ветра он не считает речью
-      const voice = rms > 0.012
+      // The bar follows the room: a quiet one needs almost nothing, and a television that
+      // is always on lifts the floor instead of being taken for speech every phrase.
+      if (!voicing) floor = floor * 0.97 + rms * 0.03
+      const voice = rms > Math.max(0.012, floor * 3)
       if (voice) {
         voicing = true
         silence = 0
@@ -145,7 +156,10 @@ export function makeVoiceListen(t: Translate, hooks: { onError?: (message: strin
     const [state, setState] = useState<'idle' | 'listening' | 'working'>('idle')
     const [failure, setFailure] = useState('')
     const run = useRef<{ stop(): void } | null>(null)
+    // the audio callback outlives this render, so what the microphone must ignore lives in a ref
+    const busy = useRef(false)
     const change = (next: 'idle' | 'listening' | 'working') => {
+      busy.current = next === 'working'
       setState(next)
       hooks.onState?.(next)
     }
@@ -192,13 +206,28 @@ export function makeVoiceListen(t: Translate, hooks: { onError?: (message: strin
 
     const start = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        // Echo cancellation and noise suppression are the browser's own: without them a
+        // laptop's speakers feed the answer straight back into the microphone.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        })
         const context = new AudioContext()
         if (context.state !== 'running') await context.resume().catch(() => undefined)
         const source = context.createMediaStreamSource(stream)
         const processor = context.createScriptProcessor(4096, 1, 1)
         const splitter = makeSpeechSplitter((samples) => send(samples, context.sampleRate), { silenceMs: 900, minMs: 350 })
+        // the host knows when the platform's voice is talking; a listener that cannot tell
+        // its own answer from a question answers itself until the conversation is a mess
+        const talking = { active: false }
+        const askTalking = setInterval(() => {
+          void call<{ speaking?: boolean }>('speaking')
+            .then((answer) => {
+              talking.active = answer.speaking === true
+            })
+            .catch(() => undefined)
+        }, 700)
         processor.onaudioprocess = (event) => {
+          splitter.mute(busy.current || talking.active)
           splitter.push(event.inputBuffer.getChannelData(0), context.sampleRate)
         }
         source.connect(processor)
@@ -207,6 +236,7 @@ export function makeVoiceListen(t: Translate, hooks: { onError?: (message: strin
         let watchdog: ReturnType<typeof setInterval> | undefined
         const finish = () => {
           if (watchdog !== undefined) clearInterval(watchdog)
+          clearInterval(askTalking)
           processor.disconnect()
           source.disconnect()
           splitter.flush()

@@ -103,6 +103,13 @@ export function voiceFor(text: string, configured: string): string {
   return match ? match.name : ''
 }
 
+/**
+ * Whether the platform's voice is talking right now. The microphone must not hear it: an
+ * always-on listener that catches the answer sends it back as a question, and the answer
+ * becomes a question again — the loop people describe as "it gets stuck".
+ */
+export const speaking = { active: false }
+
 /** How long one answer may take to be said: a slow voice must not wedge the turn. */
 function speechLimitMs(text: string): number {
   return Math.max(20_000, Math.ceil(text.length / 8) * 1_000)
@@ -125,10 +132,13 @@ function say(text: string, config: Config): Promise<void> {
     const finish = (error?: Error): void => {
       if (done) return
       done = true
+      speaking.active = false
       clearTimeout(timer)
       if (error) reject(error)
       else resolve()
     }
+    // the microphone stays deaf while the words are heard, or it answers itself
+    speaking.active = true
     // A voice that hangs (a missing voice, a busy audio device) ends here, not a turn later.
     const timer = setTimeout(() => {
       try {
@@ -147,12 +157,12 @@ function say(text: string, config: Config): Promise<void> {
  * One voice at a time: an answer waits for the previous one to end instead of two `say`
  * processes talking over each other.
  */
-let speaking: Promise<void> = Promise.resolve()
+let spokenQueue: Promise<void> = Promise.resolve()
 
 function enqueue(text: string, config: Config): Promise<void> {
   const run = (): Promise<void> => say(text, config)
-  const next = speaking.then(run, run)
-  speaking = next.catch(() => undefined)
+  const next = spokenQueue.then(run, run)
+  spokenQueue = next.catch(() => undefined)
   return next
 }
 

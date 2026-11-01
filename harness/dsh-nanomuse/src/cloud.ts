@@ -60,6 +60,7 @@ import { RemoteStore, SyncEngine, SyncRelay, type RemoteLine, type SessionInfo, 
 import { AvatarMotion, ANIMATED, type MotionMood, type MotionView } from './motion.ts'
 import { OwnClip, isOwnClipMood, type OwnClipMood, type OwnClipView } from './own-clip.ts'
 import { parseWave, type SpeechInput, type Transcript, type SpeechService, SPEECH_WHISPER_KEY, type SpeechWhisper, type SpeechPreparationOptions } from './speech-whisper.ts'
+import { speaking } from './voice.ts'
 import { kindOfFile, previewFileUrl } from './preview-kind.ts'
 import { resolveUserPath } from './preview-file.ts'
 import { DEFAULT_VIDEO_MODEL, hostOf, KNOWN_DASHSCOPE_MODELS, looksLikeVideoModel, probe as probeVideoModel, speaksDashScope, type VideoEndpoint } from './video.ts'
@@ -1078,6 +1079,9 @@ export default class NanomuseCloud extends Service {
     this.ctx.inject(['webServer'], (ctx) => {
       ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API_PREFIX}/voice`, handler: this.handleVoice.bind(this) }), 'nanomuse cloud: voice endpoint')
     ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API_PREFIX}/voice/prepare`, handler: this.handleVoicePrepare.bind(this) }), 'nanomuse cloud: voice prepare endpoint')
+      // Is the machine talking right now? The listener asks before it sends: a microphone
+      // that hears the answer sends it back as a question, and the conversation eats itself.
+      ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API_PREFIX}/speaking`, handler: this.handleSpeaking.bind(this) }), 'nanomuse cloud: speaking state')
     })
     // The account's other devices see what is connected here (C3): on every change and at start.
     this.ctx.inject(['nanomuseConnectors'], (ctx) => {
@@ -2281,6 +2285,12 @@ export default class NanomuseCloud extends Service {
 
   /** Handle voice transcription: base64 WAV → text using local Whisper. */
   /** Handle voice transcription: base64 WAV → text using local Whisper. */
+  private async handleSpeaking(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+    res.statusCode = 200
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ speaking: speaking.active }))
+  }
+
   private async handleVoice(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       // A phrase is megabytes of base64: the default 64 KB limit cuts off anything longer than a second.
