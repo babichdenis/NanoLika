@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261101-price', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-inline', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -18,6 +18,18 @@ const CATEGORIES = [
   ["audio", "Аудио"],
   ["other", "Другое"],
 ];
+
+/** Цена строкой: у текста две цифры через слэш (вход / выход за 1M), у медиа — одна. */
+function shortPrice(model) {
+  const num = (price) => price
+    ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(price.value)
+    : "—";
+  if (model.kind === "chat") {
+    if (!model.price && !model.priceOut) return "";
+    return num(model.price) + " / " + num(model.priceOut);
+  }
+  return model.price ? num(model.price) + " ₽/" + model.price.unit : "";
+}
 
 function categoryOf(model) {
   const kind = String(model.kind || "");
@@ -210,6 +222,14 @@ export function openModelPicker({
           pick.type = "button";
           pick.className = "mp-item" + (model.id === selected ? " on" : "");
           pick.textContent = model.name;
+          // В окне приложения подсказка-visio накрывала бы список: цена стоит в строке.
+          const inline = inPage ? shortPrice(model) : "";
+          if (inline) {
+            const price = document.createElement("em");
+            price.className = "mp-price";
+            price.textContent = inline;
+            pick.append(price);
+          }
           // Модель другого вида не отвечает текстом, но её можно назначить для её дела:
           // картинки — рисовать, видео — снимать. Без обработчика строка остаётся серой.
           const other = !model.forChat;
@@ -264,10 +284,12 @@ export function openModelPicker({
             render();
           };
           row.append(star);
-          row.addEventListener("mouseenter", () => showTip(model, row));
-          row.addEventListener("mouseleave", hideTip);
-          pick.addEventListener("focus", () => showTip(model, row));
-          pick.addEventListener("blur", hideTip);
+          if (!inPage) {
+            row.addEventListener("mouseenter", () => showTip(model, row));
+            row.addEventListener("mouseleave", hideTip);
+            pick.addEventListener("focus", () => showTip(model, row));
+            pick.addEventListener("blur", hideTip);
+          }
           list.append(row);
         }
       }

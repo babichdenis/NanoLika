@@ -31,6 +31,10 @@
 :is(.mp-dialog,.mp-embed) .mp-plan{flex:0 0 auto;padding:2px 8px;border-radius:999px;background:var(--fill,#e7eadc);color:var(--action,#52694e);font-size:10px;font-weight:700;letter-spacing:.04em;text-decoration:none;white-space:nowrap}
 :is(.mp-dialog,.mp-embed) .mp-plan:hover{background:var(--action,#52694e);color:#fffdf4}
 .mp-dialog[open]{display:flex}
+/* Цена в строке списка (окно приложения): тихо, справа от имени. */
+.mp-item{gap:8px}
+.mp-price{margin-left:auto;padding-left:10px;font-style:normal;font-size:11px;font-variant-numeric:tabular-nums;color:var(--muted,#8a8a7b);white-space:nowrap}
+.mp-item.on .mp-price{color:inherit;opacity:.8}
 .mp-tip{position:fixed;z-index:5;width:300px;padding:11px 13px;border:1px solid var(--line,#d8d1c1);border-radius:10px;background:var(--surface,#fffdf8);box-shadow:0 14px 34px rgba(40,35,20,.16);font-size:12px;line-height:1.55;color:var(--ink-2,#66675b);pointer-events:none}
 .mp-tip b{display:block;margin-bottom:5px;font-size:13px;line-height:1.35;color:var(--ink,#38372f)}
 .mp-tip span{display:block;white-space:normal} /* цена входа и выхода в одну строку не влезает — пусть переносится */
