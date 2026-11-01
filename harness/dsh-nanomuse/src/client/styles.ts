@@ -225,12 +225,12 @@ html:is([data-nm-platform='darwin'], [data-nm-platform='win32']) header[data-win
 .nm-header-drag { position: absolute; left: 0; right: 0; top: 0; height: 10px; z-index: 1; }
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header-drag { height: 36px; }
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header { top: 40px; }
-html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header-back { top: 42px; }
+html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-header-back { top: 60px; }
 html[data-nm-platform='darwin']:not([data-nm-fullscreen]) { --nm-header-h: 158px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-rail-top { height: 24px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header-drag { height: 22px; right: 150px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header { top: 26px; }
-html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header-back { top: 28px; }
+html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-header-back { top: 46px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) { --nm-header-h: 144px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) [data-slot="conversation.session.header"] > :first-child { padding-right: 150px; min-height: 40px; }
 html[data-nm-platform='win32']:not([data-nm-fullscreen]) .nm-ob-pager { top: 48px; }
@@ -529,7 +529,9 @@ html[data-nm-muse] [data-slot="conversation.session.header"] [data-conversation-
 html[data-nm-muse] [data-slot="conversation.session.header.utilities"] > *:not(.nm-invite, .nm-usage-pill):not(:has(.nm-invite, .nm-usage-pill)) { display: none; }
 html[data-nm-muse] [data-turn-process-inline] { display: none !important; }
 html[data-nm-muse] [data-slot="conversation.session.header.corner"] [data-sidebar-right-expand] { display: none; }
-.nm-header-back { position: absolute; left: 14px; top: 14px; z-index: 3; width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* Below the chat's own title row (which starts at the very top of the column) and above the
+   tabs: a 30px circle in the gap between them, so it never covers the title or "Чат". */
+.nm-header-back { position: absolute; left: 14px; top: 58px; z-index: 3; width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .nm-header-back:hover { background: var(--dsw-alias-bg-layer-3); }
 .nm-header-toast { color: var(--dsw-alias-state-success-primary, #2f9e5f); }
 .nm-header-status.nm-done { color: var(--dsw-alias-label-secondary); }

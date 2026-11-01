@@ -80,6 +80,10 @@ export function makeCloudModelPill(t: Translate) {
           setSheet(null)
           setManage(false)
           if (id !== slot?.model) void call('chat-model', { provider: 'nanomuse', model: id }).then(() => reload()).catch(() => undefined)
+        } else if (data.type === 'pick-other') {
+          // A picture or a clip went to its own slot; the chat model is untouched, and the
+          // Settings → Models page should show the new choice without a reload.
+          void reload()
         } else if (data.type === 'manage') {
           // The same web panel as Settings in the web client, inside this iframe.
           setManage(true)
@@ -106,8 +110,11 @@ export function makeCloudModelPill(t: Translate) {
         setBusy(false)
       }
     }
+    // No `kind` here: the picker lists what the person keeps in favourites, and a picture or
+    // a clip among them is assigned to its own slot — hiding those kinds made the stars for
+    // pictures and video pointless in this window.
     const src = sheet
-      ? `${sheet.url}#${new URLSearchParams({ key: sheet.key, sel: slot.model, kind: 'chat', title: t('mlTitle') }).toString()}`
+      ? `${sheet.url}#${new URLSearchParams({ key: sheet.key, sel: slot.model, title: t('mlTitle') }).toString()}`
       : ''
     return h(
       Fragment,

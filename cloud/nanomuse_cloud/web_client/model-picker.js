@@ -49,6 +49,9 @@ export function openModelPicker({
   kinds = null,
   onPlan,
   onClose,
+  // A model of another kind («картинки», «видео») assigns that slot instead of closing the
+  // picker: the person sees what happened and can pick the chat model next.
+  closeOnOther = true,
 } = {}) {
   injectStyles();
   return new Promise((resolve) => {
@@ -169,8 +172,8 @@ export function openModelPicker({
           pick.onclick = () => {
             if (model.locked) return;
             if (other) {
-              onPickOther?.(model.id, model.kind);
-              finish(model.id);
+              void onPickOther?.(model.id, model.kind);
+              if (closeOnOther) finish(model.id);
               return;
             }
             selected = model.id;

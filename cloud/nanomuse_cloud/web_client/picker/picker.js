@@ -1,7 +1,7 @@
 /* Встраиваемый выбор модели для Лики: та же модалка, но в окне приложения.
    Ключ сессии приходит в #key=..., результат уходит хосту через nlPicker
    (Electron-мост) или postMessage (iframe/веб). */
-import { openModelPicker } from '/web/model-picker.js?v=20261030-izob';
+import { openModelPicker } from '/web/model-picker.js?v=20261101-kinds';
 import { allModels } from '/web/catalog.js?v=20261030-izob';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -41,6 +41,9 @@ async function start() {
     const data = await api('/v1/me/models');
     const all = allModels({ data: data.models || [] });
     const favourites = new Set(data.shelf?.favourites || []);
+    // The shelf per kind: a picture or a clip picked here is put on its own shelf, so the
+    // chat model stays what it was. Known ids only — the relay refuses a model of another kind.
+    const enabled = { ...(data.shelf?.enabled || {}) };
     const models = all.filter((model) => favourites.has(model.id));
     openModelPicker({
       models,
@@ -51,11 +54,35 @@ async function start() {
       embedded: true,
       container: document.getElementById('picker'),
       onPick: (id) => send({ type: 'pick', id }),
+      // A model of another kind assigns that kind's slot and says so in place; the picker
+      // stays open, because the chat model is still to be chosen.
+      closeOnOther: false,
+      onPickOther: async (id, kind) => {
+        if (!id || !kind) return;
+        const ids = Array.isArray(enabled[kind]) ? [...enabled[kind]] : [];
+        if (!ids.includes(id)) ids.push(id);
+        try {
+          const saved = await api('/v1/me/models', { method: 'PUT', body: JSON.stringify({ enabled: { [kind]: ids }, default: { [kind]: id } }) });
+          if (saved?.shelf?.enabled) Object.assign(enabled, saved.shelf.enabled);
+          const label = { image: 'картинок', video: 'видео', audio: 'звука' }[kind] || kind;
+          const row = all.find((model) => model.id === id);
+          status.textContent = '«' + (row?.name || id) + '» — теперь модель для ' + label + '. Чат не изменился.';
+          send({ type: 'pick-other', id, kind });
+        } catch (error) {
+          status.textContent = 'Не удалось назначить модель: ' + error.message;
+        }
+      },
       onToggleFavourite: async (id, next) => {
+        // The star in this page is the same list the picker shows: remember the change
+        // before saving, or the server gets the previous list and the star undoes itself.
+        const before = new Set(favourites);
+        if (next) favourites.add(id); else favourites.delete(id);
         try {
           await api('/v1/me/models', { method: 'PUT', body: JSON.stringify({ enabled: {}, favourites: [...favourites] }) });
           send({ type: 'favourite', id, next });
         } catch (error) {
+          favourites.clear();
+          before.forEach((kept) => favourites.add(kept));
           status.textContent = 'Избранное не сохранилось: ' + error.message;
         }
       },
