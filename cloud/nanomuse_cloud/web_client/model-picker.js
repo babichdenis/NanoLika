@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261101-scope', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-price', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -168,13 +168,14 @@ export function openModelPicker({
       add("Изготовитель", model.vendor || "—");
       add("Контекст", contextText(model.context));
       add("Тип", (CATEGORIES.find(([key]) => key === categoryOf(model)) || ["", "Другое"])[1]);
-      const money = (price) => price
-        ? "от " + new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(price.value) + " ₽ / " + price.unit
+      const num = (price) => price
+        ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(price.value)
         : "—";
-      // У текстовых моделей цена входа и выхода разная: показывать только вход — значит
-      // обещать половину счёта.
-      add("Цена", model.kind === "chat" && model.priceOut
-        ? "вход " + money(model.price) + " · выход " + money(model.priceOut)
+      // Цены текста — за миллион токенов, вход / выход, просто цифрами: «2 / 30».
+      // У картинок и клипов цена одна, и подпись единицы там нужна.
+      const money = (price) => price ? num(price) + " ₽ / " + price.unit : "—";
+      add("Цена", model.kind === "chat"
+        ? num(model.price) + " / " + num(model.priceOut)
         : money(model.price));
       const rect = row.getBoundingClientRect();
       const dialogRect = dialog.getBoundingClientRect();

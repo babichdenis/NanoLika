@@ -88,8 +88,9 @@ function visiblePrice(model: CatalogueModel | undefined, t: Translate): string |
     : undefined
   if (model.free) return t('mpFreeModel')
   if (model.kind === 'chat') {
+    // Prices are per million tokens, input / output, and nothing else: two numbers.
     const input = fmt(rates.input), output = fmt(rates.output)
-    return input || output ? `${t('mpPriceMillion')}: от ${input ?? '—'} / ${output ?? '—'}` : undefined
+    return input || output ? `${input ?? '—'} / ${output ?? '—'}` : undefined
   }
   const media = model.kind === 'image' ? fmt(rates.image) : model.kind === 'video' ? fmt(rates.second) : fmt(rates.speech ?? rates.minute)
   if (!media) return undefined
