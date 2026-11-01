@@ -9,6 +9,7 @@ vault under :data:`CLOUD_KEY`; nothing here ever shows it to the model.
 
 from __future__ import annotations
 
+import base64
 import platform
 from typing import Any
 from urllib.parse import urlencode
@@ -248,6 +249,28 @@ class CloudClient:
         data = await self._request("GET", "/v1/devices")
         devices = data.get("devices")
         return devices if isinstance(devices, list) else []
+
+    async def me_models(self) -> dict[str, Any]:
+        """The menu with the account's shelf: what it keeps per kind and its default."""
+        return await self._request("GET", "/v1/me/models")
+
+    async def image(self, model: str, prompt: str, *, size: str = "") -> tuple[bytes, dict[str, Any]]:
+        """Draw one picture: PNG bytes and the relay's own accounting."""
+        body: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1}
+        if size:
+            body["size"] = size
+        said = await self._request("POST", "/v1/images/generations", body)
+        data = said.get("data")
+        first = data[0] if isinstance(data, list) and data else {}
+        raw = str((first or {}).get("b64_json") or "")
+        if not raw:
+            raise CloudError(502, "upstream", "The relay returned no picture")
+        try:
+            png = base64.b64decode(raw)
+        except (ValueError, TypeError):
+            raise CloudError(502, "bad_response", "The relay's picture was not a picture") from None
+        accounting = said.get("nanomuse")
+        return png, accounting if isinstance(accounting, dict) else {}
 
     async def models(self) -> list[dict[str, Any]]:
         data = await self._request("GET", "/v1/models")

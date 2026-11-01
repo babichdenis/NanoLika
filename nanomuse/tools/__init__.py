@@ -9,6 +9,7 @@ from nanomuse.tools.mcp_tools import MCPManager, MCPTool
 from nanomuse.tools.media import Media
 from nanomuse.tools.memory_tools import Forget, Recall, Remember
 from nanomuse.tools.office import OfficeConvert, OfficeVba, OfficeXlsm
+from nanomuse.tools.picture import Picture
 from nanomuse.tools.reminder_tools import Reminders
 from nanomuse.tools.shell import PythonExecute, Shell
 from nanomuse.tools.skills_tool import Skills
@@ -33,6 +34,7 @@ __all__ = [
     "OfficeConvert",
     "OfficeVba",
     "OfficeXlsm",
+    "Picture",
     "PythonExecute",
     "ReadEmails",
     "Recall",

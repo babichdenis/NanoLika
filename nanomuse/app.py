@@ -42,6 +42,7 @@ from nanomuse.tools import (
     OfficeConvert,
     OfficeVba,
     OfficeXlsm,
+    Picture,
     PythonExecute,
     ReadEmails,
     Recall,
@@ -343,6 +344,7 @@ class NanoMuseApp:
             OfficeVba(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=lambda: self.hub.cloud),
+            Picture(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=lambda: self.hub.cloud),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:
