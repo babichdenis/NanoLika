@@ -251,6 +251,9 @@ class ChannelManager(ChannelBus):
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
+        # topics are reconciled from the account on a clock too: a quiet account never
+        # publishes a sync frame, and then a deleted chat's topic would sit there for good
+        self._topics_tick = asyncio.create_task(self._topics_loop(), name="topics-tick")
         for name in self.types:
             self._spawn(self.start_channel(name))
 
@@ -262,6 +265,11 @@ class ChannelManager(ChannelBus):
             self._pump.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._pump
+        tick = getattr(self, "_topics_tick", None)
+        if tick is not None:
+            tick.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await tick
             self._pump = None
         if self._queue is not None:
             self.svc.bus.unsubscribe(self._queue)
@@ -1149,6 +1157,18 @@ class ChannelManager(ChannelBus):
             await channel.react(entry[1], entry[2], mark)
 
     # ------------------------------------------------------------------ the bus
+    async def _topics_loop(self) -> None:
+        """Every quiet minute, make the messenger's topics match the account's chats."""
+        await asyncio.sleep(12)
+        while True:
+            try:
+                await self.picker.topics.discover()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - a topic pass is retried next minute
+                logger.warning("telegram: topic reconcile failed ({})", type(exc).__name__)
+            await asyncio.sleep(60)
+
     async def _pump_loop(self) -> None:
         assert self._queue is not None
         while True:
