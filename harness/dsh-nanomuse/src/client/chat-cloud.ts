@@ -45,9 +45,9 @@ export function cloudItem(t: Translate, cloud: ChatCloud): CloudItem {
     case 'main':
       return { action: 'none', label: t('chUnsync'), hint: t('chCloudMain') }
     case 'device':
-      return { action: 'off', label: t('chUnsync') }
     case 'sync':
-      return { action: 'off', label: t('chUnsync') }
+      // every chat is born in the cloud; this takes it out of the account (the copy here stays)
+      return { action: 'off', label: t('chUnsync'), hint: t('chCloudOffHint') }
     case 'local':
       return { action: 'on', label: t('chSync') }
   }

@@ -21,11 +21,12 @@
  */
 import { Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement as h, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { call, type Translate } from './api.ts'
-import { IconMore, IconPlus, IconSearch } from './icons.tsx'
+import { call, failureText, type Translate } from './api.ts'
+import { IconCloud, IconCloudOff, IconMore, IconPlus, IconSearch } from './icons.tsx'
 import { composing } from './keys.ts'
 import { useLive } from './live.ts'
 import { useRooms } from './rooms.ts'
+import { chatCloud, cloudItem, cloudRefusal, cloudSaid, type ChatCloud, type CloudAction } from './chat-cloud.ts'
 
 const MAIN_KEY = 'nanomuse.mainChat'
 
@@ -208,9 +209,12 @@ interface RowProps {
   useSessionStatus: UseStatusMap | undefined
   actions: ChatActions
   onMakeMain(): void
+  /** C11: where this chat's cloud stands (`chatCloud`) and what its item does there: on, off, or nothing (the main chat). */
+  cloud: ChatCloud
+  onCloud(action: CloudAction): void
 }
 
-function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain }: RowProps): ReactNode {
+function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useSessionStatus, actions, onMakeMain, cloud, onCloud }: RowProps): ReactNode {
   const live = useLive()
   const status = typeof useSessionStatus === 'function' ? useSessionStatus((map) => map.get(chat.id)) : undefined
   const running = status?.running ?? chat.running
@@ -244,12 +248,17 @@ function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useS
     if (event.key === 'Escape') { event.preventDefault(); cancel() }
   }
   // Muse's row menu: pin, rename, archive (Muse says delete; the harness keeps archived
-  // chats under the column's menu) and make this the main chat. Every chat of the account is
-  // in the account's store already, so there is no per-chat cloud switch to offer here.
+  // chats under the column's menu), the cloud of this chat, and make this the main chat.
+  // Every chat is born in the cloud (C9); the item takes it out of the account and back.
+  const cloudRow = cloudItem(t, cloud)
+  const cloudEntry: MenuItem = cloudRow.action === 'none'
+    ? { id: 'cloud', label: cloudRow.label, disabled: true, hint: cloudRow.hint, onSelect: () => undefined }
+    : { id: 'cloud', label: cloudRow.label, hint: cloudRow.hint, onSelect: () => onCloud(cloudRow.action) }
   const items: MenuItem[] = [
     ...(main ? [] : [{ id: 'pin', label: pinned ? t('chUnpin') : t('chPin'), onSelect: () => { void (pinned ? actions.unpinSession(chat.id) : actions.pinSession(chat.id)).catch(() => undefined) } }]),
     { id: 'rename', label: t('chRename'), onSelect: begin },
     ...(main ? [] : [{ id: 'archive', label: t('chArchive'), onSelect: () => { void actions.archiveSession(chat.id).catch(() => undefined) } }]),
+    cloudEntry,
     ...(main ? [] : [{ id: 'main', label: t('chMakeMain'), onSelect: onMakeMain }]),
   ]
 
@@ -265,7 +274,11 @@ function ChatRow({ unreadCount = 0, t, chat, label, main, pinned, selected, useS
               ? turn
                 ? h('span', { className: 'nm-chat-steps', title: `${t('chRunning')} · ${turn.steps}/${turn.limit}`, 'aria-label': `${t('chRunning')} ${turn.steps}/${turn.limit}` }, `${turn.steps}/${turn.limit}`)
                 : h('span', { className: 'nm-chat-dot nm-live', title: t('chRunning'), 'aria-label': t('chRunning') })
-              : unread ? h('span', { className: 'nm-chat-dot', 'aria-hidden': true }) : null),
+              : unread ? h('span', { className: 'nm-chat-dot', 'aria-hidden': true }) : null,
+          // where the chat lives: a cloud on every chat of the account, a crossed cloud on the
+          // one the person took out of it (C11)
+          h('span', { className: 'nm-chat-cloud', 'data-nm-local': cloud === 'local' ? '' : undefined, role: 'img', title: cloudSaid(t, cloud), 'aria-label': cloudSaid(t, cloud) },
+            cloud === 'local' ? h(IconCloudOff, { size: 12, stroke: 2 }) : h(IconCloud, { size: 12, stroke: 2 }))),
     editing ? null : h('button', { type: 'button', className: 'nm-chat-more', 'aria-label': t('chMore'), 'aria-haspopup': 'menu', 'aria-expanded': menuAnchor !== null, ref: (el: HTMLButtonElement | null): void => { more.current = el }, onClick: () => setMenuAnchor((current) => (current ? null : more.current)) }, h(IconMore, { size: 16 })),
     menuAnchor ? h(RowMenu, { anchor: menuAnchor, items, onClose: () => setMenuAnchor(null) }) : null)
 }
@@ -384,6 +397,28 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     if (main) actions.openSession(main.id)
     else actions.startSession()
   }
+  /** Put the cloud back on a chat the person took out of the account (C11). */
+  const toggleCloud = (id: string, on: boolean) => {
+    void call<{ ok?: boolean; reason?: string } | undefined>('sync/synced', { sessionId: id, on })
+      .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
+      .catch((err: unknown) => say(failureText(t, err)))
+  }
+  /**
+   * Take a chat out of the account (C11): the conversation is deleted in the cloud, so it goes
+   * from the other devices, the web and the messengers; the copy here stays as a local chat.
+   * Asked first, because the other devices are not this person's screen to undo.
+   */
+  const cloudOff = (id: string) => {
+    if (!window.confirm(t('chCloudDeleteConfirm'))) return
+    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
+      .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
+      .catch((err: unknown) => say(failureText(t, err)))
+  }
+  /** What the row's cloud item does; the host's `rev` moves on success, which re-reads the view. */
+  const runCloud = (id: string, action: CloudAction) => {
+    if (action === 'on') toggleCloud(id, true)
+    else if (action === 'off') cloudOff(id)
+  }
   const headItems: MenuItem[] = [
     { id: 'archived', label: t('chArchived'), onSelect: actions.openArchived },
   ]
@@ -398,7 +433,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     h('div', { className: 'nm-chats-list' },
       mainMatches
         ? (main
-            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined })
+            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, cloud: 'main', onCloud: () => undefined })
             : h('div', { className: 'nm-chat-row nm-main' },
                 h('button', { type: 'button', className: 'nm-chat-open', onClick: openMain }, h('span', { className: 'nm-chat-title' }, t('chMain')))))
         : null,
@@ -418,6 +453,8 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
             selected: current === chat.id,
             useSessionStatus,
             actions,
+            cloud: chatCloud(sync, chat.id, false),
+            onCloud: (action) => runCloud(chat.id, action),
             // the host has the last word: while the account's main conversation lives in a session, that one stays the main chat
             onMakeMain: () => {
               void call<{ sessionId?: string } | undefined>('sync/main', { sessionId: chat.id })
