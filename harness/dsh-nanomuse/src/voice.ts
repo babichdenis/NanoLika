@@ -178,11 +178,16 @@ async function speakOnWindows(text: string, config: Config): Promise<void> {
     `$s.Rate = ${Math.round((config.rate - 180) / 30)}`,
     `$s.Speak([IO.File]::ReadAllText('${file.replace(/'/g, "''")}'))`,
   ].join('; ')
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: 'ignore' })
-    child.once('error', reject)
-    child.once('close', (code) => (code === 0 ? resolve() : reject(new Error(`powershell exited with ${code ?? 'no code'}`))))
-  })
+  speaking.active = true
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: 'ignore' })
+      child.once('error', reject)
+      child.once('close', (code) => (code === 0 ? resolve() : reject(new Error(`powershell exited with ${code ?? 'no code'}`))))
+    })
+  } finally {
+    speaking.active = false
+  }
 }
 
 export function apply(ctx: Context, config: Config): void {
