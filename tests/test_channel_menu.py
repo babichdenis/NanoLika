@@ -327,3 +327,43 @@ async def test_answering_no_changes_nothing(tmp_path):
 
     link.release.assert_not_awaited()
     link.redeem.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_model_menu_shows_the_shelf_favourites(tmp_path):
+    """The chat offers what the person starred, like the app and the cabinet do."""
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    menu._shelf = AsyncMock(
+        return_value={
+            "models": [
+                {"id": "alpha", "name": "Alpha", "kind": "chat", "available": True},
+                {"id": "beta", "name": "Beta", "kind": "chat", "available": True},
+                {"id": "gamma", "name": "Gamma", "kind": "chat", "available": True},
+            ],
+            "shelf": {"favourites": ["beta"], "default": {"chat": "alpha"}},
+        }
+    )
+    await menu.show(msg("telegram"), page="models")
+    sent = str(m.channels["telegram"]._call.call_args)
+    assert "Beta" in sent          # a starred model
+    assert "Alpha" in sent         # the current one stays even unstarred
+    assert "Gamma" not in sent     # not starred, not current
+
+
+@pytest.mark.asyncio
+async def test_a_chat_without_stars_gets_the_whole_model_menu(tmp_path):
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    menu._shelf = AsyncMock(
+        return_value={
+            "models": [
+                {"id": "alpha", "name": "Alpha", "kind": "chat", "available": True},
+                {"id": "beta", "name": "Beta", "kind": "chat", "available": True},
+            ],
+            "shelf": {"favourites": [], "default": {}},
+        }
+    )
+    await menu.show(msg("telegram"), page="models")
+    sent = str(m.channels["telegram"]._call.call_args)
+    assert "Alpha" in sent and "Beta" in sent
