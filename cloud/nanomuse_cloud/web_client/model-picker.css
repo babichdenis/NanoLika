@@ -9,6 +9,8 @@
 :is(.mp-dialog,.mp-embed) .mp-close:hover{background:var(--fill,#e7eadc)}
 :is(.mp-dialog,.mp-embed) .mp-search{flex:0 0 auto;width:100%;box-sizing:border-box;margin:0 0 6px;padding:9px 11px;border:1px solid var(--line,#d8d1c1);border-radius:9px;background:var(--paper,#f7f1e6);color:var(--ink,#38372f);font:inherit;font-size:14px}
 .mp-list{display:block;flex:1 1 auto;min-height:0;overflow:auto}
+/* «Взяли» — под шапкой, на виду: под карточкой строку срезает узкое окно. */
+.mp-notice{margin:0 4px 8px;padding:8px 10px;border-radius:10px;background:rgba(15,157,143,.12);color:var(--fg,#1d1d1b);font-size:12px;line-height:1.35}
 .mp-row{display:flex;align-items:center;gap:2px;width:100%}
 :is(.mp-dialog,.mp-embed) .mp-item{display:flex;align-items:center;flex:1 1 auto;min-width:0;text-align:left;border:0;background:none;color:var(--ink,#38372f);border-radius:7px;padding:8px 9px;font:inherit;font-size:14px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :is(.mp-dialog,.mp-embed) .mp-item:hover{background:var(--fill,#e7eadc)}

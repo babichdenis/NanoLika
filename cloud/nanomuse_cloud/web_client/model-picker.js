@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261030-compact', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-all', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -70,6 +70,13 @@ export function openModelPicker({
     closeButton.textContent = "✕";
     head.append(heading, closeButton);
 
+    // What a pick of another kind did, said where the person is looking: above the list,
+    // not under the card where a narrow window clips it.
+    const notice = document.createElement("p");
+    notice.className = "mp-notice";
+    notice.setAttribute("role", "status");
+    notice.hidden = true;
+
     const search = document.createElement("input");
     search.type = "search";
     search.className = "mp-search";
@@ -83,7 +90,7 @@ export function openModelPicker({
     manage.className = "mp-manage";
     manage.textContent = "Управление моделями";
     manage.onclick = () => { finish(null); onManage?.(); };
-    dialog.append(head, search, list, manage);
+    dialog.append(head, notice, search, list, manage);
     if (inPage) container.append(dialog); else document.body.append(dialog);
     const tip = document.createElement("div");
     tip.className = "mp-tip";
@@ -169,10 +176,14 @@ export function openModelPicker({
               ? "Назначить моделью для «" + label.toLowerCase() + "»"
               : "Только для изображений, видео или аудио";
           }
-          pick.onclick = () => {
+          pick.onclick = async () => {
             if (model.locked) return;
             if (other) {
-              void onPickOther?.(model.id, model.kind);
+              // The handler may say what became of it; the words stay above the list while
+              // the panel is open, so taking a picture model never looks like nothing.
+              const said = await Promise.resolve(onPickOther?.(model.id, model.kind)).catch(() => undefined);
+              notice.hidden = !(typeof said === "string" && said);
+              notice.textContent = typeof said === "string" ? said : "";
               if (closeOnOther) finish(model.id);
               return;
             }

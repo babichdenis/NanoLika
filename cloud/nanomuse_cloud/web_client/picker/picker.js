@@ -1,7 +1,7 @@
 /* Встраиваемый выбор модели для Лики: та же модалка, но в окне приложения.
    Ключ сессии приходит в #key=..., результат уходит хосту через nlPicker
    (Electron-мост) или postMessage (iframe/веб). */
-import { openModelPicker } from '/web/model-picker.js?v=20261101-kinds';
+import { openModelPicker } from '/web/model-picker.js?v=20261101-all';
 import { allModels } from '/web/catalog.js?v=20261030-izob';
 
 const params = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -44,7 +44,12 @@ async function start() {
     // The shelf per kind: a picture or a clip picked here is put on its own shelf, so the
     // chat model stays what it was. Known ids only — the relay refuses a model of another kind.
     const enabled = { ...(data.shelf?.enabled || {}) };
-    const models = all.filter((model) => favourites.has(model.id));
+    // Весь список, а не только избранное: человек имеет право взять любую модель напрямую.
+    // Избранные идут первыми и помечены звездой; поиск и категории остаются.
+    const models = [...all].sort((a, b) =>
+      Number(favourites.has(b.id)) - Number(favourites.has(a.id)) ||
+      Number(Boolean(a.locked)) - Number(Boolean(b.locked)) ||
+      Number(b.forChat) - Number(a.forChat));
     openModelPicker({
       models,
       favourites,
@@ -66,10 +71,11 @@ async function start() {
           if (saved?.shelf?.enabled) Object.assign(enabled, saved.shelf.enabled);
           const label = { image: 'картинок', video: 'видео', audio: 'звука' }[kind] || kind;
           const row = all.find((model) => model.id === id);
-          status.textContent = '«' + (row?.name || id) + '» — теперь модель для ' + label + '. Чат не изменился.';
           send({ type: 'pick-other', id, kind });
+          // The picker shows these words above its list; the chat model is untouched.
+          return '«' + (row?.name || id) + '» — теперь модель для ' + label + '.';
         } catch (error) {
-          status.textContent = 'Не удалось назначить модель: ' + error.message;
+          return 'Не удалось назначить модель: ' + error.message;
         }
       },
       onToggleFavourite: async (id, next) => {
