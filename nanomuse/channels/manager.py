@@ -778,6 +778,16 @@ class ChannelManager(ChannelBus):
             if exc.code == "conversation_archived":
                 await self.picker.show(msg)
                 return False
+            if exc.code == "conversation_busy":
+                # This chat is still answering the previous message (its turn is running on
+                # this machine or on the computer). The new words are queued behind it, and
+                # the history is refreshed by the next turn anyway — refusing the message
+                # because of that lost it, which is exactly what "sync is broken" felt like.
+                logger.info(
+                    "{} cloud history refresh skipped: the chat is still answering",
+                    msg.channel,
+                )
+                return True
             logger.warning("{} cloud history refresh failed ({})", msg.channel, exc.code)
             await self._send(
                 msg.channel,

@@ -7,7 +7,7 @@ function injectStyles() {
   styled = true;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = new URL('./model-picker.css?v=20261101-tip', import.meta.url).href;
+  link.href = new URL('./model-picker.css?v=20261101-notip', import.meta.url).href;
   document.head.append(link);
 }
 
@@ -232,14 +232,7 @@ export function openModelPicker({
           pick.type = "button";
           pick.className = "mp-item" + (model.id === selected ? " on" : "");
           pick.textContent = model.name;
-          // В окне приложения подсказка-visio накрывала бы список: цена стоит в строке.
-          const inline = inPage ? shortPrice(model) : "";
-          if (inline) {
-            const price = document.createElement("em");
-            price.className = "mp-price";
-            price.textContent = inline;
-            pick.append(price);
-          }
+          // Цена — в подсказке по наведению, не в строке: в списке она отвлекает от выбора.
           // Модель другого вида не отвечает текстом, но её можно назначить для её дела:
           // картинки — рисовать, видео — снимать. Без обработчика строка остаётся серой.
           const other = !model.forChat;
