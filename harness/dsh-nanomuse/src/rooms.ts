@@ -1574,6 +1574,12 @@ export default class NanomuseRooms extends Service {
     } finally {
       this.broadcast()
     }
+    // The batch's own chat is not a chat of the person's: its final answer is the JSON the
+    // feed parses, so it must leave the chats column. Archiving here is what the doc above
+    // promises; without it the sidebar fills with "Лента" chats full of raw JSON.
+    const registry = this.ctx.get('workspaceRegistry') as RegistryLike | undefined
+    await registry?.archiveSession(sessionId, { stopActivity: true }).catch(() => undefined)
+    await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), false).catch(() => undefined)
     return text
   }
 
