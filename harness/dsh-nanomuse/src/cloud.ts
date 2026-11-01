@@ -2375,7 +2375,7 @@ export default class NanomuseCloud extends Service {
     // with goes to the relay, so the browser and the messengers see the same model for it
     if (followed && provider === PROVIDER_ID) {
       const main = this.syncMainSession()
-      if (main) this.sync?.modelPicked(main, id)
+      if (main && typeof this.sync?.modelPicked === 'function') this.sync.modelPicked(main, id)
     }
     await this.writeHands().catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: hands model not written: %s', message(error)))
     this.broadcast()
@@ -4167,7 +4167,7 @@ export default class NanomuseCloud extends Service {
           return send(res, 200, sync.view())
         }
         if (req.method === 'POST' && route === '/sync/state') {
-          // the account-wide switch (`enabled`), or this device's "Also sync side chats" (`sideChats`, C9)
+          // the account-wide switch (`enabled`), or this device's "Sync all chats" (`sideChats`, C9)
           const body = await json(req)
           if (typeof body.sideChats === 'boolean') return send(res, 200, await sync.setSideChats(body.sideChats))
           return send(res, 200, await sync.setEnabled(body.enabled !== false))

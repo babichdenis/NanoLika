@@ -304,9 +304,6 @@ html[data-nm-platform='darwin']:not([data-nm-fullscreen]) .nm-col-top { height: 
 .nm-chat-mark { flex: none; font-size: 12px; color: var(--dsw-alias-state-warn-primary, #d98c1f); }
 /* The cloud on a chat (0.29): a synced chat keeps a grey cloud; a chat only this computer has shows
    its struck one under the pointer, so the row's dot and unread count keep the resting glance. */
-.nm-chat-cloud { flex: none; display: inline-flex; align-items: center; color: var(--dsw-alias-label-secondary); opacity: 0.45; }
-.nm-chat-cloud[data-nm-local] { opacity: 0; }
-.nm-chat-row:hover .nm-chat-cloud, .nm-chat-row.nm-selected .nm-chat-cloud, .nm-chat-open:focus-visible .nm-chat-cloud { opacity: 0.6; }
 .nm-chat-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border: 0; padding: 0; border-radius: 7px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: 0; }
 .nm-chat-row:hover .nm-chat-more, .nm-chat-more:focus-visible, .nm-chat-more[aria-expanded="true"] { opacity: 1; }
 .nm-chat-more:hover { background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); }

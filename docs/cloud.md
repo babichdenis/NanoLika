@@ -262,8 +262,9 @@ rename on any device, including the first conversation's naming, reaches the
 others on the next pull.
 
 **Main first** (0.1.38, relay 0.20). By default only the main conversation
-travels: side chats stay on the device that made them, and a device pulls with
-`scope=main` so other devices' side chats never arrive. *Also sync side chats*
+travels: since 2026-11 every chat of a device goes to the account (the switch
+*Sync all chats* is on by default), and a device that turns it off pulls with
+`scope=main` so the others' chats never arrive.
 (a second switch under *Data controls*, off by default, **per device**; the
 relay has no account-wide setting for it) turns that around for the device it is
 flipped on: its side chats go up, the other devices' side chats come down, and

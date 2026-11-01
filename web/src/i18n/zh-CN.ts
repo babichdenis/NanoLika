@@ -1726,11 +1726,11 @@ const zhCN: Record<string, string> = {
   "The synced conversations are removed from NanoLika Cloud. The chats on each device stay. This cannot be undone.": "已同步的对话将从 NanoLika Cloud 删除。每台设备上的对话保留。此操作无法撤销。",
   "Synced conversations deleted.": "已删除已同步的对话。",
   // Main first (contract C9): side chats per device, the working line
-  "Also sync side chats": "同时同步旁聊",
-  "Off: side chats stay on this device. On: this device's side chats go to the account and the other devices' side chats come here.":
-    "关：旁聊只留在本机。开：本机的旁聊上传到账号，其他设备的旁聊也会同步过来。",
-  "On. This device's side chats go to the account; the other devices' are on their way.": "已打开。本机的旁聊会上传到账号，其他设备的旁聊正在同步过来。",
-  "Off. Side chats stay on this device from now on.": "已关闭。从现在起，旁聊只留在本机。",
+  "Sync all chats": "同步所有聊天",
+  "On: every chat of this device goes to the account, and the other devices' chats come here. Off: only the main chat travels.":
+    "开：本机的所有聊天都上传到账号，其他设备的聊天也会同步过来。关：只同步主要聊天。",
+  "On. Every chat of this device goes to the account; the other devices' are on their way.": "已打开。本机的所有聊天都会上传到账号，其他设备的聊天正在同步过来。",
+  "Off. Only the main chat travels from now on.": "已关闭。从现在起只同步主要聊天。",
   "{device} is working…": "{device} 正在处理…",
   "From {device}": "来自 {device}",
   "to {device}": "发给 {device}",

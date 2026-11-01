@@ -191,7 +191,7 @@ With `language = "auto"` the system prompt names the reply language and tells th
 side_chats = false   # off: only the main conversation travels between devices
 ```
 
-The account-wide sync switch is in the app (*Data controls → Sync*); this is the per-device default for *Also sync side chats*. Off, only the main conversation is pushed and pulled; side chats stay on the device that made them and no other device's arrive. On, this device's side chats go to the account and the other devices' come here. The person's choice in the app is kept in `sync.json` and wins over this file. [every-device.md](every-device.md#the-same-conversations-everywhere) has the whole picture.
+The account-wide sync switch is in the app (*Data controls → Sync*); this is the per-device default for *Sync all chats* (on since 2026-11). On, every chat of this device goes to the account and the other devices' come here; off, only the main conversation is pushed and pulled. The person's choice in the app is kept in `sync.json` and wins over this file. [every-device.md](every-device.md#the-same-conversations-everywhere) has the whole picture.
 
 ## `[cloud]` and `[hub]`
 

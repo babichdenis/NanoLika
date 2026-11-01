@@ -526,9 +526,9 @@ test('a pull keeps the other devices’ rows for the transcript and hands the mo
   e.stop()
 })
 
-// ---- contract C9: main first ------------------------------------------------------------------
+// ---- contract C9: every chat (the switch, both ways) -------------------------------------------
 
-test('C9: side chats stay local by default — only the main conversation goes up, the pull asks for scope=main, a side row makes no session; the switch turns both on and off', async () => {
+test('C9: with the switch off only the main conversation goes up, the pull asks for scope=main, a side row makes no session; turning it on syncs every chat', async () => {
   const relay = fakeRelay()
   relay.add('their-side', 'side', 'Dinner plans')
   relay.say('their-side', 'user', 'book a table')
@@ -593,10 +593,15 @@ test('C9: side chats stay local by default — only the main conversation goes u
   await until(() => [...relay.msgs.values()].some((m) => m.text === 'main answer'))
   await tick(30)
   assert.ok(![...relay.msgs.values()].some((m) => m.text === 'side answer'))
-  // the setting survives a sign-in to another account; a 0.1.37 state reads as off
+  // the setting survives a sign-in to another account; a state from before 2026-11 (no
+  // `sideChats`) moves to "all chats" once, and a state that has the marker keeps its choice
   await e.accountChanged('acct-2')
   assert.equal(e.state.sideChats, false)
-  assert.equal(migrate({ accountId: 'a', cursor: 1, enabled: true, mainSession: '', cids: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] }).sideChats, false)
+  const old = migrate({ accountId: 'a', cursor: 1, enabled: true, mainSession: '', cids: {}, mids: {}, titles: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [] })
+  assert.equal(old.sideChats, true)
+  assert.equal(old.sideChatsVersion, 2)
+  const chosen = migrate({ ...old, sideChats: false })
+  assert.equal(chosen.sideChats, false)
   e.stop()
 })
 

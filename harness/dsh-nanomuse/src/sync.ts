@@ -25,11 +25,10 @@
  * reaches the sessions here), then the whole eligible history of this computer goes
  * up, oldest first, 200 messages a POST.
  *
- * **Main first** (C9). Only the main conversation syncs unless this device's "Also sync
- * side chats" is on (`state.sideChats`): off, side chats are neither pushed nor pulled
- * (`scope=main`), and a side row that still arrives makes no session. The first pull of an
- * account asks for the newest 300 messages (`tail=300`); the switch going on pulls the
- * account's side chats the same way, once. While a turn runs here on a synced conversation
+ * **Every chat** (C9). Since 2026-11 all of this device's chats sync (`state.sideChats`,
+ * on by default): each is pushed and the other devices' come down, the main conversation
+ * first. Turning the switch off keeps this device's other chats here (`scope=main`). The
+ * first pull of an account asks for the newest 300 messages (`tail=300`). While a turn runs here on a synced conversation
  * the relay is told (`POST /v1/sync/working`, best-effort), and the other devices' `working`
  * frames put a quiet "kwai is working…" line under their last prompt here (`workingOf`).
  *
@@ -554,10 +553,15 @@ export interface SyncState {
   toArchive: string[]
   /** 0.1.36 kept the other devices' chats as mirrors; a state that still has them is migrated (`migrate`). */
   mirrors?: Record<string, unknown>
+  /** The "all chats" default this state has been moved to (2 since 2026-11); absent = before that. */
+  sideChatsVersion?: number
 }
 
+/** The version of "all chats" this build defaults to; an older state is moved over once. */
+const SIDE_CHATS_VERSION = 2
+
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: false, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
+  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: true, sideChatsVersion: SIDE_CHATS_VERSION, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
 }
 
 /**
@@ -576,6 +580,13 @@ export function migrate(state: SyncState | undefined): SyncState {
   next.cursors = state.cursors ?? { main: 0, all: next.sideChats ? state.cursor : 0 }
   next.historyBefore = state.historyBefore ?? {}
   next.models = { ...(state.models ?? {}) }
+  // 2026-11: the desktop used to sync the main conversation only, and the switch was off
+  // by default. Every chat belongs to the account now (the person can still turn the switch
+  // off); the marker keeps that one move from undoing a later choice.
+  if ((state.sideChatsVersion ?? 1) < SIDE_CHATS_VERSION) {
+    next.sideChats = true
+    next.sideChatsVersion = SIDE_CHATS_VERSION
+  }
   // 0.29's `synced` map under this state's own key, dropped once it has been read
   const legacy = (next as unknown as { synced?: Record<string, boolean> }).synced
   if (legacy && typeof legacy === 'object') {
@@ -919,6 +930,16 @@ export class SyncEngine {
     if (current && current !== sessionId) this.noteCloud(current, '')
     const mainCid = this.mainCid()
     if (mainCid && !this.state.cids[sessionId]) {
+      // One conversation, one session (C8): a session still mapped to the account's main
+      // conversation gives it up — two chats pulling and pushing the same rows is how a
+      // device ends up with two "Main chat"s, one of them half empty.
+      for (const [other, cid] of Object.entries(this.state.cids)) {
+        if (cid !== mainCid || other === sessionId) continue
+        delete this.state.cids[other]
+        delete this.state.titles[other]
+        this.state.clouds[other] = 'local'
+        delete this.state.models[other]
+      }
       this.state.cids[sessionId] = mainCid
       this.adopt(sessionId)
       this.state.titles[sessionId] = this.state.conversations[mainCid]?.title ?? ''

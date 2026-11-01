@@ -149,11 +149,11 @@ export function SyncControls({ signedIn }: { signedIn: boolean }) {
     if (!window.confirm(t("The synced conversations are removed from NanoLika Cloud. The chats on each device stay. This cannot be undone."))) return;
     void run(() => api.syncDelete(), t("Synced conversations deleted."));
   };
-  // C9: side chats, per device — off by default; on brings the other devices' over once
+  // C9: every chat of this device, on by default; on also brings the other devices' over once
   const flipSide = (on: boolean) => {
     void run(
       () => api.syncSetSideChats(on),
-      on ? t("On. This device's side chats go to the account; the other devices' are on their way.") : t("Off. Side chats stay on this device from now on."),
+      on ? t("On. Every chat of this device goes to the account; the other devices' are on their way.") : t("Off. Only the main chat travels from now on."),
     );
   };
   const syncOn = signedIn && !!sync?.enabled;
@@ -170,9 +170,9 @@ export function SyncControls({ signedIn }: { signedIn: boolean }) {
       {sync && "side_chats" in sync && (
         <>
           <MuseCard className="mt-3">
-            <MuseSwitchRow label={t("Also sync side chats")} checked={syncOn && !!sync.side_chats} disabled={busy || !syncOn} onChange={flipSide} />
+            <MuseSwitchRow label={t("Sync all chats")} checked={syncOn && !!sync.side_chats} disabled={busy || !syncOn} onChange={flipSide} />
           </MuseCard>
-          <MuseCaption>{t("Off: side chats stay on this device. On: this device's side chats go to the account and the other devices' side chats come here.")}</MuseCaption>
+          <MuseCaption>{t("On: every chat of this device goes to the account, and the other devices' chats come here. Off: only the main chat travels.")}</MuseCaption>
         </>
       )}
       {stored && (

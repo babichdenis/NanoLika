@@ -35,7 +35,7 @@ const KEY = 'nanomuse.prefs'
  * header bar, the composer's dock, the model picker); a window where the Muse chrome did
  * not come up either was left with nothing at the top and at the bottom.
  */
-const SCHEMA = 2
+const SCHEMA = 3
 
 /** The desktop app's platform, from the preload's bridge, which is in place before the page's
  *  own scripts run. Undefined in a plain browser: the web client keeps the Muse look. */
@@ -45,10 +45,13 @@ function appPlatform(): string | undefined {
   return document.documentElement?.dataset?.['nmPlatform'] || undefined
 }
 
-/** On macOS and on Windows the harness's own controls show by default; elsewhere as before. */
+/**
+ * The nanoMuse column is the default everywhere: it lists the account's chats (the harness's
+ * own column lists workspaces and hides a chat that has no turns here yet — the reason a new
+ * device "saw nothing"). The harness controls stay one switch away in Settings.
+ */
 function defaultShowHarness(): boolean {
-  const platform = appPlatform()
-  return platform === 'darwin' || platform === 'win32'
+  return false
 }
 
 const DEFAULTS: Prefs = { showHarness: defaultShowHarness(), keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
@@ -62,11 +65,12 @@ function read(): Prefs {
     const raw = window.localStorage.getItem(KEY)
     if (!raw) return DEFAULTS
     const parsed = JSON.parse(raw) as Partial<Prefs> & { schema?: number }
-    // A profile written before schema 2 carries the old default (off), not a choice, so it is
-    // read as on once; a switch touched since (`schema` 2) stands as the person left it.
+    // A profile written before schema 3 carries a default (the harness column on macOS and
+    // Windows), not a choice: it is read once with the current default, the nanoMuse chat
+    // column. A switch touched since (`schema` 3) stands as the person left it.
     const schema = typeof parsed.schema === 'number' ? parsed.schema : 1
     return {
-      showHarness: schema < SCHEMA ? defaultShowHarness() || parsed.showHarness === true : parsed.showHarness !== false,
+      showHarness: schema < SCHEMA ? defaultShowHarness() : parsed.showHarness !== false,
       keepAwake: parsed.keepAwake !== false,
       showSteps: parsed.showSteps !== false,
       approvals: Array.isArray(parsed.approvals) ? parsed.approvals.slice(0, MAX_APPROVALS) : [],

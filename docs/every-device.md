@@ -126,13 +126,13 @@ change, on a phone that wears no face of its own says nothing about the look:
 the relay keeps the face the account has, and only a reset in the avatar
 studio takes it off every device.
 
-Since 0.1.38 it is **main first**. Only the main conversation travels unless a
-device asks for more: side chats stay on the device that made them, and no other
-device's side chats arrive. *Also sync side chats* (同时同步旁聊), under the sync
-switch in *Data controls*, is per device and off by default. *Off: side chats
-stay on this device. On: this device's side chats go to the account and the
-other devices' side chats come here.* Turning it on sends this device's side
-chats up and pulls the others' down once from the start. A fresh sign-in pulls
+Since 2026-11 it is **every chat**. All of this device's chats travel with the
+account and the other devices' chats come down; the account's main conversation
+is still the one every device shows first. *Sync all chats* (同步所有聊天), under
+the sync switch in *Data controls*, is per device and **on by default**; it used
+to be *Also sync side chats* (旁聊), off by default, and the one-time move to the
+new default happens on the first start of this build (a person who turns it off
+keeps it off). *Off: only the main chat travels.* A fresh sign-in pulls
 the newest 300 messages first so a long history is readable at once instead of
 arriving oldest-first. While another device is answering, the chat shows *kwai
 is working…* (kwai 正在处理…) under the last message, a presence note the relay

@@ -28,7 +28,7 @@ const PRIVACY_URL = 'https://nanolika.ru/privacy/'
 export interface SyncView {
   catalogue?: boolean
   enabled: boolean
-  /** "Also sync side chats" (contract C9), this device's setting. */
+  /** "Sync all chats" (contract C9), this device's setting. */
   sideChats: boolean
   available: boolean
   paused: boolean
@@ -45,7 +45,7 @@ export interface SyncView {
  * Data controls, the first card (contract C7): *Sync conversations between my devices*, on by
  * default while signed in. Off tells the relay, which deletes what it stores; *Delete synced
  * conversations* empties the store and keeps the switch and the chats on every device. Under
- * it, *Also sync side chats* (C9): this device's own switch, off by default — off, only the
+ * it, *Sync all chats* (C9): this device's own switch, on by default — off, only the
  * main conversation goes up and comes down.
  */
 export function SyncControls({ t }: { t: Translate }): ReactNode {
@@ -89,10 +89,13 @@ export function SyncControls({ t }: { t: Translate }): ReactNode {
       h('span', null, t('syncSwitch')),
       h(Switch, { checked: view?.enabled === true, onChange: flip, disabled: busy || !view, label: t('syncSwitch') })),
     h('div', { style: muted }, t('syncWhy'), ' ', view?.paused ? t('syncPaused') : stored ? t('syncKept', { c: counts.conversations, m: counts.messages }) : ''),
-    view?.catalogue ? h('div', { style: muted }, t('syncShared')) : h('div', { style: { ...row, justifyContent: 'space-between', marginTop: 8 }, 'data-testid': 'nm-sync-side' },
+    // The switch is about *sending* this device's chats, and a relay with the catalogue still
+    // needs that: reading is lazy there, writing is not. It stays visible either way.
+    h('div', { style: { ...row, justifyContent: 'space-between', marginTop: 8 }, 'data-testid': 'nm-sync-side' },
       h('span', null, t('syncSide')),
       h(Switch, { checked: view?.sideChats === true, onChange: flipSide, disabled: busy || !view || view.enabled !== true, label: t('syncSide') })),
-    view?.catalogue ? null : h('div', { style: muted }, t('syncSideWhy')),
+    h('div', { style: muted }, t('syncSideWhy')),
+    view?.catalogue ? h('div', { style: muted }, t('syncShared')) : null,
     stored ? h('div', { style: { marginTop: 6 } }, h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: wipe }, t('syncDelete'))) : null,
     notice ? h('div', { style: muted }, notice) : null,
     error ? h('div', { style: errorStyle }, error) : null)
