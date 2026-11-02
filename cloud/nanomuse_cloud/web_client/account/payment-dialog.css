@@ -51,3 +51,7 @@ body .payment-dialog .payment-total { margin: 14px 0; font-size: 20px; font-weig
   body .payment-dialog { padding: 20px 16px; }
   body .payment-dialog .plan-amount { font-size: 14px; }
 }
+.payment-email { display: grid; gap: 6px; font-size: 13px; }
+.payment-email input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #cfc8bb; border-radius: 8px; background: #fff; color: #242820; font: inherit; }
+.payment-email input:focus-visible { outline: 2px solid #52694e; outline-offset: 1px; }
+.payment-email[hidden] { display: none; }

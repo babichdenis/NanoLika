@@ -1543,11 +1543,9 @@ export default class NanomuseRooms extends Service {
       sessionId = created.sessionId
       this.store.feed.sessionId = String(sessionId)
       await this.save()
-      await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), true).catch(() => false)
       resolved = await sc.resolveAgent(sessionId)
     }
     if (!sessionId || !resolved || 'error' in resolved) throw new Error(`the chat could not be opened: ${String(resolved && 'error' in resolved ? resolved.error : 'unknown session')}`)
-    await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), true).catch(() => false)
     await sc.rename({ sessionId, title }).catch(() => undefined)
     const agent = resolved.agent
     let text = ''

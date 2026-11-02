@@ -634,12 +634,13 @@
     config: () => "/v1/config",
     payments: (d) => `/v1/admin/payments?days=${d}&mode=${encodeURIComponent(params.get("pmode") || "all")}&status=${encodeURIComponent(params.get("st") || "")}&q=${encodeURIComponent(params.get("pq") || "")}`,
     readiness: () => "/v1/admin/payments/readiness",
+    paymentProvider: () => "/v1/admin/payments/provider",
     siteCounter: () => "/v1/admin/site-counter",
     providers: () => "/v1/admin/provider-prices",
     balances: () => "/v1/admin/provider-balances",
     grandet: () => "/v1/admin/grandet-prices",
   };
-  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "siteCounter", "providers", "balances", "grandet"]);
+  const TIMELESS = new Set(["catalog", "health", "nudges", "sync", "controls", "invites", "config", "readiness", "paymentProvider", "siteCounter", "providers", "balances", "grandet"]);
   const CACHE = new Map();
   const cacheKey = (key) => `${key}:${TIMELESS.has(key) ? 0 : days}${key === "payments" ? ":" + SOURCES.payments(days) : ""}`;
   /** The view's data, or null while it is on its way (the view draws again when it lands);
@@ -1756,16 +1757,40 @@
     } catch (e) { payMessage = e.message; }
     finally { payBusy = false; draw(); }
   }
+  async function setPaymentProvider(name) {
+    if (payBusy) return;
+    payBusy = true; payMessage = L3("Переключаю платёжную систему…", "Switching the payment provider…", "正在切换支付系统…"); draw();
+    try {
+      await api("POST", "/v1/admin/payments/provider", { provider: name });
+      payMessage = L3("Переключено. Касса перезапускается…", "Switched. Checkout is restarting…", "已切换，收银台正在重启…");
+      forget("paymentProvider"); forget("readiness"); forget("payments");
+      window.setTimeout(() => window.location.reload(), 2500);
+    } catch (e) { payMessage = e.message; }
+    finally { payBusy = false; draw(); }
+  }
   function paymentsView() {
-    const pay = need("payments"), ready = need("readiness");
+    const pay = need("payments"), ready = need("readiness"), prov = need("paymentProvider");
     if (pay && pay._error) return [failedPanel(T.nav.payments, "payments", pay._error)];
     if (!pay) return [loadingPanel(T.nav.payments)];
     const sum = pay.summary || {}, live = sum.live || {}, demo = sum.demo || {};
     const detail = selectedPayment ? paymentDetails.get(selectedPayment) : null;
     const checks = (ready && ready.checks) || [];
+    const activeState = prov && prov.providers ? prov.providers[prov.provider] : null;
+    const providerPanel = panel(L3("Платёжная система", "Payment provider", "支付系统"),
+      h("div", { class: "pad" },
+        prov && prov._error ? h("p", { class: "fine" }, prov._error) : h("div", { class: "toolbar" },
+          ...["tbank", "yookassa", "robokassa"].map(name => {
+            const one = prov && prov.providers ? prov.providers[name] : null;
+            return h("button", {
+              class: "btn " + (prov && prov.provider === name ? "" : "quiet sm"),
+              disabled: !one || !one.configured || !one.live_ready || payBusy ? "" : null,
+              onclick: () => setPaymentProvider(name)
+            }, `${(one && one.label) || name}${one && one.live_ready ? "" : " · не готова"}`);
+          })),
+        h("p", { class: "fine" }, L3("Переключение перезапускает кассу на 2–3 секунды. Открытые заказы сохраняются; новые платежи пойдут через выбранную систему.", "Switching restarts checkout for 2–3 seconds. Open orders are kept; new payments use the selected system.", "切换会重启收银台 2–3 秒，未完成订单保留，新付款使用所选系统。"))));
     const payPanel = panel(L3("Готовность к первой оплате", "First payment readiness", "首次支付准备"),
       h("div", { class: "pad" },
-        h("p", {}, h("span", { class: "pill warn" }, L3("Реальная оплата выключена", "Live payments disabled", "正式支付已关闭"))),
+        h("p", {}, h("span", { class: "pill " + (activeState && !activeState.test_mode ? "ok" : "warn") }, activeState ? (activeState.test_mode ? L3("Тестовый режим", "Test mode", "测试模式") : L3("Боевой режим", "Live mode", "正式模式")) : L3("Проверяем…", "Checking…", "检查中…"))),
         h("p", {}, L3("Сайт → вход в аккаунт → форма Т-Банка → подтверждение сервера → баланс и тариф → чек и письмо. Возврат из банка сам по себе ничего не зачисляет.", "Website → sign-in → T-Bank → server confirmation → balance and plan → receipt and email. Returning from the bank never credits an account.", "网站、登录、银行、服务器确认、余额和套餐、收据与邮件。银行返回页面不会自行入账。")),
         ready && ready._error ? h("p", { class: "fine" }, ready._error) : checks.length ? h("ul", { class: "readiness-checks" }, ...checks.map(c => h("li", {}, h("span", { class: "pill " + (c.ok ? "ok" : "warn") }, c.ok ? "✓" : "○"), " ", (!c.ok && c.id === "retail_pricing" ? L3("Розничные ставки ещё не включены", "Retail prices are not enabled", "零售价尚未启用") : !c.ok && c.id === "paid_entitlements" ? L3("Оплаченные права связи ещё не включены", "Paid cross-device access is not enabled", "付费设备互联权限尚未启用") : LANG === "ru" ? c.label : c.label_en)))) : h("p", {}, T.loading),
         h("p", { class: "fine" }, L3("Тестовые платежи не дают рабочие деньги или тариф. Автоматических повторных списаний нет.", "Test payments never grant real balance or plans. No automatic recurring charges.", "测试支付不发放真实余额或套餐。没有自动续扣。")),
@@ -1781,7 +1806,7 @@
       h("p", { class: "fine" }, L3("Последняя сверка: ", "Last reconciliation: ", "上次核对：") + (detail.order.checked_at ? when(detail.order.checked_at) : "—")),
       ...detail.events.map(e => h("div", { class: "row payment-event" }, h("span", { class: "txt" }, paymentStatus(e.status), h("span", { class: "sub" }, when(e.ts))), h("code", {}, rubles(e.amount_delta)))),
       detail.order.payment_id ? h("button", { class: "btn quiet sm", disabled: payBusy ? "" : null, onclick: () => reconcilePayment(selectedPayment) }, L3("Сверить с банком", "Reconcile with bank", "与银行核对")) : null));
-    return [payPanel,
+    return [providerPanel, payPanel,
       h("div", { class: "kpis" },
         kpi(L3("Реально оплачено", "Live captured", "实际收款"), rubles(live.captured), L3("Подтверждённые списания", "Confirmed captures", "已确认扣款")),
         kpi(L3("Реально возвращено", "Live refunds", "实际退款"), rubles(live.refunded)),
