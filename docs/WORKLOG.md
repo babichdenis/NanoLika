@@ -83,6 +83,22 @@
   (site-packages read-only, потому монтируются отдельные файлы), CSP — `api.py` из
   `deepseek-routing-20261027`, релей перезапущен. Коммит `d205fd9a`.
 
+## 2026-11-02 · Мысли модели в облачном вебе, PWA, Telegram и MAX
+
+- **Один клиент на все входы.** `telegram-entry.js` и `max-entry.js` после входа
+  открывают `/web/?channel=…`; PWA — тот же `/web/`. Поэтому правка одна на все четыре.
+- **`stream.js`.** `readReply` читает `delta.reasoning_content` в отдельный аккумулятор
+  и отдаёт его четвёртым колбэком, не смешивая с `content`.
+- **`app.js`.** У сообщения появились `reasoning` и `thinking`: блок `<details>`
+  «Лика думает…» открыт, пока ответа нет, и сворачивается в «Ход мыслей» с первым словом.
+- **`i18n.js`** — ru/en/zh, **`app.css`** — приглушённый блок с левой линией,
+  **`sw.js`** — новая версия кэша, `index.html` — новые `?v=`.
+- **Выложено** в оверрайды релея `web-draw-20261102` (app.js/css/i18n/index),
+  `audit-a1-web-20261028T201937Z` (stream.js), `site-auth-1792871841` (sw.js);
+  бэкап — `/opt/nanomuse/cloud/backups/web-reasoning-overrides-20261102T205900`.
+  Проверено: `/web/stream.js` отдаёт `reasoning_content`, `index.html` — новую версию,
+  `sw.js` — новый кэш.
+
 ## 2026-11-02 · Живой стрим мыслей модели
 
 - **Модель.** `ask(..., on_reasoning=...)` во всех клиентах; `OpenAIChatLLM` отдаёт
