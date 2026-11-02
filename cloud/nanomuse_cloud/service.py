@@ -3708,9 +3708,11 @@ class Cloud:
         room = a["left_uy"]
         left_cny = None if room is None else self.s.uy_to_cny(room)
         grant_cny = self.s.uy_to_cny(a["grant_uy"])
+        cny = self.s.uy_to_cny(cost)
         return {
-            "cny": self.s.uy_to_cny(cost),
-            "usd": self.s.cny_to_usd(self.s.uy_to_cny(cost)),
+            "cny": cny,
+            "rub": self.s.cny_to_rub(cny),
+            "usd": self.s.cny_to_usd(cny),
             "parts": parts,
             "left_cny": left_cny,
             "grant_cny": grant_cny,

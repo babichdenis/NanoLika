@@ -2515,6 +2515,47 @@ def create_app(
             return "polza", storage.base, storage.key()
         return None
 
+    async def _keep_video(task: Any, url: str) -> str:
+        """Copy the finished clip into our own storage once and answer a stable link.
+
+        The provider's URL lives for hours or days and the chat must keep working after
+        that, on every device: the same rule as a picture, the relay's own /v1/files link.
+        """
+        existing = str(task["media_key"] or "") if "media_key" in task.keys() else ""
+        if existing:
+            return existing
+        if not s3_files.enabled(settings) or not (url.startswith("http://") or url.startswith("https://")):
+            return ""
+        try:
+            async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as grab:
+                response = await grab.get(url)
+            if response.status_code >= 400:
+                raise httpx.HTTPError(f"HTTP {response.status_code}")
+        except httpx.HTTPError as error:
+            log.warning("video %s: could not fetch the clip: %s", str(task["task_id"])[:12], error)
+            return ""
+        key = f"videos/{task['task_id']}.mp4"
+        try:
+            await s3_files.put_object(
+                settings, key, response.content, response.headers.get("content-type") or "video/mp4"
+            )
+        except Exception as error:  # noqa: BLE001 - a storage fault must not fail the poll
+            log.warning("video %s: could not store the clip: %s", str(task["task_id"])[:12], error)
+            return ""
+        cloud.db.set_video_media(str(task["task_id"]), key)
+        return key
+
+    async def _clip_meta(task: Any, output: dict, charged: int | None) -> dict:
+        """What the app needs besides the provider's own answer: the charge, and our link."""
+        meta: dict = {}
+        if charged is not None:
+            meta["charged"] = charged
+        if output.get("task_status") == "SUCCEEDED" and output.get("video_url"):
+            key = await _keep_video(task, str(output["video_url"]))
+            if key:
+                meta["media_url"] = s3_files.media_url(settings, key)
+        return meta
+
     async def _provider_video_poll(provider: str, base: str, key: str, task) -> Response:
         """Спросить провайдера о клипе, списать его один раз и ответить по-дашскоповски."""
         task_id = str(task["task_id"])
@@ -2545,7 +2586,7 @@ def create_app(
                     "bothub video task %s done for %s: %s, charged %d",
                     task_id[:14], str(task["account_id"])[:8], output["task_status"], charged,
                 )
-            return JSONResponse(content={"output": output})
+            return JSONResponse(content={"output": output, "nanomuse": await _clip_meta(task, output, charged)})
         if provider == "aitunnel":
             try:
                 r = await http.get(f"{base}/v1/videos/{task_id}", headers={"Authorization": f"Bearer {key}"})
@@ -2576,7 +2617,7 @@ def create_app(
                     output["task_status"],
                     charged,
                 )
-            return JSONResponse(content={"output": output})
+            return JSONResponse(content={"output": output, "nanomuse": await _clip_meta(task, output, charged)})
         try:
             r = await http.get(f"{base}/v1/media/{task_id}", headers={"Authorization": f"Bearer {key}"})
         except httpx.HTTPError as e:
@@ -2614,7 +2655,7 @@ def create_app(
                 output["task_status"],
                 charged,
             )
-        return JSONResponse(content={"output": output})
+        return JSONResponse(content={"output": output, "nanomuse": await _clip_meta(task, output, charged)})
 
     @app.post("/api/v1" + VIDEO_PATH)
     async def video_synthesis(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
@@ -2716,6 +2757,16 @@ def create_app(
             charged = cloud.settle_video_task(task, _task_status(r))
             if charged is not None:
                 log.info("video task %s done for %s: charged %d", task_id[:12], caller.account_id[:8], charged)
+            try:
+                body = r.json()
+            except ValueError:
+                body = None
+            output = body.get("output") if isinstance(body, dict) else None
+            if isinstance(output, dict) and output.get("task_status") == "SUCCEEDED":
+                meta = await _clip_meta(task, output, charged)
+                if meta:
+                    body["nanomuse"] = {**(body.get("nanomuse") or {}), **meta}
+                return JSONResponse(content=body)
         return _dashscope_reply(r)
 
     def _task_status(r: httpx.Response) -> str | None:

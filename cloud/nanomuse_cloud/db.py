@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS video_tasks (
     probe         INTEGER NOT NULL DEFAULT 0,  -- an empty task the app sent to see if the model exists
     status        TEXT NOT NULL DEFAULT '',    -- the provider's last word: SUCCEEDED / FAILED / ...
     checks        INTEGER NOT NULL DEFAULT 0,  -- 0.24: times the relay itself asked the provider (settle_video_tasks)
-    provider      TEXT NOT NULL DEFAULT ''     -- 0.30: the supplier that made the clip (poll it there)
+    provider      TEXT NOT NULL DEFAULT '',    -- 0.30: the supplier that made the clip (poll it there)
+    media_key     TEXT NOT NULL DEFAULT ''     -- the clip copied into our own storage, under /v1/files
 );
 -- 0.4: conversations an account chose to contribute (accounts.contribute=1). The only
 -- place message content ever lands; empty for everyone else, and deleted with the account
@@ -523,6 +524,8 @@ class Database:
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN charged INTEGER NOT NULL DEFAULT 0")
         if "sale_uy" not in cols("video_tasks"):
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN sale_uy INTEGER")
+        if "media_key" not in cols("video_tasks"):
+            self._conn.execute("ALTER TABLE video_tasks ADD COLUMN media_key TEXT NOT NULL DEFAULT ''")
         if "cost_uy" not in cols("video_tasks"):
             self._conn.execute("ALTER TABLE video_tasks ADD COLUMN cost_uy INTEGER NOT NULL DEFAULT 0")
         if "cost_uy" not in cols("ledger"):
@@ -2764,6 +2767,10 @@ class Database:
     def set_video_status(self, task_id: str, status: str) -> None:
         with self.tx() as c:
             c.execute("UPDATE video_tasks SET status=? WHERE task_id=?", (status[:20], task_id))
+
+    def set_video_media(self, task_id: str, key: str) -> None:
+        with self.tx() as c:
+            c.execute("UPDATE video_tasks SET media_key=? WHERE task_id=?", (key, task_id))
 
     def mark_video_charged(self, task_id: str) -> bool:
         """True the first time only, so a clip is charged once however often it is polled."""
