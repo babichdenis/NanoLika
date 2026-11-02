@@ -85,8 +85,32 @@
 	}
 
 	# The desktop's installers and update feeds: scripts/publish-updates.mjs writes
-	# ./dl/win (latest.yml + the NSIS .exe electron-updater reads) and ./dl/mac
-	# (latest.json + the dmg/zip update-lika.py reads). It is a plain file server.
+	# ./dl/win (latest.yml + the NSIS .exe electron-updater reads), ./dl/mac
+	# (latest.json + the dmg/zip update-lika.py reads) and ./dl/index.json (what the app's
+	# own check reads). It is a plain file server.
+	# …the feeds change, though: a year of cache would hide every release after this one.
+	# They get their own handlers because `handle` picks the most specific path first.
+	handle /dl/index.json {
+		root * /srv/dl
+		rewrite * /index.json
+		header Cache-Control "no-cache, must-revalidate"
+		header -Server
+		file_server
+	}
+	handle /dl/win/latest.yml {
+		root * /srv/dl
+		rewrite * /win/latest.yml
+		header Cache-Control "no-cache, must-revalidate"
+		header -Server
+		file_server
+	}
+	handle /dl/mac/latest.json {
+		root * /srv/dl
+		rewrite * /mac/latest.json
+		header Cache-Control "no-cache, must-revalidate"
+		header -Server
+		file_server
+	}
 	handle_path /dl/* {
 		root * /srv/dl
 		header {

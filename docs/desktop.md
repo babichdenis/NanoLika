@@ -70,6 +70,33 @@ in-app updater must first be upgraded with the downloaded installer. Development
 builds do not run an installer. This uses the existing installation behaviour;
 mixed copies or stale installation registration need to be sorted out separately.
 
+## Releasing an update to nanolika.ru
+
+The check every install makes reads one file, `https://nanolika.ru/dl/index.json`: the first
+release with a tag is the newest, and its `assets` are the installers (`harness/dsh-nanomuse/src/desk.ts`,
+`checkForUpdate`). The shell's own Windows updater reads `https://nanolika.ru/dl/win/latest.yml`
+instead; both files live on the cloud host in `/srv/dl`, served by Caddy.
+
+1. Bump the version (`scripts/release-bump.sh old new code code`) and build the installers:
+   `npm run dist` on Windows, `scripts/desktop-app/package-mac.sh` after `npm run dist:dir` on
+   a Mac. The artifacts land in `harness/desktop/dist`.
+2. Publish everything with the mirror script — it copies the Windows `latest.yml`, `.exe` and
+   `.blockmap` to `/dl/win/`, the macOS dmg/zip to `/dl/mac/` with their `latest.json`, and
+   writes `/dl/index.json` listing every installer of that version:
+
+   ```bash
+   cd harness/desktop
+   node scripts/publish-updates.mjs --dist=dist --notes "1.0.9: что изменилось"
+   ```
+3. Check the live files: `curl -s https://nanolika.ru/dl/index.json`, `…/dl/win/latest.yml`.
+
+The app checks 15 seconds after start and then once a day (a failed check retries in an hour).
+A newer release puts a down arrow beside the name in the chat header; it opens About, whose
+version row offers **Update** with the installer for this computer. Windows downloads in the
+background and installs on **Restart to update**; macOS and Linux download the installer
+(nothing is signed for a silent install there). The arrow and the About row are the same
+`update` state the host keeps in `~/.nanolika/desktop/nanolika/state.json`.
+
 ## What it is
 
 Copy buttons can put text on the clipboard. Right-click selected text to copy it, or

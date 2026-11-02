@@ -382,6 +382,9 @@ html[data-nm-muse] [data-slot="conversation.header"]:has(.nm-header) ~ [data-con
 .nm-header-face.nm-wait { box-shadow: 0 0 0 2px var(--dsw-alias-state-warn-primary, #d98c1f); }
 .nm-header-face:focus-visible { outline: 2px solid var(--nm-accent); outline-offset: 2px; }
 .nm-header-name { font-size: 14px; font-weight: 600; line-height: 1.2; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nm-header-update { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; padding: 0; border-radius: 999px; border: 1px solid var(--dsw-alias-border-secondary, rgba(0,0,0,.12)); background: var(--dsw-alias-bg-secondary, rgba(0,0,0,.04)); color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.nm-header-update:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-primary, rgba(0,0,0,.24)); }
+.nm-header-update:focus-visible { outline: 2px solid var(--dsw-alias-state-primary, #10a37f); outline-offset: 2px; }
 .nm-header-status { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.2; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .nm-header-status.nm-live { color: var(--dsw-alias-label-secondary); }
 .nm-header-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); }

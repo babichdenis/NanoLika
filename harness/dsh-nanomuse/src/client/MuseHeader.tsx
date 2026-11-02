@@ -9,14 +9,16 @@
  */
 import { createElement as h, Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { dismissStar, markStarred, nudgeText, openStar } from './AccountPage.tsx'
+import { aboutBus } from './About.tsx'
 import type { Translate } from './api.ts'
 import { Avatar, motionStatus, type Mood } from './Avatar.tsx'
 import { describeCall } from './Capsule.tsx'
-import { IconCheck, IconChevronLeft, IconHeart, IconMenu, IconSpinner } from './icons.tsx'
+import { IconArrowDown, IconCheck, IconChevronLeft, IconHeart, IconMenu, IconSpinner } from './icons.tsx'
 import { useLive } from './live.ts'
 import { mainChatId } from './MuseChats.tsx'
 import { usePrefs } from './prefs.ts'
 import { statusWords } from './ProfileDrawer.tsx'
+import { openLink } from './bridge.ts'
 import { activityOf, nav, useRooms } from './rooms.ts'
 import { useWin } from './win.ts'
 
@@ -149,6 +151,21 @@ export function MuseHeader({ t, openProfile, useSessionStatus }: MuseHeaderProps
         : h('button', { type: 'button', className: `nm-header-face${running ? ' nm-live' : waiting ? ' nm-wait' : ''}`, 'aria-label': live.profile.name || t('brand'), title: t('railProfile'), onClick: openProfile },
             h(Avatar, { size: 66, profile: live.profile, mood })),
       h('div', { className: 'nm-header-name' }, live.profile.name || t('brand')),
+      // A new release on the mirror: one down arrow beside the name, the way every desktop
+      // app says "there is an update". It opens About, where the version line and Update live.
+      live.update?.newer
+        ? h('button', {
+            type: 'button',
+            className: 'nm-header-update',
+            title: t('updArrow', { version: live.update.latest }),
+            'aria-label': t('updArrow', { version: live.update.latest }),
+            onClick: () => {
+              const open = aboutBus.open
+              if (open) open()
+              else openLink('https://nanolika.ru/download/')
+            },
+          }, h(IconArrowDown, { size: 14 }))
+        : null,
       toast
         ? h('div', { className: 'nm-header-status nm-header-toast' }, h(IconCheck, { size: 13 }), t('statusApproved', { n: toast.n }))
         : starAsk

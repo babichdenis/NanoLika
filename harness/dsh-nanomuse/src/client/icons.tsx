@@ -42,6 +42,7 @@ export const IconPanelLeft = (p: IconProps) => icon([h('rect', { key: 1, x: 3.5,
 export const IconStop = (p: IconProps) => icon([h('rect', { key: 1, x: 7, y: 7, width: 10, height: 10, rx: 2, fill: 'currentColor', stroke: 'none' })], p)
 export const IconChevronLeft = (p: IconProps) => icon([h('path', { key: 1, d: 'm14.5 6-6 6 6 6' })], p)
 export const IconChevronRight = (p: IconProps) => icon([h('path', { key: 1, d: 'm9.5 6 6 6-6 6' })], p)
+export const IconArrowDown = (p: IconProps) => icon([h('path', { key: 1, d: 'M12 4.5v10.5M7.5 10.5 12 15l4.5-4.5M5 19.5h14' })], p)
 export const IconCheck = (p: IconProps) => icon([h('path', { key: 1, d: 'm5 12.5 4.5 4.5L19 7.5' })], p)
 export const IconClose = (p: IconProps) => icon([h('path', { key: 1, d: 'M6 6l12 12M18 6 6 18' })], p)
 export const IconMic = (p: IconProps) => icon([h('rect', { key: 1, x: 9, y: 3.5, width: 6, height: 11, rx: 3 }), h('path', { key: 2, d: 'M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5M9 20.5h6' })], p)

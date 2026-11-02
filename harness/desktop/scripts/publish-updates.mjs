@@ -135,5 +135,35 @@ for (const u of uploads) {
   execFileSync("scp", ["-q", u.from, `${server}:${u.to}`], { stdio: "inherit" });
   console.log(`  загружено ${basename(u.to)}`);
 }
+// --- index.json: what the app's own check reads (nanolika.ru/dl/index.json) -----------
+// The host asks for this file once a day: `{releases: [{tag, page, assets: [{name, url,
+// size}]}]}` (harness/dsh-nanomuse/src/desk.ts, checkForUpdate). The newest release is the
+// first one with a tag, and it holds every installer of that version — both platforms come
+// from the mirror itself, so a publish of one platform does not drop the other's file.
+const wanted = /\.(dmg|zip|exe)$/i;
+const listing = execFileSync(
+  "ssh",
+  [server, `find ${remoteDir}/mac ${remoteDir}/win -maxdepth 1 -type f -name '*${version}*' -printf '%p\t%s\n'`],
+  { encoding: "utf8" },
+);
+const assets = listing
+  .split("\n")
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => {
+    const [path, bytes] = line.split("\t");
+    return { name: basename(path), url: path.replace(remoteDir, publicBase), size: Number(bytes) || 0 };
+  })
+  .filter((a) => wanted.test(a.name) && !/blockmap/i.test(a.name))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const index = {
+  repo: args.repo || "babichdenis/NanoLika",
+  releases: [{ tag: `v${version}`, page: args.page || "https://nanolika.ru/download/", assets }],
+};
+const tmpIndex = mkdtempSync(join(tmpdir(), "nl-index-"));
+const indexPath = join(tmpIndex, "index.json");
+writeFileSync(indexPath, JSON.stringify(index, null, 2) + "\n");
+execFileSync("scp", ["-q", indexPath, `${server}:${remoteDir}/index.json`], { stdio: "inherit" });
+console.log(`  загружено index.json (${assets.length} файлов)`);
 const manifestUrl = `${publicBase}/mac/latest.json`;
-console.log(`\nготово. Проверка:\n  curl -s ${publicBase}/win/latest.yml | head -3\n  curl -s ${manifestUrl}`);
+console.log(`\nготово. Проверка:\n  curl -s ${publicBase}/win/latest.yml | head -3\n  curl -s ${manifestUrl}\n  curl -s ${publicBase}/index.json`);
