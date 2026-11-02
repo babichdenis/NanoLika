@@ -20,7 +20,14 @@
 	# A chat request may carry a few screenshots and one frame of the hub a file, so
 	# the body limit sits just above the relay's MAX_REQUEST_BYTES (16 MiB) and
 	# HUB_FRAME_LIMIT; the relay answers 413 with its own message before Caddy would.
-	request_body {
+	# A chat attachment may be 50 MB (the bot's own Telegram ceiling); every other body
+	# keeps the smaller prompt limit.
+	@uploads path /v1/attachments
+	request_body @uploads {
+		max_size 60MB
+	}
+	@not_uploads not path /v1/attachments
+	request_body @not_uploads {
 		max_size 20MB
 	}
 

@@ -738,6 +738,8 @@ class Settings:
     # since 0.20: a computer-use turn carries a few screenshots, and the apps now keep at most
     # four and scale them down, so a body that still passes this is a bug on their side.
     max_request_bytes: int = field(default_factory=lambda: _int("MAX_REQUEST_BYTES", 16 * 1024 * 1024))
+    # A chat attachment may be a document or a clip: the same 50 MB a bot can send to Telegram.
+    attachments_max_bytes: int = field(default_factory=lambda: _int("ATTACHMENTS_MAX_BYTES", 50 * 1024 * 1024))
     # Вложения из веб-клиента: файл кладётся в общий бакет S3 (тот же, что у приложения)
     # и отдаётся presigned-ссылкой. Пустые ключи выключают загрузку — релей работает как раньше.
     s3_endpoint: str = field(default_factory=lambda: _env("S3_ENDPOINT", "https://s3.regru.cloud"))

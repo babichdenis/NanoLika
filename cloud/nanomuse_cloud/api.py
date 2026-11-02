@@ -461,7 +461,7 @@ def create_app(
 
     from .request_limits import RequestBodyLimitMiddleware
 
-    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes, overrides={"/v1/attachments": settings.attachments_max_bytes})
 
     # CORS for WebApp (nanolika.ru) and cloud subdomain
     from starlette.middleware.cors import CORSMiddleware
@@ -1957,16 +1957,9 @@ def create_app(
             raise CloudError(503, "attachments_unconfigured", "File storage is not configured on this relay")
         name = (file.filename or "file")[:200]
         mime = (file.content_type or "application/octet-stream")[:100]
-        data = await file.read(settings.max_request_bytes + 1)
-        if len(data) > settings.max_request_bytes:
+        data = await file.read(settings.attachments_max_bytes + 1)
+        if len(data) > settings.attachments_max_bytes:
             raise CloudError(413, "too_large", "The file is larger than this relay accepts")
-        allowed = mime.startswith(("image/", "text/", "audio/", "video/")) or mime in {
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        }
-        if not allowed:
-            raise CloudError(400, "bad_type", "Attach an image or a text document")
         try:
             key, url = await s3_files.store(settings, data, mime, name)
         except Exception as exc:  # noqa: BLE001 — the vendor's words stay out of the answer

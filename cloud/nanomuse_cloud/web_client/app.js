@@ -2,7 +2,7 @@ import {fundsView} from './funds.js';
 import {navigationTools,performNavigation} from './navigation-tool.js';
 import {ChatSync} from './chat-sync.js?v=20261102-reasoning';
 import {ConversationOpener} from './conversation-open.js';
-import {text,locales} from './i18n.js?v=20261102-draw';
+import {text,locales} from './i18n.js?v=20261102-files';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
 import {installComposerControls} from './composer-controls.js?v=20261102-reasoning';
@@ -154,7 +154,7 @@ function wireMessage(message,seesImages=true){let text=message.content||'';for(c
 function wireLength(message,seesImages=true){const parts=wireMessage(message,seesImages);return typeof parts==='string'?parts.length:parts.reduce((sum,part)=>sum+(part.type==='text'?part.text.length:4000),0);}
 function contextFor(chat,seesImages=true){let n=0;const selected=[];for(const m of chat.messages.filter(m=>(m.content||m.files?.length)&&!m.interrupted).slice(-20).reverse()){const length=wireLength(m,seesImages);if(n+length>65000&&selected.length)break;selected.unshift({role:m.role,content:wireMessage(m,seesImages)});n+=length;}return [{role:'system',content:'You are Lika, a warm and practical personal assistant. Reply in '+({ru:'Russian',zh:'Simplified Chinese',en:'English'}[lang])+'. This browser client has one explicit conversation_open navigation tool, but no computer-control, filesystem or publishing tools. Never claim you clicked, changed a file, sent a message or ran background work. Help with explanations, drafts, plans and code. Documents in the local library are not available to you unless the user explicitly provides their content. Do not claim access to other conversations or devices. All synced chats share one account list. New chat creates a separate shared conversation with empty history. Opening an existing chat in a messenger preserves that chat and does not create another conversation. Never say you created a chat when only switching channels, or say no new chat was created when the user pressed New chat. For an explicit request to open this conversation in Telegram, MAX or on the computer, call conversation_open with the chosen destination. Do not claim success until the tool result confirms it. A new conversation requires the New chat control; navigation preserves the current conversation. Do not confuse these actions. Other apps are optional: the browser works on its own. Connection setup is in the account menu under Devices and channels. Do not tell the user to click channel buttons above the chat. Use the conversation_open tool for a spoken or typed navigation request. If it fails, explain the failure briefly; do not investigate infrastructure or repeat the action automatically.'},...selected];}
 /* ── вложения: картинки сжимаем в браузере, текстовые файлы читаем в контекст ── */
-const ATTACH_MAX=4,ATTACH_IMAGE_SIDE=1200,ATTACH_TEXT_CHARS=20000,ATTACH_FILE_BYTES=12*1024*1024;
+const ATTACH_MAX=4,ATTACH_IMAGE_SIDE=1200,ATTACH_TEXT_CHARS=20000,ATTACH_FILE_BYTES=50*1024*1024;
 let pendingFiles=[];
 const isImageFile=file=>/^image\//i.test(file.type||'')||/\.(png|jpe?g|webp|gif|heic|heif|avif|bmp)$/i.test(file.name||'');
 const isTextFile=file=>/^text\//i.test(file.type||'')||/\.(txt|md|markdown|csv|tsv|json|log|ya?ml|xml|html?|css|scss|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|sh|bash|zsh|sql|ini|toml)$/i.test(file.name||'');
@@ -166,7 +166,7 @@ function fileChip(file,{removable=false}={}){const chip=document.createElement('
 function renderPending(){const box=$('composer-files');if(!box)return;box.replaceChildren();box.hidden=!pendingFiles.length;for(const file of pendingFiles)box.append(fileChip(file,{removable:true}));}
 async function decodeImage(file){if('createImageBitmap'in window){try{return await createImageBitmap(file);}catch{}}return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image);};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('decode'));};image.src=url;});}
 async function shrinkImage(file){const source=await decodeImage(file);const scale=Math.min(1,ATTACH_IMAGE_SIDE/Math.max(source.width||1,source.height||1));const width=Math.max(1,Math.round((source.width||1)*scale)),height=Math.max(1,Math.round((source.height||1)*scale));const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const pen=canvas.getContext('2d');pen.fillStyle='#ffffff';pen.fillRect(0,0,width,height);pen.drawImage(source,0,0,width,height);if(typeof source.close==='function')source.close();return canvas.toDataURL('image/jpeg',.82);}
-async function readAttachment(file){if(file.size>ATTACH_FILE_BYTES)throw new Error('big');if(isImageFile(file))return {name:file.name||'image.jpg',mime:'image/jpeg',size:file.size,dataUrl:await shrinkImage(file)};if(isTextFile(file)){const raw=(await file.text()).replace(/\u0000/g,'');const body=raw.slice(0,ATTACH_TEXT_CHARS);return {name:file.name||'file.txt',mime:file.type||'text/plain',size:file.size,text:body,cut:raw.length>body.length};}throw new Error('unsupported');}
+async function readAttachment(file){if(file.size>ATTACH_FILE_BYTES)throw new Error('big');if(isImageFile(file))return {name:file.name||'image.jpg',mime:'image/jpeg',size:file.size,dataUrl:await shrinkImage(file)};if(isTextFile(file)){const raw=(await file.text()).replace(/\u0000/g,'');const body=raw.slice(0,ATTACH_TEXT_CHARS);return {name:file.name||'file.txt',mime:file.type||'text/plain',size:file.size,text:body,cut:raw.length>body.length};}return {name:file.name||'file',mime:file.type||'application/octet-stream',size:file.size,blob:file};}
 /* Вложение уходит в S3 через релей и возвращает ссылку: её увидят другие устройства
    и мессенджеры. Не вышло — файл остаётся в браузере, в тексте будет только имя. */
 async function uploadAttachment(file){
@@ -174,6 +174,7 @@ async function uploadAttachment(file){
   let blob=null;
   if(file.dataUrl){const comma=file.dataUrl.indexOf(','),mime=(file.dataUrl.slice(5,comma).split(';')[0])||file.mime||'image/jpeg',binary=atob(file.dataUrl.slice(comma+1)),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);blob=new Blob([bytes],{type:mime});}
   else if(typeof file.text==='string')blob=new Blob([file.text],{type:file.mime||'text/plain'});
+  else if(file.blob)blob=file.blob;
   if(!blob)return '';
   const form=new FormData();form.append('file',blob,file.name);
   const response=await fetch('/v1/attachments',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+session.key},body:form});
