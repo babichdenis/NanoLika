@@ -6,7 +6,6 @@ import pytest
 from nanomuse.channels.base import InboundMessage
 from nanomuse.channels.menu import ChatMenu, Preferences
 from nanomuse.channels.permission_mode import scoped_decision
-from nanomuse.memory import MemoryStore
 from nanomuse.sentinel.policy import Decision
 from nanomuse.tools.base import CallAssessment
 
@@ -252,7 +251,7 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
         # have to guess that /balance or /permissions exist
         assert {row[field] for row in commands} == {
             "start", "menu", "new", "chats", "help", "status", "balance",
-            "model", "memory", "permissions", "rename", "unlink",
+            "model", "permissions", "rename", "unlink",
         }
 
 
@@ -399,28 +398,3 @@ async def test_a_model_pick_belongs_to_that_chat_only(tmp_path):
     assert thread.model == "picture"
     assert pushed == ["channel-telegram-chat"]
 
-
-@pytest.mark.asyncio
-async def test_the_memory_menu_lists_a_fact_and_forgets_it(tmp_path):
-    m = manager(tmp_path)
-    m.svc.app.memory = MemoryStore(tmp_path / "memory.db")
-    m.svc.app.memory.add("Любит зелёный чай", category="preference")
-    menu = ChatMenu(m)
-    await menu.show(msg("telegram"), page="memory")
-    sent = str(m.channels["telegram"]._call.call_args)
-    assert "зелёный чай" in sent
-    item = m.svc.app.memory.all()[0]
-    await menu.perform(msg("telegram"), "memory-forget:" + item.id)
-    assert m.svc.app.memory.count() == 0
-
-
-@pytest.mark.asyncio
-async def test_memory_search_finds_a_fact_without_the_app(tmp_path):
-    m = manager(tmp_path)
-    m.svc.app.memory = MemoryStore(tmp_path / "memory.db")
-    m.svc.app.memory.add("Любит зелёный чай", category="preference")
-    m.svc.app.memory.add("Живёт в Санкт-Петербурге", category="profile")
-    menu = ChatMenu(m)
-    await menu.memory_find(msg("telegram", text="/memory чай"), "чай")
-    sent = str(m.channels["telegram"]._call.call_args)
-    assert "зелёный чай" in sent and "Санкт-Петербурге" not in sent
