@@ -331,8 +331,9 @@ async def test_answering_no_changes_nothing(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_the_model_menu_shows_the_shelf_favourites(tmp_path):
-    """The chat offers what the person starred, like the app and the cabinet do."""
+async def test_the_model_menu_puts_the_shelf_favourites_first(tmp_path):
+    """Starred models come first, but every model the plan allows is reachable here: a
+    person who lives in the messenger must not need the app to pick another one."""
     m = manager(tmp_path)
     menu = ChatMenu(m)
     menu._shelf = AsyncMock(
@@ -347,9 +348,8 @@ async def test_the_model_menu_shows_the_shelf_favourites(tmp_path):
     )
     await menu.show(msg("telegram"), page="models")
     sent = str(m.channels["telegram"]._call.call_args)
-    assert "Beta" in sent          # a starred model
-    assert "Alpha" in sent         # the current one stays even unstarred
-    assert "Gamma" not in sent     # not starred, not current
+    assert "Beta" in sent and "Alpha" in sent and "Gamma" in sent
+    assert sent.index("Beta") < sent.index("Gamma")  # the star leads
 
 
 @pytest.mark.asyncio

@@ -629,13 +629,15 @@ class ChatMenu:
                 favourites = [str(item) for item in (shelf.get("favourites") or [])]
                 thread = self._thread_now(msg)
                 current = str(getattr(thread, "model", "") or (shelf.get("default") or {}).get("chat") or "")
+                models = [m for m in every if m.get("available", True)]
                 if favourites:
+                    # The starred ones come first, the rest of the shelf follows: the menu
+                    # is a way to reach every model the plan allows, not only the stars.
                     starred = [
-                        m for m in every
+                        m for m in models
                         if str(m.get("id")) in favourites or str(m.get("id")) == str(current)
                     ]
-                    every = starred or every
-                models = [m for m in every if m.get("available", True)]
+                    models = starred + [m for m in models if m not in starred]
                 pages = max(1, (len(models) + per_page - 1) // per_page)
                 page_no = min(max(1, page_no), pages)
                 start = (page_no - 1) * per_page
