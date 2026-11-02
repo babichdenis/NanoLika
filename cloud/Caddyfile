@@ -121,6 +121,33 @@
 		file_server
 	}
 
+	# The MAX mini app's entry page and its two files. The relay serves its own web_client
+	# from a read-only site-packages tree, and a new file cannot be mounted there (no
+	# mountpoint can be made), so these three come from ./max-web — the same origin, the
+	# same sign-in cookie, and a CSP just for them.
+	handle /web/max.html {
+		root * /srv/max
+		rewrite * /max.html
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'"
+		header Cache-Control "no-cache"
+		header -Server
+		file_server
+	}
+	handle /web/max-entry.js {
+		root * /srv/max
+		rewrite * /max-entry.js
+		header Cache-Control "no-cache"
+		header -Server
+		file_server
+	}
+	handle /web/max-entry.css {
+		root * /srv/max
+		rewrite * /max-entry.css
+		header Cache-Control "no-cache"
+		header -Server
+		file_server
+	}
+
 	# The store: skills, code capsules and MCP descriptions the app fetches when a job needs
 	# them instead of carrying them in the installer (docs/store.md). Its catalogue,
 	# index.json, is short-lived: a package installed today should be visible in a minute.

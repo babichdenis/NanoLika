@@ -860,6 +860,8 @@ class Settings:
     # Telegram bot token for WebApp initData validation (HMAC-SHA256 of init_data)
     # Get from @BotFather. Different from BOT_SIGNIN_TOKEN (shared secret for bot→relay).
     telegram_bot_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN"))
+    # MAX bot token for the mini app's WebAppData signature (HMAC-SHA256, docs/webapps/validation)
+    max_bot_token: str = field(default_factory=lambda: _env("MAX_BOT_TOKEN"))
     # How long a one-time code lives that ties a second identifier to an account: the chat
     # makes it (`POST /v1/bot/link-code`), the app types it beside its own sign-in code, and
     # both then are one account. 0 = linking switched off.

@@ -74,6 +74,58 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, An
         return None
 
 
+def _validate_max_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
+    """Verify MAX's WebAppData start parameters, including the short launch lifetime.
+
+    https://dev.max.ru/docs/webapps/validation — the secret is HMAC-SHA256 *keyed by the
+    literal string* "WebAppData" over the bot token, and the launch parameters are joined
+    with newlines; the hash is the hex digest over that string.
+    """
+    if not init_data or not bot_token or len(init_data) > _BODY_BYTES:
+        return None
+    try:
+        if re.search(r"%(?![0-9a-fA-F]{2})", init_data):
+            return None
+        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True, errors="strict", max_num_fields=32)
+        params = dict(pairs)
+        if len(params) != len(pairs):
+            return None
+        received_hash = params.pop("hash", "")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", received_hash):
+            return None
+        check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
+        secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        expected = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(received_hash.lower(), expected):
+            return None
+        age = time.time() - int(params.get("auth_date", "0"))
+        if age < -30 or age > 300:
+            return None
+        user = json.loads(params.get("user", "null"))
+        if not isinstance(user, dict) or type(user.get("id")) is not int or not 0 < user["id"] < 2**52:
+            return None
+        params["user"] = user
+        return params
+    except (ValueError, TypeError, UnicodeError):
+        return None
+
+
+def _max_session(cloud: Cloud, user_id: int) -> dict:
+    """Issue only for an existing MAX identity; never register or merge accounts."""
+    ident = chat_identity("max", str(user_id))
+    with cloud.db._lock:
+        alias = cloud._chat_alias("max", ident)
+        account = (
+            cloud.db.account(str(alias["account_id"])) if alias is not None else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key))
+        )
+        if account is None:
+            raise CloudError(409, "max_not_linked", "Link MAX to your account first")
+        if account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        key, caller = cloud._issue_key(str(account["id"]), "MAX WebApp", "max_webapp", expires_at=int(time.time()) + 30 * 86400)
+        return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
+
+
 def _telegram_session(cloud: Cloud, user_id: int) -> dict:
     """Issue only for an existing Telegram identity; never register or merge accounts."""
     ident = chat_identity("telegram", str(user_id))
@@ -218,6 +270,27 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
         if validated is None:
             raise CloudError(401, "invalid_init_data", "Reopen the Mini App from Telegram")
         result = await asyncio.to_thread(_telegram_session, cloud, validated["user"]["id"])
+        response.headers["Cache-Control"] = "private, no-store"
+        caller = await asyncio.to_thread(cloud.authenticate, result["api_key"])
+        browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))
+        return result
+
+    @router.post("/v1/auth/max-webapp")
+    async def max_webapp_sign_in(request: Request, response: Response) -> dict:
+        public = urlsplit(cloud.s.public_base)
+        expected_origin = f"{public.scheme}://{public.netloc}"
+        if request.headers.get("origin") != expected_origin:
+            raise CloudError(403, "bad_origin", "Open the mini app on the cloud origin")
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise CloudError(415, "bad_content_type", "Send JSON")
+        if not cloud.s.max_bot_token:
+            raise CloudError(503, "webapp_check_unconfigured", "MAX sign-in is unavailable")
+        body = await _body(request)
+        raw = body.get("init_data")
+        validated = _validate_max_init_data(raw, cloud.s.max_bot_token) if isinstance(raw, str) else None
+        if validated is None:
+            raise CloudError(401, "invalid_init_data", "Reopen the mini app from MAX")
+        result = await asyncio.to_thread(_max_session, cloud, validated["user"]["id"])
         response.headers["Cache-Control"] = "private, no-store"
         caller = await asyncio.to_thread(cloud.authenticate, result["api_key"])
         browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))
