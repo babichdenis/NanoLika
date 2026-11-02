@@ -144,6 +144,8 @@ class ConversationSync:
             "models": {},
             # thread id → the thinking level that goes with it ('' = the provider's default)
             "reasoning": {},
+            # thread id → the chat's own sampling temperature last pushed or applied (D8)
+            "temperatures": {},
             # C10: thread id → the account (`account.id`) it was synced with; absent = none
             "owners": {},
             # C10: account id → the thread that holds that account's main chat while another
@@ -232,6 +234,12 @@ class ConversationSync:
             for key in ("cids", "titles", "models", "reasoning", "owners", "mains"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = {str(k): str(v) for k, v in data[key].items()}
+            if isinstance(data.get("temperatures"), dict):
+                self.state["temperatures"] = {
+                    str(k): float(v)
+                    for k, v in data["temperatures"].items()
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)
+                }
             # 2026-11-02: side chats used to be off, so a chat started from Telegram or MAX
             # on one device never reached the others. A state written before this default
             # has no version; its chats join in and the older history is read once (the
@@ -975,7 +983,13 @@ class ConversationSync:
                 reasoning = (thread.reasoning or "").strip().lower()[:24]
                 model_changed = bool(model) and self.state["models"].get(thread.id) != model
                 reasoning_changed = bool(model) and self.state["reasoning"].get(thread.id, "") != reasoning
-                if self.state["titles"].get(thread.id) != thread.title or model_changed or reasoning_changed:
+                temperature_changed = thread.temperature != self.state["temperatures"].get(thread.id)
+                if (
+                    self.state["titles"].get(thread.id) != thread.title
+                    or model_changed
+                    or reasoning_changed
+                    or temperature_changed
+                ):
                     row: dict[str, Any] = {
                         "cid": cid,
                         "kind": "main" if thread.id == MAIN_THREAD else "side",
@@ -986,6 +1000,9 @@ class ConversationSync:
                     if model_changed or reasoning_changed:
                         row["model"] = model
                         row["reasoning"] = reasoning
+                    if temperature_changed:
+                        # null is a real value here: it puts the chat back on [llm]
+                        row["temperature"] = thread.temperature
                     conversations.append(row)
                 for ev, wire in self._unsynced(thread, cid):
                     if len(messages) >= BATCH:
@@ -1052,6 +1069,12 @@ class ConversationSync:
                                 self.state["models"][tid] = str(c["model"])
                             if "reasoning" in c:
                                 self.state["reasoning"][tid] = str(c.get("reasoning") or "")
+                            if "temperature" in c:
+                                value = c.get("temperature")
+                                if value is None:
+                                    self.state["temperatures"].pop(tid, None)
+                                else:
+                                    self.state["temperatures"][tid] = float(value)
             self._save()
             if len(messages) < BATCH and not redirect:
                 break
@@ -1371,12 +1394,14 @@ class ConversationSync:
                 self._save()
                 self._adopt(MAIN_THREAD)
             self._apply_thread_model(main, row)
+            self._apply_thread_temperature(main, row)
             return
         if thread is not None:
             if title and title != thread.title:
                 self.state["titles"][thread.id] = title
                 self.svc.rename_thread(thread.id, title)
             self._apply_thread_model(thread, row)
+            self._apply_thread_temperature(thread, row)
             return
         device = str(row.get("device") or "")
         if device and device == self.svc.hub.device_id and not self.state.get("catalog_mode"):
@@ -1392,6 +1417,7 @@ class ConversationSync:
         self._save()
         self._adopt(created.id)
         self._apply_thread_model(created, row)
+        self._apply_thread_temperature(created, row)
         self.svc._save_index()
         self.svc.bus.publish({"kind": "thread", "thread": created.meta()})
 
@@ -1418,6 +1444,29 @@ class ConversationSync:
         if not changed:
             return
         self.svc._save_index()
+
+    def _apply_thread_temperature(self, thread: Thread, row: dict[str, Any]) -> None:
+        """The chat's sampling temperature from the relay (D8). A relay that says nothing
+        about it leaves a local pick alone; an explicit null puts the chat back on [llm]."""
+        if "temperature" not in row:
+            return
+        value = row.get("temperature")
+        if value is None:
+            if thread.temperature is None:
+                return
+            thread.temperature = None
+            self.state["temperatures"].pop(thread.id, None)
+        else:
+            try:
+                value = max(0.0, min(2.0, float(value)))
+            except (TypeError, ValueError):
+                return
+            if thread.temperature == value:
+                return
+            thread.temperature = value
+            self.state["temperatures"][thread.id] = value
+        self.svc._save_index()
+        self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
         self.svc.bus.publish({"kind": "thread", "thread": thread.meta()})
 
     def _find_event(self, thread: Thread, mid: str) -> dict[str, Any] | None:

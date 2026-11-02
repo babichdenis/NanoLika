@@ -128,6 +128,14 @@ class ThreadBody(BaseModel):
     title: str = ""
 
 
+class ThreadPatch(BaseModel):
+    """A rename, the chat's sampling temperature, or both. A field left out is untouched;
+    ``temperature: null`` goes back to the configured ``[llm]`` value (D8)."""
+
+    title: str | None = None
+    temperature: float | None = Field(None, ge=0, le=2)
+
+
 class FeedInstructionsBody(BaseModel):
     """The feed's preferences; only the fields given change (``daily``/``time`` are the
     daily routine, see ``MuseService.feed_posts``)."""
@@ -587,10 +595,12 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         return svc.create_thread(body.title).meta()
 
     @app.patch("/api/threads/{thread_id}", dependencies=dep)
-    async def rename_thread(thread_id: str, body: ThreadBody) -> dict[str, Any]:
-        thread = svc.rename_thread(thread_id, body.title)
-        if thread is None:
-            raise HTTPException(404, "no such thread")
+    async def patch_thread(thread_id: str, body: ThreadPatch) -> dict[str, Any]:
+        thread = _thread_or_404(thread_id)
+        if body.title is not None:
+            thread = svc.rename_thread(thread_id, body.title) or thread
+        if "temperature" in body.model_fields_set:
+            thread = svc.set_thread_temperature(thread_id, body.temperature) or thread
         return thread.meta()
 
     @app.post("/api/threads/{thread_id}/archive", dependencies=dep)

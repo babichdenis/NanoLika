@@ -361,6 +361,9 @@ class Thread:
     # how much that model thinks before it answers ('' = the provider's own default): the
     # level chosen beside the model in the app, carried with the conversation
     reasoning: str = ""
+    # the chat's own sampling temperature (0..2); None = the configured [llm] value. Carried
+    # with the conversation, so a chat answers the same way on every device (D8)
+    temperature: float | None = None
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -386,6 +389,8 @@ class Thread:
             meta["model"] = self.model
         if self.reasoning:
             meta["reasoning"] = self.reasoning
+        if self.temperature is not None:
+            meta["temperature"] = self.temperature
         return meta
 
 
@@ -855,6 +860,10 @@ class MuseService:
                 thread.model = str(m["model"])
             if m.get("reasoning"):
                 thread.reasoning = str(m["reasoning"]).strip().lower()[:24]
+            if isinstance(m.get("temperature"), (int, float)) and not isinstance(
+                m.get("temperature"), bool
+            ):
+                thread.temperature = max(0.0, min(2.0, float(m["temperature"])))
         self._save_index()
 
     def _save_index(self) -> None:
@@ -884,6 +893,8 @@ class MuseService:
                 m["model"] = t.model
             if t.reasoning:
                 m["reasoning"] = t.reasoning
+            if t.temperature is not None:
+                m["temperature"] = t.temperature
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -1105,6 +1116,20 @@ class MuseService:
         if thread is None:
             return None
         thread.title = title.strip() or thread.title
+        thread.updated_at = now_iso()
+        self._save_index()
+        self.bus.publish({"kind": "thread", "thread": thread.meta()})
+        self.sync.thread_changed(thread)
+        return thread
+
+    def set_thread_temperature(self, thread_id: str, value: float | None) -> Thread | None:
+        """The chat's own sampling temperature; ``None`` goes back to ``[llm]``. The range
+        is the one every OpenAI-shaped provider accepts, so a value taken from the API,
+        the cabinet or another device is the same everywhere."""
+        thread = self.threads.get(thread_id)
+        if thread is None:
+            return None
+        thread.temperature = None if value is None else max(0.0, min(2.0, float(value)))
         thread.updated_at = now_iso()
         self._save_index()
         self.bus.publish({"kind": "thread", "thread": thread.meta()})
@@ -1352,7 +1377,26 @@ class MuseService:
             else self.memory_scope_for_current_account()
         )
 
-    def thread_model_llm(self, model: str, reasoning: str = "") -> tuple[BaseLLM | None, str]:
+    def _with_temperature(self, llm: Any, temperature: float | None) -> Any:
+        """The same client with this chat's sampling temperature, for one turn. Clients
+        that carry no settings (a test model, a sign-in client) are left as they are."""
+        inner = getattr(llm, "inner", llm)
+        settings = getattr(inner, "settings", None)
+        if temperature is None or settings is None:
+            return llm
+        if abs(float(getattr(settings, "temperature", 0.0)) - float(temperature)) < 1e-9:
+            return llm
+        try:
+            return create_llm(
+                settings.model_copy(update={"temperature": float(temperature)}),
+                data_dir=self.settings.data_dir,
+            )
+        except (ValueError, OSError):
+            return llm
+
+    def thread_model_llm(
+        self, model: str, reasoning: str = "", temperature: float | None = None
+    ) -> tuple[BaseLLM | None, str]:
         """The client a chat's own Cloud model answers with (contract C7).
 
         ``(None, model)`` when the configured client already is that model, ``(None, "")``
@@ -1368,11 +1412,17 @@ class MuseService:
         if not key:
             return None, ""
         try:
-            return self.cloud_once(key, model, reasoning)
+            return self.cloud_once(key, model, reasoning, temperature)
         except CloudError:
             return None, ""
 
-    def cloud_once(self, key: str = "", model: str = "", reasoning: str = "") -> tuple[BaseLLM | None, str]:
+    def cloud_once(
+        self,
+        key: str = "",
+        model: str = "",
+        reasoning: str = "",
+        temperature: float | None = None,
+    ) -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
         the vault, for one turn. ``[llm]``, ``[cloud] models`` and the conversation stay as
@@ -1400,7 +1450,7 @@ class MuseService:
             api_key=key or self.app.vault.get(CLOUD_KEY) or "",
             tool_mode="auto",
             stream=llm.stream,
-            temperature=llm.temperature,
+            temperature=temperature if temperature is not None else llm.temperature,
             max_tokens=llm.max_tokens,
             timeout=llm.timeout,
             extra_body=extra_body,
@@ -1507,11 +1557,19 @@ class MuseService:
                 elif thread.model:
                     # the chat's own model (C7): a picture model picked in one chat never
                     # answers the next one; the client is the turn's and goes after it
-                    held, used = self.thread_model_llm(thread.model, thread.reasoning)
+                    held, used = self.thread_model_llm(
+                        thread.model, thread.reasoning, thread.temperature
+                    )
                     if held is not None:
                         thread.agent.llm = held
                     if used:
                         incoming.model = used
+                elif thread.temperature is not None:
+                    # the chat's own temperature on the configured model: a client for this
+                    # turn, so the person's other chats keep the [llm] value (D8)
+                    thread.agent.llm = self._with_temperature(
+                        thread.agent.llm, thread.temperature
+                    )
                 self.bus.publish({"kind": "thread", "thread": thread.meta()})
                 # No sentence of its own: each client words the pause between steps
                 # itself ("On it: <the request>") in its language.

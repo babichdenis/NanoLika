@@ -1110,6 +1110,34 @@ def test_a_final_refusal_is_kept_and_shown(synced) -> None:
     assert "sync_retry_at" not in event
 
 
+def test_a_chat_keeps_its_own_temperature(synced) -> None:
+    """D8: the temperature belongs to the chat, not the device. Set here it stays after a
+    restart, travels with the conversation, and null puts the chat back on `[llm]`."""
+    client, service, llm, relay = synced
+    side = client.post("/api/threads", json={"title": "Warm chat"}).json()
+    r = client.patch(f"/api/threads/{side['id']}", json={"temperature": 0.9})
+    assert r.status_code == 200 and r.json()["temperature"] == 0.9
+    assert service.threads[side["id"]].temperature == 0.9
+    again = MuseService(settings=service.settings, llm=MockLLM([]))
+    assert again.threads[side["id"]].temperature == 0.9
+    # it goes up with the chat and is clamped to the provider's range
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    assert any(
+        c.get("temperature") == 0.9 for p in relay.pushes for c in p["conversations"]
+    )
+    assert client.patch(f"/api/threads/{side['id']}", json={"temperature": 3}).status_code == 422
+    # another device's value comes down and is applied here
+    cid = service.sync.cid_of(side["id"])
+    relay.convs[cid]["temperature"] = 0.4
+    relay.convs[cid]["seq"] = relay._next()
+    client.post("/api/sync/pull")
+    wait_for(lambda: service.threads[side["id"]].temperature == 0.4)
+    # null: back to the configured [llm]
+    r = client.patch(f"/api/threads/{side['id']}", json={"temperature": None})
+    assert r.status_code == 200 and "temperature" not in r.json()
+    assert service.threads[side["id"]].temperature is None
+
+
 def test_opening_a_chat_asks_the_relay_for_its_history(synced, monkeypatch) -> None:
     """D2: a chat created on another device used to arrive as a title with no messages and
     stayed empty until something was sent here. Opening the chat is the signal that pulls

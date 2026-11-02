@@ -133,6 +133,21 @@ def _ts(value: object, default: int, ceiling: int | None = None) -> int:
     return t
 
 
+def _temperature(conv: dict, current: float | None = None) -> float | None:
+    """The chat's sampling temperature from a push, clamped to the range every
+    OpenAI-shaped provider takes; a missing field keeps what the relay has, and null
+    clears it (the chat goes back to the device's ``[llm]``)."""
+    if "temperature" not in conv:
+        return current
+    value = conv.get("temperature")
+    if value is None:
+        return None
+    try:
+        return max(0.0, min(2.0, float(value)))
+    except (TypeError, ValueError):
+        return current
+
+
 def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
     return {
         "cid": r["cid"],
@@ -146,6 +161,11 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "archived": bool(r["archived"]) if "archived" in r.keys() else False,
         "model": str(r["model"] or "") if "model" in r.keys() else "",
         "reasoning": str(r["reasoning"] or "") if "reasoning" in r.keys() else "",
+        "temperature": (
+            float(r["temperature"])
+            if "temperature" in r.keys() and r["temperature"] is not None
+            else None
+        ),
         "seq": int(r["seq"]),
     }
 
@@ -653,8 +673,8 @@ class SyncStore:
                             continue
                     seq = self._next_seq(c, account_id)
                     c.execute(
-                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model, reasoning) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model, reasoning, temperature) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             account_id,
                             cid,
@@ -669,6 +689,7 @@ class SyncStore:
                             1 if archived and not deleted else 0,
                             str(conv.get("model") or "")[:160],
                             str(conv.get("reasoning") or "").strip().lower()[:24],
+                            _temperature(conv),
                         ),
                     )
                     accepted += 1
@@ -692,16 +713,24 @@ class SyncStore:
                         else str(row["reasoning"] or "") if "reasoning" in row.keys() else ""
                     )
                     reasoning_changed = "reasoning" in conv and reasoning != (str(row["reasoning"] or "") if "reasoning" in row.keys() else "")
-                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed:
+                    current_temperature = (
+                        float(row["temperature"])
+                        if "temperature" in row.keys() and row["temperature"] is not None
+                        else None
+                    )
+                    temperature = _temperature(conv, current_temperature)
+                    temperature_changed = "temperature" in conv and temperature != current_temperature
+                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed or temperature_changed:
                         seq = self._next_seq(c, account_id)
                         c.execute(
-                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, seq=? WHERE account_id=? AND cid=?",
+                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, temperature=?, seq=? WHERE account_id=? AND cid=?",
                             (
                                 title if title_changed else row["title"],
                                 t,
                                 1 if next_archived else 0,
                                 model,
                                 reasoning,
+                                temperature,
                                 seq,
                                 account_id,
                                 cid,
