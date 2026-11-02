@@ -5,6 +5,7 @@ conversation, tombstones, the switch — and the ``@<device>`` mention in the co
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from collections.abc import Callable, Iterator
@@ -598,8 +599,11 @@ def test_pull_makes_threads_and_history_and_tombstones_remove(synced) -> None:
     relay.add_conversation(cid, "side", "Dinner plans", device="phone-1")
     m1 = relay.add_message(cid, "user", "book a table", created_at=1738000050)
     relay.add_message(cid, "assistant", "Booked for 7", created_at=1738000060)
+    # the start-up pull may take these rows before the manual one (side chats are on by
+    # default now), so wait for the chat rather than for this request's own count
     r = client.post("/api/sync/pull")
-    assert r.status_code == 200 and r.json()["applied"] == 3
+    assert r.status_code == 200
+    wait_for(lambda: any(x["title"] == "Dinner plans" for x in client.get("/api/threads").json()))
     threads = client.get("/api/threads").json()
     t = next(x for x in threads if x["title"] == "Dinner plans")
     assert t["origin_device"] == "phone-1" and t["origin_device_name"] == "Pixel 8"
@@ -1017,6 +1021,64 @@ def test_side_chats_stay_local_by_default(main_only) -> None:
     client.delete(f"/api/threads/{side['id']}")
     time.sleep(0.2)
     assert relay.calls.count("delete_conversation") == calls
+
+
+def test_side_chats_are_on_for_a_device_that_never_chose(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default since 2026-11-02: a chat started from Telegram or MAX on a phone is the
+    same chat on the computer, without anyone finding the switch first."""
+    assert Settings().sync.side_chats is True
+    service = _signed_in(settings, monkeypatch)
+    relay = FakeSyncRelay()
+    service.sync.client = relay  # type: ignore[assignment]
+    llm = service.threads[MAIN_THREAD].agent.llm
+    assert isinstance(llm, MockLLM)
+    with TestClient(create_app(settings, service)) as client:
+        client.headers["Authorization"] = "Bearer secret-token"
+        wait_for(lambda: relay.pulls)
+        side = client.post("/api/threads", json={"title": "MAX: Работа"}).json()
+        llm.script.append(LLMResponse(content="полив включён", finish_reason="stop"))
+        client.post(f"/api/threads/{side['id']}/send", json={"text": "что с поливом?"})
+        # the chat and both of its messages travel, and the cid is kept for the tombstone
+        wait_for(lambda: any(c["title"] == "MAX: Работа" for c in relay.convs.values()))
+        cid = service.sync.cid_of(side["id"])
+        assert cid is not None
+        wait_for(lambda: any(m["text"] == "полив включён" for m in relay.msgs.values()))
+        # deleting it here deletes it for the other devices too
+        client.delete(f"/api/threads/{side['id']}")
+        wait_for(lambda: relay.convs[cid]["deleted"])
+
+
+def test_an_old_state_joins_side_chats_in_once(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A device that synced before 2026-11-02 kept every side chat to itself. Its state has
+    no defaults version: on the next start the chats join in, and the older history is read
+    once — the same full pass the switch does, not a tail that would leave the rest behind."""
+    service = _signed_in(settings, monkeypatch, side_chats=False)
+    service.sync.state["side_chats"] = False
+    service.sync.state.pop("defaults_version", None)
+    service.sync._save()
+    again = MuseService(settings, llm=MockLLM([]))
+    assert again.sync.side_chats is True
+    assert again.sync.state["backfill"] is True
+    assert again.sync.state["defaults_version"] == 2
+    saved = json.loads((service.sync.path).read_text("utf-8"))
+    assert saved["side_chats"] is True and saved["defaults_version"] == 2
+
+
+def test_a_chosen_off_survives_a_restart(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Version 2 with the flag off means the person turned it off: the migration must not
+    turn it back on at every start."""
+    service = _signed_in(settings, monkeypatch, side_chats=False)
+    service.sync.state["side_chats"] = False
+    service.sync.state["defaults_version"] = 2
+    service.sync._save()
+    again = MuseService(settings, llm=MockLLM([]))
+    assert again.sync.side_chats is False
 
 
 def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -> None:

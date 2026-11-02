@@ -76,6 +76,9 @@ if TYPE_CHECKING:
 
 PUSH_DELAY_S = 2.0
 PULL_EVERY_S = 60.0
+# Bumped when a default changes for states already on disk. 2: side chats moved from off to
+# on (2026-11-02), so a device that never chose joins its chats in instead of staying alone.
+DEFAULTS_VERSION = 2
 BATCH = 200
 PAGE = 500
 # the first pull of a fresh device: the newest messages of the scope, not the whole store (C9)
@@ -120,6 +123,8 @@ class ConversationSync:
             "cursor": 0,
             "cursors": {"main": 0, "all": 0},
             "enabled": bool(svc.settings.cloud.sync),
+            # the defaults this state was written under; an older file is migrated once
+            "defaults_version": DEFAULTS_VERSION,
             # C9: this device's side chats too (and the other devices'); off = main only
             "side_chats": bool(svc.settings.sync.side_chats),
             # C9/S3: the side-chat switch went on and the older history is not read yet;
@@ -222,6 +227,21 @@ class ConversationSync:
             for key in ("cids", "titles", "models", "reasoning", "owners", "mains"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = {str(k): str(v) for k, v in data[key].items()}
+            # 2026-11-02: side chats used to be off, so a chat started from Telegram or MAX
+            # on one device never reached the others. A state written before this default
+            # has no version; its chats join in and the older history is read once (the
+            # same full pass the switch itself does). A device that carries version 2 with
+            # the flag off chose it, and that choice stands.
+            try:
+                defaults_version = int(data.get("defaults_version") or 1)
+            except (TypeError, ValueError):
+                defaults_version = 1
+            if defaults_version < DEFAULTS_VERSION:
+                self.state["side_chats"] = True
+                self.state["backfill"] = True
+                self.state["backfill_cursor"] = 0
+                self.state["defaults_version"] = DEFAULTS_VERSION
+                self._save()
 
     def _save(self) -> None:
         try:
