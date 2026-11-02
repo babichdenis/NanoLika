@@ -142,6 +142,7 @@ class OpenAIResponsesLLM(BaseLLM):
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
         on_delta: DeltaCallback | None = None,
+        on_reasoning: DeltaCallback | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
         pictures = has_images(messages)

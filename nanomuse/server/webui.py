@@ -106,6 +106,7 @@ class WebUI:
         # streaming state per thread
         self._stream_ids: dict[str, str] = {}
         self._stream_buf: dict[str, str] = {}
+        self._reasoning_buf: dict[str, str] = {}
         self._tool_events: dict[str, str] = {}  # tool call id -> event id
         self.last_assistant_text: dict[str, str] = {}
         self.last_assistant_event: dict[str, str] = {}  # thread -> id of that bubble
@@ -371,6 +372,23 @@ class WebUI:
         return working[0]
 
     # ------------------------------------------------------------------ UI protocol
+    def on_reasoning_delta(self, text: str) -> None:
+        """The model's thinking as it is written: its own channel, so a client can show it
+        dimmed above the answer and fold it away when the words start."""
+        if not text:
+            return
+        thread = self.thread()
+        sid = self._stream_ids.get(thread)
+        if sid is None:
+            sid = new_id("a")
+            self._stream_ids[thread] = sid
+            self._stream_buf[thread] = ""
+            self.bus.publish({"kind": "stream_start", "thread": thread, "id": sid, "ts": now_iso()})
+        self._reasoning_buf[thread] = self._reasoning_buf.get(thread, "") + text
+        self.bus.publish(
+            {"kind": "reasoning_delta", "thread": thread, "id": sid, "text": text}
+        )
+
     def on_text_delta(self, text: str) -> None:
         if not text:
             return
@@ -388,6 +406,7 @@ class WebUI:
         thread = self.thread()
         sid = self._stream_ids.pop(thread, None)
         self._stream_buf.pop(thread, None)
+        self._reasoning_buf.pop(thread, None)
         # _step_text describes this response only; a terminate-only response after a
         # text reply must not look like "already said its piece".
         self._step_text.pop(thread, None)

@@ -54,6 +54,7 @@ class BaseLLM(ABC):
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
         on_delta: DeltaCallback | None = None,
+        on_reasoning: DeltaCallback | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
         """Send a conversation and get one assistant turn back.
@@ -61,6 +62,8 @@ class BaseLLM(ABC):
         ``tools`` are OpenAI-style function schemas
         (``{"type": "function", "function": {...}}``).
         ``on_delta`` receives visible text as it streams (never reasoning).
+        ``on_reasoning`` receives the model's own thinking as it streams, when the
+        provider sends it (``reasoning_content``); clients show it apart from the answer.
         ``max_tokens`` overrides the configured budget for this one call.
         """
 

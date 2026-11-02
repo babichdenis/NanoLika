@@ -285,8 +285,14 @@ export function ChatScreen() {
               onCloudRetry={cloudRetryFor(i)}
             />
           ))}
-          {stream && stream.text && (
-            <AssistantBubble text={stream.text} streaming files={files} onOpenFile={(path) => openFile(path, activeThread)} />
+          {stream && (stream.text || stream.reasoning) && (
+            <AssistantBubble
+              text={stream.text}
+              reasoning={stream.reasoning}
+              streaming
+              files={files}
+              onOpenFile={(path) => openFile(path, activeThread)}
+            />
           )}
           <LiveReply stream={stream} name={name} />
           {(thread?.busy || status.state !== "idle") && !stream?.text && status.state !== "waiting" && (
@@ -558,6 +564,13 @@ function AssistantBubble({
 }) {
   const [showReasoning, setShowReasoning] = useState(false);
   const t = useT();
+  // while the model is still thinking, its notes are open; the first words of the answer
+  // fold them away, so the person reads the reply, not the working-out
+  const thinking = !!streaming && !text.trim() && !!reasoning;
+  useEffect(() => {
+    if (thinking) setShowReasoning(true);
+    else if (streaming) setShowReasoning(false);
+  }, [thinking, streaming]);
   // the model's block for the app (the first conversation's names) is never shown — not even
   // the half of it a stream has delivered so far
   const blocks = useMemo(() => splitBlocks(stripNamingFence(text, !!streaming)), [text, streaming]);

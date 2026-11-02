@@ -366,6 +366,21 @@ class MuseAgent:
 
         return push, finish
 
+    def _reasoning_delta(self) -> Callable[[str], None]:
+        """The model's thinking as it streams, redacted the same way as its words; clients
+        show it apart from the answer, while it is still being written."""
+        vault = self.sentinel.vault
+        if vault is None:
+            return self.ui.on_reasoning_delta
+        redactor = vault.redact_stream()
+
+        def push(text: str) -> None:
+            safe = redactor.push(text)
+            if safe:
+                self.ui.on_reasoning_delta(safe)
+
+        return push
+
     def language_rule(self, user_input: str) -> str:
         """The `## Language` paragraph of the system prompt. A reply language set under
         Settings wins; else the language of the client's screens when a client has said
@@ -672,7 +687,12 @@ class MuseAgent:
                     system_prompt = self.build_system_prompt(latest, await self.recall_for(latest))
                 context = [Message.system(system_prompt), *self.context_messages()]
                 on_delta, finish_stream = self._stream_delta()
-                response = await self.llm.ask(context, tools=tool_params, on_delta=on_delta)
+                response = await self.llm.ask(
+                    context,
+                    tools=tool_params,
+                    on_delta=on_delta,
+                    on_reasoning=self._reasoning_delta(),
+                )
                 finish_stream()
                 if (
                     response.finish_reason == "length"
@@ -687,6 +707,7 @@ class MuseAgent:
                         context,
                         tools=tool_params,
                         on_delta=on_delta,
+                        on_reasoning=self._reasoning_delta(),
                         max_tokens=self.llm.roomier_max_tokens(),
                     )
                     finish_stream()
@@ -790,7 +811,12 @@ class MuseAgent:
                 self.messages.append(Message.user(prompts.MAX_STEPS_PROMPT))
                 context = [Message.system(system_prompt), *self.context_messages()]
                 on_delta, finish_stream = self._stream_delta()
-                response = await self.llm.ask(context, tools=None, on_delta=on_delta)
+                response = await self.llm.ask(
+                    context,
+                    tools=None,
+                    on_delta=on_delta,
+                    on_reasoning=self._reasoning_delta(),
+                )
                 finish_stream()
                 assistant = response.to_message().model_copy(deep=True)
                 assistant.content = self._redact(assistant.content)
