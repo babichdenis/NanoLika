@@ -33,6 +33,8 @@ from nanomuse.tools.shell import kill_tree, scrubbed_env
 
 OUTPUT_LIMIT = 200_000
 FILE_LIMIT = 8 * 1024 * 1024  # base64 inside one hub frame
+# A directory listing carries at most this many entries; more is marked `truncated`.
+FILES_MAX = 2000
 SHELL_TIMEOUT_MAX = 900.0
 
 # what this device announces in `hello`; `task`, `stop` and `approve` are the service's
@@ -158,18 +160,21 @@ def files(path: str | None = None, *, root: Path | None = None) -> dict[str, Any
         raise ActionError("not_found", f"{p} does not exist")
     if p.is_file():
         return {"path": str(p), "entries": [_entry(p, p.stat())]}
-    entries = []
+    entries: list[dict[str, Any]] = []
     try:
         children = sorted(p.iterdir(), key=lambda c: (not c.is_dir(), c.name.lower()))
     except PermissionError as exc:
         raise ActionError("forbidden", f"cannot read {p}") from exc
     for child in children:
         try:
-            entries.append(_entry(child, child.lstat()))
+            entry = _entry(child, child.lstat())
         except OSError:
             continue
-        if len(entries) >= 2000:
-            break
+        if len(entries) >= FILES_MAX:
+            # Only an additional readable entry proves that the listing was capped; a folder
+            # of exactly 2000 is whole and must not read as cut.
+            return {"path": str(p), "entries": entries, "truncated": True, "total": len(children)}
+        entries.append(entry)
     return {"path": str(p), "entries": entries}
 
 

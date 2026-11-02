@@ -255,6 +255,14 @@ refuses frames over `HUB_FRAME_LIMIT`. The `files`, `file.get` and `file.put`
 actions are confined to the target device's configured workspace; absolute paths
 inside it are accepted, while `..` and symlinks that resolve outside it are refused.
 
+refuses frames over `HUB_FRAME_LIMIT`.
+
+The Python runtime's `files` action returns at most 2,000 directory entries. When more
+readable entries exist, the result also includes `truncated: true` and `total`, the number
+of names observed in the directory before per-entry reads. An entry that disappears or
+cannot be read may be omitted. An exactly full listing is not marked truncated. These
+fields are optional additions; clients must also accept responses without them.
+
 The agent's name and look are the account's, not a device's: `GET` / `PUT
 /v1/me/profile` on the relay keep them (the dragon, an emoji on a colour, or a
 face drawn in the avatar studio with its five small stills), last writer wins,
