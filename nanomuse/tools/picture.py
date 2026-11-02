@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -104,8 +104,10 @@ class Picture(BaseTool):
             chosen = await self._model(client, model)
             png, accounting = await client.image(chosen, said, size=shape)
         except CloudError as exc:
-            # the code says why (insufficient_funds, model_not_offered); the message alone
-            # reads like the network had a bad day
+            if exc.code in FUNDS_CODES:
+                return ToolResult.fail(FUNDS_MESSAGE)
+            # the code says why (model_not_offered); the message alone reads like the
+            # network had a bad day
             said = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
             return ToolResult.fail(f"Picture failed: {said}")
         if not png:
@@ -115,9 +117,8 @@ class Picture(BaseTool):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(png)
         bits = [f"Picture saved to {rel.as_posix()}"]
-        charged = accounting.get("charged") if isinstance(accounting, dict) else None
-        if charged:
-            bits.append(f"charged {charged}")
+        # the price was quoted before the call and the person was told it; the relay's
+        # `charged` is in its own units and has no place in a chat answer
         return ToolResult(output=", ".join(bits) + f" ({chosen})")
 
 

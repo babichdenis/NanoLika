@@ -29,6 +29,17 @@ DEFAULT_CHAT_MODEL = "deepseek-v4.1-flash"
 DEFAULT_GUI_MODEL = "qwen3.8-27b"
 DEFAULT_MODEL = DEFAULT_CHAT_MODEL
 
+#: The relay's refusals that mean "the balance is short", not "the request is wrong".
+#: Tools answer them with one sentence and never repeat the provider's own numbers.
+FUNDS_CODES = frozenset(
+    {"insufficient_funds", "allowance_exhausted", "out_of_tokens", "daily_cap", "budget_exhausted"}
+)
+FUNDS_MESSAGE = (
+    "Not enough money on the balance for this request. Tell the person its price and what "
+    "is left, and that a top-up in the cabinet opens the paid models and larger sizes. Do "
+    "not retry the same request."
+)
+
 MESSAGES = {
     "bad_identifier": "Enter a mainland phone number or an e-mail address.",
     "phone_region": "Codes reach mainland China numbers only for now; elsewhere, sign in with an e-mail address.",
@@ -286,6 +297,11 @@ class CloudClient:
         data = await self._request("GET", "/v1/models")
         models = data.get("data")
         return models if isinstance(models, list) else []
+
+    async def quote(self, model: str, **params: Any) -> dict[str, Any]:
+        """What one exact request costs, in the relay's rubles: size, seconds, resolution,
+        characters or tracks. Nothing is charged and no provider is named."""
+        return await self._request("POST", "/v1/models/quote", {"model": model, **params})
 
     async def video(
         self,

@@ -80,25 +80,89 @@ def _money(row: dict[str, Any]) -> str:
     return ""
 
 
+FUNDS = {"insufficient_funds", "allowance_exhausted", "out_of_tokens", "daily_cap", "budget_exhausted"}
+FUNDS_MESSAGE = (
+    "There is not enough money on the balance for this request. Say the price and the "
+    "balance, and that a top-up in the cabinet opens the paid models and larger sizes; "
+    "do not submit anything."
+)
+
+
+def _accepts(row: dict[str, Any]) -> str:
+    """The request facts a model publishes: sizes, clip lengths, resolutions, a voice."""
+    facts = row.get("supports") if isinstance(row.get("supports"), dict) else {}
+    if not facts:
+        return ""
+    kind = _kind(row)
+    if kind == "image":
+        sizes = [str(s) for s in facts.get("sizes") or []]
+        if facts.get("edits"):
+            sizes.append("правка по картинке")
+        return ", ".join(sizes)
+    if kind == "video":
+        seconds = facts.get("default_seconds")
+        resolutions = ", ".join(str(r) for r in facts.get("resolutions") or [])
+        bits = []
+        if seconds:
+            bits.append(f"{seconds} с по умолчанию")
+        if resolutions:
+            bits.append(resolutions)
+        return " · ".join(bits)
+    if kind == "audio":
+        voice = facts.get("voice")
+        return f"голос {voice}" if voice else ""
+    return ""
+
+
 class Models(BaseTool):
+    async def _with_balance(self, client: Any, price: dict[str, Any]) -> ToolResult:
+        total = price.get("total_rub")
+        line = f"The exact request costs {_rub(total)}"
+        discount = price.get("discount_pct")
+        if isinstance(discount, (int, float)) and discount > 0:
+            line += f" (with the plan's {discount:g}% off)"
+        try:
+            me = await client.me()
+            spend = me.get("spend") if isinstance(me, dict) else None
+            spend = spend if isinstance(spend, dict) else {}
+            if spend.get("unlimited"):
+                line += "; the account has no balance limit"
+            else:
+                left = spend.get("left_rub")
+                if isinstance(left, (int, float)):
+                    line += f"; left on the balance: {_rub(left)}"
+                    if isinstance(total, (int, float)) and total > left:
+                        line += f"; short by {_rub(total - left)} — a top-up opens it"
+                    else:
+                        line += "; the balance covers it"
+        except CloudError:
+            pass
+        return ToolResult(output=line)
     name: str = "models"
     description: str = (
         "Which models this account can use and what they cost. action=`list` shows the menu "
-        "by kind (chat, image, video, audio) with prices in rubles and the shelf's own "
-        "choice; action=`estimate` prices pictures or clips before they are made (images, "
-        "clips, model, size) and says whether the pool covers it. Nothing is charged. Use "
-        "it when the person asks what is available, which model to pick, or how much a "
-        "picture or a clip will cost."
+        "by kind (chat, image, video, audio) with prices in rubles, what each model accepts "
+        "and the shelf's own choice; action=`quote` prices one exact request (model, size, "
+        "seconds, resolution, characters, tracks, count) and says whether the balance covers "
+        "it, so a picture or a clip can be described before it is made; action=`estimate` "
+        "prices a number of pictures or clips in one go. Nothing is charged and no provider "
+        "or wholesale price is ever named. Use it when the person asks what is available, "
+        "which model to pick, or how much the exact thing will cost."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["list", "estimate"], "description": "list by default"},
+            "action": {"type": "string", "enum": ["list", "quote", "estimate"], "description": "list by default"},
             "kind": {"type": "string", "enum": ["chat", "image", "video", "audio"], "description": "for list"},
             "images": {"type": "integer", "description": "how many pictures to price"},
             "clips": {"type": "integer", "description": "how many clips to price"},
             "model": {"type": "string", "description": "the model to price, optional"},
             "size": {"type": "string", "description": f"picture size: {SIZES}"},
+            "seconds": {"type": "number", "description": "clip length to price"},
+            "resolution": {"type": "string", "description": "480P, 720P or 1080P"},
+            "characters": {"type": "number", "description": "spoken characters to price"},
+            "tracks": {"type": "number", "description": "music tracks to price"},
+            "count": {"type": "number", "description": "pictures to price for one model"},
         },
         "required": [],
     }
@@ -116,12 +180,35 @@ class Models(BaseTool):
         clips: int = 0,
         model: str = "",
         size: str = "",
+        seconds: float = 0,
+        resolution: str = "",
+        characters: float = 0,
+        tracks: float = 0,
+        count: float = 0,
         **_: Any,
     ) -> ToolResult:
         client = self.cloud() if self.cloud is not None else None
         if client is None:
             return ToolResult.fail("Sign in to NanoLika Cloud first.")
         try:
+            if str(action) == "quote":
+                if not str(model).strip():
+                    return ToolResult.fail("quote needs the model to price")
+                params: dict[str, Any] = {}
+                if size:
+                    params["size"] = size
+                if seconds:
+                    params["seconds"] = seconds
+                if resolution:
+                    params["resolution"] = resolution
+                if characters:
+                    params["characters"] = characters
+                if tracks:
+                    params["tracks"] = tracks
+                if count:
+                    params["count"] = count
+                price = await client.quote(str(model), **params)
+                return await self._with_balance(client, price)
             if str(action) == "estimate":
                 answer = await client.estimate(
                     images=max(0, int(images or 0)),
@@ -133,6 +220,8 @@ class Models(BaseTool):
                 return self._estimate(answer)
             return await self._list(client, str(kind or ""))
         except CloudError as exc:
+            if exc.code in FUNDS:
+                return ToolResult.fail(FUNDS_MESSAGE)
             return ToolResult.fail(f"Models failed: {exc.message} ({exc.code})")
 
     def _estimate(self, answer: dict[str, Any]) -> ToolResult:
@@ -146,9 +235,10 @@ class Models(BaseTool):
             bits.append(f"{part.get('count')} {what} · {part.get('model')} · {_rub(part.get('cny'))}")
         if answer.get("unlimited"):
             bits.append("the account has no limit")
-        elif answer.get("left_cny") is not None:
-            bits.append(f"left in the pool: {_rub(answer.get('left_cny'))}")
-            bits.append("covered" if answer.get("affordable") else "not covered by the pool")
+        elif answer.get("left_rub") is not None or answer.get("left_cny") is not None:
+            left = answer.get("left_rub")
+            bits.append(f"left on the balance: {_rub(left if left is not None else answer.get('left_cny'))}")
+            bits.append("the balance covers it" if answer.get("affordable") else "not enough — a top-up opens it")
         return ToolResult(output=" · ".join(bits))
 
     async def _list(self, client: Any, kind: str) -> ToolResult:
@@ -171,9 +261,17 @@ class Models(BaseTool):
             name = str(row.get("name") or model_id)
             audio_kind = _audio_kind(row)
             audio = f" ({audio_kind})" if kind_of == "audio" and audio_kind else ""
-            lines.append(f"{model_id} · {name}{audio} · {_money(row)}" + (" · выбран" if chosen else ""))
+            extra = _accepts(row)
+            lines.append(
+                f"{model_id} · {name}{audio} · {_money(row)}"
+                + (f" · {extra}" if extra else "")
+                + (" · выбран" if chosen else "")
+            )
         if not lines:
-            return ToolResult.output("No models of that kind are on this plan.")
+            return ToolResult.output(
+                "No models of that kind are open on this plan. A top-up or another plan opens "
+                "more, and the cabinet's Models page shows what the account has now."
+            )
         head = "Models on this plan:" if not kind else f"Models on this plan ({kind}):"
         tail = ""
         if "image" in wanted:

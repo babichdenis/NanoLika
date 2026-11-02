@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -105,6 +105,8 @@ class Video(BaseTool):
             chosen = await self._model(client, model)
             data, accounting = await client.video(chosen, said, seconds=length, size=shape, resolution=grade)
         except CloudError as exc:
+            if exc.code in FUNDS_CODES:
+                return ToolResult.fail(FUNDS_MESSAGE)
             message = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
             return ToolResult.fail(f"Clip failed: {message}")
         if not data:
@@ -114,7 +116,6 @@ class Video(BaseTool):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         bits = [f"Clip saved to {rel.as_posix()}", f"{length} s"]
-        charged = accounting.get("charged") if isinstance(accounting, dict) else None
-        if charged:
-            bits.append(f"charged {charged}")
+        # the price was quoted before the call and the person was told it; the relay's
+        # `charged` is in its own units and has no place in a chat answer
         return ToolResult(output=", ".join(bits) + f" ({len(data)} bytes)")

@@ -491,6 +491,31 @@ def _unit(spec: ModelSpec) -> str:
     return UNIT_NAMES.get(spec.kind, "1M_tokens")
 
 
+def _supports(spec: ModelSpec) -> dict[str, Any]:
+    """What the client may ask this model for, in the model's own words.
+
+    The menu's facts are for choosing and pricing, not a promise about the provider's
+    limits: sizes are the ones the relay prices, resolutions the ones it knows a rate for,
+    and the clip length is the provider's default. Nothing here says who serves the model.
+    """
+    if spec.kind == "image":
+        sizes = ["1024x1024", "1536x1024", "1024x1536"]
+        if spec.price_image_2k:
+            sizes.append("2048x2048")
+        return {"sizes": sizes, "count_max": 50, "edits": bool(spec.price_image_in)}
+    if spec.kind == "video":
+        resolutions = ["480P"]
+        resolutions += sorted({str(name).upper() for name, _rate in spec.price_second_res if str(name).strip()})
+        return {
+            "default_seconds": int(spec.clip_seconds or 5),
+            "resolutions": resolutions,
+            "sizes": ["1280x720", "720x1280", "1024x1024"],
+        }
+    if spec.kind == "audio":
+        return {"kind": spec.audio_kind, "voice": spec.voice}
+    return {}
+
+
 class Cloud:
     # The clock a charge is priced by (a model with idle hours); the tests pin it to a known
     # hour, so a suite run at night costs the same as one by day.
@@ -2479,6 +2504,7 @@ class Cloud:
             row["commerce"] = model_pricing.describe(self, spec, caller)
             row["context_length"] = spec.context_length or measured_context().get(spec.id, 0)
             row["max_output"] = spec.max_output
+            row["supports"] = _supports(spec)
         return {"kinds": list(SHELF_KINDS), "models": models, "shelf": shelf, "key": self.key_view(caller)}
 
     def put_shelf(self, caller: Caller, data: dict[str, Any]) -> dict[str, Any]:
@@ -3715,7 +3741,9 @@ class Cloud:
             "usd": self.s.cny_to_usd(cny),
             "parts": parts,
             "left_cny": left_cny,
+            "left_rub": None if left_cny is None else self.s.cny_to_rub(left_cny),
             "grant_cny": grant_cny,
+            "grant_rub": self.s.cny_to_rub(grant_cny),
             "unlimited": room is None,
             "affordable": room is None or cost <= room,
             # 0.4 names, one more version

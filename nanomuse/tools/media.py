@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -108,6 +108,8 @@ class Media(BaseTool):
                     model, text.strip(), voice=voice, fmt=fmt, speed=speed
                 )
             except CloudError as exc:
+                if exc.code in FUNDS_CODES:
+                    return ToolResult.fail(FUNDS_MESSAGE)
                 return ToolResult.fail(f"Speech failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no sound")
@@ -115,13 +117,10 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
-            charged = headers.get("x-nanomuse-charged", "")
             seconds = headers.get("x-nanomuse-seconds", "")
             bits = [f"Speech saved to {rel.as_posix()}"]
             if seconds:
                 bits.append(f"{seconds} s")
-            if charged:
-                bits.append(f"charged {charged}")
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
         if action == "music":
             if not text.strip():
@@ -130,6 +129,8 @@ class Media(BaseTool):
                 model = await self._model("music")
                 sound, media_type, headers = await client.music(model, text.strip())
             except CloudError as exc:
+                if exc.code in FUNDS_CODES:
+                    return ToolResult.fail(FUNDS_MESSAGE)
                 return ToolResult.fail(f"Music failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no track")
@@ -137,10 +138,7 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
-            charged = headers.get("x-nanomuse-charged", "")
             bits = [f"Track saved to {rel.as_posix()}"]
-            if charged:
-                bits.append(f"charged {charged}")
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
         if action == "transcribe":
             if not path.strip():
