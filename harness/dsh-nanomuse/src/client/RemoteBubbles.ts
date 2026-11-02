@@ -19,7 +19,10 @@
  * by the bubbles themselves are ignored, and the rest are coalesced over 100 ms.
  */
 import { call, type Translate } from './api.ts'
+import { showImage } from './image-view.ts'
 import { subscribeLive } from './live.ts'
+import { nameOfUrl, previewKindOf } from './media.ts'
+import { showPreview } from './preview.ts'
 import { bindRemoteSession, remoteFlowItem } from './remote-layout.ts'
 
 const DONE = 'data-nm-remote'
@@ -38,6 +41,8 @@ interface RemoteRow {
   before: string | null
   /** A picture the message carried: the relay's stable link, drawn under the text. */
   image?: string
+  /** Every file the message carried; the ones that are not pictures become chips. */
+  files?: Array<{ name?: string; mime?: string; size?: number; url: string }>
 }
 /** Another device working on this conversation right now (C9). */
 interface Working {
@@ -90,12 +95,41 @@ function bubble(t: Translate, row: RemoteRow): HTMLElement {
     picture.src = image
     picture.alt = ''
     picture.loading = 'lazy'
+    picture.title = t('previewOpenBig')
+    picture.tabIndex = 0
+    const open = (): void => showImage(image, row.files?.find((file) => file.url === image)?.name)
+    picture.addEventListener('click', open)
+    picture.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open() }
+    })
     root.append(picture)
+  }
+  // Everything that is not a picture: a chip with the file's name opens it beside the chat —
+  // video and sound play there, a PDF is drawn there, anything else is handed to the browser.
+  for (const file of row.files ?? []) {
+    if (!file.url || /^image\//i.test(file.mime || '')) continue
+    const chip = document.createElement('button')
+    chip.className = 'nm-remote-file'
+    chip.type = 'button'
+    chip.append(el('span', 'nm-remote-file-name', file.name || nameOfUrl(file.url)))
+    if (file.size) chip.append(el('span', 'nm-remote-file-size', sizeWords(file.size)))
+    chip.title = t('previewOpen')
+    chip.addEventListener('click', () => {
+      showPreview({ kind: previewKindOf(file.url, file.mime), url: file.url, ...(file.name ? { title: file.name } : {}) })
+    })
+    root.append(chip)
   }
   const from = el('div', 'nm-remote-from', t('chFrom', { device: row.deviceName || row.device || '?' }))
   if (row.at > 0) from.title = new Date(row.at).toLocaleString()
   root.append(from)
   return root
+}
+
+/** `1536` → `1.5 KB`, the way a file chip prints its weight. */
+function sizeWords(bytes: number): string {
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1).replace(/\.0$/, '')} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
 }
 
 /** The element the chat lays out: the row itself, or the turn-process group it sits in. */

@@ -1,11 +1,12 @@
 /**
- * The small spend meter at the top right of a chat, the way a status bar keeps
- * money in sight: what today cost in yuan and tokens, the pool's left under the
- * hover; a click opens the account. Occupies `conversation.session.header.utilities`,
- * next to Invite. Reads the relay's `GET /v1/me` through the host's pass-through
- * (`call('me')`, the same sheet the account page reads) once a minute — the relay
- * already answers the account page from memory, so the extra call is free there.
- * Nothing shows without an account.
+ * The spend meter under the composer, in the harness's own status row beside the turns,
+ * the cache hit rate and the context gauge: what today cost in rubles (yuan before the
+ * relay prices in them) and how many tokens that was, the pool's left under the hover;
+ * a click opens the account. Occupies `conversation.composer.dock`, the list seat the
+ * stats row is drawn from, and is ordered after the context gauge. Reads the relay's
+ * `GET /v1/me` through the host's pass-through (`call('me')`, the same sheet the account
+ * page reads) once a minute — the relay already answers the account page from memory, so
+ * the extra call is free there. Nothing shows without an account.
  */
 import { createElement as h, useEffect, useState, type ReactNode } from 'react'
 import { call, type Translate } from './api.ts'
@@ -76,7 +77,7 @@ export function makeUsagePill(t: Translate) {
       'button',
       {
         type: 'button',
-        className: `nm-usage-pill${low ? ' nm-usage-pill-low' : ''}`,
+        className: `nm-usage-pill nm-usage-pill-inline${low ? ' nm-usage-pill-low' : ''}`,
         title,
         onClick: () => settingsBus.openSection?.('nanomuse-cloud'),
       },

@@ -36,6 +36,9 @@ import { CODING_SECTION, makeCodingPanel } from './CodingPanel.tsx'
 import { makeDevicesPanel } from './DevicesPanel.tsx'
 import { makeFeedPanel } from './FeedPanel.tsx'
 import { makePreviewPanel } from './PreviewPanel.tsx'
+import { makeImageView } from './ImageView.tsx'
+import { showImage } from './image-view.ts'
+import { nameOfUrl, previewKindOf } from './media.ts'
 import { hidePreview, showPreview, type Preview } from './preview.ts'
 import { kindOfFile, previewFileUrl } from '../preview-kind.ts'
 import { makeGoalsPanel } from './GoalsPanel.tsx'
@@ -214,9 +217,13 @@ export function apply(ctx: ClientContext): void {
     const a = target.closest('a[href^="http"]')
     if (!a || !a.closest('[data-conversation-content]')) return
     const href = a.getAttribute('href') || ''
-    if (href.includes('//127.0.0.1:') || href.startsWith('https://cloud.nanolika.ru') || href.startsWith('https://nanolika.ru')) return
+    // Attachments the relay serves are the chat's own files: a picture opens to full size,
+    // a clip or a PDF is drawn beside the chat. Other links to our sites stay the browser's.
+    const attached = href.includes('/v1/files/')
+    if (!attached && (href.includes('//127.0.0.1:') || href.startsWith('https://cloud.nanolika.ru') || href.startsWith('https://nanolika.ru'))) return
     event.preventDefault()
-    openBeside({ kind: 'url', url: href })
+    if (attached && previewKindOf(href) === 'image') { showImage(href, nameOfUrl(href)); return }
+    openBeside({ kind: attached ? previewKindOf(href) : 'url', url: href, ...(attached ? { title: nameOfUrl(href) } : {}) })
   })
   // A deliverable card (the stock `present`) sends its click to the stock Sidebar,
   // whose document preview has no player for a clip: it answers "preview is not
@@ -556,6 +563,10 @@ export function apply(ctx: ClientContext): void {
     slots.register({ name: 'conversation.header.leading', locale: 'nanomuse' }, ({ useSessionStatus }: { useSessionStatus?: UseSessionStatus }) =>
       h(MuseHeader, { t, stop, openProfile: () => { profileBus.toggle() }, useSessionStatus })))
 
+  // A picture opens to the window's size, in one viewer with a download button.
+  const ImageView = makeImageView(t)
+  slots.inject('shell.overlay', () =>
+    slots.register({ name: 'shell.overlay', id: 'nanomuse.image-view', locale: 'nanomuse' }, ImageView))
   // Invite, at the top right of a chat; the profile drawer over the frame.
   const InviteButton = makeInviteButton(t)
   slots.inject('conversation.session.header.utilities', () =>
@@ -564,10 +575,11 @@ export function apply(ctx: ClientContext): void {
   const CloudModelPill = makeCloudModelPill(t)
   slots.inject('conversation.input.model', () =>
     slots.register({ name: 'conversation.input.model', id: 'nanomuse-model', priority: -100, locale: 'nanomuse' }, CloudModelPill))
-  // What today cost, beside Invite: yuan and tokens; a click opens the account.
+  // What today cost, in the row under the composer beside the turns and the context gauge:
+  // rubles and tokens; a click opens the account.
   const UsagePill = makeUsagePill(t)
-  slots.inject('conversation.session.header.utilities', () =>
-    slots.register({ name: 'conversation.session.header.utilities', id: 'nanomuse-usage', order: -19, locale: 'nanomuse' }, UsagePill))
+  slots.inject('conversation.composer.dock', () =>
+    slots.register({ name: 'conversation.composer.dock', id: 'nanomuse-usage', locale: 'nanomuse' }, UsagePill))
   const ProfileDrawer = makeProfileDrawer(t, stop)
   slots.inject('shell.overlay', () =>
     slots.register({ name: 'shell.overlay', id: 'nanomuse.profile', locale: 'nanomuse', inject: () => ({ openSchedules: () => { selectPanel('schedules') } }) }, ProfileDrawer))

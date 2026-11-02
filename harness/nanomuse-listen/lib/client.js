@@ -806,14 +806,37 @@ function DictationSettings() {
 }
 function ChatCloudButton(props) {
   const sessionId = props.sessionId ?? "";
-  const [synced, setSynced] = (0, import_react.useState)(false);
+  const [mark, setMark] = (0, import_react.useState)("unknown");
+  const [syncedHere, setSyncedHere] = (0, import_react.useState)(false);
   const [open, setOpen] = (0, import_react.useState)(false);
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [note, setNote] = (0, import_react.useState)("");
   const [channels, setChannels] = (0, import_react.useState)([]);
   (0, import_react.useEffect)(() => {
     if (sessionId === "") return;
-    void fetch("/nanomuse/cloud/sync/state", { headers: { "x-nanomuse": "1" } }).then(async (res) => res.ok ? await res.json() : {}).then((view) => setSynced(Array.isArray(view.synced) && view.synced.includes(sessionId))).catch(() => void 0);
+    let alive = true;
+    const read = () => {
+      void fetch("/nanomuse/cloud/sync/state", { headers: { "x-nanomuse": "1" } }).then(async (res) => res.ok ? await res.json() : {}).then((view) => {
+        if (!alive) return;
+        const sessions = Array.isArray(view.sessions) ? view.sessions : [];
+        const synced = Array.isArray(view.synced) ? view.synced : [];
+        setSyncedHere(synced.includes(sessionId));
+        if (view.mainSession === sessionId) setMark("main");
+        else if (sessions.includes(sessionId) || synced.includes(sessionId)) setMark("shared");
+        else setMark("local");
+      }).catch(() => void 0);
+    };
+    read();
+    const again = () => read();
+    window.addEventListener("focus", again);
+    window.addEventListener("nanomuse:cloud-changed", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", again);
+      window.removeEventListener("nanomuse:cloud-changed", again);
+      document.removeEventListener("visibilitychange", again);
+    };
   }, [sessionId]);
   (0, import_react.useEffect)(() => {
     void fetch("/nanomuse/cloud/link/channels", { headers: { "x-nanomuse": "1" } }).then(async (res) => res.ok ? await res.json() : {}).then((answer) => setChannels(Array.isArray(answer.channels) ? answer.channels : [])).catch(() => void 0);
@@ -830,7 +853,8 @@ function ChatCloudButton(props) {
       });
       const answer = await res.json().catch(() => ({}));
       if (!res.ok || answer.ok === false) throw new Error(answer.error?.message ?? answer.reason ?? `${res.status}`);
-      setSynced(on);
+      setSyncedHere(on);
+      window.dispatchEvent(new CustomEvent("nanomuse:cloud-changed"));
       setNote(on ? "\u0427\u0430\u0442 \u0432 \u043E\u0431\u043B\u0430\u043A\u0435" : "\u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u044D\u0442\u043E\u043C \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0435");
     } catch (error) {
       setNote(error instanceof Error ? error.message : "\u041D\u0435 \u043F\u043E\u043B\u0443\u0447\u0438\u043B\u043E\u0441\u044C");
@@ -860,13 +884,14 @@ function ChatCloudButton(props) {
   };
   const hasTelegram = channels.some((item) => item.channel === "telegram");
   const hasMax = channels.some((item) => item.channel === "max");
-  const title = synced ? "\u0412 \u043E\u0431\u043B\u0430\u043A\u0435: \u0432\u0435\u0431 \u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" : "\u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u044D\u0442\u043E\u043C \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0435";
+  const shared = mark === "main" || mark === "shared";
+  const title = mark === "unknown" ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044F\u044E \u043E\u0431\u043B\u0430\u043A\u043E\u2026" : mark === "main" ? "\u0412 \u043E\u0431\u043B\u0430\u043A\u0435: \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0447\u0430\u0442 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430" : shared ? "\u0412 \u043E\u0431\u043B\u0430\u043A\u0435: \u0432\u0435\u0431 \u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430" : "\u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u044D\u0442\u043E\u043C \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0435";
   return (0, import_react.createElement)(
     "div",
     { className: "nm-chat-cloud-ctl" },
     (0, import_react.createElement)("button", {
       type: "button",
-      className: `nm-icon-btn nm-cloud-btn${synced ? " nm-cloud-on" : ""}`,
+      className: `nm-icon-btn nm-cloud-btn${shared ? " nm-cloud-on" : ""}`,
       "aria-label": title,
       title,
       disabled: busy,
@@ -875,7 +900,7 @@ function ChatCloudButton(props) {
       "svg",
       { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true },
       (0, import_react.createElement)("path", { d: "M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15z" }),
-      synced ? null : (0, import_react.createElement)("path", { d: "M3.5 3.5l17 17" })
+      mark === "local" ? (0, import_react.createElement)("path", { d: "M3.5 3.5l17 17" }) : null
     )),
     open ? (0, import_react.createElement)(
       "div",
@@ -883,8 +908,8 @@ function ChatCloudButton(props) {
       (0, import_react.createElement)(
         "label",
         { className: "nm-cloud-item" },
-        (0, import_react.createElement)("input", { type: "checkbox", checked: synced, disabled: busy, onChange: (event) => void toggle(event.target.checked) }),
-        (0, import_react.createElement)("span", null, "\u041E\u0431\u043B\u0430\u043A\u043E: \u0432\u0435\u0431 \u0438 \u0432\u0441\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430")
+        (0, import_react.createElement)("input", { type: "checkbox", checked: mark === "main" ? true : syncedHere, disabled: busy || mark === "main" || mark === "unknown", onChange: (event) => void toggle(event.target.checked) }),
+        (0, import_react.createElement)("span", null, mark === "main" ? "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0447\u0430\u0442 \u0432\u0441\u0435\u0433\u0434\u0430 \u0432 \u043E\u0431\u043B\u0430\u043A\u0435" : "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0441 \u044D\u0442\u0438\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E\u043C")
       ),
       (0, import_react.createElement)("button", { type: "button", className: "nm-cloud-item", disabled: busy || !hasTelegram, onClick: () => void openIn("telegram") }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 Telegram"),
       (0, import_react.createElement)("button", { type: "button", className: "nm-cloud-item", disabled: busy || !hasMax, onClick: () => void openIn("max") }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 MAX"),

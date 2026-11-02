@@ -140,7 +140,7 @@ function renderContent(root,value){
 function openImage(src){
  let box=document.getElementById('image-lightbox');
  if(!box){box=document.createElement('div');box.id='image-lightbox';box.className='image-lightbox';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.onclick=event=>{if(event.target===box)closeImage();};const pic=document.createElement('img');pic.className='image-lightbox-pic';pic.alt='';const bar=document.createElement('div');bar.className='image-lightbox-bar';const download=document.createElement('a');download.className='image-lightbox-button';download.textContent=t('download');download.download='lika-picture.jpg';const close=document.createElement('button');close.type='button';close.className='image-lightbox-button';close.textContent=t('close');close.onclick=closeImage;bar.append(download,close);box.append(pic,bar);document.body.append(box);document.addEventListener('keydown',imageEscape);}
- const pic=box.querySelector('.image-lightbox-pic');pic.src=src;const link=box.querySelector('a');link.href=src;box.hidden=false;document.body.classList.add('lightbox-open');
+ const pic=box.querySelector('.image-lightbox-pic');pic.src=src;const link=box.querySelector('a');link.href=src;const tail=(src.split('?')[0].split('/').pop()||'');try{link.download=decodeURIComponent(tail)||'picture.jpg';}catch{link.download=tail||'picture.jpg';}box.hidden=false;document.body.classList.add('lightbox-open');
 }
 function closeImage(){const box=document.getElementById('image-lightbox');if(box)box.hidden=true;document.body.classList.remove('lightbox-open');}
 function imageEscape(event){if(event['key']==='Escape')closeImage();}

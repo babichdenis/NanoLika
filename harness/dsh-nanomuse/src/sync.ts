@@ -368,6 +368,8 @@ export interface RemoteLine {
   keptAt?: number
   /** A picture the message carried: the relay's stable link, drawn under the text. */
   image?: string
+  /** Every file the message carried, the picture included: the chat draws chips for the rest. */
+  files?: Array<{ name?: string; mime?: string; size?: number; url: string }>
   device: string
   deviceName: string
 }
@@ -1953,7 +1955,19 @@ export class SyncEngine {
     if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
     const picture = pictureOf(m.attachments)
-    const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name, ...(picture ? { image: picture } : {}) }
+    const files = (m.attachments ?? [])
+      .filter((a) => a.url)
+      .map((a) => ({ name: a.name, mime: a.mime, size: a.size, url: a.url }))
+    const line: RemoteLine = {
+      mid: m.mid,
+      role: m.role,
+      text: m.text,
+      at: m.created_at * 1000,
+      device: m.device,
+      deviceName: m.device_name,
+      ...(picture ? { image: picture } : {}),
+      ...(files.length ? { files } : {}),
+    }
     if (m.role === 'user' && allowPromote && this.options.sessions.promote) {
       const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
       if (promoted) {

@@ -402,10 +402,15 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     if (main) actions.openSession(main.id)
     else actions.startSession()
   }
+  /** Tell the rest of the window (the header's cloud badge is another bundle) that a chat's cloud moved. */
+  const announceCloud = (): void => { window.dispatchEvent(new CustomEvent('nanomuse:cloud-changed')) }
   /** Put the cloud back on a chat the person took out of the account (C11). */
   const toggleCloud = (id: string, on: boolean) => {
     void call<{ ok?: boolean; reason?: string } | undefined>('sync/synced', { sessionId: id, on })
-      .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
+      .then((reply) => {
+        if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason))
+        else announceCloud()
+      })
       .catch((err: unknown) => say(failureText(t, err)))
   }
   /**
@@ -418,6 +423,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
       .then((reply) => {
         if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason))
+        else announceCloud()
         // the harness has no delete of its own: the session's files go too, so the row is gone
         // from every column, not only from the nanoMuse one
         return call('sync/purge', { sessionId: id }).catch(() => undefined)

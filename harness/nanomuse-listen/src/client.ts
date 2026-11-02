@@ -839,21 +839,55 @@ function DictationSettings(): ReactNode {
 }
 
 
+/**
+ * Where a chat stands in the account: the main conversation is in the cloud by definition,
+ * a side chat that this or another device put there is shared, and the rest live only here.
+ * The distinction matters — "in the account" is `sessions`, while `synced` is only the mark
+ * this device left, so a chat that arrived from the web or a messenger is shared too.
+ */
+type CloudMark = 'unknown' | 'main' | 'shared' | 'local'
+
 /** The chat's cloud switch and the ways into the paired messengers, in the header. */
 function ChatCloudButton(props: { sessionId?: string }): ReactNode {
   const sessionId = props.sessionId ?? ''
-  const [synced, setSynced] = useState(false)
+  const [mark, setMark] = useState<CloudMark>('unknown')
+  /** This device's own switch for the chat; the cloud may hold it without it. */
+  const [syncedHere, setSyncedHere] = useState(false)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [channels, setChannels] = useState<Array<{ channel: string }>>([])
 
+  // Read on every session change and again when the window comes back or the column
+  // toggled a cloud, so the badge never keeps the previous chat's answer.
   useEffect(() => {
     if (sessionId === '') return
-    void fetch('/nanomuse/cloud/sync/state', { headers: { 'x-nanomuse': '1' } })
-      .then(async (res) => (res.ok ? ((await res.json()) as { synced?: string[] }) : {}))
-      .then((view) => setSynced(Array.isArray(view.synced) && view.synced.includes(sessionId)))
-      .catch(() => undefined)
+    let alive = true
+    const read = (): void => {
+      void fetch('/nanomuse/cloud/sync/state', { headers: { 'x-nanomuse': '1' } })
+        .then(async (res) => (res.ok ? ((await res.json()) as { sessions?: string[]; synced?: string[]; mainSession?: string }) : {}))
+        .then((view) => {
+          if (!alive) return
+          const sessions = Array.isArray(view.sessions) ? view.sessions : []
+          const synced = Array.isArray(view.synced) ? view.synced : []
+          setSyncedHere(synced.includes(sessionId))
+          if (view.mainSession === sessionId) setMark('main')
+          else if (sessions.includes(sessionId) || synced.includes(sessionId)) setMark('shared')
+          else setMark('local')
+        })
+        .catch(() => undefined)
+    }
+    read()
+    const again = (): void => read()
+    window.addEventListener('focus', again)
+    window.addEventListener('nanomuse:cloud-changed', again)
+    document.addEventListener('visibilitychange', again)
+    return () => {
+      alive = false
+      window.removeEventListener('focus', again)
+      window.removeEventListener('nanomuse:cloud-changed', again)
+      document.removeEventListener('visibilitychange', again)
+    }
   }, [sessionId])
 
   useEffect(() => {
@@ -876,7 +910,8 @@ function ChatCloudButton(props: { sessionId?: string }): ReactNode {
       })
       const answer = (await res.json().catch(() => ({}))) as { ok?: boolean; reason?: string; error?: { message?: string } }
       if (!res.ok || answer.ok === false) throw new Error(answer.error?.message ?? answer.reason ?? `${res.status}`)
-      setSynced(on)
+      setSyncedHere(on)
+      window.dispatchEvent(new CustomEvent('nanomuse:cloud-changed'))
       setNote(on ? 'Чат в облаке' : 'Только на этом компьютере')
     } catch (error) {
       setNote(error instanceof Error ? error.message : 'Не получилось')
@@ -908,22 +943,27 @@ function ChatCloudButton(props: { sessionId?: string }): ReactNode {
 
   const hasTelegram = channels.some((item) => item.channel === 'telegram')
   const hasMax = channels.some((item) => item.channel === 'max')
-  const title = synced ? 'В облаке: веб и устройства' : 'Только на этом компьютере'
+  const shared = mark === 'main' || mark === 'shared'
+  const title = mark === 'unknown'
+    ? 'Проверяю облако…'
+    : mark === 'main' ? 'В облаке: основной чат аккаунта'
+      : shared ? 'В облаке: веб и устройства'
+        : 'Только на этом компьютере'
   return h('div', { className: 'nm-chat-cloud-ctl' },
     h('button', {
       type: 'button',
-      className: `nm-icon-btn nm-cloud-btn${synced ? ' nm-cloud-on' : ''}`,
+      className: `nm-icon-btn nm-cloud-btn${shared ? ' nm-cloud-on' : ''}`,
       'aria-label': title,
       title,
       disabled: busy,
       onClick: () => setOpen((current) => !current),
     }, h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
       h('path', { d: 'M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15z' }),
-      synced ? null : h('path', { d: 'M3.5 3.5l17 17' }))),
+      mark === 'local' ? h('path', { d: 'M3.5 3.5l17 17' }) : null)),
     open ? h('div', { className: 'nm-cloud-menu' },
       h('label', { className: 'nm-cloud-item' },
-        h('input', { type: 'checkbox', checked: synced, disabled: busy, onChange: (event: { target: { checked: boolean } }) => void toggle(event.target.checked) }),
-        h('span', null, 'Облако: веб и все устройства')),
+        h('input', { type: 'checkbox', checked: mark === 'main' ? true : syncedHere, disabled: busy || mark === 'main' || mark === 'unknown', onChange: (event: { target: { checked: boolean } }) => void toggle(event.target.checked) }),
+        h('span', null, mark === 'main' ? 'Основной чат всегда в облаке' : 'Синхронизировать с этим устройством')),
       h('button', { type: 'button', className: 'nm-cloud-item', disabled: busy || !hasTelegram, onClick: () => void openIn('telegram') }, 'Открыть в Telegram'),
       h('button', { type: 'button', className: 'nm-cloud-item', disabled: busy || !hasMax, onClick: () => void openIn('max') }, 'Открыть в MAX'),
       note !== '' ? h('span', { className: 'nm-cloud-note' }, note) : null) : null)

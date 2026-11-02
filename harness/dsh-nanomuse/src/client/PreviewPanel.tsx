@@ -10,6 +10,7 @@
  */
 import { createElement as h, useEffect, type ReactNode } from 'react'
 import type { Translate } from './api.ts'
+import { saveMedia } from './media.ts'
 import { hidePreview, usePreview } from './preview.ts'
 
 export function makePreviewPanel(t: Translate) {
@@ -30,6 +31,9 @@ export function makePreviewPanel(t: Translate) {
         h('span', { className: 'nm-preview-title', title }, title),
         p.url
           ? h('a', { className: 'nm-preview-open', href: p.url, target: '_blank', rel: 'noreferrer' }, t('previewOpen'))
+          : null,
+        p.url && (p.kind === 'image' || p.kind === 'video' || p.kind === 'audio' || p.kind === 'pdf' || p.kind === 'text')
+          ? h('button', { className: 'nm-preview-download', type: 'button', title: t('previewDownload'), onClick: () => { void saveMedia(p.url ?? '', p.title) } }, t('previewDownload'))
           : null,
         h('button', { className: 'nm-preview-close', type: 'button', onClick: hidePreview, title: t('previewClose'), 'aria-label': t('previewClose') }, '×'),
       ),

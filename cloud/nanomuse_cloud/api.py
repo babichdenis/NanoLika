@@ -2005,7 +2005,10 @@ def create_app(
         return StreamingResponse(
             stream_body(),
             media_type=upstream.headers.get("content-type") or "application/octet-stream",
-            headers={"Cache-Control": "private, max-age=3600"},
+            # The file's link is signed, so anyone holding it may read the bytes: a wildcard
+            # lets the desktop (a random loopback port) save the picture it is showing, while
+            # the pages on our own origins keep their credentialed answer from CORS.
+            headers={"Cache-Control": "private, max-age=3600", "Access-Control-Allow-Origin": "*"},
         )
 
     # -- звук: озвучка текста и распознавание записи -------------------------------------------
