@@ -158,7 +158,7 @@ async function createInfo(force){
 }
 function createList(info,kind){
  let models=(info.models||[]).filter(m=>createUsable(m,kind));
- if(kind==='audio'){const wanted=createChoice.audio.kind;models=models.filter(m=>((m.audio_kind||'speech')===wanted));}
+ if(kind==='audio'){const wanted=createChoice.audio.kind;models=models.filter(m=>(((m.audio&&m.audio.kind)||m.audio_kind||'speech')===wanted));}
  const shelf=info.shelf||{},starred=new Set([...(shelf.favourites||[]),(shelf.default||{})[kind]].filter(Boolean));
  return models.sort((a,b)=>(starred.has(b.id)?1:0)-(starred.has(a.id)?1:0));
 }
@@ -199,7 +199,7 @@ function createPanelElement(){
  const foot=document.createElement('div');foot.className='create-foot';
  const price=document.createElement('span');price.id='create-price';price.className='create-price';
  const go=document.createElement('button');go.type='button';go.id='create-go';go.className='create-go';go.textContent=t('createGo');
- go.onclick=()=>{if(!createMode)return;const info=createCatalogue||{};createChoice[createMode].model=createModel(createMode,info);closeCreate();const placeholder=createMode==='image'?t('drawPlaceholder'):createMode==='video'?t('createVideoPlaceholder'):t('createAudioPlaceholder');$('message').placeholder=placeholder;createChip();$('message').focus();};
+ go.onclick=()=>{if(!createMode)return;const info=createCatalogue||{};createChoice[createMode].model=createModel(createMode,info);if(createPanel)createPanel.hidden=true;const placeholder=createMode==='image'?t('drawPlaceholder'):createMode==='video'?t('createVideoPlaceholder'):t('createAudioPlaceholder');$('message').placeholder=placeholder;createChip();$('message').focus();};
  foot.append(price,go);
  panel.append(tabs,row,options,foot);
  document.body.append(panel);
@@ -257,14 +257,14 @@ function renderCreate(){
   requestAnimationFrame(placeCreatePanel);
  });
 }
-function closeCreate(){if(createPanel)createPanel.hidden=true;}
+function closeCreate(){if(createPanel)createPanel.hidden=true;const chip=document.getElementById('create-chip');if(!chip||chip.hidden)createMode=null;}
 function placeCreatePanel(){
  const panel=createPanel,button=$('draw');if(!panel||!button)return;
  const box=button.getBoundingClientRect(),width=panel.offsetWidth||360,height=panel.offsetHeight||220;
  panel.style.left=Math.min(Math.max(8,box.left),Math.max(8,window.innerWidth-width-8))+'px';
  panel.style.top=(box.top-height-10>8?box.top-height-10:box.bottom+10)+'px';
 }
-function toggleCreate(){const panel=createPanelElement();if(panel.hidden){renderCreate();}else{panel.hidden=true;}}
+function toggleCreate(){const panel=createPanelElement();if(panel.hidden){if(!createMode)createMode='image';renderCreate();}else{closeCreate();}}
 async function priceCreate(){
  const panel=createPanel;if(!panel)return;
  const price=panel.querySelector('#create-price');price.textContent=t('createCounting');
