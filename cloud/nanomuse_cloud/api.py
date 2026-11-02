@@ -582,8 +582,12 @@ def create_app(
                 or path.startswith("/v1/images/")
                 or path.startswith("/v1/audio/")
                 or path.startswith("/v1/videos/")
+                # the apps make clips through the provider's own asynchronous route
+                or path.startswith("/api/v1/services/aigc/video-generation/")
             )
-            model_list = request.method == "GET" and path in ("/v1/models", "/v1/me/key")
+            model_list = request.method == "GET" and (
+                path in ("/v1/models", "/v1/me/key") or path.startswith("/api/v1/tasks/")
+            )
             if not (inference or model_list):
                 raise CloudError(403, "api_key_scope", "Personal API keys can call model endpoints and read their own key status only")
         return caller
