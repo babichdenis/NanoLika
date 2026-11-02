@@ -400,6 +400,12 @@ export default class NanomuseRooms extends Service {
     }
     for (const goal of this.store.goals) this.goalBySession.set(goal.sessionId, goal.id)
     this.ctx.effect(() => this.ctx.on('session/event', (session: Session, event: SessionEvent) => this.onEvent(session, event)), 'nanomuse rooms: session events')
+    // A batch chat is archived when its run ends; under a host where that call was refused
+    // (the session was still active) or the registry was not there yet, the chat would come
+    // back to the chats column on the next start. The list of batches is durable, so it is
+    // read back here and every chat in it is put into the archive again — idempotent, quiet.
+    const repairArchive = setTimeout(() => { void this.archiveOldBatches() }, 8000)
+    repairArchive.unref?.()
     this.ctx.effect(() => this.ctx.on('schedule/changed' as never, (() => void this.refreshAutomations()) as never), 'nanomuse rooms: schedule changes')
     this.ctx.effect(() => this.ctx.nanomuseCloud.onChange(() => void this.syncReady().catch(() => undefined)), 'nanomuse rooms: cloud changes')
     mountGuarded(this.ctx, API_PREFIX, this.handle, 'nanomuse rooms: api')
@@ -428,7 +434,7 @@ export default class NanomuseRooms extends Service {
       ideas: { ...this.store.ideas, items: this.ideaItems() },
       activity,
       busy: { ...this.busy },
-      batches: [...this.runs.keys()],
+      batches: [...new Set([...this.runs.keys(), ...this.store.batches])],
       automations: this.automations,
       ready: this.ready,
       studio: this.studio,
@@ -1594,7 +1600,21 @@ export default class NanomuseRooms extends Service {
     const registry = this.ctx.get('workspaceRegistry') as RegistryLike | undefined
     await registry?.archiveSession(sessionId, { stopActivity: true }).catch(() => undefined)
     await this.ctx.nanomuseCloud.setSyncChat(String(sessionId), false).catch(() => undefined)
+    // The batch chat is a workbench, not a chat of the person's: its answer is parsed into the
+    // feed above, and keeping the session would leave one more "Лента" row in the sidebar for
+    // every day the feed ran. It goes for good; the next batch opens a fresh one.
+    const cloud = this.ctx.get('nanomuseCloud') as { purgeSession?(id: string): Promise<unknown> } | undefined
+    await cloud?.purgeSession?.(String(sessionId)).catch(() => undefined)
     return text
+  }
+
+  /** Every chat a batch ever used goes (back) into the archive: see the note in `init`. */
+  private async archiveOldBatches(): Promise<void> {
+    const registry = this.ctx.get('workspaceRegistry') as RegistryLike | undefined
+    if (!registry) return
+    for (const id of this.store.batches) {
+      await registry.archiveSession(id as SessionId, { stopActivity: true }).catch(() => undefined)
+    }
   }
 
   private onEvent(session: Session, event: SessionEvent): void {

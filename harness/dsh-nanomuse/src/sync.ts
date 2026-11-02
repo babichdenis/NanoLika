@@ -1088,6 +1088,9 @@ export class SyncEngine {
     const refusal = this.cloudRefusal(sessionId)
     if (refusal) return { ...this.view(), ok: false, reason: refusal }
     this.state.clouds[sessionId] = on ? 'device' : 'local'
+    // "turn the cloud on" is the person asking for this chat to exist over there now: a new
+    // chat has no messages yet, and pushAll skips blank sessions, so it goes in by name alone
+    if (on) this.dirty.add(sessionId)
     if (!on) {
       this.dirty.delete(sessionId)
       delete this.state.pendingArchives?.[sessionId]
