@@ -49,6 +49,18 @@ COPY = {
         "models_error": "Не удалось получить модели. Попробуй ещё раз.",
         "models_more": "Показаны первые 15 из {total}: остальные выбираются в приложении или в кабинете.",
         "models_locked": "Ещё {count} моделей открываются с тарифом: они дороже в закупке.",
+        "memory": "Память",
+        "memory_intro": "Что Лика помнит о вас. Нажмите на факт, чтобы забыть его.",
+        "memory_empty": "Пока ничего не запомнено.",
+        "memory_found": "Найдено по запросу «{query}»: {count}.",
+        "memory_not_found": "Ничего не найдено.",
+        "memory_forgotten": "Забыто.",
+        "memory_clear": "Забыть всё",
+        "memory_confirm": "Забыть все факты? Это необратимо.",
+        "memory_clear_yes": "Да, забыть всё",
+        "memory_cleared": "Память очищена.",
+        "memory_search": "Найти",
+        "memory_search_hint": "Пришлите: /memory <текст>",
         "more": "Дальше",
         "rename_usage": "Пришли новое название после команды: /rename Поездка в Сочи",
         "rename_done": "Название сохранено.",
@@ -116,6 +128,18 @@ COPY = {
         "models_error": "Could not load the models. Try again.",
         "models_more": "Showing the first 15 of {total}: the rest are in the app or the cabinet.",
         "models_locked": "{count} more open with a plan: they cost more to run.",
+        "memory": "Memory",
+        "memory_intro": "What Lika remembers about you. Tap a fact to forget it.",
+        "memory_empty": "Nothing is remembered yet.",
+        "memory_found": "Found for “{query}”: {count}.",
+        "memory_not_found": "Nothing found.",
+        "memory_forgotten": "Forgotten.",
+        "memory_clear": "Forget everything",
+        "memory_confirm": "Forget every fact? This cannot be undone.",
+        "memory_clear_yes": "Yes, forget everything",
+        "memory_cleared": "Memory cleared.",
+        "memory_search": "Search",
+        "memory_search_hint": "Send: /memory <text>",
         "more": "Next",
         "rename_usage": "Send the new name after the command: /rename Trip to Sochi",
         "rename_done": "Name saved.",
@@ -183,6 +207,18 @@ COPY = {
         "models_error": "无法获取模型。请再试一次。",
         "models_more": "仅显示前 15 个（共 {total}），其余在应用或账户中选择。",
         "models_locked": "另有 {count} 个模型需套餐才能开启。",
+        "memory": "记忆",
+        "memory_intro": "Lika 记得的关于你的事。点一条即可忘记。",
+        "memory_empty": "暂时还没有记住什么。",
+        "memory_found": "按「{query}」找到 {count} 条。",
+        "memory_not_found": "没有找到。",
+        "memory_forgotten": "已忘记。",
+        "memory_clear": "全部忘记",
+        "memory_confirm": "忘记所有记忆？此操作不可撤销。",
+        "memory_clear_yes": "是，全部忘记",
+        "memory_cleared": "记忆已清空。",
+        "memory_search": "查找",
+        "memory_search_hint": "请发送：/memory <文字>",
         "more": "下一页",
         "rename_usage": "发送新名称：/rename 去索契",
         "rename_done": "名称已保存。",
@@ -363,6 +399,8 @@ class ChatMenu:
             "retention",
             "chats",
             "models",
+            "memory",
+            "memory-confirm",
         }:
             return {"menu": "nav:" + action}
         if action.startswith("chat:"):
@@ -535,6 +573,43 @@ class ChatMenu:
                 row("switch_yes", "switch:yes"),
                 row("switch_no", "switch:no"),
             ]
+        elif page in {"memory", "memory-confirm"}:
+            memory = self.m.svc.app.memory
+            items = memory.all(limit=200)
+            if page == "memory-confirm":
+                text = c["memory_confirm"]
+                rows = [
+                    row("memory_clear_yes", "memory-clear-yes"),
+                    row("back", "memory"),
+                ]
+            elif not items:
+                text = c["memory_intro"] + "\n\n" + c["memory_empty"]
+                rows = [row("memory_clear", "memory-clear")] if memory.count() else []
+            else:
+                per_page = 8
+                pages = max(1, (len(items) + per_page - 1) // per_page)
+                page_no = min(max(1, page_no), pages)
+                chunk = items[(page_no - 1) * per_page : page_no * per_page]
+                text = c["memory_intro"] + f"\n\n{page_no} / {pages}"
+                rows = [
+                    [(item.content[:46], self.ticket(msg, "memory-forget:" + item.id))]
+                    for item in chunk
+                ]
+                nav: list = []
+                if page_no > 1:
+                    nav.append(
+                        (c.get("previous", "←"), self.ticket(msg, f"memory-page:{page_no - 1}"))
+                    )
+                if page_no < pages:
+                    nav.append((c.get("more", "→"), self.ticket(msg, f"memory-page:{page_no + 1}")))
+                if nav:
+                    rows.append(nav)
+                rows.append(
+                    [
+                        (c["memory_search"], self.ticket(msg, "memory-search")),
+                        (c["memory_clear"], self.ticket(msg, "memory-clear")),
+                    ]
+                )
         elif page == "models":
             # Кнопки вместо номеров: список листается, как выбор времени, и нажатие
             # сразу выбирает модель. Восемь на экран — столько читается с телефона.
@@ -588,7 +663,11 @@ class ChatMenu:
                 [(c["chats"], self.ticket(msg, "chats")), (c["new"], self.ticket(msg, "chat:new"))],
                 [
                     (c["models"], self.ticket(msg, "models")),
+                    (c["memory"], self.ticket(msg, "memory")),
+                ],
+                [
                     (c["settings"], self.ticket(msg, "settings")),
+                    (c["balance"], self.ticket(msg, "balance")),
                 ],
                 [
                     (c["account"], "https://cloud.nanolika.ru/web/account/?source=messenger"),
@@ -628,6 +707,7 @@ class ChatMenu:
             "/language": "language",
             "/pay": "pay",
             "/model": "models",
+            "/memory": "memory",
             "/rename": "chat-rename",
             "/del": "chat-delete",
             "/models": "models",
@@ -653,6 +733,9 @@ class ChatMenu:
                 await self.show(msg, note=COPY[self.language(msg)]["unknown_command"])
                 return True
             return False
+        if command == "/memory" and len(msg.text.split()) > 1:
+            await self.memory_find(msg, msg.text.split(None, 1)[1])
+            return True
         if command in {"/model", "/models"} and len(msg.text.split()) > 1:
             pages[command] = "model:" + msg.text.split()[1]
         if command == "/rename" and len(msg.text.split()) > 1:
@@ -764,6 +847,24 @@ class ChatMenu:
             await self.show(msg, note="https://nanolika.ru/pricing.html")
         elif action == "balance":
             await self.show(msg, note=await self.balance(msg))
+        elif action in {"memory", "memory-confirm"}:
+            await self.show(msg, action)
+        elif action == "memory-search":
+            await self.show(msg, "memory", note=c["memory_search_hint"])
+        elif action == "memory-clear":
+            await self.show(msg, "memory-confirm")
+        elif action == "memory-clear-yes":
+            count = self.m.svc.app.memory.clear()
+            await self.show(msg, note=c["memory_cleared"] + (f" ({count})" if count else ""))
+        elif action.startswith("memory-forget:"):
+            self.m.svc.app.memory.forget(action.split(":", 1)[1])
+            await self.show(msg, "memory", note=c["memory_forgotten"])
+        elif action.startswith("memory-page:"):
+            try:
+                page_no = int(action.split(":", 1)[1])
+            except ValueError:
+                page_no = 1
+            await self.show(msg, "memory", page_no=page_no)
         elif action == "models":
             await self.show(msg, "models")
         elif action.startswith("model-page:"):
@@ -919,6 +1020,25 @@ class ChatMenu:
         lines.append("")
         lines.append(c["models_how"])
         return "\n".join(lines)
+
+    async def memory_find(self, msg: InboundMessage, query: str) -> None:
+        """Search what is remembered and offer to forget each hit, without the app."""
+        c = COPY[self.language(msg)]
+        try:
+            items = await self.m.svc.app.memory.search_async(query.strip()[:200], limit=10)
+        except Exception:
+            items = []
+        if not items:
+            await self.send(msg, c["memory_not_found"], [[(c["back"], self.ticket(msg, "memory"))]])
+            return
+        rows = [
+            [(item.content[:46], self.ticket(msg, "memory-forget:" + item.id))]
+            for item in items
+        ]
+        rows.append([(c["back"], self.ticket(msg, "memory"))])
+        await self.send(
+            msg, c["memory_found"].format(query=query.strip()[:60], count=len(items)), rows
+        )
 
     async def model_pick(self, msg: InboundMessage, raw: str) -> str:
         """Pick this chat's model by id (a button) or by number (`/model 3`).
