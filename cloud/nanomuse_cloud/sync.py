@@ -145,6 +145,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "deleted": bool(r["deleted"]),
         "archived": bool(r["archived"]) if "archived" in r.keys() else False,
         "model": str(r["model"] or "") if "model" in r.keys() else "",
+        "reasoning": str(r["reasoning"] or "") if "reasoning" in r.keys() else "",
         "seq": int(r["seq"]),
     }
 
@@ -652,8 +653,8 @@ class SyncStore:
                             continue
                     seq = self._next_seq(c, account_id)
                     c.execute(
-                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model, reasoning) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             account_id,
                             cid,
@@ -667,6 +668,7 @@ class SyncStore:
                             seq,
                             1 if archived and not deleted else 0,
                             str(conv.get("model") or "")[:160],
+                            str(conv.get("reasoning") or "").strip().lower()[:24],
                         ),
                     )
                     accepted += 1
@@ -684,15 +686,22 @@ class SyncStore:
                     title_changed = bool(title) and title != str(row["title"])
                     model = str(conv.get("model") or "")[:160] if "model" in conv else str(row["model"] or "")
                     model_changed = "model" in conv and model != str(row["model"] or "")
-                    if title_changed or next_archived != bool(row["archived"]) or model_changed:
+                    reasoning = (
+                        str(conv.get("reasoning") or "").strip().lower()[:24]
+                        if "reasoning" in conv
+                        else str(row["reasoning"] or "") if "reasoning" in row.keys() else ""
+                    )
+                    reasoning_changed = "reasoning" in conv and reasoning != (str(row["reasoning"] or "") if "reasoning" in row.keys() else "")
+                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed:
                         seq = self._next_seq(c, account_id)
                         c.execute(
-                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, seq=? WHERE account_id=? AND cid=?",
+                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, seq=? WHERE account_id=? AND cid=?",
                             (
                                 title if title_changed else row["title"],
                                 t,
                                 1 if next_archived else 0,
                                 model,
+                                reasoning,
                                 seq,
                                 account_id,
                                 cid,

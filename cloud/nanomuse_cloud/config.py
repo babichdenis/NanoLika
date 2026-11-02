@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .reasoning import public_reasoning
+
 log = logging.getLogger(__name__)
 
 # What a chat model is for (0.17): the conversation ("chat") or the hands — the GUI model
@@ -143,6 +145,11 @@ class ModelSpec:
     # menu and can be ticked by hand, but it is not what a fresh account spends on by default:
     # `default_on: false` leaves it in the list, unticked.
     default_on: bool = True
+    # The thinking levels this model takes and the level it uses when a request says
+    # nothing (`reasoning.py` documents the default when these stay empty). The apps draw
+    # min/default/max from these two; a model with no levels shows no control at all.
+    reasoning_levels: tuple[str, ...] = ()
+    reasoning_default: str = ""
 
     def __post_init__(self) -> None:
         # a lane list from CLOUD_MODELS may arrive as a list; keep tuples, and only known lanes
@@ -165,6 +172,20 @@ class ModelSpec:
         if len(hours) != 2 or not all(0 <= h <= 24 for h in hours):
             raise ValueError(f"{self.id}: idle_hours is [start, end] in hours of the day, Beijing time")
         object.__setattr__(self, "idle_hours", hours)
+        levels = tuple(str(level).strip().lower() for level in (self.reasoning_levels or ()) if str(level).strip())
+        if levels:
+            from .reasoning import LEVELS
+
+            unknown = [level for level in levels if level not in LEVELS]
+            if unknown:
+                raise ValueError(f"{self.id}: reasoning_levels {unknown} are not one of {', '.join(LEVELS)}")
+            if self.kind != "chat":
+                raise ValueError(f"{self.id}: reasoning levels are for chat models; a {self.kind} model has none")
+        default = str(self.reasoning_default or "").strip().lower()
+        if default and default not in levels:
+            raise ValueError(f"{self.id}: reasoning_default {default!r} is not one of its reasoning_levels")
+        object.__setattr__(self, "reasoning_levels", levels)
+        object.__setattr__(self, "reasoning_default", default)
         for name in ("sell_in", "sell_cached_in", "sell_out"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{self.id}: {name} is a price, not a negative number")
@@ -208,6 +229,7 @@ class ModelSpec:
                 "priced_as": self.priced_as,
                 "recommended": self.recommended,
                 "recommended_for": list(self.recommended_lanes),
+                "reasoning": public_reasoning(self),
                 "in_mult": self.in_mult,
                 "out_mult": self.out_mult,
                 "per_image": self.per_image,

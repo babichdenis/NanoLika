@@ -41,7 +41,7 @@ function fakeRelay() {
     if (req.url === '/v1/models') {
       return json(200, {
         data: [
-          { id: 'qwen-a', name: 'Qwen A', architecture: { input_modalities: ['text', 'image'] }, nanomuse: { kind: 'chat', recommended: true } },
+          { id: 'qwen-a', name: 'Qwen A', architecture: { input_modalities: ['text', 'image'] }, nanomuse: { kind: 'chat', recommended: true, reasoning: { levels: ['low', 'high', 'max'], default: 'high', wire: 'reasoning_effort' } } },
           { id: 'wan-v', name: 'Wan (video)', architecture: { input_modalities: ['text'] }, nanomuse: { kind: 'video', recommended: false } },
           { id: 'bare' },
         ],
@@ -134,6 +134,10 @@ test('models keeps kind, recommendation and modalities, with defaults', async ()
     ],
   )
   assert.equal(models[2].name, 'bare')
+  // the menu's thinking levels travel with the model; a model without them has no badge
+  assert.deepEqual(models[0].reasoning, { levels: ['low', 'high', 'max'], default: 'high' })
+  assert.equal(models[1].reasoning, undefined)
+  assert.equal(models[2].reasoning, undefined)
 })
 
 test('signOut tolerates a key the relay no longer knows', async () => {

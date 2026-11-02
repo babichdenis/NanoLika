@@ -246,7 +246,7 @@ test('explicit image modalities win over model names; older relays use the name 
 test('the provider row carries the image budget of a request through the relay (413 too_large): 5 MiB of base64 images, 2 Mpx a picture, the per-image byte cap left to dsh', async () => {
   const { providerRowFor, IMAGE_BUDGET } = await import('../lib/cloud.js')
   const row = providerRowFor('https://relay.test/v1', [
-    { id: 'deepseek-v4.1', name: 'DeepSeek V4.1', kind: 'chat', recommended: true, inputModalities: ['text', 'image'], for: ['chat'] },
+    { id: 'deepseek-v4.1', name: 'DeepSeek V4.1', kind: 'chat', recommended: true, inputModalities: ['text', 'image'], for: ['chat'], reasoning: { levels: ['low', 'high', 'max'], default: 'high' } },
     { id: 'qwen3.8-27b', name: 'Qwen', kind: 'chat', recommended: false, inputModalities: ['text', 'image'], for: ['gui'] },
     { id: 'wan-video', name: 'Wan', kind: 'video', recommended: false, inputModalities: ['text'], for: ['video'] },
   ])
@@ -260,4 +260,8 @@ test('the provider row carries the image budget of a request through the relay (
   assert.ok(row.maxRequestImageBytes < 6 * 1024 * 1024)
   assert.deepEqual(row.models.map((m) => m.id), ['deepseek-v4.1'])
   assert.deepEqual(row.models[0].input, ['text', 'image'])
+  // the relay's levels become the adapter's choice, and the wire is the flat OpenAI field
+  // the relay translates for the provider behind it
+  assert.deepEqual(row.models[0].reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
+  assert.deepEqual(row.models[0].compat, { thinkingFormat: 'openai', supportsReasoningEffort: true })
 })

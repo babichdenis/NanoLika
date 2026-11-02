@@ -115,6 +115,8 @@ export interface WireConversation {
   archived: boolean
   /** The chat's own model (a NanoLika Cloud id), chosen on any device (C7); '' when never chosen. */
   model?: string
+  /** The thinking level that goes with the model (a level the relay documents), '' = provider default. */
+  reasoning?: string
   seq: number
 }
 
@@ -353,8 +355,8 @@ export interface SyncSessions {
   lines(sessionId: string): Promise<SessionLine[]>
   create(title: string): Promise<string>
   rename(sessionId: string, title: string): Promise<void>
-  /** Another device chose this chat's model: the session answers with it from the next turn on. */
-  model?(sessionId: string, model: string): Promise<void>
+  /** Another device chose this chat's model (and its thinking level): the session answers with it from the next turn on. */
+  model?(sessionId: string, model: string, reasoningEffort?: string): Promise<void>
   /**
    * A turn from another device, kept by the host for the transcript — in a store of its own,
    * never in the session's log: a surface message appended there outside a turn makes the log
@@ -496,6 +498,8 @@ export interface KnownConversation {
   archived?: boolean
   /** The chat's own Cloud model, as the relay knows it. */
   model?: string
+  /** The thinking level that goes with it, as the relay knows it; '' = provider default. */
+  reasoning?: string
 }
 
 /**
@@ -542,6 +546,8 @@ export interface SyncState {
   titles: Record<string, string>
   /** session id → the chat's own model (a Cloud id): what this device chose or applied, so a pick in one chat never follows into another. */
   models: Record<string, string>
+  /** session id → the thinking level chosen beside that model; absent = the provider's default. */
+  reasoning: Record<string, string>
   /** cid → what the relay says of the conversation. */
   conversations: Record<string, KnownConversation>
   /** mid → the session it was appended to: a row goes into a log once. */
@@ -564,7 +570,7 @@ export interface SyncState {
 const SIDE_CHATS_VERSION = 2
 
 export function emptyState(): SyncState {
-  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: true, sideChatsVersion: SIDE_CHATS_VERSION, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, gone: [], conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
+  return { accountId: '', cursor: 0, cursors: { main: 0, all: 0 }, enabled: true, mainSession: '', sideChats: true, sideChatsVersion: SIDE_CHATS_VERSION, clouds: {}, cids: {}, owners: {}, mids: {}, titles: {}, models: {}, reasoning: {}, gone: [], conversations: {}, pulled: {}, hidden: [], toArchive: [], historyBefore: {} }
 }
 
 /**
@@ -622,7 +628,7 @@ export function migrate(state: SyncState | undefined): SyncState {
  * longer the main chat here.
  */
 export function forAccount(state: SyncState, accountId: string): SyncState {
-  const next: SyncState = { ...state, accountId, cursor: 0, cursors: { main: 0, all: 0 }, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {}, historyBefore: {}, models: {} }
+  const next: SyncState = { ...state, accountId, cursor: 0, cursors: { main: 0, all: 0 }, conversations: {}, pulled: {}, hidden: [], toArchive: [], pendingArchives: {}, historyBefore: {}, models: {}, reasoning: {} }
   const mainOwner = state.owners[state.mainSession]
   if (mainOwner && mainOwner !== accountId) next.mainSession = ''
   return next
@@ -672,6 +678,8 @@ export interface SyncView {
   titles: Record<string, string>
   /** The chat's own model (a Cloud id) per session; a session not listed follows the default. */
   models: Record<string, string>
+  /** The thinking level chosen beside the chat's model; absent = the provider's default. */
+  reasoning: Record<string, string>
   /** Chats deleted everywhere on this device: hidden in the column (the session file itself stays). */
   gone: string[]
   /** Sessions that belong to another account than the one signed in (C10): hidden by the browser half, not deleted; empty when signed out. */
@@ -802,6 +810,9 @@ export class SyncEngine {
       ),
       models: Object.fromEntries(
         Object.entries(this.state.models).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
+      ),
+      reasoning: Object.fromEntries(
+        Object.entries(this.state.reasoning ?? {}).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
       ),
       gone: [...(this.state.gone ?? [])],
       foreign: this.foreign(),
@@ -946,6 +957,7 @@ export class SyncEngine {
         delete this.state.titles[other]
         this.state.clouds[other] = 'local'
         delete this.state.models[other]
+        delete this.state.reasoning[other]
       }
       this.state.cids[sessionId] = mainCid
       this.adopt(sessionId)
@@ -1398,6 +1410,7 @@ export class SyncEngine {
       const pending: Array<{ sessionId: string; line: SessionLine; mid: string }> = []
       // the conversations whose chat model goes up with them (C7)
       const modelOf = new Map<string, string>()
+      const reasoningOf = new Map<string, string>()
       const touched: string[] = []
       // sessions with more than 200 new lines and those the round did not reach go again
       const again = new Set(ids)
@@ -1412,10 +1425,17 @@ export class SyncEngine {
         // yardstick: what it already has is not sent again (a model applied from another
         // device included), and a chat that never chose one sends nothing.
         const model = String(this.state.models[sessionId] ?? '').trim().slice(0, 120)
+        const reasoning = String(this.state.reasoning?.[sessionId] ?? '').trim().toLowerCase().slice(0, 24)
         const modelChanged = Boolean(model) && this.state.conversations[cid]?.model !== model
-        if (this.state.titles[sessionId] !== title || modelChanged) {
-          conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000), ...(modelChanged ? { model } : {}) })
-          if (modelChanged) modelOf.set(String(cid), model)
+        // the level travels beside the model; '' is a real value ("provider default") and
+        // must reach the relay too, or a level cleared here would stay on the other devices
+        const reasoningChanged = Boolean(model) && (this.state.conversations[cid]?.reasoning ?? '') !== reasoning
+        if (this.state.titles[sessionId] !== title || modelChanged || reasoningChanged) {
+          conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000), ...(modelChanged || reasoningChanged ? { model, reasoning } : {}) })
+          if (modelChanged || reasoningChanged) {
+            modelOf.set(String(cid), model)
+            reasoningOf.set(String(cid), reasoning)
+          }
         }
         // a task session's answer is the call's result over there: only the person's own
         // words typed here go up, never the model's
@@ -1476,9 +1496,18 @@ export class SyncEngine {
           createdAt: known?.createdAt || Number(c.created_at),
           updatedAt: Math.max(known?.updatedAt ?? 0, Number(c.updated_at)),
           model: modelOf.get(String(c.cid)) ?? known?.model ?? '',
+          reasoning: reasoningOf.get(String(c.cid)) ?? known?.reasoning ?? '',
         }
         const model = modelOf.get(String(c.cid))
         if (model) for (const [sid, cid] of Object.entries(this.state.cids)) if (cid === c.cid) this.state.models[sid] = model
+        if (reasoningOf.has(String(c.cid))) {
+          const level = reasoningOf.get(String(c.cid)) ?? ''
+          for (const [sid, cid] of Object.entries(this.state.cids)) {
+            if (cid !== c.cid) continue
+            if (level) this.state.reasoning[sid] = level
+            else delete this.state.reasoning[sid]
+          }
+        }
       }
       await this.save()
       // the turn's start or end told once the words are up (C9)
@@ -1736,6 +1765,7 @@ export class SyncEngine {
     if (c.archived === false && sessionId) this.state.toArchive = this.state.toArchive.filter(id => id !== sessionId)
     const known = this.state.conversations[c.cid]
     const model = typeof c.model === 'string' ? c.model.trim().slice(0, 120) : ''
+    const reasoning = typeof c.reasoning === 'string' ? c.reasoning.trim().toLowerCase().slice(0, 24) : ''
     this.state.conversations[c.cid] = {
       kind: c.kind,
       title: c.title || known?.title || '',
@@ -1745,6 +1775,7 @@ export class SyncEngine {
       updatedAt: Math.max(known?.updatedAt ?? 0, c.updated_at),
       archived: c.archived,
       model: model || known?.model || '',
+      reasoning: reasoning || known?.reasoning || '',
     }
     if (c.archived && sessionId && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
     if (!sessionId) {
@@ -1782,7 +1813,7 @@ export class SyncEngine {
         }
       }
       this.noteCloud(sessionId, c.device)
-      await this.applyChatModel(sessionId, model)
+      await this.applyChatModel(sessionId, model, reasoning)
       if (c.archived && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
       return
     }
@@ -1792,7 +1823,7 @@ export class SyncEngine {
       await this.options.sessions.rename(sessionId, c.title).catch(() => undefined)
     }
     this.noteCloud(sessionId, c.device)
-    await this.applyChatModel(sessionId, model)
+    await this.applyChatModel(sessionId, model, reasoning)
   }
 
   /**
@@ -1800,18 +1831,24 @@ export class SyncEngine {
    * turn on. Applied once — the value this device already knows is not applied again, so a
    * chat answering through an own key here keeps it until the account's choice changes.
    */
-  private async applyChatModel(sessionId: string, model: string): Promise<void> {
-    if (!model || this.state.models[sessionId] === model) return
+  private async applyChatModel(sessionId: string, model: string, reasoning = ''): Promise<void> {
+    if (!model) return
     const before = this.state.models[sessionId]
+    const beforeEffort = this.state.reasoning[sessionId]
+    if (before === model && (beforeEffort ?? '') === reasoning) return
     this.state.models[sessionId] = model
+    if (reasoning) this.state.reasoning[sessionId] = reasoning
+    else delete this.state.reasoning[sessionId]
     try {
       if (!this.options.sessions.model) return
-      await this.options.sessions.model(sessionId, model)
-      this.log('info', `nanomuse sync: the chat answers with ${model}`)
+      await this.options.sessions.model(sessionId, model, reasoning || undefined)
+      this.log('info', `nanomuse sync: the chat answers with ${model}${reasoning ? ` (${reasoning})` : ''}`)
       this.changed()
     } catch (error: unknown) {
       if (before === undefined) delete this.state.models[sessionId]
       else this.state.models[sessionId] = before
+      if (beforeEffort) this.state.reasoning[sessionId] = beforeEffort
+      else delete this.state.reasoning[sessionId]
       this.log('warn', `nanomuse sync: the chat's model did not change: ${message(error)}`)
     }
   }
@@ -1821,6 +1858,16 @@ export class SyncEngine {
     const next = String(model || '').trim().slice(0, 120)
     if (!next) return
     this.state.models[sessionId] = next
+    this.dirty.add(sessionId)
+    this.changed()
+    this.pushSoon(SEND_DELAY_MS)
+  }
+
+  /** The thinking level picked beside the model: it travels with the chat's conversation (C7). */
+  reasoningPicked(sessionId: string, reasoning: string): void {
+    const next = String(reasoning || '').trim().toLowerCase().slice(0, 24)
+    if (next) this.state.reasoning[sessionId] = next
+    else delete this.state.reasoning[sessionId]
     this.dirty.add(sessionId)
     this.changed()
     this.pushSoon(SEND_DELAY_MS)

@@ -38,6 +38,7 @@ from .nudges import defaults as nudges_defaults
 from .nudges import merge as nudges_merge
 from .nudges import validate as nudges_validate
 from .providers import exhausted_key_line, guidance
+from .reasoning import public_reasoning
 from .providers import provider as catalogue_provider
 from .senders import CodeSender, LogSender, SendError, make_sender
 
@@ -2413,6 +2414,7 @@ class Cloud:
                     "default_on": getattr(spec, "default_on", True),
                     "in": list(spec.input_modalities),
                     "out": list(spec.output_modalities),
+                    "reasoning": public_reasoning(spec),
                     "sell": {
                         "currency": "RUB",
                         "in": getattr(spec, "sell_in", 0.0),
@@ -2454,6 +2456,7 @@ class Cloud:
                     "default_on": getattr(spec, "default_on", True),
                     "in": list(spec.input_modalities),
                     "out": list(spec.output_modalities),
+                    "reasoning": public_reasoning(spec),
                     # what the account pays, rubles per million tokens (0 = not set yet, the
                     # account is charged the provider's price in yuan, as before 0.27)
                     # a relay older than the sale rate has no sell_* fields at all: 0 means

@@ -10,6 +10,7 @@ import { call, type Translate } from './api.ts'
 import { openLink } from './bridge.ts'
 import { useLive } from './live.ts'
 import { useModels } from './ModelsSection.tsx'
+import { ReasoningPill } from './ReasoningPill.tsx'
 import { peekWin, useWin } from './win.ts'
 
 interface PickerSession {
@@ -42,6 +43,24 @@ export function makeCloudModelPill(t: Translate) {
     const button = useRef<HTMLButtonElement>(null)
     const frame = useRef<HTMLIFrameElement>(null)
     const slot = view?.slots.chat
+    // The thinking level belongs to the session's model, wherever that model lives: a
+    // chat answering through an own key gets the same pill, and the stock model seat
+    // still shows (our model pill is the account catalogue's alone).
+    const currentProvider = chatModel ? 'nanomuse' : slot?.provider ?? ''
+    const currentModel = chatModel || slot?.model || ''
+    const option = slot?.options.find((o) => o.provider === currentProvider && o.id === currentModel)
+    const levels = option?.reasoning?.levels ?? []
+    const chosenBySession = live.sync?.reasoning?.[session] ?? ''
+    const chosen = chosenBySession || (currentProvider === slot?.provider && currentModel === slot?.model ? slot?.reasoning?.chosen ?? '' : '')
+    const pickLevel = (level: string): void => {
+      if (!currentModel) return
+      void call('chat-model', {
+        provider: currentProvider,
+        model: currentModel,
+        ...(session ? { sessionId: session } : {}),
+        reasoningEffort: level,
+      }).then(() => reload()).catch(() => undefined)
+    }
 
     // The frame is a true in-app popover: sized like the app window (a little shorter),
     // anchored to the pill, and transparent around the relay's card.
@@ -110,7 +129,8 @@ export function makeCloudModelPill(t: Translate) {
       return () => window.removeEventListener('message', onMessage)
     }, [sheet, shown, session, reload])
 
-    if (!view?.signedIn || !view.cloudModels || !shown) return null
+    const showModel = Boolean(view?.signedIn && view.cloudModels && shown)
+    if (!showModel && levels.length === 0) return null
     const name = slot?.options.find((option) => option.id === shown)?.name ?? shown
     const open = async (): Promise<void> => {
       setBusy(true)
@@ -132,20 +152,32 @@ export function makeCloudModelPill(t: Translate) {
     return h(
       Fragment,
       null,
-      h(
-        'button',
-        {
-          ref: button,
-          type: 'button',
-          className: 'nm-pill nm-pill-ghost nm-pill-sm nm-model-pill',
-          'data-testid': 'nm-model-pill',
-          disabled: busy,
-          title: `${t('mlCloudModels')}: ${name}`,
-          'aria-label': `${t('mlCloudModels')}: ${name}`,
-          onClick: () => void open(),
-        },
-        name,
-      ),
+      showModel
+        ? h(
+            'button',
+            {
+              ref: button,
+              type: 'button',
+              className: 'nm-pill nm-pill-ghost nm-pill-sm nm-model-pill',
+              'data-testid': 'nm-model-pill',
+              disabled: busy,
+              title: `${t('mlCloudModels')}: ${name}`,
+              'aria-label': `${t('mlCloudModels')}: ${name}`,
+              onClick: () => void open(),
+            },
+            name,
+          )
+        : null,
+      levels.length > 0
+        ? h(ReasoningPill, {
+            t,
+            levels,
+            value: chosen,
+            ...(option?.reasoning?.default ? { fallback: option.reasoning.default } : {}),
+            testId: 'nm-reasoning-pill',
+            onPick: pickLevel,
+          })
+        : null,
       sheet && box
         ? createPortal(
             h(

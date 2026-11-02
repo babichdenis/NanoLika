@@ -132,6 +132,20 @@ export interface RelayModel {
       считает бюджет истории и включает сжатие, не дожидаясь отказа провайдера. */
   contextLength?: number
   maxOutput?: number
+  /** The thinking levels the relay's menu documents for this model, and the one it uses
+      when a request says nothing; absent when the model has no such control. */
+  reasoning?: { levels: string[]; default?: string }
+}
+
+/** The relay menu's `reasoning` block, cleaned: the levels a model takes, or nothing.
+    A malformed block is treated as no control at all rather than as a broken picker. */
+export function relayReasoning(raw: unknown): { levels: string[]; default?: string } | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const body = raw as { levels?: unknown; default?: unknown }
+  const levels = Array.isArray(body.levels) ? [...new Set(body.levels.map((level) => String(level).trim()).filter(Boolean))] : []
+  if (levels.length === 0) return undefined
+  const fallback = typeof body.default === 'string' ? body.default.trim() : ''
+  return { levels, ...(fallback && levels.includes(fallback) ? { default: fallback } : {}) }
 }
 
 export interface SignIn {
@@ -664,6 +678,7 @@ export class Relay {
     return (body.data ?? []).map((m) => {
       const arch = (m.architecture ?? {}) as Record<string, unknown>
       const extra = (m.nanomuse ?? {}) as Record<string, unknown>
+      const reasoning = relayReasoning(extra.reasoning)
       return {
         id: String(m.id ?? ''),
         name: String(m.name ?? m.id ?? ''),
@@ -673,6 +688,7 @@ export class Relay {
         contextLength: Number(extra.context_length) || 0,
         maxOutput: Number(extra.max_output) || 0,
         ...(Array.isArray(extra.for) ? { for: extra.for.map(String) } : {}),
+        ...(reasoning ? { reasoning } : {}),
       }
     })
   }

@@ -146,6 +146,7 @@ from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
+from .reasoning import clean_effort, reasoning_for
 from .provider_prices import install_provider_prices
 from .provider_routing import ProviderRouter, identity, request_chat
 from .service import (
@@ -192,17 +193,26 @@ def thinking_requested(body: dict) -> bool | None:
     return None
 
 
-def apply_chat_defaults(body: dict, defaults: dict) -> None:
+def apply_chat_defaults(body: dict, defaults: dict, reasoning_model: bool = False) -> None:
     """The operator's defaults (CHAT_DEFAULTS, `{"enable_thinking": false}` as shipped) go
     in where the request is silent. Reasoning is one thing said in several ways, so the
     `enable_thinking` default follows what the request already said with `reasoning_effort`
     or `thinking` — Model Studio refuses `reasoning_effort: low` next to `enable_thinking:
     false` ("'reasoning_effort' must be 'none' when 'enable_thinking' is false"), which is
-    exactly what an app's thinking-level badge plus the shipped default used to produce."""
+    exactly what an app's thinking-level badge plus the shipped default used to produce.
+
+    A model whose menu row documents thinking levels is left alone when the request says
+    nothing: the shipped `enable_thinking: false` would turn its reasoning off, and then
+    "по умолчанию" would quietly mean "выключено" — the opposite of what the badge says."""
     wants = thinking_requested(body)
     for k, v in defaults.items():
-        if k == "enable_thinking" and wants is not None:
-            body.setdefault("enable_thinking", wants)
+        if k == "enable_thinking":
+            if wants is not None:
+                body.setdefault("enable_thinking", wants)
+            elif reasoning_model:
+                continue
+            else:
+                body.setdefault(k, v)
             continue
         body.setdefault(k, v)
     effort = body.get("reasoning_effort")
@@ -1420,7 +1430,15 @@ def create_app(
             place=client_place(request),
         )
         body["model"] = spec.upstream
-        apply_chat_defaults(body, settings.chat_defaults)
+        levels, _default = reasoning_for(spec)
+        if levels:
+            # Only the levels this model documents go upstream; "default" (and anything
+            # the model never offered) leaves the field out, so the provider's own
+            # default stands — the same thing the app's badge means.
+            effort = clean_effort(body.pop("reasoning_effort", ""), levels)
+            if effort:
+                body["reasoning_effort"] = effort
+        apply_chat_defaults(body, settings.chat_defaults, reasoning_model=bool(levels))
         stream = bool(body.get("stream"))
         if stream:
             opts = body.get("stream_options") if isinstance(body.get("stream_options"), dict) else {}

@@ -59,7 +59,7 @@ export interface ProvidersView {
   chat: { provider: string; model: string }
 }
 
-export interface ModelOption { provider: string; providerLabel: string; id: string; name: string; /** The relay's recommended one for that lane. */ recommended?: boolean }
+export interface ModelOption { provider: string; providerLabel: string; id: string; name: string; /** The relay's recommended one for that lane. */ recommended?: boolean; /** The thinking levels the model takes, when it takes any. */ reasoning?: { levels: string[]; default?: string } }
 
 const CAPS: Capability[] = ['chat', 'vision', 'image', 'video']
 

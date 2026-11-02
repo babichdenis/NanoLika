@@ -189,6 +189,25 @@ html[data-nanomuse] body { font-family: var(--nm-font); }
 .nm-pill-ghost { background: var(--nm-card); color: var(--dsw-alias-label-primary); box-shadow: inset 0 0 0 1px var(--nm-field-border); }
 .nm-pill-ghost:hover:not(:disabled) { background: var(--nm-selected); }
 .nm-pill-sm { min-height: 30px; padding: 0 14px; font-size: 13px; }
+/* The thinking-level pill sits beside the model: small, quiet, and its menu is the app's own
+   layer (the composer clips an absolutely placed panel). */
+.nm-reasoning { display: inline-flex; align-items: center; min-width: 0; }
+.nm-reasoning-row { display: flex; align-items: center; margin-top: 6px; }
+.nm-reasoning-pill { gap: 4px; min-height: 28px; padding: 0 9px; font-size: 12px; }
+.nm-reasoning-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+.nm-reasoning-panel { position: fixed; z-index: 1300; display: flex; flex-direction: column; gap: 2px; overflow: auto; padding: 6px; border: 1px solid var(--nm-field-border); border-radius: 12px; background: var(--nm-card); box-shadow: 0 18px 44px rgba(0,0,0,0.18); }
+.nm-reasoning-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, inherit); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.nm-reasoning-option:hover { background: var(--nm-hover); }
+.nm-reasoning-option.nm-selected { font-weight: 600; }
+.nm-reasoning-note { margin: 4px 9px 2px; color: var(--dsw-alias-label-tertiary, inherit); font-size: 11px; }
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-reasoning-pill {
+  min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent; box-shadow: none; color: var(--dsw-alias-label-secondary, inherit);
+  font-size: 12px; font-weight: 400;
+}
+html[data-nanomuse] [data-composer-card] [data-slot="conversation.input.model"] .nm-reasoning-pill:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover, var(--nm-hover));
+}
 .nm-field { box-sizing: border-box; width: 100%; height: 44px; padding: 0 14px; border: 1px solid var(--nm-field-border); border-radius: 12px; background: var(--nm-field); color: var(--dsw-alias-label-primary); font: inherit; font-size: 15px; outline: none; transition: border-color 120ms, box-shadow 120ms; }
 .nm-field::placeholder { color: var(--dsw-alias-label-tertiary); }
 .nm-field:focus { border-color: var(--nm-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nm-blue) 25%, transparent); }

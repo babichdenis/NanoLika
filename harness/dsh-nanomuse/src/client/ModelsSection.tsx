@@ -17,6 +17,7 @@ import { useLive } from './live.ts'
 import type { ModelGroup } from './model-list.ts'
 import type { CatalogueModel } from './ModelEstimate.tsx'
 import { ModelPicker, type PickerHead } from './ModelPicker.tsx'
+import { ReasoningPill } from './ReasoningPill.tsx'
 import { openRemoteModelPicker } from './RemoteModelPicker.ts'
 import { MODELS_SECTION, providersNamed, useProviders, type ModelOption } from './OwnKey.tsx'
 import { OWN_KEYS_SECTION } from './MuseSettings.tsx'
@@ -37,6 +38,8 @@ export interface SlotView {
   off?: boolean
   /** What *Automatic* resolves to right now (the three dependent slots); `model` '' when nothing can. Absent on an older host. */
   auto?: { provider: string; providerLabel: string; model: string }
+  /** The thinking levels the chosen model takes, and the one stored beside it; absent when there is no control. */
+  reasoning?: { levels: string[]; default?: string; chosen?: string }
 }
 
 /** The slots that follow the order unless the person chose: everything but chat, the anchor. */
@@ -80,7 +83,7 @@ export function useModels(t: Translate): { view: ModelsView | undefined; error: 
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick((n) => n + 1), [])
   const own = live.ownKeys
-  const key = `${own?.count ?? 0}|${own?.chatgpt.signedIn ?? false}|${own?.capabilities.join(',') ?? ''}|${live.cloud.signedIn}|${live.handsModel}`
+  const key = `${own?.count ?? 0}|${own?.chatgpt.signedIn ?? false}|${own?.capabilities.join(',') ?? ''}|${live.cloud.signedIn}|${live.handsModel}|${live.modelsRev ?? 0}`
   useEffect(() => {
     let alive = true
     call<ModelsView>('models')
@@ -185,11 +188,11 @@ export function makeModelsSection(t: Translate) {
         .catch((err: unknown) => setFailed(failureText(t, err)))
         .finally(() => setSwitching(false))
     }
-    const pick = (slot: Slot, provider: string, model: string) => {
+    const pick = (slot: Slot, provider: string, model: string, reasoningEffort?: string) => {
       setBusy(slot)
       setFailed(undefined)
       // `auto` drops the stored choice (`model: ''`), nothing else; the row then says what the order gives
-      call<SlotView>(ROUTE[slot], model === 'off' ? { model: 'off' } : model === 'auto' ? { model: '' } : { model, provider })
+      call<SlotView>(ROUTE[slot], model === 'off' ? { model: 'off' } : model === 'auto' ? { model: '' } : { model, provider, ...(reasoningEffort ? { reasoningEffort } : {}) })
         .then((row) => {
           if (view && (slot === 'image' || slot === 'video') && row && 'options' in row) setView({ ...view, slots: { ...view.slots, [slot]: row } })
           setSaid((prev) => ({ ...prev, [slot]: model === 'auto' ? undefined : slot === 'chat' ? t('mlAppliesNew') : slot === 'hands' ? t('mlHandsLive') : t('mlSaved') }))
@@ -225,6 +228,17 @@ export function makeModelsSection(t: Translate) {
         h('div', { className: 'nm-row-main' },
           h('span', { className: 'nm-row-title' }, slotTitle(t, slot)),
           h('span', { className: 'nm-row-sub nm-wrap' }, sub),
+          slot === 'chat' && row.provider && row.model && row.reasoning
+            ? h('span', { className: 'nm-reasoning-row' }, h(ReasoningPill, {
+                t,
+                levels: row.reasoning.levels,
+                value: row.reasoning.chosen ?? '',
+                ...(row.reasoning.default ? { fallback: row.reasoning.default } : {}),
+                disabled: busy !== null,
+                testId: 'nm-reasoning-own',
+                onPick: (level) => pick('chat', row.provider, row.model, level),
+              }))
+            : null,
           slot === 'hands' && view.handsExcluded.length ? h('span', { className: 'nm-row-sub nm-wrap', style: muted }, t('mlHandsExcluded', { providers: view.handsExcluded.join(t('langTag') === 'zh' ? '、' : ', ') })) : null),
         empty ? null : h(SlotPicker, { t, slot, view: row, disabled: busy !== null, ...(gate ? { catalogue: gate.catalogue } : {}), onPick: (provider, model) => pick(slot, provider, model) }))
     })
@@ -278,6 +292,18 @@ export function makeModelsSection(t: Translate) {
         },
           h('span', { className: 'nm-mp-btn-text' }, view.slots.chat.options.find(o => o.provider === 'nanomuse' && o.id === view.slots.chat.model)?.name ?? t('nlUseCloud')),
           h(IconChevronDown, { size: 16 })),
+
+        view.slots.chat.provider === 'nanomuse' && view.slots.chat.model && view.slots.chat.reasoning
+          ? h('span', { className: 'nm-reasoning-row' }, h(ReasoningPill, {
+              t,
+              levels: view.slots.chat.reasoning.levels,
+              value: view.slots.chat.reasoning.chosen ?? '',
+              ...(view.slots.chat.reasoning.default ? { fallback: view.slots.chat.reasoning.default } : {}),
+              disabled: busy !== null || !view.cloudModels,
+              testId: 'nm-reasoning-cloud',
+              onPick: (level) => pick('chat', 'nanomuse', view.slots.chat.model, level),
+            }))
+          : null,
 
         libraryRows.length > 1 ? h('div', { style: { marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--nm-divider)' }, 'data-testid': 'nm-cloud-all-models' },
           h('p', { className: 'nm-row-sub nm-wrap', style: { margin: '0 0 6px' } }, t('mlAllModelsHint')),

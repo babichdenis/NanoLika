@@ -179,7 +179,9 @@ export interface Live {
   /** When the hands last saw an all-black screen (macOS: Screen Recording missing or granted after launch); 0 when never. */
   blackScreenAt: number
   /** Conversation sync (C8): `rev` moves with every change; the session that is the account's main conversation; the chat's own model per session. Absent on an older host. */
-  sync?: { rev: number; mainSession: string; models?: Record<string, string> } | undefined
+  sync?: { rev: number; mainSession: string; models?: Record<string, string>; reasoning?: Record<string, string> } | undefined
+  /** Moves when the model menu (ids or their thinking levels) changes. */
+  modelsRev?: number
   /** Own keys and the ChatGPT sign-in (C11): how many rows, what everything configured can do, where the sign-in stands. Absent on an older host. */
   ownKeys?: LiveOwnKeys | undefined
   /** The hands' trajectory (0.1.40): `rev` moves with every step; the sessions with a run to look back at. Absent on an older host. */

@@ -218,6 +218,9 @@ CREATE TABLE IF NOT EXISTS sync_conversations (
     deleted       INTEGER NOT NULL DEFAULT 0,
     deleted_at    INTEGER,                    -- tombstones are swept after 30 days
     seq           INTEGER NOT NULL,           -- the account's change counter when last written
+    model         TEXT NOT NULL DEFAULT '',   -- the chat's own model, chosen on any device
+    archived      INTEGER NOT NULL DEFAULT 0,
+    reasoning     TEXT NOT NULL DEFAULT '',   -- its thinking level; '' = the provider's default
     PRIMARY KEY (account_id, cid)
 );
 CREATE INDEX IF NOT EXISTS sync_conversations_seq ON sync_conversations(account_id, seq);
@@ -508,6 +511,7 @@ class Database:
         add("accounts", "is_test", "INTEGER NOT NULL DEFAULT 0")
         add("sync_conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
         add("sync_conversations", "model", "TEXT NOT NULL DEFAULT ''")
+        add("sync_conversations", "reasoning", "TEXT NOT NULL DEFAULT ''")
 
         if "identifier_enc" not in cols("accounts"):
             self._conn.execute("ALTER TABLE accounts ADD COLUMN identifier_enc TEXT NOT NULL DEFAULT ''")

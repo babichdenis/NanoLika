@@ -2513,10 +2513,30 @@ async def test_reasoning_passes_through_and_is_paid_for(stack):
     assert all(f["model"] == "deepseek-v4.1-flash" for f in frames)
     me = (await client.get("/v1/me", headers=auth)).json()
     assert me["recent"][0]["prompt_tokens"] == 40 and me["recent"][0]["completion_tokens"] == 26
-    # the default stands when the app says nothing: no reasoning asked, none returned
+    # A model with documented thinking levels: silence means the provider's own default,
+    # not the operator's "thinking off" — otherwise the picker's "по умолчанию" would
+    # quietly mean "выключено".
     r = await client.post("/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history}, headers=auth)
-    assert r.status_code == 200 and up.state.requests[-1][2]["enable_thinking"] is False
+    assert r.status_code == 200
+    sent = up.state.requests[-1][2]
+    assert "enable_thinking" not in sent and "reasoning_effort" not in sent
     assert "reasoning_content" not in r.json()["choices"][0]["message"]
+
+    # A level the menu documents goes upstream beside the thinking toggle; "default" and a
+    # level the model never offered leave the provider's own default alone.
+    r = await client.post("/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": "max"}, headers=auth)
+    assert r.status_code == 200
+    sent = up.state.requests[-1][2]
+    assert sent["reasoning_effort"] == "max" and sent["enable_thinking"] is True
+    for effort in ("default", "xhigh"):
+        r = await client.post("/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": effort}, headers=auth)
+        assert r.status_code == 200
+        sent = up.state.requests[-1][2]
+        assert "reasoning_effort" not in sent and "enable_thinking" not in sent
+
+    # A model with no documented levels keeps the shipped default: nothing turned on.
+    r = await client.post("/v1/chat/completions", json={"model": "qwen3.8-27b", "messages": history}, headers=auth)
+    assert r.status_code == 200 and up.state.requests[-1][2]["enable_thinking"] is False
 
 
 async def test_a_chat_starts_while_anything_of_the_allowance_is_left():

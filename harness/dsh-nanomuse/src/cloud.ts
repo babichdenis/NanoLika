@@ -81,6 +81,8 @@ export const TOKEN_REF = 'NANOMUSE_CLOUD_TOKEN'
 export const PROVIDER_ID = 'nanomuse'
 /** The profile row the Models page edits too. */
 export const LLM_ROW = 'llm-pi-ai'
+/** A model choice with the thinking level beside it: the shape both dsh's selection and our state use. */
+export interface ModelPick { provider: string; model: string; reasoningEffort?: string }
 /** The `409 chat_on_cloud` body's sentence (the web client shows its own words for the code). */
 export const CHAT_ON_CLOUD_MESSAGE = 'Add a provider of your own first; with NanoLika Cloud off, nothing else could answer.'
 /** dsh-base's stock chat default (its `agent-default-model` row): what `adoptOwnDefault` and `adoptDefaultModel` read as "nothing chosen yet". */
@@ -332,7 +334,9 @@ export interface LiveState {
   /** When the hands last saw an all-black screen (macOS: Screen Recording missing, or granted after the app started); 0 when they have not. */
   blackScreenAt: number
   /** Conversation sync (C8): `rev` moves with every change pulled or pushed; the session that is the account's main conversation; the chat's own model per session. */
-  sync: { rev: number; mainSession: string; models: Record<string, string> }
+  sync: { rev: number; mainSession: string; models: Record<string, string>; reasoning?: Record<string, string> }
+  /** Moves when the model menu (ids or their thinking levels) changes. */
+  modelsRev?: number
   /** Own keys and the ChatGPT sign-in (C11): how many rows, what the sign-in is doing, whether its proxy is up. */
   ownKeys: { count: number; capabilities: Capability[]; chatgpt: { signedIn: boolean; label: string; proxy: boolean; login: LoginView } }
   /** The hands' trajectory (0.1.40): `rev` moves with every step; the sessions that have a run to look back at. The runs themselves are `GET /trajectory?session=`. */
@@ -364,6 +368,8 @@ export interface ModelOption {
   name: string
   /** The relay's recommended one for that lane (marked in the picker). */
   recommended?: boolean
+  /** The thinking levels the model takes, when it takes any. */
+  reasoning?: { levels: string[]; default?: string }
 }
 
 /** How the last mount of the hands' MCP client went (`hands-tools.ts`); `at` 0 before the first. */
@@ -426,6 +432,8 @@ interface State {
   turnOutcomes?: TurnOutcome[]
   account?: Account
   models?: RelayModel[]
+  /** Moves when the model menu (ids or their thinking levels) changes, so the open windows refetch. */
+  modelsRev?: number
   deviceId?: string
   deviceName?: string
   /** `true` lets every device of the account run things here without asking; absent or `false` means ask. */
@@ -956,8 +964,8 @@ export default class NanomuseCloud extends Service {
           },
           // another device chose this chat's model (C7): the session answers with it from the
           // next turn on; the slot (the default for new chats) is left alone
-          model: async (sessionId, model) => {
-            await this.selectSessionModel(sessionId, model, PROVIDER_ID)
+          model: async (sessionId, model, reasoningEffort) => {
+            await this.selectSessionModel(sessionId, model, PROVIDER_ID, reasoningEffort)
           },
           inject: async (sessionId, text) => {
             const resolved = await ctx.sessionController.resolveAgent(sessionId as SessionId)
@@ -1599,12 +1607,18 @@ export default class NanomuseCloud extends Service {
     if (this.cloudModels()) {
       const models = this.state.models ?? []
       const pick = pickChatModel(models)
-      for (const m of models) if (modelFor(m).includes('chat')) out.push({ provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', id: m.id, name: m.name || m.id, ...(pick && m.id === pick.id ? { recommended: true } : {}) })
+      for (const m of models) if (modelFor(m).includes('chat')) out.push({ provider: PROVIDER_ID, providerLabel: 'NanoLika Cloud', id: m.id, name: m.name || m.id, ...(m.reasoning ? { reasoning: m.reasoning } : {}), ...(pick && m.id === pick.id ? { recommended: true } : {}) })
       out.sort((a, b) => Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)))
     }
     for (const [id, row] of Object.entries(this.state.providers ?? {})) {
       if (!row.capabilities.includes('chat')) continue
-      for (const m of row.models) if (m.kind === 'chat') out.push({ provider: id, providerLabel: row.label, id: m.id, name: m.name })
+      for (const m of row.models) {
+        if (m.kind !== 'chat') continue
+        const reasoning = m.reasoning
+          ? { levels: m.reasoning.levels.map(String), ...(m.reasoning.default && m.reasoning.default !== 'none' ? { default: m.reasoning.default } : {}) }
+          : undefined
+        out.push({ provider: id, providerLabel: row.label, id: m.id, name: m.name, ...(reasoning ? { reasoning } : {}) })
+      }
     }
     return out
   }
@@ -2229,7 +2243,7 @@ export default class NanomuseCloud extends Service {
   }
 
   /** The chat model new chats answer through and where it lives: the account, an own row, or something else of dsh's (`provider` then names it, `model` empty). */
-  chatChoice(): { provider: string; model: string } {
+  chatChoice(): ModelPick {
     try {
       const current = this.defaultModelService()?.currentSelection()
       if (!current) return { provider: '', model: '' }
@@ -2347,7 +2361,7 @@ export default class NanomuseCloud extends Service {
     }
   }
 
-  private defaultModelService(): { currentSelection(): { provider: string; model: string }; saveSelection(next: { provider: string; model: string }): Promise<void> } | undefined {
+  private defaultModelService(): { currentSelection(): ModelPick; saveSelection(next: ModelPick): Promise<void> } | undefined {
     return (this.ctx as unknown as { get(name: string): unknown }).get('agentDefaultModel') as ReturnType<NanomuseCloud['defaultModelService']>
   }
 
@@ -2362,19 +2376,31 @@ export default class NanomuseCloud extends Service {
   }
 
   /**
+   * The thinking level a pick may carry: one the model documents, or nothing. `default`
+   * and an empty value mean "let the provider decide" — dsh then sends no effort at all.
+   */
+  private cleanReasoning(provider: string, model: string, effort: string | undefined): string | undefined {
+    const text = String(effort ?? '').trim().toLowerCase()
+    if (!text || text === 'default' || text === 'none') return undefined
+    const option = this.chatOptions().find((o) => o.provider === provider && o.id === model)
+    return option?.reasoning?.levels.includes(text) ? text : undefined
+  }
+
+  /**
    * Make an account chat model — or an own row's (C11) — the default for new chats (Settings →
    * Models → Chat). The hands, the pictures and the clips follow the chat provider while the
    * person has not chosen them, so the hands' environment is written again.
    */
-  async setChatModel(id: string, provider = PROVIDER_ID): Promise<void> {
+  async setChatModel(id: string, provider = PROVIDER_ID, reasoningEffort?: string): Promise<void> {
     if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) {
       if (provider === PROVIDER_ID) await this.refreshCloudModels()
       if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) throw new RelayError(400, 'bad_model', 'Not a chat model of the account or of an own key')
     }
     const svc = this.defaultModelService()
     if (!svc) throw new RelayError(503, 'no_models', 'Not available yet')
-    await svc.saveSelection({ provider, model: id })
-    const followed = await this.mainChatFollows(provider, id).catch((error: unknown) => {
+    const effort = this.cleanReasoning(provider, id, reasoningEffort)
+    await svc.saveSelection({ provider, model: id, ...(effort ? { reasoningEffort: effort } : {}) })
+    const followed = await this.mainChatFollows(provider, id, effort).catch((error: unknown) => {
       this.ctx.logger.warn('nanomuse cloud: the main chat did not follow the chat model: %s', message(error))
       return false
     })
@@ -2383,6 +2409,7 @@ export default class NanomuseCloud extends Service {
     if (followed && provider === PROVIDER_ID) {
       const main = this.syncMainSession()
       if (main && typeof this.sync?.modelPicked === 'function') this.sync.modelPicked(main, id)
+      if (main && typeof this.sync?.reasoningPicked === 'function') this.sync.reasoningPicked(main, effort ?? '')
     }
     await this.writeHands().catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: hands model not written: %s', message(error)))
     this.broadcast()
@@ -2394,7 +2421,7 @@ export default class NanomuseCloud extends Service {
    * picked here does not follow the person into the next chat. The model must be one this
    * device can route: an account chat model or an own row's.
    */
-  async selectSessionModel(sessionId: string, id: string, provider = PROVIDER_ID): Promise<void> {
+  async selectSessionModel(sessionId: string, id: string, provider = PROVIDER_ID, reasoningEffort?: string): Promise<void> {
     if (!sessionId) throw new RelayError(400, 'bad_chat', 'Choose a chat first')
     if (!id) throw new RelayError(400, 'bad_model', 'A model is required')
     if (!this.chatOptions().some((o) => o.id === id && o.provider === provider)) {
@@ -2405,16 +2432,17 @@ export default class NanomuseCloud extends Service {
     if (!ctx) throw new RelayError(503, 'not_ready', 'The session API is not up yet')
     const resolved = await ctx.sessionController.resolveAgent(sessionId as SessionId)
     if ('error' in resolved) throw new RelayError(404, 'not_found', String(resolved.error))
+    const effort = this.cleanReasoning(provider, id, reasoningEffort)
     // The registry's own call records the choice in the session's log (it answers with it next
     // turn) and leaves the default alone; an older harness only has the Remote, whose selection
     // dsh turns into the default — the slot is put back right after.
-    const agents = (ctx as unknown as { get(name: string): unknown }).get('agents') as { selectForNextRequest?(agent: unknown, selection: { provider: string; model: string }): void } | undefined
+    const agents = (ctx as unknown as { get(name: string): unknown }).get('agents') as { selectForNextRequest?(agent: unknown, selection: ModelPick): void } | undefined
     if (agents?.selectForNextRequest) {
-      agents.selectForNextRequest(resolved.agent, { provider, model: id })
+      agents.selectForNextRequest(resolved.agent, { provider, model: id, ...(effort ? { reasoningEffort: effort } : {}) })
       return
     }
     const slot = this.defaultModelService()?.currentSelection()
-    await ctx.sessionController.selectModel({ sessionId: sessionId as SessionId, provider, model: id })
+    await ctx.sessionController.selectModel({ sessionId: sessionId as SessionId, provider, model: id, ...(effort ? { reasoningEffort: effort } : {}) })
     if (slot) await this.defaultModelService()?.saveSelection(slot).catch(() => undefined)
   }
 
@@ -2462,11 +2490,15 @@ export default class NanomuseCloud extends Service {
    * The chat's model picked in this app: applied here and, for an account model, told to the
    * relay at once so the same chat answers the same way in the browser, Telegram and MAX.
    */
-  async setSessionChatModel(sessionId: string, id: string, provider = PROVIDER_ID): Promise<{ provider: string; model: string }> {
-    await this.selectSessionModel(sessionId, id, provider)
-    if (provider === PROVIDER_ID) this.sync?.modelPicked(sessionId, id)
+  async setSessionChatModel(sessionId: string, id: string, provider = PROVIDER_ID, reasoningEffort?: string): Promise<ModelPick> {
+    await this.selectSessionModel(sessionId, id, provider, reasoningEffort)
+    const effort = this.cleanReasoning(provider, id, reasoningEffort)
+    if (provider === PROVIDER_ID) {
+      this.sync?.modelPicked(sessionId, id)
+      this.sync?.reasoningPicked(sessionId, effort ?? '')
+    }
     this.broadcast()
-    return { provider, model: id }
+    return { provider, model: id, ...(effort ? { reasoningEffort: effort } : {}) }
   }
 
   /**
@@ -2480,19 +2512,20 @@ export default class NanomuseCloud extends Service {
    * says so. A main chat under *Use NanoLika Cloud this time* finishes that turn on the account
    * and comes back to the pick. True when the session was moved (or will be after the turn).
    */
-  async mainChatFollows(provider: string, model: string): Promise<boolean> {
+  async mainChatFollows(provider: string, model: string, reasoningEffort?: string): Promise<boolean> {
     const main = this.syncMainSession()
     const ctx = this.sessionCtx
     if (!main || !ctx) return false
+    const effort = reasoningEffort || undefined
     const held = this.cloudOnce.get(main)
     if (held) {
-      if (held.provider === provider && held.model === model) return false
-      this.cloudOnce.set(main, { provider, model, at: held.at })
+      if (held.provider === provider && held.model === model && held.reasoningEffort === effort) return false
+      this.cloudOnce.set(main, { provider, model, ...(effort ? { reasoningEffort: effort } : {}), at: held.at })
       return true
     }
     const current = await this.sessionSelection(main).catch(() => undefined)
-    if (current && current.provider === provider && current.model === model) return false
-    await ctx.sessionController.selectModel({ sessionId: main as SessionId, provider, model })
+    if (current && current.provider === provider && current.model === model && current.reasoningEffort === effort) return false
+    await ctx.sessionController.selectModel({ sessionId: main as SessionId, provider, model, ...(effort ? { reasoningEffort: effort } : {}) })
     this.ctx.logger.info('nanomuse: the main chat follows the chat model, %s/%s', provider, model)
     return true
   }
@@ -2526,6 +2559,12 @@ export default class NanomuseCloud extends Service {
     const video = await this.videoEndpoint()
     const media = this.state.media ?? {}
     const slot = (provider: string, model: string, options: ModelOption[], chosen: boolean): SlotView => ({ provider, providerLabel: provider ? this.labelOf(provider) : '', model, options, chosen })
+    // the chat's own level: what the slot stored beside the model, or nothing when the model
+    // documents no control (the picker then shows no badge at all)
+    const chatOption = this.chatOptions().find((option) => option.provider === chat.provider && option.id === chat.model)
+    const chatReasoning = chatOption?.reasoning
+      ? { ...chatOption.reasoning, ...(chat.reasoningEffort ? { chosen: chat.reasoningEffort } : {}) }
+      : undefined
     // what *Automatic* gives right now: the order with the stored choice set aside
     const auto = (provider: string, model: string): NonNullable<SlotView['auto']> => ({ provider, providerLabel: provider ? this.labelOf(provider) : '', model })
     const handsAuto = this.handsChoice({ auto: true })
@@ -2539,7 +2578,7 @@ export default class NanomuseCloud extends Service {
       signedIn,
       cloudModels: this.cloudModels(),
       slots: {
-        chat: slot(chat.provider, chat.model, this.chatOptions(), Boolean(chat.provider)),
+        chat: { ...slot(chat.provider, chat.model, this.chatOptions(), Boolean(chat.provider)), ...(chatReasoning ? { reasoning: chatReasoning } : {}) },
         hands: { ...slot(hands.provider, hands.model, this.handsOptions(), handsChosen), auto: auto(handsAuto.provider, handsAuto.model) },
         image: { ...slot(image?.instanceId ?? '', image?.model ?? '', this.imageOptions(), imageChosen), auto: auto(imageAuto?.instanceId ?? '', imageAuto?.model ?? '') },
         video: { ...slot(video?.instanceId ?? '', video?.model ?? '', await this.videoOptions(), videoChosen), ...(media.videoModel === VIDEO_OFF ? { off: true } : {}), auto: auto(videoAuto?.instanceId ?? '', videoAuto?.model ?? '') },
@@ -2661,7 +2700,8 @@ export default class NanomuseCloud extends Service {
       ownClip: this.ownClip.view(),
       ownClips: this.ownClip.moods(),
       blackScreenAt: this.blackScreenAt,
-      sync: this.sync ? { rev: this.sync.view().rev, mainSession: this.sync.state.mainSession, models: this.sync.view().models } : { rev: 0, mainSession: '', models: {} },
+      modelsRev: this.state.modelsRev ?? 0,
+      sync: this.sync ? { rev: this.sync.view().rev, mainSession: this.sync.state.mainSession, models: this.sync.view().models, reasoning: this.sync.view().reasoning } : { rev: 0, mainSession: '', models: {}, reasoning: {} },
       ownKeys: {
         count: Object.keys(this.state.providers ?? {}).length,
         capabilities: this.capabilities(),
@@ -3329,11 +3369,13 @@ export default class NanomuseCloud extends Service {
       if (!token) return this.status()
       try {
         const [account, models] = await Promise.all([this.relay.me(token), this.relay.models(token)])
-        // The row is rewritten when the menu changed — and when it is simply not there: a profile
-        // made again around an account that is still signed in has the credential but no row.
-        if (!sameModels(models, this.state.models ?? []) || !this.providerPresent() || !this.providerBudgetCurrent()) await this.writeProvider(models)
+        const menuChanged = !sameModels(models, this.state.models ?? [])
+        // The row is written on every refresh, not only when the menu changed: the row also
+        // carries what each model can do (its thinking levels today), and an app update that
+        // learns a new fact must reach `llm-pi-ai` without waiting for a menu edit.
+        await this.writeProvider(models)
         await this.adoptDefaultModel(models)
-        this.state = { ...this.state, account, models }
+        this.state = { ...this.state, account, models, ...(menuChanged ? { modelsRev: (this.state.modelsRev ?? 0) + 1 } : {}) }
         await this.writeState()
         await this.writeHands().catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: hands model not written: %s', message(error)))
         await this.profile.pull(token).catch((error: unknown) => this.ctx.logger.warn('nanomuse: profile pull failed: %s', message(error)))
@@ -3361,9 +3403,11 @@ export default class NanomuseCloud extends Service {
     if (!token) return
     const models = await this.relay.models(token)
     const changed = !sameModels(models, this.state.models ?? [])
-    this.state = { ...this.state, models }
+    this.state = { ...this.state, models, ...(changed ? { modelsRev: (this.state.modelsRev ?? 0) + 1 } : {}) }
+    // the row follows the menu every time: it carries the thinking levels too, and a stale
+    // row makes dsh refuse a level the model actually takes
+    await this.writeProvider(models).catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: provider row not rewritten: %s', message(error)))
     if (changed) {
-      await this.writeProvider(models).catch((error: unknown) => this.ctx.logger.warn('nanomuse cloud: provider row not rewritten: %s', message(error)))
       await this.writeState()
       this.broadcast()
     }
@@ -3519,7 +3563,7 @@ export default class NanomuseCloud extends Service {
     const pick = pickChatModel(models)
     if (!pick) return
     const svc = (this.ctx as unknown as { get(name: string): unknown }).get('agentDefaultModel') as
-      | { currentSelection(): { provider: string; model: string }; saveSelection(next: { provider: string; model: string }): Promise<void> }
+      | { currentSelection(): ModelPick; saveSelection(next: ModelPick): Promise<void> }
       | undefined
     if (!svc) return
     try {
@@ -4332,12 +4376,13 @@ export default class NanomuseCloud extends Service {
       if (req.method === 'POST' && route === '/chat-model') {
         const body = await json(req)
         const provider = typeof body.provider === 'string' && body.provider ? body.provider : PROVIDER_ID
+        const effort = typeof body.reasoningEffort === 'string' ? body.reasoningEffort : undefined
         // with a chat: that chat's own model only (the default stays where the person put it);
         // without one: Settings → Models → Chat, the default for new chats
         if (typeof body.sessionId === 'string' && body.sessionId) {
-          return send(res, 200, await this.setSessionChatModel(body.sessionId, String(body.model ?? ''), provider))
+          return send(res, 200, await this.setSessionChatModel(body.sessionId, String(body.model ?? ''), provider, effort))
         }
-        await this.setChatModel(String(body.model ?? ''), provider)
+        await this.setChatModel(String(body.model ?? ''), provider, effort)
         return send(res, 200, this.chatChoice())
       }
       if (req.method === 'POST' && route === '/hands-model') {
@@ -4542,6 +4587,12 @@ export function providerRowFor(openaiBase: string, models: RelayModel[]): Record
       // и «Основной» упирается в отказ провайдера на 620K промпта.
       ...(m.contextLength ? { contextWindow: m.contextLength } : {}),
       ...(m.maxOutput ? { maxTokens: m.maxOutput } : {}),
+      // The relay documents which thinking levels a model takes; the adapter draws the
+      // choice from this and puts `reasoning_effort` on the wire (the relay translates it
+      // for the provider behind it).
+      ...(m.reasoning && m.reasoning.levels.length
+        ? { reasoningEfforts: Object.fromEntries(m.reasoning.levels.map((level) => [level, level])), compat: { thinkingFormat: 'openai', supportsReasoningEffort: true } }
+        : {}),
     })),
   }
 }
@@ -4612,7 +4663,7 @@ function sameModels(a: RelayModel[], b: RelayModel[]): boolean {
   const key = (models: RelayModel[]) =>
     models
       .filter((m) => m.kind === 'chat')
-      .map((m) => `${m.id}:${m.name}:${m.inputModalities.join(',')}:${m.contextLength ?? 0}:${m.maxOutput ?? 0}`)
+      .map((m) => `${m.id}:${m.name}:${m.inputModalities.join(',')}:${m.contextLength ?? 0}:${m.maxOutput ?? 0}:${m.reasoning?.levels.join(',') ?? ''}:${m.reasoning?.default ?? ''}`)
       .sort()
       .join('|')
   return key(a) === key(b)
