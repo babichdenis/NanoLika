@@ -23,7 +23,9 @@ export class ChatSync {
   /* The chat's own model goes with its conversation, not with the browser: the same
      chat answers with the same model in the app, in Telegram and here. */
   const model=String(chat.model||''), modelDirty=model!==String(chat.sharedModel||'');
-  if(!pending.length&&!modelDirty&&!chat.syncCid&&!force)return;
+  /* The thinking level rides with the model: a chat answers the same way in every client. */
+  const reasoning=String(chat.reasoning||''), reasoningDirty=reasoning!==String(chat.sharedReasoning||'');
+  if(!pending.length&&!modelDirty&&!reasoningDirty&&!chat.syncCid&&!force)return;
   const fresh=!chat.syncCid;
   if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}
   // The first chat this browser puts in the cloud is the account's main chat (S9):
@@ -39,7 +41,7 @@ export class ChatSync {
    /* Файлы остаются в браузере, но в тексте для других устройств и мессенджеров
       честно сказано, что было вложено: иначе там видно только подпись. */
    const syncedText=m=>{const names=(m.files||[]).map(file=>file.name).filter(Boolean);return names.length?`${m.content||''}${m.content?'\n\n':''}[вложение: ${names.join(', ')}]`:(m.content||'')};
-   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true,...(modelDirty?{model}:{})}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:syncedText(m),created_at:Math.floor(m.at/1000),attachments:(m.files||[]).map(file=>({name:file.name,mime:file.mime,size:file.size,url:file.url||''}))}))};
+   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true,...(modelDirty?{model}:{}),...(reasoningDirty?{reasoning}:{})}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:syncedText(m),created_at:Math.floor(m.at/1000),attachments:(m.files||[]).map(file=>({name:file.name,mime:file.mime,size:file.size,url:file.url||''}))}))};
    const result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);
    const clash=(result.rejected||[]).find(r=>r.reason==='main_exists'&&r.cid_main&&r.cid===chat.syncCid);
    if(clash&&!adopted){
@@ -51,7 +53,7 @@ export class ChatSync {
     return this.upload(chat,session,{force:true,adopted:true});
    }
    if(result.rejected?.length)throw new Error('Some chat messages could not be synced');
-   for(const m of batch)m.shared=true;chat.shared=true;if(modelDirty)chat.sharedModel=model;await this.save(chat);
+   for(const m of batch)m.shared=true;chat.shared=true;if(modelDirty)chat.sharedModel=model;if(reasoningDirty)chat.sharedReasoning=reasoning;await this.save(chat);
   }
  }
  /* The relay's replies go into the local copy once: an update of a message already kept does not change it. */
@@ -71,7 +73,7 @@ export class ChatSync {
   if(result.complete!==true||(result.account_id&&result.account_id!==session.owner))return;
   this.catalogRows=result.conversations||[];
   const existing=new Map(this.getChats().map(c=>[c.syncCid,c]));const rows=[];const ids=new Set();
-  for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;/* the model another device chose for this chat */const model=typeof meta.model==='string'?meta.model:'';if(model){chat.model=model;}chat.sharedModel=model;rows.push(chat);await this.save(chat);}
+  for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;/* the model another device chose for this chat */const model=typeof meta.model==='string'?meta.model:'';if(model){chat.model=model;}chat.sharedModel=model;const reasoning=typeof meta.reasoning==='string'?meta.reasoning:'';if('reasoning' in meta){chat.reasoning=reasoning;chat.sharedReasoning=reasoning;}rows.push(chat);await this.save(chat);}
   const deleted=new Set((result.deleted||[]).map(c=>c.cid));
   for(const chat of this.getChats())if(!ids.has(chat.syncCid)){if(deleted.has(chat.syncCid)){chat.deleted=true;await this.remove(chat.key);}else rows.push(chat);}
   if(!this.valid(session))return;

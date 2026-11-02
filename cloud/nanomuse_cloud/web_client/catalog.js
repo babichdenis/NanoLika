@@ -50,6 +50,7 @@ export function allModels(catalogue){
           priceOut:priceOutOf(facts,kind),
           locked:Boolean(row.plan_locked||facts.plan_locked||row.locked||facts.locked),
           vision:row.architecture?.input_modalities?.includes?.('image')===true||facts.vision===true||row.input_modalities?.includes?.('image')===true,
+          reasoning:facts.reasoning&&Array.isArray(facts.reasoning.levels)&&facts.reasoning.levels.length?facts.reasoning:null,
           forChat:Array.isArray(facts.for)?facts.for.includes('chat'):kind==='chat'};
  });
 }

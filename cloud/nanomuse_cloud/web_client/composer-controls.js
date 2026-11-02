@@ -1,9 +1,11 @@
-import {allModels,chatModel,chatModels} from './catalog.js?v=20261101-notip';
-import {openModelPicker} from './model-picker.js?v=20261101-notip';
+import {allModels,chatModel,chatModels} from './catalog.js?v=20261102-reasoning';
+import {openModelPicker} from './model-picker.js?v=20261102-reasoning';
 export function enterSends(event){return event.key==='Enter'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&!event.isComposing&&event.keyCode!==229&&!event.repeat;}
-export function installComposerControls({form,message,select,refresh,status,session,api,words,onOtherPicked,onPick,storage=localStorage}){
- let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),enabledByKind={},selected='',chatModel='',owner='',pending=null,busy=false,generation=0;
+export function installComposerControls({form,message,select,reasoningSelect,refresh,status,session,api,words,onOtherPicked,onPick,onReasoning,storage=localStorage}){
+ let rows=[],all=[],allChat=[],allVisible=[],favSet=new Set(),enabledSet=new Set(),enabledByKind={},selected='',chatModel='',effort='',owner='',pending=null,busy=false,generation=0;
  let kind='chat',query='';
+ const LEVELS={minimal:'мин',low:'низкий',medium:'средний',high:'высокий',xhigh:'очень высокий',max:'макс'};
+ const levelName=level=>LEVELS[level]||level;
  const key=()=> 'nl.web.model.'+owner;
  const paint=()=>{select.disabled=busy||!rows.length;refresh.disabled=busy||!!pending;};
  // ── выбор модели: общий компонент model-picker ────────────────────
@@ -11,7 +13,21 @@ export function installComposerControls({form,message,select,refresh,status,sess
  select.parentNode.insertBefore(wrap,select);wrap.append(select);select.hidden=true;
  const trigger=document.createElement('button');trigger.type='button';trigger.className='mp-trigger';trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-label','Выбрать модель');
  wrap.append(trigger);
- function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?m.name:'Модель';}
+ function paintTrigger(){const m=allVisible.find(x=>x.id===selected)||allChat.find(x=>x.id===selected);trigger.textContent=m?m.name:'Модель';paintReasoning(m);}
+ /* The thinking level belongs to the model: a model the relay documents levels for gets a
+    second, small select beside the model; one without levels hides it. "по умолчанию" is
+    the absence of the field, so the provider picks its own. */
+ function paintReasoning(row){
+  if(!reasoningSelect)return;
+  const levels=Array.isArray(row?.reasoning?.levels)?row.reasoning.levels:[];
+  if(!levels.length){reasoningSelect.hidden=true;reasoningSelect.replaceChildren();if(effort){effort='';if(row)onReasoning?.('');}return;}
+  if(effort&&!levels.includes(effort))effort='';
+  reasoningSelect.replaceChildren();
+  const auto=document.createElement('option');auto.value='';auto.textContent='по умолчанию';reasoningSelect.append(auto);
+  for(const level of levels){const option=document.createElement('option');option.value=level;option.textContent=levelName(level);reasoningSelect.append(option);}
+  reasoningSelect.value=effort;
+  reasoningSelect.hidden=false;
+ }
  /* Картинка/видео/аудио из избранного: назначаем моделью для этого дела, текстовую
     модель чата не трогаем. Так выбор в пикере что-то делает, а не просто серый текст. */
  async function chooseOther(id,kind){
@@ -31,7 +47,7 @@ export function installComposerControls({form,message,select,refresh,status,sess
   // страницы: перед открытием перечитываем каталог, старый список оставляем,
   // если сеть не ответила.
   try{await load();}catch{}
-  openModelPicker({models:chosenModels(),favourites:favSet,selected,onPickOther:chooseOther,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
+  openModelPicker({models:chosenModels(),favourites:favSet,selected,onPickOther:chooseOther,onManage:()=>document.getElementById('model-browse')?.click(),onPick:(id)=>{if(!allChat.some(m=>m.id===id))return;selected=id;select.value=id;if(effort){effort='';onReasoning?.('');}select.dispatchEvent(new Event('change'));paintTrigger();},onToggleFavourite:(id,next)=>{next?favSet.add(id):favSet.delete(id);void saveFavourites();const pref=allChat.filter(m=>favSet.has(m.id)||enabledSet.has(m.id));all=pref.length?pref:allChat;applyFilters();}});
  };
  const applyFilters=()=>{
   const q=query.trim().toLowerCase();
@@ -46,7 +62,8 @@ export function installComposerControls({form,message,select,refresh,status,sess
   paint();
  };
  message.addEventListener('keydown',event=>{if(enterSends(event)){event.preventDefault();form.requestSubmit();}});
- select.addEventListener('change',()=>{if(busy||!rows.some(row=>row.id===select.value))return;selected=select.value;chatModel=selected;try{storage.setItem(key(),selected);}catch{}onPick?.(selected);});
+ select.addEventListener('change',()=>{if(busy||!rows.some(row=>row.id===select.value))return;selected=select.value;chatModel=selected;if(effort){effort='';onReasoning?.('');}try{storage.setItem(key(),selected);}catch{}onPick?.(selected);paintTrigger();});
+ if(reasoningSelect)reasoningSelect.addEventListener('change',()=>{effort=reasoningSelect.value;onReasoning?.(effort);});
  async function load(){
   const identity=session();if(!identity?.owner||!identity.key)return '';
   if(owner!==identity.owner){owner=identity.owner;rows=[];selected='';generation++;pending=null;}
@@ -103,5 +120,8 @@ export function installComposerControls({form,message,select,refresh,status,sess
    Promise.resolve().then(()=>load()).then(()=>{if(chatModel&&(allChat.some(m=>m.id===chatModel)||allVisible.some(m=>m.id===chatModel))){selected=chatModel;select.value=chatModel;paintTrigger();}}).catch(()=>{});
   },
   chatModel:()=>chatModel,
+  /** The chat's own thinking level, '' = the provider's default. */
+  setChatReasoning(level){effort=String(level||'');paintTrigger();},
+  reasoning:()=>effort,
   modelVision};
 }

@@ -1,11 +1,11 @@
 import {fundsView} from './funds.js';
 import {navigationTools,performNavigation} from './navigation-tool.js';
-import {ChatSync} from './chat-sync.js?v=20261101-model';
+import {ChatSync} from './chat-sync.js?v=20261102-reasoning';
 import {ConversationOpener} from './conversation-open.js';
 import {text,locales} from './i18n.js?v=20261031-ui2';
 import * as db from './storage.js';
 import {readReply} from './stream.js';
-import {installComposerControls} from './composer-controls.js?v=20261101-chatmodel';
+import {installComposerControls} from './composer-controls.js?v=20261102-reasoning';
 import {installModelSheet} from './model-sheet.js?v=20261030-remote';
 import {setAvatarMood,refreshAvatarImages} from './brand-avatar.js';
 // The entry bridge names the channel; a plain /web/ visit is just Web.
@@ -145,7 +145,7 @@ function renderConversationActions(){$('conversation-actions')?.remove();}
 async function selectModel(){return composerControls.model();}
 /* Каждый разговор помнит свою модель: выбрали рисующую в одном чате — текстовый
    соседний остался на своей. Пусто — значит как в аккаунте по умолчанию. */
-function applyChatModel(chat){composerControls.setChatModel(chat?.model||'');}
+function applyChatModel(chat){composerControls.setChatModel(chat?.model||'');composerControls.setChatReasoning(chat?.reasoning||'');}
 function wireMessage(message,seesImages=true){let text=message.content||'';for(const file of message.files||[]){if(!file.text)continue;text+=(text?'\n\n':'')+'--- Файл: '+file.name+' ---\n'+file.text;}const images=(message.files||[]).filter(file=>file.dataUrl);if(!images.length)return text;
  /* Текстовая модель картинку не получит: вместо ошибки релея она сама скажет об этом
     человеку — как в opencode. */
@@ -188,7 +188,7 @@ if($('attach')&&$('attach-input')){
 }
 $('composer').onsubmit=async event=>{event.preventDefault();if(controller||sending||opening)return;if(!authenticated()){showAuth();return;}const value=$('message').value.trim();if(!value&&!pendingFiles.length)return;if(value.length>30000){notice(t('tooLong'));return;}if(!navigator.onLine){notice(t('offline'));return;}const files=pendingFiles.map(file=>({...file}));sending=true;if(files.length)await Promise.all(files.map(async file=>{const url=await uploadAttachment(file);if(url)file.url=url;}));if(!current)await newChat();const chat=current,owner=session.owner,key=session.key,runEpoch=epoch;notice('');pendingFiles=[];renderPending();chat.messages.push({role:'user',content:value,at:Date.now(),...(files.length?{files}:{})});if(chat.messages.filter(m=>m.role==='user').length===1)chat.title=(value||files.map(file=>file.name).join(', ')).slice(0,52);chat.updated=Date.now();await persist(chat);try{await chatSync.publish(chat);}catch(e){notice(t('syncError'));}const messages=contextFor(chat,composerControls.modelVision()!=='no');const responseMessage={role:'assistant',content:'',at:Date.now(),interrupted:true};chat.messages.push(responseMessage);$('message').value='';controller=new AbortController();const signal=controller.signal;$('send').hidden=true;$('stop').hidden=false;updateStatus();renderConversation();
  try{const selected=await selectModel();for(let round=0;round<2;round++){
- const response=await fetch('/v1/chat/completions',{method:'POST',cache:'no-store',signal,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model:selected,messages,stream:true,store:false,max_tokens:4096,...(round===0?{tools:navigationTools,parallel_tool_calls:false}:{})})});
+ const response=await fetch('/v1/chat/completions',{method:'POST',cache:'no-store',signal,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model:selected,messages,stream:true,store:false,max_tokens:4096,...(chat.reasoning?{reasoning_effort:chat.reasoning}:{}),...(round===0?{tools:navigationTools,parallel_tool_calls:false}:{})})});
  let calls=[];const answer=await readReply(response,value=>{responseMessage.content=value;if(session?.owner===owner&&current?.key===chat.key)renderConversation();},value=>{calls=value;});
  if(!calls.length)break;
  if(round!==0)throw new Error('Repeated navigation request');
@@ -219,7 +219,7 @@ window.addEventListener('online',()=>{updateStatus();notice('');});window.addEve
 const chatSync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;if(current&&!rows.some(c=>c.key===current.key))current=null;},current:()=>current,save:chat=>db.save('chats',chat),remove:key=>db.remove('chats',key),onChange:change=>{renderChats();if(change?.messages)renderConversation();if(current)applyChatModel(current);}});
 const channelOpener=new ConversationOpener({session:()=>session,device:chatSync.device,language:()=>lang});
 
-const composerControls=installComposerControls({form:$('composer'),message:$('message'),select:$('model-select'),refresh:$('models-refresh'),status:$('model-status'),session:()=>session,api,words:{loading:t('modelsLoading'),empty:t('modelsEmpty'),error:t('modelsError')},onOtherPicked:(kind,name,ok)=>{if(!ok){notice(t('requestError'));return;}const label={image:t('pickedImage'),video:t('pickedVideo'),audio:t('pickedAudio')}[kind]||t('pickedModel');notice(label+' '+name);},onPick:id=>{const chat=current;if(!chat||chat.local)return;chat.model=id;chat.updated=Date.now();void persist(chat);void chatSync.publish(chat).catch(()=>notice(t('syncError')));}});
+const composerControls=installComposerControls({form:$('composer'),message:$('message'),select:$('model-select'),reasoningSelect:$('reasoning-select'),refresh:$('models-refresh'),status:$('model-status'),session:()=>session,api,words:{loading:t('modelsLoading'),empty:t('modelsEmpty'),error:t('modelsError')},onOtherPicked:(kind,name,ok)=>{if(!ok){notice(t('requestError'));return;}const label={image:t('pickedImage'),video:t('pickedVideo'),audio:t('pickedAudio')}[kind]||t('pickedModel');notice(label+' '+name);},onPick:id=>{const chat=current;if(!chat||chat.local)return;chat.model=id;chat.reasoning='';chat.updated=Date.now();void persist(chat);void chatSync.publish(chat).catch(()=>notice(t('syncError')));},onReasoning:level=>{const chat=current;if(!chat||chat.local)return;chat.reasoning=level;chat.updated=Date.now();void persist(chat);void chatSync.publish(chat).catch(()=>notice(t('syncError')));}});
 // Фильтры списка моделей: тип и поиск по названию. Список показывает все типы, чтобы
 // рисующие модели было видно и можно было проверить, что они есть.
 {const search=$('model-search'),kind=$('model-kind');
