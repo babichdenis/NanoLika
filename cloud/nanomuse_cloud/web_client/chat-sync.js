@@ -167,7 +167,7 @@ export class ChatSync {
  });}
  /** Put the cloud back on a local chat: a fresh conversation id (the old one is a tombstone) and its text goes up again. */
  async sync(chat){return this.run(async()=>{
-  const session=this.session();if(!session?.key||chat.owner!==session.owner)return;
+  const session=this.session();if(!session?.key||chat.owner!==session.owner)throw new Error('Sign in again');
   delete chat.syncCid;chat.local=false;chat.shared=false;for(const m of chat.messages)m.shared=false;
   await this.save(chat);
   await this.upload(chat,session,{force:true});

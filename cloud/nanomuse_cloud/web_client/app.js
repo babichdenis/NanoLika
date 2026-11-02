@@ -77,7 +77,7 @@ function cloudAction(chat){const cloud=cloudState(chat),label=cloud==='local'?t(
  button.onclick=async()=>{
   if(cloud!=='local'&&!confirm(t('leaveCloudConfirm')))return;
   button.disabled=true;
-  try{await (cloud==='local'?chatSync.sync(chat):chatSync.unsync(chat));notice(cloud==='local'?t('chatInCloud'):t('chatLeftCloud'));}
+  try{await (cloud==='local'?chatSync.sync(chat):chatSync.unsync(chat));chatListSignature='';await loadChats();renderChats();notice(cloud==='local'?t('chatInCloud'):t('chatLeftCloud'));}
   catch(error){notice(syncReason(error));}
   if(current?.key===chat.key)renderConversation();
   chatListSignature='';renderChats();
@@ -152,7 +152,7 @@ function wireMessage(message,seesImages=true){let text=message.content||'';for(c
  if(!seesImages)return (text?text+'\n\n':'')+'[К сообщению приложены изображения: '+images.map(file=>file.name).join(', ')+'. Эта модель не видит изображения. Скажи об этом прямо, попроси описать словами или предложи выбрать модель, которая видит картинки. Не пересказывай этот служебный текст.]';
  const parts=[{type:'text',text:text||'Посмотри приложенные изображения: '+images.map(file=>file.name).join(', ')}];for(const image of images)parts.push({type:'image_url',image_url:{url:image.dataUrl}});return parts;}
 function wireLength(message,seesImages=true){const parts=wireMessage(message,seesImages);return typeof parts==='string'?parts.length:parts.reduce((sum,part)=>sum+(part.type==='text'?part.text.length:4000),0);}
-function contextFor(chat,seesImages=true){let n=0;const selected=[];for(const m of chat.messages.filter(m=>(m.content||m.files?.length)&&!m.interrupted).slice(-20).reverse()){const length=wireLength(m,seesImages);if(n+length>65000&&selected.length)break;selected.unshift({role:m.role,content:wireMessage(m,seesImages)});n+=length;}return [{role:'system',content:'You are Lika, a warm and practical personal assistant. Reply in '+({ru:'Russian',zh:'Simplified Chinese',en:'English'}[lang])+'. This browser client has one explicit conversation_open navigation tool, but no computer-control, filesystem or publishing tools. Never claim you clicked, changed a file, sent a message or ran background work. Help with explanations, drafts, plans and code. Documents in the local library are not available to you unless the user explicitly provides their content. Do not claim access to other conversations or devices. All synced chats share one account list. New chat creates a separate shared conversation with empty history. Opening an existing chat in a messenger preserves that chat and does not create another conversation. Never say you created a chat when only switching channels, or say no new chat was created when the user pressed New chat. For an explicit request to open this conversation in Telegram, MAX or on the computer, call conversation_open with the chosen destination. Do not claim success until the tool result confirms it. A new conversation requires the New chat control; navigation preserves the current conversation. Do not confuse these actions. Other apps are optional: the browser works on its own. Connection setup is in the account menu under Devices and channels. Do not tell the user to click channel buttons above the chat. Use the conversation_open tool for a spoken or typed navigation request. If it fails, explain the failure briefly; do not investigate infrastructure or repeat the action automatically.'},...selected];}
+function contextFor(chat,seesImages=true){let n=0;const selected=[];for(const m of chat.messages.filter(m=>(m.content||m.files?.length)&&!m.interrupted).slice(-20).reverse()){const length=wireLength(m,seesImages);if(n+length>65000&&selected.length)break;selected.unshift({role:m.role,content:wireMessage(m,seesImages)});n+=length;}return [{role:'system',content:'You are Lika, a warm and practical personal assistant. Reply in '+({ru:'Russian',zh:'Simplified Chinese',en:'English'}[lang])+'. This browser client has one explicit conversation_open navigation tool, but no computer-control, filesystem or publishing tools. Never claim you clicked, changed a file, sent a message or ran background work. Help with explanations, drafts, plans and code. Documents in the local library are not available to you unless the user explicitly provides their content. Do not claim access to other conversations or devices. You cannot draw pictures in this chat: pictures are made with the picture button beside the attachments, so never pretend to draw with text, characters or ASCII art; say the picture button is the way. All synced chats share one account list. New chat creates a separate shared conversation with empty history. Opening an existing chat in a messenger preserves that chat and does not create another conversation. Never say you created a chat when only switching channels, or say no new chat was created when the user pressed New chat. For an explicit request to open this conversation in Telegram, MAX or on the computer, call conversation_open with the chosen destination. Do not claim success until the tool result confirms it. A new conversation requires the New chat control; navigation preserves the current conversation. Do not confuse these actions. Other apps are optional: the browser works on its own. Connection setup is in the account menu under Devices and channels. Do not tell the user to click channel buttons above the chat. Use the conversation_open tool for a spoken or typed navigation request. If it fails, explain the failure briefly; do not investigate infrastructure or repeat the action automatically.'},...selected];}
 /* ── вложения: картинки сжимаем в браузере, текстовые файлы читаем в контекст ── */
 const ATTACH_MAX=4,ATTACH_IMAGE_SIDE=1200,ATTACH_TEXT_CHARS=20000,ATTACH_FILE_BYTES=50*1024*1024;
 let pendingFiles=[];
@@ -211,7 +211,14 @@ async function drawPicture(prompt){
   updateStatus();await persist(chat);renderConversation();
   const info=await fetch('/v1/me/models',{headers:{Authorization:'Bearer '+key}}).then(r=>r.json());
   const shelf=info?.shelf||{};
-  const model=(shelf.default&&shelf.default.image)||(shelf.enabled&&shelf.enabled.image&&shelf.enabled.image[0])||(info?.models||[]).find(m=>m.kind==='image')?.id;
+  const models=info?.models||[];
+  // A plan-locked picture model answers with a refusal, not a picture: the draw takes the
+  // first picture model this account may really use, default first.
+  const usable=m=>m&&m.kind==='image'&&m.available!==false&&m.plan_locked!==true;
+  const byId=id=>models.find(m=>m.id===id);
+  const model=(usable(byId(shelf.default&&shelf.default.image))&&shelf.default.image)
+    ||((shelf.enabled&&shelf.enabled.image)||[]).find(id=>usable(byId(id)))
+    ||models.find(usable)?.id;
   if(!model)throw Object.assign(new Error(t('drawNoModel')),{code:'no_image_model'});
   const response=await fetch('/v1/images/generations',{method:'POST',cache:'no-store',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,prompt,n:1,size:'1024x1024'})});
   const data=await response.json().catch(()=>({}));
@@ -226,7 +233,8 @@ async function drawPicture(prompt){
   let remote='';
   try{if(src.startsWith('data:')){const blob=dataUrlBlob(src);const form=new FormData();form.append('file',blob,'lika-picture.jpg');const upload=await fetch('/v1/attachments',{method:'POST',headers:{Authorization:'Bearer '+key},body:form});const saved=await upload.json().catch(()=>({}));if(upload.ok&&saved.media_url)remote=String(saved.media_url);}}catch{}
   if(!remote&&!chat.syncCid)chat.local=true;
-  chat.messages.push({role:'assistant',content:'',image:remote||src,at:Date.now(),...(remote?{files:[{name:'lika-picture.jpg',mime:'image/jpeg',size:0,url:remote}]}:{})});
+  const pictureSize=remote?(()=>{try{const comma=src.indexOf(',');return Math.floor(atob(src.slice(comma+1)).length);}catch{return 0;}})():0;
+  chat.messages.push({role:'assistant',content:'',image:remote||src,at:Date.now(),...(remote?{files:[{name:'lika-picture.jpg',mime:'image/jpeg',size:pictureSize,url:remote}]}:{})});
  }catch(error){
   console.error('draw failed', error);
   if(error.code==='insufficient_funds'||error.status===402){if(!fundsNotice(error))notice(error.message||t('drawFailed'));}
