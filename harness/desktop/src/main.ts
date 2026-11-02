@@ -6,6 +6,7 @@ import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, readFileSync,
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { editContextMenu } from "./context-menu";
 import { GLOW_HIDE_MS, GLOW_SETTLE_MS, type Leak, LeakLog, leakIsEvidence, leakIsReal, pointerAction, REARM_DELAYS_MS, staleInstance } from "./glow";
 import { inviteFromArgv, inviteFromUrl, INVITE_SCHEME } from "./invite-link";
 import { defaultHelperPath, HELPER_NAME, installedHelperPath, MacHelper } from "./mac-helper";
@@ -2366,6 +2367,10 @@ function createWindow(): BrowserWindow {
     if (verdict === "allow") return;
     e.preventDefault();
     if (verdict === "external") void shell.openExternal(url);
+  });
+  win.webContents.on("context-menu", (_event, params) => {
+    const items = editContextMenu(params);
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
   });
   win.webContents.session.setPermissionRequestHandler((_wc, permission, callback, details) => {
     // the microphone for voice input and the clipboard for the copy buttons, for the Host's
