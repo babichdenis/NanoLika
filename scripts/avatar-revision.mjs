@@ -11,6 +11,11 @@ export function avatarRevision(folder) {
       hash.update(name)
       hash.update(readFileSync(new URL(name, folder)))
     }
+    if (mood !== 'error') {
+      const small = `lika-${mood}-small.webm`
+      hash.update(small)
+      hash.update(readFileSync(new URL(small, folder)))
+    }
   }
   return hash.digest('hex').slice(0, 16)
 }

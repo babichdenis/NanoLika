@@ -284,7 +284,9 @@ export function apply(ctx: ClientContext): void {
     }
     if (!saved) return
     try {
-      const { skins } = await call<{ skins: Skin[] }>('skins/list?refresh=1')
+      // no `refresh=1`: the skin is applied from the host's cache; a forced rescan of the
+      // skins folder on every start was the first thing the window waited for
+      const { skins } = await call<{ skins: Skin[] }>('skins/list')
       const theme = skins.find((s) => s.id === saved && s.kind === 'theme' && s.light && s.dark)
       if (theme) applyTheme(themeCss(theme))
     } catch {

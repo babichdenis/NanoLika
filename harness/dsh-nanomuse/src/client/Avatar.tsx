@@ -65,7 +65,7 @@ export function ownClipUrl(ownClip: LiveOwnClip | null | undefined, mood?: Mood,
  * drawn face has one only when this computer drew it (`motion`), and the URL carries the
  * clip's mtime so a redrawn clip is fetched anew.
  */
-export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', motion?: LiveMotion, stillLook = false): string | null {
+export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', motion?: LiveMotion, stillLook = false, size = 512): string | null {
   if (profile?.plain === true) return null
   if (mood === 'error' || profile?.avatar === 'emoji') return null
   // Settings → Pictures and clips off: her own pictures stay, nothing moves
@@ -77,7 +77,9 @@ export function clipUrl(profile: LiveProfile | undefined, mood: Mood = 'idle', m
   }
   // The bundled clips are VP9 with an alpha channel: the beige studio background is
   // gone, and the face still breathes and sways around the video.
-  return `nanomuse/assets/lika-${mood}.webm?v=${BUILTIN_AVATAR_REVISION}`
+  // a 66–96 px face is drawn from the 256 px clip: 80 KB instead of 1.5 MB, and the
+  // header is the one place the face is always mounted
+  return `nanomuse/assets/lika-${mood}${size <= 96 ? '-small' : ''}.webm?v=${BUILTIN_AVATAR_REVISION}`
 }
 
 /**
@@ -122,7 +124,7 @@ export function Avatar({ size, profile, mood = 'idle', className, title, still =
   const video = useRef<HTMLVideoElement | null>(null)
   const standard = profile?.avatar !== 'face' && profile?.avatar !== 'emoji' && !live.ownClip && !live.ownClips?.[mood]
   const operator = useOperatorAvatar(standard)
-  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion, live.stillLook === true) ?? operator?.clips[mood]
+  const candidate = still || reducedMotion || size < CLIP_MIN_PX ? null : ownClipUrl(live.ownClip, mood, live.ownClips) ?? clipUrl(profile, mood, live.motion, live.stillLook === true, size) ?? operator?.clips[mood]
   const clip = candidate && !noClip.has(candidate) ? candidate : null
   const plain = profile?.plain === true
   const localPoster = stillUrl(profile, mood, live.ownClip, live.ownClips)

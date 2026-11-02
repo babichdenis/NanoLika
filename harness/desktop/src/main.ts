@@ -500,9 +500,11 @@ function startHost(): Promise<string> {
         }
         const shellPath = loginShellPath();
         if (shellPath) env.PATH = shellPath;
-        // The proxy for the model providers (the Cloud page's Network row): on the Host's
-        // environment, which Node's fetch reads with NODE_USE_ENV_PROXY and the runtime's
-        // httpx reads as it is; the relay and loopback are on NO_PROXY (src/proxy.ts).
+        // The shell's own ambient proxy variables are for the browser, not for the Host: an
+        // unsupported `ALL_PROXY=socks5://…` made dsh warn, and a flaky local proxy could hold
+        // the first start for minutes. The app's Proxy setting (Data controls → Network) is
+        // the only proxy the Host gets, and the relay stays on NO_PROXY (src/proxy.ts).
+        for (const name of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy", "NO_PROXY", "no_proxy", "NODE_USE_ENV_PROXY"]) delete env[name];
         const proxied = proxyEnv(prefs.proxy, prefs.relayHosts ?? []);
         Object.assign(env, proxied);
         hostProxy = proxied.HTTPS_PROXY ?? "";

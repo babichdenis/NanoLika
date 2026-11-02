@@ -99,7 +99,16 @@ export async function serveAsset(req: IncomingMessage, res: ServerResponse, face
   } catch {
     return notFound(res)
   }
-  res.writeHead(200, { 'content-type': type, 'content-length': size, 'cache-control': face ? 'public, max-age=3600' : 'no-cache' })
+  // The built-in assets carry a `?v=<revision>` from the build (scripts/avatar-revision.mjs),
+  // so a versioned URL never changes and the browser keeps it: without this every mount of
+  // the face downloaded the same 1.5 MB clip again. A face from the account is keyed by its
+  // id, and without a version it still revalidates in an hour.
+  const versioned = url.searchParams.has('v')
+  res.writeHead(200, {
+    'content-type': type,
+    'content-length': size,
+    'cache-control': versioned ? 'public, max-age=31536000, immutable' : face ? 'public, max-age=3600' : 'no-cache',
+  })
   if (req.method === 'HEAD') {
     res.end()
     return
