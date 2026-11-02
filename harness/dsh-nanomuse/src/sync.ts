@@ -131,6 +131,24 @@ export interface WireMessage {
   truncated: boolean
   created_at: number
   deleted: boolean
+  /** What travelled with the message: name, mime, size and a link for pictures (the relay's /v1/files). */
+  attachments?: WireAttachment[]
+}
+
+export interface WireAttachment {
+  name: string
+  mime: string
+  size: number
+  url: string
+}
+
+/** A picture another device sent is shown as a Markdown image under its text: the chat's
+ * renderer already knows Markdown, and the link is the relay's stable /v1/files one. */
+export function textWithPictures(text: string, attachments?: WireAttachment[]): string {
+  const pictures = (attachments ?? []).filter((a) => a.url && /^image\//i.test(a.mime || ''))
+  if (!pictures.length) return text
+  const tail = pictures.map((a) => `![${a.name || 'picture'}](${a.url})`).join('\n\n')
+  return text ? `${text}\n\n${tail}` : tail
 }
 
 export interface SyncChanges {
@@ -311,6 +329,13 @@ function toMessage(value: unknown): WireMessage {
     truncated: m.truncated === true,
     created_at: Number(m.created_at ?? 0),
     deleted: m.deleted === true,
+    ...(Array.isArray(m.attachments)
+      ? {
+          attachments: (m.attachments as Record<string, unknown>[])
+            .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === 'object')
+            .map((a) => ({ name: String(a.name ?? ''), mime: String(a.mime ?? ''), size: Number(a.size ?? 0) || 0, url: String(a.url ?? '') })),
+        }
+      : {}),
   }
 }
 
@@ -1928,7 +1953,7 @@ export class SyncEngine {
     // the reply arrived: that device is not working on it any more; another device's line stays
     if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
-    const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
+    const line: RemoteLine = { mid: m.mid, role: m.role, text: textWithPictures(m.text, m.attachments), at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
     if (m.role === 'user' && allowPromote && this.options.sessions.promote) {
       const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
       if (promoted) {

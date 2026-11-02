@@ -1960,7 +1960,7 @@ def create_app(
         data = await file.read(settings.max_request_bytes + 1)
         if len(data) > settings.max_request_bytes:
             raise CloudError(413, "too_large", "The file is larger than this relay accepts")
-        allowed = mime.startswith(("image/", "text/")) or mime in {
+        allowed = mime.startswith(("image/", "text/", "audio/", "video/")) or mime in {
             "application/pdf",
             "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
