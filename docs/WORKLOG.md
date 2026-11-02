@@ -83,6 +83,22 @@
   (site-packages read-only, потому монтируются отдельные файлы), CSP — `api.py` из
   `deepseek-routing-20261027`, релей перезапущен. Коммит `d205fd9a`.
 
+## 2026-11-02 · Пометка «не сохранено в облаке» (D3, интерфейс)
+
+- **Что видно.** У сообщения, которое релей не принял навсегда, под пузырём появляется
+  красная строка: «Not saved to the cloud», «The chat was deleted in the cloud» или
+  «The cloud did not accept this message»; причина из `sync_failed` — в `title`.
+  Пока строка ждёт повторной попытки (`sync_refused`), видно «Waiting for the cloud to
+  accept this message». Раньше причина хранилась, но человек её не видел.
+- **Где.** `web/src/types.ts` (поля `sync_failed`/`sync_refused`), `ChatScreen.tsx`
+  (`syncFailureText`, строка под user/assistant), переводы в `zh-CN.ts`. Сборка пишет
+  статику прямо в `nanomuse/server/static`.
+- **Проверка.** `npm run typecheck`, 129 тестов web, сборка; бот на
+  `nanomuse:bot-20261102g`, healthy.
+- **Грабля деплоя.** Теги `bot-20261102e` и `f` в compose не применялись: `sed` менял
+  строку, которой там не было (в файле стоял `d`), и бот продолжал работать на старом
+  образе. Теперь тег проверяется `grep` до `up -d`, а после — `docker inspect`.
+
 ## 2026-11-02 · Релей обновлён: температура на чат (D8)
 
 - **Точечно, без полной пересборки.** Рабочий релей собран оверрайдами; `sync.py`
