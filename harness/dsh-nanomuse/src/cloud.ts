@@ -977,6 +977,8 @@ export default class NanomuseCloud extends Service {
         token: () => this.token(),
         deviceId: () => this.state.deviceId ?? '',
         isTaskSession: (sessionId) => Object.values(this.state.taskSessions ?? {}).includes(sessionId),
+        // the rooms come up after this service, so they are looked up at the time of asking
+        isBatchSession: (sessionId) => (this.ctx.get('nanomuseRooms') as { isBatch?(id: string): boolean } | undefined)?.isBatch?.(sessionId) === true,
         load: () => this.state.sync,
         save: async (state) => {
           this.state.sync = state

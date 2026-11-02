@@ -239,10 +239,15 @@ interface Store {
   activity: ActivityRecord[]
   /** When the first-run introduction was posted, so it happens once. */
   introducedAt: number
+  /**
+   * The chats of the batches run so far (the feed's), newest first: a batch is the agent's
+   * workbench, not a chat of the person's, so these stay out of the conversation sync.
+   */
+  batches: string[]
 }
 
 /** What the browser mirrors. */
-export interface RoomsView extends Omit<Store, 'activity'> {
+export interface RoomsView extends Omit<Store, 'activity' | 'batches'> {
   busy: { feed: boolean; ideas: boolean }
   /** The chats of the batches running right now (the feed's): the chats column leaves them out. */
   batches: string[]
@@ -293,6 +298,9 @@ interface Run {
   reject(error: Error): void
 }
 
+/** Batch chats remembered (one a day for the feed): enough for the archive's lifetime. */
+const BATCHES_KEEP = 400
+
 const EMPTY: Store = {
   lang: '',
   feed: { instructions: '', generatedAt: 0, lastTry: 0, posts: [], routine: { on: true, time: '08:00', ensuredAt: 0 } },
@@ -303,6 +311,7 @@ const EMPTY: Store = {
   docs: { identity: '', soul: '', identityAt: 0, soulAt: 0 },
   activity: [],
   introducedAt: 0,
+  batches: [],
 }
 /** Activity records kept, steps per record, and how much of a step's text. */
 const ACTIVITY_RECORDS = 80
@@ -1526,6 +1535,11 @@ export default class NanomuseRooms extends Service {
     return Boolean(resolved && 'agent' in resolved)
   }
 
+  /** Whether a session is (or was) one of the batches' chats: the sync leaves those out. */
+  isBatch(sessionId: string): boolean {
+    return this.runs.has(sessionId as SessionId) || this.store.batches.includes(sessionId)
+  }
+
   /**
    * A background batch: a chat of its own, the final answer returned, the chat archived. The
    * prompt is the rooms' own, not the person's words, so it goes out as a notice (`summary`, one
@@ -1542,6 +1556,8 @@ export default class NanomuseRooms extends Service {
       const created = await sc.create({ agentPreset: 'nanomuse', cwd: homeDir() })
       sessionId = created.sessionId
       this.store.feed.sessionId = String(sessionId)
+      // remembered before a word is said, so the sync never takes it for the person's chat
+      this.store.batches = [String(sessionId), ...this.store.batches.filter((id) => id !== String(sessionId))].slice(0, BATCHES_KEEP)
       await this.save()
       resolved = await sc.resolveAgent(sessionId)
     }
@@ -1798,6 +1814,7 @@ export default class NanomuseRooms extends Service {
         docs: { ...EMPTY.docs, ...(raw.docs && typeof raw.docs === 'object' ? raw.docs : {}) },
         activity: Array.isArray(raw.activity) ? raw.activity.filter((r) => r && typeof r === 'object' && Array.isArray(r.steps)) : [],
         introducedAt: typeof raw.introducedAt === 'number' ? raw.introducedAt : 0,
+        batches: Array.isArray(raw.batches) ? raw.batches.filter((id): id is string => typeof id === 'string').slice(0, BATCHES_KEEP) : [],
       }
     } catch {
       return structuredClone(EMPTY)
