@@ -65,7 +65,9 @@ def _money(row: dict[str, Any]) -> str:
     if kind == "chat":
         return f"вход {_rub(rates.get('input'))} / выход {_rub(rates.get('output'))} за 1M токенов"
     if kind == "image":
-        extra = f", 2K {_rub(rates.get('image_2k'))}" if rates.get("image_2k") else ""
+        sizes = (row.get("supports") or {}).get("sizes") if isinstance(row.get("supports"), dict) else None
+        has_2k = sizes is None or "2048x2048" in sizes
+        extra = f", 2K {_rub(rates.get('image_2k'))}" if rates.get("image_2k") and has_2k else ""
         return f"{_rub(rates.get('image'))} за картинку{extra}"
     if kind == "video":
         clip = flags.get("clip_seconds") or row.get("clip_seconds") or 5
@@ -115,6 +117,27 @@ def _accepts(row: dict[str, Any]) -> str:
 
 
 class Models(BaseTool):
+    async def _pick(self, client: Any, kind: str) -> str:
+        """The first model of this kind the plan really opens: the shelf's own choice first."""
+        try:
+            menu = await client.me_models()
+        except CloudError:
+            return ""
+        rows = menu.get("models") if isinstance(menu, dict) else None
+        rows = rows if isinstance(rows, list) else []
+        shelf = menu.get("shelf") if isinstance(menu, dict) else None
+        shelf = shelf if isinstance(shelf, dict) else {}
+        preferred = (shelf.get("default") or {}).get(kind) if isinstance(shelf.get("default"), dict) else None
+        for row in rows:
+            if not isinstance(row, dict) or _kind(row) != kind or not _open(row):
+                continue
+            if str(row.get("id") or "") == str(preferred or ""):
+                return str(row.get("id") or "")
+        for row in rows:
+            if isinstance(row, dict) and _kind(row) == kind and _open(row):
+                return str(row.get("id") or "")
+        return ""
+
     async def _with_balance(self, client: Any, price: dict[str, Any]) -> ToolResult:
         total = price.get("total_rub")
         line = f"The exact request costs {_rub(total)}"
@@ -193,7 +216,15 @@ class Models(BaseTool):
         try:
             if str(action) == "quote":
                 if not str(model).strip():
-                    return ToolResult.fail("quote needs the model to price")
+                    model = await self._pick(client, str(kind or "image"))
+                    if not model:
+                        return ToolResult(
+                            output=(
+                                "No models of that kind are open on this plan. A top-up or another "
+                                "plan opens more, and the cabinet's Models page shows what the "
+                                "account has now."
+                            )
+                        )
                 params: dict[str, Any] = {}
                 if size:
                     params["size"] = size
@@ -268,12 +299,15 @@ class Models(BaseTool):
                 + (" · выбран" if chosen else "")
             )
         if not lines:
-            return ToolResult.output(
-                "No models of that kind are open on this plan. A top-up or another plan opens "
-                "more, and the cabinet's Models page shows what the account has now."
+            return ToolResult(
+                output=(
+                    "No models of that kind are open on this plan. A top-up or another plan opens "
+                    "more, and the cabinet's Models page shows what the account has now."
+                )
             )
+        shown, more = lines[:12], max(0, len(lines) - 12)
         head = "Models on this plan:" if not kind else f"Models on this plan ({kind}):"
-        tail = ""
+        tail = f"\n… and {more} more; the cabinet's Models page has the full list." if more else ""
         if "image" in wanted:
-            tail = f"\nPicture sizes: {SIZES}."
-        return ToolResult(output=head + "\n" + "\n".join(lines) + tail)
+            tail += f"\nPicture sizes: {SIZES}."
+        return ToolResult(output=head + "\n" + "\n".join(shown) + tail)

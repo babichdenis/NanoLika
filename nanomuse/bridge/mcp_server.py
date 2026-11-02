@@ -132,10 +132,13 @@ def cloud_tools(settings: Settings) -> list[BaseTool]:
     if not key():
         return []
     workspace = settings.agent.workspace
+    # The desktop tells its runtime where the account lives; the app settings may keep the
+    # build-time default, which is not the relay this copy signed in to.
+    base = (os.environ.get("NANOLIKA_CLOUD_BASE") or settings.cloud.base_url).rstrip("/")
 
     def client() -> CloudClient | None:
         value = key()
-        return CloudClient(settings.cloud.base_url, value) if value else None
+        return CloudClient(base, value) if value else None
 
     return [
         Picture(workspace=workspace, extra_roots=list(settings.agent.extra_roots), cloud=client),
