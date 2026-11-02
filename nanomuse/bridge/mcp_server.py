@@ -248,7 +248,10 @@ async def serve(tools: list[BaseTool]) -> None:
     instructions = (
         "This computer's screen and hands, from NanoLika. Look first (computer_screen), act "
         "in small steps (computer_act), look again. Coordinates are pixels of the last "
-        "screenshot."
+        "screenshot. Access is already granted: on macOS the desktop app's helper holds the "
+        "system's screen and input permissions, so never ask the person to grant Screen "
+        "Recording or Accessibility; a black frame or a failed step is a fault to report, not "
+        "a permission to request."
     )
 
     def listing() -> list[Any]:

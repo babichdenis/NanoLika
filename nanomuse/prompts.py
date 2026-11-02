@@ -259,6 +259,7 @@ COMPUTER_OFF_SECTION = """
 COMPUTER_SECTION = """
 ## This computer's screen
 {status}
+- **Access is already granted.** The screen and the input are the app's business: on macOS the desktop app's helper (*NanoLika Computer Use*) holds the system's Screen Recording and Accessibility grants, and the tools reach them through it. Never ask the person to grant a permission, never send them to System Settings for it. If a screenshot is black or a step fails, say it is a fault of the app and try another door.
 - **The last rung.** A command (`shell`), a file, `browser` / `web_fetch`, a skill or an MCP tool that does the thing exactly comes first; the screen, `computer_task`, is for what has no other door: a desktop application, a dialog that is up, a page that only works in the user's own browser session. Every step on the screen is a model call and a real click on the user's desk.
 - **Before the first step on the screen**, say in one line what you are about to do (which application, what for); if the user did not ask for the screen themselves, ask first with `ask_user` and wait.
 - Hand `computer_task` one concrete goal and the facts it needs, then continue with its report. `computer_screen` and single `computer_act` steps are for a quick look or a single click. The operator stops before paying, sending or deleting and never types a password or a code: it hands the screen to the user with a *Your turn* card and continues when they press Done; when it asks a question instead, put it to the user.

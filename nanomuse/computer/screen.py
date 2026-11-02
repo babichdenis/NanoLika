@@ -108,6 +108,21 @@ BLACK_SCREEN_HINT = (
 )
 
 
+def black_screen_hint() -> str:
+    """What a black frame means *here*: under the desktop app the grants belong to its helper,
+    not to NanoLika, and a black frame is the helper's fault — not a permission to grant."""
+    from nanomuse.computer.operator import operator_env
+
+    if operator_env() is not None:
+        return (
+            "the screenshot came back all black. The screen is captured by the desktop app's "
+            "helper, \"NanoLika Computer Use\", which holds the macOS grant; a black frame then "
+            "means the helper failed, not that a permission is missing. Do not send the person to "
+            "System Settings and do not ask for Screen Recording or Accessibility."
+        )
+    return BLACK_SCREEN_HINT
+
+
 def _is_black(img: Any) -> bool:
     """True when nothing but black came back (every channel's maximum below 8)."""
     try:
@@ -132,7 +147,7 @@ def take_screenshot(max_width: int = DEFAULT_MAX_WIDTH) -> Shot | None:
             grab = sct.grab(mon)
             img = Image.frombytes("RGB", grab.size, grab.bgra, "raw", "BGRX")
         if _is_black(img):
-            raise BlackScreen(BLACK_SCREEN_HINT)
+            raise BlackScreen(black_screen_hint())
         width, height = img.size
         img = _fit(img, picture_size(width, height, max_width))
         buf = io.BytesIO()
@@ -151,7 +166,7 @@ def take_screenshot(max_width: int = DEFAULT_MAX_WIDTH) -> Shot | None:
 
         img = Image.open(io.BytesIO(data))
         if _is_black(img):
-            raise BlackScreen(BLACK_SCREEN_HINT)
+            raise BlackScreen(black_screen_hint())
         width, height = img.size
         size = picture_size(width, height, max_width)
         if all(size) and size != (width, height):
