@@ -32,7 +32,7 @@ def chart(cloud: Any, account_id: str, period: str, zone: str) -> dict:
         columns = {r[1] for r in conn.execute("PRAGMA table_info(ledger)")}
         price = "sale_uy" if "sale_uy" in columns else "cost_uy"
         rows = conn.execute(
-            f"SELECT ts,model,prompt_tokens,completion_tokens,{price} amount FROM ledger WHERE account_id=? AND ts>=? AND ts<=? AND charged>=0 AND kind IN ('chat','image','video','realtime')",
+            f"SELECT ts,model,prompt_tokens,completion_tokens,{price} amount FROM ledger WHERE account_id=? AND ts>=? AND ts<=? AND charged>=0 AND kind IN ('chat','image','video','audio','realtime')",
             (account_id, start, now),
         ).fetchall()
     free_requests = 0

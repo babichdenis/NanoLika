@@ -270,7 +270,7 @@ function Usage({ t, sheet }: { t: Translate; sheet: AccountSheet }): ReactNode {
   const models = sheet.usage?.total?.by_model ?? []
   // 0.27: the row's cost in the relay's rubles when it prices in them, yuan until then
   const rub = (sheet.spend?.rub_per_usd ?? 0) > 0
-  const kindWord = (k: string | undefined) => (k === 'chat' ? t('acKindChat') : k === 'image' ? t('acKindImage') : k === 'video' ? t('acKindVideo') : k === 'realtime' ? t('acKindCalls') : (k ?? ''))
+  const kindWord = (k: string | undefined) => (k === 'chat' ? t('acKindChat') : k === 'image' ? t('acKindImage') : k === 'video' ? t('acKindVideo') : k === 'audio' ? t('acKindAudio') : k === 'realtime' ? t('acKindCalls') : (k ?? ''))
   const line = (r: UsageRow, label: string) =>
     h('div', { key: label, className: 'nm-row' },
       h('div', { className: 'nm-row-main' },

@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import Depends, Query, Response
 
-KINDS = "('chat','image','video','realtime')"
+KINDS = "('chat','image','video','audio','realtime')"
 
 
 def capture_metadata(

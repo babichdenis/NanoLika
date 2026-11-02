@@ -410,7 +410,7 @@ BUSY_TIMEOUT_S = 5.0
 # pass over the ledger (the same set of kinds as admin_accounts counts).
 USAGE_BY_ACCOUNT = (
     "(SELECT account_id,"
-    " SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests,"
+    " SUM(CASE WHEN kind IN ('chat','image','video','audio','realtime') THEN 1 ELSE 0 END) AS requests,"
     f" SUM(CASE WHEN cost_uy>0 OR sale_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy"
     " FROM ledger GROUP BY account_id)"
 )
@@ -1821,7 +1821,7 @@ class Database:
                                SUM(CASE WHEN EXISTS (
                                    SELECT 1 FROM ledger l
                                    WHERE l.account_id=i.id
-                                     AND l.kind IN ('chat','image','video','realtime')
+                                     AND l.kind IN ('chat','image','video','audio','realtime')
                                    LIMIT 1
                                ) THEN 1 ELSE 0 END) AS active
                         FROM accounts i
@@ -1965,7 +1965,7 @@ class Database:
                                      SUM(CASE WHEN ts>=? AND charged>0 THEN charged ELSE 0 END) AS used_today,
                                      SUM(CASE WHEN ts>=? AND (cost_uy>0 OR sale_uy>0) THEN {SPENT_UY} ELSE 0 END) AS spent_today_uy,
                                      SUM(CASE WHEN cost_uy>0 OR sale_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy,
-                                     SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests
+                                     SUM(CASE WHEN kind IN ('chat','image','video','audio','realtime') THEN 1 ELSE 0 END) AS requests
                               FROM ledger GROUP BY account_id) l ON l.account_id=a.id
                    LEFT JOIN (SELECT account_id, MAX(last_used_at) AS last_active_at,
                                      SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END) AS live_keys
@@ -2018,7 +2018,7 @@ class Database:
             return self._conn.execute(
                 f"""SELECT {self._DAY} AS day, kind, COUNT(*) AS requests, SUM(prompt_tokens) AS prompt_tokens,
                            SUM(completion_tokens) AS completion_tokens, SUM(charged) AS charged, SUM(cost_uy) AS cost_uy
-                    FROM ledger WHERE ts>=? AND charged>=0 AND kind IN ('chat','image','video','realtime')
+                    FROM ledger WHERE ts>=? AND charged>=0 AND kind IN ('chat','image','video','audio','realtime')
                     GROUP BY day, kind ORDER BY day""",
                 (day_offset_s, day_offset_s, day_offset_s, since),
             ).fetchall()
@@ -2331,7 +2331,7 @@ class Database:
     def usage_by_kind(self, since: int, account_id: str | None = None) -> list[sqlite3.Row]:
         """Requests, tokens and money per kind since `since` — one account or everyone."""
         with self._lock:
-            where = "ts>=? AND charged>=0 AND kind IN ('chat','image','video','realtime')"
+            where = "ts>=? AND charged>=0 AND kind IN ('chat','image','video','audio','realtime')"
             args: tuple = (since,)
             if account_id is not None:
                 where += " AND account_id=?"
@@ -2348,7 +2348,7 @@ class Database:
 
     def usage_by_model(self, since: int, account_id: str | None = None) -> list[sqlite3.Row]:
         with self._lock:
-            where = "ts>=? AND charged>=0 AND kind IN ('chat','image','video','realtime')"
+            where = "ts>=? AND charged>=0 AND kind IN ('chat','image','video','audio','realtime')"
             args: tuple = (since,)
             if account_id is not None:
                 where += " AND account_id=?"
@@ -2366,7 +2366,7 @@ class Database:
             return self._conn.execute(
                 """SELECT ((ts + ?) - (ts + ?) % 86400 - ?) AS day, kind, COUNT(*) AS requests,
                           SUM(charged) AS charged, SUM(cost_uy) AS cost_uy
-                   FROM ledger WHERE account_id=? AND ts>=? AND charged>=0 AND kind IN ('chat','image','video','realtime')
+                   FROM ledger WHERE account_id=? AND ts>=? AND charged>=0 AND kind IN ('chat','image','video','audio','realtime')
                    GROUP BY day, kind ORDER BY day DESC""",
                 (day_offset_s, day_offset_s, day_offset_s, account_id, since),
             ).fetchall()
@@ -2374,7 +2374,7 @@ class Database:
     def active_accounts_since(self, since: int) -> int:
         with self._lock:
             r = self._conn.execute(
-                "SELECT COUNT(DISTINCT account_id) FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','realtime')",
+                "SELECT COUNT(DISTINCT account_id) FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','audio','realtime')",
                 (since,),
             ).fetchone()
         return int(r[0])
@@ -2419,7 +2419,7 @@ class Database:
         with self._lock:
             return self._conn.execute(
                 f"""SELECT {self._DAY} AS day, COUNT(DISTINCT account_id) AS n FROM ledger
-                    WHERE ts>=? AND kind IN ('chat','image','video','realtime') GROUP BY day""",
+                    WHERE ts>=? AND kind IN ('chat','image','video','audio','realtime') GROUP BY day""",
                 (day_offset_s, day_offset_s, day_offset_s, since),
             ).fetchall()
 
@@ -2468,7 +2468,7 @@ class Database:
             return self._conn.execute(
                 """SELECT COUNT(*) AS requests, COALESCE(SUM(charged),0) AS charged, COALESCE(SUM(cost_uy),0) AS cost_uy,
                           COALESCE(SUM(prompt_tokens),0) AS prompt_tokens, COALESCE(SUM(completion_tokens),0) AS completion_tokens
-                   FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','realtime')""",
+                   FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','audio','realtime')""",
                 (since,),
             ).fetchone()
 
@@ -2476,7 +2476,7 @@ class Database:
         with self._lock:
             return self._conn.execute(
                 """SELECT account_id, COUNT(*) AS requests, SUM(cost_uy) AS cost_uy, SUM(charged) AS charged
-                   FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','realtime')
+                   FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','audio','realtime')
                    GROUP BY account_id ORDER BY cost_uy DESC LIMIT ?""",
                 (since, limit),
             ).fetchall()
@@ -2522,7 +2522,7 @@ class Database:
         """Model requests since `since`, across every account (the self-check)."""
         with self._lock:
             r = self._conn.execute(
-                "SELECT COUNT(*) FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','realtime')", (since,)
+                "SELECT COUNT(*) FROM ledger WHERE ts>=? AND kind IN ('chat','image','video','audio','realtime')", (since,)
             ).fetchone()
         return int(r[0])
 
@@ -2546,7 +2546,7 @@ class Database:
     def requests_since(self, account_id: str, since: int) -> int:
         with self._lock:
             r = self._conn.execute(
-                "SELECT COUNT(*) FROM ledger WHERE account_id=? AND ts>=? AND kind IN ('chat','image','video','realtime')",
+                "SELECT COUNT(*) FROM ledger WHERE account_id=? AND ts>=? AND kind IN ('chat','image','video','audio','realtime')",
                 (account_id, since),
             ).fetchone()
         return int(r[0])
