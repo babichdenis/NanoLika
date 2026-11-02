@@ -358,6 +358,9 @@ class Thread:
     # the chat's own Cloud model (contract C7): a pick made here or on another device, so a
     # picture model chosen in one chat never follows the person into the next one
     model: str = ""
+    # how much that model thinks before it answers ('' = the provider's own default): the
+    # level chosen beside the model in the app, carried with the conversation
+    reasoning: str = ""
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -381,6 +384,8 @@ class Thread:
             meta["main_of"] = self.main_of
         if self.model:
             meta["model"] = self.model
+        if self.reasoning:
+            meta["reasoning"] = self.reasoning
         return meta
 
 
@@ -848,6 +853,8 @@ class MuseService:
                 thread.workspace_scope = str(m["workspace_scope"])
             if m.get("model"):
                 thread.model = str(m["model"])
+            if m.get("reasoning"):
+                thread.reasoning = str(m["reasoning"]).strip().lower()[:24]
         self._save_index()
 
     def _save_index(self) -> None:
@@ -875,6 +882,8 @@ class MuseService:
                 m["workspace_scope"] = t.workspace_scope
             if t.model:
                 m["model"] = t.model
+            if t.reasoning:
+                m["reasoning"] = t.reasoning
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -1219,7 +1228,7 @@ class MuseService:
         ]
         if not text and not attachments:
             raise ValueError("empty message")
-        once = self.cloud_once(once_key, once_model) if (via == "cloud" or once_key) else None
+        once = self.cloud_once(once_key, once_model, thread.reasoning) if (via == "cloud" or once_key) else None
         thread.updated_at = now_iso()
         if language:
             # remembered on the conversation: a chat addressed to another device passes it on
@@ -1343,7 +1352,7 @@ class MuseService:
             else self.memory_scope_for_current_account()
         )
 
-    def thread_model_llm(self, model: str) -> tuple[BaseLLM | None, str]:
+    def thread_model_llm(self, model: str, reasoning: str = "") -> tuple[BaseLLM | None, str]:
         """The client a chat's own Cloud model answers with (contract C7).
 
         ``(None, model)`` when the configured client already is that model, ``(None, "")``
@@ -1353,17 +1362,17 @@ class MuseService:
         model = str(model or "").strip()
         if not model:
             return None, ""
-        if self.app.llm_is_cloud() and self.settings.llm.model == model:
+        if self.app.llm_is_cloud() and self.settings.llm.model == model and not reasoning:
             return None, model
         key = self.app.vault.get(CLOUD_KEY) or ""
         if not key:
             return None, ""
         try:
-            return self.cloud_once(key, model)
+            return self.cloud_once(key, model, reasoning)
         except CloudError:
             return None, ""
 
-    def cloud_once(self, key: str = "", model: str = "") -> tuple[BaseLLM | None, str]:
+    def cloud_once(self, key: str = "", model: str = "", reasoning: str = "") -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
         the vault, for one turn. ``[llm]``, ``[cloud] models`` and the conversation stay as
@@ -1378,6 +1387,12 @@ class MuseService:
                 return None, self.settings.llm.model
         model = model or (self.hub.chat_models[0] if self.hub.chat_models else DEFAULT_CHAT_MODEL)
         llm = self.settings.llm
+        # the chat's thinking level rides beside its model; "default" is the absence of
+        # the field, so the relay/provider picks its own
+        extra_body = dict(llm.extra_body or {})
+        level = str(reasoning or "").strip().lower()
+        if level and level not in ("default", "none"):
+            extra_body["reasoning_effort"] = level
         merged = LLMSettings(
             provider="openai",
             model=model,
@@ -1388,6 +1403,7 @@ class MuseService:
             temperature=llm.temperature,
             max_tokens=llm.max_tokens,
             timeout=llm.timeout,
+            extra_body=extra_body,
         )
         return create_llm(merged, data_dir=self.settings.data_dir), model
 
@@ -1491,7 +1507,7 @@ class MuseService:
                 elif thread.model:
                     # the chat's own model (C7): a picture model picked in one chat never
                     # answers the next one; the client is the turn's and goes after it
-                    held, used = self.thread_model_llm(thread.model)
+                    held, used = self.thread_model_llm(thread.model, thread.reasoning)
                     if held is not None:
                         thread.agent.llm = held
                     if used:

@@ -953,6 +953,9 @@ class ChatMenu:
         if thread is None:
             return c["models_error"]
         thread.model = model_id
+        # a new model brings its own levels: the old effort may not exist on it, so the
+        # chat goes back to the provider's default until a level is chosen again
+        thread.reasoning = ""
         save_index = getattr(self.m.svc, "_save_index", None)
         if save_index is not None:
             save_index()
