@@ -19,7 +19,7 @@ export class ChatSync {
   if(chat.deleted||chat.local||!session?.key||chat.owner!==session.owner||!this.valid(session))return;
   /* An interrupted answer still holds what the model said before the stream broke:
    publish it too, otherwise the other devices see the question and never the reply. */
-  const pending=chat.messages.filter(m=>!m.shared&&m.content);
+  const pending=chat.messages.filter(m=>!m.shared&&(m.content||(Array.isArray(m.files)&&m.files.length)));
   /* The chat's own model goes with its conversation, not with the browser: the same
      chat answers with the same model in the app, in Telegram and here. */
   const model=String(chat.model||''), modelDirty=model!==String(chat.sharedModel||'');
