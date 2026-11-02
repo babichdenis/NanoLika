@@ -1143,12 +1143,20 @@ class Settings:
     def cny_to_usd(self, cny: float) -> float:
         return round(cny / self.usd_cny, 4) if self.usd_cny > 0 else 0.0
 
-    def chat_charge_uy(self, model: ModelSpec, prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -> int:
+    def chat_charge_uy(
+        self,
+        model: ModelSpec,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_tokens: int = 0,
+        at: int | float | None = None,
+    ) -> int:
         """What one text turn takes from the account, in micro-yuan: the operator's sale rate
         where the model has one, the provider's price otherwise. A relay without a ruble rate
-        falls back to the provider's price rather than selling for nothing."""
+        falls back to the provider's price rather than selling for nothing — and that price
+        keeps the model's own clock, so the provider's idle hours are charged as idle."""
         if not model.sells_at_own_rate() or self.rub_per_usd <= 0 or self.usd_cny <= 0:
-            return model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens)
+            return model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
         return self.rub_to_uy(model.chat_sale_rub(prompt_tokens, completion_tokens, cached_tokens))
 
     def rub_to_uy(self, rub: float) -> int:

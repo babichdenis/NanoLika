@@ -3093,7 +3093,7 @@ class Cloud:
         # the account pays: the operator's sale rate, less the running tariff's share
         cost = model.chat_cost_uy(prompt_tokens, completion_tokens, cached_tokens, at)
         sale = self.discount(
-            self.s.chat_charge_uy(model_pricing.retail_spec(self, model), prompt_tokens, completion_tokens, cached_tokens),
+            self.s.chat_charge_uy(model_pricing.retail_spec(self, model), prompt_tokens, completion_tokens, cached_tokens, at),
             caller.account_id,
         )
         if (

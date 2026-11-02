@@ -411,7 +411,7 @@ BUSY_TIMEOUT_S = 5.0
 USAGE_BY_ACCOUNT = (
     "(SELECT account_id,"
     " SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests,"
-    f" SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy"
+    f" SUM(CASE WHEN cost_uy>0 OR sale_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy"
     " FROM ledger GROUP BY account_id)"
 )
 
@@ -934,7 +934,7 @@ class Database:
             old = int(row["grant_uy"] or 0)
             if left_uy is not None:
                 spent = c.execute(
-                    "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND cost_uy>0", (account_id,)
+                    "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND (cost_uy>0 OR sale_uy>0)", (account_id,)
                 ).fetchone()[0]
                 new = int(spent) + max(0, int(left_uy))
             elif grant_uy is not None:
@@ -971,7 +971,7 @@ class Database:
         with self.tx() as c:
             cur = c.execute(
                 """UPDATE accounts SET grant_uy = ? + MAX(0, credit_uy - credit_used_uy)
-                     + (SELECT COALESCE(SUM(CASE WHEN l.sale_uy>0 THEN l.sale_uy ELSE l.cost_uy END),0) FROM ledger l WHERE l.account_id=accounts.id AND l.cost_uy>0)
+                     + (SELECT COALESCE(SUM(CASE WHEN l.sale_uy>0 THEN l.sale_uy ELSE l.cost_uy END),0) FROM ledger l WHERE l.account_id=accounts.id AND (l.cost_uy>0 OR l.sale_uy>0))
                    WHERE grant_uy = 0 AND allowance_uy < 0""",
                 (max(0, int(allowance_uy)),),
             )
@@ -1720,7 +1720,7 @@ class Database:
             if min_spent_uy > 0:
                 spent = int(
                     c.execute(
-                        "SELECT COALESCE(SUM(" + SPENT_UY + "), 0) FROM ledger WHERE account_id=? AND cost_uy>0",
+                        "SELECT COALESCE(SUM(" + SPENT_UY + "), 0) FROM ledger WHERE account_id=? AND (cost_uy>0 OR sale_uy>0)",
                         (invitee_id,),
                     ).fetchone()[0]
                     or 0
@@ -1771,7 +1771,7 @@ class Database:
                 return 0
             earned = self._invite_net_uy(c, inviter_id)
             spent = c.execute(
-                "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND cost_uy>0", (inviter_id,)
+                "SELECT COALESCE(SUM(" + SPENT_UY + "),0) FROM ledger WHERE account_id=? AND (cost_uy>0 OR sale_uy>0)", (inviter_id,)
             ).fetchone()[0]
             grant = int(row["grant_uy"] or 0)
             amount = min(earned, max(0, grant - int(spent or 0)))
@@ -1963,8 +1963,8 @@ class Database:
                    FROM accounts a
                    LEFT JOIN (SELECT account_id,
                                      SUM(CASE WHEN ts>=? AND charged>0 THEN charged ELSE 0 END) AS used_today,
-                                     SUM(CASE WHEN ts>=? AND cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_today_uy,
-                                     SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy,
+                                     SUM(CASE WHEN ts>=? AND (cost_uy>0 OR sale_uy>0) THEN {SPENT_UY} ELSE 0 END) AS spent_today_uy,
+                                     SUM(CASE WHEN cost_uy>0 OR sale_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy,
                                      SUM(CASE WHEN kind IN ('chat','image','video','realtime') THEN 1 ELSE 0 END) AS requests
                               FROM ledger GROUP BY account_id) l ON l.account_id=a.id
                    LEFT JOIN (SELECT account_id, MAX(last_used_at) AS last_active_at,
@@ -1997,7 +1997,7 @@ class Database:
             return self._conn.execute(
                 f"""SELECT a.id_hash, a.unlimited, a.grant_uy, COALESCE(l.spent_uy, 0) AS spent_uy
                    FROM accounts a
-                   LEFT JOIN (SELECT account_id, SUM(CASE WHEN cost_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy
+                   LEFT JOIN (SELECT account_id, SUM(CASE WHEN cost_uy>0 OR sale_uy>0 THEN {SPENT_UY} ELSE 0 END) AS spent_uy
                               FROM ledger GROUP BY account_id) l ON l.account_id=a.id"""
             ).fetchall()
 
@@ -2336,9 +2336,12 @@ class Database:
             if account_id is not None:
                 where += " AND account_id=?"
                 args = (since, account_id)
+            # `cost_uy` here is the money the account was charged, as everywhere the
+            # person reads a figure: the retail price, the provider's cost only on old lines.
             return self._conn.execute(
                 f"""SELECT kind, COUNT(*) AS requests, SUM(prompt_tokens) AS prompt_tokens,
-                           SUM(completion_tokens) AS completion_tokens, SUM(charged) AS charged, SUM(cost_uy) AS cost_uy
+                           SUM(completion_tokens) AS completion_tokens, SUM(charged) AS charged,
+                           SUM(CASE WHEN sale_uy>0 THEN sale_uy ELSE cost_uy END) AS cost_uy
                     FROM ledger WHERE {where} GROUP BY kind ORDER BY cost_uy DESC""",
                 args,
             ).fetchall()
@@ -2352,7 +2355,8 @@ class Database:
                 args = (since, account_id)
             return self._conn.execute(
                 f"""SELECT model, kind, COUNT(*) AS requests, SUM(prompt_tokens) AS prompt_tokens,
-                           SUM(completion_tokens) AS completion_tokens, SUM(charged) AS charged, SUM(cost_uy) AS cost_uy
+                           SUM(completion_tokens) AS completion_tokens, SUM(charged) AS charged,
+                           SUM(CASE WHEN sale_uy>0 THEN sale_uy ELSE cost_uy END) AS cost_uy
                     FROM ledger WHERE {where} GROUP BY model, kind ORDER BY cost_uy DESC""",
                 args,
             ).fetchall()
@@ -2497,10 +2501,13 @@ class Database:
         return int(r[0])
 
     def spent_since(self, account_id: str, since: int) -> int:
-        """Money (micro-yuan) the account cost the operator since `since`."""
+        """Money (micro-yuan) the account was charged since `since`: the retail `sale_uy`,
+        the provider's `cost_uy` only on lines from before retail pricing. The pool, the
+        paid balance and the account's own statement all count this way, so a figure read
+        here is the figure the person saw on the page."""
         with self._lock:
             r = self._conn.execute(
-                "SELECT COALESCE(SUM(cost_uy),0) FROM ledger WHERE account_id=? AND ts>=? AND cost_uy>0",
+                f"SELECT COALESCE(SUM({SPENT_UY}),0) FROM ledger WHERE account_id=? AND ts>=? AND (cost_uy>0 OR sale_uy>0)",
                 (account_id, since),
             ).fetchone()
         return int(r[0])
