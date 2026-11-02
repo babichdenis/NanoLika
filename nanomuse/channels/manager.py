@@ -54,13 +54,15 @@ from nanomuse.memory import account_scope, channel_scope
 from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
 
-# The share links the desktop writes into a synced answer. The bot may fetch a small one
-# and send the file itself, so Telegram shows a player instead of asking the person to
-# tap a link; larger files stay links (the Telegram Bot API ceiling is 50 MB).
+# The share links the desktop and the web write into a synced message. The channel sends
+# the link itself (Telegram previews pictures on its own); nothing is downloaded, so the
+# 50 MB Telegram ceiling stops mattering.
 SHARE_HOST = "s3.regru.cloud"
 SHARE_PREFIX = "/nanolika/files/"
 SHARE_MAX_BYTES = 50 * 1024 * 1024
 SHARE_URL = re.compile(r"https://s3\.regru\.cloud/nanolika/files/[^\s)>\"]+")
+# A picture in an answer from another device: its Markdown form is turned back into the link.
+SHARE_IMAGE = re.compile(r"!\[[^\]]*\]\((https?://[^)\s]+)\)")
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
@@ -2073,23 +2075,22 @@ class ChannelManager(ChannelBus):
                 ):
                     targets.add(self.picker.topics.redirect(thread, channel, chat))
         body = str(event.get("text") or "").strip()
+        # A picture from another device travels as a link, not as a download: the channel
+        # gets the S3 link (Telegram draws its own preview) and the bot never fetches the
+        # bytes, so a 50 MB clip and a 2 KB still are one path.
+        body = SHARE_IMAGE.sub(r"\1", body)
+        links = [
+            str(item.get("url") or "")
+            for item in (event.get("files") or [])
+            if isinstance(item, dict) and item.get("url")
+        ]
+        for url in links:
+            if url and url not in body:
+                body = (body + "\n" if body else "") + url
         if not body:
             return
         if role == "user":
             body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
-        # A desktop answer may carry a share link. For a small object the channel gets the
-        # file itself first and the link after it; a big one stays just the link.
-        # A user message from the web or the app can carry an uploaded attachment: the sync
-        # event names its S3 link, and the channel gets the file itself, not just the name.
-        if role == "assistant":
-            shared_files = await self._shared_files(body)
-        else:
-            urls = " ".join(
-                str(item.get("url") or "")
-                for item in (event.get("files") or [])
-                if isinstance(item, dict) and item.get("url")
-            )
-            shared_files = await self._shared_files(urls) if urls else []
         try:
             for channel, chat in targets:
                 if self.picker.topics.defer(thread, (channel, chat), event):
@@ -2108,7 +2109,6 @@ class ChannelManager(ChannelBus):
                 if not await self._claim_synced_delivery(mid, channel, chat):
                     continue
                 sent_here = False
-                files_sent = False
                 for attempt in range(3):
                     # Re-check after a retry: the person may have switched away.
                     current = self.picker.selected(channel, chat)
@@ -2125,11 +2125,6 @@ class ChannelManager(ChannelBus):
                     ):
                         break
                     try:
-                        if shared_files and not files_sent:
-                            await self.channels[channel].send(
-                                chat, "", files=[str(path) for path in shared_files]
-                            )
-                            files_sent = True
                         await self.channels[channel].send(chat, self._redact_outbound(body))
                     except asyncio.CancelledError:
                         raise
