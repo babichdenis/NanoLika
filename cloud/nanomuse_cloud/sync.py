@@ -101,7 +101,7 @@ def clean_attachments(value: object) -> list[dict]:
         # Веб-клиент кладёт вложение в S3 и присылает ссылку: только https и только наш бакет,
         # чтобы через синхронизацию нельзя было протащить чужой адрес.
         url = str(a.get("url") or "")[:2000]
-        if not url.startswith("https://") or "/nanolika/files/" not in url:
+        if not url.startswith("https://") or ("/nanolika/files/" not in url and "/v1/files/" not in url):
             url = ""
         try:
             size = max(0, int(a.get("size") or 0))

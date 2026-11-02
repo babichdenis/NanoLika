@@ -130,7 +130,7 @@ from fastapi import (
     UploadFile,
     WebSocket,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
@@ -1976,8 +1976,21 @@ def create_app(
             "size": len(data),
             "key": key,
             "url": url,
+            "media_url": s3_files.media_url(settings, key),
             "expires_in": settings.s3_link_seconds,
         }
+
+    @app.get("/v1/files/{key:path}")
+    async def file_once(key: str, t: str = "") -> RedirectResponse:
+        """A stable link to an attachment: the relay checks its own signature and answers
+        with a fresh presigned URL, so a picture in a shared chat keeps opening after the
+        week-long presigned link from the upload has expired."""
+        if not s3_files.enabled(settings):
+            raise CloudError(503, "attachments_unconfigured", "File storage is not configured on this relay")
+        if not s3_files.media_ok(settings, key, t):
+            raise CloudError(403, "bad_link", "This file link is not valid")
+        name = key.rsplit("/", 1)[-1] or "file"
+        return RedirectResponse(s3_files.presign_get(settings, key, s3_files.safe_name(name)), status_code=302)
 
     # -- звук: озвучка текста и распознавание записи -------------------------------------------
     # Кабинет и будущие клиенты говорят на языке OpenAI: POST /v1/audio/speech превращает

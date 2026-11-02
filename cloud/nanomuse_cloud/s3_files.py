@@ -132,3 +132,19 @@ async def store(settings, data: bytes, content_type: str, name: str) -> tuple[st
     key = new_key(name)
     await put_object(settings, key, data, content_type)
     return key, presign_get(settings, key, safe_name(name))
+
+
+def media_signature(settings, key: str) -> str:
+    """A stable signature for a file link: the key plus the relay's own secret."""
+    return hmac.new(settings.secret.encode(), ("file:" + key).encode(), hashlib.sha256).hexdigest()[:40]
+
+
+def media_url(settings, key: str) -> str:
+    """A link that stays good after the presigned one expires: the relay signs a redirect
+    on every read, so a picture in a chat does not turn into a broken image in a week."""
+    base = (settings.public_base or "").rstrip("/")
+    return f"{base}/v1/files/{quote(key, safe='/')}?t={media_signature(settings, key)}"
+
+
+def media_ok(settings, key: str, token: str) -> bool:
+    return bool(key and token) and hmac.compare_digest(media_signature(settings, key), token)

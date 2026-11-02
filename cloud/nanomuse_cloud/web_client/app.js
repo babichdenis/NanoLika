@@ -199,10 +199,11 @@ async function shrinkPicture(src,side=1024){
   return canvas.toDataURL('image/jpeg',.86);
  }catch{return src;}
 }
+function dataUrlBlob(dataUrl){const comma=dataUrl.indexOf(','),mime=(dataUrl.slice(5,comma).split(';')[0])||'image/jpeg',binary=atob(dataUrl.slice(comma+1)),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return new Blob([bytes],{type:mime});}
 async function drawPicture(prompt){
  const owner=session.owner,key=session.key;
  if(!current)await newChat();
- const chat=current;if(!chat.syncCid)chat.local=true;/* a picture stays on this device: sync carries text */chat.messages.push({role:'user',content:prompt,at:Date.now()});
+ const chat=current;chat.messages.push({role:'user',content:prompt,at:Date.now()});
  if(chat.messages.filter(m=>m.role==='user').length===1)chat.title=prompt.slice(0,52);
  chat.updated=Date.now();sending=true;
  try{
@@ -218,7 +219,13 @@ async function drawPicture(prompt){
   let src=item.url||'';
   if(!src&&item.b64_json){const b64=String(item.b64_json);const mime=b64.startsWith('/9j/')?'image/jpeg':b64.startsWith('iVBOR')?'image/png':'image/jpeg';src=await shrinkPicture('data:'+mime+';base64,'+b64);}
   if(!src)throw new Error(t('requestError'));
-  chat.messages.push({role:'assistant',content:'',image:src,at:Date.now()});
+  // The picture goes to the same S3 bucket as any attachment, and the message keeps the
+  // relay's stable /v1/files link: it opens on every device (and in a messenger) and does
+  // not expire like the presigned URL from the upload does.
+  let remote='';
+  try{if(src.startsWith('data:')){const blob=dataUrlBlob(src);const form=new FormData();form.append('file',blob,'lika-picture.jpg');const upload=await fetch('/v1/attachments',{method:'POST',headers:{Authorization:'Bearer '+key},body:form});const saved=await upload.json().catch(()=>({}));if(upload.ok&&saved.media_url)remote=String(saved.media_url);}}catch{}
+  if(!remote&&!chat.syncCid)chat.local=true;
+  chat.messages.push({role:'assistant',content:'',image:remote||src,at:Date.now(),...(remote?{files:[{name:'lika-picture.jpg',mime:'image/jpeg',size:0,url:remote}]}:{})});
  }catch(error){
   console.error('draw failed', error);
   if(error.code==='insufficient_funds'||error.status===402){if(!fundsNotice(error))notice(error.message||t('drawFailed'));}
@@ -226,6 +233,7 @@ async function drawPicture(prompt){
   chat.messages.push({role:'assistant',content:t('drawFailed'),at:Date.now()});
  }finally{
   sending=false;chat.updated=Date.now();await persist(chat);
+  if(!chat.local){try{await chatSync.publish(chat);}catch(e){notice(t('syncError'));}}
   $('send').hidden=false;$('stop').hidden=true;updateStatus();if(session?.owner===owner)renderConversation();
  }
 }

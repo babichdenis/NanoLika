@@ -60,7 +60,7 @@ export class ChatSync {
  merge(chat,rows){const byId=new Map(chat.messages.filter(m=>m.mid).map(m=>[m.mid,m]));let changed=false;
   for(const m of rows||[]){
    if(m.deleted){const before=chat.messages.length;chat.messages=chat.messages.filter(x=>x.mid!==m.mid);changed=changed||before!==chat.messages.length;continue;}
-   if(!byId.has(m.mid)){const local={mid:m.mid,role:m.role,content:m.text,at:m.created_at*1000,shared:true,truncated:m.truncated};chat.messages.push(local);byId.set(m.mid,local);changed=true;}
+   if(!byId.has(m.mid)){const files=Array.isArray(m.attachments)?m.attachments.filter(a=>a&&(a.name||a.url)).map(a=>({name:a.name||'',mime:a.mime||'',size:a.size||0,url:a.url||''})):[];const picture=files.find(a=>/^image\//i.test(a.mime||'')&&a.url);const local={mid:m.mid,role:m.role,content:m.text,at:m.created_at*1000,shared:true,truncated:m.truncated,...(files.length?{files}:{}),...(picture?{image:picture.url}:{})};chat.messages.push(local);byId.set(m.mid,local);changed=true;}
   }
   chat.messages.sort((a,b)=>a.at-b.at);return changed;}
  async refresh(){if(this.refreshTask)return this.refreshTask;const task=this.run(async()=>{
