@@ -75,10 +75,15 @@ if TYPE_CHECKING:
     from nanomuse.server.service import MuseService, Thread
 
 PUSH_DELAY_S = 2.0
-PULL_EVERY_S = 60.0
+# A device without the hub socket (asleep, offline, a network that drops WebSockets) falls
+# back on this timer; a minute read as "sync is broken" next to the instant frames (D7).
+PULL_EVERY_S = 15.0
 # Bumped when a default changes for states already on disk. 2: side chats moved from off to
 # on (2026-11-02), so a device that never chose joins its chats in instead of staying alone.
 DEFAULTS_VERSION = 2
+# Relay refusals that will not change by waiting: the conversation is gone (D3), or the
+# role is not one the relay keeps. The rest (unknown_cid, conversation_limit) are retried.
+FINAL_REFUSALS = frozenset({"conversation_deleted", "bad_role"})
 BATCH = 200
 PAGE = 500
 # the first pull of a fresh device: the newest messages of the scope, not the whole store (C9)
@@ -721,14 +726,10 @@ class ConversationSync:
         self._save()
         for key in [k for k, w in self.working.items() if w.get("thread") == thread_id]:
             del self.working[key]
-        # a side chat with side chats off: nothing of it moves any more, its copy elsewhere stays
-        if (
-            cid
-            and self.active
-            and not self._stopped
-            and not self._applying
-            and (self.side_chats or thread_id == MAIN_THREAD)
-        ):
+        # A chat with a cid is on the relay already, whoever wrote it and whatever the
+        # side-chat switch says now: deleting it here deletes it everywhere (D6). Only a
+        # chat that never left this device (no cid) has no copy to tombstone.
+        if cid and self.active and not self._stopped and not self._applying:
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
@@ -914,6 +915,11 @@ class ConversationSync:
                 continue
             if kind == "assistant" and not ev.get("final"):
                 continue
+            # a refusal that may pass (the chat is being created, the relay is at its
+            # conversation limit) waits out its pause instead of hammering every push
+            retry_at = int(ev.get("sync_retry_at") or 0)
+            if retry_at and retry_at > int(time.time()):
+                continue
             if kind == "user":
                 # each turn carries its own origin: a desktop message after a Telegram one
                 # must not inherit the channel's label
@@ -1013,13 +1019,28 @@ class ConversationSync:
             for thread, ev in pending:
                 mid = str(ev.get("mid") or "")
                 if mid in refused_mids:
-                    # a bad row stays bad: do not send it again and again
-                    ev["synced"] = True
-                    ev["sync_refused"] = refused_mids[mid]
+                    reason = refused_mids[mid]
+                    ev["sync_refused"] = reason
+                    if reason in FINAL_REFUSALS:
+                        # the chat is gone or the row can never be valid: keep it here and
+                        # say so instead of pretending it is on the relay
+                        ev["synced"] = True
+                        ev["sync_failed"] = reason
+                    else:
+                        # not a verdict: the chat may still be created, or the limit lifted
+                        attempts = int(ev.get("sync_attempts") or 0) + 1
+                        ev["sync_attempts"] = attempts
+                        ev["sync_retry_at"] = int(time.time()) + min(
+                            60 * (2 ** min(attempts, 6)), 3600
+                        )
                 elif not any(
                     r.get("mid") == mid and r.get("reason") == "main_exists" for r in rejected
                 ):
                     ev["synced"] = True
+                    ev.pop("sync_refused", None)
+                    ev.pop("sync_failed", None)
+                    ev.pop("sync_retry_at", None)
+                    ev.pop("sync_attempts", None)
                     pushed += 1
                 thread.timeline.save()
             for c in conversations:

@@ -548,15 +548,16 @@ def test_hub_tells_the_other_devices_after_an_accepting_push(ws_client):
         # the pusher hears nothing (its next frame is the pong to its ping)
         phone.send_json({"type": "ping"})
         assert phone.receive_json()["type"] == "pong"
-        # an idempotent re-post accepts nothing and tells nobody
+        # an idempotent re-post accepts nothing, but the other devices are still told to
+        # look: a refusal can carry a newer cursor, and waiting out the timer looks broken
         r = ws_client.post(
             "/v1/sync/changes",
             json={"device": "phone-1", "conversations": [conv(cid, "main")]},
             headers={"Authorization": f"Bearer {key}"},
         )
         assert r.json()["accepted"] == 0
-        pc.send_json({"type": "ping"})
-        assert pc.receive_json()["type"] == "pong"
+        frame = pc.receive_json()
+        assert frame["type"] == "sync" and frame["from"] == "phone-1"
         # a delete from the console (no device header) reaches every device
         r = ws_client.delete(f"/v1/sync/conversations/{cid}", headers={"Authorization": f"Bearer {key}"})
         assert r.status_code == 200

@@ -634,11 +634,39 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
             raise HTTPException(409, "thread is busy")
         return {"ok": True}
 
+    async def _hydrate_on_open(thread: Any) -> None:
+        """Bring the chat's history down before the first read.
+
+        A catalogue only hands out message bodies for chats someone opens (D2): a chat
+        created on another device arrives as a title with no messages and stayed empty
+        until something was sent here. Opening it is that signal. Once the chat has both
+        local events and a message cursor it is already here, so a poll or a scroll back
+        through the same page does not ask the relay again.
+        """
+        cid = svc.sync.cid_of(thread.id)
+        if not cid or not svc.sync.active or not svc.sync._eligible(thread):
+            return
+        cursors = svc.sync.state.get("message_cursors") or {}
+        if thread.timeline.events and cursors.get(cid):
+            return
+        try:
+            if svc.sync.catalog.supported is not False:
+                await svc.sync.catalog.open(thread.id, "local-web")
+                if thread.timeline.events:
+                    return
+            # an older relay without the catalogue, or a chat whose body pages were cut
+            # by the catalogue's budget: read the whole transcript once
+            await svc.sync.hydrate_thread(thread, cid)
+        except CloudError:
+            # offline, sync paused or the chat archived elsewhere: show what is here
+            return
+
     @app.get("/api/threads/{thread_id}/events", dependencies=dep)
     async def thread_events(
         thread_id: str, limit: int = Query(200, ge=1, le=1000), before: str | None = None
     ) -> dict[str, Any]:
         thread = _thread_or_404(thread_id)
+        await _hydrate_on_open(thread)
         events = thread.timeline.tail(limit, before)
         return {
             "thread": thread.meta(),

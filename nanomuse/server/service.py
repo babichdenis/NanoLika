@@ -1664,11 +1664,33 @@ class MuseService:
                 event["model_used"] = self.ui.model_once[thread.id]
             event = self.ui.emit(event)
         else:
+            timeline = self.ui.get_timeline(thread.id)
             eid = self.ui.last_assistant_event.get(thread.id)
-            if eid and (existing := self.ui.get_timeline(thread.id).get(eid)):
+            existing = timeline.get(eid) if eid else None
+            text = final or self.ui.last_assistant_text.get(thread.id, "")
+            if existing is None and text:
+                # the streamed bubble was closed and its id forgotten, or the run ended
+                # without a last word: close the bubble carrying this text, or make one.
+                # Without a `final` row the answer never leaves for the other devices (D4).
+                existing = next(
+                    (
+                        ev
+                        for ev in reversed(timeline.events)
+                        if ev.get("type") == "assistant" and ev.get("text") == text
+                    ),
+                    None,
+                )
+            if existing is not None:
                 if not existing.get("final"):
-                    self.ui.patch(thread.id, eid, final=True)
+                    self.ui.patch(thread.id, existing["id"], final=True)
                 event = existing
+            elif text:
+                event = {"type": "assistant", "text": text, "thread": thread.id, "final": True}
+                if quiet:
+                    event["quiet"] = True
+                if thread.id in self.ui.model_once:
+                    event["model_used"] = self.ui.model_once[thread.id]
+                event = self.ui.emit(event)
         if purpose and event and event.get("text") and not event.get("quiet"):
             self._push_background(event)
         # the turn is done: its texts go to the account's other devices in a moment

@@ -1212,7 +1212,9 @@ def create_app(
         cloud.db.daily_add("sync", "accepted", int(out.get("accepted") or 0))
         cloud.db.daily_add("sync", "rejected", len(out.get("rejected") or []))
         hub = getattr(app.state, "hub", None)
-        if hub is not None and out["accepted"]:
+        if hub is not None:
+            # Even with nothing accepted: a refusal or a stale row still moves the cursor,
+            # and the other devices should look now instead of waiting out their timer (D7).
             await hub.notify_sync(caller.account_id, int(out["cursor"]), device)
         return out
 

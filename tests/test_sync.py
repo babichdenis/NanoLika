@@ -98,6 +98,8 @@ class FakeSyncRelay:
         self.calls: list[str] = []
         self.fail: CloudError | None = None
         self.fail_working: CloudError | None = None
+        # mid → reason: a test can make the relay refuse one row (D3)
+        self.refuse: dict[str, str] = {}
         self.names = {"phone-1": "Pixel 8", "pc-self": "Desk"}
 
         self._stores: dict[str, tuple[int, dict[str, Any], dict[str, Any]]] = {}
@@ -376,6 +378,9 @@ class FakeSyncRelay:
                 rejected.append(
                     {"mid": m["mid"], "reason": "main_exists", "cid_main": redirected[m["cid"]]}
                 )
+                continue
+            if m["mid"] in self.refuse:
+                rejected.append({"mid": m["mid"], "reason": self.refuse[m["mid"]]})
                 continue
             if m["mid"] in self.msgs:
                 continue
@@ -1021,6 +1026,116 @@ def test_side_chats_stay_local_by_default(main_only) -> None:
     client.delete(f"/api/threads/{side['id']}")
     time.sleep(0.2)
     assert relay.calls.count("delete_conversation") == calls
+
+
+def test_deleting_a_synced_chat_tombstones_it_even_with_side_chats_off(synced) -> None:
+    """D6: turning side chats off stopped the tombstone too, so a copy of a chat that had
+    already travelled stayed on the relay and on every other device."""
+    client, service, llm, relay = synced
+    side = client.post("/api/threads", json={"title": "Delete me"}).json()
+    llm.script.append(LLMResponse(content="answer", finish_reason="stop"))
+    client.post(f"/api/threads/{side['id']}/send", json={"text": "hello"})
+    wait_for(lambda: any(c["title"] == "Delete me" for c in relay.convs.values()))
+    cid = service.sync.cid_of(side["id"])
+    assert cid is not None
+    client.put("/api/sync/state", json={"side_chats": False})
+    client.delete(f"/api/threads/{side['id']}")
+    wait_for(lambda: relay.convs[cid]["deleted"])
+
+
+def test_an_answer_always_leaves_a_final_event(synced) -> None:
+    """D4: a run whose streamed bubble was closed and whose id was forgotten left no
+    `final` row, so the answer never reached the relay. The last word is final now."""
+    client, service, llm, relay = synced
+    thread = service.threads[MAIN_THREAD]
+    service.ui.last_assistant_text[thread.id] = "the answer"
+    service.ui.last_assistant_event.pop(thread.id, None)
+    service._finish_run(thread, None, "", False)
+    last = service.ui.get_timeline(thread.id).events[-1]
+    assert last["type"] == "assistant" and last.get("text") == "the answer"
+    assert last.get("final") is True
+
+
+def test_a_refused_message_waits_and_is_then_retried(synced) -> None:
+    """D3: a refusal used to mark the row `synced` forever, so a message the relay never
+    took looked delivered and vanished silently. A refusal that can pass now waits out a
+    growing pause, keeps its reason, and goes up when the chat exists."""
+    client, service, llm, relay = synced
+    side = client.post("/api/threads", json={"title": "Retry me"}).json()
+    llm.script.append(LLMResponse(content="answer", finish_reason="stop"))
+    client.post(f"/api/threads/{side['id']}/send", json={"text": "hello"})
+    wait_for(
+        lambda: any(
+            e["type"] == "assistant" and e.get("final") for e in _events(client, side["id"])
+        )
+    )
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]  (assigns the mid)
+    event = next(e for e in service.threads[side["id"]].timeline.events if e["type"] == "assistant")
+    mid = event["mid"]
+    relay.refuse[mid] = "unknown_cid"
+    event["synced"] = False
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    assert event.get("sync_refused") == "unknown_cid"
+    assert event.get("synced") is not True and event["sync_retry_at"] > time.time()
+    # the pause holds: a push in between does not send the row again
+    pushes = len(relay.pushes)
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    assert len(relay.pushes) == pushes
+    # the chat is there now and the pause is over
+    relay.refuse.pop(mid)
+    event.pop("sync_retry_at", None)
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    wait_for(lambda: mid in relay.msgs)
+    assert event["synced"] is True and "sync_refused" not in event
+
+
+def test_a_final_refusal_is_kept_and_shown(synced) -> None:
+    """D3: a row the relay will never take (`bad_role`) stops moving but is not presented
+    as delivered: `sync_failed` stays on the event for the interface."""
+    client, service, llm, relay = synced
+    side = client.post("/api/threads", json={"title": "Bad row"}).json()
+    llm.script.append(LLMResponse(content="answer", finish_reason="stop"))
+    client.post(f"/api/threads/{side['id']}/send", json={"text": "hello"})
+    wait_for(
+        lambda: any(
+            e["type"] == "assistant" and e.get("final") for e in _events(client, side["id"])
+        )
+    )
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]  (assigns the mid)
+    event = next(e for e in service.threads[side["id"]].timeline.events if e["type"] == "assistant")
+    relay.refuse[event["mid"]] = "bad_role"
+    event["synced"] = False
+    client.portal.call(service.sync.push)  # type: ignore[union-attr]
+    assert event.get("sync_failed") == "bad_role"
+    assert "sync_retry_at" not in event
+
+
+def test_opening_a_chat_asks_the_relay_for_its_history(synced, monkeypatch) -> None:
+    """D2: a chat created on another device used to arrive as a title with no messages and
+    stayed empty until something was sent here. Opening the chat is the signal that pulls
+    the bodies down; a poll or a scroll of the same page does not ask the relay again."""
+    client, service, llm, relay = synced
+    side = client.post("/api/threads", json={"title": "From the phone"}).json()
+    cid = "cid-from-the-phone"
+    service.sync.state["cids"][side["id"]] = cid
+    service.sync.state.setdefault("message_cursors", {}).pop(cid, None)
+    calls: list[tuple[str, str]] = []
+
+    async def open_from_relay(thread_id: str, reader: str) -> None:
+        calls.append((thread_id, reader))
+        service.threads[thread_id].timeline.add(
+            {"type": "user", "text": "book a table", "ts": _iso_at(1738000050)}
+        )
+        service.sync.state["message_cursors"][cid] = 1
+
+    monkeypatch.setattr(service.sync.catalog, "open", open_from_relay)
+    r = client.get(f"/api/threads/{side['id']}/events")
+    assert r.status_code == 200
+    assert [e["text"] for e in r.json()["events"]] == ["book a table"]
+    assert calls == [(side["id"], "local-web")]
+    # the chat is here now: the next read of the same page is local
+    client.get(f"/api/threads/{side['id']}/events")
+    assert calls == [(side["id"], "local-web")]
 
 
 def test_side_chats_are_on_for_a_device_that_never_chose(
