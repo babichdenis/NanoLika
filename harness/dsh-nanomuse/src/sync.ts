@@ -704,6 +704,9 @@ export interface SyncView {
   sessions: string[]
   /** The title of each synced session, so a chat the harness has not listed yet still has a name. */
   titles: Record<string, string>
+  /** session id → the device that started the conversation ('' = this computer): the chats column
+   *  groups the account's chats by where they were written. */
+  origins: Record<string, string>
   /** The chat's own model (a Cloud id) per session; a session not listed follows the default. */
   models: Record<string, string>
   /** The thinking level chosen beside the chat's model; absent = the provider's default. */
@@ -835,6 +838,19 @@ export class SyncEngine {
       sessions: Object.keys(this.state.cids).filter((sid) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
       titles: Object.fromEntries(
         Object.entries(this.state.titles).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
+      ),
+      origins: Object.fromEntries(
+        Object.entries(this.state.cids)
+          .filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local')
+          .map(([sid, cid]) => {
+            const conv = this.state.conversations[cid]
+            const title = String(conv?.title || '')
+            const device = String(conv?.deviceName || '')
+            const origin = /^telegram/i.test(title) ? 'telegram'
+              : /^max/i.test(title) || /^max[-_]/i.test(device) || /^max$/i.test(device) ? 'max'
+              : /cloud|web/i.test(device) ? 'web' : ''
+            return [sid, origin]
+          }),
       ),
       models: Object.fromEntries(
         Object.entries(this.state.models).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),

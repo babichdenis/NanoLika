@@ -30,12 +30,10 @@ export interface ApprovalRecord {
 const KEY = 'nanomuse.prefs'
 /**
  * Bumped when a default changes in a way that installations which already wrote the old
- * one must follow. 2: the harness's own controls show by default, on macOS and on Windows
- * alike. With the Developer switch off the Muse look hides the harness's own chrome (its
- * header bar, the composer's dock, the model picker); a window where the Muse chrome did
- * not come up either was left with nothing at the top and at the bottom.
+ * one must follow. 4: the chats column is the nanoMuse one by default (virtual folders by
+ * origin); a profile written before it is migrated once, the Developer switch stands after.
  */
-const SCHEMA = 3
+const SCHEMA = 4
 
 /** The desktop app's platform, from the preload's bridge, which is in place before the page's
  *  own scripts run. Undefined in a plain browser: the web client keeps the Muse look. */

@@ -279,15 +279,14 @@ export function MuseSidebar(props: MuseSidebarProps): ReactNode {
   const chats = wide && !roomMode
     ? h('div', { ref: column, className: `nm-col${collapsed ? ' nm-fading' : ''}`, style: { width: Math.max(0, (collapsed ? lastWideWidth.current : width) - RAIL) } },
         h('div', { className: 'nm-col-top', 'data-window-drag': true }),
-        browser
-          ? h('div', { className: 'nm-col-body' },
-              h('div', { className: 'nm-col-head' },
-                h('span', null, t('railChats')),
-                h('div', { className: 'nm-col-head-actions' },
-                  h('button', { type: 'button', className: 'nm-icon-btn', title: t('railNew'), 'aria-label': t('railNew'), onClick: startSession }, h(IconPlus, { size: 18 })))),
-              renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => { if (collapsed) toggleSidebar() } }))
-          : h('div', { className: 'nm-col-body' },
-              h(MuseChats, { t, useSessions, useSessionStatus, useWorkspaces, actions: chatActions, searchRef: (el) => { searchField.current = el } })),
+        h('div', { className: 'nm-col-body' },
+          typeof useSessions === 'function'
+            ? h(MuseChats, { t, useSessions, useSessionStatus, useWorkspaces, actions: chatActions, searchRef: (el) => { searchField.current = el } })
+            : null,
+          browser
+            ? h('div', { className: 'nm-col-harness' },
+                renderSlot('sidebar.workspaces', { wide: true, expandSidebar: () => { if (collapsed) toggleSidebar() } }))
+            : null),
         h('div', { className: 'nm-col-foot' }, renderSlot('sidebar.footer.action', { wide: true })))
     : null
 

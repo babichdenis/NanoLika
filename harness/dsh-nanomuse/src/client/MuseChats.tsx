@@ -53,8 +53,10 @@ interface SyncList {
   synced: Set<string>
   /** Chats deleted everywhere here: hidden (the account has a tombstone, the file stays). */
   gone: Set<string>
+  /** session id → the device that started the conversation ('' = this computer) */
+  origins: Record<string, string>
 }
-const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set() }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set(), origins: {} }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -63,8 +65,8 @@ export function useSyncList(): SyncList {
   useEffect(() => {
     let alive = true
     const load = () => {
-      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number> }>('sync/state')
-        .then((v) => { if (alive) setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set(v.sessions ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []) }) })
+      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number>; origins?: Record<string, string> }>('sync/state')
+        .then((v) => { if (alive) { const __s=new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]); setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []), origins: v.origins ?? {} }) } })
         .catch(() => undefined)
     }
     void load()
@@ -396,6 +398,20 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
       if (pa !== pb) return pb - pa
       return b.updatedAt - a.updatedAt
     })
+  // Virtual folders: where each chat was written. This computer first, then the messengers
+  // and the web, so a chat started on the phone is found under its own name, not mixed in.
+  const originLabel = (origin: string): string =>
+    origin === 'telegram' ? 'Telegram' : origin === 'max' ? 'MAX' : origin === 'web' ? t('chWeb') : t('chThisComputer')
+  const grouped = new Map<string, ChatSummary[]>()
+  for (const chat of side) {
+    const key = originLabel(sync.origins[chat.id] || '')
+    const rows = grouped.get(key) ?? []
+    rows.push(chat)
+    grouped.set(key, rows)
+  }
+  const originOrder = [...grouped.keys()].sort((a, b) =>
+    a === t('chThisComputer') ? -1 : b === t('chThisComputer') ? 1 : a.localeCompare(b),
+  )
   const mainMatches = q === '' || t('chMain').toLowerCase().includes(q) || (main?.displayTitle.toLowerCase().includes(q) ?? false)
 
   const openMain = () => {
@@ -461,11 +477,13 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
                 h('button', { type: 'button', className: 'nm-chat-open', onClick: openMain }, h('span', { className: 'nm-chat-title' }, t('chMain')))))
         : null,
       h('div', { className: 'nm-chats-section' },
-        h('span', null, t('chSide')),
+        h('span', null, t('chSide') + ' · ' + sync.sessions.size),
         h('button', { type: 'button', className: 'nm-icon-btn nm-icon-btn-sm', 'aria-label': t('chNewSide'), title: t('chNewSide'), onClick: actions.startSession }, h(IconPlus, { size: 16 }))),
       side.length === 0
         ? h('div', { className: 'nm-chats-empty' }, q === '' ? t('chEmpty') : t('chNoMatch'))
-        : side.map((chat) => h(ChatRow, {
+        : originOrder.map((origin) => h('div', { key: origin, className: 'nm-chats-group' },
+            h('div', { className: 'nm-chats-group-title' }, origin),
+            (grouped.get(origin) ?? []).map((chat) => h(ChatRow, {
             key: chat.id,
             unreadCount: sync.unread[chat.id] ?? 0,
             t,
@@ -485,7 +503,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
                 .then((r) => { const id = r?.sessionId || chat.id; writeMain(id); setMainStored(id) })
                 .catch(() => { writeMain(chat.id); setMainStored(chat.id) })
             },
-          }))),
+          }))))),
     notice
       ? h(Toast, { key: notice.n, text: notice.text, holdMs: 6000, anchor: columnRef.current, onDone: () => setNotice(null) })
       : null)
