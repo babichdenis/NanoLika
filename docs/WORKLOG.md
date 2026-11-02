@@ -17,6 +17,21 @@
   (site-packages read-only, потому монтируются отдельные файлы), CSP — `api.py` из
   `deepseek-routing-20261027`, релей перезапущен. Коммит `d205fd9a`.
 
+## 2026-11-02 · Серверный бот обновлён до рабочей ветки
+
+- **Образ.** Собран `nanomuse:bot-20261102d` из `feat/voice-ru` (сервер стоял на `main` от 17 октября,
+  ветка ушла вперёд на 606 коммитов). Контекст сборки — `pyproject.toml`, `Dockerfile`, `nanomuse/`,
+  `config/config.example.toml`.
+- **Данные и откат.** `/opt/nanolika-bot/data` скопирован в `data.bak-20261102T185156` (3,7 МБ),
+  compose — в `docker-compose.new.yml.bak-20261102T185156`, старый образ помечен
+  `nanomuse:bot-rollback-20261102`. Откат: вернуть `image: nanomuse:bot-20261102c` и `up -d bot`.
+- **Проверка до переключения.** Новый образ поднят на копии данных с `--network none`: конфиг
+  разобрался, миграция записала `defaults_version: 2`, `side_chats: true`, `backfill: true`,
+  5 cid на месте.
+- **После переключения.** Контейнер healthy, `/api/health` — 200, ошибок в логах нет.
+  Бэкфилл прошёл сразу: `927 change(s) from the account's other devices`, `backfill` сброшен,
+  каналы подхватили `selected-chats.json`. Версия осталась 1.0.5.
+
 ## 2026-11-02 · Синхронизация: side-чаты включены по умолчанию
 
 Разбор `NanoLika-sync-devices-2026-11-02.md` (восемь причин «сессии не доезжают»),
