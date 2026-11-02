@@ -141,6 +141,44 @@ async def test_a_conversation_keeps_its_own_model():
     assert out["conversations"][0]["model"] == "text-model"
 
 
+async def test_a_conversation_keeps_its_thinking_level():
+    """The level beside the chat's model: it travels with the conversation, survives a
+    rename that does not mention it, and an empty value really clears it."""
+    app, client, sender, up, cloud, settings = make()
+    key = await signed_in(client, sender)
+    cid = uid()
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, model="gpt-5-6-luna-pro", reasoning="Medium")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes", headers=auth(key))).json()
+    assert out["conversations"][0]["model"] == "gpt-5-6-luna-pro"
+    assert out["conversations"][0]["reasoning"] == "medium"
+
+    # a rename without the field is not a silent reset
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, title="Renamed")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
+    assert out["conversations"][0]["title"] == "Renamed"
+    assert out["conversations"][0]["reasoning"] == "medium"
+
+    # "default" is the absence of a level, and it goes upstream as a real change
+    r = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(cid, model="gpt-5-6-luna-pro", reasoning="")]},
+        headers=auth(key),
+    )
+    assert r.json()["accepted"] == 1
+    out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
+    assert out["conversations"][0]["reasoning"] == ""
+
+
 async def test_device_names_are_filled_from_the_hub_devices():
     app, client, sender, up, cloud, settings = make()
     key = await signed_in(client, sender)
