@@ -8,6 +8,7 @@ from nanomuse.tools.goal_tools import Goals
 from nanomuse.tools.mcp_tools import MCPManager, MCPTool
 from nanomuse.tools.media import Media
 from nanomuse.tools.memory_tools import Forget, Recall, Remember
+from nanomuse.tools.models import Models
 from nanomuse.tools.office import OfficeConvert, OfficeVba, OfficeXlsm
 from nanomuse.tools.picture import Picture
 from nanomuse.tools.reminder_tools import Reminders
@@ -16,6 +17,7 @@ from nanomuse.tools.skills_tool import Skills
 from nanomuse.tools.store import Store
 from nanomuse.tools.terminate import AskUser, Terminate
 from nanomuse.tools.trigger_tools import Triggers
+from nanomuse.tools.video import Video
 from nanomuse.tools.web import WebFetch, WebSearch
 
 __all__ = [
@@ -31,10 +33,12 @@ __all__ = [
     "MCPManager",
     "MCPTool",
     "Media",
+    "Models",
     "OfficeConvert",
     "OfficeVba",
     "OfficeXlsm",
     "Picture",
+    "Video",
     "PythonExecute",
     "ReadEmails",
     "Recall",

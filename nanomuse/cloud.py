@@ -9,10 +9,12 @@ vault under :data:`CLOUD_KEY`; nothing here ever shows it to the model.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import platform
+import time
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -103,7 +105,12 @@ class CloudClient:
         await self._client.aclose()
 
     async def _request(
-        self, method: str, path: str, body: dict[str, Any] | None = None, token: str | None = None
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        token: str | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         headers = {}
         tok = self.api_key if token is None else token
@@ -111,7 +118,7 @@ class CloudClient:
             headers["Authorization"] = f"Bearer {tok}"
         try:
             response = await self._client.request(
-                method, self.base_url + path, json=body, headers=headers
+                method, self.base_url + path, json=body, headers=headers, timeout=timeout
             )
         except httpx.TimeoutException:
             raise CloudError(0, "timeout", f"{self.base_url} did not answer in time") from None
@@ -259,7 +266,10 @@ class CloudClient:
         body: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1}
         if size:
             body["size"] = size
-        said = await self._request("POST", "/v1/images/generations", body)
+        # A picture takes the provider tens of seconds and the relay waits up to its own
+        # 180 s; the client's general 30 s gave up first and the person saw a timeout for
+        # a picture the relay went on to buy.
+        said = await self._request("POST", "/v1/images/generations", body, timeout=240.0)
         data = said.get("data")
         first = data[0] if isinstance(data, list) and data else {}
         raw = str((first or {}).get("b64_json") or "")
@@ -276,6 +286,69 @@ class CloudClient:
         data = await self._request("GET", "/v1/models")
         models = data.get("data")
         return models if isinstance(models, list) else []
+
+    async def video(
+        self,
+        model: str,
+        prompt: str,
+        *,
+        seconds: int = 5,
+        size: str = "",
+        resolution: str = "",
+    ) -> tuple[bytes, dict[str, Any]]:
+        """One clip: submit, wait for the provider's task, keep the file and its charge.
+
+        The relay speaks DashScope's asynchronous shape and copies the finished clip into
+        its own storage, so `nanomuse.media_url` is a link that outlives the provider's."""
+        parameters: dict[str, Any] = {"duration": int(seconds)}
+        if size:
+            parameters["size"] = size
+        if resolution:
+            parameters["resolution"] = resolution
+        said = await self._request(
+            "POST",
+            "/api/v1/services/aigc/video-generation/video-synthesis",
+            {"model": model, "input": {"prompt": prompt}, "parameters": parameters},
+            timeout=180.0,
+        )
+        output = said.get("output") if isinstance(said, dict) else None
+        task = str((output or {}).get("task_id") or "")
+        if not task:
+            raise CloudError(502, "upstream", "The relay did not name the clip's task")
+        deadline = time.monotonic() + 15 * 60
+        while time.monotonic() < deadline:
+            await asyncio.sleep(4)
+            state = await self._request("GET", f"/api/v1/tasks/{quote(task, safe='')}", timeout=60.0)
+            output = state.get("output") if isinstance(state, dict) else None
+            output = output if isinstance(output, dict) else {}
+            status = str(output.get("task_status") or "")
+            if status == "SUCCEEDED":
+                meta = state.get("nanomuse") if isinstance(state.get("nanomuse"), dict) else {}
+                url = str(meta.get("media_url") or output.get("video_url") or "")
+                if not url:
+                    raise CloudError(502, "upstream", "The relay returned no clip")
+                try:
+                    response = await self._client.get(url, timeout=300.0, follow_redirects=True)
+                except httpx.HTTPError as exc:
+                    raise CloudError(0, "offline", "The clip could not be downloaded") from exc
+                if response.status_code >= 400:
+                    raise CloudError(502, "upstream", "The clip could not be downloaded")
+                return response.content, {
+                    "charged": meta.get("charged"),
+                    "url": url,
+                    "seconds": int(seconds),
+                }
+            if status in ("FAILED", "CANCELED"):
+                raise CloudError(502, "upstream", str(output.get("message") or "the provider could not make this clip"))
+        raise CloudError(504, "timeout", "The clip took longer than fifteen minutes")
+
+    async def music(self, model: str, prompt: str) -> tuple[bytes, str, dict[str, str]]:
+        """One music track by description: bytes, type and the relay's own headers."""
+        response = await self._audio(
+            "/v1/audio/music", json={"model": model, "prompt": prompt}, timeout=300.0
+        )
+        media = (response.headers.get("content-type") or "audio/mpeg").split(";")[0].strip()
+        return response.content, media, dict(response.headers)
 
     async def estimate(
         self,

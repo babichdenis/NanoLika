@@ -39,6 +39,7 @@ from nanomuse.tools import (
     Goals,
     MCPManager,
     Media,
+    Models,
     OfficeConvert,
     OfficeVba,
     OfficeXlsm,
@@ -55,6 +56,7 @@ from nanomuse.tools import (
     Terminate,
     ToolCollection,
     Triggers,
+    Video,
     WebFetch,
     WebSearch,
     playwright_available,
@@ -356,6 +358,8 @@ class NanoMuseApp:
             OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
             Picture(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
+            Video(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
+            Models(cloud=self._cloud_client),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:

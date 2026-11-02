@@ -36,15 +36,16 @@ class Media(BaseTool):
     description: str = (
         "Sound through the account's NanoLika Cloud key. action=`speech` speaks `text` "
         "aloud and saves the file in the workspace (voice, format, speed); action="
-        "`transcribe` turns a recording inside the workspace into text (path, language). "
-        "The result names the file or the words and what the relay charged. Use this "
-        "instead of calling a provider's audio API yourself."
+        "`music` makes one track from a description; action=`transcribe` turns a recording "
+        "inside the workspace into text (path, language). The result names the file or the "
+        "words and what the relay charged. Use this instead of calling a provider's audio "
+        "API yourself."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["speech", "transcribe"]},
-            "text": {"type": "string", "description": "What to say (speech)"},
+            "action": {"type": "string", "enum": ["speech", "music", "transcribe"]},
+            "text": {"type": "string", "description": "What to say (speech) or the music to make"},
             "voice": {"type": "string", "description": "The provider's voice id, optional"},
             "format": {"type": "string", "enum": list(SPEECH_FORMATS), "description": "mp3 by default"},
             "speed": {"type": "number", "description": "0.25 to 4, optional"},
@@ -119,6 +120,25 @@ class Media(BaseTool):
             bits = [f"Speech saved to {rel.as_posix()}"]
             if seconds:
                 bits.append(f"{seconds} s")
+            if charged:
+                bits.append(f"charged {charged}")
+            return ToolResult(output=", ".join(bits) + f" ({media_type})")
+        if action == "music":
+            if not text.strip():
+                return ToolResult.fail("media music needs the description of the track")
+            try:
+                model = await self._model("music")
+                sound, media_type, headers = await client.music(model, text.strip())
+            except CloudError as exc:
+                return ToolResult.fail(f"Music failed: {exc.message}")
+            if not sound:
+                return ToolResult.fail("The relay returned no track")
+            rel = Path("media") / f"{uuid.uuid4().hex[:12]}.mp3"
+            target = self._resolve(str(rel), must_exist=False)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(sound)
+            charged = headers.get("x-nanomuse-charged", "")
+            bits = [f"Track saved to {rel.as_posix()}"]
             if charged:
                 bits.append(f"charged {charged}")
             return ToolResult(output=", ".join(bits) + f" ({media_type})")

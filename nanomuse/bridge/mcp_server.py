@@ -106,6 +106,45 @@ def bot_project_tools(settings: Settings) -> list[BaseTool]:
     ]
 
 
+def cloud_tools(settings: Settings) -> list[BaseTool]:
+    """Pictures, clips, sound and the model menu, under the account's own Cloud key.
+
+    The desktop's host runs the agent itself; without these it could only talk about a
+    picture. The key comes from the vault, or from the launch environment the desktop
+    passes when its account is the one signed in. The tools stay out of the list when
+    there is no key at all, so an unsigned copy is not a menu of refusals."""
+    from nanomuse.cloud import CLOUD_KEY, CloudClient
+    from nanomuse.tools.media import Media
+    from nanomuse.tools.models import Models
+    from nanomuse.tools.picture import Picture
+    from nanomuse.tools.video import Video
+    from nanomuse.vault.vault import CredentialVault
+
+    kept = CredentialVault(settings.vault_file, settings.vault_key_file)
+
+    def key() -> str:
+        if os.environ.get("NANOLIKA_DESKTOP_ACCOUNT") == "1":
+            from_env = os.environ.get("NANOMUSE_CLOUD_KEY") or ""
+            if from_env:
+                return from_env
+        return kept.get(CLOUD_KEY) or ""
+
+    if not key():
+        return []
+    workspace = settings.agent.workspace
+
+    def client() -> CloudClient | None:
+        value = key()
+        return CloudClient(settings.cloud.base_url, value) if value else None
+
+    return [
+        Picture(workspace=workspace, extra_roots=list(settings.agent.extra_roots), cloud=client),
+        Video(workspace=workspace, extra_roots=list(settings.agent.extra_roots), cloud=client),
+        Media(workspace=workspace, extra_roots=list(settings.agent.extra_roots), cloud=client),
+        Models(cloud=client),
+    ]
+
+
 def confirm_secret() -> str:
     """The host's confirmation secret, or ``""`` when the model's own word is accepted."""
     return os.environ.get(CONFIRM_SECRET_ENV, "").strip()
