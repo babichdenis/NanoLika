@@ -73,6 +73,8 @@ class FakeMac:
         self.ax_hits: set[tuple[float, float]] = set()
         self.is_trusted = True
         self.capture_fails = False
+        # a window that is minimised or not drawn: ScreenCaptureKit hands back black
+        self.black = False
 
     def windows(self) -> list[mw.WindowInfo]:
         return list(self.window_list)
@@ -81,6 +83,14 @@ class FakeMac:
         if self.capture_fails:
             return None
         w = next(w for w in self.window_list if w.id == window_id)
+        if self.black:
+            import io
+
+            from PIL import Image
+
+            buf = io.BytesIO()
+            Image.new("RGB", (int(w.width) * self.scale, int(w.height) * self.scale), (0, 0, 0)).save(buf, "PNG")
+            return buf.getvalue()
         return png_bytes(int(w.width) * self.scale, int(w.height) * self.scale)
 
     def post_mouse(self, pid: int, event: mw.MouseEvent) -> None:
@@ -302,6 +312,26 @@ async def test_the_link_works_in_a_window_and_falls_back_to_the_screen(
     link.settings.mode = "auto"
     link.set_target("")
     assert not link.in_window_mode()
+
+
+async def test_a_window_that_comes_back_black_falls_back_to_the_screen(
+    settings: Settings, fake_screen
+) -> None:
+    """A window that is minimised, hidden or in an app that stopped drawing comes back as a
+    black rectangle while every permission is granted: the hands show the whole screen with
+    a note, never a black picture the model would take for the screen."""
+    pytest.importorskip("PIL")
+    mac = FakeMac()
+    link = make_link(settings, mac)
+    link.set_target("Safari")
+    mac.black = True
+    screen = await link.screen()
+    assert screen.app == "firefox" and (screen.width, screen.height) == (1920, 1080)
+    assert "came back black" in screen.note and "whole screen" in screen.note
+    # the next look tries the window again: it is drawn now, so the window is back
+    mac.black = False
+    screen = await link.screen()
+    assert screen.app == "com.apple.Safari" and "window of Safari" in screen.note
 
 
 async def test_auto_mode_parks_the_hands_on_the_screen_when_the_quartz_layer_breaks(

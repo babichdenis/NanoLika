@@ -68,6 +68,18 @@ POINTED = ("click", "double_click", "right_click", "middle_click", "move")
 Listener = Callable[[dict[str, Any]], None]
 
 
+def _picture_is_black(png: bytes) -> bool:
+    """Whether a window picture is a black rectangle: every channel below 8 on a 64×36 sample,
+    the same rule the screen capture uses (:mod:`nanomuse.computer.screen`)."""
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(png)).convert("RGB").resize((64, 36))
+        return max(img.tobytes()) < 8
+    except Exception:  # noqa: BLE001 — no Pillow, or not a picture: let it through
+        return False
+
+
 class ComputerLink:
     def __init__(
         self,
@@ -444,6 +456,19 @@ class ComputerLink:
             return None
         except Exception as exc:  # noqa: BLE001 — pyobjc fails in many ways
             self._window_layer_failed(exc)
+            return None
+        w0 = frame.window
+        if _picture_is_black(png):
+            # a window that is minimised, hidden or in an app that stopped drawing comes
+            # back as a black rectangle, not as an error: the model would be looking at a
+            # black screen while every permission is granted. The whole screen is the
+            # honest answer, with a note saying why the window is not the picture.
+            self._window_error = (
+                f"the window of {w0.owner} came back black (minimised, hidden, or the app "
+                "is not drawing it right now)"
+            )
+            self.window_frame = None
+            logger.info("window mode: {}", self._window_error)
             return None
         self._window_error = ""
         data, mime = png, "image/png"
