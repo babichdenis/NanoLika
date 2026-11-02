@@ -37,6 +37,8 @@ services:
       - ./dl:/srv/dl:ro
       # the store: skills, code capsules, MCP descriptions (docs/store.md)
       - ./store:/srv/store:ro
+      # the MAX mini app's three files, served from the same origin (Caddyfile /web/max.*)
+      - ./nanomuse_cloud/web_client:/srv/max:ro
       # база моделей: статические страницы из проекта modelscope
       - ./models:/srv/models:ro
       - caddy_data:/data
