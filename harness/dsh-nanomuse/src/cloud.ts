@@ -4309,7 +4309,7 @@ export default class NanomuseCloud extends Service {
           // whole. The relay tombstones its conversation (it leaves the other devices and the
           // messengers), the chat here stays as a local one. The browser half asks first.
           const body = await json(req)
-          return send(res, 200, await sync.deleteConversation(String(body.sessionId ?? '')))
+          return send(res, 200, await sync.deleteConversation(String(body.sessionId ?? ''), body.hide === true))
         }
         if (req.method === 'GET' && route === '/sync/remote') {
           const sessionId = url.searchParams.get('session') ?? ''

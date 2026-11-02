@@ -44,7 +44,7 @@ from nanomuse.channels.menu import ChatMenu
 from nanomuse.channels.store import ChannelSettingsStore, PairingStore
 from nanomuse.channels.sync_delivery import SyncDeliveryReceipts
 from nanomuse.channels.telegram import TelegramChannel
-from nanomuse.channels.telegram_topics import physical_chat
+from nanomuse.channels.telegram_topics import first_phrase, physical_chat, service_text
 from nanomuse.channels.wecom import WeComChannel
 from nanomuse.channels.welcome import send_welcome_art
 from nanomuse.cloud import CloudError
@@ -828,10 +828,24 @@ class ChannelManager(ChannelBus):
             return False
         return True
 
+    def _opening_title(self, msg: InboundMessage) -> str:
+        """The first phrase of the message that opened a chat: the name a thread carries, the
+        way a chat made in the app is named from its first words. A command or a service
+        line says nothing about the conversation, so it leaves the title alone."""
+        opening = first_phrase(msg.text)
+        if not opening or opening.startswith("/") or service_text(opening):
+            return ""
+        return opening
+
     def _thread_for(self, msg: InboundMessage) -> str:
         selected = self.picker.selected(msg.channel, msg.chat_id)
         thread = self.svc.threads.get(selected)
         if thread is not None and self.svc.sync._mine(thread):
+            # A chat that still carries the bot's generic name takes the first words of the
+            # person's message, the way a chat made on the computer is named.
+            opening = self._opening_title(msg)
+            if opening and thread.title.strip() == f"{self.types[msg.channel].label} · nanoLika":
+                self.svc.rename_thread(selected, opening)
             if selected not in self.picker.pins:
                 self.routes[selected] = (msg.channel, msg.chat_id)
             return selected
@@ -851,9 +865,12 @@ class ChannelManager(ChannelBus):
             )
             self.svc.rename_thread(
                 thread_id,
-                f"{label} · nanoLika"
-                if msg.channel in {"telegram", "max"}
-                else f"{label} · {who}"[:60],
+                self._opening_title(msg)
+                or (
+                    f"{label} · nanoLika"
+                    if msg.channel in {"telegram", "max"}
+                    else f"{label} · {who}"[:60]
+                ),
             )
         if not selected or selected != thread_id:
             # No selection, or one whose thread is gone: remember this chat's own thread so

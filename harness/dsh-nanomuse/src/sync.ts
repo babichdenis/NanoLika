@@ -848,7 +848,12 @@ export class SyncEngine {
             const device = String(conv?.deviceName || '')
             const origin = /^telegram/i.test(title) ? 'telegram'
               : /^max/i.test(title) || /^max[-_]/i.test(device) || /^max$/i.test(device) ? 'max'
-              : /cloud|web/i.test(device) ? 'web' : ''
+              : /cloud|web/i.test(device) ? 'web'
+              // Another computer running Lika: its chats keep that computer's name, so the
+              // column can show them under it instead of mixing them into "this computer".
+              : conv?.device && conv.device !== this.options.deviceId()
+                ? `device:${conv.deviceName || conv.device}`
+                : ''
             return [sid, origin]
           }),
       ),
@@ -1151,14 +1156,17 @@ export class SyncEngine {
    * go (the account keeps its one main conversation), and a chat that is local already has nothing
    * to delete and answers `ok`.
    */
-  async deleteConversation(sessionId: string): Promise<SyncedOutcome> {
+  async deleteConversation(sessionId: string, hide = false): Promise<SyncedOutcome> {
     if (!sessionId) return { ...this.view(), ok: false, reason: 'unknown-session' }
     if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return { ...this.view(), ok: false, reason: 'main' }
     if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return { ...this.view(), ok: false, reason: 'not-synced-account' }
     await this.cloudOff(sessionId)
-    const gone = new Set(this.state.gone ?? [])
-    gone.add(sessionId)
-    this.state.gone = [...gone]
+    // Turning the cloud off is not a deletion here: the conversation leaves the account (the
+    // relay tombstones it, so the other devices, the web and the messengers lose it) and the
+    // copy on this computer stays a local chat. Only "delete everywhere" hides the row.
+    this.state.gone = hide
+      ? [...new Set([...(this.state.gone ?? []), sessionId])]
+      : (this.state.gone ?? []).filter(id => id !== sessionId)
     await this.save()
     this.changed()
     return { ...this.view(), ok: true }

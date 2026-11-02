@@ -92,6 +92,9 @@ export interface ChatSummary {
   retainedBy: { mainView?: number | undefined }
   blank: boolean
   updatedAt: number
+  /** The folder the chat works in (the harness's summary carries it); a chat from a
+   *  messenger has none and gets a virtual folder by its origin instead. */
+  cwd?: string | undefined
 }
 export interface ChatListState {
   ids: string[]
@@ -105,7 +108,7 @@ export interface ChatStatus {
 }
 export type UseSessionList = <S>(selector: (state: ChatListState) => S) => S
 export type UseStatusMap = <S>(selector: (snapshot: ReadonlyMap<string, ChatStatus>) => S) => S
-export type UseWorkspaceList = <S>(selector: (snapshot: { archivedSessionIds: readonly string[]; pinnedSessionIds: readonly string[] }) => S) => S
+export type UseWorkspaceList = <S>(selector: (snapshot: { archivedSessionIds: readonly string[]; pinnedSessionIds: readonly string[]; items?: readonly { workspaceId: string; title: string; path?: string }[] }) => S) => S
 
 export interface ChatActions {
   openSession(id: string): void
@@ -398,20 +401,42 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
       if (pa !== pb) return pb - pa
       return b.updatedAt - a.updatedAt
     })
-  // Virtual folders: where each chat was written. This computer first, then the messengers
-  // and the web, so a chat started on the phone is found under its own name, not mixed in.
-  const originLabel = (origin: string): string =>
-    origin === 'telegram' ? 'Telegram' : origin === 'max' ? 'MAX' : origin === 'web' ? t('chWeb') : t('chThisComputer')
+  // Folders: a chat made on this computer stays in the folder it works in (the workspace
+  // carries the model's permissions); a chat from a messenger or the web has no folder here
+  // and gets a virtual one by its origin. Workspaces keep their registry order, the virtual
+  // folders follow, and the chats outside every folder come last.
+  const workspaceRows = typeof useWorkspaces === 'function' ? useWorkspaces((w) => w.items ?? []) : []
+  const folderOf = (chat: ChatSummary): string => {
+    const origin = sync.origins[chat.id] || ''
+    if (origin === 'telegram') return 'Telegram'
+    if (origin === 'max') return 'MAX'
+    if (origin === 'web') return t('chWeb')
+    if (origin.startsWith('device:')) return origin.slice(7).trim() || t('chThisComputer')
+    const cwd = chat.cwd || ''
+    const folder = workspaceRows.find((w) => w.path === cwd)?.title
+    if (folder) return folder
+    // A folder the registry no longer lists (or a session outside every workspace): its own
+    // last segment still tells the person where it works.
+    const tail = cwd.split('/').filter(Boolean).pop()
+    return tail || t('chThisComputer')
+  }
   const grouped = new Map<string, ChatSummary[]>()
   for (const chat of side) {
-    const key = originLabel(sync.origins[chat.id] || '')
+    const key = folderOf(chat)
     const rows = grouped.get(key) ?? []
     rows.push(chat)
     grouped.set(key, rows)
   }
-  const originOrder = [...grouped.keys()].sort((a, b) =>
-    a === t('chThisComputer') ? -1 : b === t('chThisComputer') ? 1 : a.localeCompare(b),
-  )
+  const folderOrder = [
+    ...workspaceRows.map((w) => w.title).filter((title) => grouped.has(title)),
+    ...['Telegram', 'MAX', t('chWeb')].filter((title) => grouped.has(title)),
+    ...[...grouped.keys()]
+      .filter((title) => title !== t('chThisComputer')
+        && !workspaceRows.some((w) => w.title === title)
+        && !['Telegram', 'MAX', t('chWeb')].includes(title))
+      .sort((a, b) => a.localeCompare(b)),
+    ...(grouped.has(t('chThisComputer')) ? [t('chThisComputer')] : []),
+  ]
   const mainMatches = q === '' || t('chMain').toLowerCase().includes(q) || (main?.displayTitle.toLowerCase().includes(q) ?? false)
 
   const openMain = () => {
@@ -436,13 +461,10 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
    */
   const cloudOff = (id: string) => {
     if (!window.confirm(t('chCloudDeleteConfirm'))) return
-    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
+    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id, hide: false })
       .then((reply) => {
         if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason))
         else announceCloud()
-        // the harness has no delete of its own: the session's files go too, so the row is gone
-        // from every column, not only from the nanoMuse one
-        return call('sync/purge', { sessionId: id }).catch(() => undefined)
       })
       .catch((err: unknown) => say(failureText(t, err)))
   }
@@ -454,7 +476,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   /** Delete a chat here and in the account: one confirmation, then it is gone from every device. */
   const deleteEverywhere = (id: string) => {
     if (!window.confirm(t('chDeleteForeverConfirm'))) return
-    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id })
+    void call<{ ok?: boolean; reason?: string } | undefined>('sync/delete-conversation', { sessionId: id, hide: true })
       .then((reply) => { if (reply && reply.ok === false) say(cloudRefusal(t, reply.reason)) })
       .catch((err: unknown) => say(failureText(t, err)))
   }
@@ -481,7 +503,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
         h('button', { type: 'button', className: 'nm-icon-btn nm-icon-btn-sm', 'aria-label': t('chNewSide'), title: t('chNewSide'), onClick: actions.startSession }, h(IconPlus, { size: 16 }))),
       side.length === 0
         ? h('div', { className: 'nm-chats-empty' }, q === '' ? t('chEmpty') : t('chNoMatch'))
-        : originOrder.map((origin) => h('div', { key: origin, className: 'nm-chats-group' },
+        : folderOrder.map((origin) => h('div', { key: origin, className: 'nm-chats-group' },
             h('div', { className: 'nm-chats-group-title' }, origin),
             (grouped.get(origin) ?? []).map((chat) => h(ChatRow, {
             key: chat.id,
