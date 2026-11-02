@@ -714,6 +714,8 @@ export default class NanomuseCloud extends Service {
   /** Approvals the stage may answer (C2) and holds of the hands (C1). */
   private readonly approvalDesk = new ApprovalDesk(() => this.broadcast(), (req) => this.granted(req.toolName))
   private readonly holdDesk = new HoldDesk(() => this.broadcast())
+  /** Relay answers that change rarely, kept for a little while (`/config`, the account sheet). */
+  private readonly slowCache = new Map<string, { at: number; value: unknown }>()
   private updateCheck: Promise<UpdateInfo> | undefined
   /** The hourly retry after a check that read nothing; one at a time, dropped at shutdown. */
   private updateRetry: ReturnType<typeof setTimeout> | undefined
@@ -2365,6 +2367,15 @@ export default class NanomuseCloud extends Service {
 
   private defaultModelService(): { currentSelection(): ModelPick; saveSelection(next: ModelPick): Promise<void> } | undefined {
     return (this.ctx as unknown as { get(name: string): unknown }).get('agentDefaultModel') as ReturnType<NanomuseCloud['defaultModelService']>
+  }
+
+  /** One relay answer kept for `ttlMs`; a burst of widgets asking at once gets one call. */
+  private async cachedAnswer<T>(key: string, ttlMs: number, read: () => Promise<T>): Promise<T> {
+    const hit = this.slowCache.get(key)
+    if (hit && Date.now() - hit.at < ttlMs) return hit.value as T
+    const value = await read()
+    this.slowCache.set(key, { at: Date.now(), value })
+    return value
   }
 
   /** The account model new chats answer through, when the default is ours; empty when another provider is chosen. */
@@ -4147,8 +4158,10 @@ export default class NanomuseCloud extends Service {
         return send(res, 200, await this.verify(String(body.identifier ?? ''), String(body.code ?? ''), String(body.invite ?? '')))
       }
       // the account page, passed through: the sheet, the devices holding keys, the timeline, the password
-      if (req.method === 'GET' && route === '/config') return send(res, 200, await this.relay.config())
-      if (req.method === 'GET' && route === '/me') return send(res, 200, await this.withToken((token) => this.relay.meSheet(token)))
+      // the rates and the account sheet are the same for a while: a burst of header widgets
+      // asking together must not become four slow trips to the relay
+      if (req.method === 'GET' && route === '/config') return send(res, 200, await this.cachedAnswer('config', 10 * 60_000, () => this.relay.config()))
+      if (req.method === 'GET' && route === '/me') return send(res, 200, await this.withToken((token) => this.cachedAnswer(`me:${token.slice(-12)}`, 30_000, () => this.relay.meSheet(token))))
       if (req.method === 'GET' && route === '/sessions') return send(res, 200, await this.withToken((token) => this.relay.sessions(token)))
       if (req.method === 'POST' && route === '/sessions/revoke') {
         const body = await json(req)
