@@ -142,13 +142,10 @@ export interface WireAttachment {
   url: string
 }
 
-/** A picture another device sent is shown as a Markdown image under its text: the chat's
- * renderer already knows Markdown, and the link is the relay's stable /v1/files one. */
-export function textWithPictures(text: string, attachments?: WireAttachment[]): string {
-  const pictures = (attachments ?? []).filter((a) => a.url && /^image\//i.test(a.mime || ''))
-  if (!pictures.length) return text
-  const tail = pictures.map((a) => `![${a.name || 'picture'}](${a.url})`).join('\n\n')
-  return text ? `${text}\n\n${tail}` : tail
+/** The first picture among a message's attachments: the chat draws it under the text, by
+ * the relay's stable /v1/files link. */
+export function pictureOf(attachments?: WireAttachment[]): string {
+  return (attachments ?? []).find((a) => a.url && /^image\//i.test(a.mime || ''))?.url ?? ''
 }
 
 export interface SyncChanges {
@@ -369,6 +366,8 @@ export interface RemoteLine {
   at: number
   /** Local wall-clock milliseconds when this computer kept the row, so skewed device clocks still anchor subsequent local prompts. */
   keptAt?: number
+  /** A picture the message carried: the relay's stable link, drawn under the text. */
+  image?: string
   device: string
   deviceName: string
 }
@@ -1953,7 +1952,8 @@ export class SyncEngine {
     // the reply arrived: that device is not working on it any more; another device's line stays
     if (m.role === 'assistant') this.clearWorking(m.cid, m.device)
     if (!sessionId) return
-    const line: RemoteLine = { mid: m.mid, role: m.role, text: textWithPictures(m.text, m.attachments), at: m.created_at * 1000, device: m.device, deviceName: m.device_name }
+    const picture = pictureOf(m.attachments)
+    const line: RemoteLine = { mid: m.mid, role: m.role, text: m.text, at: m.created_at * 1000, device: m.device, deviceName: m.device_name, ...(picture ? { image: picture } : {}) }
     if (m.role === 'user' && allowPromote && this.options.sessions.promote) {
       const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
       if (promoted) {

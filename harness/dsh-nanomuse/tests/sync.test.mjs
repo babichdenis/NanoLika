@@ -10,7 +10,7 @@
 // refused reaching the browser half.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SyncEngine, SyncRelay, MAX_POST_MESSAGES, TAIL, emptyState, migrate, RemoteStore, meanwhileNote, textWithPictures } from '../lib/sync.js'
+import { SyncEngine, SyncRelay, MAX_POST_MESSAGES, TAIL, emptyState, migrate, RemoteStore, meanwhileNote, pictureOf } from '../lib/sync.js'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1458,10 +1458,11 @@ test('a fresh install restores its own rows by mid, not by device', async () => 
 })
 
 
-test('a picture from another device comes into the transcript as a Markdown image', () => {
+test('a picture from another device is found among the attachments and drawn by its link', () => {
   const picture = { name: 'lika-picture.jpg', mime: 'image/jpeg', size: 12, url: 'https://cloud.example.test/v1/files/files/1/lika-picture.jpg?t=x' }
-  assert.equal(textWithPictures('вот', [picture]), 'вот\n\n![lika-picture.jpg](https://cloud.example.test/v1/files/files/1/lika-picture.jpg?t=x)')
-  assert.equal(textWithPictures('', [picture]), '![lika-picture.jpg](https://cloud.example.test/v1/files/files/1/lika-picture.jpg?t=x)')
-  assert.equal(textWithPictures('файл', [{ ...picture, mime: 'application/pdf' }]), 'файл')
-  assert.equal(textWithPictures('без', []), 'без')
+  assert.equal(pictureOf([picture]), 'https://cloud.example.test/v1/files/files/1/lika-picture.jpg?t=x')
+  assert.equal(pictureOf([{ ...picture, mime: 'application/pdf' }]), '')
+  assert.equal(pictureOf([{ ...picture, url: '' }]), '')
+  assert.equal(pictureOf([]), '')
+  assert.equal(pictureOf(undefined), '')
 })

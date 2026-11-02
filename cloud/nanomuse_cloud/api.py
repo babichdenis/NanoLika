@@ -1976,16 +1976,37 @@ def create_app(
         }
 
     @app.get("/v1/files/{key:path}")
-    async def file_once(key: str, t: str = "") -> RedirectResponse:
-        """A stable link to an attachment: the relay checks its own signature and answers
-        with a fresh presigned URL, so a picture in a shared chat keeps opening after the
-        week-long presigned link from the upload has expired."""
+    async def file_once(key: str, t: str = "") -> StreamingResponse:
+        """A stable link to an attachment: the relay checks its own signature and streams
+        the object from S3, so the link keeps opening after the week-long presigned URL from
+        the upload has expired — and it stays on this origin, which the pages' CSP allows."""
         if not s3_files.enabled(settings):
             raise CloudError(503, "attachments_unconfigured", "File storage is not configured on this relay")
         if not s3_files.media_ok(settings, key, t):
             raise CloudError(403, "bad_link", "This file link is not valid")
         name = key.rsplit("/", 1)[-1] or "file"
-        return RedirectResponse(s3_files.presign_get(settings, key, s3_files.safe_name(name)), status_code=302)
+        client = httpx.AsyncClient(timeout=120, follow_redirects=True)
+        try:
+            upstream = await client.send(client.build_request("GET", s3_files.presign_get(settings, key, s3_files.safe_name(name))), stream=True)
+        except httpx.HTTPError as error:
+            await client.aclose()
+            raise CloudError(502, "storage_unavailable", "File storage did not answer") from error
+        if upstream.status_code >= 400:
+            await upstream.aclose()
+            await client.aclose()
+            raise CloudError(502, "storage_unavailable", "File storage did not give the file")
+        async def stream_body():
+            try:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+            finally:
+                await upstream.aclose()
+                await client.aclose()
+        return StreamingResponse(
+            stream_body(),
+            media_type=upstream.headers.get("content-type") or "application/octet-stream",
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
 
     # -- звук: озвучка текста и распознавание записи -------------------------------------------
     # Кабинет и будущие клиенты говорят на языке OpenAI: POST /v1/audio/speech превращает
@@ -3640,7 +3661,7 @@ def create_app(
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 + ("script-src 'self' https://telegram.org; " if path == "/web/telegram.html" else "script-src 'self'; ")
-                + "style-src 'self'; connect-src 'self'; img-src 'self' blob: data:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org http://127.0.0.1:* http://localhost:*"
+                + "style-src 'self'; connect-src 'self'; img-src 'self' blob: data: https://s3.regru.cloud; media-src 'self' blob: https://s3.regru.cloud; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org http://127.0.0.1:* http://localhost:*"
             )
         elif path == "/app" or path.startswith("/app/"):
             # The console and the operator's page are never framed; scripts are files only,

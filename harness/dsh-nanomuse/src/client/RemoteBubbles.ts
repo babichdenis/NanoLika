@@ -36,6 +36,8 @@ interface RemoteRow {
   deviceName: string
   /** The node key of the local prompt this turn is older than, when it is. */
   before: string | null
+  /** A picture the message carried: the relay's stable link, drawn under the text. */
+  image?: string
 }
 /** Another device working on this conversation right now (C9). */
 interface Working {
@@ -71,8 +73,25 @@ function bubble(t: Translate, row: RemoteRow): HTMLElement {
   const root = el('div', `nm-remote nm-remote-${row.role}`)
   root.setAttribute(KEY, nodeKey(row.id))
   root.setAttribute('data-nm-remote-mid', row.mid)
-  const body = el('div', 'nm-remote-bubble', row.text)
+  // Rows kept by an older build carry the picture as Markdown inside the text; draw it as
+  // a picture anyway, so a chat pulled before this build is not a wall of ![alt](url).
+  let text = row.text
+  let image = row.image
+  const markdown = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/.exec(text)
+  if (markdown) {
+    image = image || markdown[1]
+    text = text.replace(markdown[0], '').trim()
+  }
+  const body = el('div', 'nm-remote-bubble', text)
   root.append(body)
+  if (image) {
+    const picture = document.createElement('img')
+    picture.className = 'nm-remote-image'
+    picture.src = image
+    picture.alt = ''
+    picture.loading = 'lazy'
+    root.append(picture)
+  }
   const from = el('div', 'nm-remote-from', t('chFrom', { device: row.deviceName || row.device || '?' }))
   if (row.at > 0) from.title = new Date(row.at).toLocaleString()
   root.append(from)
