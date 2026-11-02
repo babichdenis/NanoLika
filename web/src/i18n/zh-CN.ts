@@ -1855,6 +1855,11 @@ const zhCN: Record<string, string> = {
   "the address must start with http:// or https://": "地址必须以 http:// 或 https:// 开头",
   "that is NanoLika Cloud; it is the account, not an endpoint": "那是 NanoLika Cloud；它是账号，不是接口",
   "a key has no spaces in it": "密钥里不会有空格",
+  // ── sync (D3): a message the relay did not take ────────────────────────────────
+  "Not saved to the cloud": "未保存到云端",
+  "The chat was deleted in the cloud": "该对话已在云端删除",
+  "The cloud did not accept this message": "云端未接受此消息",
+  "Waiting for the cloud to accept this message": "正在等待云端接受此消息",
 };
 
 export default zhCN;

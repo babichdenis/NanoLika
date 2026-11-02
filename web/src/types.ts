@@ -14,6 +14,10 @@ interface BaseEvent {
   /** on the relay (contract C7): pushed from here, or pulled from another device of the account */
   synced?: boolean;
   mid?: string;
+  /** the relay refused this row for good (D3): the reason, kept here and shown beside it */
+  sync_failed?: string;
+  /** a retryable refusal (D3): the reason, while the row waits for its next attempt */
+  sync_refused?: string;
 }
 
 /** A file attached to a message: in the workspace under attachments/. */

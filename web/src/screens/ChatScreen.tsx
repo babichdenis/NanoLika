@@ -355,6 +355,7 @@ function EventView({
   /** a failed turn's *Use NanoLika Cloud this time*, when it applies */
   onCloudRetry?: () => Promise<void>;
 }) {
+  const t = useT();
   // a small centred time, iMessage style, when the conversation pauses for a while
   const divider = needsDivider(prev, event) ? <TimeDivider ts={event.ts} /> : null;
   const body = (() => {
@@ -397,12 +398,45 @@ function EventView({
     }
   })();
   if (!body) return null;
+  // D3: a row the relay will never take stays visible here, with the reason beside it,
+  // instead of looking delivered. A retryable refusal keeps its own note until it passes.
+  const failure =
+    event.type === "user" || event.type === "assistant" ? syncFailureText(event, t) : "";
   return (
     <>
       {divider}
       {body}
+      {failure && (
+        <div
+          title={event.sync_failed || event.sync_refused || ""}
+          className={cx(
+            "pt-0.5 text-[11.5px] font-medium text-red-500",
+            event.type === "user" ? "pr-12 text-right" : "pl-2",
+          )}
+        >
+          {failure}
+        </div>
+      )}
     </>
   );
+}
+
+/** What to say about a message the relay did not take (D3); "" when it is on the relay. */
+function syncFailureText(
+  event: TimelineEvent,
+  t: (key: string) => string,
+): string {
+  if (event.sync_failed) {
+    if (event.sync_failed === "conversation_deleted") {
+      return t("The chat was deleted in the cloud");
+    }
+    if (event.sync_failed === "bad_role") {
+      return t("The cloud did not accept this message");
+    }
+    return t("Not saved to the cloud");
+  }
+  if (event.sync_refused) return t("Waiting for the cloud to accept this message");
+  return "";
 }
 
 const DIVIDER_GAP_MS = 10 * 60 * 1000;
