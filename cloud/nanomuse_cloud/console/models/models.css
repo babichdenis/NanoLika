@@ -568,3 +568,321 @@ body.account-compact .mm-plan-cell { opacity: 1; }
 
 body.account-compact .mm-row-off { opacity: 1; }
 body.account-compact .mm-row-off .mm-names { color: #737a6d; }
+
+/* ---------------------------------------------------------------------------------------
+   The site's own hand: the same paper, ink, sage and Caveat as nanolika.ru. The page is a
+   catalogue on a sheet, not a console table: a brand row on top, a hand-written title, the
+   filters as slips of paper, and one bordered sheet with the models. Loaded after the
+   compact console rules, so these win where the two disagree.
+   --------------------------------------------------------------------------------------- */
+
+body.model-studio {
+  background: #f7f1e6;
+  color: #34392f;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.model-studio main {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(18px, 2.4vw, 34px) clamp(16px, 4.4vw, 64px) clamp(64px, 7vw, 110px);
+  box-sizing: border-box;
+}
+
+.models-head {
+  display: block;
+  margin-bottom: clamp(18px, 2.2vw, 30px);
+}
+
+.models-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  margin-bottom: clamp(18px, 2.4vw, 30px);
+  border-bottom: 1px solid #d8d1c1;
+}
+
+.models-top .brand {
+  display: inline-flex;
+  align-items: baseline;
+  font: 650 clamp(30px, 3.2vw, 40px)/1 Caveat, 'Segoe Print', cursive;
+  letter-spacing: 0;
+  color: #34392f;
+  text-decoration: none;
+}
+
+.models-top .brand b {
+  color: #526749;
+  font-weight: 700;
+}
+
+.models-back {
+  font-size: 14px;
+  color: #526749;
+  text-decoration: none;
+  border-bottom: 1px solid #a1ac8f;
+  padding-bottom: 2px;
+  white-space: nowrap;
+}
+
+.models-back:hover {
+  color: #34392f;
+}
+
+.models-head #eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  font-weight: 650;
+  color: #526749;
+}
+
+.model-studio #title {
+  margin: 0 0 10px;
+  font: 550 clamp(42px, 5vw, 64px)/1.02 var(--brand-hand, Caveat), 'Segoe Print', cursive !important;
+  letter-spacing: -0.6px;
+  color: #34392f;
+}
+
+.model-studio #intro {
+  max-width: 760px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.75;
+  color: #626758;
+}
+
+/* the filters as slips of paper, the way the site draws its cards */
+.model-studio .search-row {
+  gap: 14px;
+  margin: 22px 0 14px;
+}
+
+.model-studio .search input {
+  padding: 13px 16px;
+  border: 1px solid #c6c6b1;
+  border-radius: 8px 11px 8px 9px;
+  background: #fcf8f0;
+  color: #34392f;
+  font-size: 15px;
+  box-shadow: 1px 2px 0 #d8d0bb;
+}
+
+.model-studio .search input:focus-visible {
+  outline: 3px solid #526749;
+  outline-offset: 2px;
+}
+
+.model-studio .search-count,
+.model-studio #status {
+  color: #626758;
+  font-size: 13px;
+}
+
+.model-studio .catalog-toolbar {
+  padding: 4px 0 2px;
+}
+
+.model-studio .catalog-toolbar label,
+.model-studio .search-row > label:not(.search) {
+  font-size: 13px;
+  color: #626758;
+}
+
+.model-studio .catalog-toolbar select,
+.model-studio .search-row select {
+  padding: 9px 12px;
+  border: 1px solid #c6c6b1;
+  border-radius: 7px 9px 7px 8px;
+  background: #fcf8f0;
+  color: #34392f;
+}
+
+.model-studio .chip {
+  padding: 7px 13px;
+  border: 1px solid #c6c6b1;
+  border-radius: 7px 10px 7px 8px;
+  background: #fcf8f0;
+  color: #34392f;
+  font-size: 13px;
+}
+
+.model-studio .chip:hover {
+  background: #f1ecdf;
+}
+
+.model-studio .chip-on {
+  border-color: #526749;
+  background: #e5eadc;
+  color: #40563b;
+  font-weight: 600;
+}
+
+.model-studio .chip-count {
+  background: #ece6d6;
+  color: #626758;
+}
+
+.model-studio .chip-on .chip-count {
+  background: #d6dfc8;
+  color: #40563b;
+}
+
+/* the model sheet itself: one bordered paper card, headings on a tinted strip */
+.model-studio .kind {
+  margin-top: clamp(22px, 2.6vw, 34px);
+}
+
+.model-studio .kind-title {
+  font: 550 clamp(26px, 2.6vw, 34px)/1.1 var(--brand-hand, Caveat), 'Segoe Print', cursive !important;
+  color: #34392f;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #c6c6b1;
+}
+
+.model-studio .kind-count {
+  font: 13px system-ui, sans-serif;
+  color: #626758;
+}
+
+.model-studio .model-cards {
+  border: 1px solid #c6c6b1;
+  border-radius: 10px 14px 10px 12px;
+  background: #fcf8f0;
+  box-shadow: 2px 3px 0 #e7e0d0;
+  overflow: auto;
+}
+
+.model-studio .model-picker-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  min-width: 860px;
+  background: transparent;
+}
+
+.model-studio .model-picker-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 14px;
+  background: #f1ecdf;
+  border-bottom: 1px solid #c6c6b1;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 650;
+  color: #626758;
+  text-align: left;
+}
+
+.model-studio .model-picker-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e4ddcd;
+  vertical-align: middle;
+  color: #34392f;
+}
+
+.model-studio .model-picker-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.model-studio .model-picker-table tbody tr:hover td {
+  background: #f6f1e4;
+}
+
+.model-studio .model-picker-table .model-card-pick strong {
+  font-weight: 550;
+}
+
+.model-studio .model-picker-table .mm-vendor,
+.model-studio .model-picker-table .model-meta {
+  color: #626758;
+}
+
+.model-studio .model-picker-table .numeric,
+.model-studio .model-picker-table .model-card-price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.model-studio .model-lock {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e5eadc;
+  color: #526749;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+/* the save bar and the buttons: the site's cut-paper button */
+.model-studio .actions {
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #d8d1c1;
+}
+
+.model-studio .actions .btn {
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid #526749;
+  border-radius: 6px 9px 6px 8px;
+  background: transparent;
+  color: #40563b;
+  font: 600 21px/1.1 Caveat, 'Segoe Print', cursive;
+  box-shadow: 1px 2px 0 #8c92732b;
+}
+
+.model-studio .actions .btn:not(:disabled):hover {
+  background: #e5eadc;
+}
+
+.model-studio .actions .btn:not(:disabled) {
+  background: #526749;
+  color: #fffdf5;
+}
+
+.model-studio .actions .btn.quiet {
+  background: transparent;
+  color: #526749;
+}
+
+.model-studio #footer {
+  margin-top: 28px;
+  color: #626758;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .model-studio main {
+    padding-inline: clamp(14px, 4vw, 22px);
+  }
+  .model-studio .model-cards {
+    overflow-x: auto;
+  }
+  .models-top .brand {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 600px) {
+  .model-studio #title {
+    font-size: 42px;
+  }
+  .model-studio .models-top {
+    padding-bottom: 10px;
+  }
+  .model-studio .model-picker-table {
+    min-width: 720px;
+  }
+  .model-studio .model-picker-table th,
+  .model-studio .model-picker-table td {
+    padding: 10px 10px;
+  }
+}
