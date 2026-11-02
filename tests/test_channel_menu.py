@@ -252,7 +252,7 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
         # have to guess that /balance or /permissions exist
         assert {row[field] for row in commands} == {
             "start", "menu", "new", "chats", "help", "status", "balance",
-            "model", "permissions", "rename", "unlink",
+            "model", "memory", "permissions", "rename", "unlink",
         }
 
 
