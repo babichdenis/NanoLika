@@ -7,6 +7,7 @@ import { cloudRetryTarget } from "../cloud-retry";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
 import { BrowserViewer } from "../components/BrowserViewer";
 import { ChatTune } from "../components/ChatTune";
+import { HandsLiveBar } from "../components/HandsLive";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
 import { IntroLines, NamingCard } from "../components/FirstConversation";
@@ -330,6 +331,7 @@ export function ChatScreen() {
         )}
       </div>
 
+      <HandsLiveBar live={state.handsLive && state.handsLive.thread === activeThread ? state.handsLive : null} name={name} />
       <AllowanceHeadsUp />
       <Composer
         name={name}
