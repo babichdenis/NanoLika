@@ -13,6 +13,7 @@ import asyncio
 import base64
 import platform
 import time
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -39,6 +40,49 @@ FUNDS_MESSAGE = (
     "is left, and that a top-up in the cabinet opens the paid models and larger sizes. Do "
     "not retry the same request."
 )
+
+def charged_of(
+    accounting: dict[str, Any] | None = None, headers: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    """What the relay says a call took, as ``{"uy": …, "rub": …}`` (keys it did not send
+    stay out). The units are the relay's own; the rubles are what the cabinet shows."""
+    said = dict(accounting or {})
+    head = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
+    out: dict[str, Any] = {}
+    for key, raw in (("uy", said.get("charged")), ("rub", said.get("charged_rub"))):
+        try:
+            if raw is not None and str(raw).strip():
+                out[key] = float(raw)
+        except (TypeError, ValueError):
+            pass
+    for key, name in (("uy", "x-nanomuse-charged"), ("rub", "x-nanomuse-charged-rub")):
+        if key in out:
+            continue
+        try:
+            raw = head.get(name)
+            if raw:
+                out[key] = float(raw)
+        except (TypeError, ValueError):
+            pass
+    if "uy" in out and float(out["uy"]).is_integer():
+        out["uy"] = int(out["uy"])
+    return out
+
+
+def charged_line(
+    accounting: dict[str, Any] | None = None, headers: Mapping[str, str] | None = None
+) -> str:
+    """`charged ₽0.12` for a chat answer: rubles when the relay sent them, its own units
+    otherwise, and nothing at all when it said nothing (an older relay)."""
+    said = charged_of(accounting, headers)
+    if "rub" in said:
+        rub = float(said["rub"])
+        # a phrase costs kopecks: rounding 0.004 to "₽0.00" reads as free
+        return f"charged ₽{rub:.2f}" if rub >= 0.01 else f"charged ₽{rub:.4f}"
+    if "uy" in said:
+        return f"charged {said['uy']}"
+    return ""
+
 
 MESSAGES = {
     "bad_identifier": "Enter a mainland phone number or an e-mail address.",
@@ -94,12 +138,20 @@ def model_url(base_url: str) -> str:
     return base_url.rstrip("/") + "/v1"
 
 
+#: How long the menu is trusted. A model that leaves it is caught by the 404 retry in the
+#: tools and in the voice, not by an empty cache on every call.
+MODELS_TTL_S = 300.0
+
+
 class CloudClient:
     """The relay's account API. One instance per relay; the key may change (sign in/out)."""
 
     def __init__(self, base_url: str, api_key: str = "", timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # the menu, read once in a while rather than before every picture and phrase
+        self._models_cache: tuple[float, list[dict[str, Any]]] | None = None
+        self._shelf_cache: tuple[float, dict[str, Any]] | None = None
         self._client = httpx.AsyncClient(
             timeout=timeout,
             headers={
@@ -269,8 +321,18 @@ class CloudClient:
         return devices if isinstance(devices, list) else []
 
     async def me_models(self) -> dict[str, Any]:
-        """The menu with the account's shelf: what it keeps per kind and its default."""
-        return await self._request("GET", "/v1/me/models")
+        """The menu with the account's shelf: what it keeps per kind and its default.
+
+        Kept with the menu (:data:`MODELS_TTL_S`): a picture or a clip asks for the shelf
+        before it asks the menu, and both change on the operator's scale, not per call."""
+        now = time.monotonic()
+        if self._shelf_cache is not None:
+            at, held = self._shelf_cache
+            if now - at < MODELS_TTL_S:
+                return held
+        said = await self._request("GET", "/v1/me/models")
+        self._shelf_cache = (now, said if isinstance(said, dict) else {})
+        return self._shelf_cache[1]
 
     async def image(self, model: str, prompt: str, *, size: str = "") -> tuple[bytes, dict[str, Any]]:
         """Draw one picture: PNG bytes and the relay's own accounting."""
@@ -293,10 +355,28 @@ class CloudClient:
         accounting = said.get("nanomuse")
         return png, accounting if isinstance(accounting, dict) else {}
 
-    async def models(self) -> list[dict[str, Any]]:
+    async def models(self, *, fresh: bool = False) -> list[dict[str, Any]]:
+        """The relay's menu, kept for :data:`MODELS_TTL_S`.
+
+        A picture, a clip and a phrase each read it to find their model; asking three
+        times a turn on a menu that changes on the operator's scale was pure latency.
+        `fresh=True` asks again (a 404 from a paid route, a person pressing refresh)."""
+        now = time.monotonic()
+        if not fresh and self._models_cache is not None:
+            at, rows = self._models_cache
+            if now - at < MODELS_TTL_S:
+                return rows
         data = await self._request("GET", "/v1/models")
         models = data.get("data")
-        return models if isinstance(models, list) else []
+        rows = models if isinstance(models, list) else []
+        self._models_cache = (now, rows)
+        return rows
+
+    def forget_models(self) -> None:
+        """Drop the menu and the shelf (a model that left them answered 404, or the key
+        changed)."""
+        self._models_cache = None
+        self._shelf_cache = None
 
     async def quote(self, model: str, **params: Any) -> dict[str, Any]:
         """What one exact request costs, in the relay's rubles: size, seconds, resolution,

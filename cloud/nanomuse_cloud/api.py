@@ -337,6 +337,17 @@ def relay_error_body(status: int, raw: bytes) -> dict:
 PROVIDER_HOST_SUFFIXES = (".aliyuncs.com", ".alicdn.com")
 
 
+def _charged(cloud: Any, uy: int) -> dict[str, Any]:
+    """What a call took, in the relay's own units and in rubles.
+
+    The apps print money in rubles (the cabinet, the composer, the balance), so the figure
+    a tool shows a person has to be rubles too; ``charged`` stays for the tests and the
+    older clients that read it.
+    """
+    s = cloud.s
+    return {"charged": uy, "charged_rub": round(s.cny_to_rub(s.uy_to_cny(int(uy))), 4)}
+
+
 def _same_site(host: str, base_host: str) -> bool:
     """Whether a file host sits under the provider's own name: api.polza.ai and s3.polza.ai
     are one site, evil-polza.ai is not. The last two labels decide, so a provider's own CDN
@@ -417,8 +428,9 @@ def create_app(
     router = ProviderRouter(settings)
 
     async def _feed_loop() -> None:
-        """A quiet backstop for *Лента* chats that existed before push-time folding. The
-        catalogue GET is read-only now, so this is the only periodic writer besides push."""
+        """A quiet backstop for the synced store: the *Лента* chats that existed before
+        push-time folding, and the tombstones of accounts that stopped syncing (push is
+        where they used to be swept, so a silent account kept its garbage for good)."""
         while True:
             await asyncio.sleep(300)
             store = getattr(getattr(app, "state", None), "sync", None)
@@ -428,6 +440,12 @@ def create_app(
                 await asyncio.to_thread(store.fold_all_feeds)
             except Exception:
                 log.exception("sync feed fold")
+            try:
+                gone = await asyncio.to_thread(store.sweep_expired)
+                if gone:
+                    log.info("sync: {} expired tombstone(s) dropped", gone)
+            except Exception:
+                log.exception("sync tombstone sweep")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -1532,8 +1550,15 @@ def create_app(
                 cloud.keep_sample(caller, spec.id, sample_messages, text, usage.prompt, usage.completion, sample_meta)
             if isinstance(obj, dict):
                 obj["model"] = spec.id
-                obj.setdefault("nanomuse", {})["charged"] = charged
-            return JSONResponse(content=obj, headers={"x-nanomuse-charged": str(charged), "x-nanomuse-request": request_id})
+                obj.setdefault("nanomuse", {}).update(_charged(cloud, charged))
+            return JSONResponse(
+                content=obj,
+                headers={
+                    "x-nanomuse-charged": str(charged),
+                    "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}",
+                    "x-nanomuse-request": request_id,
+                },
+            )
 
         async def gen() -> AsyncIterator[bytes]:
             usage: Usage | None = None
@@ -1901,8 +1926,8 @@ def create_app(
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": {"charged": charged}},
-            headers={"x-nanomuse-charged": str(charged)},
+            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": _charged(cloud, charged)},
+            headers={"x-nanomuse-charged": str(charged), "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}"},
         )
 
     @app.post("/v1/images/edits")
@@ -1946,8 +1971,8 @@ def create_app(
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": {"charged": charged}},
-            headers={"x-nanomuse-charged": str(charged)},
+            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": _charged(cloud, charged)},
+            headers={"x-nanomuse-charged": str(charged), "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}"},
         )
 
     @app.post("/v1/attachments")
@@ -2175,7 +2200,11 @@ def create_app(
             charged = cloud.charge_speech(caller, spec, len(text), request_id)
         finally:
             cloud.settle(caller, request_id)
-        headers = {"x-nanomuse-charged": str(charged), "x-nanomuse-characters": str(len(text))}
+        headers = {
+            "x-nanomuse-charged": str(charged),
+            "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}",
+            "x-nanomuse-characters": str(len(text)),
+        }
         if sound_seconds:
             headers["x-nanomuse-seconds"] = f"{sound_seconds:.2f}"
         return Response(content=sound, media_type=sound_type, headers=headers)
@@ -2274,7 +2303,11 @@ def create_app(
         return Response(
             content=audio,
             media_type=media_type,
-            headers={"x-nanomuse-charged": str(charged), "x-nanomuse-tracks": "1"},
+            headers={
+                "x-nanomuse-charged": str(charged),
+                "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}",
+                "x-nanomuse-tracks": "1",
+            },
         )
 
     @app.post("/v1/audio/transcriptions")
@@ -2323,9 +2356,10 @@ def create_app(
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={**said, "nanomuse": {"charged": charged, "seconds": round(seconds, 2)}},
+            content={**said, "nanomuse": {**_charged(cloud, charged), "seconds": round(seconds, 2)}},
             headers={
                 "x-nanomuse-charged": str(charged),
+                "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}",
                 "x-nanomuse-seconds": f"{seconds:.2f}",
             },
         )

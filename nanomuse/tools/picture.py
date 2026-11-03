@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError, charged_line
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -104,8 +104,15 @@ class Picture(BaseTool):
             chosen = await self._model(client, model)
             png, accounting = await client.image(chosen, said, size=shape)
         except CloudError as exc:
+            if exc.code == "model_not_offered":
+                # the menu we hold is stale: the next call reads it fresh
+                forget = getattr(client, "forget_models", None)
+                if callable(forget):
+                    forget()
             if exc.code in FUNDS_CODES:
-                return ToolResult.fail(FUNDS_MESSAGE)
+                # the code stays in the text: a person reads the sentence, a log and the
+                # relay's own money card read `insufficient_funds`
+                return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
             # the code says why (model_not_offered); the message alone reads like the
             # network had a bad day
             said = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
@@ -118,13 +125,20 @@ class Picture(BaseTool):
         target.write_bytes(png)
         bits = [f"Picture saved to {rel.as_posix()}"]
         # The link is how the picture reaches a chat that did not make it: the messenger
-        # shows the image, another device opens it, and the person can keep it.
-        link = await client.upload(rel.name, png, "image/png")
+        # shows the image, another device opens it, and the person can keep it. A failed
+        # upload costs the link, not the work: the picture is drawn, paid for and on disk.
+        try:
+            link = await client.upload(rel.name, png, "image/png")
+        except CloudError:
+            link = ""
+            bits.append("no link: the upload did not go through")
         if link:
             bits.append(f"link {link}")
             bits.append(f"show it in the reply as ![picture]({link})")
-        # the price was quoted before the call and the person was told it; the relay's
-        # `charged` is in its own units and has no place in a chat answer
+        # what it took: the relay's own figure, in rubles when it sent them
+        toll = charged_line(accounting)
+        if toll:
+            bits.append(toll)
         return ToolResult(output=", ".join(bits) + f" ({chosen})", images=[str(target)])
 
 

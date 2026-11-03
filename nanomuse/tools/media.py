@@ -13,12 +13,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError, charged_line
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
 
 SPEECH_FORMATS = {"mp3": "audio/mpeg", "wav": "audio/wav", "opus": "audio/ogg", "aac": "audio/aac", "flac": "audio/flac"}
+#: a whole recording is read into memory and posted; past this it is a document, not a phrase
+RECORDING_MAX_BYTES = 25 * 1024 * 1024
+
 RECORDING_SUFFIX = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -48,7 +51,12 @@ class Media(BaseTool):
             "text": {"type": "string", "description": "What to say (speech) or the music to make"},
             "voice": {"type": "string", "description": "The provider's voice id, optional"},
             "format": {"type": "string", "enum": list(SPEECH_FORMATS), "description": "mp3 by default"},
-            "speed": {"type": "number", "description": "0.25 to 4, optional"},
+            "speed": {
+                "type": "number",
+                "minimum": 0.25,
+                "maximum": 4,
+                "description": "0.25 to 4, optional",
+            },
             "path": {"type": "string", "description": "The recording to transcribe, inside the workspace"},
             "language": {"type": "string", "description": "Spoken language, optional"},
         },
@@ -102,14 +110,24 @@ class Media(BaseTool):
             if not text.strip():
                 return ToolResult.fail("media speech needs the text to say")
             fmt = format if format in SPEECH_FORMATS else "mp3"
+            rate: float | None = None
+            if speed is not None:
+                try:
+                    rate = max(0.25, min(float(speed), 4.0))
+                except (TypeError, ValueError):
+                    rate = None
             try:
                 model = await self._model("speech")
                 sound, media_type, headers = await client.speech(
-                    model, text.strip(), voice=voice, fmt=fmt, speed=speed
+                    model, text.strip(), voice=voice, fmt=fmt, speed=rate
                 )
             except CloudError as exc:
+                if exc.code == "model_not_offered":
+                    forget = getattr(client, "forget_models", None)
+                    if callable(forget):
+                        forget()
                 if exc.code in FUNDS_CODES:
-                    return ToolResult.fail(FUNDS_MESSAGE)
+                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
                 return ToolResult.fail(f"Speech failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no sound")
@@ -117,13 +135,21 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
-            link = await client.upload(rel.name, sound, media_type)
+            try:
+                link = await client.upload(rel.name, sound, media_type)
+            except CloudError:
+                link = ""
             seconds = headers.get("x-nanomuse-seconds", "")
             bits = [f"Speech saved to {rel.as_posix()}"]
             if link:
                 bits.append(f"link {link}")
+            else:
+                bits.append("no link: the upload did not go through")
             if seconds:
                 bits.append(f"{seconds} s")
+            toll = charged_line(headers=headers)
+            if toll:
+                bits.append(toll)
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
         if action == "music":
             if not text.strip():
@@ -132,8 +158,12 @@ class Media(BaseTool):
                 model = await self._model("music")
                 sound, media_type, headers = await client.music(model, text.strip())
             except CloudError as exc:
+                if exc.code == "model_not_offered":
+                    forget = getattr(client, "forget_models", None)
+                    if callable(forget):
+                        forget()
                 if exc.code in FUNDS_CODES:
-                    return ToolResult.fail(FUNDS_MESSAGE)
+                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
                 return ToolResult.fail(f"Music failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no track")
@@ -141,10 +171,21 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
-            link = await client.upload(rel.name, sound, media_type)
+            try:
+                link = await client.upload(rel.name, sound, media_type)
+            except CloudError:
+                link = ""
             bits = [f"Track saved to {rel.as_posix()}"]
             if link:
                 bits.append(f"link {link}")
+            else:
+                bits.append("no link: the upload did not go through")
+            seconds = headers.get("x-nanomuse-seconds", "")
+            if seconds:
+                bits.append(f"{seconds} s")
+            toll = charged_line(headers=headers)
+            if toll:
+                bits.append(toll)
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
         if action == "transcribe":
             if not path.strip():
@@ -156,14 +197,29 @@ class Media(BaseTool):
             suffix = source.suffix.lower()
             mime = RECORDING_SUFFIX.get(suffix, "audio/webm")
             try:
+                size = source.stat().st_size
+            except OSError as exc:
+                return ToolResult.fail(str(exc))
+            if size > RECORDING_MAX_BYTES:
+                return ToolResult.fail(
+                    f"the recording is {size // (1024 * 1024)} MB; the relay takes up to "
+                    f"{RECORDING_MAX_BYTES // (1024 * 1024)} MB, so send a shorter one"
+                )
+            try:
                 model = await self._model("transcribe")
                 said = await client.transcribe(model, source.name, source.read_bytes(), mime, language=language)
             except CloudError as exc:
+                if exc.code in FUNDS_CODES:
+                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
                 return ToolResult.fail(f"Transcription failed: {exc.message}")
             words = str(said.get("text") or "").strip()
             if not words:
                 return ToolResult.fail("The relay heard no words")
-            seconds = (said.get("nanomuse") or {}).get("seconds")
+            used = said.get("nanomuse") or {}
+            seconds = used.get("seconds")
             tail = f" ({seconds} s)" if seconds else ""
-            return ToolResult(output=f"{words}{tail}")
-        return ToolResult.fail("media action is `speech` or `transcribe`")
+            toll = charged_line(used)
+            if toll:
+                tail += f" {toll}"
+            return ToolResult(output=f"{words}{tail.strip()}")
+        return ToolResult.fail("media action is `speech`, `music` or `transcribe`")

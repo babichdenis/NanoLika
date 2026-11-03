@@ -8,18 +8,20 @@ file, and the channel sends it as any other artifact.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError
+from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError, charged_line
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
 
 #: The provider's own aspects; anything else is refused by it rather than guessed here.
 SIZES = "1280x720, 720x1280, 1024x1024, 1920x1080"
+SIZE_RE = re.compile(r"\d{2,5}x\d{2,5}")
 RESOLUTIONS = ("480P", "720P", "1080P")
 
 
@@ -97,7 +99,9 @@ class Video(BaseTool):
         if client is None:
             return ToolResult.fail("Sign in to NanoLika Cloud first.")
         length = max(1, min(int(seconds or 5), 30))
-        shape = size.strip().replace("*", "x").replace("×", "x")
+        shape = size.strip().replace("*", "x").replace("×", "x").replace(" ", "")
+        if shape and not SIZE_RE.fullmatch(shape):
+            return ToolResult.fail(f"size is an aspect like 1280x720; this relay offers {SIZES}")
         grade = resolution.strip().upper()
         if grade and grade not in RESOLUTIONS:
             return ToolResult.fail("resolution is 480P, 720P or 1080P")
@@ -105,8 +109,13 @@ class Video(BaseTool):
             chosen = await self._model(client, model)
             data, accounting = await client.video(chosen, said, seconds=length, size=shape, resolution=grade)
         except CloudError as exc:
+            if exc.code == "model_not_offered":
+                # the menu we hold is stale: the next call reads it fresh
+                forget = getattr(client, "forget_models", None)
+                if callable(forget):
+                    forget()
             if exc.code in FUNDS_CODES:
-                return ToolResult.fail(FUNDS_MESSAGE)
+                return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
             message = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
             return ToolResult.fail(f"Clip failed: {message}")
         if not data:
@@ -116,10 +125,15 @@ class Video(BaseTool):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         bits = [f"Clip saved to {rel.as_posix()}", f"{length} s"]
-        link = await client.upload(rel.name, data, "video/mp4")
+        try:
+            link = await client.upload(rel.name, data, "video/mp4")
+        except CloudError:
+            link = ""
+            bits.append("no link: the upload did not go through")
         if link:
             bits.append(f"link {link}")
             bits.append(f"show it in the reply as [clip]({link})")
-        # the price was quoted before the call and the person was told it; the relay's
-        # `charged` is in its own units and has no place in a chat answer
+        toll = charged_line(accounting)
+        if toll:
+            bits.append(toll)
         return ToolResult(output=", ".join(bits) + f" ({len(data)} bytes)")

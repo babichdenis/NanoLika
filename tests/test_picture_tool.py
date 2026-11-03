@@ -49,6 +49,8 @@ def test_a_picture_is_drawn_with_the_shelf_model_and_saved(tmp_path: Path):
     result = asyncio.run(tool(tmp_path, cloud).execute(prompt="рыжий кот", size="1024x1024"))
     assert result.ok, result.error
     assert "pictures/" in result.output and "link https://" in result.output
+    # what it took, as the relay said it: money must not leave silently
+    assert "charged 120" in result.output
     assert cloud.uploaded and cloud.uploaded[-1]["mime"] == "image/png"
     assert cloud.drawn == [{"model": "nano-banana", "prompt": "рыжий кот", "size": "1024x1024"}]
     files = list((tmp_path / "pictures").glob("*.png"))
@@ -77,3 +79,6 @@ def test_the_prompt_is_required_and_the_size_is_checked(tmp_path: Path):
 def test_a_refusal_is_said_not_swallowed(tmp_path: Path):
     result = asyncio.run(tool(tmp_path, FakeCloud(fail="insufficient_funds")).execute(prompt="кот"))
     assert not result.ok and "balance" in result.error.lower()
+    # the code survives: a log, the relay's money card and the next reader can tell
+    # a short balance from a broken network by it
+    assert "insufficient_funds" in result.error
