@@ -99,15 +99,16 @@ def sync_avatars() -> None:
                 continue
             for folder in [
                 "web/public/avatars",
+                "nanomuse/server/static/avatars",
                 "harness/dsh-nanomuse/assets",
                 "android/src/ios/NanoMuse/Resources",
             ]:
-                shutil.copyfile(source, ROOT / folder / f"dragon-{mood}.{ext}")
+                shutil.copyfile(source, ROOT / folder / f"lika-{mood}.{ext}")
             res = ROOT / "android/src/android/app/src/main/res"
             dest = res / ("raw" if ext == "mp4" else "drawable-nodpi")
             name = "nm_motion" if ext == "mp4" else "nm_avatar"
             shutil.copyfile(source, dest / f"{name}_{mood}.{ext}")
-    demo_idle = ROOT / "demo/mobilegym/apps/NanoLika/res/dragon-idle.webp"
+    demo_idle = ROOT / "demo/mobilegym/apps/NanoLika/res/lika-idle.webp"
     if (avatar / "idle.webp").exists() and demo_idle.parent.is_dir():
         shutil.copyfile(avatar / "idle.webp", demo_idle)
 

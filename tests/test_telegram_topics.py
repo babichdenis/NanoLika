@@ -48,6 +48,8 @@ class World:
                 threads=self.threads,
                 sync=SimpleNamespace(
                     account_id="acc",
+                    state={},
+                    thread_of=lambda cid: "",
                     _mine=lambda thread: True,
                     cid_of=lambda thread_id: "",
                     thread_changed=lambda thread: None,
@@ -113,6 +115,8 @@ class World:
             title=title,
             created_at=datetime.now(UTC).isoformat(),
             timeline=SimpleNamespace(events=[]),
+            folder="",
+            state="idle",
         )
         self.threads[thread_id] = thread
         return thread

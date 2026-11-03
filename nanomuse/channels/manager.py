@@ -633,7 +633,7 @@ class ChannelManager(ChannelBus):
             answer = self.say(
                 "I do not know that command. The menu at the slash shows the ones I have.",
                 "我不认识这个命令。用 / 打开的命令菜单看看我有哪些。",
-                "Такой команды я не знаю. Список моих — в меню по «/».",
+                "Такой команды я не знаю. Список моих - в меню по «/».",
             )
             await self._send(msg.channel, msg.chat_id, answer)
             self._record_channel_reply(msg, answer, thread_id=origin_thread)

@@ -50,7 +50,7 @@ def _rub(value: Any) -> str:
     try:
         number = float(value)
     except (TypeError, ValueError):
-        return "—"
+        return "-"
     return f"₽{number:.2f}"
 
 
@@ -155,7 +155,7 @@ class Models(BaseTool):
                 if isinstance(left, (int, float)):
                     line += f"; left on the balance: {_rub(left)}"
                     if isinstance(total, (int, float)) and total > left:
-                        line += f"; short by {_rub(total - left)} — a top-up opens it"
+                        line += f"; short by {_rub(total - left)} - a top-up opens it"
                     else:
                         line += "; the balance covers it"
         except CloudError:
@@ -269,7 +269,7 @@ class Models(BaseTool):
         elif answer.get("left_rub") is not None or answer.get("left_cny") is not None:
             left = answer.get("left_rub")
             bits.append(f"left on the balance: {_rub(left if left is not None else answer.get('left_cny'))}")
-            bits.append("the balance covers it" if answer.get("affordable") else "not enough — a top-up opens it")
+            bits.append("the balance covers it" if answer.get("affordable") else "not enough - a top-up opens it")
         return ToolResult(output=" · ".join(bits))
 
     async def _list(self, client: Any, kind: str) -> ToolResult:

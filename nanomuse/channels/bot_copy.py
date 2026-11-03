@@ -2,13 +2,13 @@
 
 TEXT = {
     "en": {
-        "max_start": "Hi, I am Lika 🌿\n\nI can help with everyday tasks: make a list, draft a letter, explain something in plain language or explore an idea.\n\nTry:\n“Help me make a weekly shopping list”\n“Draft a polite reply to this email”\n“Explain this instruction”\n\nTell me what you need. Chat does not require the desktop app.\n\nYou can also send a photo or a document — Lika sees it.",
+        "max_start": "Hi, I am Lika 🌿\n\nI can help with everyday tasks: make a list, draft a letter, explain something in plain language or explore an idea.\n\nTry:\n“Help me make a weekly shopping list”\n“Draft a polite reply to this email”\n“Explain this instruction”\n\nTell me what you need. Chat does not require the desktop app.\n\nYou can also send a photo or a document - Lika sees it.",
         "help": "Describe your task in your own words.\n/start: introduction and examples\n/status: computer connection\n\nComputer files and screen actions need a separate connection and permissions. Photos and documents can be sent too.\n/computer task: run on the computer",
         "online": "The selected computer is online. Computer tasks still depend on its permissions and availability.",
         "offline": "I am available in chat. Use /computer followed by a task to ask the computer. Lika must be open there with the same account. Ordinary chat works without the app.",
         "welcome": "Hi, I am Lika 🌿\n\nI can help with everyday tasks: make a list, draft a letter, explain something in plain language or explore an idea.\n\nTry:\n“Help me make a weekly shopping list”\n“Draft a polite reply to this email”\n“Explain this instruction”\n\nTell me what you need. Chat does not require the desktop app.",
         "hello": "Hi, I am Lika 🌿\nWhat would you like help with? We can make a list, draft a text or work through a question.",
-        "limits": "Send a photo or a document if it helps — Lika reads both.",
+        "limits": "Send a photo or a document if it helps - Lika reads both.",
         "computer_usage": "Add a task after the command, for example:\n/computer Reply: the computer connection works.",
         "computer_unavailable": "I cannot identify one available computer for this task. Open Lika there with the same account. If several computers are available, select one first. Ordinary chat does not require a computer.",
         "computer_started": "Passing this task to the computer. Important actions require permission.",
@@ -68,13 +68,13 @@ TEXT = {
         "unlink_canceled": "什么都没改动。这个聊天仍然绑定着账号。",
     },
     "ru": {
-        "max_start": "Привет, я Лика 🌿\n\nПомогу разобраться с повседневными делами: составить список, подготовить письмо, объяснить сложное простыми словами или придумать идею.\n\nМожно начать так:\n«Помоги составить список покупок на неделю»\n«Подготовь вежливый ответ на письмо»\n«Объясни этот пункт инструкции»\n\nНапиши свою первую просьбу. Для разговора приложение на компьютере не нужно.\n\nМожно отправить фото или документ — Лика их увидит.",
+        "max_start": "Привет, я Лика 🌿\n\nПомогу разобраться с повседневными делами: составить список, подготовить письмо, объяснить сложное простыми словами или придумать идею.\n\nМожно начать так:\n«Помоги составить список покупок на неделю»\n«Подготовь вежливый ответ на письмо»\n«Объясни этот пункт инструкции»\n\nНапиши свою первую просьбу. Для разговора приложение на компьютере не нужно.\n\nМожно отправить фото или документ - Лика их увидит.",
         "help": "Напиши задачу обычными словами.\n/start: знакомство и примеры\n/status: доступность связи с компьютером\n\nРабота с файлами и экраном компьютера требует отдельного подключения и разрешений. Фото и документы тоже можно отправлять.\n/computer поручение: выполнить на компьютере",
         "online": "Выбранный компьютер в сети. Выполнение поручений зависит от его разрешений и доступности.",
         "offline": "Я на связи в чате. Для проверки задачи на компьютере используй /computer и текст поручения. Нужны открытая Лика на компьютере и тот же аккаунт. Обычный разговор работает без приложения.",
         "welcome": "Привет, я Лика 🌿\n\nПомогу разобраться с повседневными делами: составить список, подготовить письмо, объяснить сложное простыми словами или придумать идею.\n\nМожно начать так:\n«Помоги составить список покупок на неделю»\n«Подготовь вежливый ответ на письмо»\n«Объясни этот пункт инструкции»\n\nНапиши свою первую просьбу. Для разговора приложение на компьютере не нужно.",
         "hello": "Привет, я Лика 🌿\nС чем помочь? Можем составить список, подготовить текст или разобраться в вопросе.",
-        "limits": "Можно отправить фото или документ — Лика их увидит.",
+        "limits": "Можно отправить фото или документ - Лика их увидит.",
         "computer_usage": "Напиши поручение после команды, например:\n/computer Ответь: связь с компьютером работает.",
         "computer_unavailable": "Не вижу одного доступного компьютера для этого поручения. Открой Лику на нужном компьютере с тем же аккаунтом. Если компьютеров несколько, сначала нужно выбрать, какому передавать задачу. В обычном чате я могу помогать и без компьютера.",
         "computer_started": "Передаю поручение компьютеру. Важные действия потребуют разрешения.",

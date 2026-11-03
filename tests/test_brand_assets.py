@@ -22,7 +22,7 @@ class BrandAssetsTest(unittest.TestCase):
                     "harness/dsh-nanomuse/assets",
                     "android/src/ios/NanoMuse/Resources",
                 ):
-                    path = ROOT / folder / f"dragon-{mood}.{extension}"
+                    path = ROOT / folder / f"lika-{mood}.{extension}"
                     with self.subTest(path=str(path)):
                         self.assertEqual(hashlib.sha256(path.read_bytes()).digest(), expected)
                 kind = "raw" if extension == "mp4" else "drawable-nodpi"
@@ -68,9 +68,10 @@ def test_avatar_only_generator_skips_rendering_and_retired_demo(tmp_path, monkey
     source.mkdir(parents=True)
     (source / "idle.webp").write_bytes(b"canonical-avatar")
     destinations = (
-        "web/public/avatars/dragon-idle.webp",
-        "harness/dsh-nanomuse/assets/dragon-idle.webp",
-        "android/src/ios/NanoMuse/Resources/dragon-idle.webp",
+        "web/public/avatars/lika-idle.webp",
+        "nanomuse/server/static/avatars/lika-idle.webp",
+        "harness/dsh-nanomuse/assets/lika-idle.webp",
+        "android/src/ios/NanoMuse/Resources/lika-idle.webp",
         "android/src/android/app/src/main/res/drawable-nodpi/nm_avatar_idle.webp",
     )
     for dest in destinations:

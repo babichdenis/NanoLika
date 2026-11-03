@@ -15,6 +15,7 @@ PNG = base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode()
 class FakeCloud:
     def __init__(self, *, default: str = "nano-banana", fail: str = "") -> None:
         self.drawn: list[dict] = []
+        self.uploaded: list[dict] = []
         self.default = default
         self.fail = fail
 
@@ -34,6 +35,10 @@ class FakeCloud:
         self.drawn.append({"model": model, "prompt": prompt, "size": size})
         return b"\x89PNG\r\n\x1a\nfake", {"charged": 120}
 
+    async def upload(self, name, data, mime):
+        self.uploaded.append({"name": name, "mime": mime, "bytes": len(data)})
+        return f"https://cloud.example.test/v1/files/x/{name}"
+
 
 def tool(tmp_path: Path, cloud: FakeCloud | None = None) -> Picture:
     return Picture(workspace=tmp_path, extra_roots=[], cloud=lambda: cloud or FakeCloud())
@@ -43,7 +48,8 @@ def test_a_picture_is_drawn_with_the_shelf_model_and_saved(tmp_path: Path):
     cloud = FakeCloud()
     result = asyncio.run(tool(tmp_path, cloud).execute(prompt="рыжий кот", size="1024x1024"))
     assert result.ok, result.error
-    assert "pictures/" in result.output and "charged 120" in result.output
+    assert "pictures/" in result.output and "link https://" in result.output
+    assert cloud.uploaded and cloud.uploaded[-1]["mime"] == "image/png"
     assert cloud.drawn == [{"model": "nano-banana", "prompt": "рыжий кот", "size": "1024x1024"}]
     files = list((tmp_path / "pictures").glob("*.png"))
     assert len(files) == 1 and files[0].read_bytes().startswith(b"\x89PNG")
@@ -70,4 +76,4 @@ def test_the_prompt_is_required_and_the_size_is_checked(tmp_path: Path):
 
 def test_a_refusal_is_said_not_swallowed(tmp_path: Path):
     result = asyncio.run(tool(tmp_path, FakeCloud(fail="insufficient_funds")).execute(prompt="кот"))
-    assert not result.ok and "insufficient_funds" in result.error
+    assert not result.ok and "balance" in result.error.lower()

@@ -62,13 +62,15 @@
 
 - `ask_user`: Ask the user a clarifying question and wait for the answer.
 - `media`: Sound through the account's NanoLika Cloud key.
+- `models`: Which models this account can use and what they cost.
 - `office_xlsm`: Make an Excel workbook with a working macro and a button, without Microsoft Office: data goes to a sheet, the macro reads commands from the hidden _cfg sheet (format, filter, sort, pdf, refresh, stamp, clear) and draws a button on open.
 - `picture`: Draw one picture through the account's NanoLika Cloud key and save it in the workspace, so the chat shows it.
 - `terminate`: Finish the current task.
+- `video`: Make one short clip through the account's NanoLika Cloud key and save it in the workspace, so the chat shows it.
 
 ## Правила
 
-- Экран и ввод уже разрешены: на macOS их держит помощник приложения (*NanoLika Computer Use*), а инструменты `computer_*` ходят через него. Не проси человека выдать Screen Recording или Accessibility и не отправляй его в System Settings; чёрный кадр или сбой шага — это неисправность, о ней и говори.
+- Экран и ввод уже разрешены: на macOS их держит помощник приложения (*NanoLika Computer Use*), а инструменты `computer_*` ходят через него. Не проси человека выдать Screen Recording или Accessibility и не отправляй его в System Settings; чёрный кадр или сбой шага - это неисправность, о ней и говори.
 - Сначала посмотри в этот список, потом в `store` (`action=list`), и только потом что-то строй.
 - `pip install` в замороженном рантайме не работает: код добавляется только со склада.
 - MCP-сервер - это для того, чего нет ни в сборке, ни на складе, а не вместо встроенного коннектора.
