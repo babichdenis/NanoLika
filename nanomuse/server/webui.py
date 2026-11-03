@@ -66,7 +66,7 @@ _READ_ONLY_TOOLS = {
     "computer_task",
 }
 # the browser's persistent profile lives in the workspace too (cookies, caches) — never an artifact
-_SKIP_DIRS = {"node_modules", "__pycache__", ".venv", "venv", ".git", "browser-profile"}
+_SKIP_DIRS = {"node_modules", "__pycache__", ".venv", "venv", ".git", "browser-profile", "screenshots"}
 _SCAN_CAP = 3000
 
 
@@ -475,7 +475,7 @@ class WebUI:
             if result.ok
             else ("blocked" if "Sentinel blocked" in (result.error or "") else "error")
         )
-        preview = (result.output or result.error or "")[:600]
+        preview = (result.output or result.error or "")[:4000]
         if eid:
             self.patch(thread, eid, status=status, output=preview)
         if result.ok and call.name not in _READ_ONLY_TOOLS:

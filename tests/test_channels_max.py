@@ -213,6 +213,22 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.bus.actions), 1)
         self.assertEqual(self.bus.actions[0][:3], ("max", "19", "17"))
 
+    async def test_a_voice_take_goes_as_audio_not_a_plain_file(self):
+        """MAX has no round voice bubble: the take travels as an audio attachment, which
+        plays in the chat, the closest MAX has to a voice message."""
+        with tempfile.TemporaryDirectory() as folder:
+            take = Path(folder) / "answer.ogg"
+            take.write_bytes(b"OggS")
+            await self.ch.send_voice("19", str(take))
+        uploads = [r for r in self.calls if r.url.path == "/uploads"]
+        self.assertEqual([r.url.params.get("type") for r in uploads], ["audio"])
+        sent = [
+            json.loads(r.content)
+            for r in self.calls
+            if r.url.path == "/messages" and r.method == "POST"
+        ]
+        self.assertEqual(sent[-1]["attachments"][0]["type"], "audio")
+
     async def test_stream_and_files_go_as_attachments(self):
         await self.ch.stream("19", "s", "hello", done=False)
         await self.ch.stream("19", "s", "hello world", done=True)
