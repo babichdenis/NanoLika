@@ -55,8 +55,10 @@ interface SyncList {
   gone: Set<string>
   /** session id → the device that started the conversation ('' = this computer) */
   origins: Record<string, string>
+  /** session id → the folder the account knows the chat by (workspace title, or Telegram / MAX / Web). */
+  folders: Record<string, string>
 }
-const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set(), origins: {} }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set(), origins: {}, folders: {} }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -65,8 +67,8 @@ export function useSyncList(): SyncList {
   useEffect(() => {
     let alive = true
     const load = () => {
-      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number>; origins?: Record<string, string> }>('sync/state')
-        .then((v) => { if (alive) { const __s=new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]); setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []), origins: v.origins ?? {} }) } })
+      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number>; origins?: Record<string, string>; folders?: Record<string, string> }>('sync/state')
+        .then((v) => { if (alive) { const __s=new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]); setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []), origins: v.origins ?? {}, folders: v.folders ?? {} }) } })
         .catch(() => undefined)
     }
     void load()
@@ -408,10 +410,18 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   const workspaceRows = typeof useWorkspaces === 'function' ? useWorkspaces((w) => w.items ?? []) : []
   const folderOf = (chat: ChatSummary): string => {
     const origin = sync.origins[chat.id] || ''
+    // A folder the account knows (a workspace title, Telegram, MAX, Web) wins: it is the
+    // same name every entrance shows. Another computer's chat carries that computer's name
+    // beside its folder, so two machines with a "NanoLika" folder stay apart.
+    const sent = (sync.folders[chat.id] || '').trim()
+    if (origin.startsWith('device:')) {
+      const name = origin.slice(7).trim() || t('chThisComputer')
+      return sent ? `${sent} · ${name}` : name
+    }
+    if (sent) return sent
     if (origin === 'telegram') return 'Telegram'
     if (origin === 'max') return 'MAX'
     if (origin === 'web') return t('chWeb')
-    if (origin.startsWith('device:')) return origin.slice(7).trim() || t('chThisComputer')
     const cwd = chat.cwd || ''
     const folder = workspaceRows.find((w) => w.path === cwd)?.title
     if (folder) return folder

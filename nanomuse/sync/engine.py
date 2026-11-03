@@ -65,6 +65,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from nanomuse.channels.origin import conversation_origin
 from nanomuse.cloud import CloudError
 from nanomuse.logger import logger
 from nanomuse.schema import Message
@@ -146,6 +147,8 @@ class ConversationSync:
             "reasoning": {},
             # thread id → the chat's own sampling temperature last pushed or applied (D8)
             "temperatures": {},
+            # thread id → the folder the chat works in, last pushed or applied
+            "folders": {},
             # C10: thread id → the account (`account.id`) it was synced with; absent = none
             "owners": {},
             # C10: account id → the thread that holds that account's main chat while another
@@ -231,7 +234,7 @@ class ConversationSync:
                 self.state["message_cursors"] = {
                     str(k): v for k, v in cursors.items() if type(v) is int and v >= 0
                 }
-            for key in ("cids", "titles", "models", "reasoning", "owners", "mains"):
+            for key in ("cids", "titles", "models", "reasoning", "folders", "owners", "mains"):
                 if isinstance(data.get(key), dict):
                     self.state[key] = {str(k): str(v) for k, v in data[key].items()}
             if isinstance(data.get("temperatures"), dict):
@@ -984,11 +987,21 @@ class ConversationSync:
                 model_changed = bool(model) and self.state["models"].get(thread.id) != model
                 reasoning_changed = bool(model) and self.state["reasoning"].get(thread.id, "") != reasoning
                 temperature_changed = thread.temperature != self.state["temperatures"].get(thread.id)
+                folder = (thread.folder or "").strip()[:120]
+                if not folder:
+                    # A chat born in a messenger is in that messenger's folder: the id
+                    # prefix (or the old "Telegram ·" title) still says which one, so the
+                    # chats from before folders existed find their place too.
+                    origin = conversation_origin(thread.id, thread.title)
+                    if origin in ("telegram", "max"):
+                        folder = "Telegram" if origin == "telegram" else "MAX"
+                folder_changed = self.state["folders"].get(thread.id, "") != folder
                 if (
                     self.state["titles"].get(thread.id) != thread.title
                     or model_changed
                     or reasoning_changed
                     or temperature_changed
+                    or folder_changed
                 ):
                     row: dict[str, Any] = {
                         "cid": cid,
@@ -1003,6 +1016,8 @@ class ConversationSync:
                     if temperature_changed:
                         # null is a real value here: it puts the chat back on [llm]
                         row["temperature"] = thread.temperature
+                    if folder_changed:
+                        row["folder"] = folder
                     conversations.append(row)
                 for ev, wire in self._unsynced(thread, cid):
                     if len(messages) >= BATCH:
@@ -1075,6 +1090,8 @@ class ConversationSync:
                                     self.state["temperatures"].pop(tid, None)
                                 else:
                                     self.state["temperatures"][tid] = float(value)
+                            if "folder" in c:
+                                self.state["folders"][tid] = str(c.get("folder") or "")[:120]
             self._save()
             if len(messages) < BATCH and not redirect:
                 break
@@ -1395,6 +1412,7 @@ class ConversationSync:
                 self._adopt(MAIN_THREAD)
             self._apply_thread_model(main, row)
             self._apply_thread_temperature(main, row)
+            self._apply_thread_folder(main, row)
             return
         if thread is not None:
             if title and title != thread.title:
@@ -1402,12 +1420,14 @@ class ConversationSync:
                 self.svc.rename_thread(thread.id, title)
             self._apply_thread_model(thread, row)
             self._apply_thread_temperature(thread, row)
+            self._apply_thread_folder(thread, row)
             return
         device = str(row.get("device") or "")
         if device and device == self.svc.hub.device_id and not self.state.get("catalog_mode"):
             # ours, but the mapping was lost (a reset): no second copy
             return
         created = self.svc.create_thread(title or "Side chat")
+        created.folder = str(row.get("folder") or "").strip()[:120]
         created.origin_device = device
         created.origin_device_name = str(row.get("device_name") or "")
         created.created_at = _iso(row.get("created_at"))
@@ -1418,6 +1438,7 @@ class ConversationSync:
         self._adopt(created.id)
         self._apply_thread_model(created, row)
         self._apply_thread_temperature(created, row)
+        self._apply_thread_folder(created, row)
         self.svc._save_index()
         self.svc.bus.publish({"kind": "thread", "thread": created.meta()})
 
@@ -1444,6 +1465,18 @@ class ConversationSync:
         if not changed:
             return
         self.svc._save_index()
+
+    def _apply_thread_folder(self, thread: Thread, row: dict[str, Any]) -> None:
+        """The folder from the relay: the workspace title from the computer, or the entrance
+        the chat was born in. Kept so this device's list groups the same way."""
+        if "folder" not in row:
+            return
+        folder = str(row.get("folder") or "").strip()[:120]
+        if folder != (thread.folder or ""):
+            thread.folder = folder
+            self.svc._save_index()
+        if self.state["folders"].get(thread.id, "") != folder:
+            self.state["folders"][thread.id] = folder
 
     def _apply_thread_temperature(self, thread: Thread, row: dict[str, Any]) -> None:
         """The chat's sampling temperature from the relay (D8). A relay that says nothing

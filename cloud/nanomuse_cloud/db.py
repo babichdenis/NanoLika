@@ -515,6 +515,8 @@ class Database:
         add("sync_conversations", "model", "TEXT NOT NULL DEFAULT ''")
         add("sync_conversations", "reasoning", "TEXT NOT NULL DEFAULT ''")
         add("sync_conversations", "temperature", "REAL")
+        # 0.27: the folder a chat works in, so every entrance can group the same way
+        add("sync_conversations", "folder", "TEXT NOT NULL DEFAULT ''")
 
         if "identifier_enc" not in cols("accounts"):
             self._conn.execute("ALTER TABLE accounts ADD COLUMN identifier_enc TEXT NOT NULL DEFAULT ''")

@@ -117,6 +117,9 @@ export interface WireConversation {
   model?: string
   /** The thinking level that goes with the model (a level the relay documents), '' = provider default. */
   reasoning?: string
+  /** The folder the chat works in (a workspace title here, or a messenger/web label): every
+   *  entrance groups its list by it. '' = never told. */
+  folder?: string
   seq: number
 }
 
@@ -309,6 +312,7 @@ function toConversation(value: unknown): WireConversation {
     deleted: c.deleted === true,
     archived: c.archived === true,
     model: typeof c.model === 'string' ? c.model : '',
+    folder: typeof c.folder === 'string' ? c.folder : '',
     seq: Number(c.seq ?? 0),
   }
 }
@@ -355,6 +359,8 @@ export interface SessionInfo {
   createdAt: number
   updatedAt: number
   archived?: boolean
+  /** The workspace the chat works in (its display title), '' when it has none. */
+  folder?: string
 }
 
 /** A turn of the conversation written on another device, as it goes into a session's log here (C8). */
@@ -526,6 +532,8 @@ export interface KnownConversation {
   model?: string
   /** The thinking level that goes with it, as the relay knows it; '' = provider default. */
   reasoning?: string
+  /** The folder the chat works in, as the relay knows it; '' when never told. */
+  folder?: string
 }
 
 /**
@@ -707,6 +715,9 @@ export interface SyncView {
   /** session id → the device that started the conversation ('' = this computer): the chats column
    *  groups the account's chats by where they were written. */
   origins: Record<string, string>
+  /** session id → the folder the chat works in, as the account knows it (a workspace title,
+   *  or Telegram / MAX / Web). The column groups by it; '' falls back to the local cwd. */
+  folders: Record<string, string>
   /** The chat's own model (a Cloud id) per session; a session not listed follows the default. */
   models: Record<string, string>
   /** The thinking level chosen beside the chat's model; absent = the provider's default. */
@@ -856,6 +867,12 @@ export class SyncEngine {
                 : ''
             return [sid, origin]
           }),
+      ),
+      folders: Object.fromEntries(
+        Object.entries(this.state.cids)
+          .filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local')
+          .map(([sid, cid]) => [sid, String(this.state.conversations[cid]?.folder || '')])
+          .filter(([, folder]) => folder !== ''),
       ),
       models: Object.fromEntries(
         Object.entries(this.state.models).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
@@ -1482,12 +1499,19 @@ export class SyncEngine {
         // device included), and a chat that never chose one sends nothing.
         const model = String(this.state.models[sessionId] ?? '').trim().slice(0, 120)
         const reasoning = String(this.state.reasoning?.[sessionId] ?? '').trim().toLowerCase().slice(0, 24)
+        // A chat born on another device keeps the folder it came with (the web, a messenger,
+        // another computer); a chat born here carries its workspace title. The local cwd of a
+        // mirrored conversation is this computer's home workspace, not the chat's real folder.
+        const known = this.state.conversations[cid]
+        const remoteBorn = Boolean(known?.device && known.device !== device)
+        const folder = (remoteBorn ? (known?.folder ?? '') : (info.folder ?? '')).trim().slice(0, 120)
+        const folderChanged = folder !== (known?.folder ?? '')
         const modelChanged = Boolean(model) && this.state.conversations[cid]?.model !== model
         // the level travels beside the model; '' is a real value ("provider default") and
         // must reach the relay too, or a level cleared here would stay on the other devices
         const reasoningChanged = Boolean(model) && (this.state.conversations[cid]?.reasoning ?? '') !== reasoning
-        if (this.state.titles[sessionId] !== title || modelChanged || reasoningChanged) {
-          conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000), ...(modelChanged || reasoningChanged ? { model, reasoning } : {}) })
+        if (this.state.titles[sessionId] !== title || modelChanged || reasoningChanged || folderChanged) {
+          conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000), ...(modelChanged || reasoningChanged ? { model, reasoning } : {}), ...(folderChanged ? { folder } : {}) })
           if (modelChanged || reasoningChanged) {
             modelOf.set(String(cid), model)
             reasoningOf.set(String(cid), reasoning)
@@ -1832,6 +1856,7 @@ export class SyncEngine {
       archived: c.archived,
       model: model || known?.model || '',
       reasoning: reasoning || known?.reasoning || '',
+      folder: typeof c.folder === 'string' && c.folder.trim() ? c.folder.slice(0, 120) : (known?.folder || ''),
     }
     if (c.archived && sessionId && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
     if (!sessionId) {

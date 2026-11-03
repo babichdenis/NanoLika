@@ -899,13 +899,16 @@ export default class NanomuseCloud extends Service {
             // The title comes from the list's own `title` projection when the host has one; only a
             // session without it (no title landed yet) is read, and that once per change: reading
             // every log on every push kept the host busy for seconds on a big account.
+            const registry = ctx.get('workspaceRegistry') as { list?(): readonly { path: string; title: string }[] } | undefined
+            const folderOfPath = new Map((registry?.list?.() ?? []).map((w) => [w.path, w.title]))
             const rows: SessionInfo[] = []
             for (const s of items) {
               if (s.parentSessionId || s.origin === 'subagent') continue
               const id = String(s.sessionId)
               const hint = s.projections?.values?.title
               const title = typeof hint === 'string' && hint ? hint : await this.sessionTitle(ctx, s.sessionId, s.updatedAt)
-              rows.push({ id, title, blank: s.blank, createdAt: s.updatedAt, updatedAt: s.updatedAt })
+              const cwd = String(s.cwd || '')
+              rows.push({ id, title, blank: s.blank, createdAt: s.updatedAt, updatedAt: s.updatedAt, folder: folderOfPath.get(cwd) || '' })
             }
             return rows
           },

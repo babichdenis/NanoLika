@@ -32,6 +32,10 @@ COPY = {
         "you": "You",
         "lika": "Lika",
         "chats": "Chats",
+        "folders": "Folders",
+        "choose_folder": "Choose a folder.",
+        "all_folders": "All folders",
+        "account": "Shared",
         "new": "New chat",
         "current": "Current chat",
         "choose": "Choose where to continue. The number shows unread messages here.",
@@ -56,6 +60,10 @@ COPY = {
         "you": "你",
         "lika": "Lika",
         "chats": "对话",
+        "folders": "文件夹",
+        "choose_folder": "请选择文件夹。",
+        "all_folders": "所有文件夹",
+        "account": "共享",
         "new": "新对话",
         "current": "当前对话",
         "choose": "请选择要继续的对话，数字表示此处未读消息。",
@@ -80,6 +88,10 @@ COPY = {
         "you": "Вы",
         "lika": "Лика",
         "chats": "Чаты",
+        "folders": "Папки",
+        "choose_folder": "Выберите папку.",
+        "all_folders": "Все папки",
+        "account": "Общие",
         "new": "Новый чат",
         "current": "Сейчас открыт",
         "choose": "Выберите, где продолжить. Число рядом показывает непрочитанные сообщения здесь.",
@@ -296,7 +308,11 @@ class ChatPicker:
     def targets(self, thread: str) -> list[tuple[str, str]]:
         threads = getattr(self.m.svc, "threads", {})
         thread_row = threads.get(thread)
-        origin = conversation_origin(thread, getattr(thread_row, "title", ""))
+        origin = conversation_origin(
+            thread,
+            getattr(thread_row, "title", ""),
+            getattr(thread_row, "folder", ""),
+        )
         result = []
         for channel in ("telegram", "max"):
             if channel not in self.m.channels or not self.m.store.config(channel).enabled:
@@ -357,7 +373,13 @@ class ChatPicker:
                     await client.close()
         return bool(self.m.svc.sync.active)
 
-    async def show(self, msg: Any, page: int = 0, archived: bool = False) -> None:
+    async def show(
+        self,
+        msg: Any,
+        page: int = 0,
+        archived: bool = False,
+        folder_index: int | None = None,
+    ) -> None:
         c = COPY.get(self.m.menu.language(msg), COPY["ru"])
         try:
             if not await self.available(msg):
@@ -376,6 +398,7 @@ class ChatPicker:
                 origin = conversation_origin(
                     thread.id if thread is not None else "",
                     str(row.get("title") or ""),
+                    getattr(thread, "folder", "") if thread is not None else "",
                 )
                 return shows_in(origin, msg.channel)
 
@@ -400,16 +423,66 @@ class ChatPicker:
                     for row in listing.get("conversations", [])
                     if bool(row.get("archived")) == archived and visible(row)
                 ]
+            def folder_of(row: dict[str, Any]) -> str:
+                """The folder the account knows the chat by; an older conversation without
+                one falls back to the entrance it was born in."""
+                label = " ".join(str(row.get("folder") or "").split())[:60]
+                if label:
+                    return label
+                tid = engine.thread_of(str(row.get("cid") or ""))
+                origin = conversation_origin(
+                    tid.id if tid is not None else "",
+                    str(row.get("title") or ""),
+                    getattr(tid, "folder", "") if tid is not None else "",
+                )
+                if origin == "telegram":
+                    return "Telegram"
+                if origin == "max":
+                    return "MAX"
+                return c["account"]
+
+            folders: list[str] = []
+            for row in entries:
+                name = folder_of(row)
+                if name not in folders:
+                    folders.append(name)
+            folders.sort(key=lambda name: (2 if name == c["account"] else 1, name.casefold()))
+            selected_folder = ""
+            if not archived and folder_index is not None and 0 <= folder_index < len(folders):
+                selected_folder = folders[folder_index]
+                entries = [row for row in entries if folder_of(row) == selected_folder]
             title = self.m.svc.threads.get(current)
-            text = (
-                c["choose"]
-                + "\n\n"
-                + c["current"]
-                + ": "
-                + (title.title if title else c["untitled"])
-            )
-            if general_topic:
-                text = c["choose"]
+            current_line = c["current"] + ": " + (title.title if title else c["untitled"])
+            # Folders first: the same names the computer shows. One folder alone needs no
+            # extra tap, the chats open at once.
+            if not archived and folder_index is None and len(folders) > 1:
+                text = c["folders"] + "\n" + c["choose_folder"]
+                if not general_topic:
+                    text += "\n\n" + current_line
+                rows = []
+                for index, name in enumerate(folders):
+                    count = sum(1 for row in entries if folder_of(row) == name)
+                    rows.append(
+                        [(f"{name} · {count}", self.m.menu.ticket(msg, f"chat:folder:{index}"))]
+                    )
+                rows.extend(
+                    [
+                        [(c["new"], self.m.menu.ticket(msg, "chat:new"))],
+                        [(c["back"], self.m.menu.ticket(msg, "home"))],
+                    ]
+                )
+                await self.m.menu.send(msg, text, rows)
+                logger.info(
+                    "channel {}: shared chat folders delivered ({} folders)",
+                    msg.channel,
+                    len(folders),
+                )
+                return
+            text = c["choose"]
+            if not general_topic:
+                text += "\n\n" + current_line
+            if selected_folder:
+                text = selected_folder + "\n\n" + text
             rows = []
             page = max(0, min(page, max(0, (len(entries) - 1) // 8)))
             for row in entries[page * 8 : page * 8 + 8]:
@@ -421,7 +494,11 @@ class ChatPicker:
             if not entries:
                 text += "\n" + c["empty"]
             nav = []
-            page_action = "chat:archive:" if archived else "chat:page:"
+            page_action = (
+                "chat:archive:"
+                if archived
+                else f"chat:fp:{folder_index}:" if selected_folder else "chat:page:"
+            )
             rows.append(
                 [
                     (
@@ -439,9 +516,11 @@ class ChatPicker:
             rows.extend(
                 [
                     [(c["new"], self.m.menu.ticket(msg, "chat:new"))],
-                    [(c["back"], self.m.menu.ticket(msg, "home"))],
                 ]
             )
+            if selected_folder and len(folders) > 1:
+                rows.append([(c["all_folders"], self.m.menu.ticket(msg, "chat:folders"))])
+            rows.append([(c["back"], self.m.menu.ticket(msg, "home"))])
             await self.m.menu.send(msg, text, rows)
             logger.info(
                 "channel {}: shared chat list delivered ({} entries)", msg.channel, len(entries)
@@ -489,6 +568,16 @@ class ChatPicker:
         c = COPY.get(self.m.menu.language(msg), COPY["ru"])
         if action.startswith("chat:archive:"):
             await self.show(msg, int(action.rsplit(":", 1)[-1]), archived=True)
+            return
+        if action == "chat:folders":
+            await self.show(msg)
+            return
+        if action.startswith("chat:folder:"):
+            await self.show(msg, 0, False, int(action.rsplit(":", 1)[-1]))
+            return
+        if action.startswith("chat:fp:"):
+            _, _, index, page = action.split(":", 3)
+            await self.show(msg, int(page), False, int(index))
             return
         if action == "chats" or action.startswith("chat:page:"):
             page = int(action.rsplit(":", 1)[-1]) if action.startswith("chat:page:") else 0
@@ -540,7 +629,8 @@ class ChatPicker:
                 await self.preview(msg, thread, before=max(0, int(_page_text)))
                 return
             if action == "chat:new":
-                thread = self.m.svc.create_thread(c["untitled"])
+                label = self.m.types[msg.channel].label if msg.channel in self.m.types else ""
+                thread = self.m.svc.create_thread(c["untitled"], folder=label)
                 engine.state["catalog_mode"] = True
                 engine.thread_changed(thread)
                 await engine.push()

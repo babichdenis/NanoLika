@@ -161,6 +161,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "archived": bool(r["archived"]) if "archived" in r.keys() else False,
         "model": str(r["model"] or "") if "model" in r.keys() else "",
         "reasoning": str(r["reasoning"] or "") if "reasoning" in r.keys() else "",
+        "folder": str(r["folder"] or "") if "folder" in r.keys() else "",
         "temperature": (
             float(r["temperature"])
             if "temperature" in r.keys() and r["temperature"] is not None
@@ -673,8 +674,8 @@ class SyncStore:
                             continue
                     seq = self._next_seq(c, account_id)
                     c.execute(
-                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model, reasoning, temperature) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sync_conversations(account_id, cid, kind, title, device, created_at, updated_at, deleted, deleted_at, seq, archived, model, reasoning, temperature, folder) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             account_id,
                             cid,
@@ -690,6 +691,7 @@ class SyncStore:
                             str(conv.get("model") or "")[:160],
                             str(conv.get("reasoning") or "").strip().lower()[:24],
                             _temperature(conv),
+                            str(conv.get("folder") or "")[:120],
                         ),
                     )
                     accepted += 1
@@ -720,10 +722,12 @@ class SyncStore:
                     )
                     temperature = _temperature(conv, current_temperature)
                     temperature_changed = "temperature" in conv and temperature != current_temperature
-                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed or temperature_changed:
+                    folder = str(conv.get("folder") or "")[:120] if "folder" in conv else (str(row["folder"] or "") if "folder" in row.keys() else "")
+                    folder_changed = "folder" in conv and folder != (str(row["folder"] or "") if "folder" in row.keys() else "")
+                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed or temperature_changed or folder_changed:
                         seq = self._next_seq(c, account_id)
                         c.execute(
-                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, temperature=?, seq=? WHERE account_id=? AND cid=?",
+                            "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, temperature=?, folder=?, seq=? WHERE account_id=? AND cid=?",
                             (
                                 title if title_changed else row["title"],
                                 t,
@@ -731,6 +735,7 @@ class SyncStore:
                                 model,
                                 reasoning,
                                 temperature,
+                                folder,
                                 seq,
                                 account_id,
                                 cid,

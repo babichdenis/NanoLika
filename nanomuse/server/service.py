@@ -364,6 +364,10 @@ class Thread:
     # the chat's own sampling temperature (0..2); None = the configured [llm] value. Carried
     # with the conversation, so a chat answers the same way on every device (D8)
     temperature: float | None = None
+    # the folder the chat works in, as the account sees it: a workspace title from the
+    # computer, or Telegram / MAX / Web for a chat born in an entrance. Travels with the
+    # conversation so every list groups the same way.
+    folder: str = ""
 
     def meta(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -391,6 +395,8 @@ class Thread:
             meta["reasoning"] = self.reasoning
         if self.temperature is not None:
             meta["temperature"] = self.temperature
+        if self.folder:
+            meta["folder"] = self.folder
         return meta
 
 
@@ -860,6 +866,8 @@ class MuseService:
                 thread.model = str(m["model"])
             if m.get("reasoning"):
                 thread.reasoning = str(m["reasoning"]).strip().lower()[:24]
+            if m.get("folder"):
+                thread.folder = str(m["folder"]).strip()[:120]
             if isinstance(m.get("temperature"), (int, float)) and not isinstance(
                 m.get("temperature"), bool
             ):
@@ -895,6 +903,8 @@ class MuseService:
                 m["reasoning"] = t.reasoning
             if t.temperature is not None:
                 m["temperature"] = t.temperature
+            if t.folder:
+                m["folder"] = t.folder
             metas.append(m)
         (self.threads_dir / "index.json").write_text(
             json.dumps(metas, ensure_ascii=False, indent=1), "utf-8"
@@ -979,9 +989,10 @@ class MuseService:
             self._save_index()
         return thread.timeline
 
-    def create_thread(self, title: str = "") -> Thread:
+    def create_thread(self, title: str = "", folder: str = "") -> Thread:
         tid = "t_" + uuid.uuid4().hex[:8]
         thread = self._make_thread(tid, title.strip() or "Side chat")
+        thread.folder = str(folder or "").strip()[:120]
         if self.sync.account_id:
             thread.customer_scope = account_scope(self.sync.account_id)
         elif self.hub.signed_in:
@@ -1117,6 +1128,17 @@ class MuseService:
             return None
         thread.title = title.strip() or thread.title
         thread.updated_at = now_iso()
+        self._save_index()
+        self.bus.publish({"kind": "thread", "thread": thread.meta()})
+        self.sync.thread_changed(thread)
+        return thread
+
+    def set_thread_folder(self, thread_id: str, folder: str) -> Thread | None:
+        """Name the folder a chat works in; it travels with the conversation."""
+        thread = self.threads.get(thread_id)
+        if thread is None:
+            return None
+        thread.folder = str(folder or "").strip()[:120]
         self._save_index()
         self.bus.publish({"kind": "thread", "thread": thread.meta()})
         self.sync.thread_changed(thread)

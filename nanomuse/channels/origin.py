@@ -16,8 +16,17 @@ _TELEGRAM_PREFIX = "channel-telegram-"
 _MAX_PREFIX = "channel-max-"
 
 
-def conversation_origin(thread_id: str, title: str = "") -> str:
-    """``telegram``, ``max`` or ``account`` — never empty."""
+def conversation_origin(thread_id: str, title: str = "", folder: str = "") -> str:
+    """``telegram``, ``max`` or ``account`` — never empty.
+
+    The folder a chat carries (Telegram / MAX) is the strongest sign once a one-to-one
+    chat is named from its first words: the old title prefix is no longer there to say
+    which messenger it was born in."""
+    label = " ".join(str(folder or "").split()).casefold()
+    if label == "telegram":
+        return "telegram"
+    if label == "max":
+        return "max"
     ident = str(thread_id or "")
     name = " ".join(str(title or "").split()).casefold()
     if ident.startswith(_MAX_PREFIX) or name.startswith(("max ·", "max·")):
