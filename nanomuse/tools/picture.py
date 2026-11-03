@@ -125,7 +125,7 @@ class Picture(BaseTool):
             bits.append(f"show it in the reply as ![picture]({link})")
         # the price was quoted before the call and the person was told it; the relay's
         # `charged` is in its own units and has no place in a chat answer
-        return ToolResult(output=", ".join(bits) + f" ({chosen})")
+        return ToolResult(output=", ".join(bits) + f" ({chosen})", images=[str(target)])
 
 
 __all__ = ["Picture", "SIZE"]

@@ -89,13 +89,14 @@ function cloudAction(chat){const cloud=cloudState(chat),label=cloud==='local'?t(
  return button;}
 
 function renderInline(root,value){
- const text=String(value),pattern=/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\x60([^\x60]+)\x60|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*/g;
+ const text=String(value),pattern=/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\x60([^\x60]+)\x60|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*/g;
  let cursor=0,match;
  while((match=pattern.exec(text))){
   root.append(document.createTextNode(text.slice(cursor,match.index)));
-  if(match[2]){try{const url=new URL(match[2]);if(url.protocol==='https:'||url.protocol==='http:'){const a=document.createElement('a');a.href=url.href;a.rel='noopener noreferrer';a.target='_blank';a.textContent=match[1];root.append(a);}else root.append(document.createTextNode(match[1]));}catch{root.append(document.createTextNode(match[1]));}}
-  else if(match[3]){const code=document.createElement('code');code.textContent=match[3];root.append(code);}
-  else{const el=document.createElement(match[4]||match[5]?'strong':'em');el.textContent=match[4]||match[5]||match[6];root.append(el);}
+  if(match[2]){try{const url=new URL(match[2]);if(url.protocol==='https:'||url.protocol==='http:'){const img=document.createElement('img');img.className='message-image';img.src=url.href;img.alt=match[1]||'';img.loading='lazy';img.tabIndex=0;img.title=t('openFull');img.onclick=()=>openImage(url.href);img.onkeydown=event=>{const pressed=event['key'];if(pressed==='Enter'||pressed===' '){event.preventDefault();openImage(url.href);}};root.append(img);}else root.append(document.createTextNode(match[1]));}catch{root.append(document.createTextNode(match[1]));}}
+  else if(match[4]){try{const url=new URL(match[4]);if(url.protocol==='https:'||url.protocol==='http:'){const a=document.createElement('a');a.href=url.href;a.rel='noopener noreferrer';a.target='_blank';a.textContent=match[3];root.append(a);}else root.append(document.createTextNode(match[3]));}catch{root.append(document.createTextNode(match[3]));}}
+  else if(match[5]){const code=document.createElement('code');code.textContent=match[5];root.append(code);}
+  else{const el=document.createElement(match[6]||match[7]?'strong':'em');el.textContent=match[6]||match[7]||match[8];root.append(el);}
   cursor=pattern.lastIndex;
  }
  root.append(document.createTextNode(text.slice(cursor)));
