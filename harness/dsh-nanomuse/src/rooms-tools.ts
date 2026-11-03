@@ -211,7 +211,7 @@ export function apply(ctx: Context): void {
         defineTool({
           name: 'make_image',
           description:
-            "Make one picture for the person. It uses the image model chosen in Settings → Models (the account or an own key), not a provider API you call yourself. The result carries a stable link: put it in your reply as ![picture](link), and the chat shows the picture on this computer, on the other devices and in a messenger. Never say the picture is 'open beside the chat' — it belongs in the reply. Use it when they ask for a picture, illustration, logo concept, diagram-like visual or an edit-like redraw. Do not write a script or a provider client for this.",
+            "Make one picture for the person. It uses the image model chosen in Settings → Models (the account or an own key), not a provider API you call yourself. The result carries a stable link: put it in your reply as ![](link), and the chat shows the picture on this computer, on the other devices and in a messenger. Never say the picture is 'open beside the chat' — it belongs in the reply. Use it when they ask for a picture, illustration, logo concept, diagram-like visual or an edit-like redraw. Do not write a script or a provider client for this.",
           parameters: {
             prompt: { type: 'string', required: true, description: 'What to draw, in the person\'s words (at most 2000 characters).' },
             title: { type: 'string', description: 'What to call the picture in the pane.' },
@@ -221,7 +221,7 @@ export function apply(ctx: Context): void {
             render: (_args, value) => [{
               type: 'text',
               text: value.url
-                ? `Picture ready (${Math.round((value.bytes ?? 0) / 1024)} KB). Link: ${value.url}. Put it in the reply as ![picture](${value.url}) — the chat shows it.`
+                ? `Picture ready (${Math.round((value.bytes ?? 0) / 1024)} KB). Link: ${value.url}. Put it in the reply as ![](${value.url}) — the chat shows it.`
                 : `Picture ready (${Math.round((value.bytes ?? 0) / 1024)} KB), but it could not be uploaded for the chat.`,
             }],
           },
@@ -265,7 +265,7 @@ export function apply(ctx: Context): void {
               '- **Calendar and contacts**: the same Settings → Connectors page has built-in `calendar` and `contacts` tools. Use them; do not parse .ics/.vcf by hand or build a bridge.',
               '- **Other services** (Notion, GitHub, Linear, Slack, Google Drive and the rest of the catalogue): Settings → Connectors mounts them as `mcp__<server>__<tool>`. Use the mounted tools; do not write a client for a service the page already lists.',
               '- **Word / PowerPoint / Excel**: use the installed skills `docx`, `pptx`, `xlsx` through `tool-skill` (Settings → Skills / Настройки → Навыки). Do not pip install python-docx/openpyxl or write a parser unless the skill cannot do the job.',
-              '- **Pictures**: `make_image` draws through the image model chosen in Settings → Models (Настройки → Модели) and returns a stable link. Always put that link in your reply as `![picture](link)`: the chat shows the picture here, on the other devices and in a messenger. Never say it is "open beside the chat". Avatar looks are `draw_new_look` (opens the studio with four candidates). Do not call a provider image API directly.',
+              '- **Pictures**: `make_image` draws through the image model chosen in Settings → Models (Настройки → Модели) and returns a stable link. Always put that link in your reply as `![](link)`: the chat shows the picture here, on the other devices and in a messenger. Never say it is "open beside the chat". Avatar looks are `draw_new_look` (opens the studio with four candidates). Do not call a provider image API directly.',
               '- **Music**: `make_music` — `music-suno-track` (song/instrumental, 25 ₽), `music-sounds-track` (effect, 3.50 ₽), `music-lyria-track` (short clip, 7 ₽). Pick by the request, state the price, the tool opens the MP3 in the side pane.',
               '- **Speech out loud**: `speak` reads an answer with the system voice; it does not use the cloud voice model. Cloud speech is the app\'s voice feature, not a tool you call.',
               '- **Video**: the video model in Settings → Models is used by the avatar animation (Settings → Media / Настройки → Медиа). There is no general `make_video` tool in this build. Do not write a video client; if the person asks for a clip, say what is available.',
