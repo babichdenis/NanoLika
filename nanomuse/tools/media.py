@@ -117,8 +117,11 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
+            link = await client.upload(rel.name, sound, media_type)
             seconds = headers.get("x-nanomuse-seconds", "")
             bits = [f"Speech saved to {rel.as_posix()}"]
+            if link:
+                bits.append(f"link {link}")
             if seconds:
                 bits.append(f"{seconds} s")
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
@@ -138,7 +141,10 @@ class Media(BaseTool):
             target = self._resolve(str(rel), must_exist=False)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(sound)
+            link = await client.upload(rel.name, sound, media_type)
             bits = [f"Track saved to {rel.as_posix()}"]
+            if link:
+                bits.append(f"link {link}")
             return ToolResult(output=", ".join(bits) + f" ({media_type})")
         if action == "transcribe":
             if not path.strip():

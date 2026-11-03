@@ -117,6 +117,12 @@ class Picture(BaseTool):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(png)
         bits = [f"Picture saved to {rel.as_posix()}"]
+        # The link is how the picture reaches a chat that did not make it: the messenger
+        # shows the image, another device opens it, and the person can keep it.
+        link = await client.upload(rel.name, png, "image/png")
+        if link:
+            bits.append(f"link {link}")
+            bits.append(f"show it in the reply as ![picture]({link})")
         # the price was quoted before the call and the person was told it; the relay's
         # `charged` is in its own units and has no place in a chat answer
         return ToolResult(output=", ".join(bits) + f" ({chosen})")

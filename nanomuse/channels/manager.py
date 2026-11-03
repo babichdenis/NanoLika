@@ -267,11 +267,47 @@ class ChannelManager(ChannelBus):
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
+        self._backfill_folders()
         # topics are reconciled from the account on a clock too: a quiet account never
         # publishes a sync frame, and then a deleted chat's topic would sit there for good
         self._topics_tick = asyncio.create_task(self._topics_loop(), name="topics-tick")
         for name in self.types:
             self._spawn(self.start_channel(name))
+
+    def _backfill_folders(self) -> None:
+        """Chats born at a messenger before folders existed take their channel's name; a
+        chat carried from the computer keeps the workspace title it came with."""
+        # Telegram keeps its topic map, which names the thread even when the chat is not the
+        # one selected now: the surest sign of a chat born there.
+        topics = getattr(self.picker, "topics", None)
+        if topics is not None and topics.enabled("telegram"):
+            account = self.svc.sync.account_id
+            for row in topics.file.load().values():
+                if not isinstance(row, dict) or row.get("account") != account:
+                    continue
+                thread = self.svc.threads.get(str(row.get("thread") or ""))
+                if (
+                    thread is None
+                    or thread.folder
+                    or thread.origin_device
+                    or thread.id == MAIN_THREAD
+                ):
+                    continue
+                self.svc.set_thread_folder(thread.id, "Telegram")
+        for channel in ("telegram", "max"):
+            if channel not in self.types:
+                continue
+            for sender, entry in self.pairing.approved(channel).items():
+                chat = str(entry.get("chat_id") or sender)
+                thread = self.svc.threads.get(self.picker.selected(channel, chat))
+                if (
+                    thread is None
+                    or thread.folder
+                    or thread.origin_device
+                    or thread.id == MAIN_THREAD
+                ):
+                    continue
+                self.svc.set_thread_folder(thread.id, self.types[channel].label)
 
     async def stop(self) -> None:
         if not self.started:
@@ -1086,6 +1122,10 @@ class ChannelManager(ChannelBus):
         if route is None:
             return
         text = self._redact_outbound(text)
+        if files:
+            # the picture is attached right after the words; a Markdown copy of the same
+            # picture in the text would only add a second preview
+            text = SHARE_IMAGE.sub("", text).strip()
         channel = self.channels.get(route[0])
         if channel is None:
             return

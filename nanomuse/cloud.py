@@ -358,6 +358,23 @@ class CloudClient:
                 raise CloudError(502, "upstream", str(output.get("message") or "the provider could not make this clip"))
         raise CloudError(504, "timeout", "The clip took longer than fifteen minutes")
 
+    async def upload(self, name: str, data: bytes, mime: str) -> str:
+        """Put a file the agent made into the account's storage; the stable link back.
+
+        The link is what a chat or another device can show: the relay's own signed link,
+        not a presigned one that expires. An empty string means the relay has no storage."""
+        try:
+            response = await self._audio(
+                "/v1/attachments",
+                data=None,
+                files={"file": (name, data, mime)},
+                timeout=180.0,
+            )
+            said = response.json()
+        except (CloudError, ValueError):
+            return ""
+        return str(said.get("media_url") or "") if isinstance(said, dict) else ""
+
     async def music(self, model: str, prompt: str) -> tuple[bytes, str, dict[str, str]]:
         """One music track by description: bytes, type and the relay's own headers."""
         response = await self._audio(

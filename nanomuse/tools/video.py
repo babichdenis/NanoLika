@@ -116,6 +116,10 @@ class Video(BaseTool):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         bits = [f"Clip saved to {rel.as_posix()}", f"{length} s"]
+        link = await client.upload(rel.name, data, "video/mp4")
+        if link:
+            bits.append(f"link {link}")
+            bits.append(f"show it in the reply as [clip]({link})")
         # the price was quoted before the call and the person was told it; the relay's
         # `charged` is in its own units and has no place in a chat answer
         return ToolResult(output=", ".join(bits) + f" ({len(data)} bytes)")
