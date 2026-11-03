@@ -12,7 +12,8 @@ sets its id; a second one is refused with `main_exists` and the id to use instea
 relay keeps the one it already has — devices' clocks disagree, the arrival order does not,
 and every client already handles the refusal.
 
-On by default for a signed-in account; turning it off deletes everything stored. Deleting
+Off until the person turns it on (the audit's rule: nothing of a new account travels by
+default); turning it off deletes everything stored. Deleting
 a chat tombstones the conversation (so the other devices drop it) and removes its texts at
 once; tombstones go after 30 days. At most 20,000 messages per account: beyond that, the
 oldest conversations' messages are dropped from the relay (devices keep their own copies).
@@ -31,6 +32,7 @@ minutes, in memory only — it is a hint for the screen, not data worth a table.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import time
@@ -38,6 +40,8 @@ from typing import Any
 
 from .db import Database
 from .service import CloudError
+
+log = logging.getLogger("nanomuse_cloud.sync")
 
 LIMITS = {"messages": 20000, "text_bytes": 16384, "conversations": 2000}
 MAX_POST_MESSAGES = 200
@@ -244,6 +248,12 @@ class SyncStore:
         # Текст сообщений лежит на релее; с ключом он шифруется (AES-GCM, как
         # идентификаторы), и копия базы без CLOUD_SECRET его не читает.
         self.crypto = crypto
+        if crypto is None:
+            # Rows written with a secret and read without one come back as empty strings:
+            # quiet data loss is worse than a line at start-up that says why.
+            log.warning(
+                "sync: CLOUD_SECRET is not set; encrypted conversation texts will read as empty"
+            )
 
     def _seal(self, account_id: str, text: str) -> str:
         if not text or self.crypto is None:
@@ -928,6 +938,24 @@ class SyncStore:
             for account_id in [account for account, count in counts.items() if count > 1][: max(1, int(limit))]:
                 moved += self._fold_daily_feed(c, account_id)
             return moved
+
+    def sweep_expired(self) -> int:
+        """Drop tombstones older than TOMBSTONE_DAYS for every account, not only on push.
+
+        `push` sweeps its own account when it runs, but an account that stopped syncing
+        never pushes again and its tombstones stayed for good. The periodic backstop in
+        the relay calls this; returns how many rows went."""
+        cutoff = now() - TOMBSTONE_DAYS * 86400
+        with self.db.tx() as c:
+            gone = c.execute(
+                "DELETE FROM sync_messages WHERE deleted=1 AND deleted_at IS NOT NULL AND deleted_at<?",
+                (cutoff,),
+            ).rowcount
+            gone += c.execute(
+                "DELETE FROM sync_conversations WHERE deleted=1 AND deleted_at IS NOT NULL AND deleted_at<?",
+                (cutoff,),
+            ).rowcount
+            return max(0, gone)
 
     def _retain(self, c: sqlite3.Connection, account_id: str, keep: set[str], t: int) -> int:
         """Over the message limit: the oldest conversations' messages go first (the ones not

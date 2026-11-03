@@ -44,6 +44,7 @@ async def test_counters_rows_and_csv_through_the_api():
     app, client, sender, up, cloud, settings = make()
     a = await sign_up(client, sender, "13800138000", "pixel")
     b = await sign_up(client, sender, "dev-a@example.com", "mac")
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(b["api_key"]))
     assert (await client.post("/v1/chat/completions", json=CHAT, headers=auth(a["api_key"]))).status_code == 200
     assert (await client.post("/v1/chat/completions", json={**CHAT, "model": "boom"}, headers=auth(a["api_key"]))).status_code == 404
     assert (await client.get("/v1/me", headers=auth(b["api_key"]))).status_code == 200
@@ -69,9 +70,11 @@ async def test_counters_rows_and_csv_through_the_api():
     assert acc[today]["sign_ins"] == 2
 
     api = {r["day"]: r for r in by_id["api_daily"]["rows"]}[today]
+    # three sync calls: the switch turned on for b, a read, a push (the stats call itself is
+    # counted after it has answered)
     assert (
-        api["auth"] == 4 and api["chat"] == 2 and api["account"] == 2 and api["sync"] == 2
-    )  # the stats call itself is counted after it has answered
+        api["auth"] == 4 and api["chat"] == 2 and api["account"] == 2 and api["sync"] == 3
+    )
     assert api["total"] == sum(v for k, v in api.items() if k not in ("day", "total"))
 
     errs = {r["day"]: r for r in by_id["errors_daily"]["rows"]}[today]

@@ -311,6 +311,10 @@ async def test_one_account_sees_nothing_of_another():
     my_key, my_id = mine["api_key"], mine["account"]["id"]
     their_key, their_id = their["api_key"], their["account"]["id"]
     assert my_id != their_id
+    # the store only holds anything for an account that asked for it; both are on, so the
+    # test reaches the ownership check rather than the switch
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(my_key))
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(their_key))
 
     cid = "8a4a1f5a-1111-4a3a-9a4a-000000000001"
     push = await client.post(

@@ -33,7 +33,12 @@ def msg(mid: str, cid: str, role: str = "user", text: str = "hello", created_at:
 
 
 async def signed_in(client, sender, identifier="13800138000", device="pixel") -> str:
-    return (await sign_up(client, sender, identifier, device))["api_key"]
+    """A fresh account with sync turned on: the default is off (a person asks for it), and
+    these tests are about what happens once it is on. The default itself is checked by
+    `test_state_starts_off_and_round_trips_changes_once_turned_on`."""
+    key = (await sign_up(client, sender, identifier, device))["api_key"]
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(key))
+    return key
 
 
 def test_pure_helpers():
@@ -49,12 +54,33 @@ def test_pure_helpers():
     ]
 
 
-async def test_state_is_on_by_default_and_round_trips_changes():
+async def test_state_starts_off_and_round_trips_changes_once_turned_on():
+    """A new account's chats stay on its own devices until it asks for them to travel:
+    the default is off (audit 3, item 4), and this test walks the switch and the changes."""
     app, client, sender, up, cloud, settings = make()
-    key = await signed_in(client, sender)
+    key = (await sign_up(client, sender, "13800138000", "pixel"))["api_key"]
     r = await client.get("/v1/sync/state", headers=auth(key))
     assert r.status_code == 200
     assert r.json() == {
+        "enabled": False,
+        "cursor": 0,
+        "counts": {"conversations": 0, "messages": 0},
+        "limits": LIMITS,
+        "working": [],
+        "leases": [],
+        "paused": False,  # 0.22: the operator's sync switch
+    }
+    # off means off: a push before the person turns it on is refused
+    refused = await client.post(
+        "/v1/sync/changes",
+        json={"device": "phone-1", "conversations": [conv(uid(), "main", "Main")]},
+        headers=auth(key),
+    )
+    assert refused.status_code == 409
+    r = await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(key))
+    assert r.status_code == 200 and (await client.get("/v1/sync/state", headers=auth(key))).json()["enabled"] is True
+
+    assert (await client.get("/v1/sync/state", headers=auth(key))).json() == {
         "enabled": True,
         "cursor": 0,
         "counts": {"conversations": 0, "messages": 0},
@@ -527,6 +553,7 @@ def ws_client():
 
 def test_hub_tells_the_other_devices_after_an_accepting_push(ws_client):
     key = ws_sign_up(ws_client, "13800138000")
+    ws_client.put("/v1/sync/state", json={"enabled": True}, headers={"Authorization": f"Bearer {key}"})
     with connect(ws_client, key) as phone, connect(ws_client, key) as pc:
         phone.send_json(hello("phone", "phone-1", "Pixel"))
         phone.receive_json()  # welcome
@@ -764,6 +791,7 @@ async def test_working_is_presence_kept_ten_minutes_in_memory():
 def test_hub_carries_working_to_the_other_devices(ws_client):
     key = ws_sign_up(ws_client, "13800138000")
     headers = {"Authorization": f"Bearer {key}"}
+    ws_client.put("/v1/sync/state", json={"enabled": True}, headers=headers)
     with connect(ws_client, key) as phone, connect(ws_client, key) as pc:
         phone.send_json(hello("phone", "phone-1", "Pixel"))
         phone.receive_json()  # welcome
@@ -836,6 +864,7 @@ async def test_deleting_the_account_purges_everything_and_the_next_sign_in_start
     app, client, sender, up, cloud, settings = make()
     first = await sign_up(client, sender, "13800138000", "pixel")
     key, account_id = first["api_key"], first["account"]["id"]
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(key))
     cid, mid = uid(), uid()
     r = await client.post(
         "/v1/sync/changes",
@@ -889,6 +918,8 @@ async def test_deleting_the_account_purges_everything_and_the_next_sign_in_start
     # the same number again: a new account, a new id, nothing to pull
     again = await sign_up(client, sender, "13800138000", "pixel")
     assert again["created"] is True and again["account"]["id"] != account_id
+    # a new account starts with sync off, as everyone does; turning it on shows an empty store
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(again["api_key"]))
     r = await client.get("/v1/sync/changes?since=0&tail=300", headers=auth(again["api_key"]))
     assert r.status_code == 200
     assert r.json()["conversations"] == [] and r.json()["messages"] == [] and r.json()["cursor"] == 0

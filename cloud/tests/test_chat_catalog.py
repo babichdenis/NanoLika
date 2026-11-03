@@ -11,6 +11,9 @@ async def setup():
     b = await sign_up(client, sender, "other@example.test")
     headers = auth(a["api_key"])
     other = auth(b["api_key"])
+    # a new account starts with sync off; these tests are about what a synced store does
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=headers)
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=other)
     c1, c2 = uid(), uid()
     payload = {
         "device": "computer",
