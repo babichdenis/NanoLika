@@ -182,6 +182,11 @@ async def test_usage_is_broken_down_by_kind_and_model():
     assert r.status_code == 200
     r = await client.post("/v1/images/generations", json={"model": "qwen-image-3.0", "prompt": "a cat", "n": 1}, headers=headers)
     assert r.status_code == 200, r.text
+    # what the picture took is said twice: the relay's own units and the rubles the apps
+    # print (0.0 on a test relay with no exchange rate set yet, which is honest)
+    said = r.json()["nanomuse"]
+    assert said["charged"] > 0 and said["charged_rub"] >= 0
+    assert r.headers["x-nanomuse-charged-rub"] == f"{said['charged_rub']:.4f}"
 
     me = (await client.get("/v1/me", headers=headers)).json()
     usage = me["usage"]
