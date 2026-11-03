@@ -84,6 +84,18 @@ def charged_line(
     return ""
 
 
+def funds_line(exc: "CloudError") -> str:
+    """A money refusal as the person should hear it.
+
+    The relay's own message for a priced request already names the price and the balance
+    ("This generation costs ₽639.15; the balance has ₽12.30") — that is the warning the
+    person decides on, so it wins over the generic sentence. The code stays at the end:
+    a log and the relay's money card read it.
+    """
+    said = (exc.message or "").strip()
+    return f"{said} ({exc.code})" if said else f"{FUNDS_MESSAGE} ({exc.code})"
+
+
 MESSAGES = {
     "bad_identifier": "Enter a mainland phone number or an e-mail address.",
     "phone_region": "Codes reach mainland China numbers only for now; elsewhere, sign in with an e-mail address.",

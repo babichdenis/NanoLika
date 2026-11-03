@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError, charged_line
+from nanomuse.cloud import FUNDS_CODES, CloudError, charged_line, funds_line
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -115,7 +115,7 @@ class Video(BaseTool):
                 if callable(forget):
                     forget()
             if exc.code in FUNDS_CODES:
-                return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
+                return ToolResult.fail(funds_line(exc))
             message = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
             return ToolResult.fail(f"Clip failed: {message}")
         if not data:

@@ -26,7 +26,7 @@ class FakeCloud:
 
     async def video(self, model, prompt, *, seconds=5, size="", resolution=""):
         if self.fail:
-            raise CloudError(402, self.fail, "not enough")
+            raise CloudError(402, self.fail, "This clip costs ₽12.40; the balance has ₽3.00.")
         self.made.append({"model": model, "prompt": prompt, "seconds": seconds, "size": size})
         return b"\x00\x00\x00\x18ftypmp42", {"charged": 900, "charged_rub": 0.71}
 

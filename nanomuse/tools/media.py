@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from nanomuse.cloud import FUNDS_CODES, FUNDS_MESSAGE, CloudError, charged_line
+from nanomuse.cloud import FUNDS_CODES, CloudError, charged_line, funds_line
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
@@ -127,7 +127,7 @@ class Media(BaseTool):
                     if callable(forget):
                         forget()
                 if exc.code in FUNDS_CODES:
-                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
+                    return ToolResult.fail(funds_line(exc))
                 return ToolResult.fail(f"Speech failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no sound")
@@ -163,7 +163,7 @@ class Media(BaseTool):
                     if callable(forget):
                         forget()
                 if exc.code in FUNDS_CODES:
-                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
+                    return ToolResult.fail(funds_line(exc))
                 return ToolResult.fail(f"Music failed: {exc.message}")
             if not sound:
                 return ToolResult.fail("The relay returned no track")
@@ -210,7 +210,7 @@ class Media(BaseTool):
                 said = await client.transcribe(model, source.name, source.read_bytes(), mime, language=language)
             except CloudError as exc:
                 if exc.code in FUNDS_CODES:
-                    return ToolResult.fail(f"{FUNDS_MESSAGE} ({exc.code})")
+                    return ToolResult.fail(funds_line(exc))
                 return ToolResult.fail(f"Transcription failed: {exc.message}")
             words = str(said.get("text") or "").strip()
             if not words:

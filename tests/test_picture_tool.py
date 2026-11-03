@@ -29,9 +29,11 @@ class FakeCloud:
             {"id": "flux-lite", "nanomuse": {"kind": "image"}},
         ]
 
+    message = "This generation costs ₽3.61; the balance has ₽0.40."
+
     async def image(self, model, prompt, *, size=""):
         if self.fail:
-            raise CloudError(402, self.fail, "not enough")
+            raise CloudError(402, self.fail, self.message)
         self.drawn.append({"model": model, "prompt": prompt, "size": size})
         return b"\x89PNG\r\n\x1a\nfake", {"charged": 120}
 
@@ -74,6 +76,17 @@ def test_a_named_model_wins(tmp_path: Path):
 def test_the_prompt_is_required_and_the_size_is_checked(tmp_path: Path):
     assert not asyncio.run(tool(tmp_path).execute(prompt="  ")).ok
     assert "size" in asyncio.run(tool(tmp_path).execute(prompt="кот", size="big")).error
+
+
+def test_a_money_refusal_carries_the_price_and_the_balance(tmp_path: Path):
+    """The person decides on a price: the relay's own numbers must reach the answer, not a
+    generic "not enough money"."""
+    cloud = FakeCloud(fail="insufficient_funds")
+    cloud.message = "This generation costs ₽3.61; the balance has ₽0.40."
+    result = asyncio.run(tool(tmp_path, cloud).execute(prompt="кот"))
+    assert not result.ok
+    assert "₽3.61" in result.error and "₽0.40" in result.error
+    assert "insufficient_funds" in result.error
 
 
 def test_a_refusal_is_said_not_swallowed(tmp_path: Path):
