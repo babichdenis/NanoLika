@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.8",
   "description": "NanoLika Desktop: the NanoLika desktop built on DeepSeek Harness. The harness's web app in a window of our own, with NanoLika's account, face, Hands and Reach as plugins and the runtime for the hands bundled.",
-  "homepage": "https://nanomuse.cn/",
+  "homepage": "https://nanolika.ru/",
   "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22"
@@ -30,8 +30,8 @@
     "typescript": "^5.6.0"
   },
   "author": {
-    "name": "lgy0404",
-    "email": "lgy0404@users.noreply.github.com"
+    "name": "NanoLika",
+    "email": "hello@nanolika.ru"
   },
   "dependencies": {
     "@computer-use/nut-js": "4.2.0",
