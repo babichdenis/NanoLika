@@ -471,7 +471,12 @@ class MuseAgent:
         return prompts.SYSTEM_PROMPT.format(
             name=a.name,
             language_rule=language_rule,
-            now=timeutil.now().strftime("%Y-%m-%d %H:00 (%A, %Z, UTC%z)"),
+            now=(
+                timeutil.now().strftime("%Y-%m-%d, %H:00, %A") + " (" + timeutil.zone_name() + ")"
+                if timeutil.trusted()
+                else "not known: no computer has reported its clock. Do not state the time of day;"
+                " ask the person to open the app on their computer, or to say what city they are in."
+            ),
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
             tool_names=", ".join(t.name for t in self.tools),

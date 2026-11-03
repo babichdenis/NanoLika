@@ -492,6 +492,8 @@ function startHost(): Promise<string> {
           // server: a hands step the person must agree to is confirmed with a ticket only
           // the bundle can make (after the permission card), never by the model's own word.
           NANOMUSE_MCP_CONFIRM: randomBytes(24).toString("hex"),
+          // this process is the person's computer: its zone is the account's clock
+          NANOMUSE_DESKTOP: "1",
         };
         if (operatorServer) {
           // The hands themselves: the runtime's `nanomuse mcp` (a child of the host, which

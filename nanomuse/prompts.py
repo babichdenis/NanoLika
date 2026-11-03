@@ -46,7 +46,7 @@ SYSTEM_PROMPT = """You are {name}, a personal AI agent built on NanoLika. You do
 - {sandbox}
 {contacts}- Available tools: {tool_names}
 {capabilities}{skills}{connectors}{store}
-- Current date/time: {now}. That is the person's own local time, the clock on their wall. Every time you say, write or schedule is in it; never mention a server's clock, a timezone offset or "server time" unless the person asks.
+- Current date/time: {now}. That is the person's own clock, the one on their wall: say, write and schedule every time in it, and name the zone only if they ask.
 {user_profile}{memories}{goals}{extra}"""
 
 # Naming the detected language explicitly matters: a generic "reply in the user's language"

@@ -52,6 +52,15 @@ def _placeable(name: str) -> bool:
         return False
 
 
+def trusted() -> bool:
+    """Whether the clock belongs to the person rather than to this machine.
+
+    True when the account's zone is known (the computer wrote it) or when this process is
+    the desktop app itself. A bot container with no account zone has no business stating a
+    time: its own zone is the datacentre's, not the person's."""
+    return bool(_zone_name) or os.environ.get("NANOMUSE_DESKTOP") == "1"
+
+
 def set_zone(name: str) -> bool:
     """Adopt the account's zone. ``""`` or an unknown name goes back to the system zone.
 
@@ -104,6 +113,7 @@ __all__ = [
     "localize",
     "now",
     "set_zone",
+    "trusted",
     "stamp",
     "system_zone_name",
     "today",

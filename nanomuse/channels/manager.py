@@ -32,6 +32,7 @@ import httpx
 from nanomuse.background import keep_task
 from nanomuse.channels import telegram_format, voice_note
 from nanomuse.channels.approval_copy import approval_details, readable_approval
+from nanomuse import timeutil
 from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundFile, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 from nanomuse.channels.chat_picker import ChatPicker
@@ -271,7 +272,7 @@ class ChannelManager(ChannelBus):
         self.started = True
         self._loop = asyncio.get_running_loop()
         # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
-        self._cloud_keys: dict[tuple[str, str], tuple[str, str, float]] = {}
+        self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float]] = {}
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         self._queue = self.svc.bus.subscribe()
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
@@ -1798,7 +1799,10 @@ class ChannelManager(ChannelBus):
             return "!", ""
         cache_key = (channel, msg.sender_id)
         held = self._cloud_keys.get(cache_key)
-        if held is not None and held[2] > time.time():
+        if held is not None and held[3] > time.time():
+            # the account's clock is the computer's: every turn speaks in it
+            if held[2]:
+                timeutil.set_zone(held[2])
             return held[0], held[1]
         try:
             async with httpx.AsyncClient(timeout=20) as client:
@@ -1856,9 +1860,12 @@ class ChannelManager(ChannelBus):
             logger.warning("channel {}: the bot door answered without a key", channel)
             await self._cloud_no_account(channel, msg.chat_id)
             return "!", ""
-        self._cloud_keys[cache_key] = (key, model, time.time() + CLOUD_KEY_TTL_S)
         account = body.get("account")
         account_id = str(account.get("id") or "") if isinstance(account, dict) else ""
+        tz = str(account.get("tz") or "").strip() if isinstance(account, dict) else ""
+        if tz:
+            timeutil.set_zone(tz)
+        self._cloud_keys[cache_key] = (key, model, tz, time.time() + CLOUD_KEY_TTL_S)
         if account_id:
             self._cloud_customer_scopes[cache_key] = account_scope(account_id)
         return key, model
