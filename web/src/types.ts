@@ -69,6 +69,8 @@ export interface ToolEvent extends BaseEvent {
   args: Record<string, unknown>;
   status: "running" | "ok" | "error" | "blocked";
   output?: string;
+  /** pictures the step looked at or made (a screenshot), as workspace paths */
+  images?: string[];
   /** the device the step ran on, when it was not this one */
   device?: string;
 }

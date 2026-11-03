@@ -148,6 +148,7 @@ function ArgsList({ args }: { args: Record<string, unknown> }) {
 
 // ------------------------------------------------------------------ tool activity chip
 export function ToolChip({ event }: { event: ToolEvent }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const icon =
     event.status === "running" ? (
@@ -174,6 +175,21 @@ export function ToolChip({ event }: { event: ToolEvent }) {
           {icon}
           {event.output ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
         </span>
+        {event.images && event.images.length > 0 && (
+          // what the step saw, on the card itself: a screenshot behind a fold is a
+          // screenshot nobody looks at
+          <span className="mt-2 flex gap-1.5 overflow-x-auto">
+            {event.images.slice(0, 3).map((path) => (
+              <img
+                key={path}
+                src={fileUrl(path, false, event.thread)}
+                alt={t("What the step saw")}
+                loading="lazy"
+                className="h-24 w-auto max-w-[180px] rounded-xl border border-border/70 object-cover"
+              />
+            ))}
+          </span>
+        )}
         {open && (
           <div className="mt-2 text-fg">
             <ArgsList args={event.args} />

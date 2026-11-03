@@ -476,8 +476,14 @@ class WebUI:
             else ("blocked" if "Sentinel blocked" in (result.error or "") else "error")
         )
         preview = (result.output or result.error or "")[:4000]
+        # pictures a tool handed back (a phone or computer screenshot) belong on the card,
+        # not only in the model's context: the person sees what the step looked at
+        shots = self._card_images(result.images)
         if eid:
-            self.patch(thread, eid, status=status, output=preview)
+            fields = {"status": status, "output": preview}
+            if shots:
+                fields["images"] = shots
+            self.patch(thread, eid, **fields)
         if result.ok and call.name not in _READ_ONLY_TOOLS:
             self._announce_new_files(thread, call)
         # Let the Goals / Memory tabs refresh when the agent changed them.
@@ -487,6 +493,28 @@ class WebUI:
             self.bus.publish({"kind": "memory"})
         if call.name != "terminate":
             self.set_status("working", "", thread)
+
+    def _card_images(self, images: list[str] | None) -> list[str]:
+        """A tool's pictures as workspace-relative paths the app can serve; the ones
+        outside the workspace are dropped rather than leaked."""
+        if not images:
+            return []
+        workspace = active_workspace(self.workspace) if self.workspace is not None else None
+        out: list[str] = []
+        for raw in images:
+            if not raw:
+                continue
+            path = Path(str(raw))
+            if not path.is_absolute():
+                out.append(path.as_posix())
+                continue
+            if workspace is None:
+                continue
+            try:
+                out.append(path.resolve().relative_to(workspace.resolve()).as_posix())
+            except (ValueError, OSError):
+                continue
+        return out
 
     def _announce_new_files(self, thread: str, call: ToolCall) -> None:
         """Every file a tool created or changed in the workspace becomes an artifact card:
