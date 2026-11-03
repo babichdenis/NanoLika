@@ -115,7 +115,7 @@ test("an older core in the bundle leaves the copy alone", () => {
   assert.ok(!existsSync(`${payloadDir}.previous`));
 });
 
-test("a copy that cannot be made leaves the app on the bundle, logged", () => {
+test("a copy that cannot be made leaves the app on the bundle, logged", { skip: process.platform === 'win32' ? 'POSIX permissions cannot withhold a folder on Windows' : false }, () => {
   const root = scratch();
   const dataDir = join(root, "userData");
   mkdirSync(dataDir, { recursive: true });
@@ -133,7 +133,7 @@ test("a copy that cannot be made leaves the app on the bundle, logged", () => {
   }
 });
 
-test("a failed refresh puts the old copy back", () => {
+test("a failed refresh puts the old copy back", { skip: process.platform === 'win32' ? 'POSIX permissions cannot withhold a folder on Windows' : false }, () => {
   const root = scratch();
   const payloadDir = stageDsh(join(root, "userData", "payload", "dsh"), { core: "0.2.0", bundle: "1.0.5", marker: "the trusted copy" });
   const bundleDir = stageDsh(join(root, "Resources", "dsh"), { core: "0.3.0", bundle: "1.0.5", marker: "the new core" });
