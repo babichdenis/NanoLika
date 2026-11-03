@@ -47,7 +47,8 @@ test("the Windows build writes the update metadata electron-updater reads", () =
 test("the clips the installer must carry are in the bundle's assets", () => {
   const assets = fileURLToPath(new URL("../dsh-nanomuse/assets/", here));
   for (const mood of ["idle", "working", "waiting", "happy"]) {
-    assert.ok(existsSync(join(assets, `dragon-${mood}.mp4`)), `dragon-${mood}.mp4`);
-    assert.ok(existsSync(join(assets, `dragon-${mood}.webp`)), `dragon-${mood}.webp`);
+    assert.ok(existsSync(join(assets, `lika-${mood}.webm`)), `lika-${mood}.webm`);
+    assert.ok(existsSync(join(assets, `lika-${mood}-small.webm`)), `lika-${mood}-small.webm`);
+    assert.ok(existsSync(join(assets, `lika-${mood}.webp`)), `lika-${mood}.webp`);
   }
 });

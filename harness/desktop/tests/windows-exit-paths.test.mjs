@@ -8,7 +8,7 @@ import ts from "typescript";
 // Execute the shipped shell callbacks, with only Electron's window/app side
 // effects replaced. AST extraction avoids booting a Host or personal profile.
 const source = ts.createSourceFile("main.js", readFileSync(new URL("../out/main.js", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
-const functions = ["protectedQuit", "mainWindowClosed", "createWindow"].map((name) =>
+const functions = ["protectedQuit", "mainWindowClosed", "rememberedWindow", "createWindow"].map((name) =>
   source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(source)).join("\n");
 const hooks = [];
 function collect(node) {
@@ -29,7 +29,7 @@ function shell(phase = "ready") {
   }
   const app = Object.assign(new EventEmitter(), { quit: () => requests.push("app quit") });
   const context = vm.createContext({
-    requests, quitting: false, sessionEnding: false, mainWindow: null, tray: null,
+    requests, quitting: false, sessionEnding: false, mainWindow: null, tray: null, prefs: { window: undefined },
     app,
     exitGuard: { requestExit: async (intent) => { requests.push(intent); return false; } },
     windowsUpdates: { quit: async () => { requests.push("update quit"); }, dispose: noop, snapshot: () => ({ phase }) },

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { kindOfFile } from '../lib/preview-kind.js'
 import { rangeOf, resolveUserPath, servePreviewFile } from '../lib/preview-file.js'
 
@@ -22,7 +22,7 @@ test('kindOfFile picks a player for what the pane can show', () => {
 
 test('resolveUserPath expands the home shorthand and keeps absolute paths', () => {
   assert.equal(resolveUserPath('~/outputs/clip.mp4'), join(homedir(), 'outputs/clip.mp4'))
-  assert.equal(resolveUserPath('/tmp/clip.mp4'), '/tmp/clip.mp4')
+  assert.equal(resolveUserPath('/tmp/clip.mp4'), resolve('/tmp/clip.mp4'))
 })
 
 test('rangeOf serves a slice, an open end and a suffix; refuses the rest', () => {
