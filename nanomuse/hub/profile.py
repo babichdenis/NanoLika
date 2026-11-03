@@ -152,6 +152,12 @@ class ProfileSync:
             return False
         self.hub.cloud.api_key = self.hub._key()
         light = await self.hub.cloud.profile(with_face=False)
+        # a profile pull is the reliable "we are signed in and talking to the relay" moment:
+        # the clock sync rides here too, so it does not depend on the start order
+        try:
+            await self.hub._sync_clock()
+        except Exception as exc:  # noqa: BLE001 - a clock must not break the profile
+            logger.debug("clock: {}", exc)
         rev = int(light.get("rev") or 0)
         # the other devices' connections come with every read, whatever the rev did
         self._absorb_connectors(light)
