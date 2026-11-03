@@ -393,6 +393,21 @@ export class Relay {
     return { apiKey: String(body.api_key ?? ''), created: false, account: toAccount(body) }
   }
 
+  /** Put a file the agent made into the account's storage; the stable link back. */
+  async upload(apiKey: string, name: string, data: Buffer, mime: string, signal?: AbortSignal): Promise<string> {
+    const form = new FormData()
+    form.append('file', new Blob([data as unknown as BlobPart], { type: mime }), name)
+    const res = await this.fetchImpl(`${this.origin}/v1/attachments`, {
+      method: 'POST',
+      headers: this.auth(apiKey),
+      body: form,
+      signal: signal ?? null,
+    })
+    if (!res.ok) await fail(res)
+    const body = (await res.json().catch(() => ({}))) as { media_url?: string; url?: string }
+    return String(body.media_url || body.url || '')
+  }
+
   /** The account's invite code and link, and what inviting has brought (`GET /v1/me/invite`). */
   async invite(apiKey: string, signal?: AbortSignal): Promise<Invite> {
     const res = await this.fetchImpl(`${this.origin}/v1/me/invite`, { headers: this.auth(apiKey), signal: signal ?? null })

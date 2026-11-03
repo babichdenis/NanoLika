@@ -149,6 +149,9 @@ function placeAfter(target: HTMLElement, node: HTMLElement): void {
 export function renderRemoteBubbles(t: Translate): () => void {
   const reader = 'desktop-view-' + crypto.randomUUID()
   const cache = new Map<string, Remote>()
+  /** Pictures the tools made in this chat: stable links from the relay, shown under the turn. */
+  const pictures = new Map<string, string[]>()
+  const picturesAt = new Map<string, number>()
   const inflight = new Set<string>()
   const refreshNeeded = new Set<string>()
   let scheduled: ReturnType<typeof setTimeout> | undefined
@@ -178,6 +181,43 @@ export function renderRemoteBubbles(t: Translate): () => void {
         inflight.delete(sessionId)
         if (!stopped && refreshNeeded.delete(sessionId)) fetchFor(sessionId)
       })
+  }
+
+  /**
+   * A picture made here is part of the chat, not only of the side pane: the tool's result
+   * carries the relay's link, and the bubble stands under the conversation. Links already
+   * drawn (a synced copy of the same picture) are left alone.
+   */
+  const dressPictures = (content: HTMLElement, sessionId: string) => {
+    const urls = pictures.get(sessionId)
+    if (!urls?.length) return
+    const flow = content.querySelector<HTMLElement>('[data-chat-flow]')
+    if (!flow) return
+    const known = new Set<string>()
+    for (const img of content.querySelectorAll<HTMLImageElement>('img')) {
+      known.add(img.getAttribute('data-nm-picture') ?? img.getAttribute('src') ?? '')
+    }
+    for (const url of urls) {
+      if (!url || known.has(url)) continue
+      const root = document.createElement('div')
+      root.className = 'nm-remote nm-remote-assistant'
+      root.setAttribute('data-nm-picture', url)
+      const picture = document.createElement('img')
+      picture.className = 'nm-remote-image'
+      picture.src = url
+      picture.alt = ''
+      picture.loading = 'lazy'
+      picture.title = t('previewOpenBig')
+      picture.tabIndex = 0
+      const open = (): void => showImage(url)
+      picture.addEventListener('click', open)
+      picture.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open() }
+      })
+      root.append(picture)
+      flow.append(root)
+      known.add(url)
+    }
   }
 
   /** The bubble the working line belongs under: the other device's last line, when it is a prompt without a reply yet. */
@@ -289,6 +329,17 @@ export function renderRemoteBubbles(t: Translate): () => void {
       const sessionId = content.getAttribute('data-conversation-session') ?? ''
       if (!sessionId) continue
       bindRemoteSession(content, sessionId)
+      if (Date.now() - (picturesAt.get(sessionId) ?? 0) > 3000) {
+        picturesAt.set(sessionId, Date.now())
+        void call<{ pictures?: string[] }>(`sync/pictures?session=${encodeURIComponent(sessionId)}`)
+          .then((answer) => {
+            if (stopped) return
+            pictures.set(sessionId, Array.isArray(answer.pictures) ? answer.pictures : [])
+            schedule()
+          })
+          .catch(() => undefined)
+      }
+      dressPictures(content, sessionId)
       const remote = cache.get(sessionId)
       if (!remote) {
         fetchFor(sessionId)

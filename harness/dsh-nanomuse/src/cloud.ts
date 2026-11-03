@@ -3339,6 +3339,12 @@ export default class NanomuseCloud extends Service {
    * (`images.ts`). `viaCloud` is *Use NanoLika Cloud this time*: the account for this one
    * picture, the slot untouched.
    */
+  /** A file the agent made, in the account's storage: the stable link the chat can show. */
+  async upload(name: string, data: Buffer, mime: string): Promise<string> {
+    const token = await this.token()
+    return token ? this.relay.upload(token, name, data, mime) : ''
+  }
+
   async studioDraw(prompt: string, viaCloud = false): Promise<Buffer> {
     const ep = await this.studioEndpoint(viaCloud)
     if (ep.instanceId === PROVIDER_ID) return this.relay.generateImage(ep.apiKey, ep.model, prompt)
@@ -3920,7 +3926,7 @@ export default class NanomuseCloud extends Service {
     this.logCache.delete(sessionId)
   }
 
-  private cached(sessionId: string): { title?: { at: number; title: string }; lines?: SessionLine[]; prompts?: Array<{ key: string; time: number }> } {
+  private cached(sessionId: string): { title?: { at: number; title: string }; lines?: SessionLine[]; pictures?: string[]; prompts?: Array<{ key: string; time: number }> } {
     let entry = this.logCache.get(sessionId)
     if (!entry) {
       entry = {}
@@ -3985,6 +3991,34 @@ export default class NanomuseCloud extends Service {
     const shared = await shareFileLinks(links)
     if (!shared.includes('https://')) return
     await this.sync?.sharePresented(sessionId, shared)
+  }
+
+  /** The pictures this chat's tools made: their stable links, in the order they were made. */
+  private async sessionPictures(ctx: Context, sessionId: string): Promise<string[]> {
+    const entry = this.cached(sessionId)
+    if (entry.pictures) return entry.pictures
+    const out: string[] = []
+    try {
+      const inspection = await ctx.sessionController.inspect(sessionId as SessionId)
+      for (const event of inspection.events) {
+        if (event.type !== 'tool/result') continue
+        const data = event.data as unknown as
+          | readonly ContentBlock[]
+          | { message?: { content?: readonly ContentBlock[] }; content?: readonly ContentBlock[] }
+        const record = data as { message?: { content?: readonly ContentBlock[] }; content?: readonly ContentBlock[] }
+        const blocks = Array.isArray(data) ? (data as readonly ContentBlock[]) : record.message?.content ?? record.content ?? []
+        for (const block of blocks) {
+          if (block.type !== 'text') continue
+          const said = String((block as { text?: string }).text ?? '')
+          const found = /https:\/\/[^\s,)'"]+\/v1\/files\/[^\s,)'"]+/.exec(said)
+          if (found && !out.includes(found[0])) out.push(found[0])
+        }
+      }
+    } catch {
+      return []
+    }
+    if (out.length) entry.pictures = out
+    return out
   }
 
   private async sessionLines(ctx: Context, sessionId: string): Promise<SessionLine[]> {
@@ -4313,6 +4347,10 @@ export default class NanomuseCloud extends Service {
           // messengers), the chat here stays as a local one. The browser half asks first.
           const body = await json(req)
           return send(res, 200, await sync.deleteConversation(String(body.sessionId ?? ''), body.hide === true))
+        }
+        if (req.method === 'GET' && route === '/sync/pictures') {
+          const sessionId = url.searchParams.get('session') ?? ''
+          return send(res, 200, { pictures: sessionId ? await this.sessionPictures(this.ctx, sessionId) : [] })
         }
         if (req.method === 'GET' && route === '/sync/remote') {
           const sessionId = url.searchParams.get('session') ?? ''
