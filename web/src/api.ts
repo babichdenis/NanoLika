@@ -249,6 +249,9 @@ export const api = {
   createThread: (title: string) => request<ThreadMeta>("/api/threads", json({ title })),
   renameThread: (id: string, title: string) =>
     request<ThreadMeta>(`/api/threads/${id}`, { method: "PATCH", body: JSON.stringify({ title }) }),
+  /** A rename or this chat's own temperature; `temperature: null` follows Settings (D8). */
+  patchThread: (id: string, patch: { title?: string; temperature?: number | null }) =>
+    request<ThreadMeta>(`/api/threads/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteThread: (id: string) => request<{ ok: boolean }>(`/api/threads/${id}`, { method: "DELETE" }),
   clearThread: (id: string) => request<{ ok: boolean }>(`/api/threads/${id}/clear`, { method: "POST" }),
   stopThread: (id: string) => request<{ ok: boolean }>(`/api/threads/${id}/stop`, { method: "POST" }),

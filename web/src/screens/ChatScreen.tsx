@@ -6,6 +6,7 @@ import { AllowanceHeadsUp } from "../components/AllowanceWays";
 import { cloudRetryTarget } from "../cloud-retry";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
 import { BrowserViewer } from "../components/BrowserViewer";
+import { ChatTune } from "../components/ChatTune";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
 import { IntroLines, NamingCard } from "../components/FirstConversation";
@@ -34,6 +35,8 @@ export function ChatScreen() {
   const stream = state.streams[activeThread];
   const thread = threads.find((t) => t.id === activeThread);
   const [activityOpen, setActivityOpen] = useState(false);
+  // the sheet that tunes this chat alone: its own temperature, carried with the thread
+  const [tuneOpen, setTuneOpen] = useState(false);
   // the browser card being watched (or driven) full-screen
   const [browserView, setBrowserView] = useState<string | null>(null);
   const name = profile?.name ?? "NanoLika";
@@ -223,7 +226,14 @@ export function ChatScreen() {
               <Menu size={22} />
             </MuseRoundButton>
           }
-          trailing={<MoreMenu actions={[{ label: t("Coding agents"), onClick: () => setTab("coding") }]} />}
+          trailing={
+            <MoreMenu
+              actions={[
+                { label: t("Chat settings"), onClick: () => setTuneOpen(true) },
+                { label: t("Coding agents"), onClick: () => setTab("coding") },
+              ]}
+            />
+          }
           under={
             thread && thread.id !== "main" ? (
               thread.device ? (
@@ -335,6 +345,8 @@ export function ChatScreen() {
       />
 
       <MuseSheet open={activityOpen} onClose={() => setActivityOpen(false)} />
+      {/* the saved value comes back over the socket as a `thread` frame (D8) */}
+      <ChatTune thread={thread ?? null} open={tuneOpen} onClose={() => setTuneOpen(false)} />
       {browserView && <BrowserViewer thread={activeThread} eventId={browserView} onClose={() => setBrowserView(null)} />}
     </div>
   );

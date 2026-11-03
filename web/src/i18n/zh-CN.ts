@@ -1274,6 +1274,12 @@ const zhCN: Record<string, string> = {
   "Your account may name any model the provider has, not only these: type its id (a chat model here, a picture or clip model below) and it goes through as typed.":
     "你的账号可以使用服务商的任意模型，不限于这几个：直接输入模型 id（对话模型填在这里，图片或短片模型填在下面），会原样转发。",
   Automatic: "自动",
+  "Chat settings": "对话设置",
+  "Could not save": "没能保存",
+  Temperature: "温度",
+  "How freely it picks its words: 0 keeps to the safest wording, 2 wanders furthest.": "措辞的自由度：0 最稳妥，2 最发散。",
+  "Follows the value in Settings.": "跟随设置里的值。",
+  "Only this chat.": "只影响这个对话。",
   "{n} pictures": "{n} 张图",
   "{n} pictures and {c} clips": "{n} 张图加 {c} 段短片",
   "{what}, made with your own key at your provider's prices.": "{what}，用你自己的 key 按服务商价格计费。",

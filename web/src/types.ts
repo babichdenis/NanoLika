@@ -300,6 +300,14 @@ export interface ThreadMeta {
   /** a synced chat that was started on another device of the account ("From Pixel 8") */
   origin_device?: string;
   origin_device_name?: string;
+  /** the model this chat answers with, when it is not the one in Settings */
+  model?: string;
+  /** how much that model thinks first ('' = the provider's own default) */
+  reasoning?: string;
+  /** this chat's own sampling temperature, 0..2; missing = the configured [llm] value */
+  temperature?: number;
+  /** the folder the chat works in, as the account sees it */
+  folder?: string;
 }
 
 /** GET /api/sync/state: conversations synced between the account's devices (contract C7). */
