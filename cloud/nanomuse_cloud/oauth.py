@@ -98,8 +98,13 @@ def provider_state(name: str) -> dict:
     return dict(name=name, title=conf["title"], kind="redirect", enabled=enabled)
 
 
+# The providers that sign in with a redirect: a code comes back and becomes a profile.
+# Telegram has a widget instead and stays out of the two routes below.
+REDIRECT_PROVIDERS = tuple(n for n, conf in PROVIDERS.items() if not conf.get("widget"))
+
+
 def enabled_providers() -> list[dict]:
-    return [s for s in (provider_state(n) for n in ("yandex", "google")) if s["enabled"]]
+    return [s for s in (provider_state(n) for n in REDIRECT_PROVIDERS) if s["enabled"]]
 
 
 # ── OAuth-редирект ──────────────────────────────────────────────────────
@@ -289,7 +294,7 @@ def install_oauth(app, cloud, settings) -> None:
 
     @app.get("/v1/auth/oauth/{provider}/start")
     async def oauth_start(provider: str, request: Request, next: str = ""):
-        if provider not in {"yandex", "google"}:
+        if provider not in REDIRECT_PROVIDERS:
             return JSONResponse({"error": {"code": "no_provider"}}, status_code=404)
         state = provider_state(provider)
         if not state["enabled"]:
@@ -321,7 +326,7 @@ def install_oauth(app, cloud, settings) -> None:
 
     @app.get("/v1/auth/oauth/{provider}/callback")
     async def oauth_callback(provider: str, request: Request, code: str = "", state: str = "", error: str = ""):
-        if provider not in {"yandex", "google"} or not provider_state(provider)["enabled"]:
+        if provider not in REDIRECT_PROVIDERS or not provider_state(provider)["enabled"]:
             return JSONResponse({"error": {"code": "provider_off"}}, status_code=404)
         data = read_state(request.cookies.get("nm_oauth", ""), settings.hmac_key, provider, state)
         nxt = pick_next(data.get("next", "") if data else "")

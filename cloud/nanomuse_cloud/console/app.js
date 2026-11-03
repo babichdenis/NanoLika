@@ -340,16 +340,26 @@
     '<path fill="#FC3F1D" d="M13.32 6.02h-1.1c-1.55 0-2.34.73-2.34 1.91 0 1.33.57 1.96 1.72 3.13l1.17 1.2-3.57 5.22H6.65l3.2-4.6c-1.34-1.4-2.42-2.46-2.42-4.9 0-2.4 1.6-4 4.7-4h3.98v13.5h-2.79V6.02z"/>' +
     '<path fill="#FC3F1D" d="M16.11 12.75V6.02h-2.79v6.73h2.79z" opacity="0"/>' +
     '</svg>';
+  // GitHub's mark, drawn here so the button needs no external image (the page's CSP
+  // allows none) and keeps working offline after the first paint
+  const nmGithubLogo = '<svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">' +
+    '<path fill="#24292f" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>' +
+    '</svg>';
   function ssoBlock() {
     if (!oauthList || !oauthList.length) return null;
     
-    const buttons = oauthList.filter((p) => ["yandex", "google"].includes(p.name)).map((p) => {
+    const buttons = oauthList.map((p) => {
       const nx = new URLSearchParams(location.search).get("next");
       const go = () => { location.href = base + `/v1/auth/oauth/${p.name}/start` + (nx ? "?next=" + encodeURIComponent(nx) : ""); };
       if (p.name === "yandex") {
         return h("button", { class: "btn yandex", type: "button", onclick: go,
                              style: "display:inline-flex;align-items:center;gap:10px;justify-content:center" },
           h("span", { html: nmYandexLogo }), L("Sign in with Yandex", "用 Yandex 登录", "Войти через Яндекс"));
+      }
+      if (p.name === "github") {
+        return h("button", { class: "btn oauth-provider", type: "button", onclick: go,
+                             style: "display:inline-flex;align-items:center;gap:8px;justify-content:center", title: "GitHub" },
+          h("span", { html: nmGithubLogo }), L("Sign in with GitHub", "用 GitHub 登录", "Войти через GitHub"));
       }
       return h("button", { class: "btn oauth-provider", type: "button", onclick: go }, h("span", { class: "oauth-google", "aria-hidden": "true" }, "G"), L("Sign in with Google", "用 Google 登录", "Войти через Google"));
     });
@@ -943,7 +953,7 @@
       h("span", { class: "n" }, `${T.requests(fmtN(r.requests))} · ${n}`),
       h("span", { class: "c" }, r.cost_cny !== undefined ? cash(r.cost_cny) : ""));
   };
-  function drawAccount(body) {
+  async function drawAccount(body) {
     const a = me && me.account, u = me && me.usage;
     const initial = (hint || "?").replace(/[^0-9a-z]/gi, "").slice(0, 1).toUpperCase() || "M";
     const kids = [
@@ -1052,13 +1062,16 @@
       keys = await api("GET", "/v1/me/keys", null, key);
     } catch (_) { /* keep empty */ }
     const myKeys = keys.keys || [];
-    kids.push(h("div", { class: "label" }, T.keys), h("div", { class: "card" },
-      myKeys.length ? myKeys.map(k => h("div", { class: "row" },
-        h("span", { class: "tile" + (k.revoked ? " grey" : ""), html: k.revoked ? ICON.revoked : ICON.key }),
-        h("div", { class: "txt" }, h("div", { class: "t" }, k.prefix || "—"),
-          h("div", { class: "s" }, `${k.via || "—} · ${when(k.created_at)}${k.last_used_at ? ` · ${T.lastUsed} ${k.last_used_at}` : ""} · ${T.totalSpent}: ${k.total_sale_uy > 0 ? fmtN(k.total_sale_uy) : T.free}`)),
-        !k.revoked ? h("button", { class: "btn quiet sm", onclick: async () => { try { await api("DELETE", `/v1/me/keys/${encodeURIComponent(k.prefix)}`, null, key); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, T.revoke) : null))),
-      h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.createKey, T.createKeyConfirm, T.createKey) !== false) { try { const r = await api("POST", "/v1/me/keys", { device: navigator.userAgent || "console" }, key); await loadMe(); drawAccount(body); } catch (e) { alert(errText(e)); } } } }, h("span", { class: "tile", html: ICON.plus }), h("div", { class: "txt" }, h("div", { class: "t" }, T.createKey))))),
+    kids.push(
+      h("div", { class: "label" }, T.keys),
+      h("div", { class: "card" },
+        ...(myKeys.length ? myKeys.map((k) => h("div", { class: "row" },
+          h("span", { class: "tile" + (k.revoked ? " grey" : ""), html: k.revoked ? ICON.revoked : ICON.key }),
+          h("div", { class: "txt" },
+            h("div", { class: "t" }, k.prefix || "—"),
+            h("div", { class: "s" }, `${k.via || "—"} · ${when(k.created_at)}${k.last_used_at ? ` · ${T.lastUsed} ${k.last_used_at}` : ""} · ${T.totalSpent}: ${k.total_sale_uy > 0 ? fmtN(k.total_sale_uy) : T.free}`)),
+          !k.revoked ? h("button", { class: "btn quiet sm", onclick: async () => { try { await api("DELETE", `/v1/me/keys/${encodeURIComponent(k.prefix)}`, null, key); } catch (e) { alert(errText(e)); } await loadMe(); drawAccount(body); } }, T.revoke) : null)) : []),
+        h("button", { class: "row tap danger", onclick: async () => { if (await ask(T.createKey, T.createKeyConfirm, T.createKey) !== false) { try { const r = await api("POST", "/v1/me/keys", { device: navigator.userAgent || "console" }, key); await loadMe(); drawAccount(body); } catch (e) { alert(errText(e)); } } } }, h("span", { class: "tile", html: ICON.plus }), h("div", { class: "txt" }, h("div", { class: "t" }, T.createKey)))))
     // activity
     const events = me.events || [];
     if (events.length) kids.push(h("div", { class: "label" }, T.activity), h("div", { class: "card" }, ...events.slice(0, 12).map((e) => h("div", { class: "row" },
