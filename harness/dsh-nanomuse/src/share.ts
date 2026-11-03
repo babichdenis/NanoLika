@@ -203,7 +203,7 @@ export function localFileLinks(text: string): LocalLink[] {
       try { path = fileURLToPath(raw) } catch { continue }
     } else if (raw.startsWith('~/')) {
       path = `${homedir()}/${raw.slice(2)}`
-    } else if (!raw.startsWith('/')) {
+    } else if (!raw.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(raw)) {
       continue
     }
     try {

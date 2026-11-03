@@ -316,8 +316,10 @@ test('a harness without the speech seam is left alone', () => {
 test('a harness with the speech seam gets a provider registered on its own effect', () => {
   const registered = []
   const effects = []
+  const provided = []
   const ctx = {
     get: (name) => (name === 'speechToText' ? { register: (provider) => (registered.push(provider), async () => undefined) } : undefined),
+    provide: (key, value) => { provided.push([key, value]) },
     effect: (body, label) => (effects.push(label), body()),
   }
   assert.equal(registerSpeechWhisper(ctx, { providerId: 'whisper-test' }), true)

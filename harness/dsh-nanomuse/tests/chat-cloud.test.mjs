@@ -52,9 +52,9 @@ test('a side chat is where the host marks it: device, from the cloud, or local w
 
 test('the menu item of each: cloud on, cloud off, delete whole, or nothing for the main chat', () => {
   assert.deepEqual(cloud.cloudItem(t, 'local'), { action: 'on', label: 'chSync' })
-  assert.deepEqual(cloud.cloudItem(t, 'device'), { action: 'off', label: 'chUnsync' })
+  assert.deepEqual(cloud.cloudItem(t, 'device'), { action: 'off', label: 'chUnsync', hint: 'chCloudOffHint' })
   // a chat from the cloud: the one thing the host allows is deleting it from the account whole
-  assert.deepEqual(cloud.cloudItem(t, 'sync'), { action: 'off', label: 'chUnsync' })
+  assert.deepEqual(cloud.cloudItem(t, 'sync'), { action: 'off', label: 'chUnsync', hint: 'chCloudOffHint' })
   // the main chat: the item stays, inert, and says why
   assert.deepEqual(cloud.cloudItem(t, 'main'), { action: 'none', label: 'chUnsync', hint: 'chCloudMain' })
 })

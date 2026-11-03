@@ -220,7 +220,7 @@ export function makeVoiceListen(t: Translate, hooks: { onError?: (message: strin
         // its own answer from a question answers itself until the conversation is a mess
         const talking = { active: false }
         const askTalking = setInterval(() => {
-          void call<{ speaking?: boolean }>('speaking')
+          void call<{ speaking?: boolean }>('speaking', {})
             .then((answer) => {
               talking.active = answer.speaking === true
             })

@@ -1199,7 +1199,7 @@ test('C11: a cloud chat can pause sync without deleting shared history', async (
   assert.equal(e.state.cids[sid], 'tg-1')
   assert.ok(!relay.calls.some((c) => c.startsWith('DELETE /v1/sync/conversations/')))
   // deleting it from the account whole: the conversation is tombstoned everywhere, the copy here stays
-  const gone = await e.deleteConversation(sid)
+  const gone = await e.deleteConversation(sid, true)
   assert.equal(gone.ok, true)
   assert.equal(relay.convs.get('tg-1').deleted, true)
   assert.equal(e.state.cids[sid], undefined)
@@ -1310,7 +1310,7 @@ test('C11: a chat created here stays local with the messenger chat beside it, an
   // the route sends it as it is instead of a plain view that looks like success
   const host = readFileSync(new URL('../src/cloud.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   assert.match(host, /route === '\/sync\/synced'[\s\S]{0,900}send\(res, 200, await sync\.setSynced\(String\(body\.sessionId \?\? ''\), body\.on === true\)\)/)
-  assert.match(host, /route === '\/sync\/delete-conversation'[\s\S]{0,600}send\(res, 200, await sync\.deleteConversation\(String\(body\.sessionId \?\? ''\)\)\)/)
+  assert.match(host, /route === '\/sync\/delete-conversation'[\s\S]{0,600}send\(res, 200, await sync\.deleteConversation\(String\(body\.sessionId \?\? ''\), body\.hide === true\)\)/)
   const engineText = readFileSync(new URL('../src/sync.ts', import.meta.url), 'utf8')
   assert.match(engineText, /export type CloudRefusal = 'main' \| 'synced-from-cloud' \| 'not-synced-account' \| 'unknown-session'/)
 })
