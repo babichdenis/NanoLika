@@ -131,6 +131,14 @@ export type DshRootOptions = {
   /** `<resources>/dsh`: the core the app was built with. */
   bundleDir: string;
   log: (line: string) => void;
+  /**
+   * Read the core straight from the bundle and never copy it into the payload.
+   *
+   * Windows: the NSIS installer replaces the whole app, so the copy buys nothing — and on a
+   * machine with Defender the first run spent ten to twenty minutes copying 21 880 files
+   * before any window appeared (2026-11-03).
+   */
+  preferBundle?: boolean;
 };
 
 /**
@@ -177,8 +185,12 @@ function placeCore(options: DshRootOptions): boolean {
  * replaced when the bundle carries a newer core), the bundle otherwise.
  */
 export function resolveDshRoot(options: DshRootOptions): DshPlace {
-  const { payloadDir, bundleDir, log } = options;
+  const { payloadDir, bundleDir, log, preferBundle } = options;
   const bundle = hasDsh(bundleDir);
+  if (preferBundle && bundle) {
+    if (hasDsh(payloadDir)) log(`dsh: the payload at ${payloadDir} is ignored: this platform runs from the bundle`);
+    return { dir: bundleDir, from: "bundle" };
+  }
   const payload = hasDsh(payloadDir);
 
   if (!payload) {

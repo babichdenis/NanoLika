@@ -238,6 +238,8 @@ function dshRoot(): string {
       payloadDir: join(app.getPath("userData"), "payload", "dsh"),
       bundleDir: join(resourcesDir(), "dsh"),
       log,
+      // Windows: the installer replaces the whole app; no twenty-minute first-run copy.
+      preferBundle: process.platform === "win32",
     });
     log(`dsh: ${dshPlace.dir} (${dshPlace.from})`);
   }
