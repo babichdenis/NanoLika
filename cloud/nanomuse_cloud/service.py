@@ -2591,6 +2591,8 @@ class Cloud:
                 "id": caller.account_id,
                 "channel": caller.channel,
                 "hint": caller.hint,
+                # the person's clock, written by their device ("" until one says)
+                "tz": str(money_account["tz"] if money_account is not None else ""),
                 "created_at": caller.account_created_at,
                 "member": caller.member,
                 # may name any model of the provider's for its kind (any_model_members)
@@ -3402,6 +3404,24 @@ class Cloud:
             return hashlib.sha1(base64.b64decode(idle)).hexdigest()[:12] if idle else ""
         except (ValueError, binascii.Error, AttributeError):
             return ""
+
+    def put_tz(self, caller: Caller, tz: str) -> str:
+        """Remember the clock the person reads. An IANA name only: a typo would leave every
+        time they see wrong, so an unknown zone is refused rather than stored."""
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        name = (tz or "").strip()
+        if not name:
+            raise CloudError(400, "bad_request", "tz is an IANA zone name like Asia/Vladivostok")
+        if len(name) > 64 or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_+/-]*", name):
+            raise CloudError(400, "bad_request", "tz is an IANA zone name like Asia/Vladivostok")
+        try:
+            ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise CloudError(400, "bad_zone", f"{name} is not a timezone") from None
+        with self.db.tx() as c:
+            c.execute("UPDATE accounts SET tz=? WHERE id=?", (name, caller.account_id))
+        return name
 
     def put_profile(self, caller: Caller, device: str, data: dict) -> dict:
         """Last writer wins for the look. Only the look is kept — never a key, a message or a

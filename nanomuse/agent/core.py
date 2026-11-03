@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from nanomuse import prompts
+from nanomuse import prompts, timeutil
 from nanomuse.calendar import CalendarFeeds
 from nanomuse.config import Settings
 from nanomuse.contacts import ContactBook
@@ -471,7 +471,7 @@ class MuseAgent:
         return prompts.SYSTEM_PROMPT.format(
             name=a.name,
             language_rule=language_rule,
-            now=datetime.now().astimezone().strftime("%Y-%m-%d %H:00 (%A, %Z, UTC%z)"),
+            now=timeutil.now().strftime("%Y-%m-%d %H:00 (%A, %Z, UTC%z)"),
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
             tool_names=", ".join(t.name for t in self.tools),

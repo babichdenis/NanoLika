@@ -288,6 +288,11 @@ class CloudClient:
         """This device's name and look for the account (last writer wins); the new ``rev``."""
         return await self._request("PUT", "/v1/me/profile", body)
 
+    async def put_tz(self, tz: str) -> None:
+        """Tell the account this device's clock: an IANA name, so a bot on a relay in another
+        country can speak in the person's time (``GET /v1/me`` returns it)."""
+        await self._request("PUT", "/v1/me/tz", {"tz": tz})
+
     async def set_contribute(self, on: bool) -> dict[str, Any]:
         """Keep (or stop keeping) this account's chat turns for the community's model."""
         return await self._request("POST", "/v1/me/contribute", {"on": on})

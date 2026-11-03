@@ -77,6 +77,8 @@ class HubService:
         self.cloud = CloudClient(self.settings.cloud.base_url, self._key())
         # the relay's last /v1/me (models with prices, usage)
         self.last_me: dict[str, Any] = {}
+        # one "this is my clock" write per process (see _sync_clock)
+        self._tz_sent = False
         # the account's chat models (ids), for the provider form; refreshed on sign-in and
         # whenever the form asks
         self.chat_models: list[str] = []
@@ -181,6 +183,12 @@ class HubService:
         if self.signed_in:
             # the look the account's other devices wear, when it moved while we were away
             self.profile.pull_soon()
+            # whose clock this is: a desktop tells the account, a relay box learns from it,
+            # before the first message rather than on the first account page
+            try:
+                await self.me()
+            except Exception as exc:  # noqa: BLE001 - the clock must not block the start
+                logger.debug("clock: {}", exc)
 
     def _model_has_no_key(self) -> bool:
         """True when the configured model would be called with no key at all — not a local
@@ -536,12 +544,39 @@ class HubService:
         self.svc.connections._publish()
         self.publish()
 
+    async def _sync_clock(self, data: dict[str, Any]) -> None:
+        """Keep the account's timezone in step with the person's real clock.
+
+        A laptop knows its zone (``Europe/Moscow``, ``Asia/Vladivostok``) and tells the
+        account once, so a messenger bot on a relay elsewhere can speak in it. A relay box
+        has no zone of its own (its container is UTC) and adopts the account's, which is
+        what makes "в 21:19" mean the same thing on both."""
+        from nanomuse import timeutil
+
+        account = data.get("account") if isinstance(data.get("account"), dict) else {}
+        theirs = str(account.get("tz") or "").strip()
+        mine = timeutil.system_zone_name()
+        real = bool(mine) and mine not in ("UTC", "Etc/UTC", "Etc/GMT")
+        if real and theirs != mine and not self._tz_sent:
+            self._tz_sent = True
+            try:
+                await self.cloud.put_tz(mine)
+                logger.info("clock: the account's timezone is {}", mine)
+            except Exception as exc:  # noqa: BLE001 - an older relay has no such door
+                logger.debug("clock not shared: {}", exc)
+        elif theirs and not real and timeutil.set_zone(theirs):
+            logger.info("clock: the account's timezone is {} ({})", theirs, timeutil.stamp())
+
     async def me(self) -> dict[str, Any]:
         if not self.signed_in:
             raise CloudError(401, "bad_key", "Not signed in.")
         self.cloud.api_key = self._key()
         data = await self.cloud.me()
         self.last_me = data
+        try:
+            await self._sync_clock(data)
+        except Exception as exc:  # noqa: BLE001 - the clock must not break the account page
+            logger.debug("clock: {}", exc)
         account = data.get("account") if isinstance(data.get("account"), dict) else {}
         if account:
             cloud = dict(self.data.get("cloud") or {})

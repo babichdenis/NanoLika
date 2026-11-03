@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
+from nanomuse import timeutil
 from nanomuse.reminders import ReminderStore
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
@@ -119,7 +120,8 @@ class Reminders(BaseTool):
                     delta = parse_duration(duration)
                     if delta is None:
                         return ToolResult.fail("`in` is a duration like '5m', '90s' or '1h30m'")
-                    at = (datetime.now().astimezone() + delta).strftime("%Y-%m-%d %H:%M")
+                    # on the person's clock: the tool adds the delta, the model does not
+                    at = (timeutil.now() + delta).strftime("%Y-%m-%d %H:%M")
                 if not (at or repeat):
                     return ToolResult.fail("give `in` or `at` (one-off) or `repeat` (routine)")
                 item = self.store.create(

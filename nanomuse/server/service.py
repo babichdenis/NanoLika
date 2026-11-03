@@ -25,12 +25,13 @@ from datetime import time as time_of_day
 from pathlib import Path
 from typing import Any
 
-from nanomuse import __version__, prompts
+from nanomuse import __version__, prompts, timeutil
 from nanomuse.agent import Incoming, MuseAgent
 from nanomuse.app import NanoMuseApp
 from nanomuse.avatar import AvatarStudio
 from nanomuse.background import spawn
 from nanomuse.bridge.server import Bridge
+from nanomuse import timeutil
 from nanomuse.cloud import CLOUD_KEY, DEFAULT_CHAT_MODEL, CloudError, model_url
 from nanomuse.coding.service import CodingService
 from nanomuse.config import LLMSettings, Settings
@@ -421,6 +422,10 @@ class MuseService:
         self.bus = EventBus()
         self.threads: dict[str, Thread] = {}
         self._base_instructions = settings.agent.instructions
+        # the clock the person reads: an explicit zone wins, else this computer's; a bot on a
+        # relay adopts the account's zone later, when the shared profile arrives
+        if settings.agent.timezone:
+            timeutil.set_zone(settings.agent.timezone)
         self.profile = self._load_profile()
         self._apply_profile()
         self.ui = WebUI(
@@ -2040,7 +2045,7 @@ class MuseService:
             MAIN_THREAD,
             prompts.CHECK_IN_PROMPT.format(
                 goal=goal.render(),
-                today=datetime.now().astimezone().strftime("%A, %Y-%m-%d"),
+                today=timeutil.now().strftime("%A, %Y-%m-%d"),
                 quiet=prompts.QUIET_MARKER,
             ),
             source="goal",
@@ -2099,7 +2104,7 @@ class MuseService:
         if item.status != "active":
             raise ValueError(f"reminder is {item.status}")
         thread = item.thread if item.thread in self.threads else MAIN_THREAD
-        now = datetime.now().astimezone().strftime("%A, %Y-%m-%d %H:%M")
+        now = timeutil.now().strftime("%A, %Y-%m-%d %H:%M")
         template = prompts.REMINDER_PROMPT if item.kind == "remind" else prompts.ROUTINE_PROMPT
         label = ("Reminder: " if item.kind == "remind" else "Routine: ") + _short(item.text)
         self.send(

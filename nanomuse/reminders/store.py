@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from nanomuse import timeutil
 from nanomuse.goals.store import next_check_in, parse_check_in
 
 KINDS = ("remind", "task")
@@ -50,13 +51,13 @@ def parse_when(value: str) -> datetime | None:
         except ValueError:
             continue
         if parsed.tzinfo is None:
-            parsed = parsed.astimezone()  # local
+            parsed = parsed.replace(tzinfo=timeutil.zone())  # the person's wall clock
         return parsed
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return parsed if parsed.tzinfo else parsed.astimezone()
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timeutil.zone())
 
 
 @dataclass
@@ -98,7 +99,7 @@ class Reminder:
 
 def _local(iso: str) -> str:
     try:
-        return datetime.fromisoformat(iso).astimezone().strftime("%Y-%m-%d %H:%M")
+        return timeutil.localize(datetime.fromisoformat(iso)).strftime("%Y-%m-%d %H:%M")
     except ValueError:
         return iso
 

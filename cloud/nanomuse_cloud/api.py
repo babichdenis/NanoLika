@@ -921,6 +921,14 @@ def create_app(
         body = await _json(request)
         return cloud.set_contribute(caller, bool(body.get("on")))
 
+    @app.put("/v1/me/tz", status_code=204)
+    async def me_put_tz(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
+        """0.30: the person's clock (IANA name) as the device they use sees it. A bot on a
+        relay in another country reads it back with /v1/me and speaks in their time."""
+        body = await _json(request)
+        cloud.put_tz(caller, str(body.get("tz") or ""))
+        return Response(status_code=204)
+
     @app.get("/v1/me/profile")
     async def me_profile(face: bool = True, caller: Caller = Depends(caller_dep)) -> dict:
         """The agent's name and look, shared by the account's devices; ``?face=false`` leaves

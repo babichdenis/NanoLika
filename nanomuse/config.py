@@ -239,6 +239,10 @@ class AgentSettings(BaseModel):
     extra_roots: list[Path] = Field(default_factory=list)
     # "auto" → answer in the user's language; or force e.g. "zh" / "en".
     language: str = "auto"
+    # The clock the person reads: an IANA zone ("Asia/Vladivostok"). Empty = this computer's
+    # zone; a messenger bot on a relay in another country sets it (or takes it from the
+    # account's profile, which any device of the account writes).
+    timezone: str = ""
     max_context_messages: int = 80
     # A cap on the text sent in one request, not only on the number of messages: a few
     # unlimited tool dumps fit the message limit but not any model's context window. The

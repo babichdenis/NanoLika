@@ -631,6 +631,9 @@ class Database:
         # Conversation sync is off until the person turns it on: a new account's chats
         # stay on its own devices until it asks for them to travel (sync.py).
         add("accounts", "sync_enabled", "INTEGER NOT NULL DEFAULT 0")
+        # The clock the person reads: an IANA zone ("Asia/Vladivostok"), written by the
+        # device they use; a bot on a relay in another country speaks in it. "" = unknown.
+        add("accounts", "tz", "TEXT NOT NULL DEFAULT ''")
         # the invite bonus is paid at the invitee's first charged request, not at sign-up;
         # the column says when. Every invited account from before was paid at sign-up, so
         # it is marked settled once, when the column is added, and nobody is paid twice.

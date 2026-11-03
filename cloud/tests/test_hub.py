@@ -491,6 +491,24 @@ def test_a_sign_out_closes_the_hub_socket_of_the_key_it_revoked(client):
         assert closed.value.code == 4001
 
 
+def test_the_person_s_clock_is_written_once_and_read_by_the_bot(client):
+    """The account's timezone: a device writes its own (IANA name), /v1/me returns it, and a
+    bot on a relay in another country adopts it instead of UTC."""
+    key = sign_up(client, "13800138000")
+    auth = {"Authorization": f"Bearer {key}"}
+    assert client.get("/v1/me", headers=auth).json()["account"]["tz"] == ""
+    r = client.put("/v1/me/tz", headers=auth, json={"tz": "Asia/Vladivostok"})
+    assert r.status_code == 204
+    assert client.get("/v1/me", headers=auth).json()["account"]["tz"] == "Asia/Vladivostok"
+    # a typo is refused, not stored: a wrong clock is worse than none
+    bad = client.put("/v1/me/tz", headers=auth, json={"tz": "Mars/Olympus"})
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "bad_zone"
+    assert client.get("/v1/me", headers=auth).json()["account"]["tz"] == "Asia/Vladivostok"
+    # another account keeps its own (empty) clock
+    other = sign_up(client, "13900139000")
+    assert client.get("/v1/me", headers={"Authorization": f"Bearer {other}"}).json()["account"]["tz"] == ""
+
+
 def test_the_profile_is_shared_and_announced(client):
     """The agent's name and look live on the relay so every device of the account wears
     the same one: a PUT from one device is a ``profile`` frame on the other's socket, and
@@ -518,6 +536,8 @@ def test_the_profile_is_shared_and_announced(client):
                 "avatar": "face",
                 "style": "pixel",
                 "description": "a robot owl",
+                # the clock the person reads: a bot on a relay in another country speaks in it
+                "tz": "Asia/Vladivostok",
                 "face": {"idle": webp, "happy": webp},
             },
         )
@@ -543,6 +563,7 @@ def test_the_profile_is_shared_and_announced(client):
     after = client.get("/v1/me/profile", headers=auth).json()
     assert r.status_code == 200 and r.json()["rev"] == 3
     assert after["name"] == "阿火" and after["avatar"] == "face" and after["style"] == "pixel" and after["face"]["idle"] == webp
+
     r = client.put("/v1/me/profile", headers=auth, json={"device": "phone-1", "name": "", "description": "a robot owl, blue"})
     after = client.get("/v1/me/profile", headers=auth).json()
     assert r.status_code == 200 and after["name"] == "阿火" and after["description"] == "a robot owl, blue" and after["has_face"]
