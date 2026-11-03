@@ -9,6 +9,7 @@ import pytest
 from nanomuse.reminders import ReminderStore, parse_when
 from nanomuse.schema import RiskLevel
 from nanomuse.tools import Reminders
+from nanomuse.tools.reminder_tools import parse_duration
 
 
 def test_parse_when_reads_what_the_model_writes():
@@ -69,6 +70,32 @@ def test_reminders_fire_once_and_routines_repeat(tmp_path: Path):
     assert store.list("active") == []
     assert once.render().startswith(f"[{once.id}] ") and "call mum" in once.render()
     store.close()
+
+
+def test_a_duration_is_arithmetic_the_tool_does_itself(tmp_path: Path):
+    """`in` exists because the system prompt carries the hour, not the minute: "in five
+    minutes" must not be computed by a model that only knows it is 19:00."""
+    assert parse_duration("5m") == timedelta(minutes=5)
+    assert parse_duration("90s") == timedelta(seconds=90)
+    assert parse_duration("1h30m") == timedelta(hours=1, minutes=30)
+    assert parse_duration("2d") == timedelta(days=2)
+    assert parse_duration("soon") is None and parse_duration("5") is None
+
+    tool = Reminders(store=ReminderStore(tmp_path / "d.db"))
+    tool.thread_of = lambda: "t_1"
+    before = datetime.now().astimezone()
+    r = asyncio.run(tool.execute(action="create", text="чайник", **{"in": "5m"}))
+    assert r.ok, r.error
+    item = tool.store.list("active")[0]
+    when = datetime.fromisoformat(item.next_at)
+    assert timedelta(minutes=4) < (when - before) < timedelta(minutes=6)
+    assert "Reminder set." in r.output
+
+    both = asyncio.run(
+        tool.execute(action="create", text="x", at="2026-11-04 10:00", **{"in": "5m"})
+    )
+    assert not both.ok and "not both" in both.error
+    tool.store.close()
 
 
 def test_reminders_tool(tmp_path: Path):

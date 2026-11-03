@@ -464,10 +464,14 @@ class MuseAgent:
             extra += f"\n## This conversation\n{addendum}\n"
         # The stable part goes first and the volatile one last: providers cache a prefix,
         # so the minute and the per-turn facts must not sit in the middle of the prompt.
+        # The hour, not the minute: the prompt is the cached prefix of every turn, and a
+        # clock that changes each minute would keep it from ever being reused. Durations
+        # ("in five minutes") go to `reminders` as `in`, which does the arithmetic itself;
+        # a wall-clock time the person names is the one thing the model may compute.
         return prompts.SYSTEM_PROMPT.format(
             name=a.name,
             language_rule=language_rule,
-            now=datetime.now().astimezone().strftime("%Y-%m-%d %H:00 (%A, UTC%z)"),
+            now=datetime.now().astimezone().strftime("%Y-%m-%d %H:00 (%A, %Z, UTC%z)"),
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
             tool_names=", ".join(t.name for t in self.tools),
