@@ -87,6 +87,11 @@ REMOTE_TASK_S = 600
 # chat writing twice does not need two sign-ins, and the relay issues a key per chat anyway.
 CLOUD_KEY_TTL_S = 600.0
 
+# A chat that spoke in voice gets its answer said back; the pair (relay, account key) waits
+# for that answer no longer than this, and no more than VOICE_TURNS_MAX chats are held.
+VOICE_TURN_TTL_S = 600.0
+VOICE_TURNS_MAX = 64
+
 CHANNEL_TYPES: tuple[type[Channel], ...] = (
     FeishuChannel,
     DingTalkChannel,
@@ -224,8 +229,11 @@ class ChannelManager(ChannelBus):
         self.status: dict[str, ChannelStatus] = {n: ChannelStatus() for n in self.types}
         # thread id -> the step shown in the chat ("photo", "document", …)
         self._typing_action: dict[str, str] = {}
-        # thread id -> (base, key): the chat spoke in voice, so the answer is said too
-        self._voice_turns: dict[str, tuple[str, str]] = {}
+        # thread id -> (base, key, when): the chat spoke in voice, so the answer is said
+        # too. The entry holds an account key, so it lives for one turn and no longer
+        # (VOICE_TURN_TTL_S): a turn served by another device or one that dies before the
+        # answer must not leave a key in memory until the process ends.
+        self._voice_turns: dict[str, tuple[str, str, float]] = {}
         # thread id -> (channel, chat_id, message id): the message that started the turn.
         # A reply quotes it where the channel can, so a group keeps the thread.
         self._answer_to: dict[str, tuple[str, str, str]] = {}
@@ -344,6 +352,21 @@ class ChannelManager(ChannelBus):
             task.cancel()
         for name in list(self.channels):
             await self.stop_channel(name)
+
+    def _remember_voice_turn(self, thread: str, base: str, key: str) -> None:
+        """This chat spoke: say the answer too, for the length of one turn.
+
+        The map is bounded and aged here, not only where it is read: a turn that never
+        reaches the answer (another device took it, the run died) leaves an entry, and an
+        entry holds the account's key."""
+        now = time.monotonic()
+        for held, (_b, _k, when) in list(self._voice_turns.items()):
+            if now - when > VOICE_TURN_TTL_S:
+                self._voice_turns.pop(held, None)
+        if len(self._voice_turns) >= VOICE_TURNS_MAX:
+            oldest = min(self._voice_turns, key=lambda held: self._voice_turns[held][2])
+            self._voice_turns.pop(oldest, None)
+        self._voice_turns[thread] = (base, key, now)
 
     def _spawn(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
         task = asyncio.ensure_future(coro)
@@ -689,7 +712,7 @@ class ChannelManager(ChannelBus):
                 msg.files = [item for item in msg.files if item.kind != "audio"]
                 # what was said, then what was typed: the model sees one message in order
                 text = "\n\n".join(heard + ([text] if text else []))
-                self._voice_turns[thread_id] = (voice_base, voice_key)
+                self._remember_voice_turn(thread_id, voice_base, voice_key)
         device = await self._shared_execution_device(thread_id) if text and not msg.files else None
         if device is not None:
             self._spawn(
@@ -1175,7 +1198,10 @@ class ChannelManager(ChannelBus):
             logger.warning("channel {}: reply to {} failed: {}", route[0], route[1], exc)
             self._set(route[0], "error", _short(exc))
         primary = (live.channel, live.chat_id) if live is not None else route
-        await self._say_back(thread, primary, channel, text)
+        # The spoken copy is a bonus and the words are already on screen: it goes in its own
+        # task, so a relay that hangs on speech cannot hold the answer to the other chats.
+        # `_say_back` itself never raises; the TTL in `_voice_turns` bounds the key.
+        self._spawn(self._say_back(thread, primary, channel, text))
         targets = set(self.picker.targets(thread)) | self.picker.pins.pop(thread, set())
         for other in targets - {primary}:
             if text.strip():
@@ -1189,7 +1215,7 @@ class ChannelManager(ChannelBus):
         Only when the chat spoke — an answer typed into a chat is read, not listened to.
         A relay that cannot say it, or does not have the model, leaves the words as they are.
         """
-        base, key = self._voice_turns.pop(thread, ("", ""))
+        base, key, _at = self._voice_turns.pop(thread, ("", "", 0.0))
         if not (base and key) or not text.strip():
             return
         if not getattr(channel, "supports_voice", False):
