@@ -7,3 +7,10 @@
   nsExec::Exec 'taskkill /F /IM NanoLika.exe /T'
   Sleep 600
 !macroend
+
+; Первая страница мастера: предупредить, что установка долгая, и показать Лику.
+!macro customWelcomePage
+  !define MUI_WELCOMEPAGE_TITLE "Установка nanoLika"
+  !define MUI_WELCOMEPAGE_TEXT "Лика переезжает на этот компьютер вместе с моделями, Node и средой управления экраном.$\r$\n$\r$\nУстановка занимает 5–15 минут: распаковываются десятки тысяч файлов. Так и должно быть — окно можно свернуть и вернуться позже."
+  !insertmacro MUI_PAGE_WELCOME
+!macroend
