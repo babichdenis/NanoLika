@@ -1136,9 +1136,15 @@ class ChannelManager(ChannelBus):
         if route is None:
             return
         text = self._redact_outbound(text)
+        # A picture the reply points at is sent as the picture, never left as Markdown:
+        # Telegram turns `![picture](url)` into a bare "!picture" link, which is exactly
+        # what the person could not open. Files already attached win; otherwise the links
+        # are fetched from our storage and sent the same way.
+        linked = [url for url in SHARE_IMAGE.findall(text) if self._share_allowed(url)]
+        if not files and linked:
+            fetched = await self._fetch_shared(linked)
+            files = [str(path) for _url, path in fetched]
         if files:
-            # the picture is attached right after the words; a Markdown copy of the same
-            # picture in the text would only add a second preview
             text = SHARE_IMAGE.sub("", text).strip()
         channel = self.channels.get(route[0])
         if channel is None:
