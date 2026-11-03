@@ -31,17 +31,17 @@ which NanoLika does not read.
 
 ## Working with it
 
-- `fgc status` — the goal, the counts, and the frontier: intents ready to work now.
-- `fgc fact "<one sentence>" -t "<short title>"` — a confirmed observation: a command that
+- `fgc status`: the goal, the counts, and the frontier: intents ready to work now.
+- `fgc fact "<one sentence>" -t "<short title>"`: a confirmed observation: a command that
   ran, a file that exists, an error that reproduces. Never a guess.
-- `fgc intent --from f001 "<what to do next>" -t "<title>"` — a unit of work that depends on
+- `fgc intent --from f001 "<what to do next>" -t "<title>"`: a unit of work that depends on
   those facts.
-- `fgc done i001 --fact "<what came out>" -t "<title>"` — close the intent with the fact it
+- `fgc done i001 --fact "<what came out>" -t "<title>"`: close the intent with the fact it
   produced (both are written at once, no orphan notes).
-- `fgc doc f002` — the long `doc` layer of a node. Prompts carry the title and the one-line
+- `fgc doc f002`: the long `doc` layer of a node. Prompts carry the title and the one-line
   summary; details are read on purpose.
-- `fgc recall "<task gist>"` — a lexical search over prior titles and summaries.
-- `fgc view` — a self-contained `fact-graph.html` with the graph; tell the person the path.
+- `fgc recall "<task gist>"`: a lexical search over prior titles and summaries.
+- `fgc view`: a self-contained `fact-graph.html` with the graph; tell the person the path.
 
 ## Rules
 
