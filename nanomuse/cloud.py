@@ -288,6 +288,11 @@ class CloudClient:
         """This device's name and look for the account (last writer wins); the new ``rev``."""
         return await self._request("PUT", "/v1/me/profile", body)
 
+    async def tz(self) -> str:
+        """The account's clock (an IANA name, "" until a device says): a cheap poll."""
+        data = await self._request("GET", "/v1/me/tz")
+        return str(data.get("tz") or "")
+
     async def put_tz(self, tz: str) -> None:
         """Tell the account this device's clock: an IANA name, so a bot on a relay in another
         country can speak in the person's time (``GET /v1/me`` returns it)."""

@@ -921,6 +921,13 @@ def create_app(
         body = await _json(request)
         return cloud.set_contribute(caller, bool(body.get("on")))
 
+    @app.get("/v1/me/tz")
+    async def me_tz(caller: Caller = Depends(caller_dep)) -> dict:
+        """The account's clock as cheaply as it can be asked: a bot polls this every few
+        minutes, so it must not carry the usage, the models or the sessions."""
+        row = cloud.db.account(caller.account_id)
+        return {"tz": str(row["tz"] if row is not None else "")}
+
     @app.put("/v1/me/tz", status_code=204)
     async def me_put_tz(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
         """0.30: the person's clock (IANA name) as the device they use sees it. A bot on a

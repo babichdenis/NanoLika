@@ -500,6 +500,9 @@ def test_the_person_s_clock_is_written_once_and_read_by_the_bot(client):
     r = client.put("/v1/me/tz", headers=auth, json={"tz": "Asia/Vladivostok"})
     assert r.status_code == 204
     assert client.get("/v1/me", headers=auth).json()["account"]["tz"] == "Asia/Vladivostok"
+    # the cheap poll a bot makes every few minutes carries nothing else
+    light = client.get("/v1/me/tz", headers=auth).json()
+    assert light == {"tz": "Asia/Vladivostok"}
     # a typo is refused, not stored: a wrong clock is worse than none
     bad = client.put("/v1/me/tz", headers=auth, json={"tz": "Mars/Olympus"})
     assert bad.status_code == 400 and bad.json()["error"]["code"] == "bad_zone"

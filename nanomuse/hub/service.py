@@ -79,6 +79,8 @@ class HubService:
         self.last_me: dict[str, Any] = {}
         # one "this is my clock" write per process (see _sync_clock)
         self._tz_sent = False
+        # the loop that keeps the account's clock in step (a person may move 9 hours east)
+        self._clock_task: asyncio.Task[Any] | None = None
         # the account's chat models (ids), for the provider form; refreshed on sign-in and
         # whenever the form asks
         self.chat_models: list[str] = []
@@ -189,6 +191,10 @@ class HubService:
                 await self.me()
             except Exception as exc:  # noqa: BLE001 - the clock must not block the start
                 logger.debug("clock: {}", exc)
+            if self._clock_task is None or self._clock_task.done():
+                self._clock_task = asyncio.ensure_future(self._clock_loop())
+                self._tasks.add(self._clock_task)
+                self._clock_task.add_done_callback(self._tasks.discard)
 
     def _model_has_no_key(self) -> bool:
         """True when the configured model would be called with no key at all — not a local
@@ -247,6 +253,9 @@ class HubService:
     async def stop(self) -> None:
         """Leave the hub, end the profile's pending push or pull, then close the HTTP client —
         in that order, so that nothing is still talking to the relay when its client goes."""
+        if self._clock_task is not None and not self._clock_task.done():
+            self._clock_task.cancel()
+            self._clock_task = None
         await self.leave()
         await self.profile.stop()
         await self.cloud.close()
@@ -544,7 +553,19 @@ class HubService:
         self.svc.connections._publish()
         self.publish()
 
-    async def _sync_clock(self, data: dict[str, Any]) -> None:
+    async def _clock_loop(self) -> None:
+        """Every ten minutes, ask the relay whose clock this is. Cheap on purpose: one small
+        GET, and the account's zone changes only when the person uses another device."""
+        while True:
+            await asyncio.sleep(600)
+            try:
+                await self._sync_clock()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("clock: {}", exc)
+
+    async def _sync_clock(self, data: dict[str, Any] | None = None) -> None:
         """Keep the account's timezone in step with the person's real clock.
 
         A laptop knows its zone (``Europe/Moscow``, ``Asia/Vladivostok``) and tells the
@@ -553,8 +574,11 @@ class HubService:
         what makes "в 21:19" mean the same thing on both."""
         from nanomuse import timeutil
 
-        account = data.get("account") if isinstance(data.get("account"), dict) else {}
-        theirs = str(account.get("tz") or "").strip()
+        if data is None:
+            theirs = (await self.cloud.tz()).strip()
+        else:
+            account = data.get("account") if isinstance(data.get("account"), dict) else {}
+            theirs = str(account.get("tz") or "").strip()
         mine = timeutil.system_zone_name()
         real = bool(mine) and mine not in ("UTC", "Etc/UTC", "Etc/GMT")
         if real and theirs != mine and not self._tz_sent:
