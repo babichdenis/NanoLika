@@ -137,6 +137,7 @@ def test_builtin_skills_are_well_formed():
         "office-docx",
         "office-xlsx",
         "office-pptx",
+        "fact-graph",
     } <= set(names)
     assert lib.errors == {} and all(s.source == BUILT_IN for s in lib.all())
     for s in lib.all():
@@ -318,7 +319,7 @@ async def test_skills_tool(tmp_path: Path):
     assert b.warnings == ["this replaces one of the built-in skills"]
     assert tool.assess({"action": "remove", "name": "x"}).risk == RiskLevel.SENSITIVE
     r = await tool.execute(action="list")
-    assert r.ok and r.output.startswith("15 skills:\n- amap (built-in)")
+    assert r.ok and r.output.startswith("16 skills:\n- amap (built-in)")
     r = await tool.execute(action="use", name="trip-plan")
     assert r.ok and r.output.startswith("# Skill: trip-plan\n") and "## Research" in r.output
     r = await tool.execute(action="use", name="nope")
