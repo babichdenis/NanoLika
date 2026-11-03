@@ -510,7 +510,7 @@ def test_sync_enabled_column_is_added_to_an_older_database(tmp_path):
     conn.close()
     db = Database(str(path))
     assert "accounts.sync_enabled" in db.added
-    assert db.account("a1")["sync_enabled"] == 1
+    assert db.account("a1")["sync_enabled"] == 0
     db.close()
 
 

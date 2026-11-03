@@ -628,8 +628,9 @@ class Database:
         # 0.17: the connectors each device of the account holds — a label and a sign-in kind
         # per service, never a credential — merged by the device that wrote them
         add("profiles", "connectors", "TEXT NOT NULL DEFAULT '[]'")
-        # 0.19: conversation sync is on unless the person turned it off (sync.py)
-        add("accounts", "sync_enabled", "INTEGER NOT NULL DEFAULT 1")
+        # Conversation sync is off until the person turns it on: a new account's chats
+        # stay on its own devices until it asks for them to travel (sync.py).
+        add("accounts", "sync_enabled", "INTEGER NOT NULL DEFAULT 0")
         # the invite bonus is paid at the invitee's first charged request, not at sign-up;
         # the column says when. Every invited account from before was paid at sign-up, so
         # it is marked settled once, when the column is added, and nobody is paid twice.
