@@ -1,3 +1,29 @@
+## 2026-11-03 · Сборка 1.0.8: два для мака, один для Windows
+
+Собрали тестовые бандлы руками на этом Mac (Intel, macOS 13.7.3).
+
+- **Mac x64**: `npm run dist:dir -- --mac --x64`, затем `scripts/desktop-app/package-mac.sh x64`
+  → `NanoLika-Desktop-1.0.8-mac-x64.zip` (456 МБ) и `...dmg` (489 МБ). Подпись ad-hoc,
+  `codesign --verify --deep --strict` чистый, `node scripts/smoke.mjs --app dist/mac` —
+  «harness boots with the NanoLika bundle».
+- **Права не потерялись.** Помощника `NanoLika Computer Use.app` собрать здесь нельзя:
+  CLT 13.3 не знает `SCScreenshotManager`/`captureResolution` (macOS 14 SDK). Поэтому взяли
+  его готовый universal-бинар из установленного приложения (тот же, 1.0.5) и только
+  переподписали. `CDHash` совпал с установленным до байта (`4e26d7ba…`): TCC на ad-hoc
+  помнит именно хэш бинаря, значит регистрация «NanoLika Computer Use» в
+  Screen Recording/Accessibility не слетит. Идентификаторы не трогали:
+  `io.github.nanomuse.desktop` (app) и `…desktop.computer-use` (helper), схема `nanolika`.
+- **Windows x64**: на этом же Mac через wine (`electron-builder --win --x64`) →
+  `NanoLika-Desktop-1.0.8-win-x64.exe` (236 МБ) + `latest.yml` и `.blockmap`.
+  Внутри намеренно **нет** `runtime` и `node`: рантайм рук — это PyInstaller под Windows,
+  а Node качается под платформу сборки; обе вещи делаются на Windows-раннере или на .8.
+  Без них приложение работает, руки выключены, офисные скрипты берут Node из PATH.
+- **arm64 не собирали.** Все бинарные зависимости рантайма здесь x86_64, универсальный
+  бинарь не собрать на Intel; arm64-бандл делает CI на arm64-раннере. Пользователю с
+  Apple Silicon этот zip не подойдёт.
+- Полезные числа: `dsh` 467 МБ, `runtime` 291 МБ, `node` 109 МБ, Electron 293 МБ — отсюда
+  и полгигабайта архива.
+
 ## 2026-11-03 · nvwabase в OpenCode и в Лике, тесты в четыре потока
 
 Владелец посмотрел проект `N1nEmAn/nvwabase` (граф фактов и намерений для агентов) и решил,
