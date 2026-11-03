@@ -220,7 +220,7 @@ jobs:
           7z e -y -r -onsis-check dist/*.exe app-64.7z > /dev/null
           7z l nsis-check/app-64.7z > nsis-check/list.txt
           for mood in idle working waiting happy; do
-            grep -Eq "dsh-nanomuse[/\\\\]assets[/\\\\]dragon-$mood\.mp4" nsis-check/list.txt || { echo "the installer's archive lacks dsh-nanomuse/assets/dragon-$mood.mp4" >&2; exit 1; }
+            grep -Eq "dsh-nanomuse[/\\\\]assets[/\\\\]lika-$mood\.mp4" nsis-check/list.txt || { echo "the installer's archive lacks dsh-nanomuse/assets/lika-$mood.mp4" >&2; exit 1; }
           done
           echo "the installer's archive carries the four clips"
       # The update assets the release must carry (electron-builder.yml, win.publish: latest.yml,

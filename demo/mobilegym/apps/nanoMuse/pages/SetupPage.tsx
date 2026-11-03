@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FocusEvent, type FormEvent, type ReactNode } from 'react';
 import { useKeyboard } from '@/os/keyboard';
-import { dragonIdle, IcBack, IcChat, IcCloud, IcHands, IcKey, IcReach, IcRetry } from '../res/icons';
+import { likaIdle, IcBack, IcChat, IcCloud, IcHands, IcKey, IcReach, IcRetry } from '../res/icons';
 import { parseServerInput, useNanoMuseStore } from '../state';
 import { useNanoMuseGestures } from '../hooks/useNanoMuseGestures';
 import { NANOMUSE_CONFIG } from '../data';
@@ -556,7 +556,7 @@ function reveal(container: HTMLElement | null, target: EventTarget | Element | n
 function FaceDisc() {
   return (
     <div className="w-[104px] h-[104px] rounded-full overflow-hidden flex items-center justify-center" style={{ background: 'var(--nm-disc)' }}>
-      <img src={dragonIdle} alt="" width={104} height={104} className="w-full h-full object-cover" draggable={false} />
+      <img src={likaIdle} alt="" width={104} height={104} className="w-full h-full object-cover" draggable={false} />
     </div>
   );
 }

@@ -108,7 +108,7 @@ def sync_avatars() -> None:
             dest = res / ("raw" if ext == "mp4" else "drawable-nodpi")
             name = "nm_motion" if ext == "mp4" else "nm_avatar"
             shutil.copyfile(source, dest / f"{name}_{mood}.{ext}")
-    demo_idle = ROOT / "demo/mobilegym/apps/NanoLika/res/lika-idle.webp"
+    demo_idle = ROOT / "demo/mobilegym/apps/nanoMuse/res/lika-idle.webp"
     if (avatar / "idle.webp").exists() and demo_idle.parent.is_dir():
         shutil.copyfile(avatar / "idle.webp", demo_idle)
 

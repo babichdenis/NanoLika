@@ -18,4 +18,4 @@ export const IcKey = KeyRound;
 export const IcCloud = Cloud;
 
 /** The dragon's face at rest — the Muse's default look, as the Android app shows it on its first page. */
-export { default as dragonIdle } from './dragon-idle.webp';
+export { default as likaIdle } from './lika-idle.webp';

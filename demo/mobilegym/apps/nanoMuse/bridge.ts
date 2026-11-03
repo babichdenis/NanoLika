@@ -128,7 +128,7 @@ const STOP_MARKER = 'nanomuse:stop';
  *  link opens that one file for a few hours, nothing else). */
 async function faceUrl(serverUrl: string, token: string, avatar: string | undefined): Promise<string> {
   if (!serverUrl) return '';
-  if (!avatar || avatar === 'dragon') return `${serverUrl}/avatars/dragon-working.webp`;
+  if (!avatar || avatar === 'dragon') return `${serverUrl}/avatars/lika-working.webp`;
   const path = `/api/files/avatar/${avatar}/working.webp`;
   const exp = (Math.floor(realNow() / 1000 / 21600) + 2) * 21600;
   const enc = new TextEncoder();
@@ -145,7 +145,7 @@ function setIdentity(serverUrl: string, token: string, profile: { name?: string;
 
 function showFace(serverUrl: string, url: string): void {
   if (!url) return;
-  const fallback = `${serverUrl}/avatars/dragon-working.webp`;
+  const fallback = `${serverUrl}/avatars/lika-working.webp`;
   if (url === fallback) {
     stage.setIdentity(agentName, url);
     return;
