@@ -49,7 +49,10 @@ function appPlatform(): string | undefined {
  * device "saw nothing"). The harness controls stay one switch away in Settings.
  */
 function defaultShowHarness(): boolean {
-  return false
+  // On Windows the harness column is the default: the Muse column needs the account's
+  // sessions before the first paint, and a fresh Windows profile opened with it empty
+  // looked like the app had no UI at all (2026-11-03). The switch still turns it off.
+  return appPlatform() === 'win32'
 }
 
 const DEFAULTS: Prefs = { showHarness: defaultShowHarness(), keepAwake: true, showSteps: true, approvals: [], feedIntroSeen: false }
