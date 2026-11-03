@@ -58,7 +58,8 @@ Run the checks for the area you changed. CI runs the same lines on Node 22; the 
 uv venv && uv pip install -e ".[dev]"
 ruff check nanomuse tests scripts && ruff format --check nanomuse tests scripts
 mypy
-python -m pytest -q -m "not live"
+python -m pytest -q -m "not live"     # serial: ~25 min on the Mac
+python -m pytest -q -n 4 -m "not live"   # 4 workers: ~11 min, same set (needs the dev extras)
 
 # Relay (cloud/)
 cd cloud && pip install -e ".[dev]" && ruff check . && ruff format --check . && pytest

@@ -63,6 +63,7 @@ Before you push:
 ruff check nanomuse tests scripts && ruff format nanomuse tests scripts
 mypy                                           # types; config in pyproject.toml
 python -m pytest -q                            # MockLLM only, no network
+python -m pytest -q -n 4                       # the same set on four workers, about twice as fast
 cd web && npm run check && npm run build       # if you touched web/; commit the build
 cd cloud && pip install -e ".[dev]" && ruff check . && ruff format --check . && pytest   # if you touched the relay
 ```
