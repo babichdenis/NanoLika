@@ -12,6 +12,7 @@ import {
   Code2,
   ExternalLink,
   FileText,
+  FileSpreadsheet,
   Globe,
   Hand,
   Loader2,
@@ -803,7 +804,19 @@ export function ArtifactCard({ event, onOpen }: { event: ArtifactEvent; onOpen: 
   const t = useT();
   const kind = fileKind(event.name);
   const what =
-    kind === "html" ? t("Page") : kind === "image" ? t("Image") : kind === "data" ? t("Data") : kind === "code" ? t("Code") : kind === "event" ? t("Event") : t("Document");
+    kind === "html"
+      ? t("Page")
+      : kind === "image"
+        ? t("Image")
+        : kind === "data"
+          ? t("Data")
+          : kind === "sheet"
+            ? t("Spreadsheet")
+            : kind === "code"
+              ? t("Code")
+              : kind === "event"
+                ? t("Event")
+                : t("Document");
   const label = event.action === "update" ? `${what} · ${t("updated")}` : what;
   const preview = kind === "html" || kind === "image";
   return (
@@ -820,7 +833,15 @@ export function ArtifactCard({ event, onOpen }: { event: ArtifactEvent; onOpen: 
         <div className="flex items-center gap-3 px-4 py-3">
           {!preview && (
             <div className="rounded-2xl bg-accent/12 p-2.5 text-accent">
-              {kind === "code" ? <Code2 size={20} /> : kind === "event" ? <CalendarDays size={20} /> : <FileText size={20} />}
+              {kind === "code" ? (
+                <Code2 size={20} />
+              ) : kind === "event" ? (
+                <CalendarDays size={20} />
+              ) : kind === "sheet" ? (
+                <FileSpreadsheet size={20} />
+              ) : (
+                <FileText size={20} />
+              )}
             </div>
           )}
           <div className="min-w-0 flex-1">

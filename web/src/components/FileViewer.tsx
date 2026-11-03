@@ -74,6 +74,23 @@ function Body({ path, kind, threadId }: { path: string; kind: ReturnType<typeof 
   if (kind === "html") return <HtmlBody path={path} threadId={threadId} />;
   if (kind === "event") return <EventBody path={path} threadId={threadId} />;
   if (kind === "text" || kind === "code" || kind === "data") return <TextBody path={path} kind={kind} threadId={threadId} />;
+  if (kind === "sheet" || kind === "document") {
+    // A workbook or a document is a zip of XML; the browser cannot show it, so name the
+    // program that can and let the person take the file there.
+    const app = kind === "sheet" ? t("Excel, Numbers or your spreadsheet app") : t("Word, Pages or your document app");
+    return (
+      <div className="mx-auto max-w-[420px] px-6 py-10 text-center">
+        <div className="text-[15px] font-medium">{path.split("/").pop() ?? path}</div>
+        <p className="mt-1.5 text-[13px] text-muted">{t("Opens in {app}.", { app })}</p>
+        <a
+          href={fileUrl(path, true, threadId)}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13.5px] font-medium text-white"
+        >
+          {t("Download it")}
+        </a>
+      </div>
+    );
+  }
   return (
     <div className="p-8 text-center text-muted text-[14px]">
       {t("No preview for this file type.")}{" "}

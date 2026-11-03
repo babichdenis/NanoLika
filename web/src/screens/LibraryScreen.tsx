@@ -123,7 +123,7 @@ function FileRow({ file, onOpen }: { file: FileInfo; onOpen: () => void }) {
       <Globe size={22} />
     ) : kind === "image" ? (
       <FileImage size={22} />
-    ) : kind === "data" ? (
+    ) : kind === "data" || kind === "sheet" ? (
       <FileSpreadsheet size={22} />
     ) : kind === "code" ? (
       <Code2 size={22} />

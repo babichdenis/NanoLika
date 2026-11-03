@@ -152,6 +152,7 @@ const zhCN: Record<string, string> = {
   Document: "文档",
   Image: "图片",
   Data: "数据",
+  Spreadsheet: "表格",
   Code: "代码",
   Open: "打开",
   Download: "下载",
@@ -691,6 +692,9 @@ const zhCN: Record<string, string> = {
   "Untitled event": "未命名日程",
   "Add to calendar": "加入日历",
   "Opens in your calendar app, which asks before it saves anything.": "会在你的日历应用中打开，保存前会先询问你。",
+  "Opens in {app}.": "用{app}打开。",
+  "Excel, Numbers or your spreadsheet app": "Excel、Numbers 或你的表格应用",
+  "Word, Pages or your document app": "Word、Pages 或你的文档应用",
 
   // ── Connections ───────────────────────────────────────────────────────────────────
   "What {name} can reach; keys stay in the vault on this machine.": "{name} 能用到的东西；密钥留在这台机器的保险库里。",

@@ -102,7 +102,9 @@ export function truncate(text: string, n: number): string {
   return text.length > n ? `${text.slice(0, n - 1)}…` : text;
 }
 
-export function fileKind(name: string): "text" | "code" | "html" | "image" | "pdf" | "data" | "event" | "other" {
+export function fileKind(
+  name: string,
+): "text" | "code" | "html" | "image" | "pdf" | "data" | "sheet" | "document" | "event" | "other" {
   const ext = name.toLowerCase().split(".").pop() ?? "";
   if (ext === "ics") return "event";
   if (["md", "txt", "log", "rtf"].includes(ext)) return "text";
@@ -111,6 +113,10 @@ export function fileKind(name: string): "text" | "code" | "html" | "image" | "pd
   if (["html", "htm"].includes(ext)) return "html";
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) return "image";
   if (ext === "pdf") return "pdf";
-  if (["csv", "json", "xlsx", "xls", "parquet"].includes(ext)) return "data";
+  if (["csv", "tsv", "json", "parquet"].includes(ext)) return "data";
+  // Workbooks and documents are zipped, not text: reading them as one shows garbage, so
+  // they are offered as a file to open in Excel, Word or PowerPoint instead.
+  if (["xlsx", "xlsm", "xls", "ods", "numbers"].includes(ext)) return "sheet";
+  if (["docx", "doc", "odt", "pptx", "ppt", "odp", "key"].includes(ext)) return "document";
   return "other";
 }
