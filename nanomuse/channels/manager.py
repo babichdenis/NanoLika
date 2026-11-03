@@ -61,6 +61,20 @@ SHARE_HOST = "s3.regru.cloud"
 SHARE_PREFIX = "/nanolika/files/"
 SHARE_MAX_BYTES = 50 * 1024 * 1024
 SHARE_URL = re.compile(r"https://s3\.regru\.cloud/nanolika/files/[^\s)>\"]+")
+#: What the channel can show as a picture, play as a clip or a voice take. Everything
+#: else (a PDF, an archive) still travels as a link or a document, not as a photo.
+MEDIA_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp",
+    ".mp4", ".m4v", ".mov", ".webm", ".mkv",
+    ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus", ".flac", ".aac",
+}
+
+
+def _is_media(mime: str, name: str) -> bool:
+    """Whether this file is something the chat draws or plays by itself."""
+    if mime.lower().startswith(("image/", "video/", "audio/")):
+        return True
+    return Path(name.split("?")[0]).suffix.lower() in MEDIA_SUFFIXES
 # A picture in an answer from another device: its Markdown form is turned back into the link.
 SHARE_IMAGE = re.compile(r"!\[[^\]]*\]\((https?://[^)\s]+)\)")
 
@@ -843,7 +857,7 @@ class ChannelManager(ChannelBus):
         if thread is not None and self.svc.sync._mine(thread):
             # A chat that still carries the bot's generic name takes the first words of the
             # person's message, the way a chat made on the computer is named.
-            opening = self._opening_title(msg)
+            opening = self._opening_title(msg) if not msg.is_group else ""
             if opening and thread.title.strip() == f"{self.types[msg.channel].label} · nanoLika":
                 self.svc.rename_thread(selected, opening)
             if selected not in self.picker.pins:
@@ -863,13 +877,18 @@ class ChannelManager(ChannelBus):
             who = msg.chat_name or (
                 msg.sender_name or msg.sender_id if not msg.is_group else "group"
             )
+            if (thread := self.svc.threads.get(thread_id)) is not None:
+                thread.folder = label
+            # A group keeps its own name (the people in it do not change because someone
+            # spoke); a one-to-one chat is named from the first words of the person.
+            opening = self._opening_title(msg) if not msg.is_group else ""
             self.svc.rename_thread(
                 thread_id,
-                self._opening_title(msg)
+                opening
                 or (
-                    f"{label} · nanoLika"
-                    if msg.channel in {"telegram", "max"}
-                    else f"{label} · {who}"[:60]
+                    f"{label} · {who}"[:60]
+                    if msg.is_group or msg.channel not in {"telegram", "max"}
+                    else f"{label} · nanoLika"
                 ),
             )
         if not selected or selected != thread_id:
@@ -2005,21 +2024,28 @@ class ChannelManager(ChannelBus):
         except Exception as exc:  # noqa: BLE001 — the claim expires in a minute by itself
             logger.debug("sync: delivery claim not released: {}", exc)
 
-    async def _shared_files(self, text: str) -> list[Path]:
-        """Small S3 objects linked in an answer, fetched so the channel can play them.
+    def _share_allowed(self, url: str) -> bool:
+        """Only our own storage: the S3 bucket itself or the relay's stable /v1/files link.
+
+        The host and prefix are fixed, so a path in a message can never make the bot fetch
+        an arbitrary address."""
+        parts = urlsplit(url)
+        if parts.hostname == SHARE_HOST and parts.path.startswith(SHARE_PREFIX):
+            return True
+        relay = urlsplit(str(getattr(self.svc.settings.cloud, "base_url", "") or ""))
+        return bool(relay.hostname) and parts.hostname == relay.hostname and parts.path.startswith("/v1/files/")
+
+    async def _fetch_shared(self, urls: list[str]) -> list[tuple[str, Path]]:
+        """Our own objects, fetched so the channel can send the file itself.
 
         Telegram's cloud Bot API takes 50 MB; a larger object is left as the link and the
-        person is not made to wait for a download that would fail. The host and prefix are
-        fixed, so a path in a message can never make the bot fetch an arbitrary address."""
-        urls = list(dict.fromkeys(SHARE_URL.findall(text)))
-        if not urls:
-            return []
-        out: list[Path] = []
+        person is not made to wait for a download that would fail."""
+        out: list[tuple[str, Path]] = []
         async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-            for url in urls:
-                parts = urlsplit(url)
-                if parts.hostname != SHARE_HOST or not parts.path.startswith(SHARE_PREFIX):
+            for url in dict.fromkeys(urls):
+                if not self._share_allowed(url):
                     continue
+                parts = urlsplit(url)
                 suffix = Path(unquote(parts.path)).suffix[:12]
                 target = (
                     Path(tempfile.gettempdir())
@@ -2039,11 +2065,15 @@ class ChannelManager(ChannelBus):
                         target.unlink(missing_ok=True)
                         logger.debug("channel: share object over 50 MB left as a link")
                         continue
-                    out.append(target)
+                    out.append((url, target))
                 except (httpx.HTTPError, OSError) as exc:
                     target.unlink(missing_ok=True)
                     logger.debug("channel: share object not fetched: {}", exc)
         return out
+
+    async def _shared_files(self, text: str) -> list[Path]:
+        """The objects linked in a text, fetched (see :meth:`_fetch_shared`)."""
+        return [path for _url, path in await self._fetch_shared(SHARE_URL.findall(text))]
 
     async def _deliver_synced_channel(self, event: dict[str, Any]) -> None:
         role = str(event.get("type") or "")
@@ -2092,22 +2122,40 @@ class ChannelManager(ChannelBus):
                 ):
                     targets.add(self.picker.topics.redirect(thread, channel, chat))
         body = str(event.get("text") or "").strip()
-        # A picture from another device travels as a link, not as a download: the channel
-        # gets the S3 link (Telegram draws its own preview) and the bot never fetches the
-        # bytes, so a 50 MB clip and a 2 KB still are one path.
-        body = SHARE_IMAGE.sub(r"\1", body)
-        links = [
-            str(item.get("url") or "")
-            for item in (event.get("files") or [])
+        # A picture, a clip or a voice take from another device goes as the file itself:
+        # Telegram draws the picture and plays the clip, and the relay's stable link stays
+        # only for what the Bot API cannot take (an object over 50 MB). The link is ours,
+        # not S3's: it does not expire and the bucket stays private.
+        files = [
+            item for item in (event.get("files") or [])
             if isinstance(item, dict) and item.get("url")
         ]
+        media = [
+            str(item.get("url") or "")
+            for item in files
+            if _is_media(str(item.get("mime") or ""), str(item.get("name") or item.get("url") or ""))
+        ]
+        media += SHARE_IMAGE.findall(body)
+        media = [url for url in dict.fromkeys(media) if self._share_allowed(url)]
+        for url in media:
+            body = body.replace(url, "")
+        body = SHARE_IMAGE.sub("", body)
+        body = re.sub(r"\[вложение:[^\]]*\]", "", body).strip()
+        links = [str(item.get("url") or "") for item in files if str(item.get("url") or "") not in media]
         for url in links:
             if url and url not in body:
                 body = (body + "\n" if body else "") + url
-        if not body:
+        if not body and not media:
             return
         if role == "user":
             body = self.say("💻 You", "💻 你", "💻 Вы") + "\n" + body
+        fetched = await self._fetch_shared(media) if media else []
+        shared_files: list[Path] = [path for _url, path in fetched]
+        sent_urls = {url for url, _path in fetched}
+        for url in media:
+            if url not in sent_urls:
+                # too large or not fetched: the link is still better than nothing
+                body = (body + "\n" if body else "") + url
         try:
             for channel, chat in targets:
                 if self.picker.topics.defer(thread, (channel, chat), event):
@@ -2142,7 +2190,11 @@ class ChannelManager(ChannelBus):
                     ):
                         break
                     try:
-                        await self.channels[channel].send(chat, self._redact_outbound(body))
+                        await self.channels[channel].send(
+                            chat,
+                            self._redact_outbound(body) if body else "",
+                            files=[str(path) for path in shared_files],
+                        )
                     except asyncio.CancelledError:
                         raise
                     except Exception:
