@@ -118,7 +118,10 @@ nsis:
   language: "1049"
   installerLanguages: [ru_RU, en_US, zh_CN]
   uninstallerSidebar: resources/installer-sidebar.bmp
-  uninstallerIcon: resources/app-icon.ico
+  # Без кастомной иконки деинсталлятора (04.11.2026). С `uninstallerIcon` NSIS пишет
+  # $INSTDIR\uninstallerIcon.ico во время установки — и на .8 антивирус успевал заблокировать
+  # файл: «Невозможно открыть файл для записи», установка вставала. У деинсталлятора будет
+  # стандартная иконка NSIS — это дешевле, чем диалог у каждого пользователя.
   unicode: true
   perMachine: false
   allowToChangeInstallationDirectory: true
