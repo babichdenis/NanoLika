@@ -591,6 +591,54 @@ def test_a_file_is_named_in_the_words_and_sent_once(chan):
     assert "documents/letter.docx" not in text and "letter.docx" in text
 
 
+def test_a_public_channel_lets_a_stranger_in_without_a_code(chan, monkeypatch):
+    """A public channel has no pairing step: the chat is its own account in the relay, so
+    there is nobody else's account to protect and no app to confirm a code with."""
+    client, service, llm, manager, fake = chan
+    original = manager.store.resolved
+
+    def resolved(cfg):  # noqa: ANN001, ANN202
+        data = dict(original(cfg))
+        data["public"] = "true"
+        return data
+
+    monkeypatch.setattr(manager.store, "resolved", resolved)
+    llm.script.append(LLMResponse(content="Привет, я Лика."))
+    fake.bus.inbound(dm("сколько будет два плюс два?", sender="u9", chat="chat9"))
+    wait_for(lambda: any("Привет, я Лика." in t for t in fake.texts("chat9")))
+    assert not any(
+        "Pairing code" in t or "Код для привязки" in t for t in fake.texts("chat9")
+    )
+
+
+def test_the_owner_chat_keeps_the_machine_account_on_a_public_channel(chan, monkeypatch):
+    """`cloud_per_chat` gives each stranger its own key; the owner's paired chat keeps the
+    machine's account, or the owner would be moved onto another balance by the switch."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    original = manager.store.resolved
+
+    def resolved(cfg):  # noqa: ANN001, ANN202
+        data = dict(original(cfg))
+        data.update(
+            {
+                "cloud_per_chat": "true",
+                "cloud_url": "https://cloud.example",
+                "cloud_bot_token": "secret",
+            }
+        )
+        return data
+
+    monkeypatch.setattr(manager.store, "resolved", resolved)
+
+    async def key_for(sender: str):
+        return await manager._cloud_key_for("fake", dm("x", sender=sender))
+
+    import asyncio
+
+    assert asyncio.run(key_for("u1")) == ("", "")
+
+
 def test_switching_off_and_on_and_removing_a_chat(chan):
     client, service, llm, manager, fake = chan
     pair(client, fake)

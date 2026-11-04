@@ -531,7 +531,18 @@ class ChannelManager(ChannelBus):
         key = f"{msg.channel}:{msg.chat_id}"
         if not self._allowed(msg):
             cfg = self.store.config(msg.channel)
-            if (
+            settings = self.store.resolved(cfg)
+            if str(settings.get("public") or "").lower() in ("1", "true", "yes") and not msg.is_group:
+                # A public channel: the chat is its own account in the relay (its key comes
+                # from /v1/bot/signin), not a guest of this machine's account. No pairing
+                # code: there is nothing of the owner's to protect here, and the person has
+                # no app to confirm one with (2026-11-04).
+                logger.info(
+                    "channel {}: {} enters as its own account (public channel)",
+                    msg.channel,
+                    msg.sender_id,
+                )
+            elif (
                 getattr(cfg, "first_chat_claims", False)
                 and (not msg.is_group)
                 and (not self.pairing.approved(msg.channel))
@@ -548,20 +559,23 @@ class ChannelManager(ChannelBus):
                 )
                 await self._greet(msg.channel, msg.chat_id)
                 return
-            if msg.is_group:
-                logger.debug(
-                    "channel {}: ignoring group message from unknown {}", msg.channel, msg.sender_id
+            else:
+                if msg.is_group:
+                    logger.debug(
+                        "channel {}: ignoring group message from unknown {}",
+                        msg.channel,
+                        msg.sender_id,
+                    )
+                    return
+                code = self.pairing.request(
+                    msg.channel,
+                    msg.sender_id,
+                    sender_name=msg.sender_name,
+                    chat_id=physical_chat(msg.channel, msg.chat_id),
                 )
+                self.publish()
+                await self._send(msg.channel, msg.chat_id, self.pairing_text(code))
                 return
-            code = self.pairing.request(
-                msg.channel,
-                msg.sender_id,
-                sender_name=msg.sender_name,
-                chat_id=physical_chat(msg.channel, msg.chat_id),
-            )
-            self.publish()
-            await self._send(msg.channel, msg.chat_id, self.pairing_text(code))
-            return
         cfg = self.store.config(msg.channel)
         if msg.is_group and cfg.group_policy == "mention" and (not msg.mentioned):
             return
@@ -1882,6 +1896,13 @@ class ChannelManager(ChannelBus):
         why instead of seeing nothing happen."""
         settings = self.store.resolved(self.store.config(channel))
         if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
+            return "", ""
+        approved = self.pairing.approved(channel)
+        if str(msg.sender_id) in approved or str(
+            physical_chat(channel, msg.chat_id)
+        ) in approved:
+            # The owner's own chat keeps this machine's account: public entry is for the
+            # chats that were never paired, not a switch of the owner onto another key.
             return "", ""
         url = str(settings.get("cloud_url") or "").strip().rstrip("/")
         token = str(settings.get("cloud_bot_token") or "").strip()
