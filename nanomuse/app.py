@@ -393,6 +393,17 @@ class NanoMuseApp:
             )
             self.store.enable_all()
             tools.add(self.store)
+        if s.agent.tool_search:
+            # a short list in the request, the rest behind `tool_search`: the schemas of a
+            # long catalog weigh more than the whole system prompt
+            from nanomuse.tools.discovery import CORE, TOOL_SEARCH, ToolSearch
+
+            core = set(s.agent.tool_search_core) or set(CORE)
+            core &= set(tools.tool_map)  # a build without the tool keeps going
+            hidden = set(tools.tool_map) - core
+            if hidden:
+                tools.add(ToolSearch.over(list(tools.tools), hidden))
+                tools.visible = core | {TOOL_SEARCH}
         return tools
 
     def browser_tool(self) -> Browser:

@@ -85,6 +85,12 @@ max_steps = 30
 # private data (taint tracking); writes there ask for approval.
 extra_roots = []                # e.g. ["~/Documents/notes"]
 language = "auto"               # "auto" | "zh" | "en" | ...
+# The clock the person reads ("Asia/Vladivostok"); empty = this computer's zone.
+# timezone = ""
+# A long tool catalog costs more than the whole system prompt: the request carries a
+# short core and the rest are found with `tool_search` (docs: CAPABILITIES.md).
+# tool_search = true
+# tool_search_core = []          # names that always stay; empty = the built-in core
 max_context_messages = 80
 # A cap on the text of one request, not only on the number of messages.
 max_context_chars = 240000

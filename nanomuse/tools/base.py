@@ -173,6 +173,11 @@ async def safe_execute(tool: BaseTool, args: dict[str, Any] | None = None) -> To
 class ToolCollection:
     """An ordered, name-addressable set of tools."""
 
+    #: the names the model is shown when the catalog is too long for one request; None
+    #: means every tool (the default). Calls to the others still dispatch: the search
+    #: layer names them, and a name is enough to run it (``nanomuse/tools/discovery.py``).
+    visible: set[str] | None = None
+
     def __init__(self, *tools: BaseTool):
         self.tools: list[BaseTool] = []
         self.tool_map: dict[str, BaseTool] = {}
@@ -195,7 +200,11 @@ class ToolCollection:
         return self.tool_map.get(name)
 
     def to_params(self) -> list[dict[str, Any]]:
-        return [t.to_param() for t in self.tools]
+        return [t.to_param() for t in self.tools if self.visible is None or t.name in self.visible]
+
+    def shown(self) -> list[BaseTool]:
+        """The tools this request carries in full."""
+        return [t for t in self.tools if self.visible is None or t.name in self.visible]
 
     async def execute(self, name: str, args: dict[str, Any] | None = None) -> ToolResult:
         tool = self.get(name)

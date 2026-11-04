@@ -243,6 +243,13 @@ class AgentSettings(BaseModel):
     # zone; a messenger bot on a relay in another country sets it (or takes it from the
     # account's profile, which any device of the account writes).
     timezone: str = ""
+    # A long catalog costs more than the whole system prompt, so the request carries a
+    # short core and the rest are found with `tool_search` (nanomuse/tools/discovery.py).
+    # Off by default: the tools of a small build are cheap, and every search is a turn.
+    tool_search: bool = False
+    # The names that stay in the request whatever the catalog size; empty = the built-in
+    # core (files, shell, python, web, skills, ask_user, terminate).
+    tool_search_core: list[str] = Field(default_factory=list)
     max_context_messages: int = 80
     # A cap on the text sent in one request, not only on the number of messages: a few
     # unlimited tool dumps fit the message limit but not any model's context window. The

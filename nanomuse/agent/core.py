@@ -401,6 +401,16 @@ class MuseAgent:
             return prompts.LANGUAGE_UI.format(language=ui, detected=detected)
         return prompts.LANGUAGE_AUTO.format(detected=detected)
 
+    def _tool_names(self) -> str:
+        """The tools the request carries, and a word about the ones it does not: the model
+        has to know that a search exists, or it will not use the catalog behind it."""
+        shown = self.tools.shown()
+        names = ", ".join(t.name for t in shown)
+        rest = len(self.tools.tools) - len(shown)
+        if rest <= 0:
+            return names
+        return f"{names}; {rest} more are not described here, find them with `tool_search`"
+
     def build_system_prompt(
         self, user_input: str, memories_: list[MemoryItem] | None = None
     ) -> str:
@@ -479,7 +489,7 @@ class MuseAgent:
             ),
             sandbox=self.sandbox_note(),
             contacts=self.contacts_note(),
-            tool_names=", ".join(t.name for t in self.tools),
+            tool_names=self._tool_names(),
             capabilities=self.capabilities_section(),
             skills=self.skills_section(),
             connectors=self.connectors_section(),
