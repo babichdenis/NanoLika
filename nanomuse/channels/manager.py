@@ -608,6 +608,9 @@ class ChannelManager(ChannelBus):
         if command in ("/unlink", "/отвязать", "/развязать"):
             await self._unlink_chat(msg)
             return
+        if command in ("/connect", "/подключить"):
+            await self._send_connect_code(msg)
+            return
         if command in ("/help", "/status"):
             key = "help"
             if command == "/status":
@@ -1081,6 +1084,64 @@ class ChannelManager(ChannelBus):
                 "Эта просьба уже не ждёт ответа.",
             )
         await self._send(channel, chat_id, text)
+
+    async def _send_connect_code(self, msg: InboundMessage) -> None:
+        """A code that ties this chat's account to an email — and so to the web.
+
+        The chat is the first door: its account already exists and already pays. The code
+        lets the person prove an email in the browser and join that same account, instead
+        of starting a second one on the site (2026-11-04)."""
+        settings = self.store.resolved(self.store.config(msg.channel))
+        base = str(settings.get("cloud_url") or "").strip().rstrip("/")
+        token = str(settings.get("cloud_bot_token") or "").strip()
+        if not base or not token:
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "This chat is not connected to the cloud yet; ask the owner to finish the setup.",
+                    "这个聊天还没有连接到云端，请让所有者完成设置。",
+                    "Этот чат ещё не подключён к облаку — попросите владельца закончить настройку.",
+                ),
+            )
+            return
+        code = ""
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.post(
+                    base + "/v1/bot/link-code",
+                    json={
+                        "channel": msg.channel,
+                        "chat_id": physical_chat(msg.channel, msg.chat_id),
+                        "device": "chat",
+                    },
+                    headers={"X-Bot-Token": token},
+                )
+                if response.status_code < 400:
+                    code = str((response.json() or {}).get("code") or "")
+        except Exception as exc:  # noqa: BLE001 — the chat hears a plain no, not a traceback
+            logger.warning("channel {}: link code failed: {}", msg.channel, exc)
+        if not code:
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "I could not make the code just now. Try again in a minute.",
+                    "现在没能生成代码，请稍后再试。",
+                    "Не получилось сделать код. Попробуйте через минуту.",
+                ),
+            )
+            return
+        link = f"{base}/app/?link={code}"
+        await self._send(
+            msg.channel,
+            msg.chat_id,
+            self.say(
+                f"Code: {code}\nOpen {link} and sign in with your email — it joins this account. The code lasts ten minutes.",
+                f"代码：{code}\n打开 {link}，用邮箱登录——邮箱会并入这个账户。十分钟内有效。",
+                f"Код: {code}\nОткройте {link} и войдите по почте — она прирастёт к этому аккаунту. Код действует десять минут.",
+            ),
+        )
 
     def pairing_text(self, code: str) -> str:
         # The reader may be a stranger: the bot is personal, and only its owner can let a
