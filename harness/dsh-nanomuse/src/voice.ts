@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
+import { registerTool } from './discovery.ts'
 
 export const name = 'nanomuse-voice'
 export const inject = ['tools']
@@ -193,7 +194,7 @@ async function speakOnWindows(text: string, config: Config): Promise<void> {
 export function apply(ctx: Context, config: Config): void {
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'speak',
           description:

@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from './cloud.ts'
 import type {} from './rooms.ts'
 import { AREAS, languageName } from './rooms.ts'
+import { registerTool } from './discovery.ts'
 
 export const name = 'nanomuse-rooms-tools'
 export const inject = ['tools', 'nanomuseRooms', 'nanomuseCloud']
@@ -22,7 +23,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'goals_room_update',
           description: "Update one of the person's goals in their Goals room (NanoLika's room, not this session's own goal — that is update_goal): the one-line status, a timeline entry, the title, or mark it done/paused/tracking. Call it whenever something happens on a goal worth noting — a check done, a price seen, a step finished. The goals and their ids are in your context.",
@@ -55,7 +56,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'feed_post',
           description: "Write a post into the person's Feed (their 动态 room): something they asked you to put there, a digest you made, a finding worth keeping. Markdown body, links inline. Not for ordinary replies.",
@@ -82,7 +83,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'library_add',
           description: "Put a file into the person's Library (their 资源库 room): a document, a web page, an image, a video or audio you made or found for them. `present` does this too for files you deliver at the end of a task; use this for files you want listed without delivering them.",
@@ -107,7 +108,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'remember',
           description: "Keep one fact about the person for every later chat (their Memory): a preference, a name, a routine, a decision they made. One line, in their words' language. Use it when they tell you something they will expect you to know next time; not for the task at hand.",
@@ -131,7 +132,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'draw_new_look',
           description: "Open the avatar studio on the person's screen with a description of the new look they asked for (\"change your avatar to an orange cat with a scarf\"). Four candidates are drawn there and they pick one; you do not draw the pictures yourself. Call it only when they ask for a new look.",
@@ -155,7 +156,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'make_music',
           description:
@@ -207,7 +208,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'make_image',
           description:

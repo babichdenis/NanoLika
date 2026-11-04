@@ -39,6 +39,10 @@
       "types": "./lib/types/memory-tools.d.ts",
       "default": "./lib/memory-tools.js"
     },
+    "./discovery": {
+      "types": "./lib/types/discovery.d.ts",
+      "default": "./lib/discovery.js"
+    },
     "./preview-tools": {
       "types": "./lib/types/preview-tools.d.ts",
       "default": "./lib/preview-tools.js"

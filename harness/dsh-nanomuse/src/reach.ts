@@ -30,6 +30,7 @@ import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from './cloud.ts'
 import { HubError, type HubDevice } from './hub.ts'
+import { registerTool } from './discovery.ts'
 
 export const CONVERSATION_CHANNEL_RULES = `## Conversation and messenger controls
 - A conversation is shared account history. Its title does not choose Telegram, MAX, a device, or a delivery destination.
@@ -90,7 +91,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'devices',
           description: "The person's other devices on NanoLika Cloud (phone, other computers): names, kinds, app control connection status. Online/offline describes the app control connection only, not Telegram/MAX delivery or chat sync. An offline iPhone app can still receive bot replies in its messenger. not_allowed denies remote device control, not chat delivery. Call before the device_* tools when unsure which device is which.",
@@ -123,7 +124,7 @@ export function apply(ctx: Context): void {
     'nanomuse reach: devices',
   )
 
-  ctx.effect(() => ctx.tools.register(defineTool({
+  ctx.effect(() => registerTool(ctx, defineTool({
     name: 'conversation_open',
     description: 'Open this same shared conversation in Telegram, MAX or this desktop. Desktop confirms only after its UI shows the chat. Uses account chat controls, not SSH or a model task. Preserves history. Ask the channel only when unclear. Telegram creates or reuses a topic; the person opens the topic in the Telegram client.',
     parameters: { channel: { type: 'string', enum: ['telegram', 'max', 'desktop'], required: true } },
@@ -145,7 +146,7 @@ export function apply(ctx: Context): void {
   const projections = new WeakMap<ToolExecution, ContentBlock[]>()
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'device_screen',
           description: "A screenshot of another device's screen right now (the phone's, or another computer's). Look, then decide; this does not touch the device.",
@@ -188,7 +189,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'device_shell',
           description: "Run a shell command on another device of the person's (its sandbox on a phone, the real shell on a computer). The person approves it here first. Prefer reads and builds; never anything that deletes, sends or pays without being asked to.",
@@ -238,7 +239,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'device_files',
           description: "List a folder on another device (its home folder when no path is given). Read-only; the person is asked first.",
@@ -275,7 +276,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'device_open',
           description: 'Open a URL (or a file path on that device) on another device, in its default app or browser. The person approves it here first.',
@@ -301,7 +302,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'device_notify',
           description: 'Show a notification on another device (e.g. a reminder on the phone).',
@@ -326,7 +327,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'delegate',
           description:

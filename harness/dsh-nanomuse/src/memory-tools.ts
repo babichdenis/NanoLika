@@ -10,6 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from './cloud.ts'
+import { registerTool } from './discovery.ts'
 
 export const name = 'nanomuse-memory-tools'
 export const inject = ['tools', 'nanomuseCloud']
@@ -46,7 +47,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'memory_remember',
           description:
@@ -81,7 +82,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'memory_recall',
           description:
@@ -127,7 +128,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'memory_forget',
           description:

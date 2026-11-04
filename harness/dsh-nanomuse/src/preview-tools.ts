@@ -14,6 +14,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from './cloud.ts'
 import { kindOfFile } from './preview-kind.ts'
 import { resolveUserPath } from './preview-file.ts'
+import { registerTool } from './discovery.ts'
 
 export const name = 'nanomuse-preview-tools'
 export const inject = ['tools', 'nanomuseCloud']
@@ -26,7 +27,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'preview_show',
           description:
@@ -67,7 +68,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(
     () =>
-      ctx.tools.register(
+      registerTool(ctx, 
         defineTool({
           name: 'preview_close',
           description: 'Take the side pane down when what is in it is no longer needed.',

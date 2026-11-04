@@ -272,6 +272,11 @@
           # Needs the cloud row (`nanomuse-cloud`).
           - id: nanomuse-preview-tools
             name: dsh-nanomuse/preview-tools
+          # The catalog behind a search: the tools that are not in every request live
+          # here until `tool_search` names one (src/discovery.ts). Registered after the
+          # rows above, so their definitions are already collected.
+          - id: nanomuse-discovery
+            name: dsh-nanomuse/discovery
           # The services connected on Settings → Connectors: one MCP client per
           # connection (src/connectors-tools.ts), through the host row
           # `nanomuse-connectors`' loopback proxy, which holds the credentials.
