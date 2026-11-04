@@ -37,6 +37,62 @@ def unescape_flat(content: str) -> tuple[str, bool]:
     return content.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t"), True
 
 
+OFFICE_READERS = {".docx": "word", ".xlsx": "excel", ".pptx": "powerpoint"}
+
+
+def office_text(path: Path, limit: int = 200_000) -> str:
+    """The text of a Word, Excel or PowerPoint file, the way a person sees it.
+
+    Halbot's trick (`pipeline/070_collect.mjs`, `officeparser`): never make the model read
+    a zipped OOXML blob — pull the words out and hand them over as text. The same libraries
+    that write these files read them back; when one is missing, the answer says so instead
+    of coming back as binary noise."""
+    suffix = path.suffix.lower()
+    kind = OFFICE_READERS.get(suffix)
+    if kind is None:
+        return ""
+    try:
+        if kind == "word":
+            import docx
+
+            document = docx.Document(str(path))
+            lines = [p.text for p in document.paragraphs if p.text.strip()]
+            for table in document.tables:
+                for row in table.rows:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    if any(cells):
+                        lines.append(" | ".join(cells))
+            return "\n".join(lines)[:limit]
+        if kind == "excel":
+            import openpyxl
+
+            book = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+            lines: list[str] = []
+            for sheet in book.worksheets:
+                lines.append(f"# {sheet.title}")
+                for row in sheet.iter_rows(values_only=True):
+                    cells = ["" if value is None else str(value) for value in row]
+                    if any(cell.strip() for cell in cells):
+                        lines.append("\t".join(cells))
+                    if sum(len(line) for line in lines) > limit:
+                        break
+            book.close()
+            return "\n".join(lines)[:limit]
+        from pptx import Presentation
+
+        deck = Presentation(str(path))
+        lines = []
+        for index, slide in enumerate(deck.slides, start=1):
+            lines.append(f"# slide {index}")
+            for shape in slide.shapes:
+                text = getattr(shape, "text", "")
+                if isinstance(text, str) and text.strip():
+                    lines.append(text)
+        return "\n".join(lines)[:limit]
+    except Exception as exc:  # noqa: BLE001 — a damaged file is a result, not a crash
+        return f"(this {suffix} could not be read: {type(exc).__name__}: {str(exc)[:200]})"
+
+
 def pdf_text(path: Path, max_pages: int = 60) -> str:
     """The text of a PDF, page by page — what the model reads when the user attaches one.
     Scanned PDFs have no text layer; the result says so instead of coming back empty."""
@@ -212,6 +268,11 @@ class Files(BaseTool):
                     # pypdf on a long document takes seconds: off the event loop, so the
                     # web app and the hub keep answering meanwhile
                     text = await asyncio.to_thread(pdf_text, target)
+                elif target.suffix.lower() in OFFICE_READERS:
+                    text = await asyncio.to_thread(office_text, target)
+                    if len(text) > MAX_READ_CHARS:
+                        text = text[:MAX_READ_CHARS] + "\n... [truncated]"
+                    return ToolResult(output=text or "(the document has no text)")
                     if len(text) > MAX_READ_CHARS:
                         text = text[:MAX_READ_CHARS] + f"\n... [truncated, {len(text)} chars total]"
                     return ToolResult(output=text or "(empty file)")
