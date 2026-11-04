@@ -1,0 +1,11 @@
+[Unit]
+Description=Раз в минуту: сторож людей nanoLika
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=nanolika-people-watch.service
+
+[Install]
+WantedBy=timers.target
