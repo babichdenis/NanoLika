@@ -1,6 +1,17 @@
 ; Установка поверх работающей копии: файлы нельзя менять под живым процессом, иначе
 ; приложение остаётся в нерабочем состоянии и его приходится «выковыривать» из процессов
 ; (23.10.2026). Перед распаковкой закрываем запущенную копию: сначала мягко, затем жёстко.
+; `preInit` вставлен в .onInit ДО проверки electron-builder «приложение запущено»
+; (`ALLOW_ONLY_ONE_INSTALLER_INSTANCE`). Раньше закрытие жило только в `customInit`, то есть
+; после проверки: если приложение было открыто, установщик успевал показать «Не удалось
+; закрыть NanoLika», хотя taskkill ниже сработал бы. 04.11.2026.
+!macro preInit
+  nsExec::Exec 'taskkill /IM NanoLika.exe /T'
+  Sleep 1200
+  nsExec::Exec 'taskkill /F /IM NanoLika.exe /T'
+  Sleep 600
+!macroend
+
 !macro customInit
   nsExec::Exec 'taskkill /IM NanoLika.exe /T'
   Sleep 1200
