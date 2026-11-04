@@ -46,9 +46,46 @@ async def test_the_provider_list_offers_github_and_keeps_the_widget_out(monkeypa
         assert (await client.get("/v1/auth/oauth/twitter/start")).status_code == 404
 
 
-async def test_unsupported_telegram_login_returns_a_response_not_a_type_error():
-    app, _cloud = stack()
+def _telegram_widget(token: str, user_id: str) -> dict[str, str]:
+    import hashlib
+    import hmac
+    import time
+
+    data = {
+        "id": user_id,
+        "first_name": "Лика",
+        "username": "lika",
+        "auth_date": str(int(time.time())),
+    }
+    check = "\n".join(f"{k}={data[k]}" for k in sorted(data))
+    secret = hashlib.sha256(token.encode()).digest()
+    data["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    return data
+
+
+async def test_telegram_widget_signs_in_the_account_the_bot_already_knows(monkeypatch):
+    """The widget proves the Telegram identity with the bot token; that identity opens the
+    web session, so an account born in a chat needs no password and no second registration.
+    A wrong signature is refused, and an identity with no account is refused too — the door
+    shows identities, it does not merge accounts by itself."""
+    monkeypatch.setenv("CLOUD_OAUTH_TELEGRAM_TOKEN", "fixture-token")
+    monkeypatch.setenv("CLOUD_OAUTH_TELEGRAM_BOT", "fixture_bot")
+    app, cloud = stack(public_base="https://cloud.test")
+    from nanomuse_cloud.service import chat_identity
+
+    cloud.sign_in(chat_identity("telegram", "777"), "Telegram", "test")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://cloud.test") as client:
-        response = await client.post("/v1/auth/oauth/telegram")
-        assert response.status_code == 410
-        assert response.json()["error"]["code"] == "email_required"
+        good = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "777"))
+        assert good.status_code == 200, good.text
+        assert "set-cookie" in {k.lower() for k in good.headers}
+        assert good.headers["cache-control"] == "private, no-store"
+
+        forged = _telegram_widget("fixture-token", "777")
+        forged["hash"] = "0" * 64
+        bad = await client.post("/v1/auth/oauth/telegram", json=forged)
+        assert bad.status_code == 401
+        assert bad.json()["error"]["code"] == "invalid_signature"
+
+        unknown = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "999"))
+        assert unknown.status_code == 409
+        assert unknown.json()["error"]["code"] == "telegram_not_linked"

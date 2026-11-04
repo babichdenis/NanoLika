@@ -386,8 +386,35 @@ def install_oauth(app, cloud, settings) -> None:
         return response
 
     @app.post("/v1/auth/oauth/telegram")
-    async def oauth_telegram() -> JSONResponse:
-        return JSONResponse(
-            {"error": {"code": "email_required", "message": "Use email, Yandex or Google to sign in. Link messengers from your account."}},
-            status_code=410,
-        )
+    async def oauth_telegram(request: Request) -> JSONResponse:
+        """Sign in with the Telegram Login Widget.
+
+        The widget signs its fields with the bot token; that proof is checked here, and the
+        Telegram identity the bot already knows opens the web session — an account born in a
+        chat has no password and needs no second registration. An account that has never
+        linked Telegram is refused (`telegram_not_linked`): the door shows identities, it
+        never merges two accounts on its own."""
+        state = provider_state("telegram")
+        if not state["enabled"]:
+            return JSONResponse({"error": {"code": "provider_off"}}, status_code=503)
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001 — a body that is not JSON is a bad request
+            payload = None
+        profile = check_telegram(payload) if isinstance(payload, dict) else None
+        if profile is None:
+            return JSONResponse({"error": {"code": "invalid_signature"}}, status_code=401)
+        from .channel_links import _telegram_session
+        from .service import CloudError
+
+        try:
+            result = await asyncio.to_thread(_telegram_session, cloud, int(profile["subject"]))
+        except CloudError as exc:
+            return JSONResponse(
+                {"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status
+            )
+        caller = await asyncio.to_thread(cloud.authenticate, result["api_key"])
+        response = JSONResponse({"ok": True, "account": result["account"]})
+        browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
