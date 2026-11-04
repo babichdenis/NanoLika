@@ -79,6 +79,17 @@ async def test_unrelated_computer_is_not_chosen_for_a_new_cloud_chat():
 
 
 @pytest.mark.asyncio
+async def test_another_computer_does_not_pick_up_a_desktop_chat():
+    """A chat of the Windows desktop must not be answered by the MacBook that merely holds
+    a synced copy: the person sees the answer switch machines behind their back."""
+    manager, thread, _device, calls = world()
+    thread.origin_device = "windows"
+    thread.timeline.events = [{"type": "assistant", "via_device": "windows"}]
+    assert await manager._shared_execution_device("main") is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_existing_desktop_is_probed_when_the_hello_marker_is_missing():
     manager, _, device, calls = world()
     device["actions"] = ["task", "chat.open_desktop"]

@@ -832,20 +832,13 @@ class ChannelManager(ChannelBus):
             if hit is not None:
                 return hit
         # A new cloud chat has no computer of its own: "cloud" in the evidence is the
-        # server, not a machine, and pulling an unrelated desktop into it is wrong. A
-        # browser's id is a device the hub knows, and the fallback below is for those.
+        # server, not a machine, and pulling an unrelated desktop into it is wrong.
         evidence = [item for item in preferred if item]
         if not evidence or set(evidence) <= {"cloud"}:
             return primary
-        # A browser's id can be the thread's origin or the last answer's `via_device`:
-        # it is never a computer, so the preferred list may name no computer at all.
-        # Then try every online computer that advertises the shared chat, best effort.
-        for device_id, device in devices.items():
-            if device_id in tried:
-                continue
-            hit = await probe(device_id, device)
-            if hit is not None:
-                return hit
+        # No unrelated computer: a chat of the desktop must not be answered by another
+        # machine that merely holds a synced copy of it (2026-11-04: a Windows chat was
+        # picked up by the MacBook as soon as the Windows app went offline).
         return None
 
     def _shared_runtime_context(self, thread_id: str) -> None:
