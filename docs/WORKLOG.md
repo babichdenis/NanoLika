@@ -1,3 +1,24 @@
+## 2026-11-04 · `nanomuse-discovery: never started` — плагин не был объявлен в пакете
+
+После перезапуска приложения в чатах появилось: `resume failed for session …:
+RemoteError: nanomuse-discovery (dsh-nanomuse/discovery): never started (gateway/internal)`.
+Сессия не возобновлялась, потому что плагин, который пресет подключает строкой
+`name: dsh-nanomuse/discovery`, не загружался.
+
+- **Причина.** В `package.json` бандла (`harness/dsh-nanomuse`) не было субпути
+  `./discovery` в `exports`. Node не резолвит модуль — плагин «никогда не стартовал», без
+  стека. В репозитории `./discovery` уже есть; расходились **собранные копии**: на Mac в
+  `~/.nanolika/desktop/plugins/dsh-nanomuse` лежала копия, где обновили `lib` и пресет, но не
+  `package.json`; в payload приложения и в стейджинге `harness/desktop/dsh` — та же старая
+  карта экспортов.
+- **Починка.** Добавил `./discovery` в `exports` у копии профиля и у payload на Mac,
+  перезапустил host (не приложение): `host: ready`, ошибок нет. Проверка резолва:
+  `import('dsh-nanomuse/discovery')` → `ok nanomuse-discovery`.
+- **Стейджинг Windows.** `build-win6.bat` запускает только electron-builder, поэтому
+  `harness/desktop/dsh` остаётся от прошлой сборки (там вообще нет discovery). Собирать
+  установщик нужно через `npm run dist` (prepare-dsh → prepare-plugin → tsc → electron-builder),
+  иначе harness в установщике отстаёт от репозитория.
+
 ## 2026-11-04 · Установщик: без кастомной иконки деинсталлятора
 
 У владельца установка встала на `C:\…\NanoLika\uninstallerIcon.ico`: NSIS с параметром
