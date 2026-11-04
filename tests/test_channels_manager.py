@@ -4,9 +4,11 @@ scripted model: pairing, allowlist, group policy, replies, approvals by word, de
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -545,6 +547,42 @@ def test_a_picture_from_the_conversation_workspace_is_sent(chan):
     sent = next(files for _, _, files in fake.sent if files)
     assert sent[0].endswith("pictures/fox.png")
     assert (pictures / "fox.png").is_file()
+
+
+def test_a_file_made_on_the_computer_arrives_as_a_document(chan, monkeypatch):
+    """The answer of a desktop turn names the file by a path of that computer
+    (`/Users/…`), which a phone cannot open. The bytes are fetched over the hub and the
+    chat gets the file itself; the words keep only its name."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+    payload = base64.b64encode(b"xlsx-bytes").decode()
+
+    async def call(
+        to: str,
+        action: str,
+        args: dict[str, Any] | None = None,
+        timeout: float = 120,
+        on_event=None,
+    ):  # noqa: ANN001
+        calls.append((to, action, dict(args or {})))
+        if action == "task":
+            return {"text": "Готово.\n\n[Скачать book.xlsx](</Users/ann/book.xlsx>)"}
+        if action == "file.get":
+            return {"name": "book.xlsx", "data": payload}
+        return {}
+
+    monkeypatch.setattr(
+        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
+    )
+    monkeypatch.setattr(service.hub, "call", call)
+    fake.bus.inbound(dm("сделай таблицу excel"))
+    wait_for(lambda: any(files for _, _, files in fake.sent))
+    _chat, text, files = next(item for item in fake.sent if item[2])
+    assert files[0].endswith("book.xlsx")
+    assert Path(files[0]).read_bytes() == b"xlsx-bytes"
+    assert "/Users/ann/book.xlsx" not in text and "Скачать book.xlsx" in text
+    assert ("dev-1", "file.get", {"path": "/Users/ann/book.xlsx"}) in calls
 
 
 def test_switching_off_and_on_and_removing_a_chat(chan):

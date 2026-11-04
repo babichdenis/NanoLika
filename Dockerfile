@@ -35,12 +35,12 @@ COPY --chown=muse:muse nanomuse ./nanomuse
 COPY --chown=muse:muse config/config.example.toml ./config/config.example.toml
 
 RUN if [ "$WITH_BROWSER" = "1" ]; then \
-      pip install --no-cache-dir ".[browser,channels]" \
+      pip install --no-cache-dir ".[browser,channels,office]" \
       && playwright install --with-deps chromium \
       && chmod -R a+rX /ms-playwright \
       && rm -rf /var/lib/apt/lists/*; \
     else \
-      pip install --no-cache-dir ".[channels]"; \
+      pip install --no-cache-dir ".[channels,office]"; \
     fi \
  && ln -s /workspace /app/workspace \
  && cp config/config.example.toml config/config.toml

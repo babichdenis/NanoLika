@@ -15,6 +15,7 @@ like a message typed in the app, and the events it produces are read off the ser
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import hashlib
 import json
@@ -78,6 +79,25 @@ def _is_media(mime: str, name: str) -> bool:
     return Path(name.split("?")[0]).suffix.lower() in MEDIA_SUFFIXES
 # A picture in an answer from another device: its Markdown form is turned back into the link.
 SHARE_IMAGE = re.compile(r"!\[[^\]]*\]\((https?://[^)\s]+)\)")
+# A file of the computer the chat is served by, linked by its own path: `/Users/…`,
+# `C:\…`. A phone cannot open it, so the file itself is fetched over the hub and sent.
+LOCAL_LINK = re.compile(r"\[([^\]]*)\]\(\s*<?((?:/|[A-Za-z]:[\\/])[^)\n>]*)>?\s*\)")
+
+
+def _local_links(text: str) -> list[str]:
+    return [match.group(2) for match in LOCAL_LINK.finditer(text)]
+
+
+def _without_local_links(text: str) -> str:
+    """What is left of an answer once the paths of another computer are gone: the label,
+    or the file's own name when the label says nothing."""
+
+    def keep(match: re.Match[str]) -> str:
+        label = match.group(1).strip()
+        return label or Path(match.group(2)).name
+
+    return LOCAL_LINK.sub(keep, text)
+
 
 if TYPE_CHECKING:
     from nanomuse.server.service import MuseService
@@ -1964,8 +1984,17 @@ class ChannelManager(ChannelBus):
                 live.status = self.say(f"on {name}", f"在 {name} 上", f"работает {name}")
                 self._schedule_flush(thread)
 
+            made: list[str] = []
+            shots: list[dict[str, Any]] = []
+
             async def on_event(body: dict[str, Any]) -> None:
                 stage = body.get("stage")
+                if stage == "file" and body.get("path"):
+                    made.append(str(body.get("path")))
+                    return
+                if stage == "image" and body.get("data"):
+                    shots.append(body)
+                    return
                 lv = self._live_for(thread)
                 if lv is None:
                     return
@@ -2070,6 +2099,18 @@ class ChannelManager(ChannelBus):
                     await self._send(msg.channel, msg.chat_id, _short(error))
                 return
             final = str(answer.get("text") or "").strip()
+            # A file made on that computer is not in this chat's reach: the person on a
+            # phone cannot open `/Users/…` or `C:\…`. The bytes come over the hub and the
+            # reply carries the file itself; the words keep only its name.
+            files = await self._device_files(
+                str(device.get("id") or ""),
+                thread,
+                made,
+                shots,
+                _local_links(final),
+            )
+            if files:
+                final = _without_local_links(final).strip()
             if final and (not fallback):
                 self._record_channel_reply(msg, final, thread_id=thread)
             await self._finish(
@@ -2078,12 +2119,49 @@ class ChannelManager(ChannelBus):
                 or self.say(
                     "(the device sent no answer)", "（设备没有回答）", "（устройство не ответило）"
                 ),
+                files=files or None,
             )
         finally:
             self.picker.remote_threads.discard(thread)
             for pending in self.picker.deferred.pop(thread, {}).values():
                 await self._deliver_synced_channel(pending)
             await self._set_typing(thread, False)
+
+    async def _device_files(
+        self,
+        device_id: str,
+        thread: str,
+        made: list[str],
+        shots: list[dict[str, Any]],
+        linked: list[str],
+    ) -> list[str]:
+        """The files a turn on a computer made, as paths this server can open.
+
+        The device names a file by its own path; the bytes are fetched over the hub
+        (`file.get`), because a chat on a phone cannot open a path of that computer. An
+        image the device sent inline arrives already encoded. A file that does not come
+        back is logged and left out: the words of the answer still reach the person."""
+        out: list[str] = []
+        for body in shots:
+            with contextlib.suppress(Exception):
+                saved = self.svc.save_upload(
+                    str(body.get("name") or "picture.png"),
+                    base64.b64decode(str(body.get("data") or "")),
+                    thread_id=thread,
+                )
+                out.append(str(self.svc.resolve_workspace_path(saved.path, thread_id=thread)))
+        for rel in dict.fromkeys([*made, *linked]):
+            try:
+                got = await self.svc.hub.call(device_id, "file.get", {"path": rel}, timeout=60)
+                saved = self.svc.save_upload(
+                    str(got.get("name") or Path(rel).name or "file"),
+                    base64.b64decode(str(got.get("data") or "")),
+                    thread_id=thread,
+                )
+                out.append(str(self.svc.resolve_workspace_path(saved.path, thread_id=thread)))
+            except Exception as exc:  # noqa: BLE001 — the chat still gets the words
+                logger.warning("channel: {} did not hand over {}: {}", device_id, rel, exc)
+        return out
 
     def _record_channel_reply(
         self, msg: InboundMessage, answer: str, *, thread_id: str = ""
