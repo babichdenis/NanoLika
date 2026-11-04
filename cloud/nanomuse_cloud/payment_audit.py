@@ -228,7 +228,22 @@ def install_payment_audit(app, cloud, payments, admin_dep):
 
     @app.get("/v1/admin/site-counter", dependencies=[Depends(admin_dep)])
     async def site_counter():
-        return await counter.get()
+        data = await counter.get()
+        # Где был посетитель: адрес из журнала посещений разбирает geo.py (ip2region на
+        # диске, без внешних сервисов). В счётчике на хостинге адрес настоящий, потому что
+        # его видит сам сайт; у аккаунтов в релее он часто адрес Caddy, поэтому регион
+        # осмысленно показывать именно здесь. Неизвестное поле не добавляем вовсе.
+        geo = getattr(app.state, "geo", None)
+        visits = data.get("visits") if isinstance(data, dict) else None
+        if visits and geo is not None and getattr(geo, "ready", False):
+            for visit in visits:
+                if not isinstance(visit, dict):
+                    continue
+                place = geo.place(str(visit.get("ip") or ""))
+                text = getattr(place, "text", "") if place is not None else ""
+                if text and text != "本地网络" and getattr(place, "local", False) is False:
+                    visit["place"] = text
+        return data
 
     @app.get("/v1/admin/payments/readiness", dependencies=[Depends(admin_dep)])
     async def payment_readiness():

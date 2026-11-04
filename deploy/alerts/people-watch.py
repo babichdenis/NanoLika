@@ -352,25 +352,57 @@ def check_sign_in_trouble(state: dict, connection: sqlite3.Connection) -> None:
 
 
 # ------------------------------------------------------------------------- сайт
-def check_visits(state: dict) -> None:
+ADMIN_TOKEN_FILE = HERE / "admin-access.txt"
+RELAY = os.environ.get("RELAY", "http://127.0.0.1:8790").rstrip("/")
+
+
+def site_visits() -> list[dict]:
+    """Журнал посещений — из админки релея, если есть токен, иначе у счётчика.
+
+    Релей уже складывает туда же регион каждого адреса (geo.py, ip2region на диске),
+    поэтому из админки заход приходит с местом: «Краснодар». Без токена работает
+    прямая выгрузка со счётчика — без региона.
+    """
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    if ADMIN_TOKEN_FILE.exists():
+        token = ADMIN_TOKEN_FILE.read_text(encoding="utf-8").strip()
+        request = urllib.request.Request(
+            f"{RELAY}/v1/admin/site-counter",
+            headers={"X-Admin-Token": token},
+        )
+        try:
+            with opener.open(request, timeout=25) as response:
+                data = json.load(response)
+        except Exception as exc:  # noqa: BLE001
+            note(f"админка релея не ответила: {exc!r}")
+        else:
+            if isinstance(data, dict) and data.get("details_available"):
+                return [row for row in data.get("visits") or [] if isinstance(row, dict)]
+            return []
     if not COUNTER_KEY_FILE.exists():
-        return
+        return []
     key = COUNTER_KEY_FILE.read_text(encoding="utf-8").strip()
     request = urllib.request.Request(
         f"{COUNTER}?details=1",
         headers={"X-Counter-Key": key, "User-Agent": "nanolika-people-watch/1.0"},
     )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=25) as response:
             data = json.load(response)
     except Exception as exc:  # noqa: BLE001
         note(f"счётчик не ответил: {exc!r}")
-        return
+        return []
     if not data.get("ok"):
+        return []
+    return [row for row in data.get("recent") or [] if isinstance(row, dict)]
+
+
+def check_visits(state: dict) -> None:
+    visits = site_visits()
+    if not visits:
         return
     last_id = int(state.get("visit_id") or 0)
-    fresh = [event for event in data.get("recent") or [] if int(event.get("id") or 0) > last_id]
+    fresh = [event for event in visits if int(event.get("id") or 0) > last_id]
     if not fresh:
         return
     state["visit_id"] = max(int(event.get("id") or 0) for event in fresh)
@@ -383,15 +415,22 @@ def check_visits(state: dict) -> None:
         page = PAGES.get(str(event.get("page") or ""), str(event.get("page") or "?"))
         source = SOURCES.get(str(event.get("source") or ""), str(event.get("source") or ""))
         device = device_of(str(event.get("ua") or ""))
+        place = str(event.get("place") or "").strip()
+        if place:
+            # «Russia · Krasnodar Krai · Krasnodar» → «Krasnodar»: в сообщении нужен город,
+            # страна и область только удлиняют строку; целиком это видно в админке.
+            place = place.split(" · ")[-1]
         when = datetime.fromtimestamp(float(event.get("at") or 0)).strftime("%H:%M")
         line = f"Заход на сайт · {when} · {page}"
         if source:
             line += f" · {source}"
-        if device:
+        if place:
+            line += f" · {place}"
+        elif device:
             line += f" · {device}"
         if send(line):
             stamps.append(time.time())
-            note(f"заход {event.get('id')} {page} {source}")
+            note(f"заход {event.get('id')} {page} {source} {place}")
     state["visit_sent"] = stamps
 
 
