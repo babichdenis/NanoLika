@@ -724,6 +724,13 @@ class TelegramTopics:
                     "/language",
                     "/pay",
                     "/permissions",
+                    "/rename",
+                    "/model",
+                    "/connect",
+                    "/подключить",
+                    "/unlink",
+                    "/отвязать",
+                    "/развязать",
                 )
             ]:
                 return False
