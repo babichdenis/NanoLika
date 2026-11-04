@@ -11,6 +11,7 @@ from nanomuse.tools.memory_tools import Forget, Recall, Remember
 from nanomuse.tools.models import Models
 from nanomuse.tools.office import OfficeConvert, OfficeVba, OfficeXlsm
 from nanomuse.tools.picture import Picture
+from nanomuse.tools.share import ShareFile
 from nanomuse.tools.reminder_tools import Reminders
 from nanomuse.tools.shell import PythonExecute, Shell
 from nanomuse.tools.skills_tool import Skills
@@ -38,6 +39,7 @@ __all__ = [
     "OfficeVba",
     "OfficeXlsm",
     "Picture",
+    "ShareFile",
     "Video",
     "PythonExecute",
     "ReadEmails",

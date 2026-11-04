@@ -19,7 +19,6 @@ import base64
 import contextlib
 import hashlib
 import json
-import mimetypes
 import re
 import tempfile
 import time
@@ -54,6 +53,7 @@ from nanomuse.cloud import CloudError
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
 from nanomuse.memory import account_scope, channel_scope
+from nanomuse.mime import file_mime
 from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
 
@@ -1509,7 +1509,7 @@ class ChannelManager(ChannelBus):
         key = self.svc.app.vault.get(CLOUD_KEY)
         if not key:
             return ""
-        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        mime = file_mime(path.name)
         client = CloudClient(base_url=self.svc.settings.cloud.base_url, api_key=key)
         try:
             return await client.upload(path.name, path.read_bytes(), mime)
