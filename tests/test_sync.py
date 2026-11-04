@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from nanomuse.cloud import CloudClient, CloudError
 from nanomuse.config import Settings
 from nanomuse.llm import MockLLM
-from nanomuse.schema import LLMResponse
+from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
 from nanomuse.server.events import MAIN_THREAD
 from nanomuse.server.service import MuseService
@@ -452,6 +452,42 @@ def _events(client: TestClient, thread: str) -> list[dict[str, Any]]:
 
 
 # ----------------------------------------------------------------------------- push
+def tc(name: str, **args: Any) -> ToolCall:
+    import json
+
+    return ToolCall(function=Function(name=name, arguments=json.dumps(args)))
+
+
+def test_a_file_made_in_a_turn_is_synced_with_its_link(synced) -> None:
+    """A document made here stays here; the conversation carries text. The file goes to the
+    account's storage and its link travels with the answer, so the desktop can draw a chip
+    and open it (`RemoteBubbles.ts` already does that for a file with a url)."""
+    client, service, llm, relay = synced
+    uploaded: list[tuple[str, bytes, str]] = []
+
+    async def upload(name: str, data: bytes, mime: str) -> str:
+        uploaded.append((name, data, mime))
+        return f"https://cloud.nanolika.ru/v1/files/files/x/{name}"
+
+    relay.cloud.upload = upload  # type: ignore[attr-defined]
+    llm.script.extend(
+        [
+            LLMResponse(
+                tool_calls=[tc("files", action="write", path="letter.docx", content="docx")]
+            ),
+            LLMResponse(content="Готово: letter.docx", finish_reason="stop"),
+        ]
+    )
+    client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "сделай документ"})
+    wait_for(lambda: any(m["role"] == "assistant" for m in relay.msgs.values()))
+    answer = next(m for m in relay.msgs.values() if m["role"] == "assistant")
+    attachments = answer.get("attachments") or []
+    assert attachments, "the file travels with the answer"
+    assert attachments[0]["name"] == "letter.docx"
+    assert attachments[0]["url"].startswith("https://cloud.nanolika.ru/v1/files/")
+    assert uploaded and uploaded[0][1] == b"docx"
+
+
 def test_a_finished_turn_is_pushed_as_the_main_conversation(synced) -> None:
     client, service, llm, relay = synced
     llm.script.append(LLMResponse(content="Hello from the desk", finish_reason="stop"))

@@ -63,11 +63,13 @@ import json
 import time
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from nanomuse.channels.origin import conversation_origin
 from nanomuse.cloud import CloudError
 from nanomuse.logger import logger
+from nanomuse.mime import file_mime
 from nanomuse.schema import Message
 from nanomuse.server.events import MAIN_THREAD, now_iso
 from nanomuse.sync.client import SyncClient
@@ -894,6 +896,7 @@ class ConversationSync:
                         "name": str(f.get("name") or "")[:200],
                         "mime": str(f.get("mime") or "")[:100],
                         "size": int(f.get("size") or 0),
+                        "url": str(f.get("url") or "")[:2000],
                     }
                 )
         return out
@@ -913,7 +916,65 @@ class ConversationSync:
             stem = stem[3:]
         return f"{prefix}-{stem}"[:80] if stem else ""
 
-    def _unsynced(self, thread: Thread, cid: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    async def _attach_turn_files(self, thread: Thread, ev: dict[str, Any]) -> None:
+        """The files this turn made, carried to the other devices as links.
+
+        The text of a conversation is all that syncs; a document made here stays here. So
+        the artifact events between the person's message and this answer are uploaded to
+        the account's storage and named in the message: the desktop draws them as file
+        chips and opens them beside the chat (`RemoteBubbles.ts`)."""
+        if ev.get("files"):
+            return
+        made: list[dict[str, Any]] = []
+        events = thread.timeline.events
+        try:
+            start = len(events) - 1 - events[::-1].index(ev)
+        except ValueError:
+            start = len(events)
+        for item in reversed(events[:start]):
+            kind = item.get("type")
+            if kind == "user":
+                break
+            if kind != "artifact" or not item.get("path"):
+                continue
+            rel = str(item.get("path") or "")
+            try:
+                path = self.svc.resolve_workspace_path(rel, thread_id=thread.id)
+            except Exception:  # noqa: BLE001 — a file outside this conversation is not ours
+                continue
+            if not path.is_file():
+                continue
+            url = str(item.get("url") or "")
+            if not url:
+                url = await self._upload_file(path)
+                item["url"] = url
+            made.append(
+                {
+                    "name": path.name,
+                    "mime": file_mime(path.name),
+                    "size": path.stat().st_size,
+                    "url": url,
+                    "path": rel,
+                    "kind": "artifact",
+                }
+            )
+        if made:
+            ev["files"] = list(reversed(made))
+
+    async def _upload_file(self, path: Path) -> str:
+        """The stable relay link for a file, or "" when the storage is not there."""
+        cloud = getattr(self.client, "cloud", None)
+        if cloud is None:
+            return ""
+        try:
+            return await cloud.upload(path.name, path.read_bytes(), file_mime(path.name))
+        except Exception as exc:  # noqa: BLE001 — a file without a link is not a lost turn
+            logger.warning("sync: {} was not uploaded: {}", path.name, exc)
+            return ""
+
+    async def _unsynced(
+        self, thread: Thread, cid: str
+    ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
         """(event, wire message) for every user / final assistant text not yet on the relay."""
         out: list[tuple[dict[str, Any], dict[str, Any]]] = []
         channel = ""
@@ -936,6 +997,8 @@ class ConversationSync:
                 # must not inherit the channel's label
                 channel = str(ev.get("via_channel") or "")
             text = str(ev.get("text") or "")
+            if kind == "assistant":
+                await self._attach_turn_files(thread, ev)
             attachments = self._attachments(ev)
             if not text.strip() and not attachments:
                 continue
@@ -1019,7 +1082,7 @@ class ConversationSync:
                     if folder_changed:
                         row["folder"] = folder
                     conversations.append(row)
-                for ev, wire in self._unsynced(thread, cid):
+                for ev, wire in await self._unsynced(thread, cid):
                     if len(messages) >= BATCH:
                         break
                     messages.append(wire)

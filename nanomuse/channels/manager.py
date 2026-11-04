@@ -1192,7 +1192,7 @@ class ChannelManager(ChannelBus):
             files = [str(path) for path in fetched]
         if files:
             text = SHARE_IMAGE.sub("", text).strip()
-            text = await self._name_artifacts(text, pending)
+            text = await self._name_artifacts(thread, text, pending)
         channel = self.channels.get(route[0])
         if channel is None:
             return
@@ -1489,13 +1489,23 @@ class ChannelManager(ChannelBus):
                 taken.append((rel, path))
         return taken
 
-    async def _name_artifacts(self, text: str, pending: list[tuple[str, Path]]) -> str:
+    async def _name_artifacts(
+        self, thread: str, text: str, pending: list[tuple[str, Path]]
+    ) -> str:
         """A path of this runtime is not an address a phone or another device can open: the
         words keep the file's name, with a link to our storage when the relay has one."""
+        # The sync engine uploads the same files before the message is pushed; its link is
+        # reused here instead of storing the file twice.
+        known: dict[str, str] = {}
+        thread_obj = self.svc.threads.get(thread)
+        if thread_obj is not None:
+            for item in thread_obj.timeline.events:
+                if item.get("type") == "artifact" and item.get("path") and item.get("url"):
+                    known[str(item["path"])] = str(item["url"])
         for rel, path in pending:
             if not rel or rel not in text:
                 continue
-            link = await self._artifact_link(path)
+            link = known.get(rel) or await self._artifact_link(path)
             text = text.replace(rel, f"[{path.name}]({link})" if link else path.name)
         return text
 
