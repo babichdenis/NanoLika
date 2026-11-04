@@ -1069,10 +1069,20 @@ class ChannelManager(ChannelBus):
         await self._send(channel, chat_id, text)
 
     def pairing_text(self, code: str) -> str:
+        # The reader may be a stranger: the bot is personal, and only its owner can let a
+        # chat in. "Open the app" is a dead end for a guest who has no app — say whose move
+        # it is (2026-11-04: a daughter wrote to the bot and got the owner's instruction).
         return self.say(
-            f"Pairing code: {code}\nApprove it in nanoLika, Settings → Chat apps. The code lasts ten minutes.",
-            f"配对码：{code}\n请在 nanoLika 的「设置 → 聊天入口」中确认，十分钟内有效。",
-            f"Код для привязки: {code}\nПодтверди его в nanoLika, Настройки → Каналы. Код действует десять минут.",
+            f"Pairing code: {code}\n"
+            "If this bot is yours, approve it in nanoLika → Settings → Chat apps. "
+            "If it is not, ask its owner to approve this code. The code lasts ten minutes.",
+            f"配对码：{code}\n"
+            "如果这个机器人是你的，请在 nanoLika →「设置 → 聊天入口」中确认；"
+            "如果不是，请让它的主人确认这个码。十分钟内有效。",
+            f"Код для привязки: {code}\n"
+            "Если бот ваш — подтвердите код в nanoLika, Настройки → Каналы. "
+            "Если бот не ваш — попросите владельца подтвердить этот код. "
+            "Код действует десять минут.",
         )
 
     # ------------------------------------------------------------------ outbound helpers
