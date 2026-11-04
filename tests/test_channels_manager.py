@@ -518,6 +518,35 @@ def test_files_in_and_out(chan, settings: Settings):
     assert files[0].endswith("out.txt")
 
 
+def test_a_picture_from_the_conversation_workspace_is_sent(chan):
+    """A file the turn made lives in the conversation's own workspace
+    (`…/threads/<id>/pictures/…`), while the artifact event names it relative to that
+    workspace. Resolved against the installation workspace it was not found, and the
+    channels skip a missing file without a word: the picture never reached the chat."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    own = thread_id_for("fake", "chat1")
+    llm.script.append(LLMResponse(content="Here is the fox."))
+    fake.bus.inbound(dm("draw a fox"))
+    wait_for(lambda: any("Here is the fox" in t for t in fake.texts()))
+
+    pictures = service.workspace_for_thread(own) / "pictures"
+    pictures.mkdir(parents=True, exist_ok=True)
+    (pictures / "fox.png").write_bytes(b"\x89PNG fox")
+    emit(
+        manager,
+        {
+            "kind": "event",
+            "event": {"type": "artifact", "thread": own, "path": "pictures/fox.png"},
+        },
+    )
+    emit(manager, {"kind": "status", "status": {"thread": own, "state": "idle"}})
+    wait_for(lambda: any(files for _, _, files in fake.sent))
+    sent = next(files for _, _, files in fake.sent if files)
+    assert sent[0].endswith("pictures/fox.png")
+    assert (pictures / "fox.png").is_file()
+
+
 def test_switching_off_and_on_and_removing_a_chat(chan):
     client, service, llm, manager, fake = chan
     pair(client, fake)

@@ -1165,9 +1165,10 @@ class ChannelManager(ChannelBus):
         # what the person could not open. Files already attached win; otherwise the links
         # are fetched from our storage and sent the same way.
         linked = [url for url in SHARE_IMAGE.findall(text) if self._share_allowed(url)]
+        fetched: list[Path] = []
         if not files and linked:
-            fetched = await self._fetch_shared(linked)
-            files = [str(path) for _url, path in fetched]
+            fetched = [path for _url, path in await self._fetch_shared(linked)]
+            files = [str(path) for path in fetched]
         if files:
             text = SHARE_IMAGE.sub("", text).strip()
         channel = self.channels.get(route[0])
@@ -1205,8 +1206,17 @@ class ChannelManager(ChannelBus):
         self._spawn(self._say_back(thread, primary, channel, text))
         targets = set(self.picker.targets(thread)) | self.picker.pins.pop(thread, set())
         for other in targets - {primary}:
-            if text.strip():
-                await self._send(other[0], other[1], self.picker.reply_text(thread, other, text))
+            # The picture travels with the words: a linked chat that only got the text
+            # showed a bare markdown link where the other one had an image.
+            if text.strip() or files:
+                await self._send(
+                    other[0],
+                    other[1],
+                    self.picker.reply_text(thread, other, text),
+                    files=files,
+                )
+        for path in fetched:
+            path.unlink(missing_ok=True)
 
     async def _say_back(
         self, thread: str, route: tuple[str, str], channel: Channel, text: str
@@ -1435,8 +1445,9 @@ class ChannelManager(ChannelBus):
         files = self._artifacts.pop(thread, [])
         paths: list[str] = []
         for rel in files:
-            with contextlib.suppress(Exception):
-                paths.append(str(self.svc.resolve_workspace_path(rel)))
+            path = self._artifact_path(thread, rel)
+            if path is not None:
+                paths.append(str(path))
         if live is not None and (live.text.strip() or live.shown):
             await self._finish(thread, live.text or live.shown, files=paths or None)
         else:
@@ -1450,6 +1461,23 @@ class ChannelManager(ChannelBus):
                 await self._finish(thread, "", files=paths)
         await self._set_typing(thread, False)
         await self._mark(thread, "done")
+
+    def _artifact_path(self, thread: str, rel: str) -> Path | None:
+        """Where the file an artifact event names actually is.
+
+        The event's path is relative to the workspace the run was looking at. Inside a
+        chat that is the conversation's own workspace — `…/threads/<id>/pictures/…` — so
+        resolving it against the installation workspace found nothing, and both channels
+        skip a file that is not on disk without a word (`Path.is_file()`): the picture was
+        drawn, paid for and never sent.
+        """
+        for kwargs in ({"thread_id": thread}, {}):
+            with contextlib.suppress(Exception):
+                path = self.svc.resolve_workspace_path(rel, **kwargs)
+                if path.is_file():
+                    return path
+        logger.warning("channel: artifact {} of thread {} is not on disk", rel, thread)
+        return None
 
     def _tool_label(self, event: dict[str, Any]) -> str:
         title = str(event.get("title") or "").strip()
