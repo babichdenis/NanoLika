@@ -55,7 +55,10 @@ asar: true
 # loaded with require() from a real file, not from inside the archive (src/operator.ts)
 asarUnpack:
   - "**/node_modules/@computer-use/**"
-compression: normal
+# store: 7-Zip's -mx=9 hit a stack overflow (0xC00000FD) on the 21 880-file harness
+# (2026-11-04, twice on .8). The installer is ~80 MB larger, the packaging is minutes
+# faster and does not crash; the download is a one-off, the first launch is not.
+compression: store
 npmRebuild: false
 nodeGypRebuild: false
 publish: null
