@@ -1433,10 +1433,12 @@ class ChannelManager(ChannelBus):
         if kind == "notice" and ours and (event.get("level") == "error"):
             text = str(event.get("text") or "").strip()
             if event.get("code") == "allowance_exhausted":
+                # The trial ends in the chat: this person may have no app at all. Point at
+                # the door they are in (/pay), not at the one they do not have yet.
                 text = self.say(
-                    "The free allowance of this account is used up. Sign in to the app to top it up, or invite a friend for more.",
-                    "这个账户的免费额度用完了。登录应用充值，或邀请朋友获得更多额度。",
-                    "Бесплатный запас этого аккаунта закончился. Войди в приложение, чтобы пополнить, или пригласи друга и получи ещё.",
+                    "The free allowance is used up. Top up right here with /pay, or invite a friend for more.",
+                    "免费额度用完了。在这里用 /pay 充值，或邀请朋友获得更多额度。",
+                    "Бесплатный запас закончился. Пополнить можно прямо здесь: /pay. Или пригласи друга — дадим ещё.",
                 ) + (f"\n\n{text}" if text else "")
             if text:
                 await self._send_to_thread(thread, text)
