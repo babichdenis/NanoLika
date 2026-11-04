@@ -565,6 +565,32 @@ def test_a_file_made_on_the_computer_arrives_as_a_document(chan, monkeypatch):
     assert ("dev-1", "file.get", {"path": "/Users/ann/book.xlsx"}) in calls
 
 
+def test_a_file_is_named_in_the_words_and_sent_once(chan):
+    """The reply names the file by a path of this runtime (`documents/x.docx`); a phone
+    cannot open that. The chat gets the file once, and the words keep only its name."""
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    own = thread_id_for("fake", "chat1")
+    documents = service.workspace_for_thread(own) / "documents"
+    documents.mkdir(parents=True, exist_ok=True)
+    (documents / "letter.docx").write_bytes(b"docx")
+    emit(
+        manager,
+        {
+            "kind": "event",
+            "event": {"type": "artifact", "thread": own, "path": "documents/letter.docx"},
+        },
+    )
+    llm.script.append(LLMResponse(content="Готово: documents/letter.docx"))
+    fake.bus.inbound(dm("сделай документ"))
+    wait_for(lambda: any(files for _, _, files in fake.sent))
+    sent = [item for item in fake.sent if item[2]]
+    assert len(sent) == 1, "the file goes out once"
+    _chat, text, files = sent[0]
+    assert files[0].endswith("documents/letter.docx")
+    assert "documents/letter.docx" not in text and "letter.docx" in text
+
+
 def test_switching_off_and_on_and_removing_a_chat(chan):
     client, service, llm, manager, fake = chan
     pair(client, fake)

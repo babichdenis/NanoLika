@@ -19,6 +19,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import mimetypes
 import re
 import tempfile
 import time
@@ -1160,13 +1161,23 @@ class ChannelManager(ChannelBus):
             return
         await self._send(route[0], route[1], text)
 
-    async def _finish(self, thread: str, text: str, *, files: list[str] | None = None) -> None:
+    async def _finish(
+        self,
+        thread: str,
+        text: str,
+        *,
+        files: list[str] | None = None,
+        artifacts: list[tuple[str, Path]] | None = None,
+    ) -> None:
         """The reply (one assistant bubble) is complete: the live message gets its final
         text, or a message is sent where nothing was streamed yet."""
         live = self._live.pop(thread, None)
         route = (live.channel, live.chat_id) if live is not None else self.routes.get(thread)
         if route is None:
             return
+        # What the turn made goes out once, with this reply: taking it here also keeps the
+        # picture from being fetched out of the text and then sent again by `_run_ended`.
+        pending = artifacts if artifacts is not None else self._take_artifacts(thread)
         text = self._redact_outbound(text)
         # A picture the reply points at is sent as the picture, never left as Markdown:
         # Telegram turns `![picture](url)` into a bare "!picture" link, which is exactly
@@ -1174,11 +1185,14 @@ class ChannelManager(ChannelBus):
         # are fetched from our storage and sent the same way.
         linked = [url for url in SHARE_IMAGE.findall(text) if self._share_allowed(url)]
         fetched: list[Path] = []
+        if not files and pending:
+            files = [str(path) for _rel, path in pending]
         if not files and linked:
             fetched = [path for _url, path in await self._fetch_shared(linked)]
             files = [str(path) for path in fetched]
         if files:
             text = SHARE_IMAGE.sub("", text).strip()
+            text = await self._name_artifacts(text, pending)
         channel = self.channels.get(route[0])
         if channel is None:
             return
@@ -1450,14 +1464,10 @@ class ChannelManager(ChannelBus):
 
     async def _run_ended(self, thread: str) -> None:
         live = self._live.get(thread)
-        files = self._artifacts.pop(thread, [])
-        paths: list[str] = []
-        for rel in files:
-            path = self._artifact_path(thread, rel)
-            if path is not None:
-                paths.append(str(path))
+        pending = self._take_artifacts(thread)
+        paths = [str(path) for _rel, path in pending]
         if live is not None and (live.text.strip() or live.shown):
-            await self._finish(thread, live.text or live.shown, files=paths or None)
+            await self._finish(thread, live.text or live.shown, artifacts=pending)
         else:
             self._live.pop(thread, None)
             stale = self.channels.get(live.channel) if live is not None and live.shown else None
@@ -1466,9 +1476,48 @@ class ChannelManager(ChannelBus):
                 with contextlib.suppress(Exception):
                     await stale.discard(live.chat_id, live.stream_id)
             if paths:
-                await self._finish(thread, "", files=paths)
+                await self._finish(thread, "", artifacts=pending)
         await self._set_typing(thread, False)
         await self._mark(thread, "done")
+
+    def _take_artifacts(self, thread: str) -> list[tuple[str, Path]]:
+        """The files this turn made, as the event names them and as they are on disk."""
+        taken: list[tuple[str, Path]] = []
+        for rel in self._artifacts.pop(thread, []):
+            path = self._artifact_path(thread, rel)
+            if path is not None:
+                taken.append((rel, path))
+        return taken
+
+    async def _name_artifacts(self, text: str, pending: list[tuple[str, Path]]) -> str:
+        """A path of this runtime is not an address a phone or another device can open: the
+        words keep the file's name, with a link to our storage when the relay has one."""
+        for rel, path in pending:
+            if not rel or rel not in text:
+                continue
+            link = await self._artifact_link(path)
+            text = text.replace(rel, f"[{path.name}]({link})" if link else path.name)
+        return text
+
+    async def _artifact_link(self, path: Path) -> str:
+        """The stable relay link for a file the turn made, or "" when there is no storage."""
+        from nanomuse.cloud import CLOUD_KEY, CloudClient
+
+        with contextlib.suppress(OSError):
+            if path.stat().st_size > SHARE_MAX_BYTES:
+                return ""
+        key = self.svc.app.vault.get(CLOUD_KEY)
+        if not key:
+            return ""
+        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        client = CloudClient(base_url=self.svc.settings.cloud.base_url, api_key=key)
+        try:
+            return await client.upload(path.name, path.read_bytes(), mime)
+        except Exception as exc:  # noqa: BLE001 — the chat still gets the file itself
+            logger.warning("channel: {} was not uploaded: {}", path.name, exc)
+            return ""
+        finally:
+            await client.close()
 
     def _artifact_path(self, thread: str, rel: str) -> Path | None:
         """Where the file an artifact event names actually is.
