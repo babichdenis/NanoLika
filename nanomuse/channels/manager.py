@@ -1988,11 +1988,17 @@ class ChannelManager(ChannelBus):
                     )
                     if applied.get("mode") != mode:
                         raise ValueError("permission mode was not applied")
-                except Exception:
-                    from nanomuse.channels.menu import COPY
-
-                    await self._finish(thread, COPY[self.menu.language(msg)]["remote_old"])
-                    return
+                except Exception as exc:  # noqa: BLE001 - an older desktop, or the card timed out
+                    # The turn must not die because the access mode did not apply: the app's
+                    # own settings still hold, which is the safe default. Saying "the installed
+                    # version cannot change access" and dropping the turn is what a person saw
+                    # after asking for a picture (2026-11-04).
+                    logger.warning(
+                        "channel {}: the access mode {} was not applied ({}); the turn runs with the app's settings",
+                        msg.channel,
+                        mode,
+                        exc,
+                    )
             try:
                 if shared_cid:
                     for endpoint in set(self.picker.targets(thread)) | {(msg.channel, msg.chat_id)}:
