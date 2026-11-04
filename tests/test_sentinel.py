@@ -371,6 +371,41 @@ async def test_gate_warnings_are_never_covered_by_grants(tmp_path: Path):
     assert asks(ui) == 2
 
 
+async def test_gate_full_access_lets_one_always_cover_local_code(tmp_path: Path):
+    """In a full-access chat the owner may turn a warning about local work (shell, code,
+    files) into one standing permission: a task is not a card per step. Revoking it is the
+    ordinary grant list. Another tool with a warning still asks every time."""
+
+    class Code(Echo):
+        name: str = "shell"
+
+        def assess(self, args: dict[str, Any]) -> CallAssessment:
+            return CallAssessment(
+                risk=RiskLevel.SENSITIVE, summary="runs code", warnings=["no sandbox"]
+            )
+
+    ui = ScopedUI(scope="always")
+    gate = Sentinel(SentinelSettings(), AuditLog(tmp_path / "a.jsonl"), ui)
+    gate.channel_mode = lambda _thread: "full-access"
+    token = gate.begin_task("build a document")
+    await gate.guard(call("shell", text="python -c 'print(1)'"), Code())
+    assert asks(ui) == 1
+    assert "always" in ui.requests[-1].grant_options, "one approval can stand for the tool"
+    await gate.guard(call("shell", text="python -c 'print(2)'"), Code())
+    assert asks(ui) == 1, "the standing permission covers the next step of the same task"
+    gate.end_task(token)
+
+    other = ScopedUI(scope="always")
+    gate_other = Sentinel(SentinelSettings(), AuditLog(tmp_path / "b.jsonl"), other)
+    await gate_other.guard(call("echo", text="1"), RiskyEcho())
+    assert other.requests[-1].grant_options == ["once"]
+
+
+class RiskyEcho(Echo):
+    def assess(self, args: dict[str, Any]) -> CallAssessment:
+        return CallAssessment(risk=RiskLevel.SENSITIVE, summary="risky", warnings=["careful"])
+
+
 async def test_gate_auto_mode_still_asks_on_warnings(tmp_path: Path):
     """Policy step 6 keeps a call with a warning an ASK in auto mode; the gate used to
     turn every ASK into ALLOW there, so `rm -rf` ran unattended."""

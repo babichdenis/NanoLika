@@ -142,17 +142,25 @@ class Sentinel:
         return self.grants.active(ctx.conversation_id if ctx else None)
 
     @staticmethod
-    def grant_options(assessment: CallAssessment, target: str | None) -> list[str]:
+    def grant_options(
+        assessment: CallAssessment, target: str | None, *, standing: bool = False
+    ) -> list[str]:
         """Which standing permissions to offer. Calls with warnings get none: a
-        dangerous-looking command or a purchase is approved every single time."""
-        if assessment.warnings:
+        dangerous-looking command or a purchase is approved every single time — unless the
+        conversation is in full access and the call is local work (shell, code, files, see
+        :func:`full_access_standing`), where one "always" is the whole point."""
+        if assessment.warnings and not standing:
             return ["once"]
         options = ["once", "conversation"]
         unknown_destination = target is None and assessment.egress
-        if unknown_destination and assessment.risk.rank >= RiskLevel.MODERATE.rank:
+        if (
+            unknown_destination
+            and assessment.risk.rank >= RiskLevel.MODERATE.rank
+            and not standing
+        ):
             return options  # arbitrary code with network access: never a standing grant
         options += ["session", "24h"]
-        if target is not None or assessment.risk != RiskLevel.SENSITIVE:
+        if standing or target is not None or assessment.risk != RiskLevel.SENSITIVE:
             options.append("always")
         return options
 
@@ -252,9 +260,13 @@ class Sentinel:
         scope: str | None = None
 
         if decision == Decision.ASK:
+            from nanomuse.channels.permission_mode import full_access_standing
+
+            standing = full_access_standing(mode, tool.name)
             grant = (
                 None
-                if assessment.warnings or mode in {"read-only", "workspace-write"}
+                if (assessment.warnings and not standing)
+                or mode in {"read-only", "workspace-write"}
                 else self.grants.match(key, task.conversation_id if task else None)
             )
             # auto mode skips the question, except for a call that carries a warning or
@@ -271,7 +283,7 @@ class Sentinel:
                 scope = grant.scope
                 reasons.append(f"covered by your '{grant.scope}' permission for {grant.key}")
             else:
-                options = self.grant_options(assessment, target)
+                options = self.grant_options(assessment, target, standing=standing)
                 request = ApprovalRequest(
                     tool=tool.name,
                     args=args,

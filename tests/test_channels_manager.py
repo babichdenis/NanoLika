@@ -396,15 +396,12 @@ def test_one_memory_shared_chats_write_into_the_main_thread(chan):
     assert thread_id_for("fake", "chat1") not in manager.routes
 
 
-def test_a_stale_permission_mode_does_not_swallow_a_shared_chat_turn(chan, monkeypatch):
-    """A mode saved before `shared_thread` was switched on must not be sent to the desktop:
-    its access is the app setting, and a failed apply used to end the turn with remote_old."""
-    from nanomuse.server.events import MAIN_THREAD
-
-    client, service, _llm, manager, fake = chan
-    service.settings.channels.shared_thread = True
+def test_an_online_computer_does_not_take_an_ordinary_chat_message(chan, monkeypatch):
+    """The computer is hands, not the brain. With its app online and `hub.primary` naming it,
+    an ordinary message is still answered here: sending every turn to the desktop made a
+    chat wait on a machine, ask its cards and end with "the computer has not finished"."""
+    client, service, llm, manager, fake = chan
     pair(client, fake)
-    manager.menu.preferences.put(MAIN_THREAD, mode="full-access")
     calls: list[str] = []
 
     async def call(
@@ -417,24 +414,21 @@ def test_a_stale_permission_mode_does_not_swallow_a_shared_chat_turn(chan, monke
         calls.append(action)
         return {"text": "The shared chat answered."}
 
+    llm.script.append(LLMResponse(content="Answered here."))
     monkeypatch.setattr(
         service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
     )
     monkeypatch.setattr(service.hub, "call", call)
     fake.bus.inbound(dm("are you there?"))
-    wait_for(lambda: any("shared chat answered" in t for t in fake.texts()))
-    assert calls == ["task"], "no channel_permissions call for a shared chat"
+    wait_for(lambda: any("Answered here." in t for t in fake.texts()))
+    assert calls == [], "an ordinary message is never handed to the desktop"
 
 
-def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
-    """With `hub.primary` naming an online device, a chat's message goes there as a task and
-    its answer lands in the chat — the Muse on this machine does not answer it too."""
+def test_computer_command_hands_the_turn_to_the_desktop(chan, monkeypatch):
+    """`/computer` is the one explicit way to use the hands: the words travel to the
+    computer as a task and its answer lands in the chat."""
     client, service, llm, manager, fake = chan
     pair(client, fake)
-    own = thread_id_for("fake", "chat1")
-    fake.bus.inbound(dm("one more"))
-    wait_for(lambda: llm.calls)
-    wait_for(lambda: not service.threads[own].busy)
     calls: list[tuple[str, str, dict[str, Any]]] = []
 
     async def call(
@@ -445,48 +439,25 @@ def test_a_chat_is_served_by_the_primary_device(chan, monkeypatch):
         on_event=None,
     ):  # noqa: ANN001
         calls.append((to, action, dict(args or {})))
-        if on_event is not None:
-            await on_event({"stage": "tool", "name": "open_app", "summary": "Calendar"})
-            await on_event({"stage": "text", "text": "On it."})
-        return {"text": "The first meeting is at nine."}
+        return {"text": "Готово на компьютере."}
 
-    monkeypatch.setattr(
-        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
-    )
+    def others():
+        return [
+            {
+                "id": "dev-1",
+                "name": "MacBook",
+                "kind": "computer",
+                "online": True,
+                "actions": ["task"],
+            }
+        ]
+
+    monkeypatch.setattr(service.hub, "others", others)
     monkeypatch.setattr(service.hub, "call", call)
-    fake.bus.inbound(dm("what is my first meeting tomorrow?"))
-    wait_for(lambda: any("first meeting is at nine" in t for t in fake.texts()))
+    fake.bus.inbound(dm("/computer сделай файл"))
+    wait_for(lambda: any("Готово на компьютере" in t for t in fake.texts()))
     assert calls and calls[0][0] == "dev-1" and calls[0][1] == "task"
-    assert "first meeting" in calls[0][2]["text"]
-    assert calls[0][2]["conversation"] == own
-    assert calls[0][2]["channel"] == "fake"
-
-
-def test_a_primary_device_that_refuses_steps_aside(chan, monkeypatch):
-    """The device went away (or said no): the chat hears which device it was and the Muse on
-    this machine answers instead, so the chat never goes quiet."""
-    client, service, llm, manager, fake = chan
-    pair(client, fake)
-    own = thread_id_for("fake", "chat1")
-    fake.bus.inbound(dm("one more"))
-    wait_for(lambda: llm.calls)
-    wait_for(lambda: not service.threads[own].busy)
-
-    async def call(
-        to: str,
-        action: str,
-        args: dict[str, Any] | None = None,
-        timeout: float = 120,
-        on_event=None,
-    ):  # noqa: ANN001
-        raise HubError("busy", "this conversation is already busy")
-
-    monkeypatch.setattr(
-        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
-    )
-    monkeypatch.setattr(service.hub, "call", call)
-    fake.bus.inbound(dm("what is my first meeting tomorrow?"))
-    wait_for(lambda: any("MacBook" in t and "busy" in t for t in fake.texts()))
+    assert "сделай файл" in calls[0][2]["text"]
 
 
 def test_files_in_and_out(chan, settings: Settings):
@@ -572,11 +543,20 @@ def test_a_file_made_on_the_computer_arrives_as_a_document(chan, monkeypatch):
             return {"name": "book.xlsx", "data": payload}
         return {}
 
-    monkeypatch.setattr(
-        service.hub, "primary", lambda: {"id": "dev-1", "name": "MacBook", "online": True}
-    )
+    def others():
+        return [
+            {
+                "id": "dev-1",
+                "name": "MacBook",
+                "kind": "computer",
+                "online": True,
+                "actions": ["task"],
+            }
+        ]
+
+    monkeypatch.setattr(service.hub, "others", others)
     monkeypatch.setattr(service.hub, "call", call)
-    fake.bus.inbound(dm("сделай таблицу excel"))
+    fake.bus.inbound(dm("/computer сделай таблицу excel"))
     wait_for(lambda: any(files for _, _, files in fake.sent))
     _chat, text, files = next(item for item in fake.sent if item[2])
     assert files[0].endswith("book.xlsx")

@@ -734,20 +734,11 @@ class ChannelManager(ChannelBus):
                 # what was said, then what was typed: the model sees one message in order
                 text = "\n\n".join(heard + ([text] if text else []))
                 self._remember_voice_turn(thread_id, voice_base, voice_key)
-        device = await self._shared_execution_device(thread_id) if text and not msg.files else None
-        if device is not None:
-            self._spawn(
-                self._serve_from_device(
-                    thread_id,
-                    msg,
-                    text,
-                    device,
-                    shared_cid=self.svc.sync.cid_of(thread_id) or ""
-                    if self.svc.sync.active and self.svc.sync._eligible(self.svc.threads[thread_id])
-                    else "",
-                )
-            )
-            return
+        # A chat is answered here, in this process. The computer is a pair of hands, not the
+        # brain: an ordinary message never travels to it, even when the conversation started
+        # there and its app is online. Sending every message to the desktop is what made a
+        # MAX request wait on a machine, ask its own cards and end with "the computer has not
+        # finished"; `/computer <text>` is the explicit way to use the hands.
         self._shared_runtime_context(thread_id)
         linked_owner = self.svc.sync.owner_of(thread_id) if not msg.is_group else ""
         customer_scope = (

@@ -6,6 +6,17 @@ from typing import Any
 from nanomuse.sentinel.policy import Decision
 from nanomuse.tools.base import BaseTool, CallAssessment
 
+#: Tools that only work inside this runtime: code, shell, files of the agent's own
+#: workspace. In full access a warning about them ("runs without a sandbox") may be turned
+#: into one standing permission, so a chat is not asked before every step of one task.
+LOCAL_EXEC_TOOLS = {"shell", "python_execute", "files"}
+
+
+def full_access_standing(mode: str, tool: str) -> bool:
+    """Whether this call may be covered by a standing grant although it carries a warning."""
+    return mode == "full-access" and tool in LOCAL_EXEC_TOOLS
+
+
 # Unknown tools never gain a read or workspace-write exemption.
 READ_ACTIONS = {"read", "list", "search"}
 READ_TOOLS = {"web_search", "web_fetch", "search", "fetch", "time", "terminate"}
