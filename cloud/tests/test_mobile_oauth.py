@@ -73,19 +73,19 @@ async def test_telegram_widget_signs_in_the_account_the_bot_already_knows(monkey
     app, cloud = stack(public_base="https://cloud.test")
     from nanomuse_cloud.service import chat_identity
 
-    cloud.sign_in(chat_identity("telegram", "777"), "Telegram", "test")
+    cloud.sign_in(chat_identity("telegram", "5211558537"), "Telegram", "test")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://cloud.test") as client:
-        good = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "777"))
+        good = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "5211558537"))
         assert good.status_code == 200, good.text
         assert "set-cookie" in {k.lower() for k in good.headers}
         assert good.headers["cache-control"] == "private, no-store"
 
-        forged = _telegram_widget("fixture-token", "777")
+        forged = _telegram_widget("fixture-token", "5211558537")
         forged["hash"] = "0" * 64
         bad = await client.post("/v1/auth/oauth/telegram", json=forged)
         assert bad.status_code == 401
         assert bad.json()["error"]["code"] == "invalid_signature"
 
-        unknown = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "999"))
+        unknown = await client.post("/v1/auth/oauth/telegram", json=_telegram_widget("fixture-token", "5211558538"))
         assert unknown.status_code == 409
         assert unknown.json()["error"]["code"] == "telegram_not_linked"
