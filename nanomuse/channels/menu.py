@@ -645,6 +645,8 @@ class ChatMenu:
                 "/help",
                 "/status",
                 "/computer",
+                "/connect",
+                "/подключить",
                 "/unlink",
                 "/отвязать",
                 "/развязать",
