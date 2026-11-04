@@ -158,6 +158,25 @@ def started_by_person(thread: Any) -> bool:
     )
 
 
+#: One "the chat continues" per topic per half a minute. The same switch is announced from
+#: two places (a service event and the topic switch), and the person saw the line twice
+#: with the history preview twice under it (2026-11-04).
+_RECENT_ANNOUNCE: dict[str, float] = {}
+
+
+def _first_announcement(key: str, window: float = 20.0) -> bool:
+    now = time.monotonic()
+    last = _RECENT_ANNOUNCE.get(key)
+    _RECENT_ANNOUNCE[key] = now
+    if last is not None and now - last < window:
+        return False
+    if len(_RECENT_ANNOUNCE) > 256:
+        for name, when in list(_RECENT_ANNOUNCE.items()):
+            if now - when > window:
+                _RECENT_ANNOUNCE.pop(name, None)
+    return True
+
+
 class TelegramTopics:
     def __init__(self, picker: Any):
         self.p = picker
@@ -790,9 +809,10 @@ class TelegramTopics:
                 if msg.chat_name and msg.chat_name != thread.title:
                     self.m.svc.rename_thread(thread.id, msg.chat_name[:100])
                     self._put(msg, topic, thread)
-                await self.m.channels["telegram"].send(
-                    msg.chat_id, self.copy(msg)["continued"].format(title=thread.title)
-                )
+                if _first_announcement(f"{msg.chat_id}:{thread.id}"):
+                    await self.m.channels["telegram"].send(
+                        msg.chat_id, self.copy(msg)["continued"].format(title=thread.title)
+                    )
                 return True
         return False
 
@@ -960,7 +980,8 @@ class TelegramTopics:
                         self.m.sync_receipts.mark(
                             self.m.sync_receipts.key("telegram", destination, mid, role)
                         )
-                await channel.send(destination, c["continued"].format(title=name))
+                if _first_announcement(f"{destination}:{thread.id}"):
+                    await channel.send(destination, c["continued"].format(title=name))
         current()
         self.p.bind(replace(msg, chat_id=destination), thread.id, fresh=fresh)
         if announce:
