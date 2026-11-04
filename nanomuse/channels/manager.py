@@ -947,7 +947,11 @@ class ChannelManager(ChannelBus):
             opening = self._opening_title(msg) if not msg.is_group else ""
             if opening and thread.title.strip() == f"{self.types[msg.channel].label} · nanoLika":
                 self.svc.rename_thread(selected, opening)
-            if selected not in self.picker.pins:
+            if not getattr(thread, "busy", False):
+                # While a turn runs, its answer belongs to the chat that asked for it; when
+                # nothing runs, the chat that writes last is the one the answer goes to. A
+                # turn that died without a reply used to leave the old route in place, and a
+                # question asked in MAX landed in Telegram.
                 self.routes[selected] = (msg.channel, msg.chat_id)
             return selected
         if getattr(getattr(self.svc.settings, "channels", None), "shared_thread", False):
