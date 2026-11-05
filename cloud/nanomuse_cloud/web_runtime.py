@@ -17,17 +17,21 @@ Per-account workers (a pool, a scheduler) are the next step, not this one.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
 import os
 from typing import Any
 
 import httpx
-from fastapi import Request
+import websockets
+from fastapi import Request, WebSocket
 from fastapi.responses import JSONResponse, Response
 
 from .browser_auth import SESSION_COOKIE
 
 #: where the runtime of the account lives; the bot container is on the same docker network
 RUNTIME_BASE = os.environ.get("WEB_RUNTIME_BASE", "http://nanolika-bot:8799").rstrip("/")
+RUNTIME_WS = os.environ.get("WEB_RUNTIME_WS", RUNTIME_BASE.replace("http", "ws", 1) + "/ws").strip()
 #: the runtime's own access token; the relay holds it, the browser never sees it
 RUNTIME_TOKEN = os.environ.get("WEB_RUNTIME_TOKEN", "").strip()
 #: accounts the first slice serves (comma-separated ids); empty means "nobody yet"
@@ -69,6 +73,51 @@ async def _caller_for(cloud: Any, request: Request) -> Any:
 
 def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
     """Mount `/api/*` as the runtime door. Called from `create_app`."""
+
+    @app.websocket("/ws")
+    async def web_runtime_ws(websocket: WebSocket) -> None:
+        """The chat's events and streaming: the same door, for WebSocket.
+
+        The browser authenticates with its own session cookie on the handshake; the frame
+        it sends first (its idea of a token) is consumed here and never forwarded — the
+        relay authenticates upstream itself, so the runtime token stays on the server."""
+        caller = await _caller_for(cloud, websocket)
+        if caller is None or (OWNERS and caller.account_id not in OWNERS):
+            await websocket.close(code=4401)
+            return
+        await websocket.accept()
+        try:
+            await asyncio.wait_for(websocket.receive_text(), timeout=15)
+        except Exception:  # noqa: BLE001 — no auth frame, no session
+            await websocket.close(code=4401)
+            return
+        try:
+            upstream = await websockets.connect(RUNTIME_WS, max_size=None, open_timeout=10)
+        except Exception:  # noqa: BLE001 — the runtime is not there right now
+            await websocket.close(code=4502)
+            return
+        await upstream.send(json.dumps({"kind": "auth", "token": RUNTIME_TOKEN}))
+
+        async def to_upstream() -> None:
+            while True:
+                await upstream.send(await websocket.receive_text())
+
+        async def to_client() -> None:
+            async for message in upstream:
+                await websocket.send_text(
+                    message if isinstance(message, str) else message.decode("utf-8", "replace")
+                )
+
+        tasks = [asyncio.create_task(to_upstream()), asyncio.create_task(to_client())]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            with contextlib.suppress(Exception):
+                await upstream.close()
+            with contextlib.suppress(Exception):
+                await websocket.close()
 
     @app.api_route(
         "/api/{path:path}",
