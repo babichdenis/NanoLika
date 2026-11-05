@@ -123,7 +123,10 @@ nsis:
   # файл: «Невозможно открыть файл для записи», установка вставала. У деинсталлятора будет
   # стандартная иконка NSIS — это дешевле, чем диалог у каждого пользователя.
   unicode: true
-  perMachine: false
+  # per-machine: the installer asks for administrator rights and can close a copy that
+  # runs elevated, and it writes to Program Files. Per-user installs could not close the
+  # app and looped on "cannot close" (2026-11-05).
+  perMachine: true
   allowToChangeInstallationDirectory: true
   shortcutName: NanoLika
   # electron-builder keeps files with these extensions out of the installer's 7z archive and
