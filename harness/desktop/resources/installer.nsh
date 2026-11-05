@@ -26,11 +26,17 @@
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
-; Удаление приложения — это выход из аккаунта. Профиль в ~/.nanolika переживает
-; деинсталляцию (чаты и память нужны после переустановки), но сессия и ключи
-; провайдеров — нет: иначе новая установка сразу открывается в чужом аккаунте
-; (2026-11-03, поймано на .8: снесли, поставили заново — уже залогинены).
+; A real uninstall signs out. electron-builder also runs the uninstaller with
+; --updated when replacing a version, which must retain the session and own keys.
+; Keep the root explicit so the Windows fixture can exercise this exact macro
+; against an isolated profile instead of the person's account.
+!macro nanoLikaRemoveAccountFiles PROFILE_ROOT
+  ${ifNot} ${isUpdated}
+    Delete "${PROFILE_ROOT}\.nanolika\desktop\nanolika\cloud.json"
+    Delete "${PROFILE_ROOT}\.nanolika\desktop\.credentials.yaml"
+  ${endIf}
+!macroend
+
 !macro customUnInstall
-  Delete "$PROFILE\.nanolika\desktop\nanolika\cloud.json"
-  Delete "$PROFILE\.nanolika\desktop\.credentials.yaml"
+  !insertmacro nanoLikaRemoveAccountFiles "$PROFILE"
 !macroend

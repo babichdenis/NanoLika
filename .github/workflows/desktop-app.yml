@@ -234,6 +234,12 @@ jobs:
         working-directory: harness/desktop
         shell: bash
         run: node scripts/update-feed-check.mjs
+      - name: An update keeps the account and profile (Windows)
+        if: runner.os == 'Windows'
+        working-directory: harness/desktop
+        env:
+          NANOLIKA_REQUIRE_NSIS_TESTS: "1"
+        run: node --test tests/windows-installer-profile.test.mjs
       - name: What was built
         shell: bash
         working-directory: harness/desktop

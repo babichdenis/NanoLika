@@ -103,6 +103,10 @@ win:
     url: "https://nanolika.ru/dl/win/"
 nsis:
   oneClick: false
+  # Retain the differential-aware 7z package and the existing updater contract.
+  # Faster first installation must not turn upgrades into full ZIP downloads.
+  differentialPackage: true
+  useZip: false
   # После установки приложение не стартует само: если старая версия ещё работает,
   # второй экземпляр поднимался поверх неё и оба зависали (23.10.2026)
   runAfterFinish: false

@@ -1,3 +1,41 @@
+## 2026-11-05 · Windows installer integrity and update-safe packaging
+
+The owner asked why the Windows bundle could not close NanoLika, requested a remote
+reproduction, and required faster bundles to retain the update path. The downloaded
+1.0.8 executable had an inherited Low integrity label. Its process token was Low,
+even when launched through an administrative task. No application process was
+running and the disk had ample free space. The generic NSIS retry message hid
+failure to remove the previous installation, followed by error 2 on cancellation.
+A byte-identical copy in a normal temporary directory ran at High integrity,
+completed installation with exit code 0, and the installed app started. At the
+owner's request, only the original executable's label was changed to Medium.
+Downloads directory permissions and global Windows security settings were retained.
+Temporary diagnostic tasks and files were removed after verification.
+
+The payload has 23,504 files, including 21,975 DSH files. The current NSIS 7z route
+extracts, copies, then deletes a temporary tree. This is the measured packaging
+baseline, not a speed improvement. Keep differential-aware 7z, stable application
+identity, profile paths and the existing verified update feed. Do not trade these
+for ZIP or publish an unmeasured speed claim.
+
+Review found that `customUnInstall` deleted the session and own-key files on
+`--updated` too. The new cleanup macro retains them during replacement and signs
+out only on a real uninstall. A Windows test compiles and executes that exact NSIS
+macro against an isolated profile: three update argument combinations preserve
+credential bytes and chat data; real uninstall removes credentials only; missing
+files are harmless. This fixture passed on the real Windows machine. The Windows
+package workflow now requires it after NSIS has been cached by packaging.
+Validation: Node 22.23.4 typecheck passed; the desktop suite finished with 162
+passing tests, zero failures, and the Windows-only fixture skipped on macOS. That
+fixture passed separately on Windows without a skip. Builder/workflow YAML parsing
+and `git diff --check` also passed.
+
+Release prerequisites still open: measure first installation and an actual upgrade
+from the last published version, verify interruption recovery and profile/account
+retention across that transition, and compare downloaded update size. The shipped
+1.0.8 uninstaller still contains its old unconditional cleanup; the new macro does
+not retroactively fix that first upgrade. No new installer or release was published.
+
 ## 2026-11-04 · Почему «молчали» все сторожа: диск, 502 и никто не следил за людьми
 
 Жалоба: «зашла дочь — все молчали, и сколько народу заходит я не понимаю». Разбор
