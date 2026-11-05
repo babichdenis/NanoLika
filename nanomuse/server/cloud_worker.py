@@ -10,18 +10,20 @@ Run: ``python -m nanomuse.server.cloud_worker`` (uvicorn on 127.0.0.1:8789).
 
 from __future__ import annotations
 
+import asyncio
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from nanomuse.config import load_settings
 from nanomuse.logger import logger
 from nanomuse.server.accounts import AccountRuntime
-from nanomuse.server.api import create_app
+from nanomuse.server.api import _handle_ws_message, create_app
 
 DROP_REQUEST = {"host", "content-length", "connection", "keep-alive", "authorization", "cookie", "accept-encoding", "x-account", "x-cloud-key"}
 DROP_RESPONSE = {"content-length", "content-encoding", "transfer-encoding", "connection"}
@@ -95,6 +97,57 @@ def build_worker() -> FastAPI:
             },
             media_type=answer.headers.get("content-type"),
         )
+
+    @app.websocket("/ws")
+    async def ws_proxy(ws: WebSocket) -> None:
+        """The account's live events: the relay has already proved the session."""
+        account_id = ws.headers.get("x-account", "").strip()
+        cloud_key = ws.headers.get("x-cloud-key", "").strip()
+        if not account_id:
+            await ws.close(code=4401)
+            return
+        try:
+            service = await runtime.service(account_id, cloud_key)
+        except Exception as exc:  # noqa: BLE001 — no runtime, a plain close
+            logger.warning("worker: ws account {} did not start: {}", account_id[:8], exc)
+            await ws.close(code=4502)
+            return
+        await ws.accept()
+        conn_id = f"ws-{uuid.uuid4().hex[:8]}"
+        lock = asyncio.Lock()
+
+        async def send(message: dict[str, Any]) -> None:
+            async with lock:
+                await ws.send_json(message)
+
+        # The client may send its auth frame first; the relay already proved the session, so
+        # that frame is consumed and not treated as a command.
+        try:
+            first = await asyncio.wait_for(ws.receive_json(), timeout=1.5)
+            if not (isinstance(first, dict) and first.get("kind") == "auth"):
+                await _handle_ws_message(service, ws, first, conn_id=conn_id, send=send)
+        except (TimeoutError, ValueError, RuntimeError):
+            pass
+        queue = service.bus.subscribe()
+        await send({"kind": "hello", "state": service.state()})
+
+        async def pump() -> None:
+            while True:
+                await send(await queue.get())
+
+        pump_task = asyncio.create_task(pump())
+        try:
+            while True:
+                data = await ws.receive_json()
+                await _handle_ws_message(service, ws, data, conn_id=conn_id, send=send)
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("worker ws closed: {}", exc)
+        finally:
+            pump_task.cancel()
+            service.bus.unsubscribe(queue)
+            service.phone.detach(conn_id)
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
