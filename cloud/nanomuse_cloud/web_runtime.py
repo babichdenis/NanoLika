@@ -29,6 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from .browser_auth import SESSION_COOKIE
+from .browser_session_store import browser_store
 
 #: where the runtime of the account lives; the bot container is on the same docker network
 RUNTIME_BASE = os.environ.get("WEB_RUNTIME_BASE", "http://nanolika-bot:8799").rstrip("/")
@@ -66,6 +67,15 @@ async def _caller_for(cloud: Any, request: Request) -> Any:
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token or not RUNTIME_TOKEN:
         return None
+    # The browser session cookie is an opaque session id, not an API key: the console
+    # resolves it through the session store (2026-11-05 — `authenticate` alone found no
+    # account, so `/web/` fell back to the lite chat).
+    try:
+        resolved = await asyncio.to_thread(browser_store(cloud).caller, token)
+        if resolved is not None:
+            return resolved
+    except Exception:  # noqa: BLE001 — fall through to the key path
+        pass
     try:
         return await asyncio.to_thread(cloud.authenticate, token)
     except Exception:  # noqa: BLE001 — an unknown or revoked session is simply not in
