@@ -5,7 +5,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "1.0.5";
+  const VERSION = "1.0.9";
 
   // ── i18n ────────────────────────────────────────────────────────
   const onOurDomain = /(^|\.)nanolika\.ru$/i.test(location.hostname);

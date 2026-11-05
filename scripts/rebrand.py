@@ -48,8 +48,8 @@ IOS = ROOT / "android" / "src" / "ios"
 
 APP_ID = "io.github.nanomuse.app"
 NAME = "NanoLika"
-VERSION_NAME = "1.0.5"
-VERSION_CODE = 48
+VERSION_NAME = "1.0.9"
+VERSION_CODE = 49
 REPO = "nano-muse/nanoMuse"
 REPO_URL = f"https://github.com/{REPO}"
 PRIVACY_URL = "https://nanolika.ru/privacy.html"
