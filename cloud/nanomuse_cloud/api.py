@@ -337,6 +337,10 @@ def relay_error_body(status: int, raw: bytes) -> dict:
 PROVIDER_HOST_SUFFIXES = (".aliyuncs.com", ".alicdn.com")
 
 
+#: which tool counts this process has already written down (one line per catalog)
+_TOOLSETS_SEEN: set[int] = set()
+
+
 def _charged(cloud: Any, uy: int) -> dict[str, Any]:
     """What a call took, in the relay's own units and in rubles.
 
@@ -1468,6 +1472,24 @@ def create_app(
             key_uy=cloud.chat_sale_reserve_uy(spec, caller),
             place=client_place(request),
         )
+        # how much the client spends on tool definitions before it does anything: the
+        # number that decides whether a search-first catalog is worth it (counts only)
+        tools = body.get("tools") or []
+        try:
+            count = len(tools) if isinstance(tools, list) else 0
+            size = len(json.dumps(tools, ensure_ascii=False)) if tools else 0
+            log.info("chat tools=%d tool_bytes=%d model=%s", count, size, spec.id)
+            if count not in _TOOLSETS_SEEN:
+                # once per catalog per process: the names, for comparing surfaces
+                _TOOLSETS_SEEN.add(count)
+                names = [
+                    str((t.get("function") or {}).get("name") or t.get("name") or "?")
+                    for t in tools
+                    if isinstance(t, dict)
+                ]
+                log.info("chat toolset=%d names=%s", count, ",".join(sorted(names))[:4000])
+        except (TypeError, ValueError):
+            pass
         body["model"] = spec.upstream
         levels, _default = reasoning_for(spec)
         if levels:
