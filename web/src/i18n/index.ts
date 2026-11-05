@@ -7,24 +7,26 @@
  * in Settings: "auto" follows the browser, otherwise English or 简体中文.
  */
 import { useSyncExternalStore } from "react";
+import ru from "./ru";
 import zhCN from "./zh-CN";
 
-export type Locale = "en" | "zh-CN";
+export type Locale = "en" | "zh-CN" | "ru";
 export type LocaleSetting = Locale | "auto";
 
 export const LOCALES: Array<{ value: LocaleSetting; label: string }> = [
   { value: "auto", label: "Auto" },
   { value: "en", label: "English" },
   { value: "zh-CN", label: "简体中文" },
+  { value: "ru", label: "Русский" },
 ];
 
 const STORAGE_KEY = "nanomuse_locale";
-const DICTS: Record<Locale, Record<string, string>> = { en: {}, "zh-CN": zhCN };
+const DICTS: Record<Locale, Record<string, string>> = { en: {}, "zh-CN": zhCN, ru };
 
 function load(): LocaleSetting {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "en" || v === "zh-CN" || v === "auto") return v;
+    if (v === "en" || v === "zh-CN" || v === "ru" || v === "auto") return v;
   } catch {
     // private mode / no storage: stay on auto
   }
@@ -37,6 +39,7 @@ const listeners = new Set<() => void>();
 /** What the browser is set to, reduced to a locale we have. */
 export function detectLocale(): Locale {
   const langs = typeof navigator === "undefined" ? [] : [navigator.language, ...(navigator.languages ?? [])];
+  if (langs.some((l) => /^ru\b/i.test(l ?? ""))) return "ru";
   return langs.some((l) => /^zh\b/i.test(l ?? "")) ? "zh-CN" : "en";
 }
 
