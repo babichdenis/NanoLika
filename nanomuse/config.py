@@ -337,6 +337,29 @@ class MemorySettings(BaseModel):
         return v.rstrip("/")
 
 
+#: The servers a person never has to type: address in, servers out. A provider missing
+#: here still works — the fields stay editable for anyone who knows their own numbers.
+_EMAIL_PRESETS: dict[str, tuple[str, int, str, int, bool]] = {
+    "gmail.com": ("imap.gmail.com", 993, "smtp.gmail.com", 587, True),
+    "googlemail.com": ("imap.gmail.com", 993, "smtp.gmail.com", 587, True),
+    "yandex.ru": ("imap.yandex.ru", 993, "smtp.yandex.ru", 465, False),
+    "ya.ru": ("imap.yandex.ru", 993, "smtp.yandex.ru", 465, False),
+    "yandex.com": ("imap.yandex.com", 993, "smtp.yandex.com", 465, False),
+    "mail.ru": ("imap.mail.ru", 993, "smtp.mail.ru", 465, False),
+    "inbox.ru": ("imap.mail.ru", 993, "smtp.mail.ru", 465, False),
+    "list.ru": ("imap.mail.ru", 993, "smtp.mail.ru", 465, False),
+    "bk.ru": ("imap.mail.ru", 993, "smtp.mail.ru", 465, False),
+    "internet.ru": ("imap.mail.ru", 993, "smtp.mail.ru", 465, False),
+    "icloud.com": ("imap.mail.me.com", 993, "smtp.mail.me.com", 587, True),
+    "me.com": ("imap.mail.me.com", 993, "smtp.mail.me.com", 587, True),
+    "mac.com": ("imap.mail.me.com", 993, "smtp.mail.me.com", 587, True),
+    "outlook.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
+    "hotmail.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
+    "live.com": ("outlook.office365.com", 993, "smtp.office365.com", 587, True),
+    "rambler.ru": ("imap.rambler.ru", 993, "smtp.rambler.ru", 465, False),
+}
+
+
 class EmailSettings(BaseModel):
     enabled: bool = False
     imap_host: str = ""
@@ -350,6 +373,24 @@ class EmailSettings(BaseModel):
     password: str = "{{vault:EMAIL_PASSWORD}}"
     # Strip one-time passcodes / password-reset links before the model reads a mail.
     scrub_secrets: bool = True
+
+    @model_validator(mode="after")
+    def _servers_from_address(self) -> "EmailSettings":
+        """Fill IMAP/SMTP from the domain of the address, so a person types only their
+        mail and app password. Anything set by hand wins; unknown domains stay as they are."""
+        address = (self.address or "").strip()
+        if not address or "{{vault:" in address or "@" not in address:
+            return self
+        domain = address.rsplit("@", 1)[-1].lower()
+        # A provider we have not listed still follows the usual pattern: mail on
+        # imap.<domain>:993, sending on smtp.<domain>:587. A person types no numbers either way.
+        preset = _EMAIL_PRESETS.get(domain) or (f"imap.{domain}", 993, f"smtp.{domain}", 587, True)
+        imap_host, imap_port, smtp_host, smtp_port, starttls = preset
+        if not self.imap_host:
+            self.imap_host, self.imap_port = imap_host, imap_port
+        if not self.smtp_host:
+            self.smtp_host, self.smtp_port, self.smtp_starttls = smtp_host, smtp_port, starttls
+        return self
 
 
 class CalendarFeedSettings(BaseModel):
