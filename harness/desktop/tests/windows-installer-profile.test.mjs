@@ -58,7 +58,16 @@ OutFile "${nsisString(exe)}"
 !define isUpdated \`"" isUpdated ""\`
 !include "${nsisString(join(desktop, "resources/installer.nsh"))}"
 Section
+  \${StdUtils.TestParameter} $R8 "legacy"
+  StrCmp "$R8" "true" 0 normal
+    !insertmacro nanoLikaBackupAccount "${nsisString(profile)}"
+    Delete "${nsisString(profile)}\\.nanolika\\desktop\\nanolika\\cloud.json"
+    Delete "${nsisString(profile)}\\.nanolika\\desktop\\.credentials.yaml"
+    !insertmacro nanoLikaRestoreAccount "${nsisString(profile)}"
+    Goto done
+  normal:
   !insertmacro nanoLikaRemoveAccountFiles "${nsisString(profile)}"
+  done:
   SetErrorLevel 0
 SectionEnd
 `, "utf8");
@@ -68,7 +77,7 @@ SectionEnd
   const keys = join(profile, ".nanolika/desktop/.credentials.yaml");
   const chat = join(profile, ".nanolika/desktop/nanolika/chats/keep.txt");
   const fixtures = new Map([[account, '{"fixture":"session"}\r\n'], [keys, "fixture: ключ\r\n"], [chat, "fixture chat"]]);
-  for (const args of [["--updated"], ["--updated", "/S"], ["--updated", "--keep-shortcuts"], []]) {
+  for (const args of [["--updated"], ["--updated", "--legacy"], ["--updated", "/S"], ["--updated", "--keep-shortcuts"], []]) {
     for (const [path, data] of fixtures) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, data); }
     const result = spawnSync(exe, args, { encoding: "utf8", timeout: 30_000 });
     assert.equal(result.status, 0, `${args}: ${result.error || ""} ${result.stderr}`);
