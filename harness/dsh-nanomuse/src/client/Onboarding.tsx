@@ -32,6 +32,7 @@ import { BlackScreenNotice, HandsTryRows } from './HandsCheck.tsx'
 import { IconCheck, IconHand, IconMessage, IconMonitor, IconSettings, IconUsers } from './icons.tsx'
 import { useLive } from './live.ts'
 import { setMainChatId } from './MuseChats.tsx'
+import { useAccountOAuth } from './account-oauth.ts'
 import { OwnKeyStep } from './OwnKey.tsx'
 import { nav, roomsCall, useRooms } from './rooms.ts'
 
@@ -103,18 +104,6 @@ function CodeBoxes({ value, onChange, disabled, label }: { value: string; onChan
 
 function link(url: string, label: string): ReactNode {
   return h('a', { href: url, onClick: (e: Event) => { e.preventDefault(); openLink(url) } }, label)
-}
-
-/**
- * Sign in through Yandex or Google, the way the site does it: the system browser opens the
- * relay's door (a person is already signed in there), and the relay hands the key back to this
- * app by the `nanolika://` scheme. The browser is the only place a third-party cookie and a
- * two-factor prompt work, so an embedded window would not do.
- */
-function openOauth(provider: 'google' | 'yandex'): void {
-  const base = 'https://cloud.nanolika.ru'
-  const back = 'nanolika://oauth'
-  openLink(`${base}/v1/auth/oauth/${provider}/start?next=${encodeURIComponent(back)}`)
 }
 
 export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
@@ -219,6 +208,7 @@ export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
         setBusy(false)
       }
     }
+    const oauth = useAccountOAuth(t, async (next) => { await signedIn(next, false) })
     const sendCode = (event?: FormEvent) => {
       event?.preventDefault()
       void run(async () => {
@@ -344,17 +334,19 @@ export function makeOnboarding(t: Translate, _actions: OnboardingActions) {
         hero: h(BrandMark, { size: 104, className: 'nm-fr-hero-mark' }),
         title: t('frWelcomeTitle'),
         sub: t('frTagline'),
-        primary: { label: t('frSignIn'), onClick: () => { setError(undefined); setSignIn('identifier') } },
-        secondary: { label: t('frWelcomeOwnKey'), onClick: () => { setModelsSkipped(false); choose('own') } },
+        primary: { label: t('frSignIn'), onClick: () => { oauth.cancel(); setError(undefined); setSignIn('identifier') } },
+        secondary: { label: t('frWelcomeOwnKey'), onClick: () => { oauth.cancel(); setModelsSkipped(false); choose('own') } },
         sso: [
-          { label: t('frSignInGoogle'), onClick: () => openOauth('google') },
-          { label: t('frSignInYandex'), onClick: () => openOauth('yandex') },
+          { label: t('frSignInGoogle'), disabled: busy || oauth.busy, onClick: () => { void oauth.start('google') } },
+          { label: t('frSignInYandex'), disabled: busy || oauth.busy, onClick: () => { void oauth.start('yandex') } },
         ],
-        skipFine: { label: t('frSignInSkip'), onClick: () => { setModelsSkipped(false); choose('own') } },
+        skipFine: { label: t('frSignInSkip'), onClick: () => { oauth.cancel(); setModelsSkipped(false); choose('own') } },
         fine: config.allowance_cny ? `${t('frWelcomeFine')} ${t('obFreeAmount', { allowance: cash(config.allowance_cny, config) })}` : t('frWelcomeFine'),
         learnMore: PRIVACY_URL,
         t,
       },
+        oauth.error ? h('p', { role: 'alert' }, oauth.error) : null,
+        oauth.busy ? h('div', { role: 'status' }, t('oauthWaiting'), ' ', h('button', { type: 'button', className: 'nm-ob-link', onClick: oauth.cancel }, t('cancel'))) : null,
         h('div', { className: 'nm-fr-features' },
           h(FeatureRow, { icon: h(IconMessage, { size: 18 }), title: t('frFeatChat'), sub: t('frFeatChatSub') }),
           h(FeatureRow, { icon: h(IconHand, { size: 18 }), title: t('frFeatHands'), sub: t('frFeatHandsSub') }),
@@ -434,7 +426,7 @@ function Page({ hero, title, sub, children, primary, secondary, sso, skipFine, f
   children?: ReactNode
   primary?: { label: string; onClick(): void; disabled?: boolean } | undefined
   secondary?: { label: string; onClick(): void } | undefined
-  sso?: Array<{ label: string; onClick(): void }>
+  sso?: Array<{ label: string; disabled?: boolean; onClick(): void }>
   skipFine?: { label: string; onClick(): void } | undefined
   fine?: string | undefined
   learnMore?: string | undefined
@@ -448,7 +440,7 @@ function Page({ hero, title, sub, children, primary, secondary, sso, skipFine, f
     primary ? h(Pill, { onClick: primary.onClick, disabled: primary.disabled, className: 'nm-ob-wide nm-fr-primary' }, primary.label) : null,
     secondary ? h('button', { type: 'button', className: 'nm-ob-skip', onClick: secondary.onClick }, secondary.label) : null,
     sso && sso.length
-      ? h('div', { className: 'nm-fr-sso' }, ...sso.map((one) => h('button', { key: one.label, type: 'button', className: 'nm-fr-sso-btn', onClick: one.onClick }, one.label)))
+      ? h('div', { className: 'nm-fr-sso' }, ...sso.map((one) => h('button', { key: one.label, type: 'button', className: 'nm-fr-sso-btn', disabled: one.disabled, onClick: one.onClick }, one.label)))
       : null,
     skipFine ? h('button', { type: 'button', className: 'nm-ob-fine nm-fr-skip-fine', onClick: skipFine.onClick }, skipFine.label) : null,
     fine ? h('p', { className: 'nm-ob-fine' }, fine, learnMore ? h(Fragment, null, ' ', link(learnMore, t('frLearnMore'))) : null) : null)

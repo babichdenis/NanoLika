@@ -22,6 +22,8 @@ capability is missing.
 
 ## The desktop shell's own traps
 
+Read [harness/desktop/BUILDING.md](harness/desktop/BUILDING.md) before rebuilding installers or publishing desktop updates.
+
 - The profile is named `nanolika` (`PROFILE` in `harness/desktop/src/main.ts`). Bundles gate rows
   on `profileContext.name !== 'desktop'`, so a row that "should be on" may be off: the right
   Sidebar's Browser tab was, until `scripts/patch-dsh.mjs` stopped removing that gate.

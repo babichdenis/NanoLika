@@ -863,3 +863,20 @@ The plan link in the account's model table opens the shared payment dialog direc
 has loaded. The account payment deep link uses the same entry. Amount validation, explicit
 terms acceptance, order idempotency and the existing test-mode gate are unchanged. This
 interface change does not enable a payment provider or collect a live payment.
+
+### Desktop browser sign-in
+
+First run and Settings support Google and Yandex in the system browser. Email code and
+password sign-in remain available. The desktop starts an ephemeral listener on
+`127.0.0.1` and requests `/v1/auth/oauth/{provider}/start` with `desktop_callback`,
+`desktop_state` and the S256 `desktop_challenge`. The relay accepts only HTTP IPv4
+loopback, an unprivileged port, and `/nanolika-signin` without a query or fragment.
+The signed OAuth cookie binds these values to the provider request. After verifying
+the provider, the relay redirects with a random one-use code and the original state.
+`POST /v1/auth/desktop/exchange` accepts `{code, verifier, device}` over HTTPS and
+returns the normal device sign-in result. The code expires after 120 seconds; only its
+hash and PKCE challenge are stored. A wrong verifier does not spend a valid code.
+Consumption is transactional across relay workers. No account key travels through the
+callback URL. The desktop validates Host, path and state, closes the listener after one
+response or five minutes, and cancels it when another sign-in method is chosen.
+Existing browser OAuth and email endpoints are unchanged.

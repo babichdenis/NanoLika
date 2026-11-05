@@ -226,3 +226,16 @@ cookie。随机值不是 API key，也不能作为 Bearer 使用。服务器仅�
 重启不会延长。转换后的 cookie 不能超过迁移截止时间或原始 key 的有效期。
 窗口结束后清除旧 key cookie；仍有有效本地 Bearer 的浏览器可通过明确认证的 POST
 建立新会话，无需重新输入登录信息。
+
+### 桌面端通过浏览器登录
+
+首次启动和设置页支持通过系统浏览器使用 Google 或 Yandex 登录，邮箱验证码和密码登录继续保留。
+桌面端在 `127.0.0.1` 启动临时监听器，向 `/v1/auth/oauth/{provider}/start` 提交
+`desktop_callback`、`desktop_state` 和 S256 `desktop_challenge`。中继只接受 HTTP IPv4
+回环地址、非特权端口以及不带查询参数或片段的 `/nanolika-signin` 路径。签名 OAuth Cookie
+将这些参数绑定到本次登录。验证第三方身份后，中继重定向至回环地址，只携带一次性随机码和原始 state。
+桌面端通过 HTTPS 向 `POST /v1/auth/desktop/exchange` 提交 `{code, verifier, device}`，
+获取常规设备登录结果。一次性码 120 秒后过期，数据库仅保存其哈希和 PKCE 挑战值。错误的
+verifier 不会消耗有效码，多进程消费通过数据库事务保证。账户密钥不会出现在回调地址中。
+桌面端验证 Host、路径和 state，在收到一次响应、超时五分钟或改用其他登录方式时关闭监听器。
+原有浏览器 OAuth 和邮箱登录接口保持兼容。

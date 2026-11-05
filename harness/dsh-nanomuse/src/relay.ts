@@ -356,6 +356,23 @@ export class Relay {
     return `${this.origin}/v1`
   }
 
+  async oauthProviders(): Promise<string[]> {
+    const res = await this.fetchImpl(`${this.origin}/v1/auth/oauth/providers`)
+    if (!res.ok) await fail(res)
+    const body = await res.json() as { providers: Array<{ name: string }> }
+    return body.providers.map((provider) => provider.name)
+  }
+
+  async oauthExchange(code: string, verifier: string, device: string, signal: AbortSignal): Promise<SignIn> {
+    const res = await this.fetchImpl(`${this.origin}/v1/auth/desktop/exchange`, {
+      method: 'POST', headers: JSON_HEADERS,
+      body: JSON.stringify({ code, verifier, device: device.slice(0, 80) }), signal,
+    })
+    if (!res.ok) await fail(res)
+    const body = await res.json() as Record<string, unknown>
+    return { apiKey: String(body.api_key ?? ''), created: Boolean(body.created), account: toAccount(body) }
+  }
+
   /** Ask for a six-digit code (SMS for a mainland number, e-mail otherwise). */
   async requestCode(identifier: string, signal?: AbortSignal): Promise<void> {
     const res = await this.fetchImpl(`${this.origin}/v1/auth/code`, {

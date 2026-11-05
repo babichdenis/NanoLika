@@ -28,6 +28,7 @@ import { TurnBudget, type TurnView } from './turn-budget.ts'
  * (`/events`) carrying the live state — registered when the web server is
  * present; the headless and SDK profiles get the service without routes.
  */
+import { desktopOAuth, type DesktopOAuth } from './desktop-oauth.ts'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ApprovalDesk, appOf, checkForUpdate, compareVersions, DEVICE_GRANT_PREFIX, HoldDesk, modelFor, pickChatModel, pickHandsModel, REMOTE_CONTROL_GRANT_ID, sharedConnectors, standingGrants, takesImages, UPDATE_RETRY_MS, updateCacheFresh, type Grant, type Hold, type HoldTool, type PendingApproval, type StandingGrant, type UpdateInfo } from './desk.ts'
@@ -662,6 +663,39 @@ export default class NanomuseCloud extends Service {
   static inject = ['credentials', 'settings']
   static Config = Config
 
+  private oauth: { id: string; phase: 'waiting' | 'complete' | 'failed'; error?: string; listener?: DesktopOAuth } | undefined
+
+  private cancelOAuth(id?: string): void {
+    if (!this.oauth || (id && this.oauth.id !== id)) return
+    this.oauth.listener?.cancel()
+    this.oauth = undefined
+  }
+
+  private async startOAuth(provider: string, id: string): Promise<{ url: string }> {
+    if ((provider !== 'google' && provider !== 'yandex') || !/^[a-zA-Z0-9-]{16,80}$/.test(id)) throw new RelayError(400, 'bad_provider', 'Invalid sign-in request')
+    return this.serialize(async () => {
+      this.cancelOAuth()
+      if (!(await this.relay.oauthProviders()).includes(provider)) throw new RelayError(400, 'oauth_unavailable', 'Sign-in provider is unavailable')
+      const attempt: NonNullable<NanomuseCloud['oauth']> = { id, phase: 'waiting' }
+      this.oauth = attempt
+      try {
+        attempt.listener = await desktopOAuth({
+          origin: this.relay.origin, provider,
+          exchange: async (code, verifier, signal) => {
+            const signIn = await this.relay.oauthExchange(code, verifier, this.deviceName(), signal)
+            await this.serialize(async () => {
+              if (signal.aborted || this.oauth !== attempt) throw new Error('Sign-in cancelled')
+              await this.adopt(signIn)
+              attempt.phase = 'complete'
+            })
+          },
+          failed: (reason) => { attempt.phase = 'failed'; attempt.error = reason === 'timeout' ? 'timeout' : 'oauth_failed' },
+        })
+        return { url: attempt.listener.url }
+      } catch (error) { this.cancelOAuth(id); throw error }
+    })
+  }
+
   readonly relay: Relay
   readonly profile: ProfileStore
   readonly hub: HubClient
@@ -1239,6 +1273,7 @@ export default class NanomuseCloud extends Service {
       })
     })
     this.ctx.effect(() => () => {
+      this.cancelOAuth()
       this.hub.stop('shutting down')
       this.coding.close()
       this.chatgpt.stop()
@@ -2761,11 +2796,13 @@ export default class NanomuseCloud extends Service {
 
   /** Step one: a code to the phone or the mailbox. */
   async requestCode(identifier: string): Promise<void> {
+    this.cancelOAuth()
     await this.serialize(() => this.relay.requestCode(identifier.trim()))
   }
 
   /** Step two: the code for the key; wires the provider and remembers the account. A friend's invite code counts for a new account. */
   verify(identifier: string, code: string, invite = ''): Promise<CloudStatus> {
+    this.cancelOAuth()
     return this.serialize(async () => this.adopt(await this.relay.verify(identifier.trim(), code, this.deviceName(), undefined, invite)))
   }
 
@@ -2791,11 +2828,13 @@ export default class NanomuseCloud extends Service {
 
   /** The other way in: the account's password instead of a code. */
   login(identifier: string, password: string): Promise<CloudStatus> {
+    this.cancelOAuth()
     return this.serialize(async () => this.adopt(await this.relay.login(identifier.trim(), password, this.deviceName())))
   }
 
   /** "Sign in with Telegram", step one: a code for this computer's QR. */
   telegramStart(challenge: string): Promise<{ code: string; url: string; expiresInS: number }> {
+    this.cancelOAuth()
     return this.serialize(() => this.relay.telegramStart(challenge))
   }
 
@@ -3613,6 +3652,7 @@ export default class NanomuseCloud extends Service {
   }
 
   private async forget(): Promise<void> {
+    this.cancelOAuth()
     this.hub.stop('signed out')
     await this.ctx.credentials.unset(credentialRef(TOKEN_REF))
     try {
@@ -4194,6 +4234,21 @@ export default class NanomuseCloud extends Service {
         this.clearStage()
         this.trajectory.clear()
         this.broadcast()
+        return send(res, 204)
+      }
+      if (req.method === 'POST' && route === '/oauth/start') {
+        const body = await json(req)
+        return send(res, 200, await this.startOAuth(String(body.provider ?? ''), String(body.id ?? '')))
+      }
+      if (req.method === 'POST' && route === '/oauth/status') {
+        const body = await json(req)
+        const attempt = this.oauth
+        if (!attempt || attempt.id !== body.id) throw new RelayError(400, 'oauth_failed', 'Sign-in cancelled')
+        return send(res, 200, { phase: attempt.phase, error: attempt.error, ...(attempt.phase === 'complete' ? { status: await this.status() } : {}) })
+      }
+      if (req.method === 'POST' && route === '/oauth/cancel') {
+        const body = await json(req)
+        this.cancelOAuth(String(body.id ?? ''))
         return send(res, 204)
       }
       if (req.method === 'POST' && route === '/code') {

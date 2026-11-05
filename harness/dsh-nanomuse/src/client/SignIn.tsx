@@ -10,6 +10,7 @@ import { useCloudConfig } from './AccountPage.tsx'
 import { bridge } from './bridge.ts'
 import { cash } from './money.ts'
 import { call, column, errorStyle, muted, row, type CloudStatus, type Translate, failureText } from './api.ts'
+import { useAccountOAuth } from './account-oauth.ts'
 import qrcode from './vendor/qrcode.js'
 
 /** A PKCE verifier and its S256 challenge, both base64url without padding. */
@@ -81,7 +82,10 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
   const [resent, setResent] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
+  const oauth = useAccountOAuth(t, onSignedIn)
+
   const run = async (work: () => Promise<void>) => {
+    oauth.cancel()
     setBusy(true)
     setError(undefined)
     try {
@@ -225,6 +229,12 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
   }
 
   return h('form', { style: column, onSubmit: sendCode },
+    h('div', { style: row }, ...(['google', 'yandex'] as const).map((provider) => h(Button, {
+      key: provider, type: 'button', variant: 'ghost', size: 'md', disabled: busy || oauth.busy,
+      onClick: () => { void oauth.start(provider) },
+    }, t(provider === 'google' ? 'frSignInGoogle' : 'frSignInYandex')))),
+    oauth.error ? h('div', { style: errorStyle, role: 'alert' }, oauth.error) : null,
+    oauth.busy ? h('div', { style: muted, role: 'status' }, t('oauthWaiting'), ' ', h(Button, { type: 'button', variant: 'ghost', size: 'md', onClick: oauth.cancel }, t('cancel'))) : null,
     h(Input, { value: identifier, onChange: (e: FormEvent<HTMLInputElement>) => setIdentifier(e.currentTarget.value), placeholder: t('identifier'), autoComplete: 'username', 'aria-label': t('identifier') }),
     h('div', { style: muted }, t('identifierHint')),
     error ? h('div', { style: errorStyle, role: 'alert' }, error) : null,

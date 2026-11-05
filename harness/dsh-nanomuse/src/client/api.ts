@@ -112,6 +112,8 @@ export function failureText(t: Translate, err: unknown): string {
   const status = Number(/^(?:http_)?(\d{3})$/.exec(code)?.[1] ?? 0)
   // `fetch` itself failed: the host on loopback is gone (no status, no code)
   if (!code && err instanceof TypeError && /fetch/i.test(text)) return t('errHostDown')
+  if (code === 'oauth_failed') return t('oauthFailed')
+  if (code === 'oauth_unavailable') return t('oauthUnavailable')
   if (code === 'unreachable') return t('errUnreachable')
   if (code === 'timeout' || code === 'http_504' || status === 504) return t('errTimeout')
   if (code === 'rate_limited' || code === 'too_many_in_flight' || code === 'provider_busy' || status === 429) return t('errBusy')

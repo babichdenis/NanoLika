@@ -604,3 +604,33 @@ test('the "Use it for" card moves the main chat to the own key too; a main chat 
     await out.done()
   }
 })
+
+test('browser account sign-in: API polling resolves status and cancellation isolates attempts', async () => {
+  const out = await cloud()
+  let signedIn = false
+  let exchanges = 0
+  out.svc.relay.oauthProviders = async () => ['google', 'yandex']
+  out.svc.relay.oauthExchange = async () => { exchanges++; return { apiKey: 'test-key' } }
+  out.svc.adopt = async () => { signedIn = true }
+  out.svc.status = async () => ({ signedIn })
+  try {
+    const start = await out.api('POST', '/oauth/start', { provider: 'yandex', id: 'test-attempt-00000001' })
+    assert.equal(start.status, 200)
+    const url = new URL(start.body.url)
+    const callback = new URL(url.searchParams.get('desktop_callback'))
+    callback.searchParams.set('state', url.searchParams.get('desktop_state'))
+    callback.searchParams.set('code', 'c'.repeat(43))
+    assert.equal((await fetch(callback)).status, 200)
+    const done = await out.api('POST', '/oauth/status', { id: 'test-attempt-00000001' })
+    assert.deepEqual(done.body.status, { signedIn: true })
+    assert.equal(done.body.phase, 'complete')
+    assert.equal(exchanges, 1)
+    await out.api('POST', '/oauth/start', { provider: 'google', id: 'test-attempt-00000002' })
+    await out.api('POST', '/oauth/cancel', { id: 'test-attempt-00000001' })
+    assert.equal((await out.api('POST', '/oauth/status', { id: 'test-attempt-00000002' })).body.phase, 'waiting')
+    await out.api('POST', '/oauth/cancel', { id: 'test-attempt-00000002' })
+    assert.equal((await out.api('POST', '/oauth/status', { id: 'test-attempt-00000002' })).status, 400)
+    out.svc.relay.oauthProviders = async () => []
+    assert.equal((await out.api('POST', '/oauth/start', { provider: 'google', id: 'test-attempt-00000003' })).body.error.code, 'oauth_unavailable')
+  } finally { out.svc.cancelOAuth(); await out.done() }
+})

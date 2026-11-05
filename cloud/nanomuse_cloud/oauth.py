@@ -266,6 +266,9 @@ def read_state(cookie: str, key: str | bytes, provider: str, nonce: str) -> dict
 def install_oauth(app, cloud, settings) -> None:
     """Три ручки: список провайдеров, старт и возврат. Плюс вход по виджету Telegram."""
     from .identifiers import parse as parse_identifier
+    from .desktop_oauth import desktop_request, desktop_redirect, install_desktop_exchange
+
+    desktop_codes = install_desktop_exchange(app, cloud)
 
     base = (getattr(settings, "public_base", "") or "https://cloud.nanolika.ru").rstrip("/")
 
@@ -293,7 +296,8 @@ def install_oauth(app, cloud, settings) -> None:
         return {"providers": enabled_providers()}
 
     @app.get("/v1/auth/oauth/{provider}/start")
-    async def oauth_start(provider: str, request: Request, next: str = ""):
+    async def oauth_start(provider: str, request: Request, next: str = "", desktop_callback: str = "", desktop_challenge: str = "", desktop_state: str = ""):
+        desktop = desktop_request(desktop_callback, desktop_challenge, desktop_state)
         if provider not in REDIRECT_PROVIDERS:
             return JSONResponse({"error": {"code": "no_provider"}}, status_code=404)
         state = provider_state(provider)
@@ -313,7 +317,7 @@ def install_oauth(app, cloud, settings) -> None:
         response.set_cookie(
             "nm_oauth",
             state_cookie(
-                {"provider": provider, "nonce": nonce, "next": nxt, "expires": int(time.time()) + STATE_TTL_S, "verifier": verifier},
+                {"provider": provider, "nonce": nonce, "next": nxt, "expires": int(time.time()) + STATE_TTL_S, "verifier": verifier, "desktop": desktop},
                 settings.hmac_key,
             ),
             max_age=STATE_TTL_S,
@@ -330,6 +334,12 @@ def install_oauth(app, cloud, settings) -> None:
             return JSONResponse({"error": {"code": "provider_off"}}, status_code=404)
         data = read_state(request.cookies.get("nm_oauth", ""), settings.hmac_key, provider, state)
         nxt = pick_next(data.get("next", "") if data else "")
+        desktop = data.get("desktop") if data else None
+
+        def failed(reason: str):
+            if desktop:
+                return desktop_redirect(desktop, error=reason)
+            return _back(nxt, reason)
         if error or not code or data is None:
             log.warning(
                 "oauth %s callback refused: denied=%s code_present=%s cookie_present=%s state_valid=%s",
@@ -339,22 +349,27 @@ def install_oauth(app, cloud, settings) -> None:
                 bool(request.cookies.get("nm_oauth")),
                 data is not None,
             )
-            return _back(nxt, "denied" if error else "state")
+            return failed("denied" if error else "state")
         try:
             profile = await asyncio.to_thread(fetch_profile, provider, code, redirect_uri(provider), data.get("verifier", ""))
         except Exception as e:  # noqa: BLE001
             log.warning("oauth %s profile failed: %s", provider, type(e).__name__)
-            return _back(nxt, type(e).__name__)
+            return failed(type(e).__name__)
         email = (profile.get("email") or "").strip().lower()
         if not email:
-            return _back(nxt, "no_email")
+            return failed("no_email")
+        if desktop:
+            handoff = await asyncio.to_thread(desktop_codes.issue, email, provider, desktop["challenge"])
+            response = desktop_redirect(desktop, code=handoff)
+            response.delete_cookie("nm_oauth", path="/")
+            return response
         try:
             ident = parse_identifier(email)
             api_key, caller, created = await asyncio.to_thread(cloud.sign_in, ident, "nanoLika Web", f"oauth.{provider}")
         except Exception as e:  # noqa: BLE001
             log.warning("oauth %s sign_in: %s", provider, type(e).__name__)
             code_name = getattr(e, "code", type(e).__name__)
-            return _back(nxt, str(code_name))
+            return failed(str(code_name))
         log.info("oauth %s: account %s (%s)", provider, caller.account_id[:8], "created" if created else "existing")
         # ключ всегда уходит консоли: без него она не знает о входе; адрес возврата
         # (витрина, профиль, любая страница) консоль откроет сама после сохранения
