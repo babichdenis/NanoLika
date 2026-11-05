@@ -552,6 +552,7 @@ class MCPServerSettings(BaseModel):
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
     url: str | None = None  # Streamable-HTTP / SSE endpoint
+    headers: dict[str, str] = Field(default_factory=dict)  # e.g. Authorization for a remote server
     risk: RiskLevel = RiskLevel.MODERATE
     egress: bool = False
     reads_private_data: bool = False

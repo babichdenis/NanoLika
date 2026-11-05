@@ -219,13 +219,13 @@ class MCPManager:
                 from mcp.client.streamable_http import (  # type: ignore[attr-defined,no-redef]
                     streamablehttp_client as http_client,
                 )
-            streams = await stack.enter_async_context(http_client(cfg.url or ""))
+            streams = await stack.enter_async_context(http_client(cfg.url or "", headers=cfg.headers or None))
             return streams[0], streams[1]
         if transport == "sse":
             # an older server speaks SSE only
             from mcp.client.sse import sse_client
 
-            streams = await stack.enter_async_context(sse_client(cfg.url or ""))
+            streams = await stack.enter_async_context(sse_client(cfg.url or "", headers=cfg.headers or None))
             return streams[0], streams[1]
         if not cfg.command:
             raise ValueError(f"MCP server '{cfg.name}' needs either `command` or `url`")
