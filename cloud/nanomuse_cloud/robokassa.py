@@ -183,12 +183,9 @@ class RobokassaPayments(Payments):
             "SignatureValue": self._signature(":".join(parts)),
             "Culture": "ru",
             "IsTest": "1" if self.test_mode else "0",
-            # Return to the account-aware checkout on the same origin that holds
-            # the user's cloud session. The merchant's SuccessURL remains a fallback.
-            "SuccessUrl2": self.public_base.rstrip("/") + "/payments/checkout?order=" + order_id,
-            "SuccessUrl2Method": "GET",
-            "FailUrl2": self.public_base.rstrip("/") + "/payments/checkout?order=" + order_id,
-            "FailUrl2Method": "GET",
+            # Возврат идёт на SuccessURL из кабинета; Robokassa вернёт туда Shp_order,
+            # а checkout найдёт заказ сам. SuccessUrl2/FailUrl2 не используем: магазин
+            # не подключён к этой услуге и касса отвечает «код 29».
             **custom,
         }
         query = urlencode(values)
