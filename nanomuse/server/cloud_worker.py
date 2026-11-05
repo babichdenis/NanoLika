@@ -92,6 +92,9 @@ def build_worker() -> FastAPI:
                     "vendor": str(row.get("vendor") or ""),
                     "kind": str(row.get("kind") or nano.get("kind") or ""),
                     "free": bool(row.get("free") or nano.get("free")),
+                    # the relay's own plan gate: the model is in the menu but this account's
+                    # tariff does not open it (viewable, not runnable)
+                    "locked": bool(row.get("plan_locked") or nano.get("plan_locked")),
                     "reasoning": reason if isinstance(reason, dict) else None,
                     "sell": row.get("sell") if isinstance(row.get("sell"), dict) else None,
                     "context": row.get("context") if isinstance(row.get("context"), int) else nano.get("context"),

@@ -16,6 +16,7 @@ export interface AccountModel {
   vendor: string;
   kind: string;
   free: boolean;
+  locked?: boolean;
   reasoning?: { levels?: string[]; default?: string; wire?: string } | null;
   sell?: { currency?: string; in?: number; cached_in?: number; out?: number } | null;
   context?: number | null;
@@ -155,6 +156,7 @@ export function ChatModelSheet({
   };
 
   const choose = async (model: AccountModel) => {
+    if (model.locked) return;
     setBusy(true);
     setError("");
     try {
@@ -249,7 +251,7 @@ export function ChatModelSheet({
                     >
                       <span className="w-4 shrink-0 text-accent">{active ? <Check size={14} /> : null}</span>
                       <span className="min-w-0 flex-1 truncate text-[14px]">{model.name}</span>
-                      {model.free && <span className="rounded-full bg-accent/12 px-2 py-0.5 text-[10.5px] font-medium text-accent">{t("Free")}</span>}
+                      {model.locked && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-medium text-amber-700">{t("Lika+")}</span>}
                       {model.vendor && <span className="shrink-0 text-[11.5px] text-muted">{model.vendor}</span>}
                       <ChevronRight size={14} className="shrink-0 text-muted" />
                     </button>
@@ -264,6 +266,14 @@ export function ChatModelSheet({
                 <div>
                   <div className="text-[15px] font-semibold">{picked.name}</div>
                   <div className="text-[12.5px] text-muted">{picked.vendor || picked.id}</div>
+                  {picked.locked && (
+                    <div className="mt-2 rounded-lg bg-amber-500/12 px-2.5 py-1.5 text-[12px] text-amber-800">
+                      {t("Unavailable on your plan")}. {t("Opens on the Lika+ plan")}.{" "}
+                      <a href={PRICING_URL} target="_blank" rel="noreferrer" className="underline">
+                        {t("Compare plans")}
+                      </a>
+                    </div>
+                  )}
                 </div>
                 {inPrice || outPrice ? (
                   <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
@@ -327,11 +337,11 @@ export function ChatModelSheet({
                 <div className="mt-auto">
                   <button
                     type="button"
-                    disabled={busy || picked.id === current}
+                    disabled={busy || picked.locked || picked.id === current}
                     onClick={() => void choose(picked)}
                     className="w-full rounded-xl bg-accent px-4 py-2.5 text-[14px] font-medium text-white disabled:opacity-50"
                   >
-                    {busy ? t("Saving…") : picked.id === current ? t("Current model") : t("Use this model")}
+                    {picked.locked ? t("Available on Lika+") : busy ? t("Saving…") : picked.id === current ? t("Current model") : t("Use this model")}
                   </button>
                 </div>
               </>

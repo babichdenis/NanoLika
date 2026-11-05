@@ -201,6 +201,7 @@ export const api = {
         vendor: string;
         kind: string;
         free: boolean;
+        locked?: boolean;
         reasoning?: { levels?: string[]; default?: string; wire?: string } | null;
         sell?: { currency?: string; in?: number; cached_in?: number; out?: number } | null;
         context?: number | null;

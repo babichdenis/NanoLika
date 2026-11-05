@@ -248,6 +248,11 @@ const ru: Record<string, string> = {
   "Top up": "Пополнить",
   "Account page": "Кабинет",
   "Close": "Закрыть",
+  "Unavailable on your plan": "Недоступна на вашем тарифе",
+  "Opens on the Lika+ plan": "Открывается на тарифе «Лика+»",
+  "Compare plans": "Сравнить тарифы",
+  "Lika+": "Лика+",
+  "Available on Lika+": "Доступна на «Лика+»",
 };
 
 export default ru;
