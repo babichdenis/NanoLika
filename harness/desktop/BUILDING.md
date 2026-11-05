@@ -84,5 +84,7 @@ The website's download buttons should link directly to the public S3 objects, se
 for Windows x64, Mac arm64 and Mac x64. Back up download.html before replacing it, then
 sync its source and publication copies. Remove obsolete copy claiming that this is a
 mockup or that available builds are still pending. Verify the live buttons, file headers,
-version labels and layout after publication. Record the build commit, CI URL, checksums,
+download targets and layout after publication. Keep file formats, build numbers, sizes
+and checksums in release metadata and verification reports, not in the visible download
+cards (owner preference, 2026-11-05). Record the build commit, CI URL, checksums,
 public URLs and rollback paths in the worklog.
