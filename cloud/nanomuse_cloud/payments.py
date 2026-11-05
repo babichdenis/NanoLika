@@ -78,6 +78,9 @@ class OrderRequest(BaseModel):
     accept_terms: bool = False
     plan: str = Field(default="", max_length=16)
     amount: str = Field(default="", max_length=16)
+    # The address a receipt goes to when the account has none (a chat account before an
+    # e-mail is joined); the person types it in the chat.
+    email: str = Field(default="", max_length=128)
     idempotency_key: str = Field(min_length=16, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
@@ -289,6 +292,7 @@ class Payments:
             amount = cents(request.amount)
         # Explicit server-side policy only. DEMO-only ready() remains mandatory.
         # A fixture policy used by an operator test is never persisted as merchant settings.
+        receipt_email = request.email.strip() or receipt_email
         receipt = fiscal.prepare(kind="topup", amount_kopecks=amount, customer_email=receipt_email) if fiscal is not None else None
         with self.db.tx() as c:
             existing = c.execute(

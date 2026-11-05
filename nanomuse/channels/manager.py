@@ -269,6 +269,10 @@ class ChannelManager(ChannelBus):
         # and a confirmation nobody re-asks for is worse than asking again.
         self._unlink_pending: dict[tuple[str, str], float] = {}
         self._logout_pending: dict[tuple[str, str], float] = {}
+        # `/pay` for a chat account without an address: the receipt e-mail it is waiting for
+        self._pay_waiting: set[tuple[str, str]] = set()
+        self._pay_address: dict[tuple[str, str], str] = {}
+        self._pay_plans: dict[tuple[str, str], dict[str, str]] = {}
         self.picker = ChatPicker(self)
         self.sync_receipts = SyncDeliveryReceipts(
             svc.settings.data_dir / "channels" / "sync-delivery.json"
@@ -618,6 +622,11 @@ class ChannelManager(ChannelBus):
             return
         if command in ("/connect", "/подключить"):
             await self._send_connect_code(msg)
+            return
+        if command in ("/pay", "/оплатить") or (
+            (msg.channel, msg.chat_id) in self._pay_waiting
+        ):
+            await self._pay_command(msg)
             return
         if command in ("/help", "/status"):
             key = "help"
@@ -1092,6 +1101,120 @@ class ChannelManager(ChannelBus):
                 "Эта просьба уже не ждёт ответа.",
             )
         await self._send(channel, chat_id, text)
+
+    async def _pay_key(self, msg: InboundMessage) -> str:
+        """The Cloud key this chat pays with: its own, or the bot's account for an owner chat."""
+        key, _model = await self._cloud_key_for(msg.channel, msg)
+        if key and key != "!":
+            return key
+        hub = getattr(self.svc, "hub", None)
+        if hub is not None and getattr(hub, "signed_in", False):
+            return hub._key()
+        return ""
+
+    async def _pay_call(
+        self, msg: InboundMessage, method: str, path: str, body: dict | None = None
+    ) -> dict[str, Any] | None:
+        settings = self.store.resolved(self.store.config(msg.channel))
+        base = str(settings.get("cloud_url") or "").strip().rstrip("/")
+        key = await self._pay_key(msg)
+        if not base or not key:
+            return None
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        try:
+            async with httpx.AsyncClient(timeout=25) as client:
+                response = await client.request(method, base + path, headers=headers, json=body)
+        except httpx.HTTPError:
+            return None
+        if response.status_code >= 400:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    async def _pay_command(self, msg: InboundMessage) -> None:
+        """`/pay` inside the chat: a receipt address, the plans, and the bank's own link.
+
+        A chat account may have no address yet (it was made by the first message), and a
+        receipt needs one: the bot asks for it once, keeps it for this chat, and never
+        creates a second account. `/pay` alone lists the plans, `/pay 2` makes the order and
+        sends the payment page the bank returns.
+        """
+        key = (msg.channel, msg.chat_id)
+        text = msg.text.strip()
+        command = text.split()[0].lower().split("@")[0] if text else ""
+        if key in self._pay_waiting:
+            email = text.strip()
+            if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", email) or len(email) > 128:
+                await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "pay_email_bad"))
+                return
+            self._pay_waiting.discard(key)
+            self._pay_address[key] = email
+            await self._pay_plans_send(msg)
+            return
+        if key not in self._pay_address:
+            me = await self._pay_call(msg, "GET", "/v1/me")
+            account = (me or {}).get("account") if isinstance(me, dict) else None
+            email = str((account or {}).get("email") or "").strip() if isinstance(account, dict) else ""
+            if email:
+                self._pay_address[key] = email
+        if key not in self._pay_address:
+            self._pay_waiting.add(key)
+            await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "pay_email_ask"))
+            return
+        parts = text.split()
+        if len(parts) > 1 and parts[1].isdigit():
+            await self._pay_order(msg, int(parts[1]))
+            return
+        await self._pay_plans_send(msg)
+
+    async def _pay_plans_send(self, msg: InboundMessage) -> None:
+        key = (msg.channel, msg.chat_id)
+        data = await self._pay_call(msg, "GET", "/v1/payments/config")
+        plans = (data or {}).get("plans") if isinstance(data, dict) else None
+        if not isinstance(plans, dict) or not plans:
+            await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "pay_unavailable"))
+            return
+        rows: dict[str, str] = {}
+        lines: list[str] = []
+        for number, (plan_id, row) in enumerate(plans.items(), start=1):
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or plan_id)
+            amount = int(row.get("amount") or 0) / 100
+            lines.append(f"{number}. {name} — {amount:g} ₽")
+            rows[str(number)] = str(plan_id)
+        self._pay_plans[key] = rows
+        header = channel_text(self.lang, "pay_plans")
+        await self._send(msg.channel, msg.chat_id, header + "\n\n" + "\n".join(lines) + "\n\n" + channel_text(self.lang, "pay_how"))
+
+    async def _pay_order(self, msg: InboundMessage, number: int) -> None:
+        key = (msg.channel, msg.chat_id)
+        plan_id = self._pay_plans.get(key, {}).get(str(number))
+        if not plan_id:
+            await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "pay_bad_plan"))
+            return
+        email = self._pay_address.get(key, "")
+        body = {
+            "plan": plan_id,
+            "accept_terms": True,
+            "idempotency_key": secrets.token_hex(16),
+            "email": email,
+        }
+        data = await self._pay_call(msg, "POST", "/v1/payments/orders", body)
+        url = str((data or {}).get("payment_url") or "")
+        if not url:
+            await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "pay_failed"))
+            return
+        await self._send(
+            msg.channel,
+            msg.chat_id,
+            channel_text(self.lang, "pay_link").format(url=url),
+        )
 
     async def _send_connect_code(self, msg: InboundMessage) -> None:
         """A code that ties this chat's account to an email — and so to the web.
