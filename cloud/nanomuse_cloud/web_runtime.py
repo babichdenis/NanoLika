@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 import websockets
 from fastapi import Request, WebSocket
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from .browser_auth import SESSION_COOKIE
@@ -71,8 +72,67 @@ async def _caller_for(cloud: Any, request: Request) -> Any:
         return None
 
 
+
+class WebUiProxy(BaseHTTPMiddleware):
+    """Serve the runtime's own web client at `/web/` for a signed-in account.
+
+    The relay's `/web/` is a static lite chat; the full client (memory, tools, files) is
+    the runtime's page. The static mount matches first, so this runs as middleware — the
+    same door, one layer earlier. An account that is not allowed, or a runtime that is
+    down, falls through to the static page instead of an error.
+    """
+
+    def __init__(self, app: Any, cloud: Any) -> None:  # noqa: ANN401
+        super().__init__(app)
+        self.cloud = cloud
+
+    async def dispatch(self, request: Request, call_next: Any) -> Any:  # noqa: ANN401
+        path = request.url.path
+        if not (path == "/web" or path.startswith("/web/")):
+            return await call_next(request)
+        token = request.cookies.get(SESSION_COOKIE, "")
+        if not token or not RUNTIME_TOKEN:
+            return await call_next(request)
+        try:
+            caller = await asyncio.to_thread(self.cloud.authenticate, token)
+        except Exception:  # noqa: BLE001 — no session, static page as before
+            return await call_next(request)
+        if OWNERS and caller.account_id not in OWNERS:
+            return await call_next(request)
+        headers = {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in DROP_REQUEST
+        }
+        try:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+                answer = await client.request(
+                    request.method,
+                    RUNTIME_BASE + path,
+                    params=request.query_params,
+                    headers=headers,
+                    content=await request.body(),
+                )
+        except httpx.HTTPError:
+            return await call_next(request)
+        if answer.status_code >= 400:
+            return await call_next(request)
+        return Response(
+            content=answer.content,
+            status_code=answer.status_code,
+            headers={
+                key: value
+                for key, value in answer.headers.items()
+                if key.lower() not in DROP_RESPONSE
+            },
+            media_type=answer.headers.get("content-type"),
+        )
+
+
 def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
-    """Mount `/api/*` as the runtime door. Called from `create_app`."""
+    """Mount `/api/*` and `/ws` as the runtime door, and `/web/` as its page."""
+
+    app.add_middleware(WebUiProxy, cloud=cloud)
 
     @app.websocket("/ws")
     async def web_runtime_ws(websocket: WebSocket) -> None:
