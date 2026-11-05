@@ -157,7 +157,10 @@ export function useT(): typeof t {
 
 /** Locale tag for Intl / toLocale*String, so dates and numbers follow the UI language. */
 export function intlLocale(): string {
-  return getLocale() === "zh-CN" ? "zh-CN" : "en-US";
+  const locale = getLocale();
+  if (locale === "zh-CN") return "zh-CN";
+  if (locale === "ru") return "ru-RU";
+  return "en-US";
 }
 
 /** Names of translated keys, for tests and for spotting strings that lack a translation. */

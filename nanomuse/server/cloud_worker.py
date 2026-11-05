@@ -31,6 +31,9 @@ DROP_RESPONSE = {"content-length", "content-encoding", "transfer-encoding", "con
 
 def build_worker() -> FastAPI:
     settings = load_settings()
+    # The worker has no config file of its own; the relay is ours, not the upstream one the
+    # package ships as its default.
+    settings.cloud.base_url = os.environ.get("NANOMUSE_CLOUD_URL", "https://cloud.nanolika.ru").rstrip("/")
     root = Path(os.environ.get("NANOMUSE_ACCOUNTS_DIR", str(settings.data_dir / "accounts")))
     runtime = AccountRuntime(
         settings,
@@ -52,6 +55,42 @@ def build_worker() -> FastAPI:
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
         return {"ok": True, "active": runtime.active()}
+
+    @app.get("/api/models")
+    async def account_models(request: Request) -> JSONResponse:
+        """The account's models for the chat picker: the relay's menu and the current choice."""
+        account_id = request.headers.get("x-account", "").strip()
+        cloud_key = request.headers.get("x-cloud-key", "").strip()
+        if not account_id:
+            return JSONResponse({"detail": "no account"}, status_code=401)
+        try:
+            service = await runtime.service(account_id, cloud_key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("worker: models account {} did not start: {}", account_id[:8], exc)
+            return JSONResponse({"detail": "runtime unavailable"}, status_code=502)
+        llm = service.settings.llm
+        rows = []
+        for row in getattr(service.hub, "models", []) or []:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            nano = row.get("nanomuse") if isinstance(row.get("nanomuse"), dict) else {}
+            reason = row.get("reasoning") if isinstance(row.get("reasoning"), dict) else nano.get("reasoning")
+            rows.append(
+                {
+                    "id": str(row["id"]),
+                    "name": str(row.get("name") or row["id"]),
+                    "vendor": str(row.get("vendor") or ""),
+                    "kind": str(row.get("kind") or nano.get("kind") or ""),
+                    "free": bool(row.get("free") or nano.get("free")),
+                    "reasoning": reason if isinstance(reason, dict) else None,
+                }
+            )
+        return JSONResponse(
+            {
+                "current": {"provider": llm.provider, "model": llm.model, "cloud": bool(getattr(llm, "cloud", False))},
+                "models": rows,
+            }
+        )
 
     @app.api_route(
         "/{path:path}",

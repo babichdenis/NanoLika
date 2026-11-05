@@ -7,6 +7,7 @@ import { cloudRetryTarget } from "../cloud-retry";
 import { AvatarOptionsCard } from "../components/AvatarOptionsCard";
 import { BrowserViewer } from "../components/BrowserViewer";
 import { ChatTune } from "../components/ChatTune";
+import { ChatModelSheet } from "../components/ChatModelSheet";
 import { HandsLiveBar } from "../components/HandsLive";
 import { MicButton, useDictation } from "../components/Dictation";
 import { ApprovalCard, ArtifactCard, BrowserCard, HandsCard, HoldCard, Notice, QuestionCard, ToolChip } from "../components/Cards";
@@ -776,6 +777,7 @@ function Composer({
   onSend: (text: string, files: string[]) => Promise<void>;
 }) {
   const { state, draft, draftFiles, toast } = useStore();
+  const [modelOpen, setModelOpen] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   // voice input: the words recognised so far replace what dictation put in the box, after
@@ -1046,6 +1048,15 @@ function Composer({
           aria-label={t("Message")}
           className="flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-[1.4] outline-none placeholder:text-muted"
         />
+        <button
+          type="button"
+          onClick={() => setModelOpen(true)}
+          title={t("Model")}
+          aria-label={t("Model")}
+          className="flex h-9 max-w-[150px] shrink-0 items-center gap-1 rounded-full bg-surface-2 px-2.5 text-[12px] text-fg/80 hover:bg-border/60"
+        >
+          <span className="truncate">{state.settings?.llm.model || t("Model")}</span>
+        </button>
         {dictation.supported && <MicButton listening={dictation.listening} onClick={toggleDictation} />}
         <button
           type="submit"
@@ -1061,6 +1072,12 @@ function Composer({
           <ArrowUp size={19} strokeWidth={2.5} />
         </button>
       </div>
+      <ChatModelSheet
+        open={modelOpen}
+        current={state.settings?.llm.model ?? ""}
+        onClose={() => setModelOpen(false)}
+        onPicked={() => window.location.reload()}
+      />
     </form>
   );
 }

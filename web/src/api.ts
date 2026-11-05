@@ -191,6 +191,19 @@ export const api = {
   cloudContribute: (on: boolean) => request<{ on: boolean; samples: number; default_on?: boolean; privacy_url?: string }>("/api/cloud/contribute", json({ on })),
   cloudDeleteSamples: () => request<{ deleted: number }>("/api/cloud/samples", { method: "DELETE" }),
   cloudUseAsModel: (model = "") => request<Record<string, unknown>>("/api/cloud/use-as-model", json({ model })),
+  /** The account's models for the chat picker (the relay's menu, with reasoning levels). */
+  models: () =>
+    request<{
+      current: { provider: string; model: string; cloud: boolean };
+      models: Array<{
+        id: string;
+        name: string;
+        vendor: string;
+        kind: string;
+        free: boolean;
+        reasoning?: { levels?: string[]; default?: string; wire?: string } | null;
+      }>;
+    }>("/api/models"),
   // ---- conversations synced between the account's devices (contract C7)
   syncState: () => request<SyncState>("/api/sync/state"),
   /** off tells the relay, which deletes what it stores; on pushes this device's chats again */
