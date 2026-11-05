@@ -1,10 +1,10 @@
 /**
- * The chat's model picker, a skeleton in the manner of the OpenCode dialog: a searchable
- * list on the left (favourites, recent, the account's models) and the model's details on
- * the right (its reasoning levels and a favourite star). Picking a model makes it the
- * account's chat model; the chat reloads once it is saved.
+ * The chat's model picker in the manner of the OpenCode dialog: a searchable list on the
+ * left (kind filters, favourites, recent, the account's models) and the model's card on
+ * the right — price per million tokens, context, reasoning levels, plans and the doors to
+ * the cabinet and the top-up page. Picking a model makes it the account's chat model.
  */
-import { Check, ChevronRight, Loader2, Search, Star, X } from "lucide-react";
+import { Check, ChevronRight, CreditCard, Loader2, Search, Star, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useT } from "../i18n";
@@ -17,6 +17,8 @@ export interface AccountModel {
   kind: string;
   free: boolean;
   reasoning?: { levels?: string[]; default?: string; wire?: string } | null;
+  sell?: { currency?: string; in?: number; cached_in?: number; out?: number } | null;
+  context?: number | null;
 }
 
 interface ModelsAnswer {
@@ -24,8 +26,12 @@ interface ModelsAnswer {
   models: AccountModel[];
 }
 
+type Kind = "all" | "chat" | "image" | "video" | "audio";
+
 const FAV_KEY = "nm.model.favorites";
 const RECENT_KEY = "nm.model.recent";
+const PRICING_URL = "https://nanolika.ru/pricing.html";
+const ACCOUNT_URL = "/web/account/?source=web";
 
 function readList(key: string): string[] {
   try {
@@ -44,6 +50,23 @@ function writeList(key: string, list: string[]) {
   }
 }
 
+function kindOf(model: AccountModel): Kind {
+  const kind = (model.kind || "").toLowerCase();
+  if (kind === "image" || kind === "video" || kind === "audio") return kind;
+  return "chat";
+}
+
+function money(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  return value >= 100 ? value.toFixed(0) : value.toFixed(2).replace(".", ",");
+}
+
+function contextLabel(tokens: number | null | undefined): string {
+  if (!tokens || tokens <= 0) return "";
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
 export function ChatModelSheet({
   open,
   current,
@@ -59,9 +82,11 @@ export function ChatModelSheet({
   const [answer, setAnswer] = useState<ModelsAnswer | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<Kind>("all");
   const [picked, setPicked] = useState<AccountModel | null>(null);
   const [favorites, setFavorites] = useState<string[]>(() => readList(FAV_KEY));
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY));
+  const [plans, setPlans] = useState<Array<{ id: string; name: string; amount: number }>>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -71,10 +96,27 @@ export function ChatModelSheet({
       .models()
       .then((data) => {
         setAnswer(data);
-        const first = data.models.find((m) => m.id === current) ?? data.models.find((m) => m.kind !== "image" && m.kind !== "video") ?? null;
+        const first =
+          data.models.find((m) => m.id === current) ??
+          data.models.find((m) => kindOf(m) === "chat") ??
+          null;
         setPicked(first);
       })
       .catch((e: Error) => setError(e.message || t("Could not load the models.")));
+    void fetch("/v1/payments/config", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const rows = data?.plans;
+        if (!rows || typeof rows !== "object") return;
+        setPlans(
+          Object.entries(rows as Record<string, { name?: string; amount?: number }>).map(([id, row]) => ({
+            id,
+            name: String(row?.name || id),
+            amount: Number(row?.amount || 0) / 100,
+          })),
+        );
+      })
+      .catch(() => undefined);
   }, [open, current, t]);
 
   useEffect(() => {
@@ -89,17 +131,22 @@ export function ChatModelSheet({
   const groups = useMemo(() => {
     const all = answer?.models ?? [];
     const q = query.trim().toLowerCase();
-    const match = (m: AccountModel) => !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.vendor.toLowerCase().includes(q);
+    const match = (m: AccountModel) =>
+      (kind === "all" || kindOf(m) === kind) &&
+      (!q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.vendor.toLowerCase().includes(q));
     const byId = new Map(all.map((m) => [m.id, m]));
     const fav = favorites.map((id) => byId.get(id)).filter((m): m is AccountModel => !!m).filter(match);
-    const rec = recent.map((id) => byId.get(id)).filter((m): m is AccountModel => !!m && !favorites.includes(m.id)).filter(match);
+    const rec = recent
+      .map((id) => byId.get(id))
+      .filter((m): m is AccountModel => !!m && !favorites.includes(m.id))
+      .filter(match);
     const rest = all.filter((m) => !favorites.includes(m.id) && !recent.includes(m.id)).filter(match);
     return [
       { title: t("Favorites"), rows: fav },
       { title: t("Recent"), rows: rec },
       { title: t("All models"), rows: rest },
     ].filter((group) => group.rows.length > 0);
-  }, [answer, favorites, recent, query, t]);
+  }, [answer, favorites, recent, query, kind, t]);
 
   const toggleFavorite = (id: string) => {
     const next = favorites.includes(id) ? favorites.filter((x) => x !== id) : [id, ...favorites].slice(0, 24);
@@ -126,13 +173,30 @@ export function ChatModelSheet({
 
   if (!open) return null;
 
+  const kinds: Array<{ id: Kind; label: string }> = [
+    { id: "all", label: t("All") },
+    { id: "chat", label: t("Text") },
+    { id: "image", label: t("Images") },
+    { id: "video", label: t("Video") },
+    { id: "audio", label: t("Audio") },
+  ];
+  const pill = (active: boolean) =>
+    cx(
+      "rounded-full border px-3 py-1 text-[12.5px] transition",
+      active ? "border-accent bg-accent/10 text-accent" : "border-border text-fg/70 hover:bg-surface-2",
+    );
+
+  const inPrice = money(picked?.sell?.in);
+  const outPrice = money(picked?.sell?.out);
+  const currency = picked?.sell?.currency || "RUB";
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-3 py-10" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={t("Choose a model")}
-        className="flex max-h-[80vh] w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_24px_80px_-20px_rgba(0,0,0,0.45)]"
+        className="flex max-h-[84vh] w-full max-w-[920px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_24px_80px_-20px_rgba(0,0,0,0.45)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -149,7 +213,14 @@ export function ChatModelSheet({
             <X size={16} />
           </button>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px]">
+        <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2">
+          {kinds.map((item) => (
+            <button key={item.id} type="button" onClick={() => setKind(item.id)} className={pill(kind === item.id)} aria-pressed={kind === item.id}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-h-0 overflow-y-auto px-2 py-2">
             {!answer && !error && (
               <div className="flex items-center gap-2 px-3 py-6 text-[13.5px] text-muted">
@@ -157,6 +228,9 @@ export function ChatModelSheet({
               </div>
             )}
             {error && <div className="px-3 py-4 text-[13.5px] text-rose-600">{error}</div>}
+            {!error && answer && groups.length === 0 && (
+              <div className="px-3 py-4 text-[13.5px] text-muted">{t("Nothing found.")}</div>
+            )}
             {groups.map((group) => (
               <div key={group.title} className="mb-2">
                 <div className="px-3 pb-1 pt-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted">{group.title}</div>
@@ -184,13 +258,32 @@ export function ChatModelSheet({
               </div>
             ))}
           </div>
-          <aside className="border-l border-border px-4 py-4">
+          <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto border-l border-border px-4 py-4">
             {picked ? (
-              <div className="flex h-full flex-col gap-3">
+              <>
                 <div>
                   <div className="text-[15px] font-semibold">{picked.name}</div>
                   <div className="text-[12.5px] text-muted">{picked.vendor || picked.id}</div>
                 </div>
+                {inPrice || outPrice ? (
+                  <div className="rounded-xl bg-surface-2/60 px-3 py-2.5">
+                    <div className="text-[11.5px] font-semibold uppercase tracking-wide text-muted">{t("Price per 1M tokens")}</div>
+                    <div className="mt-1 flex items-baseline justify-between gap-2 text-[13px]">
+                      <span>{t("Input")}</span>
+                      <span className="font-medium">{inPrice ? `${inPrice} ₽` : "—"}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                      <span>{t("Output")}</span>
+                      <span className="font-medium">{outPrice ? `${outPrice} ₽` : "—"}</span>
+                    </div>
+                    {currency !== "RUB" && <div className="mt-1 text-[11px] text-muted">{currency}</div>}
+                  </div>
+                ) : null}
+                {contextLabel(picked.context) && (
+                  <div className="text-[12.5px] text-muted">
+                    {t("Context")}: {contextLabel(picked.context)} {t("tokens")}
+                  </div>
+                )}
                 {picked.reasoning?.levels?.length ? (
                   <div>
                     <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-muted">{t("Reasoning")}</div>
@@ -211,6 +304,26 @@ export function ChatModelSheet({
                   <Star size={15} className={favorites.includes(picked.id) ? "fill-amber-400 text-amber-500" : "text-muted"} />
                   {favorites.includes(picked.id) ? t("Remove from favorites") : t("Add to favorites")}
                 </button>
+                {plans.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-[11.5px] font-semibold uppercase tracking-wide text-muted">{t("Plans")}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {plans.map((plan) => (
+                        <a key={plan.id} href={PRICING_URL} target="_blank" rel="noreferrer" className={pill(false)}>
+                          {plan.name} · {plan.amount.toFixed(0)} ₽
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="mt-1 flex flex-col gap-1 border-t border-border pt-2">
+                  <a href={PRICING_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-surface-2">
+                    <CreditCard size={15} className="text-muted" /> {t("Top up")}
+                  </a>
+                  <a href={ACCOUNT_URL} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] hover:bg-surface-2">
+                    <UserRound size={15} className="text-muted" /> {t("Account page")}
+                  </a>
+                </div>
                 <div className="mt-auto">
                   <button
                     type="button"
@@ -221,7 +334,7 @@ export function ChatModelSheet({
                     {busy ? t("Saving…") : picked.id === current ? t("Current model") : t("Use this model")}
                   </button>
                 </div>
-              </div>
+              </>
             ) : (
               <div className="text-[13px] text-muted">{t("Pick a model to see what it can do.")}</div>
             )}

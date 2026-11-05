@@ -69,8 +69,18 @@ def build_worker() -> FastAPI:
             logger.warning("worker: models account {} did not start: {}", account_id[:8], exc)
             return JSONResponse({"detail": "runtime unavailable"}, status_code=502)
         llm = service.settings.llm
+        # `/v1/me/models` carries the account's shelf with prices; `/v1/models` does not.
+        menu_rows: list[Any] = []
+        try:
+            shelf = await service.hub.cloud.me_models()
+            if isinstance(shelf, dict) and isinstance(shelf.get("models"), list):
+                menu_rows = shelf["models"]
+        except Exception:  # noqa: BLE001 — an older relay or a cold client falls back to the plain menu
+            menu_rows = []
+        if not menu_rows:
+            menu_rows = list(getattr(service.hub, "models", []) or [])
         rows = []
-        for row in getattr(service.hub, "models", []) or []:
+        for row in menu_rows:
             if not isinstance(row, dict) or not row.get("id"):
                 continue
             nano = row.get("nanomuse") if isinstance(row.get("nanomuse"), dict) else {}
@@ -83,6 +93,8 @@ def build_worker() -> FastAPI:
                     "kind": str(row.get("kind") or nano.get("kind") or ""),
                     "free": bool(row.get("free") or nano.get("free")),
                     "reasoning": reason if isinstance(reason, dict) else None,
+                    "sell": row.get("sell") if isinstance(row.get("sell"), dict) else None,
+                    "context": row.get("context") if isinstance(row.get("context"), int) else nano.get("context"),
                 }
             )
         return JSONResponse(

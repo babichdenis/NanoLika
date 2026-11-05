@@ -233,6 +233,21 @@ const ru: Record<string, string> = {
   "Pick a model to see what it can do.": "Выберите модель, чтобы увидеть, что она умеет.",
   "Could not load the models.": "Не удалось загрузить модели.",
   "Could not change the model.": "Не удалось сменить модель.",
+  "All": "Все",
+  "Text": "Текст",
+  "Images": "Картинки",
+  "Video": "Видео",
+  "Audio": "Звук",
+  "Nothing found.": "Ничего не найдено.",
+  "Price per 1M tokens": "Цена за 1 млн токенов",
+  "Input": "Вход",
+  "Output": "Выход",
+  "Context": "Контекст",
+  "tokens": "токенов",
+  "Plans": "Тарифы",
+  "Top up": "Пополнить",
+  "Account page": "Кабинет",
+  "Close": "Закрыть",
 };
 
 export default ru;

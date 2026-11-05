@@ -202,6 +202,8 @@ export const api = {
         kind: string;
         free: boolean;
         reasoning?: { levels?: string[]; default?: string; wire?: string } | null;
+        sell?: { currency?: string; in?: number; cached_in?: number; out?: number } | null;
+        context?: number | null;
       }>;
     }>("/api/models"),
   // ---- conversations synced between the account's devices (contract C7)
