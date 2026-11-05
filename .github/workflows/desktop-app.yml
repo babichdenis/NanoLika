@@ -188,8 +188,8 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
           APP_DIR: harness/desktop
-          APP_NAME: nanoMuse
-          ARTIFACT: nanoMuse-Desktop
+          APP_NAME: NanoLika
+          ARTIFACT: NanoLika-Desktop
         run: |
           npm ci
           npm run typecheck
