@@ -10,6 +10,32 @@ import { useCloudConfig } from './AccountPage.tsx'
 import { bridge } from './bridge.ts'
 import { cash } from './money.ts'
 import { call, column, errorStyle, muted, row, type CloudStatus, type Translate, failureText } from './api.ts'
+import qrcode from './vendor/qrcode.js'
+
+/** A PKCE verifier and its S256 challenge, both base64url without padding. */
+function pkce(): Promise<{ verifier: string; challenge: string }> {
+  const bytes = crypto.getRandomValues(new Uint8Array(48))
+  const verifier = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then((digest) => {
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    return { verifier, challenge }
+  })
+}
+
+/** The QR modules as one SVG path, or null when the link cannot be drawn. */
+function qrOf(text: string): { path: string; size: number } | null {
+  try {
+    const qr = qrcode(0, 'M')
+    qr.addData(text, 'Byte')
+    qr.make()
+    const modules = qr.getModuleCount()
+    let path = ''
+    for (let row = 0; row < modules; row++) for (let col = 0; col < modules; col++) if (qr.isDark(row, col)) path += `M${col + 4} ${row + 4}h1v1h-1z`
+    return { path, size: modules + 8 }
+  } catch {
+    return null
+  }
+}
 
 export interface SignInProps {
   t: Translate
@@ -21,7 +47,9 @@ export interface SignInProps {
 }
 
 export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): ReactNode {
-  const [step, setStep] = useState<'identifier' | 'code' | 'password'>('identifier')
+  const [step, setStep] = useState<'identifier' | 'code' | 'password' | 'telegram'>('identifier')
+  // "Sign in with Telegram": the code on screen, the verifier kept here, the poll below.
+  const [tg, setTg] = useState<{ code: string; url: string; verifier: string; expiresInS: number } | null>(null)
   const [identifier, setIdentifier] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
@@ -81,6 +109,50 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
     })
   }
 
+  const openTelegram = () => {
+    void run(async () => {
+      const { verifier, challenge } = await pkce()
+      const start = await call<{ code: string; url: string; expiresInS: number }>('telegram/start', { challenge })
+      setTg({ ...start, verifier })
+      setStep('telegram')
+    })
+  }
+
+  // While the QR is on screen, ask the host whether the bot approved it; the host asks the relay.
+  useEffect(() => {
+    if (step !== 'telegram' || !tg) return
+    let alive = true
+    let timer = 0
+    const deadline = Date.now() + Math.max(60, tg.expiresInS) * 1000
+    const tick = async () => {
+      if (!alive) return
+      try {
+        const status = await call<CloudStatus | null>('telegram/poll', { code: tg.code, verifier: tg.verifier })
+        if (!alive) return
+        if (status) {
+          onSignedIn(status)
+          return
+        }
+      } catch (err: unknown) {
+        if (!alive) return
+        if (Date.now() >= deadline) {
+          setError(failureText(t, err))
+          return
+        }
+      }
+      if (Date.now() >= deadline) {
+        setError(t('tgExpired'))
+        return
+      }
+      timer = window.setTimeout(() => void tick(), 2000)
+    }
+    timer = window.setTimeout(() => void tick(), 1500)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [step, tg, onSignedIn, t])
+
   const signIn = (event: FormEvent) => {
     event.preventDefault()
     void run(async () => {
@@ -106,6 +178,20 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
 
   const primary = { variant: 'primary' as const, size: 'md' as const, type: 'submit' as const, style: wide ? { width: '100%' } : undefined }
   const back = () => { setStep('identifier'); setError(undefined); setCode(''); setPassword('') }
+
+  if (step === 'telegram') {
+    const qr = tg ? qrOf(tg.url) : null
+    return h('div', { style: column },
+      h('div', { style: muted }, t('tgLead')),
+      qr
+        ? h('svg', { viewBox: `0 0 ${qr.size} ${qr.size}`, width: 232, height: 232, role: 'img', 'aria-label': t('tgSignIn'), style: { display: 'block', maxWidth: '100%', height: 'auto', background: '#fff', borderRadius: 12, margin: '16px auto' } }, h('rect', { width: '100%', height: '100%', fill: '#fff' }), h('path', { d: qr.path, fill: '#253020', shapeRendering: 'crispEdges' }))
+        : null,
+      tg ? h('div', null, h('a', { href: tg.url, target: '_blank', rel: 'noopener noreferrer', className: 'nm-ob-link nm-inline' }, t('tgOpen'))) : null,
+      h('div', { style: muted }, t('tgWaiting')),
+      error ? h('div', { style: errorStyle, role: 'alert' }, error) : null,
+      h('div', { style: row },
+        h(Button, { variant: 'ghost', size: 'md', type: 'button', disabled: busy, onClick: back }, t('back'))))
+  }
 
   if (step === 'code') {
     return h('form', { style: column, onSubmit: signIn },
@@ -143,6 +229,7 @@ export function SignIn({ t, onSignedIn, footer, wide = false }: SignInProps): Re
     h('div', { style: muted }, t('identifierHint')),
     error ? h('div', { style: errorStyle, role: 'alert' }, error) : null,
     h('div', { style: row },
-      h(Button, { ...primary, disabled: busy || identifier.trim().length < 3 }, busy ? t('sending') : t('sendCode'))),
+      h(Button, { ...primary, disabled: busy || identifier.trim().length < 3 }, busy ? t('sending') : t('sendCode')),
+      h(Button, { variant: 'ghost', size: 'md', type: 'button', disabled: busy, onClick: openTelegram }, t('tgSignIn'))),
     footer)
 }

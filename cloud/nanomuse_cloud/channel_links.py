@@ -22,15 +22,18 @@ is this chat" however the two were joined.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
 import re
+import secrets
 import time
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 
 from .browser_auth import SESSION_COOKIE, browser_sign_in
 from .identifiers import BadIdentifier
@@ -127,7 +130,15 @@ def _max_session(cloud: Cloud, user_id: int) -> dict:
 
 
 def _telegram_session(cloud: Cloud, user_id: int) -> dict:
-    """Issue only for an existing Telegram identity; never register or merge accounts."""
+    """The Telegram id and its mini app are one account, until an address joins them.
+
+    The chat makes the account on its first message (`/v1/bot/signin`), and the mini app
+    opens that very account: no address, no code, no second allowance. An address typed
+    later (`/connect`, `link_into`) joins the two ways in, and from then on the account is
+    the one every device signs in to. An account that already holds this Telegram (a code
+    linked it to an e-mail account, or MAX is there too) is found through its alias first,
+    so the mini app never quietly makes a second account beside it.
+    """
     ident = chat_identity("telegram", str(user_id))
     # The database lock also protects alias unlinking. No nested transaction is needed.
     with cloud.db._lock:
@@ -135,12 +146,106 @@ def _telegram_session(cloud: Cloud, user_id: int) -> dict:
         account = (
             cloud.db.account(str(alias["account_id"])) if alias is not None else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key))
         )
-        if account is None:
-            raise CloudError(409, "telegram_not_linked", "Link Telegram to your account first")
-        if account["disabled"]:
-            raise CloudError(403, "account_disabled", "This account is disabled")
-        key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
+    if account is None:
+        # No account yet: the first visit from the mini app makes the same account the
+        # first message to the bot makes, and the key is issued to it.
+        key, caller, _created = cloud.sign_in_bot(str(user_id), "Telegram WebApp", channel="telegram")
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
+    if account["disabled"]:
+        raise CloudError(403, "account_disabled", "This account is disabled")
+    key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
+    return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
+
+
+LOGIN_TTL_S = 300
+_LOGIN_CODE = re.compile(r"nl_LG[A-F0-9]{30}", re.IGNORECASE)
+_OPAQUE = re.compile(r"[A-Za-z0-9_-]{43,128}")
+_VERIFIER = re.compile(r"[A-Za-z0-9._~-]{43,128}")
+
+
+class TelegramLogins:
+    """One-time tickets for "sign in on this computer with Telegram".
+
+    The computer makes a PKCE challenge and shows the code as a QR; the person opens the
+    bot with it; the bot tells the relay which account the chat is (the same account the
+    chat already has, or the one its first message makes); the computer polls with its
+    verifier and gets a key. The bot never sees the key, and the relay never sees the
+    verifier.
+    """
+
+    def __init__(self, cloud: Cloud):
+        self.cloud = cloud
+        with cloud.db.tx() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS telegram_logins ("
+                "code_hash TEXT PRIMARY KEY, challenge TEXT NOT NULL, account_id TEXT NOT NULL DEFAULT '', "
+                "created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)"
+            )
+
+    @staticmethod
+    def _hash(code: str) -> str:
+        return hashlib.sha256(code.encode()).hexdigest()
+
+    def start(self, challenge: str) -> tuple[str, int]:
+        if not _OPAQUE.fullmatch(challenge or ""):
+            raise CloudError(400, "bad_request", "A sign-in challenge is required")
+        now = int(time.time())
+        # Upper from the start: the bot gives the code back uppercased, and the hash must match.
+        code = "NL_LG" + secrets.token_hex(15).upper()
+        with self.cloud.db.tx() as connection:
+            connection.execute("DELETE FROM telegram_logins WHERE expires_at<=?", (now,))
+            connection.execute(
+                "INSERT INTO telegram_logins(code_hash,challenge,account_id,created_at,expires_at) VALUES (?,?,?,?,?)",
+                (self._hash(code), challenge, "", now, now + LOGIN_TTL_S),
+            )
+        return code, now + LOGIN_TTL_S
+
+    def approve(self, code: str, chat_id: str) -> dict[str, Any]:
+        """The bot's half: the chat names the account the computer will sign in to."""
+        code = (code or "").strip().upper()
+        if not _LOGIN_CODE.fullmatch(code):
+            raise CloudError(400, "bad_request", "That is not a sign-in code")
+        row = None
+        with self.cloud.db.tx() as connection:
+            row = connection.execute(
+                "SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)
+            ).fetchone()
+        if row is None or int(row["expires_at"]) <= int(time.time()):
+            raise CloudError(400, "login_expired", "This sign-in code has expired; make a new one on the computer")
+        key, caller, _created = self.cloud.sign_in_bot(str(chat_id), "Telegram Desktop", channel="telegram")
+        # The bot does not keep a key: the computer gets its own in `poll`.
+        self.cloud.db.revoke_key(hashlib.sha256(key.encode()).hexdigest())
+        with self.cloud.db.tx() as connection:
+            connection.execute(
+                "UPDATE telegram_logins SET account_id=? WHERE code_hash=?",
+                (caller.account_id, self._hash(code)),
+            )
+        return {"ok": True, "account": {"id": caller.account_id, "hint": caller.hint}}
+
+    def poll(self, code: str, verifier: str) -> dict[str, Any] | None:
+        """The computer's half: None while the bot has not approved, the key when it has."""
+        code = (code or "").strip().upper()
+        if not _LOGIN_CODE.fullmatch(code) or not _VERIFIER.fullmatch(verifier or ""):
+            raise CloudError(400, "bad_request", "A sign-in code and its proof are required")
+        expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        with self.cloud.db.tx() as connection:
+            row = connection.execute(
+                "SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)
+            ).fetchone()
+        if row is None or int(row["expires_at"]) <= int(time.time()) or not hmac.compare_digest(str(row["challenge"]), expected):
+            raise CloudError(400, "login_expired", "This sign-in has expired; start again on the computer")
+        account_id = str(row["account_id"] or "")
+        if not account_id:
+            return None
+        with self.cloud.db.tx() as connection:
+            connection.execute("DELETE FROM telegram_logins WHERE code_hash=?", (self._hash(code),))
+        account = self.cloud.db.account(account_id)
+        if account is None or account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        key, caller = self.cloud._issue_key(
+            account_id, "Telegram Desktop", "telegram_desktop", expires_at=int(time.time()) + 90 * 86400
+        )
+        return {"api_key": key, "created": False, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
 async def _body(request: Request) -> dict[str, Any]:
@@ -161,6 +266,37 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
     caller_auth = caller_dep
     caller_auth_dependency = Depends(caller_auth)
     router = APIRouter()
+    logins = TelegramLogins(cloud)
+
+    @router.post("/v1/auth/telegram/start")
+    async def telegram_login_start(request: Request) -> dict:
+        """A code for the computer's QR: the person opens the bot, the computer gets a key."""
+        body = await _body(request)
+        code, expires_at = await asyncio.to_thread(logins.start, str(body.get("challenge") or ""))
+        return {
+            "code": code,
+            "url": f"https://t.me/nanolika_bot?start={code}",
+            "expires_at": expires_at,
+            "expires_in_s": LOGIN_TTL_S,
+        }
+
+    @router.post("/v1/auth/telegram/poll")
+    async def telegram_login_poll(request: Request) -> Response:
+        body = await _body(request)
+        answer = await asyncio.to_thread(
+            logins.poll, str(body.get("code") or ""), str(body.get("verifier") or "")
+        )
+        if answer is None:
+            return JSONResponse({"state": "pending"}, status_code=202)
+        return JSONResponse(answer)
+
+    @router.post("/v1/bot/telegram-login")
+    async def bot_telegram_login(request: Request) -> dict:
+        bot_caller(request)
+        body = await _body(request)
+        return await asyncio.to_thread(
+            logins.approve, str(body.get("code") or ""), str(body.get("chat_id") or "")
+        )
 
     @router.post("/v1/link/code")
     async def link_code(caller: Caller = Depends(caller_auth)) -> dict:

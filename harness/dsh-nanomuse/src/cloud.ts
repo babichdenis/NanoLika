@@ -2794,6 +2794,17 @@ export default class NanomuseCloud extends Service {
     return this.serialize(async () => this.adopt(await this.relay.login(identifier.trim(), password, this.deviceName())))
   }
 
+  /** "Sign in with Telegram", step one: a code for this computer's QR. */
+  telegramStart(challenge: string): Promise<{ code: string; url: string; expiresInS: number }> {
+    return this.serialize(() => this.relay.telegramStart(challenge))
+  }
+
+  /** Step two: `null` while the bot waits; the signed-in status once it approved. */
+  async telegramPoll(code: string, verifier: string): Promise<CloudStatus | null> {
+    const signIn = await this.serialize(() => this.relay.telegramPoll(code, verifier))
+    return signIn === null ? null : this.serialize(() => this.adopt(signIn))
+  }
+
   /** A fresh key from either way in: wire the provider, remember the account, wear its look. */
   private async adopt(signIn: SignIn): Promise<CloudStatus> {
     // C10: a different account than the one this device last held (the sync state remembers it through a
@@ -4219,6 +4230,14 @@ export default class NanomuseCloud extends Service {
       if (req.method === 'POST' && route === '/login') {
         const body = await json(req)
         return send(res, 200, await this.login(String(body.identifier ?? ''), String(body.password ?? '')))
+      }
+      if (req.method === 'POST' && route === '/telegram/start') {
+        const body = await json(req)
+        return send(res, 200, await this.telegramStart(String(body.challenge ?? '')))
+      }
+      if (req.method === 'POST' && route === '/telegram/poll') {
+        const body = await json(req)
+        return send(res, 200, await this.telegramPoll(String(body.code ?? ''), String(body.verifier ?? '')))
       }
       if (req.method === 'GET' && route === '/invite') {
         const invite = await this.invite()

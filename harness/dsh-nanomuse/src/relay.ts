@@ -380,6 +380,40 @@ export class Relay {
     return { apiKey: String(body.api_key ?? ''), created: Boolean(body.created), account: toAccount(body) }
   }
 
+  /**
+   * The Telegram way in, step one: a one-time code for the computer's QR.
+   * `challenge` is the S256 PKCE challenge of a verifier this computer keeps.
+   */
+  async telegramStart(challenge: string, signal?: AbortSignal): Promise<{ code: string; url: string; expiresInS: number }> {
+    const res = await this.fetchImpl(`${this.origin}/v1/auth/telegram/start`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ challenge }),
+      signal: signal ?? null,
+    })
+    if (!res.ok) await fail(res)
+    const body = (await res.json()) as Record<string, unknown>
+    return {
+      code: String(body.code ?? ''),
+      url: String(body.url ?? ''),
+      expiresInS: Number(body.expires_in_s ?? 300),
+    }
+  }
+
+  /** Step two: `null` while the bot has not approved, the key once it has. */
+  async telegramPoll(code: string, verifier: string, signal?: AbortSignal): Promise<SignIn | null> {
+    const res = await this.fetchImpl(`${this.origin}/v1/auth/telegram/poll`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ code, verifier }),
+      signal: signal ?? null,
+    })
+    if (res.status === 202) return null
+    if (!res.ok) await fail(res)
+    const body = (await res.json()) as Record<string, unknown>
+    return { apiKey: String(body.api_key ?? ''), created: Boolean(body.created), account: toAccount(body) }
+  }
+
   /** The password way in, for people who set one (`POST /v1/auth/login`). */
   async login(identifier: string, password: string, device: string, signal?: AbortSignal): Promise<SignIn> {
     const res = await this.fetchImpl(`${this.origin}/v1/auth/login`, {

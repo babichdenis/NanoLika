@@ -40,7 +40,7 @@ from nanomuse.channels.chat_picker import ChatPicker
 from nanomuse.channels.desktop_request import computer_request, select_computer
 from nanomuse.channels.dingtalk import DingTalkChannel
 from nanomuse.channels.feishu import FeishuChannel
-from nanomuse.channels.link_start import handle_start_link
+from nanomuse.channels.link_start import desktop_login_token, handle_start_link
 from nanomuse.channels.max import MaxChannel
 from nanomuse.channels.menu import ChatMenu
 from nanomuse.channels.store import ChannelSettingsStore, PairingStore
@@ -268,6 +268,7 @@ class ChannelManager(ChannelBus):
         # within the window is the confirmation. In memory on purpose: a restart forgets it,
         # and a confirmation nobody re-asks for is worse than asking again.
         self._unlink_pending: dict[tuple[str, str], float] = {}
+        self._logout_pending: dict[tuple[str, str], float] = {}
         self.picker = ChatPicker(self)
         self.sync_receipts = SyncDeliveryReceipts(
             svc.settings.data_dir / "channels" / "sync-delivery.json"
@@ -526,6 +527,10 @@ class ChannelManager(ChannelBus):
             )
             self.publish()
 
+        login_code = desktop_login_token(msg.text)
+        if login_code:
+            await self._approve_desktop_login(msg, login_code)
+            return
         if await handle_start_link(channel, msg, self.lang, linked_sender):
             return
         key = f"{msg.channel}:{msg.chat_id}"
@@ -607,6 +612,9 @@ class ChannelManager(ChannelBus):
         command = text.split()[0].lower().split("@")[0] if text else ""
         if command in ("/unlink", "/отвязать", "/развязать"):
             await self._unlink_chat(msg)
+            return
+        if command in ("/logout", "/выйти"):
+            await self._logout_chat(msg)
             return
         if command in ("/connect", "/подключить"):
             await self._send_connect_code(msg)
@@ -1961,11 +1969,15 @@ class ChannelManager(ChannelBus):
         if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
             return "", ""
         approved = self.pairing.approved(channel)
-        if str(msg.sender_id) in approved or str(
-            physical_chat(channel, msg.chat_id)
-        ) in approved:
-            # The owner's own chat keeps this machine's account: public entry is for the
-            # chats that were never paired, not a switch of the owner onto another key.
+        if (
+            str(msg.sender_id) in approved
+            or str(physical_chat(channel, msg.chat_id)) in approved
+        ) and self.svc.hub.signed_in:
+            # The owner's own chat keeps this machine's account while the bot itself is
+            # signed in to one: public entry is for the chats that were never paired, not
+            # a switch of the owner onto another key. A bot with no account of its own
+            # (signed out, "only this messenger") sends its chats through `/v1/bot/signin`
+            # like everyone else, so the messenger keeps its own account.
             return "", ""
         url = str(settings.get("cloud_url") or "").strip().rstrip("/")
         token = str(settings.get("cloud_bot_token") or "").strip()
@@ -2618,6 +2630,69 @@ class ChannelManager(ChannelBus):
             return
         self._unlink_pending[key] = time.monotonic()
         await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "unlink_confirm"))
+
+    async def _approve_desktop_login(self, msg: InboundMessage, code: str) -> None:
+        """The computer's QR was opened here: the chat names the account it signs in to."""
+        channel = self.channels.get(msg.channel)
+        link = getattr(channel, "chat_link", None) if channel is not None else None
+        if link is None:
+            answer = channel_text(self.lang, "desktop_login_offline")
+        else:
+            try:
+                answer = await link().approve_desktop(
+                    msg.sender_id or msg.chat_id, code, self.lang
+                )
+            except Exception as exc:  # noqa: BLE001 — a command must never break the chat
+                logger.warning(
+                    "channel {}: desktop sign-in failed: {}", msg.channel, type(exc).__name__
+                )
+                answer = channel_text(self.lang, "desktop_login_offline")
+        await self._send(msg.channel, msg.chat_id, answer)
+
+    async def _logout_chat(self, msg: InboundMessage) -> None:
+        """`/logout`: the chat goes back to the state of its first visit.
+
+        Asked twice, and the warning says what goes: the chats of this messenger kept on
+        this runtime, and the link to the account. Chats the account already synced to other
+        devices stay where they are — this is a goodbye to the messenger, not a deletion of
+        somebody's account. Cloud aliases are released through the bot's own door, so the
+        relay forgets the chat as well."""
+        key = (msg.channel, msg.chat_id)
+        asked = self._logout_pending.get(key)
+        if asked and time.monotonic() - asked < UNLINK_CONFIRM_SECONDS:
+            self._logout_pending.pop(key, None)
+            await self.logout_now(msg)
+            return
+        self._logout_pending[key] = time.monotonic()
+        await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "logout_confirm"))
+
+    async def logout_now(self, msg: InboundMessage) -> None:
+        """Do what `/logout` confirmed: forget this messenger's local chats and its link."""
+        base = thread_id_for(msg.channel, msg.chat_id)
+        forgotten = 0
+        for thread_id in [
+            t for t in list(self.svc.threads) if t == base or t.startswith(base + "_")
+        ]:
+            # A conversation already in the account lives on the person's other devices
+            # too; deleting it here would delete it there, so it stays.
+            if self.svc.sync.cid_of(thread_id):
+                continue
+            if self.svc.delete_thread(thread_id):
+                forgotten += 1
+        self.pairing.remove(msg.channel, msg.sender_id)
+        self.publish()
+        channel = self.channels.get(msg.channel)
+        link = getattr(channel, "chat_link", None) if channel is not None else None
+        if link is not None:
+            with contextlib.suppress(Exception):
+                await link().release(msg.sender_id, self.lang)
+        logger.info(
+            "channel {}: logout from chat {} ({} local chats forgotten)",
+            msg.channel,
+            msg.chat_id,
+            forgotten,
+        )
+        await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "logout_done"))
 
     async def _greet(self, channel: str, chat_id: str) -> None:
         """The greeting, then the links the channel was configured with."""

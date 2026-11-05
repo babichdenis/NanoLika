@@ -159,6 +159,31 @@ class ChatLink:
         )
         return channel_text(language, "link_offline")
 
+    async def approve_desktop(self, chat_id: str, code: str, language: str = "") -> str:
+        """The computer's QR was opened in this chat: name its account, no key handed here."""
+        base = self._base()
+        if not base:
+            return channel_text(language, "desktop_login_offline")
+        body = {"channel": self.channel, "chat_id": chat_id, "code": code}
+        try:
+            async with self._client(base) as client:
+                answer = await client.post("/v1/bot/telegram-login", json=body)
+        except httpx.HTTPError as exc:
+            logger.warning("{}: the relay could not be told about a desktop sign-in: {}", self.channel, exc)
+            return channel_text(language, "desktop_login_offline")
+        if answer.status_code == 200:
+            return channel_text(language, "desktop_login_done")
+        try:
+            data = answer.json()
+        except ValueError:
+            data = {}
+        error = data.get("error") if isinstance(data, dict) else None
+        name = str((error or {}).get("code") or "") if isinstance(error, dict) else ""
+        if name == "login_expired":
+            return channel_text(language, "desktop_login_expired")
+        logger.warning("{}: the relay refused a desktop sign-in ({}: {})", self.channel, answer.status_code, name)
+        return channel_text(language, "desktop_login_offline")
+
     async def release(self, chat_id: str, language: str = "") -> str:
         """Let this chat go from its account and say how it went. Never raises.
 

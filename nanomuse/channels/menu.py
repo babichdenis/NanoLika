@@ -25,10 +25,24 @@ COPY = {
         "new": "✨ Новая беседа",
         "settings": "⚙️ Настройки",
         "account": "🌐 Кабинет ↗",
+        "computer": "🖥 Компьютер",
+        "computer_text": (
+            "Компьютер подключается к этому же аккаунту через приложение.\n\n"
+            "1. Скачайте приложение для Mac или Windows.\n"
+            "2. Войдите в него по почте.\n"
+            "3. Если почты у аккаунта ещё нет, пришлите /connect: бот даст код, "
+            "введите его на сайте вместе с почтой. После этого компьютер и этот чат "
+            "станут одним аккаунтом."
+        ),
+        "computer_download": "Скачать приложение ↗",
         "switch_yes": "Выйти и подключить",
         "switch_no": "Оставить как есть",
         "unlink": "Отвязать этот чат",
         "unlink_hint": "Чат перестанет быть этим аккаунтом: своя касса, своя история. Аккаунт в приложении останется.",
+        "logout": "🚪 Выйти из Telegram",
+        "logout_confirm": "Выйти из Telegram? История этого чата и его бесед в боте удалится, связь с аккаунтом разорвётся. Чаты на других устройствах останутся.",
+        "logout_yes": "Да, выйти",
+        "logout_no": "Отмена",
         "chats": "💬 Чаты",
         "expired": "Кнопка устарела. Открыла новое меню; выберите действие ещё раз.",
         "private_only": "Настройки и баланс доступны в личном чате с Ликой. Откройте его и отправьте /start.",
@@ -92,10 +106,24 @@ COPY = {
         "new": "New chat",
         "settings": "Settings",
         "account": "Account ↗",
+        "computer": "🖥 Computer",
+        "computer_text": (
+            "A computer joins this same account through the app.\n\n"
+            "1. Download the app for Mac or Windows.\n"
+            "2. Sign in with an e-mail address.\n"
+            "3. If the account has no address yet, send /connect: the bot gives a code; "
+            "enter it on the site together with the address. The computer and this chat "
+            "then become one account."
+        ),
+        "computer_download": "Download the app ↗",
         "switch_yes": "Leave and connect",
         "switch_no": "Keep as it is",
         "unlink": "Unlink this chat",
         "unlink_hint": "The chat stops being this account: its own allowance, its own history. The account in the app stays.",
+        "logout": "🚪 Leave Telegram",
+        "logout_confirm": "Leave Telegram? This chat's history in the bot is deleted and the link to the account is cut. Chats on your other devices stay.",
+        "logout_yes": "Yes, leave",
+        "logout_no": "Cancel",
         "chats": "Chats",
         "expired": "This button expired. A new menu is open; choose the action again.",
         "private_only": "Open a private chat with Lika and send /start to use settings and balance.",
@@ -159,10 +187,23 @@ COPY = {
         "new": "新对话",
         "settings": "设置",
         "account": "账户 ↗",
+        "computer": "🖥 电脑",
+        "computer_text": (
+            "电脑通过桌面应用加入同一个账户。\n\n"
+            "1. 下载 Mac 或 Windows 版应用。\n"
+            "2. 用邮箱登录。\n"
+            "3. 如果账户还没有邮箱，发送 /connect：机器人会给一个代码，"
+            "在网站上连同邮箱一起输入。之后电脑和这个聊天就是同一个账户。"
+        ),
+        "computer_download": "下载应用 ↗",
         "switch_yes": "离开并连接",
         "switch_no": "保持原样",
         "unlink": "解除此聊天的绑定",
         "unlink_hint": "这个聊天将不再是该账号：自己的额度，自己的记录。App 里的账号保持不变。",
+        "logout": "🚪 退出 Telegram",
+        "logout_confirm": "退出 Telegram？这个聊天在机器人里的记录会被删除，和账号的连接会断开。其他设备上的聊天会保留。",
+        "logout_yes": "是，退出",
+        "logout_no": "取消",
         "chats": "对话",
         "expired": "按钮已过期，已打开新菜单，请重新选择。",
         "private_only": "请在与 Lika 的私聊中发送 /start，然后使用设置和余额。",
@@ -513,6 +554,9 @@ class ChatMenu:
         elif page == "confirm-full":
             text = c["full_note"]
             rows = [row("confirm", "mode-confirm:full-access")]
+        elif page == "computer":
+            text = c["computer_text"]
+            rows = [[(c["computer_download"], "https://nanolika.ru/download.html")]]
         elif page == "settings":
             text = c["settings"] + "\n\n" + c["unlink_hint"]
             rows = [
@@ -526,6 +570,13 @@ class ChatMenu:
                 # the way out of a link sits with the settings, where somebody looking for it
                 # would look, and says what it costs before it does anything
                 row("unlink", "unlink"),
+                row("logout", "logout-ask"),
+            ]
+        elif page == "logout-confirm":
+            text = c["logout_confirm"]
+            rows = [
+                row("logout_yes", "logout-do"),
+                row("logout_no", "settings"),
             ]
         elif page == "switch":
             # The question a scanned QR asks when the chat is already somebody's: two buttons
@@ -596,6 +647,7 @@ class ChatMenu:
                     (c["balance"], self.ticket(msg, "balance")),
                 ],
                 [
+                    (c["computer"], self.ticket(msg, "computer")),
                     (c["account"], "https://cloud.nanolika.ru/web/account/?source=messenger"),
                 ],
             ]
@@ -650,6 +702,8 @@ class ChatMenu:
                 "/unlink",
                 "/отвязать",
                 "/развязать",
+                "/logout",
+                "/выйти",
             }:
                 # `/unlink` is the manager's own command, not a menu page: it must reach the
                 # manager instead of being answered here as an unknown command. The two
@@ -771,6 +825,13 @@ class ChatMenu:
             await self.show(msg, note="https://nanolika.ru/pricing.html")
         elif action == "balance":
             await self.show(msg, note=await self.balance(msg))
+        elif action == "computer":
+            await self.show(msg, "computer")
+        elif action == "logout-ask":
+            await self.show(msg, "logout-confirm")
+        elif action == "logout-do":
+            await self.m.logout_now(msg)
+            await self.show(msg, "home")
         elif action == "models":
             await self.show(msg, "models")
         elif action.startswith("model-page:"):

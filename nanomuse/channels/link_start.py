@@ -9,7 +9,14 @@ from nanomuse.channels.base import Channel, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 
 _START = re.compile(r"^/start(?:@[A-Za-z0-9_]+)?\s+nl_((?:TG|MX)[A-F0-9]{30})$", re.I)
+_LOGIN = re.compile(r"^/start(?:@[A-Za-z0-9_]+)?\s+(nl_LG[A-F0-9]{30})$", re.I)
 _PREFIXES = {"telegram": "TG", "max": "MX"}
+
+
+def desktop_login_token(text: str) -> str:
+    """The code a computer's QR carries: `/start nl_LG…` signs that computer in."""
+    match = _LOGIN.fullmatch((text or "").strip())
+    return match.group(1).upper() if match else ""
 
 
 def start_token(text: str, channel: str) -> str:
