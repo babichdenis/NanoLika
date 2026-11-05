@@ -165,7 +165,7 @@ class RobokassaPayments(Payments):
             raise CloudError(404, "payment_missing", "Заказ не найден")
         return str(row["order_id"])
 
-    def _payment_url(self, order_id: str, invoice_id: int, amount: int) -> str:
+    def _payment_url(self, order_id: str, invoice_id: int, amount: int, email: str = "") -> str:
         out_sum = self._rub(amount)
         receipt = self._receipt(amount)
         receipt_encoded = quote(receipt, safe="") if receipt else ""
@@ -183,6 +183,8 @@ class RobokassaPayments(Payments):
             "SignatureValue": self._signature(":".join(parts)),
             "Culture": "ru",
             "IsTest": "1" if self.test_mode else "0",
+            # Почта аккаунта подставляется в форму кассы и в чек; в подпись не входит.
+            **({"Email": email} if email else {}),
             # Возврат идёт на SuccessURL из кабинета; Robokassa вернёт туда Shp_order,
             # а checkout найдёт заказ сам. SuccessUrl2/FailUrl2 не используем: магазин
             # не подключён к этой услуге и касса отвечает «код 29».
@@ -205,7 +207,7 @@ class RobokassaPayments(Payments):
                 "OrderId": order_id,
                 "Amount": amount,
                 "PaymentId": str(invoice_id),
-                "PaymentURL": self._payment_url(order_id, invoice_id, amount),
+                "PaymentURL": self._payment_url(order_id, invoice_id, amount, str(payload.get("Email") or "")),
                 "Success": True,
                 "TerminalKey": self.terminal,
                 "Status": "NEW",

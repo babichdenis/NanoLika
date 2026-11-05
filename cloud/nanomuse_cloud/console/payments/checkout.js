@@ -4,6 +4,7 @@
   const params = new URLSearchParams(location.search);
   const format = value => new Intl.NumberFormat('ru-RU', {style:'currency',currency:'RUB'}).format(value / 100);
   let key = '', sessionOwner = '', config = null, order = params.get('order') || params.get('Shp_order') || '';
+  let receiptEmail = '';
   let idempotency = crypto.randomUUID().replaceAll('-', '');
   let busy = false, redirecting = false;
   try {
@@ -79,8 +80,11 @@
       return;
     }
     sessionOwner = me.account.id;
+    receiptEmail = me.account.email || '';
     await loadConfig();
     $('checkout').hidden = false; $('purchase').hidden = false;
+    $('receipt').textContent = receiptEmail ? 'Чек и письма об оплате придут на ' + receiptEmail : '';
+    $('receipt').hidden = !receiptEmail;
     if (order) { await check(); return; }
     const plan = config.plans[params.get('plan')];
     if (params.has('plan') && !plan) throw Error('Неизвестный тариф. Вернитесь к выбору пакета.');

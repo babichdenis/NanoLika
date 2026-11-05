@@ -329,6 +329,7 @@ class Payments:
                 "NotificationURL": self.public_base + "/v1/payments/tbank/notify",
                 "SuccessURL": self.public_base + "/payments/checkout?order=" + order_id,
                 "FailURL": self.public_base + "/payments/checkout?order=" + order_id,
+                **({"Email": receipt_email} if receipt_email else {}),
                 **({"Receipt": receipt} if receipt is not None else {}),
             },
         )
@@ -545,7 +546,13 @@ def install(app, cloud: Cloud, caller_dep, *, payments: Payments | None = None, 
 
     @router.post("/v1/payments/orders")
     async def create(body: OrderRequest, caller: Caller = caller_auth):
-        return await p.create(caller, body)
+        # Чек и письма об оплате идут на почту аккаунта: человек уже вошёл,
+        # спрашивать адрес заново в кассе не нужно.
+        account = cloud.db.account(caller.account_id)
+        email = ""
+        if account is not None and account["channel"] == "email" and account["identifier_enc"]:
+            email = cloud.crypto.decrypt(caller.account_id, account["identifier_enc"]) or ""
+        return await p.create(caller, body, receipt_email=email)
 
     @router.get("/v1/payments/wallet")
     async def wallet(caller: Caller = caller_auth):

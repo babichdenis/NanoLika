@@ -53,6 +53,7 @@ async def test_hosted_checkout_and_signed_result_credit_once_in_test_wallet(monk
     # SuccessUrl2/FailUrl2 не отправляем: магазин не подключён к услуге, касса отвечает кодом 29.
     assert "SuccessUrl2" not in query and "FailUrl2" not in query
     assert query["Shp_order"] == result["order_id"]
+    assert query["Email"] == "payer@example.test"  # почта аккаунта, а не вопрос в кассе
 
     row = payments.order(result["order_id"])
     fields = callback_fields(payments, row)
