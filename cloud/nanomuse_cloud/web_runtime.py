@@ -23,6 +23,7 @@ import os
 from typing import Any
 
 import httpx
+import logging
 import websockets
 from fastapi import Request, WebSocket
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -31,12 +32,14 @@ from fastapi.responses import JSONResponse, Response
 from .browser_auth import SESSION_COOKIE
 from .browser_session_store import browser_store
 
+log = logging.getLogger("nanomuse_cloud.web_runtime")
+
 #: where the runtime of the account lives; the bot container is on the same docker network
 RUNTIME_BASE = os.environ.get("WEB_RUNTIME_BASE", "http://nanolika-bot:8799").rstrip("/")
 RUNTIME_WS = os.environ.get("WEB_RUNTIME_WS", RUNTIME_BASE.replace("http", "ws", 1) + "/ws").strip()
 #: the runtime's own access token; the relay holds it, the browser never sees it
 RUNTIME_TOKEN = os.environ.get("WEB_RUNTIME_TOKEN", "").strip()
-#: accounts the first slice serves (comma-separated ids); empty means "nobody yet"
+#: accounts the first slice serves (comma-separated ids); empty means "nobody yet" — fail closed
 OWNERS = tuple(x.strip() for x in os.environ.get("WEB_RUNTIME_ACCOUNTS", "").split(",") if x.strip())
 
 #: headers a browser may not pass through: the runtime decides its own framing and encoding
@@ -71,11 +74,16 @@ async def _caller_for(cloud: Any, request: Request) -> Any:
     # resolves it through the session store (2026-11-05 — `authenticate` alone found no
     # account, so `/web/` fell back to the lite chat).
     try:
-        resolved = await asyncio.to_thread(browser_store(cloud).caller, token)
+        store = browser_store(cloud)
+        resolved = await asyncio.to_thread(store.caller, token)
+        if resolved is None:
+            # a session issued before the store was introduced lives in the legacy table
+            resolved = await asyncio.to_thread(store.legacy_caller, token)
         if resolved is not None:
             return resolved
-    except Exception:  # noqa: BLE001 — fall through to the key path
-        pass
+        log.info("web ui: session %s… resolved to nobody", token[:6])
+    except Exception as exc:  # noqa: BLE001 — fall through to the key path
+        log.info("web ui: session lookup failed: %s", type(exc).__name__)
     try:
         return await asyncio.to_thread(cloud.authenticate, token)
     except Exception:  # noqa: BLE001 — an unknown or revoked session is simply not in
@@ -103,11 +111,11 @@ class WebUiProxy(BaseHTTPMiddleware):
         token = request.cookies.get(SESSION_COOKIE, "")
         if not token or not RUNTIME_TOKEN:
             return await call_next(request)
-        try:
-            caller = await asyncio.to_thread(self.cloud.authenticate, token)
-        except Exception:  # noqa: BLE001 — no session, static page as before
+        caller = await _caller_for(self.cloud, request)
+        if caller is None:
             return await call_next(request)
-        if OWNERS and caller.account_id not in OWNERS:
+        log.info("web ui: account=%s allowed=%s", caller.account_id, caller.account_id in OWNERS)
+        if caller.account_id not in OWNERS:
             return await call_next(request)
         headers = {
             key: value
@@ -142,7 +150,8 @@ class WebUiProxy(BaseHTTPMiddleware):
 def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
     """Mount `/api/*` and `/ws` as the runtime door, and `/web/` as its page."""
 
-    app.add_middleware(WebUiProxy, cloud=cloud)
+    # /web/ stays the static page for now: the working pattern is the Telegram mini app
+    # (telegram.html), which signs in with initData and keeps an API key. Copy that next.
 
     @app.websocket("/ws")
     async def web_runtime_ws(websocket: WebSocket) -> None:
@@ -152,7 +161,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
         it sends first (its idea of a token) is consumed here and never forwarded — the
         relay authenticates upstream itself, so the runtime token stays on the server."""
         caller = await _caller_for(cloud, websocket)
-        if caller is None or (OWNERS and caller.account_id not in OWNERS):
+        if caller is None or caller.account_id not in OWNERS:
             await websocket.close(code=4401)
             return
         await websocket.accept()
@@ -197,7 +206,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
         caller = await _caller_for(cloud, request)
         if caller is None:
             return JSONResponse({"detail": "sign in to NanoLika"}, status_code=401)
-        if OWNERS and caller.account_id not in OWNERS:
+        if caller.account_id not in OWNERS:
             return JSONResponse({"detail": "this account has no runtime here yet"}, status_code=403)
         body = await request.body()
         url = f"{RUNTIME_BASE}/api/{path}"

@@ -77,6 +77,116 @@ def _blocks(title: str, text: str) -> list[str]:
     return out
 
 
+_XLSX_CONTENT_TYPES = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    '<Default Extension="xml" ContentType="application/xml"/>'
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    "</Types>"
+)
+_XLSX_RELS = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    "</Relationships>"
+)
+_XLSX_WORKBOOK_RELS = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    "</Relationships>"
+)
+
+
+def _column(index: int) -> str:
+    name = ""
+    index += 1
+    while index:
+        index, rest = divmod(index - 1, 26)
+        name = chr(65 + rest) + name
+    return name
+
+
+def _rows_from(content: str) -> list[list[str]]:
+    text = (content or "").strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, list):
+            rows: list[list[str]] = []
+            for row in parsed:
+                if isinstance(row, list):
+                    rows.append(["" if cell is None else str(cell) for cell in row])
+                else:
+                    rows.append([str(row)])
+            return rows
+    rows = []
+    for line in text.splitlines():
+        if "\t" in line:
+            cells = line.split("\t")
+        elif "|" in line:
+            cells = line.split("|")
+        else:
+            cells = [line]
+        rows.append([cell.strip() for cell in cells])
+    return rows
+
+
+def make_xlsx(title: str, content: str) -> bytes:
+    rows = _rows_from(content)
+    sheet_rows = []
+    for r, row in enumerate(rows, start=1):
+        cells = "".join(
+            f'<c r="{_column(c)}{r}" t="inlineStr"><is><t xml:space="preserve">{escape(str(value))}</t></is></c>'
+            for c, value in enumerate(row)
+        )
+        sheet_rows.append(f'<row r="{r}">{cells}</row>')
+    sheet = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f"<sheetData>{''.join(sheet_rows)}</sheetData></worksheet>"
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'<sheets><sheet name="{escape((title or "Лист1")[:31])}" sheetId="1" r:id="rId1"/></sheets>'
+        "</workbook>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _XLSX_CONTENT_TYPES)
+        archive.writestr("_rels/.rels", _XLSX_RELS)
+        archive.writestr("xl/workbook.xml", workbook)
+        archive.writestr("xl/_rels/workbook.xml.rels", _XLSX_WORKBOOK_RELS)
+        archive.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buffer.getvalue()
+
+
+def _safe_member(name: str) -> str:
+    clean = re.sub(r"[\\/]+", "/", str(name or "")).strip("/")
+    clean = clean.replace("..", "_")
+    return clean[:120] or "file.txt"
+
+
+def make_zip(files: list[dict[str, Any]]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            name = _safe_member(str(item.get("name") or "file.txt"))
+            content = str(item.get("content") or "")
+            archive.writestr(name, content.encode("utf-8"))
+    return buffer.getvalue()
+
+
 def make_docx(title: str, text: str) -> bytes:
     body = "".join(_blocks(title, text))
     document = (
@@ -95,10 +205,10 @@ def make_docx(title: str, text: str) -> bytes:
     return buffer.getvalue()
 
 
-def _safe_name(title: str) -> str:
+def _safe_name(title: str, suffix: str) -> str:
     clean = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", title or "").strip()
     clean = re.sub(r"\s+", " ", clean)[:80] or "document"
-    return clean + ".docx"
+    return clean + suffix
 
 
 def install(app: Any, cloud: Cloud, caller_dep: Any) -> None:
@@ -118,19 +228,32 @@ def install(app: Any, cloud: Cloud, caller_dep: Any) -> None:
             raise CloudError(400, "bad_request", "The body is not an object")
         title = str(body.get("title") or "")[:MAX_TITLE]
         text = str(body.get("content") or "")[:MAX_TEXT]
-        if not text.strip():
+        kind = str(body.get("format") or "docx").lower()
+        if kind not in {"docx", "xlsx", "zip"}:
+            raise CloudError(400, "bad_format", "Use docx, xlsx or zip")
+        if kind != "zip" and not text.strip():
             raise CloudError(400, "empty_document", "There is nothing to put in the document")
+        raw_files = body.get("files")
+        files = [row for row in raw_files if isinstance(row, dict)] if isinstance(raw_files, list) else []
+        if kind == "zip" and not files:
+            raise CloudError(400, "empty_archive", "An archive needs at least one file")
         if not s3_files.enabled(settings):
             raise CloudError(503, "attachments_unconfigured", "File storage is not configured on this relay")
-        data = make_docx(title, text)
-        name = _safe_name(title)
+        if kind == "docx":
+            data = make_docx(title, text)
+            suffix = ".docx"
+            mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif kind == "xlsx":
+            data = make_xlsx(title, text)
+            suffix = ".xlsx"
+            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            data = make_zip(files)
+            suffix = ".zip"
+            mime = "application/zip"
+        name = _safe_name(title, suffix)
         try:
-            key, _url = await s3_files.store(
-                settings,
-                data,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                name,
-            )
+            key, _url = await s3_files.store(settings, data, mime, name)
         except Exception as exc:  # noqa: BLE001 — the vendor's words stay out of the answer
             logging.getLogger("nanomuse_cloud.documents").warning("documents: S3 refused the file: %s", exc)
             raise CloudError(502, "storage_failed", "The document could not be stored") from exc
