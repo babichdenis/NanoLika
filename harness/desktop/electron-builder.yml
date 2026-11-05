@@ -27,6 +27,9 @@ directories:
 files:
   - out/**
   - resources/**
+  # Installer-only art and its helper are embedded by NSIS, not shipped in the app.
+  - "!resources/installer-slides/**"
+  - "!resources/installer-generated/**"
   - package.json
   - "!**/*.map"
 extraResources:
@@ -107,9 +110,9 @@ nsis:
   # Faster first installation must not turn upgrades into full ZIP downloads.
   differentialPackage: true
   useZip: false
-  # После установки приложение не стартует само: если старая версия ещё работает,
-  # второй экземпляр поднимался поверх неё и оба зависали (23.10.2026)
-  runAfterFinish: false
+  # The assisted finish page offers a checked launch checkbox. The installer shuts
+  # the previous process down before replacement; silent updates never show this page.
+  runAfterFinish: true
   # перед заменой файлов закрываем запущенную копию (build/installer.nsh)
   include: resources/installer.nsh
   # мастер установки: фирменная боковая панель и шапка (из тех же цветов, что сайт),

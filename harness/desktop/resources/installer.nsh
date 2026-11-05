@@ -1,3 +1,6 @@
+!define NanoLikaInstallerResources "${__FILEDIR__}"
+!include "${NanoLikaInstallerResources}\installer-pages.nsh"
+
 ; Keep the account through the first upgrade from installers whose old uninstaller
 ; deleted these two files even with --updated. The backup stays inside the user's
 ; profile until restored, so an interrupted installer can recover on the next run.
@@ -69,8 +72,8 @@
 
 ; Первая страница мастера: предупредить, что установка долгая, и показать Лику.
 !macro customWelcomePage
-  !define MUI_WELCOMEPAGE_TITLE "Установка nanoLika"
-  !define MUI_WELCOMEPAGE_TEXT "Лика переезжает на этот компьютер вместе с моделями, Node и средой управления экраном.$\r$\n$\r$\nУстановка занимает 5–15 минут: распаковываются десятки тысяч файлов. Так и должно быть — окно можно свернуть и вернуться позже."
+  !define MUI_WELCOMEPAGE_TITLE "$(NanoLikaWelcomeTitle)"
+  !define MUI_WELCOMEPAGE_TEXT "$(NanoLikaWelcomeText)"
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 

@@ -1,0 +1,145 @@
+{
+  "intervalMs": 12000,
+  "slides": [
+    {
+      "image": "working",
+      "en": {
+        "title": "Start with the result",
+        "body": "Describe what you need: a table, a letter or a list of tasks. Lika can help prepare it."
+      },
+      "zh": {
+        "title": "先说想要的结果",
+        "body": "表格、邮件或待办清单，告诉 Lika 你需要什么，她会协助准备。"
+      },
+      "ru": {
+        "title": "Начните с результата",
+        "body": "Опишите, что нужно: таблица, письмо или список дел. Лика поможет это подготовить."
+      }
+    },
+    {
+      "image": "idle",
+      "en": {
+        "title": "Continue the conversation",
+        "body": "Start on your phone and continue on your computer, with your conversation context."
+      },
+      "zh": {
+        "title": "换个设备，继续聊",
+        "body": "在手机上开始，在电脑上接着聊，保留对话上下文。"
+      },
+      "ru": {
+        "title": "Продолжайте с другого устройства",
+        "body": "Начните разговор на телефоне и продолжите на компьютере с сохранением контекста."
+      }
+    },
+    {
+      "image": "working",
+      "en": {
+        "title": "Bring your files",
+        "body": "Attach a document or spreadsheet and explain what you want to change or find."
+      },
+      "zh": {
+        "title": "带上你的文件",
+        "body": "附上文档或表格，再说明要修改什么，或想找到什么。"
+      },
+      "ru": {
+        "title": "Прикладывайте файлы",
+        "body": "Добавьте документ или таблицу и объясните, что нужно изменить или найти."
+      }
+    },
+    {
+      "image": "waiting",
+      "en": {
+        "title": "Make room for routine",
+        "body": "Use scheduled tasks for things that need to happen again."
+      },
+      "zh": {
+        "title": "重复的事，按时做",
+        "body": "为需要反复处理的事情设置定时任务。"
+      },
+      "ru": {
+        "title": "Поручайте повторяющиеся дела",
+        "body": "Настройте задачи по расписанию для дел, к которым нужно возвращаться регулярно."
+      }
+    },
+    {
+      "image": "working",
+      "en": {
+        "title": "Speak your request",
+        "body": "Use voice input when speaking is more convenient than typing."
+      },
+      "zh": {
+        "title": "不方便打字时，就说出来",
+        "body": "使用语音输入，把你的需求告诉 Lika。"
+      },
+      "ru": {
+        "title": "Говорите вместо печати",
+        "body": "Используйте голосовой ввод, когда удобнее сказать просьбу вслух."
+      }
+    },
+    {
+      "image": "idle",
+      "en": {
+        "title": "Connect your tools",
+        "body": "Connect the services you need and give Lika access to their tools."
+      },
+      "zh": {
+        "title": "连接常用工具",
+        "body": "连接需要的服务，让 Lika 使用它们提供的工具。"
+      },
+      "ru": {
+        "title": "Подключайте сервисы",
+        "body": "Подключайте нужные сервисы и давайте Лике доступ к их инструментам."
+      }
+    },
+    {
+      "image": "happy",
+      "en": {
+        "title": "Choose how to sign in",
+        "body": "Use Yandex, Google or an email code to sign in to your account."
+      },
+      "zh": {
+        "title": "选择熟悉的登录方式",
+        "body": "使用 Yandex、Google 或邮箱验证码登录账户。"
+      },
+      "ru": {
+        "title": "Вход привычным способом",
+        "body": "Войдите в аккаунт через Яндекс, Google или по коду из электронной почты."
+      }
+    },
+    {
+      "image": "happy",
+      "en": {
+        "title": "Try one ordinary task",
+        "body": "Ask Lika to turn notes into a checklist or help draft an email."
+      },
+      "zh": {
+        "title": "从一件小事开始",
+        "body": "试着让 Lika 把笔记整理成清单，或协助起草邮件。"
+      },
+      "ru": {
+        "title": "Начните с обычного дела",
+        "body": "Попросите Лику собрать из заметок список дел или помочь с черновиком письма."
+      }
+    }
+  ],
+  "controls": {
+    "en": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "pauseLabel": "Pause tips",
+      "resumeLabel": "Resume tips"
+    },
+    "zh": {
+      "pause": "暂停",
+      "resume": "继续",
+      "pauseLabel": "暂停提示轮播",
+      "resumeLabel": "继续提示轮播"
+    },
+    "ru": {
+      "pause": "Пауза",
+      "resume": "Продолжить",
+      "pauseLabel": "Приостановить советы",
+      "resumeLabel": "Продолжить советы"
+    }
+  }
+}

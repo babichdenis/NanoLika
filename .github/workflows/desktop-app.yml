@@ -239,7 +239,7 @@ jobs:
         working-directory: harness/desktop
         env:
           NANOLIKA_REQUIRE_NSIS_TESTS: "1"
-        run: node --test tests/windows-installer-profile.test.mjs
+        run: node --test tests/windows-installer-profile.test.mjs tests/installer-tips.test.mjs
       - name: What was built
         shell: bash
         working-directory: harness/desktop
