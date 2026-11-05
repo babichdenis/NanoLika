@@ -3049,6 +3049,10 @@ def create_app(
 
     install_model_accounting(app, cloud, caller_dep, admin_dep)
     install_oauth(app, cloud, settings)
+
+    from .web_runtime import install_web_runtime
+
+    install_web_runtime(app, cloud, settings)
     install_provider_prices(app, admin_dep)
 
     from .autopay import install as install_autopay
