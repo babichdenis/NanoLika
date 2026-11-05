@@ -29,7 +29,6 @@ const GoalsScreen = lazy(() => import("./screens/GoalsScreen").then((m) => ({ de
 const IdeasScreen = lazy(() => import("./screens/IdeasScreen").then((m) => ({ default: m.IdeasScreen })));
 const LibraryScreen = lazy(() => import("./screens/LibraryScreen").then((m) => ({ default: m.LibraryScreen })));
 const MemoryScreen = lazy(() => import("./screens/MemoryScreen").then((m) => ({ default: m.MemoryScreen })));
-const Onboarding = lazy(() => import("./screens/Onboarding").then((m) => ({ default: m.Onboarding })));
 const SettingsScreen = lazy(() => import("./screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
 const SkillsScreen = lazy(() => import("./screens/SkillsScreen").then((m) => ({ default: m.SkillsScreen })));
 
@@ -105,16 +104,6 @@ export default function App() {
   if (signInDoorNeeded(state.hub, state.settings, state.signInSkipped)) {
     return <SignInGate />;
   }
-  // First run: the server has not seen setup finish and nothing has been said yet.
-  if (!state.lite && state.settings && !state.settings.onboarded && !state.onboardingDismissed && !state.threads.some((t) => t.events > 0)) {
-    return (
-      <Suspense fallback={<Loading />}>
-        <Onboarding />
-        {firstSteps}
-      </Suspense>
-    );
-  }
-
   const pendingApprovals = state.pendingApprovals.length;
   // a plan change waiting for your answer is worth a red badge; the count of goals is not
   const proposals = state.goals.filter((g) => g.proposal && g.status !== "cancelled").length;
