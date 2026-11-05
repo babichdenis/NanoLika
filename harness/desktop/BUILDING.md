@@ -28,8 +28,9 @@ The workflow stages the harness and freshly built plugin, builds and checks the 
 runtime, prepares the platform's Node and native helpers, packages and smoke-tests the app.
 macOS uses `npm run dist:dir` followed by `scripts/desktop-app/package-mac.sh arm64` or
 `x64` on the matching native runner. Do not cross-package the other architecture using
-native modules from the current machine. Apple signing/notarization must finish before
-calling the public macOS build ready. Follow the workflow rather than inventing a shorter
+native modules from the current machine. Record whether the Mac app is Developer ID signed and notarized or ad-hoc signed.
+Never describe an ad-hoc build as notarized; the existing ad-hoc distribution requires
+the user to allow its first launch in macOS Privacy & Security. Follow the workflow rather than inventing a shorter
 local packaging command that omits these steps.
 
 ## Test install and update
@@ -41,7 +42,9 @@ local packaging command that omits these steps.
   packages and the `.exe.blockmap`/`latest.yml` checks. Run the NSIS profile fixture on
   Windows; `--updated` must preserve credentials, an intentional uninstall removes them.
   A newly fixed uninstaller does not fix the uninstaller already shipped in an older
-  version. The first upgrade from that version is a separate required acceptance test.
+  version. The installer therefore backs up the two account files before replacement
+  and restores missing files afterwards. The first upgrade from that version remains a
+  separate required acceptance test; the NSIS fixture exercises this legacy deletion.
 - If Windows cannot close a process but none exists, inspect the actual installer log,
   elevation and file integrity label. Run the downloaded candidate on a real Windows
   machine. Do not disable antivirus, UAC or browser download protection globally.
@@ -62,3 +65,24 @@ commit, CI run, signing status and any unverified acceptance checks in the workl
 подготовленные папки вместо исходников и не выпускать изменённый установщик под уже
 опубликованной версией. Перед выпуском обязательно проверить обновление поверх версии,
 которая сейчас стоит у пользователей, с сохранением входа и переписки.
+
+## Publish downloads to S3 and the website
+
+Use `releases/desktop/<version>/<installer filename>` in the configured S3 bucket.
+Upload verified CI artifacts with public-read access, an attachment filename, the correct
+content type, an immutable cache header and SHA-256 metadata. Never expose account
+attachments or change the whole bucket's policy just to publish installers. If an object
+already exists, compare its hash and size; refuse to replace it with different bytes.
+Check public, unauthenticated HEAD responses, lengths and hashes before changing links.
+Publish both Mac ZIP and DMG files; the installed updater consumes ZIP, the website DMG.
+Windows needs its EXE, EXE.blockmap and the exact SHA-512 values in latest.yml.
+
+Keep older installers. Back up the existing Windows and Mac download feeds before
+switching them to the new version, and copy their referenced files into the existing
+mirror as well. Do not break relative URLs expected by already installed clients.
+The website's download buttons should link directly to the public S3 objects, separately
+for Windows x64, Mac arm64 and Mac x64. Back up download.html before replacing it, then
+sync its source and publication copies. Remove obsolete copy claiming that this is a
+mockup or that available builds are still pending. Verify the live buttons, file headers,
+version labels and layout after publication. Record the build commit, CI URL, checksums,
+public URLs and rollback paths in the worklog.
