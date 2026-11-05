@@ -19,6 +19,7 @@ import httpx
 import websockets
 from fastapi import Request, WebSocket
 from fastapi.responses import JSONResponse, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .browser_auth import SESSION_COOKIE
 from .browser_session_store import browser_store
@@ -91,8 +92,57 @@ def _runtime_headers(caller: Any, request: Request | WebSocket) -> dict[str, str
     return headers
 
 
+class RuntimePage(BaseHTTPMiddleware):
+    """Serve the runtime's own page and its assets at `/web/` for a served account.
+
+    The lite chat stays the page for everybody else (and for the Telegram and MAX entry
+    pages); a pilot account gets the full client, which talks to `/api` and `/ws` on this
+    same origin. A failure falls through to the static page instead of an error.
+    """
+
+    PREFIXES = ("/assets/", "/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png")
+
+    def __init__(self, app: Any, cloud: Any) -> None:  # noqa: ANN401
+        super().__init__(app)
+        self.cloud = cloud
+
+    async def dispatch(self, request: Request, call_next: Any) -> Any:  # noqa: ANN401
+        path = request.url.path
+        page = path in ("/web", "/web/")
+        if not page and not any(path.startswith(prefix) for prefix in self.PREFIXES):
+            return await call_next(request)
+        caller = await _caller_for(self.cloud, request)
+        if caller is None or caller.account_id not in OWNERS:
+            return await call_next(request)
+        key = await asyncio.to_thread(_account_key, self.cloud, caller.account_id)
+        headers = _runtime_headers(caller, request)
+        headers.pop("accept-encoding", None)
+        headers["X-Account"] = caller.account_id
+        headers["X-Cloud-Key"] = key
+        target = "/" if page else path
+        try:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
+                answer = await client.get(f"{RUNTIME_BASE}{target}", headers=headers)
+        except httpx.HTTPError:
+            return await call_next(request)
+        if answer.status_code >= 400:
+            return await call_next(request)
+        return Response(
+            content=answer.content,
+            status_code=answer.status_code,
+            headers={
+                key: value
+                for key, value in answer.headers.items()
+                if key.lower() not in DROP_RESPONSE
+            },
+            media_type=answer.headers.get("content-type"),
+        )
+
+
 def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
     """Mount `/api/*` and `/ws` as the door to the account's own runtime."""
+
+    app.add_middleware(RuntimePage, cloud=cloud)
 
     @app.websocket("/ws")
     async def web_runtime_ws(websocket: WebSocket) -> None:
@@ -102,12 +152,6 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
             await websocket.close(code=4401)
             return
         await websocket.accept()
-        try:
-            # the client sends its idea of a token first; the relay already proved the session
-            await asyncio.wait_for(websocket.receive_text(), timeout=15)
-        except Exception:  # noqa: BLE001 — no auth frame, no session
-            await websocket.close(code=4401)
-            return
         try:
             key = await asyncio.to_thread(_account_key, cloud, caller.account_id)
             upstream = await websockets.connect(

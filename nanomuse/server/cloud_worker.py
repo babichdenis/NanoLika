@@ -121,14 +121,6 @@ def build_worker() -> FastAPI:
             async with lock:
                 await ws.send_json(message)
 
-        # The client may send its auth frame first; the relay already proved the session, so
-        # that frame is consumed and not treated as a command.
-        try:
-            first = await asyncio.wait_for(ws.receive_json(), timeout=1.5)
-            if not (isinstance(first, dict) and first.get("kind") == "auth"):
-                await _handle_ws_message(service, ws, first, conn_id=conn_id, send=send)
-        except (TimeoutError, ValueError, RuntimeError):
-            pass
         queue = service.bus.subscribe()
         await send({"kind": "hello", "state": service.state()})
 
@@ -140,6 +132,10 @@ def build_worker() -> FastAPI:
         try:
             while True:
                 data = await ws.receive_json()
+                # The client's own auth frame names a runtime token it does not have here;
+                # the relay already proved the session, so the frame is ignored.
+                if isinstance(data, dict) and data.get("kind") == "auth":
+                    continue
                 await _handle_ws_message(service, ws, data, conn_id=conn_id, send=send)
         except WebSocketDisconnect:
             pass
