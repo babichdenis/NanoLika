@@ -32,7 +32,7 @@ if (args.includes("--app") && appArg) {
     electron = join(macos, readdirSync(macos)[0]);
     dshDir = join(bundle, "Contents", "Resources", "dsh");
   } else {
-    const exe = readdirSync(unpacked).find((f) => (process.platform === "win32" ? f.endsWith(".exe") && !/uninstall/i.test(f) : f === "nanomuse-desktop"));
+    const exe = readdirSync(unpacked).find((f) => (process.platform === "win32" ? f.endsWith(".exe") && !/uninstall/i.test(f) : (f === "NanoLika" || f === "nanomuse-desktop")));
     if (!exe) throw new Error(`no executable under ${unpacked}`);
     electron = join(unpacked, exe);
     dshDir = join(unpacked, "resources", "dsh");
