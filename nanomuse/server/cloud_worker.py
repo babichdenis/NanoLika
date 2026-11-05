@@ -37,6 +37,7 @@ def build_worker() -> FastAPI:
         root,
         limit=int(os.environ.get("NANOMUSE_ACCOUNTS_LIMIT", "24")),
         idle_seconds=float(os.environ.get("NANOMUSE_ACCOUNTS_IDLE_S", "900")),
+        allow_code=os.environ.get("NANOMUSE_WORKER_ALLOW_CODE", "0").lower() in ("1", "true", "yes"),
     )
     apps: dict[str, FastAPI] = {}
     app = FastAPI(title="NanoLika cloud worker", docs_url=None, redoc_url=None)
@@ -149,8 +150,23 @@ def build_worker() -> FastAPI:
             service.bus.unsubscribe(queue)
             service.phone.detach(conn_id)
 
+    @app.on_event("startup")
+    async def startup() -> None:
+        async def sweeper() -> None:
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    await runtime.sweep()
+                except Exception as exc:  # noqa: BLE001 — the sweep must not kill the worker
+                    logger.warning("worker: sweep failed: {}", exc)
+
+        app.state.sweeper = asyncio.create_task(sweeper())
+
     @app.on_event("shutdown")
     async def shutdown() -> None:
+        task = getattr(app.state, "sweeper", None)
+        if task is not None:
+            task.cancel()
         await runtime.close()
 
     return app

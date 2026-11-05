@@ -58,11 +58,15 @@ class AccountRuntime:
         *,
         limit: int = 24,
         idle_seconds: float = 900.0,
+        allow_code: bool = False,
     ) -> None:
         self.base = base
         self.root = Path(root)
         self.limit = max(1, int(limit))
         self.idle_seconds = max(60.0, float(idle_seconds))
+        # Arbitrary code without a real sandbox would let one account read another's files:
+        # the cloud worker keeps shell/python out until a job boundary exists.
+        self.allow_code = bool(allow_code)
         self._entries: dict[str, _Entry] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._closed = False
@@ -107,6 +111,9 @@ class AccountRuntime:
         if cloud_key:
             CredentialVault(data_dir / "vault.enc", data_dir / "vault.key").set(CLOUD_KEY, cloud_key)
         service = MuseService(settings)
+        if not self.allow_code:
+            for name in ("shell", "python_execute", "coding_agents"):
+                service.app.tools.remove(name)
         await service.start()
         # The sync engine needs the account up front: the hub only learns it from the
         # settings file, which a fresh directory does not have yet.
