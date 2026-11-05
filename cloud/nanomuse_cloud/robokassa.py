@@ -172,7 +172,9 @@ class RobokassaPayments(Payments):
         custom = {"Shp_order": order_id}
         parts = [self.merchant_login, out_sum, str(invoice_id)]
         if receipt:
-            parts.append(receipt_encoded)
+            # В подпись идёт сырой JSON чека, а не URL-encoded: иначе Robokassa
+            # отвечает кодом 29 «неверный SignatureValue».
+            parts.append(receipt)
         parts.append(self.password1)
         parts.extend(f"{key}={value}" for key, value in sorted(custom.items()))
         values = {
