@@ -26,6 +26,16 @@ import { MuseSheet } from "./MuseSheet";
 import { countDay, countTask, StarNudgeOnce } from "../components/StarNudge";
 import { useShowSteps } from "../steps";
 
+/** `deepseek-deepseek-v4-1-flash-1017` is a wire id, not something to read. */
+function prettyModel(id: string): string {
+  return id
+    .replace(/^deepseek-/, "")
+    .replace(/-\d{4}$/, "")
+    .replace(/-/g, " ")
+    .replace(/\bv(\d+)/g, "V$1")
+    .replace(/\bflash\b/gi, "Flash");
+}
+
 export function ChatScreen() {
   const { state, send, sendViaCloud, decide, loadEvents, openFile, toast, setDrawer, setTab } = useStore();
   const t = useT();
@@ -259,7 +269,7 @@ export function ChatScreen() {
 
       {/* Timeline */}
       <div ref={listRef} onScroll={measure} className="relative flex-1 overflow-y-auto px-3 pb-3">
-        <div ref={contentRef} className="space-y-2.5">
+        <div ref={contentRef} className="mx-auto w-full max-w-3xl space-y-2.5">
           {/* the room the header takes; the first message starts under it, not behind it */}
           <div aria-hidden style={{ height: headerHeight }} />
           {state.hasMore[activeThread] && events.length > 0 && (
@@ -626,7 +636,7 @@ function AssistantBubble({
             <span className="inline-block w-1.5 h-4 align-middle bg-accent/70 animate-pulse rounded-sm" />
           </div>
         )}
-        {modelUsed && !streaming && <div className="ml-1 text-[11px] text-muted">{t("Answered by NanoLika Cloud this time ({model})", { model: modelUsed })}</div>}
+        {modelUsed && !streaming && <div className="ml-1 text-[11px] text-muted">{t("Answered by NanoLika Cloud this time ({model})", { model: prettyModel(modelUsed) })}</div>}
       </div>
     </div>
   );
@@ -925,7 +935,7 @@ function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="chat-composer shrink-0 bg-bg px-3 pt-1.5 pb-1">
+    <form onSubmit={submit} className="chat-composer mx-auto w-full max-w-3xl shrink-0 bg-bg px-3 pt-1.5 pb-1">
       {busy && !waiting && (
         <div className="px-2 pb-1 text-[12px] text-muted">{t("{name} is working; anything you send now is picked up right away.", { name })}</div>
       )}
