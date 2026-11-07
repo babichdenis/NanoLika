@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -59,13 +60,41 @@ def _worker_auth() -> dict[str, str]:
     return {"X-Worker-Secret": WORKER_SECRET} if WORKER_SECRET else {}
 
 
+#: The keys handed to the worker, kept on disk: a restart must not mint a new one while the
+#: worker still holds the old, or the agent answers "this key is no longer valid".
+_KEYS_PATH = os.environ.get("CLOUD_RUNTIME_KEYS", "/srv/nanomuse-cloud/data/runtime-keys.json")
+
+
+def _load_keys() -> dict[str, tuple[str, float]]:
+    try:
+        raw = json.loads(Path(_KEYS_PATH).read_text())
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, tuple[str, float]] = {}
+    for key, value in raw.items():
+        if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
+            out[str(key)] = (value[0], float(value[1]))
+    return out
+
+
+def _save_keys(keys: dict[str, tuple[str, float]]) -> None:
+    try:
+        Path(_KEYS_PATH).parent.mkdir(parents=True, exist_ok=True)
+        Path(_KEYS_PATH).write_text(json.dumps({k: [v[0], v[1]] for k, v in keys.items()}))
+    except OSError:
+        log.warning("runtime keys could not be saved")
+
+
 def _account_key(cloud: Any, account_id: str) -> str:
     now = time.time()
+    if not _KEYS:
+        _KEYS.update(_load_keys())
     held = _KEYS.get(account_id)
     if held is not None and held[1] > now + 60:
         return held[0]
     key, _caller = cloud._issue_key(account_id, "cloud worker", "runtime", expires_at=int(now) + _KEY_TTL_S)
     _KEYS[account_id] = (key, now + _KEY_TTL_S)
+    _save_keys(_KEYS)
     return key
 
 

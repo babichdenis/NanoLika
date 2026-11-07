@@ -24,7 +24,7 @@
 /* `wide:` — the sidebar layout. A browser gets it from 1024px; the desktop app always has it,
    whatever the window's width (main.tsx marks <html class="desktop">). */
 @custom-variant wide {
-  @media (min-width: 64rem) {
+  @media (min-width: 44rem) {
     @slot;
   }
   :where(html.desktop) & {
