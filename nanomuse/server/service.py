@@ -1477,7 +1477,9 @@ class MuseService:
             provider="openai",
             model=model,
             base_url=model_url(self.hub.cloud.base_url),
-            api_key=key or self.app.vault.get(CLOUD_KEY) or "",
+            # The vault holds the key the relay last rotated in; a key handed down by an
+            # older caller may already be revoked, so the vault wins when it has one.
+            api_key=self.app.vault.get(CLOUD_KEY) or key or "",
             tool_mode="auto",
             stream=llm.stream,
             temperature=temperature if temperature is not None else llm.temperature,
