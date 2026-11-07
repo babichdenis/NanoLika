@@ -74,3 +74,41 @@ export async function signInFromWebApp(): Promise<string | null> {
   if (key) setCloudToken(key);
   return key || null;
 }
+
+/** The Telegram SDK, loaded only when the page really was opened from Telegram. */
+export function loadTelegramSdk(timeout = 1500): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.Telegram?.WebApp) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-web-app.js";
+    script.async = true;
+    script.onload = done;
+    script.onerror = done;
+    document.head.append(script);
+    setTimeout(done, timeout);
+  });
+}
+
+/** Dark or light, as the messenger draws it, so the page does not glare inside the chat. */
+export function applyMessengerTheme(): void {
+  const app = window.Telegram?.WebApp as { colorScheme?: string; themeParams?: Record<string, string> } | undefined;
+  const scheme = app?.colorScheme;
+  if (scheme === "dark" || scheme === "light") {
+    document.documentElement.dataset.messengerTheme = scheme;
+    document.documentElement.style.colorScheme = scheme;
+  }
+}
+
+/** The messenger's back button goes back in the page instead of closing the app. */
+export function wireBackButton(onBack: () => boolean): void {
+  const app = window.Telegram?.WebApp as
+    | { BackButton?: { show?: () => void; hide?: () => void; onClick?: (fn: () => void) => void }; onEvent?: (event: string, fn: () => void) => void }
+    | undefined;
+  if (!app?.BackButton) return;
+  app.BackButton.onClick?.(() => {
+    if (!onBack()) app.BackButton?.hide?.();
+  });
+  app.BackButton.show?.();
+}

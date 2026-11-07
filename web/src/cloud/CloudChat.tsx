@@ -8,9 +8,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { useT } from "../i18n";
-import { chat, cloudToken, CloudError, isRecord, me, models, relayBase, setCloudToken, type CloudMessage, type CloudModel } from "./client";
+import { chat, cloudToken, CloudError, isRecord, me, models, relayBase, setCloudToken, uploadAttachment, type CloudMessage, type CloudModel, type UploadedFile } from "./client";
 import { catalog, messages as history, publish, type ConversationMeta, type SyncedMessage } from "./sync";
-import { announce, signInFromWebApp } from "./webapp";
+import { announce, applyMessengerTheme, loadTelegramSdk, signInFromWebApp, surface, wireBackButton } from "./webapp";
 
 interface Turn {
   role: "user" | "assistant";
@@ -33,6 +33,7 @@ export function CloudChat() {
   const [openChat, setOpenChat] = useState<ConversationMeta | null>(null);
   const [historyRows, setHistoryRows] = useState<SyncedMessage[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [pending, setPending] = useState<File[]>([]);
   const cidRef = useRef<string>("");
   const startedRef = useRef<number>(0);
   const abort = useRef<AbortController | null>(null);
@@ -43,9 +44,12 @@ export function CloudChat() {
     tRef.current = t;
   }, [token, t]);
   const bottom = useRef<HTMLDivElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     announce();
+    applyMessengerTheme();
+    if (surface() === "telegram") void loadTelegramSdk().then(announce);
     if (tokenRef.current) return;
     // Opened from Telegram or MAX: the messenger's signed payload is the sign-in.
     signInFromWebApp()
@@ -82,7 +86,46 @@ export function CloudChat() {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
+  useEffect(() => {
+    wireBackButton(() => {
+      if (openChat) {
+        setOpenChat(null);
+        setHistoryRows([]);
+        return true;
+      }
+      return false;
+    });
+  }, [openChat]);
+
   const visible = useMemo(() => turns.filter((turn) => turn.text || turn.reasoning || turn.pending), [turns]);
+
+  const TEXT_LIMIT = 20_000;
+  const isTextFile = (file: File) =>
+    /^text\//i.test(file.type || "") || /\.(txt|md|markdown|csv|tsv|json|log|ya?ml|xml|html?|css|js|mjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|sh|bash|zsh|sql|ini|toml)$/i.test(file.name || "");
+  const isImageFile = (file: File) => /^image\//i.test(file.type || "");
+
+  /** What the model reads: the words of text files, pictures as pictures, the rest by name. */
+  async function prepare(files: File[]): Promise<{ parts: CloudMessage["content"]; uploaded: UploadedFile[]; note: string }> {
+    const uploaded: UploadedFile[] = [];
+    const images: string[] = [];
+    let text = "";
+    for (const file of files) {
+      if (isTextFile(file)) {
+        const raw = (await file.text()).split("\u0000").join("");
+        const body = raw.slice(0, TEXT_LIMIT);
+        text += (text ? "\n\n" : "") + `--- ${file.name} ---\n${body}`;
+        continue;
+      }
+      const saved = await uploadAttachment(file);
+      uploaded.push(saved);
+      if (isImageFile(file) && saved.url) images.push(saved.url);
+      else text += (text ? "\n\n" : "") + `[вложение: ${file.name}]`;
+    }
+    const parts: CloudMessage["content"] = images.length
+      ? [{ type: "text" as const, text: text || "Посмотри приложенные изображения." }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
+      : text;
+    return { parts, uploaded, note: text };
+  }
 
   async function send() {
     const text = draft.trim();
@@ -90,9 +133,23 @@ export function CloudChat() {
     setDraft("");
     setError("");
     setBusy(true);
+    let content: CloudMessage["content"] = text;
+    let uploaded: UploadedFile[] = [];
+    try {
+      if (pending.length) {
+        const prepared = await prepare(pending);
+        content = typeof prepared.parts === "string" ? (text + (prepared.parts ? "\n\n" + prepared.parts : "")) : prepared.parts;
+        uploaded = prepared.uploaded;
+        setPending([]);
+      }
+    } catch (e) {
+      setError(e instanceof CloudError ? e.message : tRef.current("Could not read this file."));
+      setBusy(false);
+      return;
+    }
     const history: CloudMessage[] = [
       ...turns.filter((turn) => !turn.pending).map((turn) => ({ role: turn.role, content: turn.text })),
-      { role: "user", content: text },
+      { role: "user", content },
     ];
     setTurns((all) => [...all, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
     // One conversation per screen session; its id is what every other client will see.
@@ -110,7 +167,7 @@ export function CloudChat() {
           updated_at: sentAt,
           ...(model ? { model } : {}),
         },
-        [{ mid: crypto.randomUUID(), cid, role: "user", text, created_at: sentAt }],
+        [{ mid: crypto.randomUUID(), cid, role: "user", text: typeof content === "string" ? content : text, created_at: sentAt, ...(uploaded.length ? { attachments: uploaded.map((f) => ({ name: f.name, mime: f.mime, size: f.size, url: f.url })) } : {}) }],
       );
     } catch {
       setError(tRef.current("Could not save this message to the shared history."));
@@ -291,6 +348,23 @@ export function CloudChat() {
         <div ref={bottom} />
       </main>
 
+      {pending.length > 0 && (
+        <div className="flex flex-wrap gap-2 border-t border-border px-4 pt-2 text-xs">
+          {pending.map((file, index) => (
+            <span key={index} className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-1">
+              {file.name}
+              <button
+                type="button"
+                aria-label={t("Remove attachment")}
+                onClick={() => setPending((all) => all.filter((_, i) => i !== index))}
+                className="text-muted"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <form
         className="flex items-end gap-2 border-t border-border px-4 py-3"
         hidden={!!openChat}
@@ -299,6 +373,26 @@ export function CloudChat() {
           void send();
         }}
       >
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(event) => {
+            const chosen = [...(event.target.files ?? [])];
+            event.target.value = "";
+            if (chosen.length) setPending((all) => [...all, ...chosen].slice(0, 4));
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          className="rounded-xl border border-border px-3 py-2 text-sm"
+          aria-label={t("Attach a file")}
+          disabled={busy}
+        >
+          +
+        </button>
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}

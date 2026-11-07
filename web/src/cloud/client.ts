@@ -216,3 +216,33 @@ export async function streamChat(
   if (buffer) handle(buffer);
   return { text, reasoning, usage };
 }
+
+export interface UploadedFile {
+  name: string;
+  mime: string;
+  size: number;
+  url: string;
+}
+
+/** A file for the chat: the relay keeps it and hands back a stable link. */
+export async function uploadAttachment(file: File): Promise<UploadedFile> {
+  const form = new FormData();
+  form.append("file", file, file.name || "file");
+  const response = await fetch(relayBase() + "/v1/attachments", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${cloudToken()}` },
+    body: form,
+  });
+  const data: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = isRecord(data) && isRecord(data.error) ? data.error : {};
+    throw new CloudError(String(error.message || t("The cloud refused the file.")), response.status, String(error.code || ""), error);
+  }
+  const row = isRecord(data) ? data : {};
+  return {
+    name: String(row.name || file.name || "file"),
+    mime: String(row.mime || file.type || "application/octet-stream"),
+    size: Number(row.size || file.size || 0),
+    url: String(row.media_url || row.url || ""),
+  };
+}

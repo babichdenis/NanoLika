@@ -290,6 +290,9 @@ const ru: Record<string, string> = {
   "read only for now": "пока только чтение",
   "Could not read this conversation.": "Не удалось прочитать эту беседу.",
   "Could not save this message to the shared history.": "Не удалось сохранить сообщение в общую историю.",
+  "The cloud refused the file.": "Облако не приняло файл.",
+  "Could not read this file.": "Не удалось прочитать этот файл.",
+  "Remove attachment": "Убрать вложение",
 };
 
 export default ru;
