@@ -94,6 +94,13 @@
     preference: light
     fontSize: 14
 
+# Russian out of the box: the interface, dates and the voice input all speak Russian
+# without a person hunting for the switch. A saved choice in the Host still wins.
+- id: locale
+  name: '@deepseek-ai/dsh-client-locale'
+  config:
+    preference: ru
+
 - insert:
     # Voice as input: what you say lands in the composer as text. SenseVoice runs
     # on this computer and downloads its runtime on first use, so the recording
@@ -109,7 +116,8 @@
     - id: speech-to-text
       name: '@deepseek-ai/dsh-experimental-speech-to-text'
       config:
-        defaultProvider: sensevoice-local
+        defaultProvider: whisper-local
+        language: ru
     - id: speech-to-text-sensevoice
       name: '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice'
       config:
