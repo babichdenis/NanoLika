@@ -1933,6 +1933,10 @@ const zhCN: Record<string, string> = {
   "The cloud refused the file.": "云端未接受此文件。",
   "Could not read this file.": "无法读取此文件。",
   "Remove attachment": "移除附件",
+  "What shall we take care of?": "今天需要我做什么？",
+  "Help me write a letter": "帮我写一封信",
+  "Make a plan for the week": "制定一周计划",
+  "Explain something in plain words": "用简单的话解释",
 };
 
 export default zhCN;

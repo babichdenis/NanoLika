@@ -293,6 +293,10 @@ const ru: Record<string, string> = {
   "The cloud refused the file.": "Облако не приняло файл.",
   "Could not read this file.": "Не удалось прочитать этот файл.",
   "Remove attachment": "Убрать вложение",
+  "What shall we take care of?": "С чем сегодня помочь?",
+  "Help me write a letter": "Помоги написать письмо",
+  "Make a plan for the week": "Составь план на неделю",
+  "Explain something in plain words": "Объясни простыми словами",
 };
 
 export default ru;
