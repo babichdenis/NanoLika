@@ -1937,6 +1937,7 @@ const zhCN: Record<string, string> = {
   "Help me write a letter": "帮我写一封信",
   "Make a plan for the week": "制定一周计划",
   "Explain something in plain words": "用简单的话解释",
+  "No conversations yet": "还没有对话",
 };
 
 export default zhCN;

@@ -297,6 +297,7 @@ const ru: Record<string, string> = {
   "Help me write a letter": "Помоги написать письмо",
   "Make a plan for the week": "Составь план на неделю",
   "Explain something in plain words": "Объясни простыми словами",
+  "No conversations yet": "Бесед пока нет",
 };
 
 export default ru;

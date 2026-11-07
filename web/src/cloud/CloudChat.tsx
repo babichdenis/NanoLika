@@ -6,7 +6,7 @@
  * green bubble for the person's words.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Plus, Send } from "lucide-react";
+import { Loader2, Menu, Plus, Send } from "lucide-react";
 import { useT } from "../i18n";
 import {
   chat,
@@ -56,6 +56,7 @@ export function CloudChat() {
   const [historyRows, setHistoryRows] = useState<SyncedMessage[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [pending, setPending] = useState<File[]>([]);
+  const [drawer, setDrawer] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -307,38 +308,62 @@ export function CloudChat() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-bg">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border/60 bg-bg/95 px-4 py-3 backdrop-blur">
-        <img src="/avatars/lika-idle.webp" alt="" className="h-10 w-10 rounded-full object-contain" />
+        <button
+          type="button"
+          onClick={() => setDrawer((open) => !open)}
+          className="grid h-9 w-9 place-items-center rounded-full border border-border text-muted"
+          aria-label={t("Chats")}
+        >
+          <Menu size={18} />
+        </button>
+        <img src="/avatars/lika-idle.webp" alt="" className="h-9 w-9 rounded-full object-contain" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">nanoLika Cloud</p>
           <p className="truncate text-xs text-muted">{account || relayBase()}</p>
         </div>
-        <button
-          type="button"
-          className="rounded-full border border-border px-3 py-1.5 text-xs"
-          onClick={() => {
-            if (openChat) {
+      </header>
+
+      {drawer && (
+        <div className="border-b border-border/60 bg-bg px-3 py-2">
+          <button
+            type="button"
+            className="mb-2 w-full rounded-2xl bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
+            onClick={() => {
               setOpenChat(null);
               setHistoryRows([]);
-              return;
-            }
-            const first = chats[0];
-            if (first) void openHistory(first);
-          }}
-        >
-          {openChat ? t("Back") : t("History")}
-        </button>
-        <select
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-          className="max-w-[42%] rounded-full border border-border bg-surface px-2 py-1.5 text-xs"
-        >
-          {list.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.name || entry.id}
-            </option>
-          ))}
-        </select>
-      </header>
+              setTurns([]);
+              cidRef.current = "";
+              startedRef.current = 0;
+              setDrawer(false);
+            }}
+          >
+            {t("New chat")}
+          </button>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {chats.length === 0 && <p className="px-2 py-1 text-xs text-muted">{t("No conversations yet")}</p>}
+            {chats.map((row) => (
+              <button
+                key={row.cid}
+                type="button"
+                onClick={() => {
+                  setDrawer(false);
+                  void openHistory(row);
+                }}
+                className={
+                  row.cid === openChat?.cid
+                    ? "flex w-full items-center gap-2 rounded-xl bg-surface px-3 py-2 text-left text-sm"
+                    : "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-surface"
+                }
+              >
+                <span className="min-w-0 flex-1 truncate">{row.title || t("Untitled chat")}</span>
+                {typeof row.unread === "number" && row.unread > 0 && (
+                  <span className="rounded-full bg-accent px-2 text-xs text-accent-fg">{row.unread}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {openChat ? (
@@ -348,7 +373,10 @@ export function CloudChat() {
             </p>
             {historyBusy && <Loader2 className="mx-auto animate-spin text-muted" size={16} />}
             {historyRows.map((row) => (
-              <div key={row.mid} className={row.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div key={row.mid} className={row.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}>
+                {row.role === "user" && (row.device_name || row.device) && (
+                  <span className="mb-1 text-[11px] text-muted">{row.device_name || row.device}</span>
+                )}
                 <div
                   className={
                     row.role === "user"
@@ -460,6 +488,18 @@ export function CloudChat() {
               placeholder={t("Write to Lika…")}
               className="max-h-40 min-h-10 flex-1 resize-none rounded-3xl border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
             />
+            <select
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+              aria-label={t("Model")}
+              className="max-w-[38%] shrink-0 rounded-full border border-border bg-surface px-2 py-1.5 text-xs"
+            >
+              {list.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name || entry.id}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={busy || (!draft.trim() && pending.length === 0)}

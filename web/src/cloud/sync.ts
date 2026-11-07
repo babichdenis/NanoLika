@@ -48,6 +48,8 @@ export interface SyncedMessage {
   seq: number;
   role: "user" | "assistant" | string;
   text: string;
+  device?: string;
+  device_name?: string;
   created_at: number;
   attachments?: SyncedAttachment[];
   truncated?: boolean;
