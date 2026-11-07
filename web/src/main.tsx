@@ -13,7 +13,7 @@ applyTheme();
 markDesktopShell();
 // ?cloud=1 opens the relay-backed chat: the first slice of the single client, served from
 // the cloud origin while the runtime screens keep their own transport.
-const cloudMode = location.pathname.startsWith("/web2") || new URLSearchParams(location.search).has("cloud");
+const cloudMode = new URLSearchParams(location.search).has("cloud");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
