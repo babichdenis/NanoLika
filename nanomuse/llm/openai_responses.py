@@ -10,6 +10,7 @@ a Responses-shaped API. Some of those gateways silently ignore client-side
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import openai
 from openai import AsyncOpenAI
@@ -58,8 +59,17 @@ def _to_responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _image_type(base_url: str | None) -> str:
+    """OpenAI's Responses API takes ``input_image``; an OpenAI-compatible gateway
+    (OpenRouter, Polza, DeepSeek) takes the Chat Completions ``image_url`` even when a
+    Responses-shaped slot points at it. Sending ``input_image`` there is what produced
+    "no providers supporting input_image"."""
+    host = (urlparse(base_url or "").hostname or "").lower()
+    return "input_image" if host == "api.openai.com" or host.endswith(".openai.azure.com") else "image_url"
+
+
 def _to_input_items(
-    messages: list[Message], with_images: bool = False
+    messages: list[Message], with_images: bool = False, image_type: str = "input_image"
 ) -> tuple[str | None, list[dict[str, Any]]]:
     instructions: list[str] = []
     items: list[dict[str, Any]] = []
@@ -72,7 +82,7 @@ def _to_input_items(
                 instructions.append(m.content)
         elif m.role == Role.USER:
             content: Any = (
-                content_parts(m, image_type="input_image")
+                content_parts(m, image_type=image_type)
                 if with_images and m.images
                 else (m.content or "")
             )
@@ -150,7 +160,9 @@ class OpenAIResponsesLLM(BaseLLM):
             pictures and self.settings.vision != "off" and self.vision_available is not False
         )
         instructions, items = _to_input_items(
-            messages if with_images or not pictures else without_images(messages), with_images
+            messages if with_images or not pictures else without_images(messages),
+            with_images,
+            _image_type(self.settings.base_url),
         )
         params: dict[str, Any] = {
             "model": self.settings.model,

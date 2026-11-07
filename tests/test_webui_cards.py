@@ -30,7 +30,10 @@ def test_a_picture_inside_the_workspace_is_served_relative(tmp_path: Path):
     shot = ws / "screenshots" / "1.jpg"
     shot.write_bytes(b"jpg")
     ui = ui_for(ws, a_timeline(tmp_path))
-    assert ui._card_images([str(shot), "screenshots/2.jpg"]) == ["screenshots/1.jpg", "screenshots/2.jpg"]
+    assert ui._card_images([str(shot), "screenshots/2.jpg"]) == [
+        "screenshots/1.jpg",
+        "screenshots/2.jpg",
+    ]
 
 
 def test_a_picture_outside_the_workspace_is_dropped(tmp_path: Path):

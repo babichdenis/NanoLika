@@ -130,7 +130,7 @@ from fastapi import (
     UploadFile,
     WebSocket,
 )
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import ClientDisconnect
 
@@ -146,9 +146,9 @@ from .github_stats import GitHubCollector
 from .hub import Hub
 from .identifiers import BadIdentifier, parse
 from .oauth import install_oauth
-from .reasoning import clean_effort, reasoning_for
 from .provider_prices import install_provider_prices
-from .provider_routing import ProviderRouter, identity, request_chat
+from .provider_routing import ProviderRouter, Route, has_images, identity, normalize_messages, request_chat
+from .reasoning import clean_effort, reasoning_for
 from .service import (
     Caller,
     Cloud,
@@ -163,6 +163,12 @@ from .stats import Stats, api_group
 from .sync import DEFAULT_PAGE, SyncStore
 
 log = logging.getLogger("nanomuse_cloud.api")
+
+
+def _chat_url(base: str) -> str:
+    """The chat endpoint of a provider address: `/v1` is kept once, never twice."""
+    base = str(base or "").rstrip("/")
+    return base + ("/chat/completions" if base.endswith("/v1") else "/v1/chat/completions")
 
 
 def error_response(status: int, code: str, message: str, extra: dict | None = None) -> JSONResponse:
@@ -483,7 +489,9 @@ def create_app(
 
     from .request_limits import RequestBodyLimitMiddleware
 
-    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes, overrides={"/v1/attachments": settings.attachments_max_bytes})
+    app.add_middleware(
+        RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes, overrides={"/v1/attachments": settings.attachments_max_bytes}
+    )
 
     # CORS for WebApp (nanolika.ru) and cloud subdomain
     from starlette.middleware.cors import CORSMiddleware
@@ -607,9 +615,7 @@ def create_app(
                 # the apps make clips through the provider's own asynchronous route
                 or path.startswith("/api/v1/services/aigc/video-generation/")
             )
-            model_list = request.method == "GET" and (
-                path in ("/v1/models", "/v1/me/key") or path.startswith("/api/v1/tasks/")
-            )
+            model_list = request.method == "GET" and (path in ("/v1/models", "/v1/me/key") or path.startswith("/api/v1/tasks/"))
             if not (inference or model_list):
                 raise CloudError(403, "api_key_scope", "Personal API keys can call model endpoints and read their own key status only")
         return caller
@@ -1018,9 +1024,7 @@ def create_app(
         label = str(body.get("label") or "")[:60]
         daily_limit_rub = _key_limit_rub(body, "daily_limit_rub")
         monthly_limit_rub = _key_limit_rub(body, "monthly_limit_rub")
-        api_key, prefix = await asyncio.to_thread(
-            cloud.create_user_key, caller, device, ttl_s, label, daily_limit_rub, monthly_limit_rub
-        )
+        api_key, prefix = await asyncio.to_thread(cloud.create_user_key, caller, device, ttl_s, label, daily_limit_rub, monthly_limit_rub)
         return {"prefix": prefix, "api_key": api_key}
 
     @app.patch("/v1/me/keys/{prefix}")
@@ -1053,6 +1057,39 @@ def create_app(
         cloud.revoke_key(caller, prefix)
         await _drop_signed_out(caller.account_id)
         return Response(status_code=204)
+
+    # -- a person's own provider keys (BYOK) -------------------------------------------
+
+    @app.get("/v1/me/providers")
+    async def me_providers(caller: Caller = Depends(caller_dep)) -> dict:
+        return {"providers": cloud.list_provider_keys(caller)}
+
+    @app.post("/v1/me/providers")
+    async def me_add_provider(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        body = await _json(request)
+        providers = await asyncio.to_thread(cloud.add_provider_key, caller, body)
+        return {"providers": providers}
+
+    @app.delete("/v1/me/providers/{provider}", status_code=204)
+    async def me_delete_provider(provider: str, caller: Caller = Depends(caller_dep)) -> Response:
+        await asyncio.to_thread(cloud.delete_provider_key, caller, provider)
+        return Response(status_code=204)
+
+    @app.post("/v1/me/providers/{provider}/verify")
+    async def me_verify_provider(provider: str, caller: Caller = Depends(caller_dep)) -> dict:
+        row = cloud.provider_key(caller, provider)
+        if row is None:
+            raise CloudError(404, "provider_not_found", "No such provider key")
+        url = _chat_url(row["base_url"]).rsplit("/chat/completions", 1)[0] + "/models"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                answer = await client.get(url, headers={"Authorization": f"Bearer {row['key']}"})
+        except httpx.HTTPError as e:
+            cloud.note_provider_key(caller, provider, False, str(e)[:200])
+            raise CloudError(502, "provider_unreachable", "The provider did not answer") from e
+        ok = answer.status_code == 200
+        cloud.note_provider_key(caller, provider, ok, "" if ok else f"HTTP {answer.status_code}")
+        return {"ok": ok, "status": answer.status_code, "provider": row["provider"]}
 
     @app.post("/v1/auth/sign-out", status_code=204)
     async def sign_out(caller: Caller = Depends(caller_dep)) -> Response:
@@ -1456,22 +1493,30 @@ def create_app(
     @app.post("/v1/chat/completions")
     async def chat(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
         body = await _json(request)
+        if "messages" in body:
+            # One Chat Completions shape goes out, whatever names the client used
+            # (`input_image` from an older build, a bare string, a bare url).
+            body["messages"] = normalize_messages(body["messages"])
         _start_free(caller)
         _daily_free(caller)
         spec = cloud.model_for(str(body.get("model", "")), "chat", caller)
-        _gate_premium(caller, spec)
+        byok = cloud.byok_for(caller, spec)
+        if byok is None:
+            _gate_premium(caller, spec)
         # a relay without a key answers before anything is held: a hold taken here and never
         # settled would count against the account's in-flight limit until it timed out
-        headers = upstream_headers()
+        headers = {"Authorization": f"Bearer {byok['key']}", "Content-Type": "application/json"} if byok is not None else upstream_headers()
         request_id = uuid.uuid4().hex[:16]
-        # held at a typical turn's price while it runs; settled when the reply is in
-        cloud.check_budget(
-            caller,
-            request_id=request_id,
-            hold_uy=cloud.chat_reserve_uy(spec),
-            key_uy=cloud.chat_sale_reserve_uy(spec, caller),
-            place=client_place(request),
-        )
+        # held at a typical turn's price while it runs; settled when the reply is in.
+        # A person's own key is not held against the account balance: they pay the provider.
+        if byok is None:
+            cloud.check_budget(
+                caller,
+                request_id=request_id,
+                hold_uy=cloud.chat_reserve_uy(spec),
+                key_uy=cloud.chat_sale_reserve_uy(spec, caller),
+                place=client_place(request),
+            )
         # how much the client spends on tool definitions before it does anything: the
         # number that decides whether a search-first catalog is worth it (counts only)
         tools = body.get("tools") or []
@@ -1482,15 +1527,11 @@ def create_app(
             if count not in _TOOLSETS_SEEN:
                 # once per catalog per process: the names, for comparing surfaces
                 _TOOLSETS_SEEN.add(count)
-                names = [
-                    str((t.get("function") or {}).get("name") or t.get("name") or "?")
-                    for t in tools
-                    if isinstance(t, dict)
-                ]
+                names = [str((t.get("function") or {}).get("name") or t.get("name") or "?") for t in tools if isinstance(t, dict)]
                 log.info("chat toolset=%d names=%s", count, ",".join(sorted(names))[:4000])
         except (TypeError, ValueError):
             pass
-        body["model"] = spec.upstream
+        body["model"] = byok["model"] if byok is not None else spec.upstream
         levels, _default = reasoning_for(spec)
         if levels:
             # Only the levels this model documents go upstream; "default" (and anything
@@ -1509,20 +1550,38 @@ def create_app(
         # OpenAI request fields are dangerous, but `user` is ours to set so the
         # provider's abuse tooling can tell accounts apart without knowing them.
         body["user"] = caller.account_id[:32]
-        url = settings.upstream_base.rstrip("/") + "/chat/completions"
-        # PROVIDER_CHAT_ROUTE: a model with a provider of its own is asked there, with that
-        # provider's key; everything after this line (streaming, usage, samples) is the same
-        provider, provider_base, provider_key = settings.route(spec)
-        if provider:
-            url = provider_base.rstrip("/") + "/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {provider_key}", "Content-Type": "application/json"}
-        # CHEAPEST_ROUTE: the same model is often sold by more than one company, and the
-        # providers table knows who is cheaper today. The chain puts that one first; the
-        # model's own provider stays the fallback, so a refusal or an outage costs a retry
-        # rather than a turn.
-        chain = router.routes(spec, body, url, headers)
+        if byok is not None:
+            # BYOK: the person's own key, straight to their provider. No cheapest-route
+            # search and no fallback to the relay's keys — a silent switch would charge them.
+            url = _chat_url(byok["base_url"])
+            chain = [Route(byok["provider"], url, headers, body)]
+        else:
+            url = settings.upstream_base.rstrip("/") + "/chat/completions"
+            # PROVIDER_CHAT_ROUTE: a model with a provider of its own is asked there, with that
+            # provider's key; everything after this line (streaming, usage, samples) is the same
+            provider, provider_base, provider_key = settings.route(spec)
+            if provider:
+                url = provider_base.rstrip("/") + "/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {provider_key}", "Content-Type": "application/json"}
+            # CHEAPEST_ROUTE: the same model is often sold by more than one company, and the
+            # providers table knows who is cheaper today. The chain puts that one first; the
+            # model's own provider stays the fallback, so a refusal or an outage costs a retry
+            # rather than a turn.
+            chain = router.routes(spec, body, url, headers)
+        vision = has_images(body.get("messages") or [])
         if not chain:
             cloud.settle(caller, request_id)
+            if vision:
+                # The model is alive, it just cannot take this picture: say so instead of
+                # "no routes", and name the models that can (the client shows a picker).
+                cloud.note(caller.account_id, "upstream.vision_unsupported", f"No vision route for {spec.id}")
+                suggested = [s.id for s in settings.models if s.kind == "chat" and "image" in s.input_modalities]
+                raise CloudError(
+                    400,
+                    "vision_unsupported",
+                    "This model does not take pictures. Choose a model that sees images.",
+                    extra={"suggested": suggested},
+                )
             cloud.note(caller.account_id, "upstream.no_routes", f"No eligible provider route for {spec.id}")
             raise CloudError(
                 503, "provider_routes_unavailable", "No eligible provider is available for this model. Try another model or retry later."
@@ -1546,11 +1605,43 @@ def create_app(
         if not stream:
             try:
                 try:
-                    r, selected = await request_chat(http, chain, stream=False, on_failure=router.note_failure)
+                    r, selected = await request_chat(
+                        http, chain, stream=False, on_failure=router.note_failure, on_success=router.note_success, vision=vision
+                    )
                 except httpx.HTTPError as e:
+                    if byok is not None:
+                        cloud.note(caller.account_id, "upstream.error", f"byok {byok['provider']}: {type(e).__name__}")
+                        cloud.note_provider_key(caller, byok["id"], False, str(e)[:200])
+                        raise CloudError(
+                            502,
+                            "byok_failed",
+                            "Your provider key did not answer. You can try our daily allowance instead.",
+                            extra={
+                                "daily_free_cny": settings.daily_free_cny,
+                                "can_use_balance": True,
+                                "provider": byok["provider"],
+                            },
+                        ) from e
                     raise CloudError(502, "upstream", "The model provider did not answer") from e
                 log.info("chat %s answered by %s", spec.id, selected.provider or "configured")
                 if r.status_code >= 400:
+                    if byok is not None:
+                        cloud.note(
+                            caller.account_id,
+                            upstream_event_kind(r.status_code, r.content),
+                            upstream_detail("byok", r.status_code, spec.id, r.content),
+                        )
+                        cloud.note_provider_key(caller, byok["id"], False, f"HTTP {r.status_code}")
+                        raise CloudError(
+                            502,
+                            "byok_failed",
+                            "Your provider key did not answer. You can try our daily allowance instead.",
+                            extra={
+                                "daily_free_cny": settings.daily_free_cny,
+                                "can_use_balance": True,
+                                "provider": byok["provider"],
+                            },
+                        )
                     cloud.note(
                         caller.account_id,
                         upstream_event_kind(r.status_code, r.content),
@@ -1567,9 +1658,19 @@ def create_app(
                 text = _reply_text(obj)
                 if usage is None:
                     usage = Usage(fallback_prompt_tokens, estimate_tokens(text))
-                meta = capture_metadata(r.headers, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
-                meta = router.accounting(selected, meta, usage.prompt, usage.completion, usage.cached)
-                router.schedule_price_alert(http, meta)
+                if byok is not None:
+                    meta = {
+                        "byok": True,
+                        "provider": byok["provider"],
+                        "requested_provider": byok["provider"],
+                        "fallback": False,
+                    }
+                else:
+                    meta = capture_metadata(r.headers, obj, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
+                    meta = router.accounting(selected, meta, usage.prompt, usage.completion, usage.cached)
+                    meta["requested_provider"] = spec.provider or "configured"
+                    meta["fallback"] = bool(selected.provider and spec.provider and selected.provider != spec.provider)
+                    router.schedule_price_alert(http, meta)
                 charged = cloud.charge_chat(
                     caller,
                     spec,
@@ -1579,6 +1680,7 @@ def create_app(
                     cached_tokens=usage.cached,
                     provider_cost_rub=meta.get("provider_cost_rub"),
                     routing_meta=meta,
+                    byok=byok is not None,
                 )
                 record_metadata(cloud, caller.account_id, request_id, meta)
             finally:
@@ -1611,7 +1713,9 @@ def create_app(
             r = None
             selected = None
             try:
-                r, selected = await request_chat(http, chain, stream=True, on_failure=router.note_failure)
+                r, selected = await request_chat(
+                    http, chain, stream=True, on_failure=router.note_failure, on_success=router.note_success, vision=vision
+                )
                 accounting_meta.update(
                     capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)
                 )
@@ -1963,7 +2067,11 @@ def create_app(
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": _charged(cloud, charged)},
+            content={
+                "created": int(time.time()),
+                "data": [{"b64_json": base64.b64encode(png).decode()}],
+                "nanomuse": _charged(cloud, charged),
+            },
             headers={"x-nanomuse-charged": str(charged), "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}"},
         )
 
@@ -2008,7 +2116,11 @@ def create_app(
         finally:
             cloud.settle(caller, request_id)
         return JSONResponse(
-            content={"created": int(time.time()), "data": [{"b64_json": base64.b64encode(png).decode()}], "nanomuse": _charged(cloud, charged)},
+            content={
+                "created": int(time.time()),
+                "data": [{"b64_json": base64.b64encode(png).decode()}],
+                "nanomuse": _charged(cloud, charged),
+            },
             headers={"x-nanomuse-charged": str(charged), "x-nanomuse-charged-rub": f"{_charged(cloud, charged)['charged_rub']:.4f}"},
         )
 
@@ -2041,6 +2153,113 @@ def create_app(
             "expires_in": settings.s3_link_seconds,
         }
 
+    # ---- BeatAPI tools: the relay holds the key, the account pays for the call ----------
+    # The provider's own price is the cost; the account pays it with the operator's markup.
+    # A tool that is free today goes through the same line with zero: the statement never
+    # needs a memory of "was it free back then".
+    def _tool_markup() -> float:
+        try:
+            value = float(os.environ.get("BEATAPI_MARKUP", "2") or 2)
+        except ValueError:
+            value = 2.0
+        return value if value >= 1 else 2.0
+
+    def _tool_price_usd(pricing: Any) -> float:
+        """The list price of one call, from the capability card (Inspect/Search)."""
+        if not isinstance(pricing, dict):
+            return 0.0
+        for key in ("price_usd", "per_request_usd", "request_usd"):
+            value = pricing.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+        unit = str(pricing.get("unit") or "")
+        if "million_tokens" in unit:
+            # A token-priced model: the exact amount comes back in `usage` after the call.
+            return 0.0
+        return 0.0
+
+    async def _beatapi(http: httpx.AsyncClient, path: str, payload: dict) -> dict:
+        key = os.environ.get("BEATAPI_KEY", "").strip()
+        if not key:
+            raise CloudError(503, "tools_unconfigured", "Tool calls are not configured on this relay")
+        response = await http.post(
+            "https://api.beatapi.io" + path,
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            json=payload,
+            timeout=120,
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            data = {"error": {"message": "The tool provider sent no answer"}}
+        if response.status_code >= 400:
+            error = data.get("error") if isinstance(data, dict) else None
+            message = (error or {}).get("message") if isinstance(error, dict) else None
+            raise CloudError(502, "tool_failed", str(message or "The tool provider refused the call"))
+        return data
+
+    @app.post("/v1/tools/search")
+    async def tools_search(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        """What the tools can do; the provider does not charge for this."""
+        body = await _json(request)
+        data = await _beatapi(app.state.http, "/v1/capabilities/search", body)
+        return data
+
+    @app.post("/v1/tools/inspect")
+    async def tools_inspect(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        """One capability's contract and price; free, and the price is what we charge from."""
+        body = await _json(request)
+        return await _beatapi(app.state.http, "/v1/capabilities/inspect", body)
+
+    @app.post("/v1/tools/run")
+    async def tools_run(request: Request, caller: Caller = Depends(caller_dep)) -> dict:
+        body = await _json(request)
+        reference = str(body.get("reference") or "")
+        if not reference:
+            raise CloudError(400, "bad_request", "`reference` is required")
+        card = await _beatapi(app.state.http, "/v1/capabilities/inspect", {"reference": reference})
+        estimated = _tool_price_usd((card.get("data") or {}).get("pricing"))
+        markup = _tool_markup()
+        rub_per_usd = float(cloud.s.rub_per_usd or 100)
+        hold_rub = estimated * rub_per_usd * markup
+        request_id = uuid.uuid4().hex[:16]
+        hold = settings.rub_to_uy(max(hold_rub, 0.0)) if hold_rub > 0 else 0
+        cloud.check_budget(
+            caller,
+            request_id=request_id,
+            hold_uy=hold,
+            key_uy=hold,
+            place=client_place(request),
+        )
+        try:
+            data = await _beatapi(app.state.http, "/v1/capabilities/run", body)
+            usage = data.get("usage") if isinstance(data, dict) else None
+            actual = 0.0
+            if isinstance(usage, dict):
+                # The provider sends the price as a string ("0.005") as often as a number.
+                try:
+                    actual = max(0.0, float(usage.get("price_usd") or 0))
+                except (TypeError, ValueError):
+                    actual = 0.0
+            if actual <= 0:
+                actual = estimated
+            cost_rub = actual * rub_per_usd
+            charged = cloud.charge_tool(
+                caller,
+                reference,
+                cost_rub,
+                cost_rub * markup,
+                request_id,
+                extra={"markup": markup, "price_usd": actual},
+            )
+        finally:
+            cloud.settle(caller, request_id)
+        if isinstance(data, dict):
+            data.setdefault("nanomuse", {})
+            if isinstance(data["nanomuse"], dict):
+                data["nanomuse"].update({"charged": charged, "reference": reference})
+        return data
+
     @app.get("/v1/files/{key:path}")
     async def file_once(key: str, t: str = "") -> StreamingResponse:
         """A stable link to an attachment: the relay checks its own signature and streams
@@ -2053,7 +2272,9 @@ def create_app(
         name = key.rsplit("/", 1)[-1] or "file"
         client = httpx.AsyncClient(timeout=120, follow_redirects=True)
         try:
-            upstream = await client.send(client.build_request("GET", s3_files.presign_get(settings, key, s3_files.safe_name(name))), stream=True)
+            upstream = await client.send(
+                client.build_request("GET", s3_files.presign_get(settings, key, s3_files.safe_name(name))), stream=True
+            )
         except httpx.HTTPError as error:
             await client.aclose()
             raise CloudError(502, "storage_unavailable", "File storage did not answer") from error
@@ -2061,6 +2282,7 @@ def create_app(
             await upstream.aclose()
             await client.aclose()
             raise CloudError(502, "storage_unavailable", "File storage did not give the file")
+
         async def stream_body():
             try:
                 async for chunk in upstream.aiter_bytes():
@@ -2068,6 +2290,7 @@ def create_app(
             finally:
                 await upstream.aclose()
                 await client.aclose()
+
         return StreamingResponse(
             stream_body(),
             media_type=upstream.headers.get("content-type") or "application/octet-stream",
@@ -2278,7 +2501,7 @@ def create_app(
             await asyncio.sleep(MUSIC_PAUSE)
             try:
                 r = await http.get(f"{base}/v1/media/{task}", headers=headers)
-                status = (r.json() or {})
+                status = r.json() or {}
             except (httpx.HTTPError, ValueError) as e:
                 raise CloudError(502, "upstream", "The music provider stopped answering") from e
             state = str(status.get("status", "")).lower()
@@ -2611,9 +2834,7 @@ def create_app(
             return ""
         key = f"videos/{task['task_id']}.mp4"
         try:
-            await s3_files.put_object(
-                settings, key, response.content, response.headers.get("content-type") or "video/mp4"
-            )
+            await s3_files.put_object(settings, key, response.content, response.headers.get("content-type") or "video/mp4")
         except Exception as error:  # noqa: BLE001 - a storage fault must not fail the poll
             log.warning("video %s: could not store the clip: %s", str(task["task_id"])[:12], error)
             return ""
@@ -2659,7 +2880,10 @@ def create_app(
             if charged is not None:
                 log.info(
                     "bothub video task %s done for %s: %s, charged %d",
-                    task_id[:14], str(task["account_id"])[:8], output["task_status"], charged,
+                    task_id[:14],
+                    str(task["account_id"])[:8],
+                    output["task_status"],
+                    charged,
                 )
             return JSONResponse(content={"output": output, "nanomuse": await _clip_meta(task, output, charged)})
         if provider == "aitunnel":
@@ -3162,6 +3386,17 @@ def create_app(
         out["problems"] = problems
         return out
 
+    @app.get("/v1/admin/alerts", dependencies=[Depends(admin_dep)])
+    async def admin_alerts(days: int = 1) -> dict:
+        """Model/provider health and recent incidents: requests, fallback and BYOK per
+        model and provider, plus upstream errors and price alerts. No message text."""
+        return cloud.alerts(max(1, min(days, 30)))
+
+    @app.post("/v1/admin/alerts/notify", dependencies=[Depends(admin_dep)])
+    async def admin_alerts_notify(days: int = 1, to: str = "") -> dict:
+        """Send the same summary to the operator's address (ADMIN_EMAIL by default)."""
+        return await asyncio.to_thread(cloud.notify_alerts, max(1, min(days, 30)), to)
+
     @app.get("/v1/admin/overview", dependencies=[Depends(admin_dep)])
     async def admin_overview(days: int = 30) -> dict:
         out = cloud.admin_overview(max(1, min(days, 365)))
@@ -3522,6 +3757,7 @@ def create_app(
     @app.get("/v1/admin/provider-routing", dependencies=[Depends(admin_dep)])
     async def provider_routing_status() -> dict:
         return router.status(include_offers=True)
+
     # -- Bothub: план, CAPS и списания ---------------------------------------------------------
     bothub_cache: dict[str, Any] = {"at": 0.0, "data": None}
     bothub_lock = asyncio.Lock()
@@ -3577,11 +3813,13 @@ def create_app(
                     if at is not None and at.date() == today:
                         spent += caps
                     if len(recent) < 10:
-                        recent.append({
-                            "at": int(at.timestamp()) if at else 0,
-                            "caps": round(caps, 2),
-                            "rub": round(caps * rate, 2),
-                        })
+                        recent.append(
+                            {
+                                "at": int(at.timestamp()) if at else 0,
+                                "caps": round(caps, 2),
+                                "rub": round(caps * rate, 2),
+                            }
+                        )
                 data = {
                     "ok": True,
                     "plan": str(plan.get("type") or ""),
@@ -3641,7 +3879,6 @@ def create_app(
                 "rub_estimate": None,
             }
         return status
-
 
     @app.post("/v1/admin/provider-routing/refresh", dependencies=[Depends(admin_dep)])
     async def provider_routing_refresh() -> dict:

@@ -258,7 +258,9 @@ class DingTalkChannel(Channel):
             )
         return media_type, str(media_id)
 
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         if text.strip():
             title = text.strip().splitlines()[0][:40]
             await self._robot_send(chat_id, "sampleMarkdown", {"title": title, "text": text})

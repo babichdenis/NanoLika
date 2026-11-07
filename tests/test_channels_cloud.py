@@ -193,7 +193,7 @@ def test_the_door_opens_an_account_for_the_chat_and_the_key_is_kept(chan, monkey
     again = run(manager, manager._cloud_key_for("quiet", message("ещё")))
     assert again == (key, model) and len(door.calls) == 1
     # once it lapses the door is asked again
-    manager._cloud_keys[("quiet", "700100200")] = (key, model, time.time() - 1)
+    manager._cloud_keys[("quiet", "700100200")] = (key, model, "", time.time() - 1)
     run(manager, manager._cloud_key_for("quiet", message("третье")))
     assert len(door.calls) == 2
 

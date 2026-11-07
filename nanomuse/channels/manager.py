@@ -20,6 +20,7 @@ import contextlib
 import hashlib
 import json
 import re
+import secrets
 import tempfile
 import time
 from collections.abc import Coroutine
@@ -30,10 +31,10 @@ from urllib.parse import unquote, urlsplit
 
 import httpx
 
+from nanomuse import timeutil
 from nanomuse.background import keep_task
 from nanomuse.channels import telegram_format, voice_note
 from nanomuse.channels.approval_copy import approval_details, readable_approval
-from nanomuse import timeutil
 from nanomuse.channels.base import Channel, ChannelBus, ChannelStatus, InboundFile, InboundMessage
 from nanomuse.channels.bot_copy import channel_text
 from nanomuse.channels.chat_picker import ChatPicker
@@ -67,9 +68,28 @@ SHARE_URL = re.compile(r"https://s3\.regru\.cloud/nanolika/files/[^\s)>\"]+")
 #: What the channel can show as a picture, play as a clip or a voice take. Everything
 #: else (a PDF, an archive) still travels as a link or a document, not as a photo.
 MEDIA_SUFFIXES = {
-    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp",
-    ".mp4", ".m4v", ".mov", ".webm", ".mkv",
-    ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus", ".flac", ".aac",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".heic",
+    ".heif",
+    ".avif",
+    ".bmp",
+    ".mp4",
+    ".m4v",
+    ".mov",
+    ".webm",
+    ".mkv",
+    ".mp3",
+    ".m4a",
+    ".wav",
+    ".ogg",
+    ".oga",
+    ".opus",
+    ".flac",
+    ".aac",
 }
 
 
@@ -78,6 +98,8 @@ def _is_media(mime: str, name: str) -> bool:
     if mime.lower().startswith(("image/", "video/", "audio/")):
         return True
     return Path(name.split("?")[0]).suffix.lower() in MEDIA_SUFFIXES
+
+
 # A picture in an answer from another device: its Markdown form is turned back into the link.
 SHARE_IMAGE = re.compile(r"!\[[^\]]*\]\((https?://[^)\s]+)\)")
 # A file of the computer the chat is served by, linked by its own path: `/Users/…`,
@@ -355,7 +377,9 @@ class ChannelManager(ChannelBus):
                     continue
                 self.svc.set_thread_folder(thread.id, self.types[channel].label)
                 logger.info(
-                    "channels: folder backfill puts {} into {}", thread.id, self.types[channel].label
+                    "channels: folder backfill puts {} into {}",
+                    thread.id,
+                    self.types[channel].label,
                 )
 
     async def stop(self) -> None:
@@ -523,6 +547,8 @@ class ChannelManager(ChannelBus):
             return
 
         def linked_sender() -> None:
+            self._cloud_keys.pop((msg.channel, msg.sender_id), None)
+            self._cloud_customer_scopes.pop((msg.channel, msg.sender_id), None)
             self.pairing.add(
                 msg.channel,
                 msg.sender_id,
@@ -533,6 +559,8 @@ class ChannelManager(ChannelBus):
 
         login_code = desktop_login_token(msg.text)
         if login_code:
+            if msg.is_group:
+                return
             await self._approve_desktop_login(msg, login_code)
             return
         if await handle_start_link(channel, msg, self.lang, linked_sender):
@@ -541,7 +569,10 @@ class ChannelManager(ChannelBus):
         if not self._allowed(msg):
             cfg = self.store.config(msg.channel)
             settings = self.store.resolved(cfg)
-            if str(settings.get("public") or "").lower() in ("1", "true", "yes") and not msg.is_group:
+            if (
+                str(settings.get("public") or "").lower() in ("1", "true", "yes")
+                and not msg.is_group
+            ):
                 # A public channel: the chat is its own account in the relay (its key comes
                 # from /v1/bot/signin), not a guest of this machine's account. No pairing
                 # code: there is nothing of the owner's to protect here, and the person has
@@ -566,7 +597,7 @@ class ChannelManager(ChannelBus):
                 logger.info(
                     "channel {}: {} claimed the empty bot as its owner", msg.channel, msg.sender_id
                 )
-                await self._greet(msg.channel, msg.chat_id)
+                await self._greet(msg.channel, msg.chat_id, msg.sender_id)
                 return
             else:
                 if msg.is_group:
@@ -607,7 +638,7 @@ class ChannelManager(ChannelBus):
             self._answer_to[origin_thread] = (msg.channel, msg.chat_id, msg.message_id)
         text = msg.text.strip()
         if text.lower().split("@")[0].split()[0:1] == ["/start"]:
-            await self._greet(msg.channel, msg.chat_id)
+            await self._greet(msg.channel, msg.chat_id, msg.sender_id)
             introduction = channel_text(self.lang, "welcome")
             if msg.channel == "max":
                 introduction += "\n\n" + channel_text(self.lang, "limits")
@@ -623,9 +654,7 @@ class ChannelManager(ChannelBus):
         if command in ("/connect", "/подключить"):
             await self._send_connect_code(msg)
             return
-        if command in ("/pay", "/оплатить") or (
-            (msg.channel, msg.chat_id) in self._pay_waiting
-        ):
+        if command in ("/pay", "/оплатить") or ((msg.channel, msg.chat_id) in self._pay_waiting):
             await self._pay_command(msg)
             return
         if command in ("/help", "/status"):
@@ -655,6 +684,9 @@ class ChannelManager(ChannelBus):
             return
         requested = computer_request(text) if not msg.is_group else None
         if requested is not None:
+            if self.menu.public_private(msg) and not await self.menu.native_account(msg):
+                await self.menu.cloud_handoff(msg, computer=True)
+                return
             if not requested:
                 await self._send(
                     msg.channel, msg.chat_id, channel_text(self.lang, "computer_usage")
@@ -690,7 +722,12 @@ class ChannelManager(ChannelBus):
         # Только там, где у канала есть темы: слово без кнопки может уйти не в ту тему.
         # В обычном чате (MAX, личка) человек отвечает словом, и это законно.
         topic_channel = bool(getattr(self.channels.get(msg.channel), "topics_enabled", False))
-        if topic_channel and selected and self._asks.get(key) and (word in ALLOW_WORDS or word in DENY_WORDS):
+        if (
+            topic_channel
+            and selected
+            and self._asks.get(key)
+            and (word in ALLOW_WORDS or word in DENY_WORDS)
+        ):
             await self._send(
                 msg.channel,
                 msg.chat_id,
@@ -852,6 +889,7 @@ class ChannelManager(ChannelBus):
             if event.get("type") == "assistant"
         )
         preferred.append(str(getattr(thread, "origin_device", "") or ""))
+
         async def probe(device_id: str, device: dict[str, Any]) -> dict[str, Any] | None:
             try:
                 result = await hub.call(device_id, "shared_chat", {"cid": cid}, timeout=12)
@@ -1146,7 +1184,6 @@ class ChannelManager(ChannelBus):
         """
         key = (msg.channel, msg.chat_id)
         text = msg.text.strip()
-        command = text.split()[0].lower().split("@")[0] if text else ""
         if key in self._pay_waiting:
             email = text.strip()
             if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", email) or len(email) > 128:
@@ -1159,7 +1196,9 @@ class ChannelManager(ChannelBus):
         if key not in self._pay_address:
             me = await self._pay_call(msg, "GET", "/v1/me")
             account = (me or {}).get("account") if isinstance(me, dict) else None
-            email = str((account or {}).get("email") or "").strip() if isinstance(account, dict) else ""
+            email = (
+                str((account or {}).get("email") or "").strip() if isinstance(account, dict) else ""
+            )
             if email:
                 self._pay_address[key] = email
         if key not in self._pay_address:
@@ -1186,11 +1225,15 @@ class ChannelManager(ChannelBus):
                 continue
             name = str(row.get("name") or plan_id)
             amount = int(row.get("amount") or 0) / 100
-            lines.append(f"{number}. {name} — {amount:g} ₽")
+            lines.append(f"{number}. {name}: {amount:g} ₽")
             rows[str(number)] = str(plan_id)
         self._pay_plans[key] = rows
         header = channel_text(self.lang, "pay_plans")
-        await self._send(msg.channel, msg.chat_id, header + "\n\n" + "\n".join(lines) + "\n\n" + channel_text(self.lang, "pay_how"))
+        await self._send(
+            msg.channel,
+            msg.chat_id,
+            header + "\n\n" + "\n".join(lines) + "\n\n" + channel_text(self.lang, "pay_how"),
+        )
 
     async def _pay_order(self, msg: InboundMessage, number: int) -> None:
         key = (msg.channel, msg.chat_id)
@@ -1232,7 +1275,7 @@ class ChannelManager(ChannelBus):
                 self.say(
                     "This chat is not connected to the cloud yet; ask the owner to finish the setup.",
                     "这个聊天还没有连接到云端，请让所有者完成设置。",
-                    "Этот чат ещё не подключён к облаку — попросите владельца закончить настройку.",
+                    "Этот чат ещё не подключён к облаку: попросите владельца закончить настройку.",
                 ),
             )
             return
@@ -1268,9 +1311,9 @@ class ChannelManager(ChannelBus):
             msg.channel,
             msg.chat_id,
             self.say(
-                f"Code: {code}\nOpen {link} and sign in with your email — it joins this account. The code lasts ten minutes.",
-                f"代码：{code}\n打开 {link}，用邮箱登录——邮箱会并入这个账户。十分钟内有效。",
-                f"Код: {code}\nОткройте {link} и войдите по почте — она прирастёт к этому аккаунту. Код действует десять минут.",
+                f"Code: {code}\nOpen {link} and sign in with your email, and it joins this account. The code lasts ten minutes.",
+                f"代码：{code}\n打开 {link}，用邮箱登录，邮箱会并入这个账户。十分钟内有效。",
+                f"Код: {code}\nОткройте {link} и войдите по почте: она прирастёт к этому аккаунту. Код действует десять минут.",
             ),
         )
 
@@ -1286,8 +1329,8 @@ class ChannelManager(ChannelBus):
             "如果这个机器人是你的，请在 nanoLika →「设置 → 聊天入口」中确认；"
             "如果不是，请让它的主人确认这个码。十分钟内有效。",
             f"Код для привязки: {code}\n"
-            "Если бот ваш — подтвердите код в nanoLika, Настройки → Мессенджеры. "
-            "Если бот не ваш — попросите владельца подтвердить этот код. "
+            "Если бот ваш, подтвердите код в nanoLika, Настройки → Мессенджеры. "
+            "Если бот не ваш, попросите владельца подтвердить этот код. "
             "Код действует десять минут.",
         )
 
@@ -1514,7 +1557,9 @@ class ChannelManager(ChannelBus):
         else:
             self._typing.discard(thread)
             self._typing_action.pop(thread, None)
-        options = {"action": action} if action and getattr(channel, "supports_action", False) else {}
+        options = (
+            {"action": action} if action and getattr(channel, "supports_action", False) else {}
+        )
         with contextlib.suppress(Exception):
             await channel.typing(route[1], on, **options)
 
@@ -1630,13 +1675,15 @@ class ChannelManager(ChannelBus):
                 text = self.say(
                     "The free allowance is used up. Top up right here with /pay, or invite a friend for more.",
                     "免费额度用完了。在这里用 /pay 充值，或邀请朋友获得更多额度。",
-                    "Бесплатный запас закончился. Пополнить можно прямо здесь: /pay. Или пригласи друга — дадим ещё.",
+                    "Бесплатный запас закончился. Пополнить можно прямо здесь: /pay. Или пригласи друга, дадим ещё.",
                 ) + (f"\n\n{text}" if text else "")
             if text:
                 await self._send_to_thread(thread, text)
             return
         if kind == "tool" and ours and (event.get("status") == "running"):
-            await self._set_typing(thread, True, _TOOL_ACTIONS.get(str(event.get("tool") or ""), ""))
+            await self._set_typing(
+                thread, True, _TOOL_ACTIONS.get(str(event.get("tool") or ""), "")
+            )
             live = self._live_for(thread)
             if live is not None:
                 live.status = self._tool_label(event)
@@ -1707,9 +1754,7 @@ class ChannelManager(ChannelBus):
                 taken.append((rel, path))
         return taken
 
-    async def _name_artifacts(
-        self, thread: str, text: str, pending: list[tuple[str, Path]]
-    ) -> str:
+    async def _name_artifacts(self, thread: str, text: str, pending: list[tuple[str, Path]]) -> str:
         """A path of this runtime is not an address a phone or another device can open: the
         words keep the file's name, with a link to our storage when the relay has one."""
         # The sync engine uploads the same files before the message is pushed; its link is
@@ -1931,7 +1976,7 @@ class ChannelManager(ChannelBus):
         )
         thread_id = self._thread_for(paired_message)
         self.svc.sync.thread_changed(self.svc.threads[thread_id])
-        await self._greet(entry["channel"], str(entry.get("chat_id") or entry["sender_id"]))
+        await self._greet(entry["channel"], str(entry.get("chat_id") or entry["sender_id"]), str(entry["sender_id"]))
         return entry
 
     async def deny(self, code: str) -> dict[str, Any] | None:
@@ -2092,10 +2137,16 @@ class ChannelManager(ChannelBus):
         if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
             return "", ""
         approved = self.pairing.approved(channel)
+        pinned = approved.get(str(msg.sender_id), {})
+        if (channel == "telegram" and physical_chat(channel, msg.chat_id) == str(msg.sender_id)
+            and pinned.get("runtime_account") == self.svc.sync.account_id and self.svc.sync.account_id
+            and self.svc.hub.signed_in):
+            return "", ""
         if (
-            str(msg.sender_id) in approved
-            or str(physical_chat(channel, msg.chat_id)) in approved
-        ) and self.svc.hub.signed_in:
+            str(msg.sender_id) in approved or str(physical_chat(channel, msg.chat_id)) in approved
+        ) and self.svc.hub.signed_in and not (
+            channel in {"telegram", "max"} and str(settings.get("public") or "").lower() in ("1", "true", "yes")
+        ):
             # The owner's own chat keeps this machine's account while the bot itself is
             # signed in to one: public entry is for the chats that were never paired, not
             # a switch of the owner onto another key. A bot with no account of its own
@@ -2246,7 +2297,9 @@ class ChannelManager(ChannelBus):
             return
         if shared_cid and "shared_chat" not in (device.get("actions") or []):
             if fallback:
-                self.svc.send(thread, text, language=self.menu.language(msg), via_channel=msg.channel)
+                self.svc.send(
+                    thread, text, language=self.menu.language(msg), via_channel=msg.channel
+                )
             else:
                 await self._finish(
                     thread,
@@ -2377,7 +2430,9 @@ class ChannelManager(ChannelBus):
                         ),
                     )
                 try:
-                    self.svc.send(thread, text, language=self.menu.language(msg), via_channel=msg.channel)
+                    self.svc.send(
+                        thread, text, language=self.menu.language(msg), via_channel=msg.channel
+                    )
                 except (ValueError, PermissionError) as error:
                     await self._send(msg.channel, msg.chat_id, _short(error))
                 return
@@ -2514,7 +2569,11 @@ class ChannelManager(ChannelBus):
         if parts.hostname == SHARE_HOST and parts.path.startswith(SHARE_PREFIX):
             return True
         relay = urlsplit(str(getattr(self.svc.settings.cloud, "base_url", "") or ""))
-        return bool(relay.hostname) and parts.hostname == relay.hostname and parts.path.startswith("/v1/files/")
+        return (
+            bool(relay.hostname)
+            and parts.hostname == relay.hostname
+            and parts.path.startswith("/v1/files/")
+        )
 
     async def _fetch_shared(self, urls: list[str]) -> list[tuple[str, Path]]:
         """Our own objects, fetched so the channel can send the file itself.
@@ -2608,13 +2667,16 @@ class ChannelManager(ChannelBus):
         # only for what the Bot API cannot take (an object over 50 MB). The link is ours,
         # not S3's: it does not expire and the bucket stays private.
         files = [
-            item for item in (event.get("files") or [])
+            item
+            for item in (event.get("files") or [])
             if isinstance(item, dict) and item.get("url")
         ]
         media = [
             str(item.get("url") or "")
             for item in files
-            if _is_media(str(item.get("mime") or ""), str(item.get("name") or item.get("url") or ""))
+            if _is_media(
+                str(item.get("mime") or ""), str(item.get("name") or item.get("url") or "")
+            )
         ]
         media += SHARE_IMAGE.findall(body)
         media = [url for url in dict.fromkeys(media) if self._share_allowed(url)]
@@ -2622,7 +2684,9 @@ class ChannelManager(ChannelBus):
             body = body.replace(url, "")
         body = SHARE_IMAGE.sub("", body)
         body = re.sub(r"\[вложение:[^\]]*\]", "", body).strip()
-        links = [str(item.get("url") or "") for item in files if str(item.get("url") or "") not in media]
+        links = [
+            str(item.get("url") or "") for item in files if str(item.get("url") or "") not in media
+        ]
         for url in links:
             if url and url not in body:
                 body = (body + "\n" if body else "") + url
@@ -2715,7 +2779,9 @@ class ChannelManager(ChannelBus):
         invite = str(cfg.settings.get("invite_url") or "").strip()
         if channel == "max":
             # MAX has no Telegram initData: the browser names the channel itself.
-            webapp = str(cfg.settings.get("webapp_url_max") or "https://cloud.nanolika.ru/web/?channel=max").strip()
+            webapp = str(
+                cfg.settings.get("webapp_url_max") or "https://cloud.nanolika.ru/web/?channel=max"
+            ).strip()
         else:
             webapp = str(cfg.settings.get("webapp_url") or "").strip()
         if site:
@@ -2749,6 +2815,9 @@ class ChannelManager(ChannelBus):
             except Exception as exc:  # noqa: BLE001 — a command must never break the chat
                 logger.warning("channel {}: unlink failed: {}", msg.channel, type(exc).__name__)
                 answer = channel_text(self.lang, "unlink_offline")
+            if answer == channel_text(self.lang, "unlink_done"):
+                self._cloud_keys.pop((msg.channel, msg.sender_id), None)
+                self._cloud_customer_scopes.pop((msg.channel, msg.sender_id), None)
             await self._send(msg.channel, msg.chat_id, answer)
             return
         self._unlink_pending[key] = time.monotonic()
@@ -2762,9 +2831,7 @@ class ChannelManager(ChannelBus):
             answer = channel_text(self.lang, "desktop_login_offline")
         else:
             try:
-                answer = await link().approve_desktop(
-                    msg.sender_id or msg.chat_id, code, self.lang
-                )
+                answer = await link().approve_desktop(msg.sender_id or msg.chat_id, code, self.lang)
             except Exception as exc:  # noqa: BLE001 — a command must never break the chat
                 logger.warning(
                     "channel {}: desktop sign-in failed: {}", msg.channel, type(exc).__name__
@@ -2803,6 +2870,8 @@ class ChannelManager(ChannelBus):
             if self.svc.delete_thread(thread_id):
                 forgotten += 1
         self.pairing.remove(msg.channel, msg.sender_id)
+        self._cloud_keys.pop((msg.channel, msg.sender_id), None)
+        self._cloud_customer_scopes.pop((msg.channel, msg.sender_id), None)
         self.publish()
         channel = self.channels.get(msg.channel)
         link = getattr(channel, "chat_link", None) if channel is not None else None
@@ -2817,7 +2886,7 @@ class ChannelManager(ChannelBus):
         )
         await self._send(msg.channel, msg.chat_id, channel_text(self.lang, "logout_done"))
 
-    async def _greet(self, channel: str, chat_id: str) -> None:
+    async def _greet(self, channel: str, chat_id: str, sender_id: str = "") -> None:
         """The greeting, then the links the channel was configured with."""
         greeting = channel_text(self.lang, "welcome")
         if channel == "max":
@@ -2828,6 +2897,9 @@ class ChannelManager(ChannelBus):
                 await send_welcome_art(ch, chat_id)
             except Exception:
                 logger.warning("channel {}: welcome artwork unavailable; sending text", channel)
+        if channel in {"telegram", "max"} and ch is not None:
+            await self.menu.home(InboundMessage(channel=channel, chat_id=chat_id, sender_id=sender_id or physical_chat(channel, chat_id)), greeting)
+            return
         await self._send(channel, chat_id, greeting)
         buttons = self.welcome_links(channel)
         if not buttons:

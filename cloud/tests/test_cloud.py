@@ -2524,12 +2524,16 @@ async def test_reasoning_passes_through_and_is_paid_for(stack):
 
     # A level the menu documents goes upstream beside the thinking toggle; "default" and a
     # level the model never offered leave the provider's own default alone.
-    r = await client.post("/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": "max"}, headers=auth)
+    r = await client.post(
+        "/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": "max"}, headers=auth
+    )
     assert r.status_code == 200
     sent = up.state.requests[-1][2]
     assert sent["reasoning_effort"] == "max" and sent["enable_thinking"] is True
     for effort in ("default", "xhigh"):
-        r = await client.post("/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": effort}, headers=auth)
+        r = await client.post(
+            "/v1/chat/completions", json={"model": "deepseek-v4.1-flash", "messages": history, "reasoning_effort": effort}, headers=auth
+        )
         assert r.status_code == 200
         sent = up.state.requests[-1][2]
         assert "reasoning_effort" not in sent and "enable_thinking" not in sent
@@ -2728,9 +2732,7 @@ async def test_music_endpoint_returns_audio_and_charges_one_track(monkeypatch):
             headers={"X-Admin-Token": "admin"},
             json={"identifier": "13800138000", "tokens": 2_000_000},
         )
-        r = await client.post(
-            "/v1/audio/music", headers=headers, json={"model": "music-test", "prompt": "calm piano"}
-        )
+        r = await client.post("/v1/audio/music", headers=headers, json={"model": "music-test", "prompt": "calm piano"})
         assert r.status_code == 200, r.text
         assert r.content == b"ID3test-track"
         assert r.headers["content-type"].startswith("audio/mpeg")

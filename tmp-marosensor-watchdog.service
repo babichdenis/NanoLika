@@ -1,0 +1,10 @@
+[Unit]
+Description=Marosensor uptime watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/marosensor-watchdog.env
+ExecStart=/usr/local/bin/marosensor-watchdog
+Nice=10

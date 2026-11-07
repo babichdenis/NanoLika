@@ -90,10 +90,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
     async def test_manager_approval_call_accepts_language(self):
         await self.ch.ask("fixture-chat", "approval-fixture", "Confirm action", "ru")
         # the card first, then the pin that keeps it in sight
-        cards = [
-            r for r in self.calls
-            if r.url.path == "/messages" and r.method == "POST"
-        ]
+        cards = [r for r in self.calls if r.url.path == "/messages" and r.method == "POST"]
         request = cards[-1]
         body = json.loads(request.content)
         self.assertEqual(body["text"], "Confirm action")

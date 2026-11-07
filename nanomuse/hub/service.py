@@ -75,6 +75,8 @@ class HubService:
         self.svc = svc
         self.client: HubClient | None = None
         self.cloud = CloudClient(self.settings.cloud.base_url, self._key())
+        # the desktop writes its zone once per process, not on every account read
+        self._tz_sent = False
         # the relay's last /v1/me (models with prices, usage)
         self.last_me: dict[str, Any] = {}
         # the account's chat models (ids), for the provider form; refreshed on sign-in and
@@ -554,13 +556,18 @@ class HubService:
         if data is None:
             theirs = (await self.cloud.tz()).strip()
         else:
-            account = data.get("account") if isinstance(data.get("account"), dict) else {}
+            account = data.get("account")
+            if not isinstance(account, dict):
+                account = {}
             theirs = str(account.get("tz") or "").strip()
         mine = timeutil.system_zone_name()
         on_desktop = os.environ.get("NANOMUSE_DESKTOP") == "1"
         if on_desktop and mine and theirs != mine:
+            if self._tz_sent:
+                return
             try:
                 await self.cloud.put_tz(mine)
+                self._tz_sent = True
                 logger.info("clock: the account's timezone is {}", mine)
             except Exception as exc:  # noqa: BLE001 - an older relay has no such door
                 logger.debug("clock not shared: {}", exc)
@@ -1117,9 +1124,11 @@ class HubService:
             await call.fail("not_allowed", "this shared chat is unavailable")
             return
         catalog = getattr(sync, "catalog", None)
-        mark = (catalog.rows.get(cid) if catalog is not None else None) or sync.state.get(
-            "conversation_marks", {}
-        ).get(cid) or {}
+        mark = (
+            (catalog.rows.get(cid) if catalog is not None else None)
+            or sync.state.get("conversation_marks", {}).get(cid)
+            or {}
+        )
         if mark.get("archived") or mark.get("deleted"):
             await call.fail("not_allowed", "this shared chat is archived")
             return

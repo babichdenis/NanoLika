@@ -239,7 +239,9 @@ class WeComChannel(Channel):
         return InboundFile(name=name, data=bytes(data), kind="image" if kind == "image" else "file")
 
     # ------------------------------------------------------------------ outbound
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         if self._client is None:
             raise RuntimeError("Not connected.")
         if text.strip():
@@ -252,7 +254,9 @@ class WeComChannel(Channel):
                 await self._client.send_media_message(chat_id, str(path))
         return ""
 
-    async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
+    async def stream(
+        self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""
+    ) -> None:
         if self._client is None:
             raise RuntimeError("Not connected.")
         entry = self._streams.get(stream_id)

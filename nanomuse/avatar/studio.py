@@ -83,6 +83,8 @@ IMAGE_PAUSES = (3.0, 6.0, 12.0)
 async def _pause(seconds: float) -> None:
     """The one place the studio sleeps; tests patch this, not asyncio everywhere."""
     await asyncio.sleep(seconds)
+
+
 # video tasks in flight at once (the provider allows an account a couple), and the pauses
 # before a refused task is submitted again
 CLIPS_AT_ONCE = 2

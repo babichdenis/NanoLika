@@ -570,7 +570,15 @@ class _GatedLLM(MockLLM):
         self.closed = False
         self.asking = False
 
-    async def ask(self, messages, tools=None, tool_choice="auto", on_delta=None, on_reasoning=None, max_tokens=None):  # type: ignore[override]  # noqa: ANN001
+    async def ask(
+        self,
+        messages,
+        tools=None,
+        tool_choice="auto",
+        on_delta=None,
+        on_reasoning=None,
+        max_tokens=None,
+    ):  # type: ignore[override]  # noqa: ANN001
         self.asking = True
         while not self.gate.is_set():
             await asyncio.sleep(0.01)

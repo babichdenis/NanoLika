@@ -29,6 +29,8 @@ log = logging.getLogger("nanomuse_cloud.web_runtime")
 #: the account worker (MuseService per account inside one process), on the docker network
 RUNTIME_BASE = os.environ.get("WEB_RUNTIME_BASE", "http://cloud-worker:8789").rstrip("/")
 RUNTIME_WS = os.environ.get("WEB_RUNTIME_WS", RUNTIME_BASE.replace("http", "ws", 1) + "/ws").strip()
+#: the shared secret of that worker (`NANOMUSE_WORKER_SECRET` on its side); empty = loopback trust
+WORKER_SECRET = os.environ.get("WEB_RUNTIME_SECRET", "").strip()
 #: accounts the pilot serves (comma-separated ids); empty means "nobody yet" — fail closed
 OWNERS = tuple(x.strip() for x in os.environ.get("WEB_RUNTIME_ACCOUNTS", "").split(",") if x.strip())
 
@@ -42,6 +44,7 @@ DROP_REQUEST = {
     "accept-encoding",
     "x-account",
     "x-cloud-key",
+    "x-worker-secret",
 }
 DROP_RESPONSE = {"content-length", "content-encoding", "transfer-encoding", "connection"}
 
@@ -50,14 +53,17 @@ _KEYS: dict[str, tuple[str, float]] = {}
 _KEY_TTL_S = 6 * 3600
 
 
+def _worker_auth() -> dict[str, str]:
+    """The worker's own header, when the deployment shares a secret with it."""
+    return {"X-Worker-Secret": WORKER_SECRET} if WORKER_SECRET else {}
+
+
 def _account_key(cloud: Any, account_id: str) -> str:
     now = time.time()
     held = _KEYS.get(account_id)
     if held is not None and held[1] > now + 60:
         return held[0]
-    key, _caller = cloud._issue_key(
-        account_id, "cloud worker", "runtime", expires_at=int(now) + _KEY_TTL_S
-    )
+    key, _caller = cloud._issue_key(account_id, "cloud worker", "runtime", expires_at=int(now) + _KEY_TTL_S)
     _KEYS[account_id] = (key, now + _KEY_TTL_S)
     return key
 
@@ -84,11 +90,7 @@ async def _caller_for(cloud: Any, request: Request | WebSocket) -> Any:
 
 
 def _runtime_headers(caller: Any, request: Request | WebSocket) -> dict[str, str]:
-    headers = {
-        key: value
-        for key, value in request.headers.items()
-        if key.lower() not in DROP_REQUEST
-    }
+    headers = {key: value for key, value in request.headers.items() if key.lower() not in DROP_REQUEST}
     return headers
 
 
@@ -119,6 +121,7 @@ class RuntimePage(BaseHTTPMiddleware):
         headers.pop("accept-encoding", None)
         headers["X-Account"] = caller.account_id
         headers["X-Cloud-Key"] = key
+        headers.update(_worker_auth())
         target = "/" if page else path
         try:
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
@@ -130,11 +133,7 @@ class RuntimePage(BaseHTTPMiddleware):
         return Response(
             content=answer.content,
             status_code=answer.status_code,
-            headers={
-                key: value
-                for key, value in answer.headers.items()
-                if key.lower() not in DROP_RESPONSE
-            },
+            headers={key: value for key, value in answer.headers.items() if key.lower() not in DROP_RESPONSE},
             media_type=answer.headers.get("content-type"),
         )
 
@@ -158,7 +157,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
                 RUNTIME_WS,
                 max_size=None,
                 open_timeout=10,
-                additional_headers={"X-Account": caller.account_id, "X-Cloud-Key": key},
+                additional_headers={"X-Account": caller.account_id, "X-Cloud-Key": key, **_worker_auth()},
             )
         except Exception as exc:  # noqa: BLE001 — the worker is not there right now
             log.warning("web ws: worker unreachable: %s", type(exc).__name__)
@@ -171,9 +170,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
 
         async def to_client() -> None:
             async for message in upstream:
-                await websocket.send_text(
-                    message if isinstance(message, str) else message.decode("utf-8", "replace")
-                )
+                await websocket.send_text(message if isinstance(message, str) else message.decode("utf-8", "replace"))
 
         tasks = [asyncio.create_task(to_worker()), asyncio.create_task(to_client())]
         try:
@@ -200,6 +197,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
         headers = _runtime_headers(caller, request)
         headers["X-Account"] = caller.account_id
         headers["X-Cloud-Key"] = key
+        headers.update(_worker_auth())
         try:
             async with httpx.AsyncClient(timeout=300.0, follow_redirects=False) as client:
                 answer = await client.request(
@@ -217,11 +215,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
         return Response(
             content=answer.content,
             status_code=answer.status_code,
-            headers={
-                key: value
-                for key, value in answer.headers.items()
-                if key.lower() not in DROP_RESPONSE
-            },
+            headers={key: value for key, value in answer.headers.items() if key.lower() not in DROP_RESPONSE},
             media_type=answer.headers.get("content-type"),
         )
 

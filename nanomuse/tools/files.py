@@ -67,17 +67,17 @@ def office_text(path: Path, limit: int = 200_000) -> str:
             import openpyxl
 
             book = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
-            lines: list[str] = []
+            sheet_lines: list[str] = []
             for sheet in book.worksheets:
-                lines.append(f"# {sheet.title}")
+                sheet_lines.append(f"# {sheet.title}")
                 for row in sheet.iter_rows(values_only=True):
                     cells = ["" if value is None else str(value) for value in row]
                     if any(cell.strip() for cell in cells):
-                        lines.append("\t".join(cells))
-                    if sum(len(line) for line in lines) > limit:
+                        sheet_lines.append("\t".join(cells))
+                    if sum(len(line) for line in sheet_lines) > limit:
                         break
             book.close()
-            return "\n".join(lines)[:limit]
+            return "\n".join(sheet_lines)[:limit]
         from pptx import Presentation
 
         deck = Presentation(str(path))
@@ -120,10 +120,108 @@ def pdf_text(path: Path, max_pages: int = 60) -> str:
     text = "\n\n".join(parts)
     if not any(p.split("---\n", 1)[-1].strip() for p in parts):
         return (
-            f"(this PDF has {pages} page{'s' if pages != 1 else ''} but no text layer; it is "
-            "probably scanned images; the text cannot be extracted here)"
+            f"(this PDF has {pages} page{'s' if pages != 1 else ''} but no text layer: it is "
+            "scanned images, so the pages are attached as pictures)"
         )
     return text
+
+
+def pdf_images(path: Path, workspace: Path, max_pages: int = 6, side: int = 1400) -> list[Path]:
+    """The pages of a scanned PDF as pictures, for a model that can look at them.
+
+    A scan has no text layer, but it is not unreadable: the same turn that would have
+    returned an empty page renders it to a JPEG and lets a vision model read it.
+    """
+    try:
+        import pypdfium2 as pdfium
+    except Exception:  # noqa: BLE001 — no renderer, no pictures: the text result stands
+        return []
+    try:
+        document = pdfium.PdfDocument(str(path))
+    except Exception:  # noqa: BLE001 — a damaged PDF is a result, not a crash
+        return []
+    shots: list[Path] = []
+    try:
+        folder = workspace / ".pdf-pages"
+        folder.mkdir(parents=True, exist_ok=True)
+        for index in range(min(len(document), max_pages)):
+            page = document[index]
+            width, height = page.get_size()
+            scale = min(2.0, side / max(width or 1, height or 1))
+            image = page.render(scale=max(scale, 0.5)).to_pil().convert("RGB")
+            target = folder / f"{path.stem[:40]}-{index + 1}.jpg"
+            image.save(target, "JPEG", quality=82)
+            shots.append(target)
+    except Exception:  # noqa: BLE001 — some pages are better than none
+        return shots
+    finally:
+        try:
+            document.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return shots
+
+
+# Formats the plain readers above do not cover: markitdown (if installed) turns them
+# into Markdown locally. It is optional on purpose — a runtime without it still reads
+# PDF, Word, Excel and text, and the bot image does not carry the 340 MB it needs.
+MARKITDOWN_SUFFIXES = {".epub", ".htm", ".html", ".msg", ".rtf"}
+
+
+def markitdown_text(path: Path, limit: int = 200_000) -> str:
+    """A document in a format no other reader here knows, as Markdown text."""
+    try:
+        from markitdown import MarkItDown
+    except Exception:  # noqa: BLE001 — not installed: the caller falls back
+        return ""
+    try:
+        converter = MarkItDown(enable_plugins=False)
+        result = converter.convert_local(str(path))
+    except Exception as exc:  # noqa: BLE001 — a damaged file is a result, not a crash
+        return f"(this {path.suffix.lower()} could not be read: {type(exc).__name__})"
+    return (getattr(result, "text_content", "") or "")[:limit]
+
+
+def zip_text(path: Path, limit: int = 200_000, max_members: int = 40) -> str:
+    """What is inside an archive: the names, and the text of the readable members.
+
+    Nothing is unpacked to disk and no member is expanded without a cap: an archive
+    from a stranger is a list first, then the few text files that fit.
+    """
+    import zipfile
+
+    try:
+        archive = zipfile.ZipFile(path)
+    except Exception as exc:  # noqa: BLE001
+        return f"(this archive could not be opened: {type(exc).__name__})"
+    parts: list[str] = []
+    try:
+        infos = archive.infolist()
+        parts.append(f"(archive with {len(infos)} entries)")
+        for info in infos[:max_members]:
+            if info.is_dir():
+                continue
+            name = info.filename
+            if info.file_size > 2_000_000:
+                parts.append(f"--- {name} --- (too large: {info.file_size} bytes)")
+                continue
+            suffix = Path(name).suffix.lower()
+            if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp3", ".mp4", ".zip", ".pdf"}:
+                parts.append(f"--- {name} --- (binary, {info.file_size} bytes)")
+                continue
+            try:
+                raw = archive.read(info)[:100_000]
+                text = raw.decode("utf-8", "replace")
+            except Exception as exc:  # noqa: BLE001
+                parts.append(f"--- {name} --- (could not be read: {type(exc).__name__})")
+                continue
+            parts.append(f"--- {name} ---\n{text}")
+            if sum(len(part) for part in parts) > limit:
+                parts.append("... [truncated]")
+                break
+    finally:
+        archive.close()
+    return "\n\n".join(parts)[:limit]
 
 
 # an unbounded `search` over a home directory would walk for minutes; this is plenty
@@ -268,14 +366,32 @@ class Files(BaseTool):
                     # pypdf on a long document takes seconds: off the event loop, so the
                     # web app and the hub keep answering meanwhile
                     text = await asyncio.to_thread(pdf_text, target)
-                elif target.suffix.lower() in OFFICE_READERS:
+                    if "no text layer" in text:
+                        # A scan is not a refusal: the pages go to the model as pictures.
+                        shots = await asyncio.to_thread(pdf_images, target, active_workspace(self.workspace))
+                        if shots:
+                            return ToolResult(output=text, images=[str(shot) for shot in shots])
+                    if len(text) > MAX_READ_CHARS:
+                        text = text[:MAX_READ_CHARS] + f"\n... [truncated, {len(text)} chars total]"
+                    return ToolResult(output=text or "(the document has no text)")
+                if target.suffix.lower() in MARKITDOWN_SUFFIXES:
+                    text = await asyncio.to_thread(markitdown_text, target)
+                    if text:
+                        return ToolResult(output=text[:MAX_READ_CHARS])
+                    if target.suffix.lower() not in {".htm", ".html"}:
+                        # These are archives with markup inside: plain reading gives noise.
+                        return ToolResult(
+                            output=f"(this {target.suffix.lower()} needs the markitdown converter, "
+                            "which is not installed on this runtime)"
+                        )
+                if target.suffix.lower() == ".zip":
+                    text = await asyncio.to_thread(zip_text, target)
+                    return ToolResult(output=text[:MAX_READ_CHARS])
+                if target.suffix.lower() in OFFICE_READERS:
                     text = await asyncio.to_thread(office_text, target)
                     if len(text) > MAX_READ_CHARS:
                         text = text[:MAX_READ_CHARS] + "\n... [truncated]"
                     return ToolResult(output=text or "(the document has no text)")
-                    if len(text) > MAX_READ_CHARS:
-                        text = text[:MAX_READ_CHARS] + f"\n... [truncated, {len(text)} chars total]"
-                    return ToolResult(output=text or "(empty file)")
                 # read what fits and one more character, not the whole file: a log of a few
                 # hundred MB is truncated either way, and need not be loaded for it
                 with target.open("r", encoding="utf-8", errors="replace") as fh:

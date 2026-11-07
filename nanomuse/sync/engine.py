@@ -225,12 +225,12 @@ class ConversationSync:
             history = data.get("history_before")
             if isinstance(history, dict):
                 self.state["history_before"] = {
-                    str(k): int(v)
-                    for k, v in history.items()
-                    if type(v) is int and v > 0
+                    str(k): int(v) for k, v in history.items() if type(v) is int and v > 0
                 }
             if isinstance(data.get("pending_cids"), list):
-                self.state["pending_cids"] = [str(cid) for cid in data["pending_cids"] if isinstance(cid, str)]
+                self.state["pending_cids"] = [
+                    str(cid) for cid in data["pending_cids"] if isinstance(cid, str)
+                ]
             cursors = data.get("message_cursors", {})
             if isinstance(cursors, dict):
                 self.state["message_cursors"] = {
@@ -303,7 +303,7 @@ class ConversationSync:
         """Move the current scope's cursor forward only. A missing or unreadable value keeps
         the cursor where it is: a relay restoring an older number must not replay history."""
         try:
-            incoming = int(value or 0)
+            incoming = int(value) if isinstance(value, (int, float, str)) else 0
         except (TypeError, ValueError):
             incoming = 0
         self._set_cursor(max(self.cursor, incoming))
@@ -1048,8 +1048,12 @@ class ConversationSync:
                 model = (thread.model or "").strip()[:120]
                 reasoning = (thread.reasoning or "").strip().lower()[:24]
                 model_changed = bool(model) and self.state["models"].get(thread.id) != model
-                reasoning_changed = bool(model) and self.state["reasoning"].get(thread.id, "") != reasoning
-                temperature_changed = thread.temperature != self.state["temperatures"].get(thread.id)
+                reasoning_changed = (
+                    bool(model) and self.state["reasoning"].get(thread.id, "") != reasoning
+                )
+                temperature_changed = thread.temperature != self.state["temperatures"].get(
+                    thread.id
+                )
                 folder = (thread.folder or "").strip()[:120]
                 if not folder:
                     # A chat born in a messenger is in that messenger's folder: the id
@@ -1521,7 +1525,9 @@ class ConversationSync:
             self.state["models"][thread.id] = model
             changed = True
         # an older relay says nothing about reasoning: absence must not clear a local pick
-        if "reasoning" in row and (self.state["reasoning"].get(thread.id, "") != reasoning or thread.reasoning != reasoning):
+        if "reasoning" in row and (
+            self.state["reasoning"].get(thread.id, "") != reasoning or thread.reasoning != reasoning
+        ):
             thread.reasoning = reasoning
             self.state["reasoning"][thread.id] = reasoning
             changed = True

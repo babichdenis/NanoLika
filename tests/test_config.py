@@ -65,6 +65,9 @@ def test_defaults_without_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("NANOMUSE_CONFIG", raising=False)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-from-env")
     monkeypatch.setenv("HOME", str(tmp_path))
+    # the real ~/.nanolika must not be read: the defaults are the subject here
+    monkeypatch.setenv("NANOMUSE_DATA_DIR", str(tmp_path / ".nanolika"))
+    monkeypatch.setattr("nanomuse.config.DEFAULT_DATA_DIR", tmp_path / ".nanolika")
     s = load_settings()
     assert s.llm.api_key == "sk-from-env"
     assert s.source == "defaults+env"

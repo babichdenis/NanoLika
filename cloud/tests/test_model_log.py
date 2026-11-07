@@ -20,9 +20,7 @@ async def opened(client):
 
 
 async def stack():
-    models = (
-        ModelSpec("text", "Text", "text", sell_in=80, sell_out=120, context_length=200000, max_output=10000),
-    )
+    models = (ModelSpec("text", "Text", "text", sell_in=80, sell_out=120, context_length=200000, max_output=10000),)
     app, client, sender, up, cloud = make_stack(models=models, rub_per_usd=100, usd_cny=10, topup_fee_pct=0)
     return client, cloud
 
@@ -56,7 +54,5 @@ async def test_note_and_price_change_appear_in_one_timeline():
 async def test_empty_note_is_refused_and_unknown_model_is_404():
     client, cloud = await stack()
     async with opened(client):
-        assert (
-            await client.post("/v1/admin/models/text/notes", headers=ADMIN, json={"body": "  "})
-        ).status_code == 422
+        assert (await client.post("/v1/admin/models/text/notes", headers=ADMIN, json={"body": "  "})).status_code == 422
         assert (await client.get("/v1/admin/models/nope/log", headers=ADMIN)).status_code == 404

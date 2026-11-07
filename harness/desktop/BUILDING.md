@@ -57,6 +57,17 @@ Only publish a new release after these checks, with coordinated versions and upd
 verification. Keep the previous release available for rollback. Record artifact checksums,
 commit, CI run, signing status and any unverified acceptance checks in the worklog.
 
+## Локальный запуск не равен установщику
+
+`npm start` прогоняет `scripts/patch-dsh.mjs` перед стартом: он вкладывает русский пакет в
+`dsh/`. Без него `electron .` копирует `dsh/` в `payload/dsh` без
+`@absolutemikhail/dsh-locale-ru`, профиль не находит пакет и весь интерфейс становится
+английским. Если это уже случилось, пакет возвращается одной командой:
+
+```sh
+node scripts/patch-dsh.mjs --dir "$HOME/Library/Application Support/nanolika-desktop/payload/dsh"
+```
+
 ## Для других сессий
 
 Сначала прочитайте этот файл и актуальную запись `docs/WORKLOG.md`. Сборка приложения,

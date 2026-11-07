@@ -1,8 +1,20 @@
 {
   "version": 1,
-  "updated": "2026-10",
-  "capabilities": ["chat", "vision", "image", "video"],
-  "auth_kinds": ["key", "none", "oauth-chatgpt", "oauth-claude", "oauth-openrouter", "device-kimi"],
+  "updated": "2026-11-07",
+  "capabilities": [
+    "chat",
+    "vision",
+    "image",
+    "video"
+  ],
+  "auth_kinds": [
+    "key",
+    "none",
+    "oauth-chatgpt",
+    "oauth-claude",
+    "oauth-openrouter",
+    "device-kimi"
+  ],
   "providers": [
     {
       "id": "bailian",
@@ -12,9 +24,18 @@
       "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "key_url": "https://bailian.console.aliyun.com/?apiKey=1",
       "key_hint": "sk-…",
-      "auth": ["key"],
-      "regions": ["cn"],
-      "capabilities": ["chat", "vision", "image", "video"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image",
+        "video"
+      ],
       "defaults": {
         "chat": "deepseek-v4.1-flash",
         "hands": "qwen3.8-27b",
@@ -33,9 +54,17 @@
       "base_url": "https://api.deepseek.com/v1",
       "key_url": "https://platform.deepseek.com/api_keys",
       "key_hint": "sk-…",
-      "auth": ["key"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "deepseek-flash",
         "hands": "deepseek-flash"
@@ -47,8 +76,29 @@
         "doc": "https://api-docs.deepseek.com/guides/thinking_mode",
         "wire": "thinking+reasoning_effort",
         "rules": [
-          { "models": "^deepseek-", "levels": ["low", "high", "max"], "default": "high" }
+          {
+            "models": "^deepseek-",
+            "levels": [
+              "low",
+              "high",
+              "max"
+            ],
+            "default": "high"
+          }
         ]
+      },
+      "role": "both",
+      "relay_base": "https://api.deepseek.com",
+      "catalog": {
+        "path": "/models",
+        "format": "deepseek",
+        "currency": "USD",
+        "price_url": "https://api-docs.deepseek.com/quick_start/pricing/"
+      },
+      "balance": {
+        "path": "/user/balance",
+        "format": "deepseek",
+        "currency": "USD"
       }
     },
     {
@@ -61,9 +111,18 @@
       "key_url": "https://platform.moonshot.cn/console/api-keys",
       "key_url_global": "https://platform.kimi.ai/console",
       "key_hint": "sk-…",
-      "auth": ["key", "device-kimi"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key",
+        "device-kimi"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "kimi-k2.6",
         "hands": "kimi-k2.6"
@@ -75,7 +134,15 @@
         "doc": "https://platform.moonshot.ai/docs/api/chat",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^kimi-k3", "levels": ["low", "high", "max"], "default": "max" }
+          {
+            "models": "^kimi-k3",
+            "levels": [
+              "low",
+              "high",
+              "max"
+            ],
+            "default": "max"
+          }
         ]
       }
     },
@@ -87,9 +154,17 @@
       "base_url": "https://open.bigmodel.cn/api/paas/v4",
       "key_url": "https://open.bigmodel.cn/usercenter/apikeys",
       "key_hint": "xxxxxxxx.xxxxxxxx",
-      "auth": ["key"],
-      "regions": ["cn"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "glm-5.3",
         "hands": "glm-4.6v",
@@ -102,8 +177,23 @@
         "doc": "https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%AF%B9%E8%AF%9D%E8%A1%A5%E5%85%A8",
         "wire": "thinking+reasoning_effort",
         "rules": [
-          { "models": "^glm-5\\.3", "levels": ["low", "high", "max"], "default": "max" },
-          { "models": "^glm-5\\.2", "levels": ["high", "max"], "default": "max" }
+          {
+            "models": "^glm-5\\.3",
+            "levels": [
+              "low",
+              "high",
+              "max"
+            ],
+            "default": "max"
+          },
+          {
+            "models": "^glm-5\\.2",
+            "levels": [
+              "high",
+              "max"
+            ],
+            "default": "max"
+          }
         ]
       }
     },
@@ -115,9 +205,17 @@
       "base_url": "https://api.siliconflow.cn/v1",
       "key_url": "https://cloud.siliconflow.cn/account/ak",
       "key_hint": "sk-…",
-      "auth": ["key"],
-      "regions": ["cn"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "deepseek-ai/DeepSeek-V4-Flash",
         "hands": "Qwen/Qwen3-VL-32B-Instruct",
@@ -130,8 +228,22 @@
         "doc": "https://docs.siliconflow.cn/cn/api-reference/chat-completions/chat-completions",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^(Pro/)?deepseek-ai/DeepSeek-V4(-|$)", "levels": ["high", "max"], "default": "high" },
-          { "models": "^Pro/zai-org/GLM-5\\.2", "levels": ["high", "max"], "default": "high" }
+          {
+            "models": "^(Pro/)?deepseek-ai/DeepSeek-V4(-|$)",
+            "levels": [
+              "high",
+              "max"
+            ],
+            "default": "high"
+          },
+          {
+            "models": "^Pro/zai-org/GLM-5\\.2",
+            "levels": [
+              "high",
+              "max"
+            ],
+            "default": "high"
+          }
         ]
       }
     },
@@ -143,9 +255,17 @@
       "base_url": "https://ark.cn-beijing.volces.com/api/v3",
       "key_url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
       "key_hint": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-      "auth": ["key"],
-      "regions": ["cn"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "doubao-seed-2-0-pro-260215",
         "hands": "doubao-seed-2-0-pro-260215",
@@ -158,9 +278,33 @@
         "doc": "https://docs.volcengine.com/docs/ark/model-parameter-support?lang=zh",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^doubao-seed-2-", "levels": ["minimal", "low", "medium", "high"], "default": "high" },
-          { "models": "^deepseek-v4-", "levels": ["low", "high", "max"], "default": "high" },
-          { "models": "^glm-5-2", "levels": ["high", "max"], "default": "max" }
+          {
+            "models": "^doubao-seed-2-",
+            "levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "high"
+          },
+          {
+            "models": "^deepseek-v4-",
+            "levels": [
+              "low",
+              "high",
+              "max"
+            ],
+            "default": "high"
+          },
+          {
+            "models": "^glm-5-2",
+            "levels": [
+              "high",
+              "max"
+            ],
+            "default": "max"
+          }
         ]
       }
     },
@@ -173,9 +317,17 @@
       "base_url_global": "https://api.minimax.io/v1",
       "key_url": "https://platform.minimaxi.com/user-center/basic-information/interface-key",
       "key_hint": "eyJ…",
-      "auth": ["key"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "MiniMax-M3",
         "hands": "MiniMax-M3"
@@ -187,7 +339,17 @@
         "doc": "https://platform.minimax.io/docs/api-reference/text-chat",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^MiniMax-M3\\.1", "levels": ["low", "medium", "high", "xhigh", "max"], "default": "max" }
+          {
+            "models": "^MiniMax-M3\\.1",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "default": "max"
+          }
         ]
       }
     },
@@ -199,9 +361,18 @@
       "base_url": "https://openrouter.ai/api/v1",
       "key_url": "https://openrouter.ai/keys",
       "key_hint": "sk-or-v1-…",
-      "auth": ["key", "oauth-openrouter"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key",
+        "oauth-openrouter"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "deepseek/deepseek-v4.1-flash",
         "hands": "qwen/qwen3.8-27b",
@@ -215,6 +386,31 @@
         "wire": "reasoning.effort",
         "listed": true,
         "rules": []
+      },
+      "role": "both",
+      "relay_base": "http://172.19.0.1:9443/api",
+      "catalog": {
+        "path": "/v1/models",
+        "format": "openrouter",
+        "currency": "USD"
+      },
+      "balance": {
+        "path": "/v1/credits",
+        "format": "openrouter",
+        "currency": "USD",
+        "key_env": "OPENROUTER_BALANCE_KEY"
+      },
+      "body": {
+        "provider": {
+          "sort": "price",
+          "require_parameters": true
+        },
+        "usage": {
+          "include": true
+        }
+      },
+      "media": {
+        "image": "openrouter"
       }
     },
     {
@@ -225,12 +421,24 @@
       "base_url": "https://api.openai.com/v1",
       "key_url": "https://platform.openai.com/api-keys",
       "key_hint": "sk-proj-…",
-      "auth": ["key", "oauth-chatgpt"],
+      "auth": [
+        "key",
+        "oauth-chatgpt"
+      ],
       "auth_capabilities": {
-        "oauth-chatgpt": ["chat", "vision"]
+        "oauth-chatgpt": [
+          "chat",
+          "vision"
+        ]
       },
-      "regions": ["global"],
-      "capabilities": ["chat", "vision", "image"],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "gpt-5.4-mini",
         "hands": "gpt-5.4",
@@ -243,12 +451,62 @@
         "doc": "https://developers.openai.com/api/docs/guides/reasoning",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^o[1-9]", "levels": ["low", "medium", "high"], "default": "medium" },
-          { "models": "^gpt-5(-|$)", "levels": ["minimal", "low", "medium", "high"], "default": "medium" },
-          { "models": "^gpt-5\\.1(-|$)", "levels": ["low", "medium", "high"], "default": "none" },
-          { "models": "^gpt-5\\.4", "levels": ["low", "medium", "high", "xhigh"], "default": "none" },
-          { "models": "^gpt-5\\.[235-9]", "levels": ["low", "medium", "high", "xhigh"] },
-          { "models": "^gpt-6", "levels": ["low", "medium", "high", "xhigh"] }
+          {
+            "models": "^o[1-9]",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "medium"
+          },
+          {
+            "models": "^gpt-5(-|$)",
+            "levels": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "medium"
+          },
+          {
+            "models": "^gpt-5\\.1(-|$)",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "none"
+          },
+          {
+            "models": "^gpt-5\\.4",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "default": "none"
+          },
+          {
+            "models": "^gpt-5\\.[235-9]",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
+          {
+            "models": "^gpt-6",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          }
         ]
       }
     },
@@ -260,9 +518,17 @@
       "base_url": "https://api.anthropic.com",
       "key_url": "https://platform.claude.com/settings/keys",
       "key_hint": "sk-ant-…",
-      "auth": ["key", "oauth-claude"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key",
+        "oauth-claude"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "claude-sonnet-5-5",
         "hands": "claude-sonnet-5-5"
@@ -274,9 +540,38 @@
         "doc": "https://docs.claude.com/en/docs/build-with-claude/effort",
         "wire": "output_config.effort",
         "rules": [
-          { "models": "^claude-(opus|haiku)-5-5", "levels": ["low", "medium", "high", "xhigh", "max"], "default": "medium" },
-          { "models": "^claude-(opus|sonnet)-4-6", "levels": ["low", "medium", "high", "max"], "default": "high" },
-          { "models": "^claude-(opus-4-[78]|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)", "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }
+          {
+            "models": "^claude-(opus|haiku)-5-5",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "default": "medium"
+          },
+          {
+            "models": "^claude-(opus|sonnet)-4-6",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "max"
+            ],
+            "default": "high"
+          },
+          {
+            "models": "^claude-(opus-4-[78]|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "default": "high"
+          }
         ]
       }
     },
@@ -288,9 +583,17 @@
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
       "key_url": "https://aistudio.google.com/apikey",
       "key_hint": "AIza…",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "gemini-3.8-flash",
         "hands": "gemini-3.8-flash",
@@ -303,7 +606,14 @@
         "doc": "https://ai.google.dev/gemini-api/docs/openai",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^gemini-(2\\.5|3)", "levels": ["low", "medium", "high"] }
+          {
+            "models": "^gemini-(2\\.5|3)",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
         ]
       }
     },
@@ -315,9 +625,17 @@
       "base_url": "https://api.x.ai/v1",
       "key_url": "https://console.x.ai",
       "key_hint": "xai-…",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision", "image"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image"
+      ],
       "defaults": {
         "chat": "grok-4.7",
         "hands": "grok-4.7",
@@ -330,8 +648,25 @@
         "doc": "https://docs.x.ai/docs/guides/reasoning",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^grok-4\\.5", "levels": ["low", "medium", "high"], "default": "high" },
-          { "models": "^grok-4\\.[6-9]", "levels": ["low", "medium", "high", "xhigh"], "default": "high" }
+          {
+            "models": "^grok-4\\.5",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "high"
+          },
+          {
+            "models": "^grok-4\\.[6-9]",
+            "levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "default": "high"
+          }
         ]
       }
     },
@@ -343,9 +678,16 @@
       "base_url": "https://api.groq.com/openai/v1",
       "key_url": "https://console.groq.com/keys",
       "key_hint": "gsk_…",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "openai/gpt-oss-120b",
         "hands": "qwen/qwen3.8-27b"
@@ -357,8 +699,23 @@
         "doc": "https://console.groq.com/docs/reasoning",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^openai/gpt-oss-", "levels": ["low", "medium", "high"] },
-          { "models": "^qwen/qwen3\\.8", "levels": ["low", "medium", "high"], "default": "none" }
+          {
+            "models": "^openai/gpt-oss-",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          {
+            "models": "^qwen/qwen3\\.8",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "none"
+          }
         ]
       }
     },
@@ -370,9 +727,16 @@
       "base_url": "https://api.mistral.ai/v1",
       "key_url": "https://console.mistral.ai/api-keys",
       "key_hint": "…",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat", "vision"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
       "defaults": {
         "chat": "mistral-medium-2508",
         "hands": "mistral-medium-2508"
@@ -384,8 +748,21 @@
         "doc": "https://docs.mistral.ai/capabilities/reasoning/",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "^mistral-(small-latest|medium-3-5|large-4-0)", "levels": ["high"], "default": "none" },
-          { "models": "^zai-glm-5-3", "levels": ["low", "high", "max"] }
+          {
+            "models": "^mistral-(small-latest|medium-3-5|large-4-0)",
+            "levels": [
+              "high"
+            ],
+            "default": "none"
+          },
+          {
+            "models": "^zai-glm-5-3",
+            "levels": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
         ]
       }
     },
@@ -396,9 +773,15 @@
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/v1",
       "key_url": "https://opencode.ai/auth",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {
         "chat": "deepseek-v4.1-flash"
       },
@@ -413,9 +796,15 @@
       "protocol": "openai",
       "base_url": "https://opencode.ai/zen/go/v1",
       "key_url": "https://opencode.ai/auth",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {
         "chat": "deepseek-v4.1-flash"
       },
@@ -432,9 +821,15 @@
       "base_url": "https://api.stdcmpt.com/v1",
       "key_url": "https://standardcompute.com/dashboard/api-keys",
       "key_hint": "sk_live_…",
-      "auth": ["key"],
-      "regions": ["global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {
         "chat": "standardcompute"
       },
@@ -449,9 +844,16 @@
       "protocol": "openai",
       "base_url": "http://127.0.0.1:11434/v1",
       "key_url": "https://ollama.com/download",
-      "auth": ["none"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "none"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {
         "chat": "qwen3:8b"
       },
@@ -462,7 +864,14 @@
         "doc": "https://docs.ollama.com/api/openai-compatibility",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "gpt-oss", "levels": ["low", "medium", "high"] }
+          {
+            "models": "gpt-oss",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
         ]
       }
     },
@@ -473,9 +882,16 @@
       "protocol": "openai",
       "base_url": "http://127.0.0.1:1234/v1",
       "key_url": "https://lmstudio.ai",
-      "auth": ["none"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "none"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {},
       "note": "LM Studio's local server, OpenAI-compatible, no key. Vision only if the loaded model has it.",
       "note_zh": "LM Studio 的本地服务，OpenAI 兼容，不要 key。装了能看图的模型才能用手。",
@@ -488,9 +904,17 @@
       "protocol": "openai",
       "base_url": "http://127.0.0.1:8000/v1",
       "key_url": "https://docs.vllm.ai",
-      "auth": ["none", "key"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "none",
+        "key"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "defaults": {},
       "note": "A vLLM server you run yourself; a key only if you started it with one. Vision only if the served model has it.",
       "note_zh": "自己跑的 vLLM 服务；启动时设了 key 才需要填。服务的模型能看图才能用手。",
@@ -499,7 +923,14 @@
         "doc": "https://docs.vllm.ai/en/latest/features/reasoning_outputs/",
         "wire": "reasoning_effort",
         "rules": [
-          { "models": "gpt-oss", "levels": ["low", "medium", "high"] }
+          {
+            "models": "gpt-oss",
+            "levels": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
         ]
       }
     },
@@ -510,14 +941,364 @@
       "protocol": "openai",
       "base_url": "",
       "key_url": "",
-      "auth": ["key", "none"],
-      "regions": ["cn", "global"],
-      "capabilities": ["chat"],
+      "auth": [
+        "key",
+        "none"
+      ],
+      "regions": [
+        "cn",
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
       "user_capabilities": true,
       "defaults": {},
       "note": "A gateway, a relay, a server of your own: paste the address (usually ending in /v1) and say what it can do; the person sets the capabilities.",
       "note_zh": "网关、中转、自己的服务：贴地址（一般以 /v1 结尾），再说明它能做什么，能力由你勾选。",
       "verified": "2026-10"
+    },
+    {
+      "id": "polza",
+      "name": "Polza.ai",
+      "name_zh": "Polza.ai",
+      "protocol": "openai",
+      "base_url": "https://api.polza.ai",
+      "relay_base": "http://polza-proxy",
+      "key_url": "https://polza.ai/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "image",
+        "video"
+      ],
+      "defaults": {},
+      "note": "Relay supplier: chat, pictures and clips.",
+      "note_zh": "中继供应商：对话、图片和视频。",
+      "verified": "2026-11",
+      "role": "relay",
+      "catalog": {
+        "path": "/v1/models",
+        "format": "polza",
+        "currency": "RUB"
+      },
+      "balance": {
+        "path": "/v1/balance",
+        "format": "polza",
+        "currency": "RUB"
+      },
+      "media": {
+        "image": "polza",
+        "video": {
+          "path": "/v1/media",
+          "payload": "polza"
+        }
+      }
+    },
+    {
+      "id": "routerai",
+      "name": "RouterAI",
+      "name_zh": "RouterAI",
+      "protocol": "openai",
+      "base_url": "https://routerai.ru/api",
+      "relay_base": "https://routerai.ru/api",
+      "key_url": "https://routerai.ru/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "defaults": {},
+      "note": "Relay supplier.",
+      "note_zh": "中继供应商。",
+      "verified": "2026-11",
+      "role": "relay",
+      "catalog": {
+        "path": "/v1/models",
+        "format": "routerai",
+        "currency": "RUB"
+      },
+      "balance": {
+        "path": "/v1/credits",
+        "format": "routerai",
+        "currency": "RUB"
+      }
+    },
+    {
+      "id": "aitunnel",
+      "name": "AITunnel",
+      "name_zh": "AITunnel",
+      "protocol": "openai",
+      "base_url": "https://api.aitunnel.ru",
+      "relay_base": "https://api.aitunnel.ru",
+      "key_url": "https://aitunnel.ru/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision",
+        "video"
+      ],
+      "defaults": {},
+      "note": "Relay supplier.",
+      "note_zh": "中继供应商。",
+      "verified": "2026-11",
+      "role": "relay",
+      "catalog": {
+        "url": "https://api.aitunnel.ru/public/aitunnel/models/chat",
+        "format": "aitunnel",
+        "currency": "RUB",
+        "auth": "none"
+      },
+      "balance": {
+        "path": "/v1/aitunnel/balance",
+        "format": "aitunnel",
+        "currency": "RUB"
+      },
+      "body": {
+        "provider": {
+          "sort": "price",
+          "require_parameters": true
+        }
+      },
+      "tool_models": [
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-0731",
+        "deepseek-v4.1-flash",
+        "deepseek-v4.1-flash-1017"
+      ],
+      "media": {
+        "video": {
+          "path": "/v1/videos",
+          "payload": "aitunnel"
+        }
+      }
+    },
+    {
+      "id": "proxyapi",
+      "name": "ProxyAPI",
+      "name_zh": "ProxyAPI",
+      "protocol": "openai",
+      "base_url": "https://api.proxyapi.ru",
+      "relay_base": "https://api.proxyapi.ru",
+      "key_url": "https://proxyapi.ru/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "defaults": {},
+      "note": "Relay supplier.",
+      "note_zh": "中继供应商。",
+      "verified": "2026-11",
+      "role": "relay",
+      "catalog": {
+        "url": "https://www.proxyapi.ru/models/browse",
+        "format": "proxyapi",
+        "currency": "RUB",
+        "auth": "none",
+        "allowed_models_path": "/v1/models"
+      },
+      "balance": {
+        "path": "/proxyapi/balance",
+        "format": "proxyapi",
+        "currency": "RUB"
+      }
+    },
+    {
+      "id": "proxyapi-openai",
+      "name": "ProxyAPI (OpenAI)",
+      "name_zh": "ProxyAPI（OpenAI）",
+      "protocol": "openai",
+      "base_url": "https://api.proxyapi.ru/openai",
+      "relay_base": "https://api.proxyapi.ru/openai",
+      "key_url": "https://proxyapi.ru/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "defaults": {},
+      "note": "Relay supplier variant.",
+      "note_zh": "中继供应商变体。",
+      "verified": "2026-11",
+      "role": "relay",
+      "balance": {
+        "path": "/proxyapi/balance",
+        "format": "proxyapi",
+        "currency": "RUB",
+        "base": "https://api.proxyapi.ru"
+      }
+    },
+    {
+      "id": "bothub",
+      "name": "BotHub",
+      "name_zh": "BotHub",
+      "protocol": "openai",
+      "base_url": "https://bothub.chat/api/v2/openai/v1",
+      "relay_base": "https://bothub.chat/api/v2/openai/v1",
+      "key_url": "https://bothub.chat/keys",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "video"
+      ],
+      "defaults": {},
+      "note": "Relay supplier.",
+      "note_zh": "中继供应商。",
+      "verified": "2026-11",
+      "role": "relay",
+      "media": {
+        "video": {
+          "path": "/videos/generations",
+          "payload": "bothub"
+        }
+      }
+    },
+    {
+      "id": "jiugx",
+      "name": "Jiugx",
+      "name_zh": "Jiugx",
+      "protocol": "openai",
+      "base_url": "https://jiugx.com",
+      "relay_base": "https://jiugx.com",
+      "key_url": "https://jiugx.com",
+      "key_hint": "…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat"
+      ],
+      "defaults": {},
+      "note": "Price catalogue only.",
+      "note_zh": "仅价格目录。",
+      "verified": "2026-11",
+      "role": "price"
+    },
+    {
+      "id": "beatapi",
+      "name": "BeatAPI",
+      "name_zh": "BeatAPI",
+      "protocol": "openai",
+      "base_url": "https://api.beatapi.io",
+      "relay_base": "https://api.beatapi.io",
+      "key_url": "https://beatapi.io/dashboard/apikeys",
+      "key_hint": "sk-…",
+      "auth": [
+        "key"
+      ],
+      "regions": [
+        "global"
+      ],
+      "capabilities": [
+        "chat",
+        "vision"
+      ],
+      "defaults": {},
+      "note": "Relay supplier: models, social data, web and SEO; paid with a Russian card, no card FX fee.",
+      "note_zh": "中继供应商：模型、社媒数据、网页与 SEO；可用俄罗斯银行卡支付。",
+      "verified": "2026-11",
+      "role": "relay",
+      "catalog": {
+        "path": "/v1/models",
+        "format": "beatapi",
+        "currency": "USD"
+      },
+      "balance": {
+        "path": "/v1/usage",
+        "format": "beatapi",
+        "currency": "USD"
+      },
+      "prices": {
+        "gpt-6-luna": {
+          "in": 0.04,
+          "out": 0.2,
+          "context": 1050000,
+          "max_out": 128000,
+          "vision": true,
+          "tools": true
+        },
+        "gpt-6.1-terra": {
+          "in": 0.4,
+          "out": 2.0,
+          "context": 1050000,
+          "max_out": 128000,
+          "vision": true,
+          "tools": true
+        },
+        "gpt-6.1-sol": {
+          "in": 0.8,
+          "out": 4.0,
+          "context": 1050000,
+          "max_out": 128000,
+          "vision": true,
+          "tools": true
+        },
+        "gpt-6-sol": {
+          "in": 0.8,
+          "out": 4.0,
+          "context": 1050000,
+          "max_out": 128000,
+          "vision": true,
+          "tools": true
+        },
+        "gemini-4-argon": {
+          "in": 1.0,
+          "out": 5.0,
+          "context": 1000000,
+          "max_out": 65536,
+          "vision": true,
+          "tools": true
+        },
+        "claude-sonnet-5": {
+          "in": 1.0,
+          "out": 5.0,
+          "context": 1000000,
+          "max_out": 128000,
+          "vision": true,
+          "tools": true
+        }
+      }
     }
   ]
 }

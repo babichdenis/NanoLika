@@ -1,4 +1,5 @@
 """The thinking-level declaration the menu carries and the wire that carries the choice."""
+
 from nanomuse_cloud.config import ModelSpec
 from nanomuse_cloud.reasoning import LEVELS, clean_effort, public_reasoning, reasoning_for
 

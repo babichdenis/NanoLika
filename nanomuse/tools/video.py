@@ -53,7 +53,9 @@ class Video(BaseTool):
     cloud: Callable[[], Any] | None = None
 
     def _resolve(self, raw: str, must_exist: bool = True) -> Path:
-        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=not must_exist)
+        return resolve_inside(
+            self.workspace, self.extra_roots, raw, must_exist, write=not must_exist
+        )
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         return CallAssessment(
@@ -107,7 +109,9 @@ class Video(BaseTool):
             return ToolResult.fail("resolution is 480P, 720P or 1080P")
         try:
             chosen = await self._model(client, model)
-            data, accounting = await client.video(chosen, said, seconds=length, size=shape, resolution=grade)
+            data, accounting = await client.video(
+                chosen, said, seconds=length, size=shape, resolution=grade
+            )
         except CloudError as exc:
             if exc.code == "model_not_offered":
                 # the menu we hold is stale: the next call reads it fresh
@@ -116,7 +120,11 @@ class Video(BaseTool):
                     forget()
             if exc.code in FUNDS_CODES:
                 return ToolResult.fail(funds_line(exc))
-            message = f"{exc.message} ({exc.code})" if exc.code and exc.code not in exc.message else exc.message
+            message = (
+                f"{exc.message} ({exc.code})"
+                if exc.code and exc.code not in exc.message
+                else exc.message
+            )
             return ToolResult.fail(f"Clip failed: {message}")
         if not data:
             return ToolResult.fail("The relay returned no clip")

@@ -26,6 +26,7 @@ metadata:
 - Page numbers and a footer: a field in the footer -
   ```python
   from docx.oxml.ns import qn
+
   run = doc.sections[0].footer.paragraphs[0].add_run()
   fld = run._r.makeelement(qn("w:fldSimple"), {qn("w:instr"): "PAGE"})
   run._r.append(fld)

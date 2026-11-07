@@ -51,6 +51,20 @@ def test_mail_off_says_where_the_switch_is(tmp_path: Path):
     assert "Settings → Connectors → Mail" in text
     assert "IMAP client" in text
     assert "MCP server" in text
+    # the path in the Russian UI, where a person would otherwise have to guess the words
+    assert "Настройки → Подключения → Почта" in text
+    # the one thing people get stuck on: the app password, and where each provider makes it
+    assert "id.yandex.ru/security/app-passwords" in text
+    assert "myaccount.google.com/apppasswords" in text
+    assert "account.mail.ru/user/2-step-auth/passwords" in text
+    assert "two-step verification" in text
+
+
+def test_mail_on_names_the_mailbox_and_the_password_fix(tmp_path: Path):
+    text = section(build(tmp_path, mail=True))
+    assert "`account`" in text
+    assert "Edit → Check" in text
+    assert "never print the password" in text
 
 
 def test_calendar_is_described_the_same_way(tmp_path: Path):

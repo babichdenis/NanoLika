@@ -71,11 +71,7 @@ def words(path: str | Path, langs: tuple[str, ...] = LANGS, *, accurate: bool = 
     width = Quartz.CGImageGetWidth(image)
 
     request = Vision.VNRecognizeTextRequest.alloc().init()
-    request.setRecognitionLevel_(
-        Vision.VNRequestTextRecognitionLevelAccurate
-        if accurate
-        else Vision.VNRequestTextRecognitionLevelFast
-    )
+    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate if accurate else Vision.VNRequestTextRecognitionLevelFast)
     request.setRecognitionLanguages_(list(langs))
     # галочка «исправлять язык» портит артикулы, суммы и номера счетов
     request.setUsesLanguageCorrection_(False)
@@ -112,7 +108,4 @@ def text(path: str | Path, langs: tuple[str, ...] = LANGS) -> str:
     lines: dict[int, list[Word]] = {}
     for word in words(path, langs):
         lines.setdefault(round(word.box[1] / 8), []).append(word)
-    return "\n".join(
-        " ".join(word.text for word in sorted(row, key=lambda w: w.box[0]))
-        for row in (lines[key] for key in sorted(lines))
-    )
+    return "\n".join(" ".join(word.text for word in sorted(row, key=lambda w: w.box[0])) for row in (lines[key] for key in sorted(lines)))

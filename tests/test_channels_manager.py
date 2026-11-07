@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from nanomuse.channels.base import Channel, ChannelStatus, Field, InboundFile, InboundMessage
 from nanomuse.channels.manager import ChannelManager, thread_id_for
 from nanomuse.config import Settings
-from nanomuse.hub.client import HubError
 from nanomuse.llm import MockLLM
 from nanomuse.schema import Function, LLMResponse, ToolCall
 from nanomuse.server import create_app
@@ -606,9 +605,7 @@ def test_a_public_channel_lets_a_stranger_in_without_a_code(chan, monkeypatch):
     llm.script.append(LLMResponse(content="Привет, я Лика."))
     fake.bus.inbound(dm("сколько будет два плюс два?", sender="u9", chat="chat9"))
     wait_for(lambda: any("Привет, я Лика." in t for t in fake.texts("chat9")))
-    assert not any(
-        "Pairing code" in t or "Код для привязки" in t for t in fake.texts("chat9")
-    )
+    assert not any("Pairing code" in t or "Код для привязки" in t for t in fake.texts("chat9"))
 
 
 def test_the_owner_chat_keeps_the_machine_account_on_a_public_channel(chan, monkeypatch):
@@ -616,6 +613,8 @@ def test_the_owner_chat_keeps_the_machine_account_on_a_public_channel(chan, monk
     machine's account, or the owner would be moved onto another balance by the switch."""
     client, service, llm, manager, fake = chan
     pair(client, fake)
+    # the scenario is a bot signed in to an account of its own
+    service.app.vault.set("NANOMUSE_CLOUD_KEY", "machine-key")
     original = manager.store.resolved
 
     def resolved(cfg):  # noqa: ANN001, ANN202
@@ -1074,7 +1073,6 @@ async def test_the_reply_points_at_the_question_only_where_the_channel_can_draw_
 @pytest.mark.asyncio
 async def test_the_step_stays_under_the_answer_and_the_step_name_restarts_the_indicator():
     """п.6 and п.7: a long job says what it is doing while the words are already there."""
-    from types import SimpleNamespace
 
     from nanomuse.channels.manager import ChannelManager, _Live
 

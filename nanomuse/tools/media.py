@@ -18,7 +18,13 @@ from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
 from nanomuse.tools.office import resolve_inside
 
-SPEECH_FORMATS = {"mp3": "audio/mpeg", "wav": "audio/wav", "opus": "audio/ogg", "aac": "audio/aac", "flac": "audio/flac"}
+SPEECH_FORMATS = {
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "opus": "audio/ogg",
+    "aac": "audio/aac",
+    "flac": "audio/flac",
+}
 #: a whole recording is read into memory and posted; past this it is a document, not a phrase
 RECORDING_MAX_BYTES = 25 * 1024 * 1024
 
@@ -50,14 +56,21 @@ class Media(BaseTool):
             "action": {"type": "string", "enum": ["speech", "music", "transcribe"]},
             "text": {"type": "string", "description": "What to say (speech) or the music to make"},
             "voice": {"type": "string", "description": "The provider's voice id, optional"},
-            "format": {"type": "string", "enum": list(SPEECH_FORMATS), "description": "mp3 by default"},
+            "format": {
+                "type": "string",
+                "enum": list(SPEECH_FORMATS),
+                "description": "mp3 by default",
+            },
             "speed": {
                 "type": "number",
                 "minimum": 0.25,
                 "maximum": 4,
                 "description": "0.25 to 4, optional",
             },
-            "path": {"type": "string", "description": "The recording to transcribe, inside the workspace"},
+            "path": {
+                "type": "string",
+                "description": "The recording to transcribe, inside the workspace",
+            },
             "language": {"type": "string", "description": "Spoken language, optional"},
         },
         "required": ["action"],
@@ -68,7 +81,9 @@ class Media(BaseTool):
     cloud: Callable[[], Any] | None = None
 
     def _resolve(self, raw: str, must_exist: bool = True) -> Path:
-        return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=not must_exist)
+        return resolve_inside(
+            self.workspace, self.extra_roots, raw, must_exist, write=not must_exist
+        )
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
         action = str(args.get("action") or "")
@@ -207,7 +222,9 @@ class Media(BaseTool):
                 )
             try:
                 model = await self._model("transcribe")
-                said = await client.transcribe(model, source.name, source.read_bytes(), mime, language=language)
+                said = await client.transcribe(
+                    model, source.name, source.read_bytes(), mime, language=language
+                )
             except CloudError as exc:
                 if exc.code in FUNDS_CODES:
                     return ToolResult.fail(funds_line(exc))

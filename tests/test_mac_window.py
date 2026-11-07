@@ -89,7 +89,9 @@ class FakeMac:
             from PIL import Image
 
             buf = io.BytesIO()
-            Image.new("RGB", (int(w.width) * self.scale, int(w.height) * self.scale), (0, 0, 0)).save(buf, "PNG")
+            Image.new(
+                "RGB", (int(w.width) * self.scale, int(w.height) * self.scale), (0, 0, 0)
+            ).save(buf, "PNG")
             return buf.getvalue()
         return png_bytes(int(w.width) * self.scale, int(w.height) * self.scale)
 

@@ -171,9 +171,7 @@ async def test_speech_rejects_an_unknown_format_and_a_missing_voice(audio):
         )
         assert bad_format.status_code == 400
         # a speech model without a default voice and no voice in the request
-        no_voice = await client.post(
-            "/v1/audio/speech", headers=headers, json={"model": "voice-silent", "input": "hi"}
-        )
+        no_voice = await client.post("/v1/audio/speech", headers=headers, json={"model": "voice-silent", "input": "hi"})
         assert no_voice.status_code == 400
         assert "voice" in no_voice.json()["error"]["message"]
 

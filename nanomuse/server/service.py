@@ -31,7 +31,6 @@ from nanomuse.app import NanoMuseApp
 from nanomuse.avatar import AvatarStudio
 from nanomuse.background import spawn
 from nanomuse.bridge.server import Bridge
-from nanomuse import timeutil
 from nanomuse.cloud import CLOUD_KEY, DEFAULT_CHAT_MODEL, CloudError, model_url
 from nanomuse.coding.service import CodingService
 from nanomuse.config import LLMSettings, Settings
@@ -1280,7 +1279,11 @@ class MuseService:
         ]
         if not text and not attachments:
             raise ValueError("empty message")
-        once = self.cloud_once(once_key, once_model, thread.reasoning) if (via == "cloud" or once_key) else None
+        once = (
+            self.cloud_once(once_key, once_model, thread.reasoning)
+            if (via == "cloud" or once_key)
+            else None
+        )
         thread.updated_at = now_iso()
         if language:
             # remembered on the conversation: a chat addressed to another device passes it on
@@ -1594,9 +1597,7 @@ class MuseService:
                 elif thread.temperature is not None:
                     # the chat's own temperature on the configured model: a client for this
                     # turn, so the person's other chats keep the [llm] value (D8)
-                    thread.agent.llm = self._with_temperature(
-                        thread.agent.llm, thread.temperature
-                    )
+                    thread.agent.llm = self._with_temperature(thread.agent.llm, thread.temperature)
                 self.bus.publish({"kind": "thread", "thread": thread.meta()})
                 # No sentence of its own: each client words the pause between steps
                 # itself ("On it: <the request>") in its language.

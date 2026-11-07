@@ -48,8 +48,8 @@ export function MuseHeader({
   scrim?: boolean;
 }) {
   return (
-    <header className={cx("safe-top relative shrink-0 pt-1.5 pb-1", scrim ? "header-scrim" : "bg-bg", className)}>
-      <div className="flex flex-col items-center px-16">
+    <header className={cx("muse-header safe-top relative shrink-0 pt-1.5 pb-1", scrim ? "header-scrim" : "bg-bg", className)}>
+      <div className="muse-header-identity flex flex-col items-center px-16">
         <button type="button" onClick={onAvatar} aria-label={name} className="relative rounded-full">
           <Avatar profile={profile} status={status} size={size} />
           {badge !== undefined && badge > 0 && (
@@ -59,7 +59,7 @@ export function MuseHeader({
           )}
         </button>
         {/* the tag rides up over the chin; its area is fixed so the bar keeps its height */}
-        <div className="relative z-10 -mt-2.5 flex min-h-[44px] flex-col items-center">
+        <div className="muse-header-label relative z-10 -mt-2.5 flex min-h-[44px] flex-col items-center">
           <MuseNamePill name={name} statusLine={statusLine} statusTone={statusTone} spinning={spinning} onClick={onName ?? onAvatar} />
           {under && <div className="mt-1.5 flex max-w-full items-center">{under}</div>}
         </div>

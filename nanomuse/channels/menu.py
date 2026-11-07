@@ -20,6 +20,22 @@ from nanomuse.logger import logger
 MODES = {"full-access", "workspace-write", "read-only"}
 COPY = {
     "ru": {
+        "cloud_controls": "Настройки этого аккаунта доступны в приложении Лики. Откройте свой аккаунт, чтобы изменить их.",
+        "retention_button": "Хранение файлов",
+        "cloud_chats": "Беседы вашего аккаунта доступны в приложении Лики. Там можно открыть беседу или создать новую.",
+        "open_chats": "Открыть мои беседы",
+        "computer_account": "Задача не отправлена. Откройте свой аккаунт, подключите компьютер и поручите задачу там.",
+        "open_account": "Открыть мой аккаунт",
+        "computer_ask": "Напишите задачу для компьютера одним сообщением. Кнопка «Назад» отменяет ввод.",
+        "computer_task": "Поручить задачу компьютеру",
+        "home_hint": "Выберите действие кнопками внизу. Задачу можно написать обычным сообщением.",
+        "help_text": "Напишите задачу или отправьте файл. Модель, баланс и настройки доступны кнопками внизу. Здесь можно подключить аккаунт и компьютер.",
+        "connect": "Подключить аккаунт",
+        "rename_ask": "Пришлите новое название этой беседы одним сообщением. Кнопка «Назад» отменяет переименование.",
+        "rename_expired": "Переименование отменено: беседа изменилась или время ожидания истекло.",
+        "status_unavailable": "Не удалось проверить устройства этого аккаунта. Попробуйте ещё раз.",
+        "computer_ready": "Компьютер этого аккаунта подключён. Выполнение задач зависит от его разрешений.",
+        "computer_offline": "Компьютер этого аккаунта сейчас не подключён. Откройте Лику на компьютере и войдите в тот же аккаунт.",
         "opened_channel": "Беседа «{title}» выбрана в {channel}.",
         "unknown_command": "Эта команда не поддерживается. Выберите действие в меню: беседы создаются кнопкой, без обращения к модели.",
         "new": "✨ Новая беседа",
@@ -30,7 +46,7 @@ COPY = {
             "Компьютер подключается к этому же аккаунту через приложение.\n\n"
             "1. Скачайте приложение для Mac или Windows.\n"
             "2. Войдите в него по почте.\n"
-            "3. Если почты у аккаунта ещё нет, пришлите /connect: бот даст код, "
+            "3. Если почты у аккаунта ещё нет, нажмите «Подключить аккаунт»: бот даст код, "
             "введите его на сайте вместе с почтой. После этого компьютер и этот чат "
             "станут одним аккаунтом."
         ),
@@ -54,9 +70,9 @@ COPY = {
         "permissions": "🛡 Разрешения",
         "balance": "💳 Баланс",
         "models": "🧠 Модели",
-        "models_intro": "Выбери модель для чата. Она работает на всех устройствах.",
+        "models_intro": "Выберите модель для этой беседы. Выбор сохранится на ваших устройствах.",
         "models_current": "сейчас",
-        "models_how": "Выберите модель кнопкой или пришлите /model 3",
+        "models_how": "Выберите модель кнопкой.",
         "models_saved": "Модель выбрана.",
         "models_bad": "Такого номера нет в списке.",
         "models_empty": "Список моделей пуст.",
@@ -101,6 +117,22 @@ COPY = {
         "retention_shared": "Срок хранения нельзя менять, пока сообщения этого канала объединены в одну беседу.",
     },
     "en": {
+        "cloud_controls": "These account settings are in the Lika app. Open your account to change them.",
+        "retention_button": "File retention",
+        "cloud_chats": "Your conversations are in the Lika app. Open one there or create a new conversation.",
+        "open_chats": "Open my conversations",
+        "computer_account": "The task was not sent. Open your account, connect your computer and give it the task there.",
+        "open_account": "Open my account",
+        "computer_ask": "Send the task for your computer in one message. Back cancels it.",
+        "computer_task": "Give the computer a task",
+        "home_hint": "Choose an action with the buttons below, or describe your task in a message.",
+        "help_text": "Describe a task or send a file. The buttons below open models, balance and settings. You can also connect your account and computer here.",
+        "connect": "Connect account",
+        "rename_ask": "Send a new name for this conversation in one message. Back cancels renaming.",
+        "rename_expired": "Renaming was canceled: the conversation changed or the request expired.",
+        "status_unavailable": "Could not check this account’s devices. Try again.",
+        "computer_ready": "A computer on this account is connected. Tasks depend on its permissions.",
+        "computer_offline": "No computer on this account is connected. Open Lika on the computer and sign in to the same account.",
         "opened_channel": "Conversation “{title}” selected in {channel}.",
         "unknown_command": "This command is not supported. Choose an action in the menu; creating a chat does not call the model.",
         "new": "New chat",
@@ -111,7 +143,7 @@ COPY = {
             "A computer joins this same account through the app.\n\n"
             "1. Download the app for Mac or Windows.\n"
             "2. Sign in with an e-mail address.\n"
-            "3. If the account has no address yet, send /connect: the bot gives a code; "
+            "3. If the account has no address yet, choose Connect account for a code; "
             "enter it on the site together with the address. The computer and this chat "
             "then become one account."
         ),
@@ -135,9 +167,9 @@ COPY = {
         "permissions": "Permissions",
         "balance": "Balance",
         "models": "Models",
-        "models_intro": "Pick the model for the chat. It works on all your devices.",
+        "models_intro": "Choose a model for this conversation. The choice follows it on your devices.",
         "models_current": "now",
-        "models_how": "Pick a model with a button or send /model 3",
+        "models_how": "Choose a model with a button.",
         "models_saved": "Model chosen.",
         "models_bad": "There is no such number in the list.",
         "models_empty": "The list of models is empty.",
@@ -182,6 +214,22 @@ COPY = {
         "retention_shared": "Retention cannot be changed while this channel shares one conversation.",
     },
     "zh": {
+        "cloud_controls": "此账号的设置在 Lika 应用中，请打开自己的账号进行修改。",
+        "retention_button": "文件保留时间",
+        "cloud_chats": "你的对话在 Lika 应用中。可以在那里继续对话或新建对话。",
+        "open_chats": "打开我的对话",
+        "computer_account": "任务尚未发送。请打开你的账号，连接电脑后在那里提交任务。",
+        "open_account": "打开我的账号",
+        "computer_ask": "发送要交给电脑的任务，点击返回可取消。",
+        "computer_task": "交给电脑执行",
+        "home_hint": "点击下方按钮选择操作，也可以直接发送任务。",
+        "help_text": "描述任务或发送文件。下方按钮可选择模型、查看余额和设置，也可以在这里连接账号和电脑。",
+        "connect": "连接账号",
+        "rename_ask": "请发送这段对话的新名称。点击返回可取消。",
+        "rename_expired": "重命名已取消：对话已更改或请求已过期。",
+        "status_unavailable": "无法检查此账号的设备，请重试。",
+        "computer_ready": "此账号的电脑已连接，任务执行取决于电脑的权限。",
+        "computer_offline": "此账号目前没有已连接的电脑。请在电脑上打开 Lika 并登录同一个账号。",
         "opened_channel": "已在 {channel} 中选择对话「{title}」。",
         "unknown_command": "不支持此命令。请在菜单中选择操作；创建对话不会调用模型。",
         "new": "新对话",
@@ -192,7 +240,7 @@ COPY = {
             "电脑通过桌面应用加入同一个账户。\n\n"
             "1. 下载 Mac 或 Windows 版应用。\n"
             "2. 用邮箱登录。\n"
-            "3. 如果账户还没有邮箱，发送 /connect：机器人会给一个代码，"
+            "3. 如果账户还没有邮箱，点击连接账号获取代码，"
             "在网站上连同邮箱一起输入。之后电脑和这个聊天就是同一个账户。"
         ),
         "computer_download": "下载应用 ↗",
@@ -215,9 +263,9 @@ COPY = {
         "permissions": "权限",
         "balance": "余额",
         "models": "模型",
-        "models_intro": "选择聊天用的模型。它在所有设备上生效。",
+        "models_intro": "选择此对话使用的模型，选择会同步到你的设备。",
         "models_current": "当前",
-        "models_how": "点按钮选择模型，或发送 /model 3",
+        "models_how": "点击按钮选择模型。",
         "models_saved": "模型已选择。",
         "models_bad": "列表里没有这个编号。",
         "models_empty": "模型列表是空的。",
@@ -300,6 +348,7 @@ class ChatMenu:
         self.m = manager
         self.preferences = Preferences(Path(manager.svc.data_dir) / "channels" / "preferences.json")
         self.tickets: dict[str, tuple[float, InboundMessage, str]] = {}
+        self.ticket_scopes: dict[str, tuple[str, str]] = {}
         self.chat_tickets = _Watched(
             Path(manager.svc.data_dir) / "channels" / "chat-menu-tickets.json"
         )
@@ -308,6 +357,8 @@ class ChatMenu:
         # code the person scanned, so the answer can act on it. Per chat, in memory: a restart
         # forgets the question, which is right — the QR it came from has lapsed by then anyway.
         self.switch_text = ""
+        self.computer_pending: dict[tuple[str, str, str], float] = {}
+        self.rename_pending: dict[tuple[str, str, str], tuple[float, str]] = {}
         self.switch_pending: dict[tuple[str, str], str] = {}
 
     def access_scope(self, msg: InboundMessage) -> str:
@@ -352,8 +403,7 @@ class ChatMenu:
             return
         lang = self.m.lang if self.m.lang in COPY else "ru"
         c = COPY[lang]
-        # Every command the manager answers, not just the three the bot used to show:
-        # a person should not have to guess that /balance or /permissions exist.
+        # Both messengers advertise only entry points; actions are offered as buttons.
         commands = [
             {"command": key, "description": c[label]}
             for key, label in (
@@ -371,12 +421,25 @@ class ChatMenu:
             )
         ]
         if channel.name == "telegram":
-            await channel._call("setMyCommands", {"commands": commands})
-            # Two independent doors, the way Telegram itself splits them: the Mini App is
-            # launched from the bot's card (Main Mini App in @BotFather), and the button in
-            # the chat is the ordinary command menu. A WebApp button here would be a third
-            # door to the same room, and the one people complained about.
-            await channel._call("setChatMenuButton", {"menu_button": {"type": "commands"}})
+            await channel._call(
+                "setMyCommands",
+                {
+                    "commands": [
+                        item for item in commands if item["command"] in {"start", "menu", "help"}
+                    ]
+                },
+            )
+            # Native app entry is separate from the persistent keyboard of bot actions.
+            await channel._call(
+                "setChatMenuButton",
+                {
+                    "menu_button": {
+                        "type": "web_app",
+                        "text": {"ru": "Открыть Лику", "en": "Open Lika", "zh": "打开 Lika"}[lang],
+                        "web_app": {"url": self.webapp_url()},
+                    }
+                },
+            )
         else:
             await channel._call(
                 "PATCH",
@@ -385,9 +448,94 @@ class ChatMenu:
                     "commands": [
                         {"name": item["command"], "description": item["description"]}
                         for item in commands
+                        if item["command"] in {"start", "menu", "help"}
                     ]
                 },
             )
+
+    def webapp_url(self, account: bool = False, channel: str = "telegram") -> str:
+        base = str(
+            getattr(getattr(self.m.svc.settings, "cloud", None), "base_url", "")
+            or "https://cloud.nanolika.ru"
+        ).rstrip("/")
+        entry = "max" if channel == "max" else "telegram"
+        return base + f"/web/{entry}.html" + ("?next=account" if account else "")
+
+    def control_message(self, msg: InboundMessage) -> bool:
+        """Menus and pending form replies do not need a selected Telegram topic."""
+        text = msg.text.strip()
+        if not text or msg.files:
+            return False
+        labels = {
+            c[k]
+            for c in COPY.values()
+            for k in ("chats", "new", "models", "balance", "settings", "help")
+        }
+        if text in labels:
+            return True
+        key = (msg.channel, msg.chat_id, msg.sender_id)
+        return not text.startswith("/") and (
+            key in self.rename_pending or key in self.computer_pending
+        )
+
+    def keyboard(self, msg: InboundMessage) -> dict:
+        c = COPY[self.language(msg)]
+        return {
+            "keyboard": [
+                [{"text": c[k]} for k in row]
+                for row in (("chats", "new"), ("models", "balance"), ("settings", "help"))
+            ],
+            "resize_keyboard": True,
+            "is_persistent": True,
+        }
+
+    async def home(self, msg: InboundMessage, note: str = "") -> None:
+        c = COPY[self.language(msg)]
+        if msg.channel == "max":
+            rows = [
+                [(c[k], self.ticket(msg, action)) for k, action in row]
+                for row in (
+                    (("chats", "chats"), ("new", "chat:new")),
+                    (("models", "models"), ("balance", "balance")),
+                    (("settings", "settings"), ("help", "help")),
+                )
+            ]
+            label = {"en": "Open Lika", "zh": "打开 Lika", "ru": "Открыть Лику"}[self.language(msg)]
+            rows.append([(label, {"web_app": self.webapp_url(channel="max")})])
+            await self.send(msg, note or c["home_hint"], rows)
+            return
+        await self.m.channels[msg.channel]._call(
+            "sendMessage",
+            {
+                "chat_id": msg.chat_id,
+                "text": note or c["home_hint"],
+                "reply_markup": self.keyboard(msg),
+            },
+        )
+
+    def runtime_owner(self, msg: InboundMessage) -> bool:
+        account = str(getattr(self.m.svc.sync, "account_id", "") or "")
+        entry = self.m.pairing.approved(msg.channel).get(msg.sender_id, {})
+        return bool(
+            account
+            and not msg.is_group
+            and physical_chat(msg.channel, msg.chat_id) == msg.sender_id
+            and entry.get("runtime_account") == account
+        )
+
+    def public_private(self, msg: InboundMessage) -> bool:
+        cfg = self.m.store.config(msg.channel)
+        # Telegram supplies the sender. A private chat must be this same numeric identity.
+        return bool(
+            msg.channel in {"telegram", "max"}
+            and not msg.is_group
+            and str(cfg.settings.get("public") or "").lower() in {"1", "true", "yes"}
+            and str(cfg.settings.get("cloud_per_chat") or "").lower() in {"1", "true", "yes"}
+            and msg.sender_id.isdecimal()
+            and int(msg.sender_id) > 0
+            and (msg.channel == "max" or physical_chat(msg.channel, msg.chat_id) == msg.sender_id)
+            and bool(msg.chat_id)
+        )
 
     def language(self, msg: InboundMessage) -> str:
         thread = self.m._thread_for(msg)
@@ -404,6 +552,9 @@ class ChatMenu:
             "retention",
             "chats",
             "models",
+            "computer",
+            "help",
+            "status",
         }:
             return {"menu": "nav:" + action}
         if action.startswith("chat:"):
@@ -427,10 +578,23 @@ class ChatMenu:
             self.chat_tickets.save(saved)
             return {"menu": token}
         if len(self.tickets) >= 256:
-            self.tickets.pop(next(iter(self.tickets)))
+            oldest = next(iter(self.tickets))
+            self.tickets.pop(oldest)
+            self.ticket_scopes.pop(oldest, None)
         token = secrets.token_hex(8)
         self.tickets[token] = (time.monotonic() + 900, msg, action)
+        self.ticket_scopes[token] = (self.m._thread_for(msg), self._cid_now(msg))
         return {"menu": token}
+
+    @staticmethod
+    def max_app_button(channel: Any, *, account: bool = False) -> dict[str, Any]:
+        button: dict[str, Any] = {"type": "open_app"}
+        bot_id = getattr(channel, "bot_id", 0)
+        if type(bot_id) is int and bot_id > 0:
+            button["contact_id"] = bot_id
+        if account:
+            button["payload"] = "account"
+        return button
 
     async def send(self, msg: InboundMessage, text: str, rows: list[list[tuple[str, Any]]]) -> None:
         channel = self.m.channels.get(msg.channel)
@@ -442,7 +606,11 @@ class ChatMenu:
                     {
                         "text": label,
                         **(
-                            {"url": value}
+                            {"web_app": {"url": value["web_app"]}}
+                            if isinstance(value, dict) and "web_app" in value
+                            else {"web_app": {"url": self.webapp_url(account=True)}}
+                            if value == "https://cloud.nanolika.ru/web/account/?source=messenger"
+                            else {"url": value}
                             if isinstance(value, str)
                             else {"callback_data": "m:" + value["menu"]}
                         ),
@@ -481,7 +649,11 @@ class ChatMenu:
                     {
                         "text": label,
                         **(
-                            {"type": "link", "url": value}
+                            self.max_app_button(channel, account="next=account" in value["web_app"])
+                            if isinstance(value, dict) and "web_app" in value
+                            else self.max_app_button(channel, account=True)
+                            if value == "https://cloud.nanolika.ru/web/account/?source=messenger"
+                            else {"type": "link", "url": value}
                             if isinstance(value, str)
                             else {"type": "callback", "payload": json.dumps(value)}
                         ),
@@ -520,13 +692,49 @@ class ChatMenu:
         self, msg: InboundMessage, page: str = "home", note: str = "", page_no: int = 1
     ) -> None:
         c = COPY[self.language(msg)]
+        if page == "home" and msg.channel in {"telegram", "max"}:
+            await self.home(msg, note)
+            return
 
         def row(label: str, action: str) -> list:
             return [(c.get(label, label), self.ticket(msg, action))]
 
         rows: list = []
         text = c["menu"]
-        if page == "permissions":
+        if page == "help":
+            text = c["help_text"]
+            rows = [
+                row("status", "status"),
+                row("connect", "connect"),
+                row("computer", "computer"),
+                [(c["account"], "https://cloud.nanolika.ru/web/account/?source=messenger")],
+            ]
+            if links := getattr(self.m, "welcome_links", None):
+                cfg = self.m.store.config(msg.channel)
+                secondary = {
+                    str(cfg.settings.get(k) or "").strip() for k in ("site_url", "invite_url")
+                }
+                rows.extend(
+                    [
+                        [(label, url)]
+                        for label, url in links(msg.channel)
+                        if url in secondary and url.startswith("https://")
+                    ]
+                )
+        elif page == "unlink-confirm":
+            text = c["unlink_hint"]
+            rows = [row("unlink", "unlink-do"), row("cancel", "settings")]
+        elif page == "chat-delete-confirm":
+            text = c["delete_prompt"]
+            rows = [
+                row("delete_button", "chat-delete-confirm:" + self._cid_now(msg)),
+                row("cancel", "settings"),
+            ]
+        elif page == "rename":
+            text = c["rename_ask"]
+        elif page == "computer-task":
+            text = c["computer_ask"]
+        elif page == "permissions":
             mode = self.preferences.mode(self.m._thread_for(msg))
             text = c["intro"] + "\n\n" + c.get(mode, c["default"])
             rows = [
@@ -556,16 +764,29 @@ class ChatMenu:
             rows = [row("confirm", "mode-confirm:full-access")]
         elif page == "computer":
             text = c["computer_text"]
-            rows = [[(c["computer_download"], "https://nanolika.ru/download.html")]]
+            rows = [
+                row("computer_task", "computer-task"),
+                [(c["computer_download"], "https://nanolika.ru/download.html")],
+                row("connect", "connect"),
+                row("status", "status"),
+            ]
         elif page == "settings":
-            text = c["settings"] + "\n\n" + c["unlink_hint"]
+            text = c["settings"]
             rows = [
                 row("permissions", "permissions"),
                 row("language", "language"),
                 *(
+                    [row("chats", "chats")]
+                    if self.public_private(msg)
+                    else [row("rename", "chat-rename"), row("delete_button", "chat-delete")]
+                ),
+                row("computer", "computer"),
+                row("connect", "connect"),
+                [(c["account"], "https://cloud.nanolika.ru/web/account/?source=messenger")],
+                *(
                     []
                     if getattr(self.m.svc.settings.channels, "shared_thread", False)
-                    else [row("retention", "retention")]
+                    else [row("retention_button", "retention")]
                 ),
                 # the way out of a link sits with the settings, where somebody looking for it
                 # would look, and says what it costs before it does anything
@@ -603,13 +824,16 @@ class ChatMenu:
                 shelf = data.get("shelf") or {}
                 favourites = [str(item) for item in (shelf.get("favourites") or [])]
                 thread = self._thread_now(msg)
-                current = str(getattr(thread, "model", "") or (shelf.get("default") or {}).get("chat") or "")
+                current = str(
+                    getattr(thread, "model", "") or (shelf.get("default") or {}).get("chat") or ""
+                )
                 models = [m for m in every if m.get("available", True)]
                 if favourites:
                     # The starred ones come first, the rest of the shelf follows: the menu
                     # is a way to reach every model the plan allows, not only the stars.
                     starred = [
-                        m for m in models
+                        m
+                        for m in models
                         if str(m.get("id")) in favourites or str(m.get("id")) == str(current)
                     ]
                     models = starred + [m for m in models if m not in starred]
@@ -664,7 +888,9 @@ class ChatMenu:
 
     def owner(self, msg: InboundMessage) -> bool:
         return bool(
-            self.m.pairing.is_approved(msg.channel, msg.sender_id)
+            self.public_private(msg)
+            or self.m.pairing.is_approved(msg.channel, msg.sender_id)
+            or "*" in self.m.store.config(msg.channel).allow_from
             or msg.sender_id in self.m.store.config(msg.channel).allow_from
         )
 
@@ -672,7 +898,7 @@ class ChatMenu:
         command = msg.text.split()[0].lower().split("@")[0] if msg.text.strip() else ""
         pages = {
             "/menu": "home",
-            "/settings": "home",
+            "/settings": "settings",
             "/chats": "chats",
             "/chat": "chats",
             "/new": "chat:new",
@@ -691,6 +917,49 @@ class ChatMenu:
         }
         if msg.channel not in {"telegram", "max"}:
             return False
+        labels = {
+            c[k]: action
+            for c in COPY.values()
+            for k, action in (
+                ("chats", "chats"),
+                ("new", "chat:new"),
+                ("models", "models"),
+                ("balance", "balance"),
+                ("settings", "settings"),
+                ("help", "help"),
+            )
+        }
+        if msg.channel in {"telegram", "max"} and msg.text.strip() in labels and not msg.files:
+            pages[command] = labels[msg.text.strip()]
+        if command == "/help":
+            pages[command] = "help"
+        if command == "/status":
+            pages[command] = "status"
+        pending_key = (msg.channel, msg.chat_id, msg.sender_id)
+        computer = self.computer_pending.pop(pending_key, None)
+        if (
+            computer
+            and command not in pages
+            and not command.startswith("/")
+            and self.private_owner(msg)
+        ):
+            if computer > time.monotonic():
+                msg.text = "/computer " + msg.text
+                return False  # The existing computer handler keeps permissions and delivery.
+            await self.show(msg, "computer")
+            return True
+        pending = self.rename_pending.pop(pending_key, None)
+        if (
+            pending
+            and command not in pages
+            and not command.startswith("/")
+            and self.private_owner(msg)
+        ):
+            if pending[0] > time.monotonic() and pending[1] == self._cid_now(msg) and not msg.files:
+                await self.show(msg, note=await self.chat_rename(msg, msg.text))
+            else:
+                await self.show(msg, note=COPY[self.language(msg)]["rename_expired"])
+            return True
         if command not in pages:
             if command in {
                 "/start",
@@ -732,6 +1001,8 @@ class ChatMenu:
         return True
 
     def private_owner(self, msg: InboundMessage) -> bool:
+        if self.public_private(msg):
+            return True
         if not self.m._allowed(msg) or not self.owner(msg):
             return False
         entry = self.m.pairing.approved(msg.channel).get(msg.sender_id, {})
@@ -763,6 +1034,9 @@ class ChatMenu:
                 "retention",
                 "chats",
                 "models",
+                "computer",
+                "help",
+                "status",
             }:
                 await self.perform(probe, action)
             return True
@@ -786,17 +1060,30 @@ class ChatMenu:
         entry = self.tickets.get(token)
         if entry is None or entry[0] < time.monotonic():
             self.tickets.pop(token, None)
+            self.ticket_scopes.pop(token, None)
             c = COPY[self.language(probe)]
             await self.show(probe, "home", c["expired"])
             return True
         _, msg, action = entry
         if (msg.channel, msg.chat_id, msg.sender_id) != (channel, chat, sender):
             return True
+        scope = self.ticket_scopes.pop(token, None)
         self.tickets.pop(token, None)
+        if scope is not None and scope != (self.m._thread_for(probe), self._cid_now(probe)):
+            await self.show(probe, note=COPY[self.language(probe)]["expired"])
+            return True
         await self.perform(replace(msg, message_id=probe.message_id, text=""), action)
         return True
 
     async def perform(self, msg: InboundMessage, action: str) -> None:
+        self.rename_pending.pop((msg.channel, msg.chat_id, msg.sender_id), None)
+        self.computer_pending.pop((msg.channel, msg.chat_id, msg.sender_id), None)
+        protected = action in {"permissions", "inherit", "retention"} or action.startswith(
+            ("mode:", "mode-confirm:", "retention-hours:")
+        )
+        if protected and self.public_private(msg) and not await self.native_account(msg):
+            await self.cloud_handoff(msg, controls=True)
+            return
         topics = getattr(getattr(self.m, "picker", None), "topics", None)
         if (
             topics is not None
@@ -810,6 +1097,9 @@ class ChatMenu:
             await self.m.picker.show(msg)
             return
         if action == "chats" or action.startswith("chat:"):
+            if self.public_private(msg) and not await self.native_account(msg):
+                await self.cloud_handoff(msg)
+                return
             await self.m.picker.perform(msg, action)
             return
         c = COPY[self.language(msg)]
@@ -821,12 +1111,23 @@ class ChatMenu:
             return
         if action in {"home", "settings", "permissions", "language", "retention"}:
             await self.show(msg, action)
+        elif action == "help":
+            await self.show(msg, "help")
+        elif action == "connect":
+            await self.m._send_connect_code(msg)
+        elif action == "status":
+            await self.show(msg, note=await self.device_status(msg))
         elif action == "pay":
             await self.show(msg, note="https://nanolika.ru/pricing.html")
         elif action == "balance":
             await self.show(msg, note=await self.balance(msg))
         elif action == "computer":
             await self.show(msg, "computer")
+        elif action == "computer-task":
+            self.computer_pending[(msg.channel, msg.chat_id, msg.sender_id)] = (
+                time.monotonic() + 300
+            )
+            await self.show(msg, "computer-task")
         elif action == "logout-ask":
             await self.show(msg, "logout-confirm")
         elif action == "logout-do":
@@ -845,20 +1146,32 @@ class ChatMenu:
             answer = await self.model_pick(msg, chosen)
             await self.show(msg, "models", note=answer)
         elif action == "chat-rename":
-            await self.show(msg, note=c["rename_usage"])
+            cid = self._cid_now(msg)
+            if not cid:
+                await self.show(msg, note=c["rename_failed"])
+                return
+            self.rename_pending[(msg.channel, msg.chat_id, msg.sender_id)] = (
+                time.monotonic() + 300,
+                cid,
+            )
+            await self.show(msg, "rename")
         elif action.startswith("chat-rename:"):
             await self.show(msg, note=await self.chat_rename(msg, action.split(":", 1)[1]))
         elif action == "chat-delete":
-            await self.show(msg, note=await self.chat_delete_prompt(msg))
-        elif action == "chat-delete-confirm":
-            await self.show(msg, note=await self.chat_delete(msg))
+            if self._cid_now(msg):
+                await self.show(msg, "chat-delete-confirm")
+            else:
+                await self.show(msg, note=c["delete_failed"])
+        elif action.startswith("chat-delete-confirm:"):
+            if action.split(":", 1)[1] == self._cid_now(msg):
+                await self.show(msg, note=await self.chat_delete(msg))
+            else:
+                await self.show(msg, note=c["expired"])
         elif action == "unlink":
-            # the same command a person can type, so there is one way out and not two: the
-            # button asks, and pressing it again within the window confirms, exactly as the
-            # typed command does
-            unlink = getattr(self.m, "_unlink_chat", None)
-            if unlink is not None:
-                await unlink(msg)
+            await self.show(msg, "unlink-confirm")
+        elif action == "unlink-do":
+            self.m._unlink_pending[(msg.channel, msg.chat_id)] = time.monotonic()
+            await self.m._unlink_chat(msg)
         elif action.startswith("switch:"):
             await self.switch_answer(msg, action.split(":", 1)[1] == "yes")
         elif action == "inherit":
@@ -932,8 +1245,10 @@ class ChatMenu:
         key = ""
         if signin:
             key, _ = await signin(msg.channel, msg)
-        if not key or key == "!":
-            if str(
+        if key == "!":
+            return "", str(self.m.svc.settings.cloud.base_url or "").rstrip("/")
+        if not key:
+            if self.runtime_owner(msg) or str(
                 self.m.store.config(msg.channel).settings.get("cloud_per_chat") or ""
             ).lower() not in {"1", "true", "yes"}:
                 from nanomuse.cloud import CLOUD_KEY
@@ -1141,25 +1456,68 @@ class ChatMenu:
             c["delete_done"] if await self._chat_write(msg, "DELETE", None) else c["delete_failed"]
         )
 
+    async def native_account(self, msg: InboundMessage) -> bool:
+        try:
+            return bool(await self.m.picker.available(msg))
+        except Exception as exc:
+            logger.warning(
+                "channel {}: account catalogue unavailable ({})", msg.channel, type(exc).__name__
+            )
+            return False
+
+    async def cloud_handoff(
+        self, msg: InboundMessage, *, computer: bool = False, controls: bool = False
+    ) -> None:
+        """Keep account-scoped work in its own client, never the shared owner's engine."""
+        c = COPY[self.language(msg)]
+        key = "open_account" if computer or controls else "open_chats"
+        text = c[
+            "cloud_controls" if controls else "computer_account" if computer else "cloud_chats"
+        ]
+        await self.send(
+            msg,
+            text,
+            [
+                [
+                    (
+                        c[key],
+                        {
+                            "web_app": self.webapp_url(
+                                account=computer or controls, channel=msg.channel
+                            )
+                        },
+                    )
+                ],
+                [(c["back"], self.ticket(msg, "home"))],
+            ],
+        )
+
+    async def device_status(self, msg: InboundMessage) -> str:
+        from nanomuse.cloud import CloudClient
+
+        c = COPY[self.language(msg)]
+        key, base = await self._cloud_access(msg)
+        if not key or not base:
+            return c["status_unavailable"]
+        client = CloudClient(base_url=base, api_key=key)
+        try:
+            devices = await client.devices()
+            online = any(d.get("online") and d.get("kind") == "computer" for d in devices)
+            return c["computer_ready"] if online else c["computer_offline"]
+        except Exception:
+            return c["status_unavailable"]
+        finally:
+            await client.close()
+
     async def balance(self, msg: InboundMessage) -> str:
         c = COPY[self.language(msg)]
         try:
             from nanomuse.cloud import CloudClient
 
-            signin = getattr(self.m, "_cloud_key_for", None)
-            key, _ = await signin(msg.channel, msg) if signin else ("", "")
-            if not key or key == "!":
-                # Single-owner runtime uses its account, never another chat's cached key.
-                if str(
-                    self.m.store.config(msg.channel).settings.get("cloud_per_chat") or ""
-                ).lower() in {"1", "true", "yes"}:
-                    return c["balance_error"]
-                from nanomuse.cloud import CLOUD_KEY
-
-                key = self.m.svc.app.vault.get(CLOUD_KEY)
+            key, base = await self._cloud_access(msg)
             if not key:
                 return c["balance_error"]
-            client = CloudClient(base_url=self.m.svc.settings.cloud.base_url, api_key=key)
+            client = CloudClient(base_url=base, api_key=key)
             try:
                 data = await client.me()
             finally:
@@ -1168,6 +1526,12 @@ class ChatMenu:
             tokens = data.get("tokens") or {}
             if spend.get("unlimited"):
                 return c["balance_label"] + ": ∞\n" + c["demo"]
+            # the relay's own rubles when it prices in them (RUB_PER_USD): the apps show
+            # the pre-computed *_rub figures, and the chat must speak the same currency
+            left_rub = spend.get("left_rub")
+            if isinstance(left_rub, (int, float)) and float(spend.get("rub_per_usd") or 0) > 0:
+                amount = f"{left_rub:.0f}" if float(left_rub) % 1 == 0 else f"{left_rub:.2f}"
+                return c["balance_label"] + ": " + amount + " ₽\n" + c["demo"]
             if isinstance(spend.get("left"), (int, float)):
                 return (
                     c["balance_label"]

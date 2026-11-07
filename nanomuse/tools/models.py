@@ -30,7 +30,9 @@ def _kind(row: dict[str, Any]) -> str:
 
 
 def _audio_kind(row: dict[str, Any]) -> str:
-    audio = row.get("audio") if isinstance(row.get("audio"), dict) else {}
+    audio = row.get("audio")
+    if not isinstance(audio, dict):
+        audio = {}
     return str(audio.get("kind") or _flags(row).get("audio_kind") or "")
 
 
@@ -65,7 +67,11 @@ def _money(row: dict[str, Any]) -> str:
     if kind == "chat":
         return f"вход {_rub(rates.get('input'))} / выход {_rub(rates.get('output'))} за 1M токенов"
     if kind == "image":
-        sizes = (row.get("supports") or {}).get("sizes") if isinstance(row.get("supports"), dict) else None
+        sizes = (
+            (row.get("supports") or {}).get("sizes")
+            if isinstance(row.get("supports"), dict)
+            else None
+        )
         has_2k = sizes is None or "2048x2048" in sizes
         extra = f", 2K {_rub(rates.get('image_2k'))}" if rates.get("image_2k") and has_2k else ""
         return f"{_rub(rates.get('image'))} за картинку{extra}"
@@ -82,7 +88,13 @@ def _money(row: dict[str, Any]) -> str:
     return ""
 
 
-FUNDS = {"insufficient_funds", "allowance_exhausted", "out_of_tokens", "daily_cap", "budget_exhausted"}
+FUNDS = {
+    "insufficient_funds",
+    "allowance_exhausted",
+    "out_of_tokens",
+    "daily_cap",
+    "budget_exhausted",
+}
 FUNDS_MESSAGE = (
     "There is not enough money on the balance for this request. Say the price and the "
     "balance, and that a top-up in the cabinet opens the paid models and larger sizes; "
@@ -127,7 +139,11 @@ class Models(BaseTool):
         rows = rows if isinstance(rows, list) else []
         shelf = menu.get("shelf") if isinstance(menu, dict) else None
         shelf = shelf if isinstance(shelf, dict) else {}
-        preferred = (shelf.get("default") or {}).get(kind) if isinstance(shelf.get("default"), dict) else None
+        preferred = (
+            (shelf.get("default") or {}).get(kind)
+            if isinstance(shelf.get("default"), dict)
+            else None
+        )
         for row in rows:
             if not isinstance(row, dict) or _kind(row) != kind or not _open(row):
                 continue
@@ -161,6 +177,7 @@ class Models(BaseTool):
         except CloudError:
             pass
         return ToolResult(output=line)
+
     name: str = "models"
     description: str = (
         "Which models this account can use and what they cost. action=`list` shows the menu "
@@ -175,8 +192,16 @@ class Models(BaseTool):
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["list", "quote", "estimate"], "description": "list by default"},
-            "kind": {"type": "string", "enum": ["chat", "image", "video", "audio"], "description": "for list"},
+            "action": {
+                "type": "string",
+                "enum": ["list", "quote", "estimate"],
+                "description": "list by default",
+            },
+            "kind": {
+                "type": "string",
+                "enum": ["chat", "image", "video", "audio"],
+                "description": "for list",
+            },
             "images": {"type": "integer", "description": "how many pictures to price"},
             "clips": {"type": "integer", "description": "how many clips to price"},
             "model": {"type": "string", "description": "the model to price, optional"},
@@ -193,7 +218,9 @@ class Models(BaseTool):
     cloud: Callable[[], Any] | None = None
 
     def assess(self, args: dict[str, Any]) -> CallAssessment:
-        return CallAssessment(risk=RiskLevel.SAFE, egress=False, summary=f"models {args.get('action') or 'list'}")
+        return CallAssessment(
+            risk=RiskLevel.SAFE, egress=False, summary=f"models {args.get('action') or 'list'}"
+        )
 
     async def execute(
         self,
@@ -263,13 +290,21 @@ class Models(BaseTool):
             if not isinstance(part, dict):
                 continue
             what = "pictures" if part.get("kind") == "image" else "clips"
-            bits.append(f"{part.get('count')} {what} · {part.get('model')} · {_rub(part.get('cny'))}")
+            bits.append(
+                f"{part.get('count')} {what} · {part.get('model')} · {_rub(part.get('cny'))}"
+            )
         if answer.get("unlimited"):
             bits.append("the account has no limit")
         elif answer.get("left_rub") is not None or answer.get("left_cny") is not None:
             left = answer.get("left_rub")
-            bits.append(f"left on the balance: {_rub(left if left is not None else answer.get('left_cny'))}")
-            bits.append("the balance covers it" if answer.get("affordable") else "not enough - a top-up opens it")
+            bits.append(
+                f"left on the balance: {_rub(left if left is not None else answer.get('left_cny'))}"
+            )
+            bits.append(
+                "the balance covers it"
+                if answer.get("affordable")
+                else "not enough - a top-up opens it"
+            )
         return ToolResult(output=" · ".join(bits))
 
     async def _list(self, client: Any, kind: str) -> ToolResult:
@@ -280,8 +315,12 @@ class Models(BaseTool):
             rows = await client.models()
         rows = [row for row in rows if isinstance(row, dict)]
         shelf = shelf if isinstance(shelf, dict) else {}
-        defaults = shelf.get("default") if isinstance(shelf.get("default"), dict) else {}
-        wanted = {kind} if kind in ("chat", "image", "video", "audio") else {"image", "video", "audio"}
+        defaults = shelf.get("default")
+        if not isinstance(defaults, dict):
+            defaults = {}
+        wanted = (
+            {kind} if kind in ("chat", "image", "video", "audio") else {"image", "video", "audio"}
+        )
         lines: list[str] = []
         for row in rows:
             kind_of = _kind(row)

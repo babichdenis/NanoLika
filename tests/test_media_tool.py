@@ -41,9 +41,13 @@ def tool(tmp_path: Path, cloud=None) -> Media:
 
 def test_speech_saves_a_file_and_reports_the_charge(tmp_path: Path):
     cloud = FakeCloud()
-    result = asyncio.run(tool(tmp_path, cloud).execute(action="speech", text="привет", format="mp3"))
+    result = asyncio.run(
+        tool(tmp_path, cloud).execute(action="speech", text="привет", format="mp3")
+    )
     assert result.ok, result.error
-    assert "media/" in result.output and "3.20 s" in result.output and "link https://" in result.output
+    assert (
+        "media/" in result.output and "3.20 s" in result.output and "link https://" in result.output
+    )
     assert "charged 100" in result.output
     assert cloud.uploaded and cloud.uploaded[-1]["mime"] == "audio/mpeg"
     files = list((tmp_path / "media").glob("*.mp3"))
@@ -84,5 +88,9 @@ def test_a_relay_error_is_one_sentence(tmp_path: Path):
 
 
 def test_signed_out_refuses(tmp_path: Path):
-    result = asyncio.run(Media(workspace=tmp_path, extra_roots=[], cloud=lambda: None).execute(action="speech", text="hi"))
+    result = asyncio.run(
+        Media(workspace=tmp_path, extra_roots=[], cloud=lambda: None).execute(
+            action="speech", text="hi"
+        )
+    )
     assert not result.ok and "Sign in" in result.error

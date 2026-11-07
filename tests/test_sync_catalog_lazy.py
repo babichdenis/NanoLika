@@ -80,7 +80,13 @@ class FakeClient:
             "account_id": "acc",
             "cid": cid,
             "messages": [
-                {"cid": cid, "mid": f"m{seq:04d}", "role": "assistant", "text": f"m{seq}", "seq": seq}
+                {
+                    "cid": cid,
+                    "mid": f"m{seq:04d}",
+                    "role": "assistant",
+                    "text": f"m{seq}",
+                    "seq": seq,
+                }
                 for seq in rows
             ],
             "cursor": cursor,

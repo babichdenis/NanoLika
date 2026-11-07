@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
-
-import pytest
 
 from nanomuse.config import Settings
 from nanomuse.tools.discovery import CORE, ToolSearch, score

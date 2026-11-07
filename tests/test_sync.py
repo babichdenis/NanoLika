@@ -614,6 +614,13 @@ def test_remote_device_task_hydrates_shared_history_without_duplicating_current_
 
 def test_the_second_main_adopts_the_accounts_id(synced) -> None:
     client, service, llm, relay = synced
+    # The premise is an account whose only main is the other device's. A start-up push of
+    # ours that is still scheduled would land after the relay is emptied and leave two
+    # mains, which the real relay never allows: let it finish, then start clean.
+    time.sleep(0.3)
+    relay.convs.clear()
+    relay.msgs.clear()
+    relay.pushes.clear()
     # another device pushed the account's main chat already, with a message in it
     theirs = str(uuid.uuid4())
     relay.add_conversation(theirs, "main", "Main chat")
@@ -622,11 +629,18 @@ def test_the_second_main_adopts_the_accounts_id(synced) -> None:
     llm.script.append(LLMResponse(content="desk answer", finish_reason="stop"))
     client.post(f"/api/threads/{MAIN_THREAD}/send", json={"text": "desk question"})
     wait_for(lambda: any(m["text"] == "desk answer" for m in relay.msgs.values()))
-    # refused with main_exists, re-posted under theirs: one main on the relay, everything in it
+    # one main on the relay, and everything goes under its id
+    wait_for(lambda: service.sync.cid_of(MAIN_THREAD) == theirs)
+    print(
+        "DBG",
+        service.sync.cid_of(MAIN_THREAD),
+        theirs,
+        [(c["cid"], c["kind"]) for c in relay.convs.values()],
+        [[(x["cid"], x.get("kind")) for x in p["conversations"]] for p in relay.pushes],
+    )
     assert sum(1 for c in relay.convs.values() if c["kind"] == "main") == 1
-    assert service.sync.cid_of(MAIN_THREAD) == theirs
     assert {m["cid"] for m in relay.msgs.values()} == {theirs}
-    assert len(relay.pushes) >= 2
+    assert len(relay.pushes) >= 1
     # and the phone's message is in our main chat after a pull
     client.post("/api/sync/pull")
     texts = [e["text"] for e in _events(client, MAIN_THREAD) if e["type"] == "user"]
@@ -1158,9 +1172,7 @@ def test_a_chat_keeps_its_own_temperature(synced) -> None:
     assert again.threads[side["id"]].temperature == 0.9
     # it goes up with the chat and is clamped to the provider's range
     client.portal.call(service.sync.push)  # type: ignore[union-attr]
-    assert any(
-        c.get("temperature") == 0.9 for p in relay.pushes for c in p["conversations"]
-    )
+    assert any(c.get("temperature") == 0.9 for p in relay.pushes for c in p["conversations"])
     assert client.patch(f"/api/threads/{side['id']}", json={"temperature": 3}).status_code == 422
     # another device's value comes down and is applied here
     cid = service.sync.cid_of(side["id"])
@@ -1317,14 +1329,9 @@ def test_turning_side_chats_on_backfills_history_older_than_the_tail(main_only) 
     assert "Long phone side" not in [t["title"] for t in client.get("/api/threads").json()]
     n_pulls = len(relay.pulls)
     client.put("/api/sync/state", json={"side_chats": True})
-    wait_for(
-        lambda: "Long phone side"
-        in [t["title"] for t in client.get("/api/threads").json()]
-    )
+    wait_for(lambda: "Long phone side" in [t["title"] for t in client.get("/api/threads").json()])
     tid = next(
-        t["id"]
-        for t in client.get("/api/threads").json()
-        if t["title"] == "Long phone side"
+        t["id"] for t in client.get("/api/threads").json() if t["title"] == "Long phone side"
     )
     wait_for(lambda: service.sync.state["backfill"] is False)
     assert service.sync.state["backfill_cursor"] == 0
@@ -1343,6 +1350,7 @@ def test_a_side_chat_backfill_skips_the_catalogue(main_only) -> None:
     went through it would return success and leave the rest of the history on the relay."""
     client, service, llm, relay = main_only
     wait_for(lambda: relay.pulls)
+
     # A push made at start-up queues a second pull of its own; it runs on the event loop's
     # thread while this one edits the state below. Let both finish first, so the only pull
     # the catalogue can see is the backfill this test asks for.

@@ -38,9 +38,9 @@ from .nudges import defaults as nudges_defaults
 from .nudges import merge as nudges_merge
 from .nudges import validate as nudges_validate
 from .providers import exhausted_key_line, guidance
-from .reasoning import public_reasoning
 from .providers import provider as catalogue_provider
-from .senders import CodeSender, LogSender, SendError, make_sender
+from .reasoning import public_reasoning
+from .senders import CodeSender, LogSender, SendError, make_sender, webhook_send
 
 log = logging.getLogger("nanomuse_cloud")
 
@@ -75,12 +75,9 @@ def measured_context() -> dict[str, int]:
             rows = raw.get("models") if isinstance(raw, dict) else {}
         except (OSError, ValueError, TypeError):
             rows = {}
-        _CONTEXT_CACHE = {
-            str(key): int(value)
-            for key, value in (rows or {}).items()
-            if isinstance(value, (int, float)) and int(value) > 0
-        }
+        _CONTEXT_CACHE = {str(key): int(value) for key, value in (rows or {}).items() if isinstance(value, (int, float)) and int(value) > 0}
     return _CONTEXT_CACHE
+
 
 # 0.30: the short code an account shows in the app and types into its chat. Six characters
 # from an alphabet without O/0 and I/1 — a code is copied off a screen or read out loud —
@@ -1102,7 +1099,9 @@ class Cloud:
                 "signup_closed",
                 "New chats are closed on this relay for now; an account that already exists keeps working.",
             )
-        return self.sign_in(ident, device or surface, via=surface, invite=invite, reached=True)
+        key, caller, created = self.sign_in(ident, device or surface, via=surface, invite=invite, reached=True)
+        self._remember_channel_key(surface, ident, caller.key_hash)
+        return key, caller, created
 
     def chat_link_code(self, chat_id: str, device: str = "", channel: str = DEFAULT_CHAT_SURFACE) -> tuple[str, int]:
         """A one-time code for the account this chat is, to be typed in the app.
@@ -1229,6 +1228,7 @@ class Cloud:
         cut = self.db.remove_aliases_for_surface(caller.account_id, surface)
         after = self.channel_links(caller)
         if cut:
+            self._revoke_channel_sessions(caller.account_id, surface, [str(row["id_hash"]) for row in aliases])
             self.db.add_event(caller.account_id, "account.unlinked", f"{surface}:{cut}")
         return {"unlinked": cut, "channel": surface, "before": before, "left": after}
 
@@ -1266,8 +1266,50 @@ class Cloud:
             return {"unlinked": False, "channel": surface, "reason": "channel_is_the_account"}
         removed = self.db.remove_alias_by_row(str(row["id_hash"]))
         if removed:
+            self._revoke_channel_sessions(account_id, surface, [str(row["id_hash"])])
             self.db.add_event(account_id, "account.unlinked", f"{surface}:chat")
         return {"unlinked": bool(removed), "channel": surface, "reason": "" if removed else "not_linked"}
+
+    def _remember_channel_key(self, surface: str, ident: Identifier, key_hash: str) -> None:
+        """Remember a verified chat origin as an HMAC, never a raw messenger id."""
+        origin = self._chat_key(surface, ident).hash(self.s.hmac_key)
+        with self.db.tx() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS channel_session_keys ("
+                "key_hash TEXT PRIMARY KEY REFERENCES api_keys(key_hash) ON DELETE CASCADE, "
+                "surface TEXT NOT NULL, identity_hash TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO channel_session_keys(key_hash,surface,identity_hash) VALUES (?,?,?)",
+                (key_hash, surface, origin),
+            )
+
+    def _revoke_channel_sessions(self, account_id: str, surface: str, origins: list[str]) -> None:
+        """Revoke only sessions issued to a removed chat; preserve other devices.
+
+        Older messenger keys have no origin metadata, so invalidate them conservatively
+        once. Their chats can sign in again. Browser cookies inherit parent-key revocation.
+        """
+        with self.db.tx() as connection:
+            exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='channel_session_keys'").fetchone()
+            rows = (
+                connection.execute(
+                    "SELECT c.key_hash,c.surface,c.identity_hash FROM channel_session_keys c "
+                    "JOIN api_keys k ON k.key_hash=c.key_hash WHERE k.account_id=?",
+                    (account_id,),
+                ).fetchall()
+                if exists
+                else []
+            )
+        known = {row["key_hash"]: row for row in rows}
+        for row in self.db.keys_for(account_id, live_only=True):
+            origin = known.get(row["key_hash"])
+            if origin is not None:
+                revoke = origin["surface"] == surface and origin["identity_hash"] in origins
+            else:
+                revoke = row["via"] in {surface, surface + "_webapp"}
+            if revoke:
+                self.db.revoke_key(row["key_hash"])
 
     @staticmethod
     def _of_surface(row: sqlite3.Row, surface: str) -> bool:
@@ -2060,6 +2102,218 @@ class Cloud:
         out.sort(key=lambda s: -(s["last_used_at"] or s["created_at"]))
         return out
 
+    # -- own provider keys (BYOK) ------------------------------------------------
+
+    def add_provider_key(self, caller: Caller, body: dict) -> list[dict]:
+        """Store a person's own provider key, encrypted with the deployment secret."""
+        provider = str(body.get("provider") or "").strip().lower()
+        if not provider:
+            raise CloudError(400, "bad_provider", "Choose a provider")
+        entry = catalogue_provider(provider)
+        if entry is None and provider != "custom":
+            raise CloudError(400, "bad_provider", "Unknown provider")
+        api_key = str(body.get("api_key") or "").strip()
+        if not api_key:
+            raise CloudError(400, "bad_key", "Paste the provider key")
+        base_url = str(body.get("base_url") or "").strip().rstrip("/")
+        if not base_url and entry is not None:
+            base_url = str(entry.get("base_url") or "").rstrip("/")
+        if not base_url:
+            raise CloudError(400, "bad_base_url", "The provider address is required")
+        raw_models = body.get("models") or []
+        if not isinstance(raw_models, list):
+            raw_models = [raw_models]
+        models = [str(m).strip() for m in raw_models if str(m).strip()]
+        label = str(body.get("label") or "").strip()[:40]
+        enc = self.crypto.encrypt(caller.account_id, api_key)
+        hint = ("…" + api_key[-4:]) if len(api_key) >= 4 else "…"
+        self.db.add_account_provider(caller.account_id, provider, label, base_url, enc, hint, json.dumps(models), now())
+        self.db.add_event(caller.account_id, "provider.add", provider)
+        return self.list_provider_keys(caller)
+
+    def list_provider_keys(self, caller: Caller) -> list[dict]:
+        """The person's own keys without the keys themselves: provider, address, hint, models."""
+        out = []
+        for row in self.db.account_providers(caller.account_id):
+            try:
+                models = json.loads(row["models"] or "[]")
+            except ValueError:
+                models = []
+            out.append(
+                {
+                    "id": int(row["id"]),
+                    "provider": row["provider"],
+                    "label": row["label"] or "",
+                    "base_url": row["base_url"],
+                    "key_hint": row["key_hint"],
+                    "models": models,
+                    "created_at": int(row["created_at"]),
+                    "last_ok_at": int(row["last_ok_at"]) if row["last_ok_at"] else None,
+                    "last_error": row["last_error"] or "",
+                }
+            )
+        return out
+
+    def _provider_id(self, caller: Caller, provider_id: str | int) -> int:
+        """The row id, or the first key of a provider when an older client sends its name."""
+        try:
+            return int(provider_id)
+        except (TypeError, ValueError):
+            pass
+        rows = [r for r in self.db.account_providers(caller.account_id) if r["provider"] == str(provider_id or "").strip().lower()]
+        if not rows:
+            raise CloudError(404, "provider_not_found", "No such provider key")
+        return int(rows[0]["id"])
+
+    def delete_provider_key(self, caller: Caller, provider_id: str | int) -> bool:
+        pid = self._provider_id(caller, provider_id)
+        if not self.db.delete_account_provider(caller.account_id, pid):
+            raise CloudError(404, "provider_not_found", "No such provider key")
+        self.db.add_event(caller.account_id, "provider.delete", str(pid))
+        return True
+
+    def provider_key(self, caller: Caller, provider_id: str | int) -> dict | None:
+        pid = self._provider_id(caller, provider_id)
+        row = self.db.account_provider(caller.account_id, pid)
+        if row is None:
+            return None
+        key = self.crypto.decrypt(caller.account_id, row["key_enc"])
+        if not key:
+            return None
+        try:
+            models = json.loads(row["models"] or "[]")
+        except ValueError:
+            models = []
+        return {
+            "id": int(row["id"]),
+            "provider": row["provider"],
+            "label": row["label"] or "",
+            "base_url": row["base_url"],
+            "key": key,
+            "models": models,
+        }
+
+    def byok_for(self, caller: Caller, spec: ModelSpec) -> dict | None:
+        """A person's own key for this model, if they added one: by provider id first,
+        then by any model id they listed (the same model is sold under many ids)."""
+        for row in self.db.account_providers(caller.account_id):
+            try:
+                models = json.loads(row["models"] or "[]")
+            except ValueError:
+                models = []
+            matches = bool(spec.provider and row["provider"] == spec.provider) or spec.id in models or spec.upstream in models
+            if not matches:
+                continue
+            full = self.db.account_provider(caller.account_id, int(row["id"]))
+            if full is None:
+                continue
+            key = self.crypto.decrypt(caller.account_id, full["key_enc"])
+            if key:
+                model_id = (
+                    spec.id
+                    if spec.id in models
+                    else (spec.upstream if spec.upstream in models else (models[0] if models else spec.upstream))
+                )
+                return {
+                    "id": int(full["id"]),
+                    "provider": full["provider"],
+                    "label": full["label"] or "",
+                    "base_url": full["base_url"],
+                    "key": key,
+                    "models": models,
+                    "model": model_id,
+                }
+        return None
+
+    def note_provider_key(self, caller: Caller, provider_id: str | int, ok: bool, error: str = "") -> None:
+        self.db.note_account_provider(caller.account_id, self._provider_id(caller, provider_id), ok, error)
+
+    def alerts(self, days: int = 1) -> dict:
+        """What the operator should look at: requests, fallback and BYOK per model and
+        provider, plus recent upstream incidents. Built from the ledger's
+        `model_accounting` and the events table; no message text is read."""
+        since = now() - max(1, int(days)) * 86400
+        by_model: dict[str, dict] = {}
+        by_provider: dict[str, dict] = {}
+        price_alerts: list[dict] = []
+        with self.db._lock:
+            rows = self.db._conn.execute("SELECT model, ts, extra FROM ledger WHERE ts>=? AND kind='chat'", (since,)).fetchall()
+            events = self.db._conn.execute(
+                "SELECT id, ts, kind, detail FROM events WHERE ts>=? "
+                "AND kind IN ('upstream.error','budget.refused','content.rejected','control.rule') "
+                "ORDER BY id DESC LIMIT 100",
+                (since,),
+            ).fetchall()
+        for row in rows:
+            try:
+                extra = json.loads(row["extra"] or "{}")
+            except (ValueError, TypeError):
+                extra = {}
+            meta = extra.get("model_accounting") if isinstance(extra, dict) else None
+            meta = meta if isinstance(meta, dict) else {}
+            provider = str(meta.get("provider") or "configured")[:80]
+            fallback = bool(meta.get("fallback"))
+            byok = bool(meta.get("byok"))
+            model = str(row["model"] or "")[:160]
+            m = by_model.setdefault(model, {"model": model, "requests": 0, "fallback": 0, "byok": 0, "providers": {}})
+            m["requests"] += 1
+            m["fallback"] += int(fallback)
+            m["byok"] += int(byok)
+            m["providers"][provider] = m["providers"].get(provider, 0) + 1
+            p = by_provider.setdefault(provider, {"provider": provider, "requests": 0, "fallback": 0, "byok": 0})
+            p["requests"] += 1
+            p["fallback"] += int(fallback)
+            p["byok"] += int(byok)
+            if meta.get("provider_price_alert"):
+                price_alerts.append({"at": int(row["ts"]), "kind": "provider.price_alert", "detail": f"{provider} · {model}"})
+        incidents = [{"at": int(e["ts"]), "kind": e["kind"], "detail": str(e["detail"] or "")[:300]} for e in events] + price_alerts
+        incidents.sort(key=lambda item: item["at"], reverse=True)
+        error_groups: dict[str, dict] = {}
+        for event in events:
+            detail = str(event["detail"] or "")[:300]
+            key = f"{event['kind']}|{detail}"
+            group = error_groups.setdefault(key, {"kind": event["kind"], "detail": detail, "count": 0, "last_at": 0})
+            group["count"] += 1
+            group["last_at"] = max(group["last_at"], int(event["ts"]))
+        return {
+            "days": days,
+            "since": since,
+            "by_model": sorted(by_model.values(), key=lambda item: -item["requests"]),
+            "by_provider": sorted(by_provider.values(), key=lambda item: -item["requests"]),
+            "error_groups": sorted(error_groups.values(), key=lambda item: (-item["count"], -item["last_at"]))[:30],
+            "incidents": incidents[:50],
+            "totals": {
+                "requests": len(rows),
+                "fallback": sum(item["fallback"] for item in by_model.values()),
+                "byok": sum(item["byok"] for item in by_model.values()),
+                "incidents": len(incidents),
+            },
+        }
+
+    def notify_alerts(self, days: int = 1, to: str = "") -> dict:
+        """Send the same summary to the operator's address through the site's mail bridge."""
+        data = self.alerts(days)
+        recipient = (to or self.s.admin_email or "denis@nanolika.ru").strip()
+        lines = [
+            f"Алерты nanoLika за {days} дн.",
+            f"Запросов: {data['totals']['requests']}, fallback: {data['totals']['fallback']}, "
+            f"BYOK: {data['totals']['byok']}, инцидентов: {data['totals']['incidents']}",
+        ]
+        for model in data["by_model"][:10]:
+            providers = ", ".join(f"{name}: {count}" for name, count in model["providers"].items())
+            lines.append(
+                f"{model['model']}: {model['requests']} запросов, fallback {model['fallback']}, BYOK {model['byok']} ({providers})"
+            )
+        for error in data.get("error_groups", [])[:10]:
+            lines.append(f"{error['kind']} ×{error['count']}: {error['detail']}")
+        for incident in data["incidents"][:10]:
+            lines.append(f"{incident['kind']}: {incident['detail']}")
+        try:
+            webhook_send(self.s, recipient, f"NanoLika · алерты за {days} дн.", "\n".join(lines))
+        except SendError as error:
+            raise CloudError(502, "mail_failed", "The alert letter did not go") from error
+        return {"ok": True, "to": recipient, "days": days, "incidents": data["totals"]["incidents"]}
+
     def create_user_key(
         self,
         caller: Caller,
@@ -2407,7 +2661,9 @@ class Cloud:
         return {
             "enabled": enabled,
             "default": default,
-            "favourites": [mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.s.public_models if self.model_visible(m)}],
+            "favourites": [
+                mid for mid in stored.get("favourites", []) if mid in {m.id for m in self.s.public_models if self.model_visible(m)}
+            ],
         }
 
     def catalogue_public(self) -> dict[str, Any]:
@@ -3110,11 +3366,14 @@ class Cloud:
         at: int | None = None,
         provider_cost_rub: float | None = None,
         routing_meta: dict[str, Any] | None = None,
+        byok: bool = False,
     ) -> int:
         """One chat turn in the ledger: the tokens as the provider counted them, the money at
         the model's price in force when the reply came in (`at`, now by default) — the
         cached part of the prompt at its cached rate, the idle hours at the idle price. The
-        ledger line's `extra` says when either applied, so a statement can be checked."""
+        ledger line's `extra` says when either applied, so a statement can be checked.
+        `byok` marks a turn paid by the person's own provider key: the tokens are kept for
+        the statement, the money is zero on both sides (nothing to charge, nothing to pay)."""
         at = self.clock() if at is None else at
         charged = math.ceil(prompt_tokens * model.in_mult + completion_tokens * model.out_mult)
         # what the provider bills the relay (telemetry, and the margin's other half) and what
@@ -3134,6 +3393,11 @@ class Cloud:
         detail: dict[str, Any] = {}
         if routing_meta:
             detail["model_accounting"] = routing_meta
+        if byok:
+            # The person's own key paid the provider; the relay charges and pays nothing.
+            cost = 0
+            sale = 0
+            detail["byok"] = True
         if cached_tokens > 0:
             detail["cached_tokens"] = min(max(0, cached_tokens), max(0, prompt_tokens))
         if model.idle_at(at):
@@ -3149,6 +3413,41 @@ class Cloud:
             cost_uy=cost,
             sale_uy=sale,
             extra=json.dumps(detail) if detail else "",
+            key_hash=caller.key_hash,
+        )
+        if not byok:
+            self.settle_invite(caller.account_id)
+        return charged
+
+    def charge_tool(
+        self,
+        caller: Caller,
+        reference: str,
+        cost_rub: float,
+        sale_rub: float,
+        request_id: str,
+        extra: dict[str, Any] | None = None,
+    ) -> int:
+        """One paid tool call (BeatAPI): the provider's price as cost, our price as the sale.
+
+        A tool that is free today is charged the same way as a paid one — the ledger line
+        is written with zero, so the statement never needs a "was it free then" memory.
+        """
+        cost = self.s.rub_to_uy(max(0.0, cost_rub))
+        sale = self.s.rub_to_uy(max(0.0, sale_rub))
+        charged = max(0, sale)
+        detail = {"tool": reference, **(extra or {})}
+        self.db.charge(
+            caller.account_id,
+            "tool",
+            reference,
+            0,
+            0,
+            charged,
+            request_id,
+            cost_uy=cost,
+            sale_uy=sale,
+            extra=json.dumps(detail),
             key_hash=caller.key_hash,
         )
         self.settle_invite(caller.account_id)

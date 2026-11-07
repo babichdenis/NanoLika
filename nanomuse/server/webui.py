@@ -66,7 +66,15 @@ _READ_ONLY_TOOLS = {
     "computer_task",
 }
 # the browser's persistent profile lives in the workspace too (cookies, caches) — never an artifact
-_SKIP_DIRS = {"node_modules", "__pycache__", ".venv", "venv", ".git", "browser-profile", "screenshots"}
+_SKIP_DIRS = {
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".git",
+    "browser-profile",
+    "screenshots",
+}
 _SCAN_CAP = 3000
 
 
@@ -385,9 +393,7 @@ class WebUI:
             self._stream_buf[thread] = ""
             self.bus.publish({"kind": "stream_start", "thread": thread, "id": sid, "ts": now_iso()})
         self._reasoning_buf[thread] = self._reasoning_buf.get(thread, "") + text
-        self.bus.publish(
-            {"kind": "reasoning_delta", "thread": thread, "id": sid, "text": text}
-        )
+        self.bus.publish({"kind": "reasoning_delta", "thread": thread, "id": sid, "text": text})
 
     def on_text_delta(self, text: str) -> None:
         if not text:
@@ -480,7 +486,7 @@ class WebUI:
         # not only in the model's context: the person sees what the step looked at
         shots = self._card_images(result.images)
         if eid:
-            fields = {"status": status, "output": preview}
+            fields: dict[str, Any] = {"status": status, "output": preview}
             if shots:
                 fields["images"] = shots
             self.patch(thread, eid, **fields)

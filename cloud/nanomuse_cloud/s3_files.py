@@ -85,9 +85,7 @@ def presign_get(settings, key: str, name: str) -> str:
     host = urlsplit(settings.s3_endpoint).hostname or ""
     canonical = f"GET\n{path}\n{query}\nhost:{host}\n\nhost\nUNSIGNED-PAYLOAD"
     to_sign = f"AWS4-HMAC-SHA256\n{amz}\n{scope}\n{_digest(canonical.encode())}"
-    signature = hmac.new(
-        _signing_key(settings.s3_secret_key, day, settings.s3_region), to_sign.encode(), hashlib.sha256
-    ).hexdigest()
+    signature = hmac.new(_signing_key(settings.s3_secret_key, day, settings.s3_region), to_sign.encode(), hashlib.sha256).hexdigest()
     endpoint = settings.s3_endpoint.rstrip("/")
     return f"{endpoint}{path}?{query}&X-Amz-Signature={signature}"
 
@@ -107,9 +105,7 @@ async def put_object(settings, key: str, data: bytes, content_type: str) -> None
     canonical_headers = "".join(f"{name}:{headers[name]}\n" for name in sorted(headers))
     canonical = f"PUT\n{path}\n\n{canonical_headers}\n{signed}\n{digest}"
     to_sign = f"AWS4-HMAC-SHA256\n{amz}\n{scope}\n{_digest(canonical.encode())}"
-    signature = hmac.new(
-        _signing_key(settings.s3_secret_key, day, settings.s3_region), to_sign.encode(), hashlib.sha256
-    ).hexdigest()
+    signature = hmac.new(_signing_key(settings.s3_secret_key, day, settings.s3_region), to_sign.encode(), hashlib.sha256).hexdigest()
     authorization = f"AWS4-HMAC-SHA256 Credential={settings.s3_access_key}/{scope}, SignedHeaders={signed}, Signature={signature}"
     url = f"{settings.s3_endpoint.rstrip('/')}{path}"
     async with httpx.AsyncClient(timeout=60, trust_env=False) as client:

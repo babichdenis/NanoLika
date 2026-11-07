@@ -568,16 +568,13 @@ class MuseAgent:
         tool_indexes = [
             i
             for i, message in enumerate(clean)
-            if message.role == Role.TOOL and len(message.content or "") >= int(
-                self.settings.agent.tool_age_min_chars
-            )
+            if message.role == Role.TOOL
+            and len(message.content or "") >= int(self.settings.agent.tool_age_min_chars)
         ]
         # Old first, then by size: a current result stays as long as it fits.
         tool_indexes.sort(key=lambda i: (ages[i], -len(clean[i].content or "")))
         for index in tool_indexes:
-            self._age_tool_result(
-                clean[index], labels[index], ages[index], current_age, force=True
-            )
+            self._age_tool_result(clean[index], labels[index], ages[index], current_age, force=True)
             if self._context_size(clean) <= cap:
                 return clean
         # Still too big: one exchange at a time, from the oldest end.

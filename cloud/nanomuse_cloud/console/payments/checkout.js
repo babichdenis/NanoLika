@@ -34,7 +34,7 @@
     $('payment-notice').textContent = config.test_mode
       ? 'Тестовое оформление. Тестовый баланс и условия не меняют рабочий аккаунт.'
       : 'Оплата проходит через защищённую форму платёжного сервиса. Статус подтверждается сервером.';
-    $('pay').textContent = `Перейти в ${config.provider_name}${config.test_mode ? ' · тест' : ''}`;
+    $('pay').textContent = 'Оплатить';
   }
   async function api(path, body) {
     const r = await fetch(path, {method:body ? 'POST' : 'GET', cache:'no-store', headers:{...(body ? {'Content-Type':'application/json'} : {}), ...(key ? {Authorization:'Bearer ' + key} : {})}, ...(body ? {body:JSON.stringify(body)} : {})});
@@ -91,13 +91,15 @@
     const value = params.get('amount') || '';
     if (!plan && !/^\d+(\.\d{1,2})?$/.test(value)) throw Error('Выберите сумму на странице тарифов.');
     $('item').textContent = plan ? 'Пакет «' + plan.name + '»' : 'Пополнение баланса';
-    $('amount').textContent = format(plan ? plan.amount : Math.round(Number(value) * 100));
+    const payable = plan ? plan.amount : Math.round(Number(value) * 100);
+    $('amount').textContent = format(payable);
+    $('pay').textContent = 'Оплатить ' + format(payable);
     $('terms').textContent = plan
       ? `Сумма поступит на баланс. Когда оплаченный остаток достигнет ${format(plan.amount)}, включится тариф «${plan.name}» на 30 дней. Деньги останутся на балансе.`
       : 'Пополнение поступит на баланс. Достигнутый порог включит соответствующий тариф на 30 дней; само пополнение действующий срок не продлевает.';
   }
   $('pay').addEventListener('click',async()=>{
-    if(busy)return; if(!$('accept-terms').checked){message('Подтвердите ознакомление с условиями.');return;} busy=true;$('pay').disabled=true;
+    if(busy)return; busy=true;$('pay').disabled=true;
     try {
       let data;
       if(order) data=await api('/v1/payments/orders/'+encodeURIComponent(order));

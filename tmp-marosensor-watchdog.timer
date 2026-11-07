@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Marosensor uptime watchdog every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=300s
+AccuracySec=5s
+Unit=marosensor-watchdog.service
+
+[Install]
+WantedBy=timers.target

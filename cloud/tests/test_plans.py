@@ -6,7 +6,6 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from nanomuse_cloud.api import create_app
 from nanomuse_cloud.config import Settings
@@ -204,6 +203,7 @@ def test_the_operator_sells_a_tariff_through_the_admin_door():
     assert r.status_code == 200, r.text
     assert r.json()["plan"]["id"] == "lika-plus"
     assert client.post("/v1/admin/plan", json={"account_id": me["account"]["id"], "plan": "gold"}, headers=ADMIN).status_code == 400
+
 
 def test_the_admin_card_shows_the_tariff_and_the_connection():
     """Карточка аккаунта в админке отдаёт тариф и состояние связи: по ним оператор

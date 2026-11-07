@@ -585,8 +585,8 @@ class OfficeXlsm(BaseTool):
         "sheet (format, filter, sort, pdf, refresh, stamp, clear) and draws a button on "
         "open. Use this when someone asks for an Excel file with a small macro or a "
         "button. `rows` is a list of lists (first row = header), `commands` is a list of "
-        "{\"action\", \"target\", \"param\"}; `target` is a range like Sheet1!A1:C20, "
-        "`param` is the sort column, \"field|value\" for filter, or a date format for "
+        '{"action", "target", "param"}; `target` is a range like Sheet1!A1:C20, '
+        '`param` is the sort column, "field|value" for filter, or a date format for '
         "stamp. `caption` is the button text. The result is a .xlsm at `out`."
     )
     parameters: dict[str, Any] = {
@@ -606,7 +606,15 @@ class OfficeXlsm(BaseTool):
                     "properties": {
                         "action": {
                             "type": "string",
-                            "enum": ["format", "filter", "sort", "pdf", "refresh", "stamp", "clear"],
+                            "enum": [
+                                "format",
+                                "filter",
+                                "sort",
+                                "pdf",
+                                "refresh",
+                                "stamp",
+                                "clear",
+                            ],
                         },
                         "target": {"type": "string"},
                         "param": {"type": "string"},
@@ -623,7 +631,9 @@ class OfficeXlsm(BaseTool):
     workspace: Path = Path(".")
     extra_roots: list[Path] = []
 
-    SEED: ClassVar[Path] = Path(__file__).resolve().parents[1] / "assets" / "office" / "nanolika-seed.xlsm"
+    SEED: ClassVar[Path] = (
+        Path(__file__).resolve().parents[1] / "assets" / "office" / "nanolika-seed.xlsm"
+    )
 
     def _resolve(self, raw: str, must_exist: bool = True, *, write: bool = False) -> Path:
         return resolve_inside(self.workspace, self.extra_roots, raw, must_exist, write=write)
@@ -685,7 +695,10 @@ class OfficeXlsm(BaseTool):
                         )
                 for column in range(1, width + 1):
                     letter = openpyxl.utils.get_column_letter(column)
-                    longest = max(len(str(ws.cell(row=line, column=column).value or "")) for line in range(1, len(rows) + 1))
+                    longest = max(
+                        len(str(ws.cell(row=line, column=column).value or ""))
+                        for line in range(1, len(rows) + 1)
+                    )
                     ws.column_dimensions[letter].width = min(48, max(10, longest + 2))
                 ws.freeze_panes = "A2"
             if "_cfg" in wb.sheetnames:
@@ -696,7 +709,9 @@ class OfficeXlsm(BaseTool):
                 action = str(command.get("action") or "").strip().lower()
                 if not action:
                     continue
-                cfg.append([action, str(command.get("target") or ""), str(command.get("param") or "")])
+                cfg.append(
+                    [action, str(command.get("target") or ""), str(command.get("param") or "")]
+                )
             cfg["F1"] = caption or "Обновить"
             cfg.sheet_state = "hidden"
             dst.parent.mkdir(parents=True, exist_ok=True)

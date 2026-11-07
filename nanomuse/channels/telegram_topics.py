@@ -244,20 +244,16 @@ class TelegramTopics:
                 logger.warning("telegram: topic delete failed ({})", type(exc).__name__)
 
     async def _reconcile(self) -> None:
-        """One topic per account chat, and no topic for a chat the account no longer has.
+        """Delete topics only when the account explicitly marks the conversation deleted.
 
-        The topic list used to grow: every rename or replay could leave a second topic for the
-        same conversation, and a conversation deleted in the app kept its topic here. This pass
-        keeps the topic bound to the live thread (or the first one), deletes its duplicates, and
-        deletes the topics of chats that are gone from the catalogue — archived chats keep theirs
-        (the caller renames them)."""
+        An incomplete catalogue or duplicate mapping is not proof of deletion.
+        """
         sync = self.m.svc.sync
         catalog = getattr(sync, "catalog", None)
         if not catalog or catalog.supported is not True:
             return
         live = dict(catalog.rows)
         marks = sync.state.get("conversation_marks") or {}
-        thread_of = {cid: sync.thread_of(cid) for cid in live}
         rows = dict(self.file.load())
         groups: dict[str, list[tuple[str, dict[str, Any]]]] = {}
         for key, row in rows.items():
@@ -265,31 +261,13 @@ class TelegramTopics:
                 continue
             groups.setdefault(str(row.get("cid") or ""), []).append((key, row))
         for cid, group in groups.items():
-            if not cid:
-                # a topic that never became an account chat: it stays while its thread lives
-                for key, row in group:
-                    thread = str(row.get("thread") or "")
-                    if thread and thread in self.m.svc.threads:
-                        continue
-                    await self._delete_topic(row)
-                    rows.pop(key, None)
-                    self.file.save(rows)
-                continue
-            if cid in live:
-                bound = thread_of.get(cid)
-                keeper = next(
-                    ((k, r) for k, r in group if bound and r.get("thread") == bound),
-                    group[0],
-                )
-                for key, row in group:
-                    if key == keeper[0]:
-                        continue
-                    await self._delete_topic(row)
-                    rows.pop(key, None)
-                    self.file.save(rows)
+            if not cid or cid in live:
+                # Missing local state and duplicate mappings are not proof of deletion.
                 continue
             mark = marks.get(cid) or {}
             if mark.get("archived") and not mark.get("deleted"):
+                continue
+            if not mark.get("deleted"):
                 continue
             for key, row in group:
                 await self._delete_topic(row)
@@ -313,12 +291,13 @@ class TelegramTopics:
         for key, row in list(self.file.load().items()):
             if not isinstance(row, dict) or not self._valid(row) or not row.get("cid"):
                 continue
+            mark = (sync.state.get("conversation_marks") or {}).get(row["cid"]) or {}
+            if row["cid"] not in catalog.rows and not mark.get("archived") and not mark.get("deleted"):
+                continue
             if (
                 (
                     shows_in(
-                        self.origin_of(
-                            str(row.get("thread") or ""), str(row.get("name") or "")
-                        ),
+                        self.origin_of(str(row.get("thread") or ""), str(row.get("name") or "")),
                         "telegram",
                     )
                     and row["cid"] in catalog.rows
@@ -434,7 +413,9 @@ class TelegramTopics:
             )
             if thread is None:
                 continue
-            if not shows_in(conversation_origin(thread.id, thread.title, thread.folder), "telegram"):
+            if not shows_in(
+                conversation_origin(thread.id, thread.title, thread.folder), "telegram"
+            ):
                 continue
             for owner, pair in self.m.pairing.approved("telegram").items():
                 chat = str(pair.get("chat_id") or owner)
@@ -702,6 +683,9 @@ class TelegramTopics:
     async def inbound(self, msg: Any) -> bool:
         """Return True when a service event/general-chat message needs no model turn."""
         if not self.enabled(msg.channel) or msg.is_group:
+            return False
+        control = getattr(self.m.menu, "control_message", None)
+        if control is not None and control(msg):
             return False
         chat, topic = split_chat(msg.chat_id)
         if not topic:

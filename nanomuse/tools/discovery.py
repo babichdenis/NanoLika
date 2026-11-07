@@ -92,10 +92,47 @@ _STEM = 4
 
 #: endings worth cutting: Russian cases and plurals, English inflection
 _ENDING = (
-    "ыми", "ими", "ого", "его", "ому", "ему", "ами", "ями", "ов", "ев", "ам", "ям",
-    "ах", "ях", "ом", "ем", "ой", "ей", "ую", "юю", "ая", "яя", "ое", "ее", "ые",
-    "ий", "ый", "а", "я", "ы", "и", "у", "ю", "е", "о", "ь", "й",
-    "ing", "ed", "es", "s",
+    "ыми",
+    "ими",
+    "ого",
+    "его",
+    "ому",
+    "ему",
+    "ами",
+    "ями",
+    "ов",
+    "ев",
+    "ам",
+    "ям",
+    "ах",
+    "ях",
+    "ом",
+    "ем",
+    "ой",
+    "ей",
+    "ую",
+    "юю",
+    "ая",
+    "яя",
+    "ое",
+    "ее",
+    "ые",
+    "ий",
+    "ый",
+    "а",
+    "я",
+    "ы",
+    "и",
+    "у",
+    "ю",
+    "е",
+    "о",
+    "ь",
+    "й",
+    "ing",
+    "ed",
+    "es",
+    "s",
 )
 
 #: words that say nothing about a job
@@ -219,6 +256,5 @@ class ToolSearch(BaseTool):
                 + json.dumps(tool.parameters, ensure_ascii=False)
             )
         return ToolResult(
-            output="\n".join(out)
-            + "\n\nCall the tool by name with arguments that fit its schema."
+            output="\n".join(out) + "\n\nCall the tool by name with arguments that fit its schema."
         )

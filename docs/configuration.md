@@ -275,20 +275,21 @@ A skill is a folder with a `SKILL.md` (YAML front matter with `name` and `descri
 
 ### Email
 
+*Settings → Connectors → Mail* has the whole setup: the address, an app password from the provider, and *Connect*. An app password is not the password the person signs in with. Yandex: *Passwords and authorisation → App passwords* (`id.yandex.ru/security/app-passwords`). Google: *Security → App passwords* (`myaccount.google.com/apppasswords`), with two-step verification on. Mail.ru: *Password and security → Passwords for external applications*. Any other provider: the same page in its account settings, or its IMAP and SMTP servers entered by hand under *Servers manually*. The app tests the mailbox as soon as it is added; *Check* in the edit form saves the change and tests it again. Several mailboxes live side by side, each with its own app password in the vault; the list is `email.accounts` in `<data_dir>/app-settings.json`. `read_emails` reads every connected mailbox, or one (`account`), and marks the conversation as tainted; `send_email` is in `always_ask_tools` by default.
+
+The same without the app, in `config.toml`:
+
 ```toml
 [connectors.email]
 enabled       = true
-imap_host     = "imap.gmail.com"
-imap_port     = 993
-smtp_host     = "smtp.gmail.com"
-smtp_port     = 587
-smtp_starttls = true
-address       = "{{vault:EMAIL_ADDRESS}}"
-password      = "{{vault:EMAIL_PASSWORD}}"
 scrub_secrets = true   # remove one-time codes and reset links before the model reads a mail
+
+[[connectors.email.accounts]]
+address = "me@yandex.ru"   # the servers follow the domain unless given
+# the password defaults to the vault secret EMAIL_ME_YANDEX_RU_PASSWORD
 ```
 
-Store the values with `nanomuse vault set EMAIL_ADDRESS` and `nanomuse vault set EMAIL_PASSWORD`. `read_emails` marks the conversation as tainted; `send_email` is in `always_ask_tools` by default.
+`nanomuse mail add|edit|remove|list|test` does the same from the terminal, and `--json` is what the app reads. A mailbox named by id, address or label is what `read_emails` and `send_email` take as `account`.
 
 ### Calendar
 

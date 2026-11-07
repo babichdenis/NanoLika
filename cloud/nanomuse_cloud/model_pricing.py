@@ -51,9 +51,7 @@ def policy(cloud: Any, spec: Any) -> dict:
     return {
         "revision": int(row.get("revision") or 0),
         "rates_rub": rates,
-        "source": "operator"
-        if row or spec.sell_track or (spec.kind == "chat" and spec.sells_at_own_rate())
-        else "legacy_cost",
+        "source": "operator" if row or spec.sell_track or (spec.kind == "chat" and spec.sells_at_own_rate()) else "legacy_cost",
     }
 
 

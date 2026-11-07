@@ -72,6 +72,8 @@ app.add_typer(channels_app, name="channels")
 app.add_typer(chatgpt_app, name="chatgpt")
 
 console = Console()
+#: Notices that are not the command's answer go to stderr, so `--json` stays parseable.
+err_console = Console(stderr=True)
 
 
 def _version_flag(value: bool) -> None:
@@ -129,7 +131,7 @@ def _settings(config: Path | None, auto: bool = False) -> Settings:
 
     vault = CredentialVault(settings.vault_file, settings.vault_key_file)
     if not llm_ready(settings.llm, vault, settings.data_dir):
-        console.print(
+        err_console.print(
             "[yellow]No model yet.[/yellow] Sign in to NanoLika Cloud in the app, set "
             "[bold]llm.api_key[/bold] in config.toml (run `nanomuse config init`), "
             "or export DEEPSEEK_API_KEY / OPENAI_API_KEY."
@@ -1306,6 +1308,373 @@ def skills_disable(name: str, config: ConfigOpt = None) -> None:
     _set_skill(name, False, config)
 
 
+# ============================================================================ mail
+mail_app = typer.Typer(
+    help="Connect mailboxes: several IMAP/SMTP accounts at once, each with its own password.",
+    no_args_is_help=True,
+)
+
+
+def _mail_accounts(data: dict[str, Any]) -> list[dict[str, Any]]:
+    email = data.setdefault("email", {})
+    accounts = email.setdefault("accounts", [])
+    return accounts if isinstance(accounts, list) else []
+
+
+def _find_account(accounts: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    """A mailbox by its id, its address or its name: the three things the app knows."""
+    wanted = key.strip().lower()
+    if not wanted:
+        return None
+    for raw in accounts:
+        if str(raw.get("id", "")).lower() == wanted:
+            return raw
+        if str(raw.get("address", "")).strip().lower() == wanted:
+            return raw
+        if str(raw.get("label", "")).strip().lower() == wanted:
+            return raw
+    return None
+
+
+def _duplicate_of(
+    accounts: list[dict[str, Any]],
+    *,
+    address: str,
+    account_id: str,
+    skip: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """The mailbox that already carries this address or this id, if there is one."""
+    wanted = address.strip().lower()
+    for raw in accounts:
+        if raw is skip:
+            continue
+        if str(raw.get("id", "")) == account_id:
+            return raw
+        if wanted and str(raw.get("address", "")).strip().lower() == wanted:
+            return raw
+    return None
+
+
+def _refuse(json_out: bool, code: str, message: str, **extra: Any) -> typer.Exit:
+    """Say why in the app's language (JSON on stdout) and in the terminal's."""
+    if json_out:
+        print(
+            json.dumps({"ok": False, "code": code, "message": message, **extra}, ensure_ascii=False)
+        )
+    else:
+        console.print(f"[red]{message}[/red]")
+    return typer.Exit(1)
+
+
+def _account_row(raw: dict[str, Any]) -> dict[str, Any]:
+    from nanomuse.config import EmailAccountSettings
+
+    account = EmailAccountSettings.model_validate(raw)
+    return {
+        "id": account.id,
+        "label": account.label,
+        "address": account.address,
+        "imap_host": account.imap_host,
+        "imap_port": account.imap_port,
+        "smtp_host": account.smtp_host,
+        "smtp_port": account.smtp_port,
+        "smtp_starttls": account.smtp_starttls,
+        "enabled": account.enabled,
+    }
+
+
+@mail_app.command("list")
+def mail_list(
+    config: ConfigOpt = None,
+    json_out: bool = typer.Option(False, "--json", help="Print JSON for the app."),
+) -> None:
+    """The connected mailboxes. Passwords are never printed."""
+    from nanomuse.config import load_app_settings
+
+    s = _settings(config)
+    rows = [_account_row(raw) for raw in _mail_accounts(load_app_settings(s.data_dir))]
+    if json_out:
+        print(json.dumps(rows, ensure_ascii=False))
+        return
+    if not rows:
+        console.print("[dim]no mailboxes yet: nanomuse mail add you@example.com[/dim]")
+        return
+    table = Table("id", "address", "server", "state")
+    for row in rows:
+        table.add_row(
+            row["id"], row["address"], row["imap_host"], "on" if row["enabled"] else "off"
+        )
+    console.print(table)
+
+
+@mail_app.command("add")
+def mail_add(
+    address: str,
+    config: ConfigOpt = None,
+    label: str = typer.Option("", "--label", help="How it reads in the app."),
+    password: str | None = typer.Option(None, "--password", help="App password."),
+    password_stdin: bool = typer.Option(
+        False, "--password-stdin", help="Read the app password from stdin."
+    ),
+    imap_host: str = typer.Option(
+        "", "--imap-host", help="IMAP server for a provider we do not know."
+    ),
+    imap_port: int = typer.Option(0, "--imap-port", help="IMAP port; 993 by default."),
+    smtp_host: str = typer.Option(
+        "", "--smtp-host", help="SMTP server for a provider we do not know."
+    ),
+    smtp_port: int = typer.Option(0, "--smtp-port", help="SMTP port; 587 or 465 by domain."),
+    replace: bool = typer.Option(
+        False, "--replace", help="Overwrite the mailbox that already has this address."
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Print JSON for the app."),
+) -> None:
+    """Add one mailbox: the address and an app password are enough (servers come by domain)."""
+    from nanomuse.config import (
+        EmailAccountSettings,
+        load_app_settings,
+        mailbox_secret,
+        save_app_settings,
+    )
+    from nanomuse.vault import CredentialVault
+
+    s = _settings(config)
+    secret = password
+    if password_stdin and secret is None:
+        secret = typer.get_text_stream("stdin").readline().strip()
+    if not secret:
+        secret = Prompt.ask(f"App password for {address}", password=True, console=console)
+    payload: dict[str, Any] = {"address": address.strip(), "label": label.strip(), "enabled": True}
+    if imap_host:
+        payload["imap_host"] = imap_host
+    if imap_port:
+        payload["imap_port"] = imap_port
+    if smtp_host:
+        payload["smtp_host"] = smtp_host
+    if smtp_port:
+        payload["smtp_port"] = smtp_port
+    account = EmailAccountSettings.model_validate(payload)
+    vault = CredentialVault(s.vault_file, s.vault_key_file)
+    data = load_app_settings(s.data_dir)
+    accounts = _mail_accounts(data)
+    existing = _duplicate_of(accounts, address=account.address, account_id=account.id)
+    if existing is not None and not replace:
+        message = f"{account.address} is already connected"
+        if existing.get("label"):
+            message += f" as {existing['label']}"
+        raise _refuse(
+            json_out,
+            "duplicate",
+            message,
+            id=str(existing.get("id", "")),
+            address=account.address,
+        )
+    vault.set(mailbox_secret(account.id), secret)
+    drop = {account.id}
+    if existing is not None:
+        drop.add(str(existing.get("id", "")))
+    accounts[:] = [raw for raw in accounts if raw.get("id") not in drop]
+    accounts.append(account.model_dump())
+    data.setdefault("email", {})["enabled"] = True
+    save_app_settings(s.data_dir, data)
+    for stale in drop - {account.id}:
+        vault.delete(mailbox_secret(stale))
+    if json_out:
+        print(json.dumps(_account_row(account.model_dump()), ensure_ascii=False))
+    else:
+        console.print(
+            f"[green]{account.address}[/green] is connected as [cyan]{account.id}[/cyan] "
+            f"({account.imap_host} / {account.smtp_host})"
+        )
+
+
+@mail_app.command("remove")
+def mail_remove(
+    account_id: str,
+    config: ConfigOpt = None,
+) -> None:
+    """Disconnect a mailbox and forget its app password."""
+    from nanomuse.config import load_app_settings, mailbox_secret, save_app_settings
+    from nanomuse.vault import CredentialVault
+
+    s = _settings(config)
+    data = load_app_settings(s.data_dir)
+    accounts = _mail_accounts(data)
+    kept = [raw for raw in accounts if raw.get("id") != account_id]
+    if len(kept) == len(accounts):
+        console.print(f"[red]no mailbox named {account_id}[/red]")
+        raise typer.Exit(1)
+    accounts[:] = kept
+    save_app_settings(s.data_dir, data)
+    CredentialVault(s.vault_file, s.vault_key_file).delete(mailbox_secret(account_id))
+    console.print(f"[green]removed {account_id}[/green]")
+
+
+@mail_app.command("edit")
+def mail_edit(
+    account_id: str,
+    config: ConfigOpt = None,
+    address: str = typer.Option(
+        "", "--address", help="New address; the servers follow its domain unless given."
+    ),
+    label: str | None = typer.Option(
+        None, "--label", help="Name in the app; an empty value clears it."
+    ),
+    password: str | None = typer.Option(None, "--password", help="New app password."),
+    password_stdin: bool = typer.Option(
+        False, "--password-stdin", help="Read the new app password from stdin."
+    ),
+    imap_host: str = typer.Option(
+        "", "--imap-host", help="IMAP server for a provider we do not know."
+    ),
+    imap_port: int = typer.Option(0, "--imap-port", help="IMAP port; 993 by default."),
+    smtp_host: str = typer.Option(
+        "", "--smtp-host", help="SMTP server for a provider we do not know."
+    ),
+    smtp_port: int = typer.Option(0, "--smtp-port", help="SMTP port; 587 or 465 by domain."),
+    enable: bool | None = typer.Option(
+        None, "--enable/--disable", help="Switch the mailbox on or off."
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Print JSON for the app."),
+) -> None:
+    """Change a mailbox already connected: address, name, password, servers, or switch it off.
+
+    The id follows the address, so the password moves with it in the vault.
+    """
+    from nanomuse.config import (
+        EmailAccountSettings,
+        load_app_settings,
+        mailbox_secret,
+        save_app_settings,
+    )
+    from nanomuse.vault import CredentialVault
+
+    s = _settings(config)
+    data = load_app_settings(s.data_dir)
+    accounts = _mail_accounts(data)
+    raw = _find_account(accounts, account_id)
+    if raw is None:
+        raise _refuse(json_out, "not_found", f"no mailbox named {account_id}")
+    old = EmailAccountSettings.model_validate(raw)
+    payload = old.model_dump()
+    new_address = (address or old.address).strip()
+    moved = new_address.lower() != old.address.lower()
+    payload["address"] = new_address
+    if moved:
+        payload["id"] = ""
+        if not imap_host:
+            payload.pop("imap_host", None)
+        if not imap_port:
+            payload.pop("imap_port", None)
+        if not smtp_host:
+            payload.pop("smtp_host", None)
+        if not smtp_port:
+            payload.pop("smtp_port", None)
+        payload.pop("smtp_starttls", None)
+    if imap_host:
+        payload["imap_host"] = imap_host
+    if imap_port:
+        payload["imap_port"] = imap_port
+    if smtp_host:
+        payload["smtp_host"] = smtp_host
+    if smtp_port:
+        payload["smtp_port"] = smtp_port
+    if label is not None:
+        payload["label"] = label.strip()
+    if enable is not None:
+        payload["enabled"] = enable
+
+    secret = password
+    if password_stdin and secret is None:
+        secret = typer.get_text_stream("stdin").readline().strip()
+
+    account = EmailAccountSettings.model_validate(payload)
+    duplicate = _duplicate_of(accounts, address=account.address, account_id=account.id, skip=raw)
+    if duplicate is not None:
+        raise _refuse(
+            json_out,
+            "duplicate",
+            f"{account.address} is already connected",
+            id=str(duplicate.get("id", "")),
+            address=account.address,
+        )
+    vault = CredentialVault(s.vault_file, s.vault_key_file)
+    if account.id != old.id:
+        if secret is None:
+            secret = vault.get(mailbox_secret(old.id))
+        vault.delete(mailbox_secret(old.id))
+    if secret is not None:
+        vault.set(mailbox_secret(account.id), secret)
+    accounts[accounts.index(raw)] = account.model_dump()
+    save_app_settings(s.data_dir, data)
+    if json_out:
+        print(json.dumps(_account_row(account.model_dump()), ensure_ascii=False))
+    else:
+        console.print(
+            f"[green]{account.address}[/green] is saved as [cyan]{account.id}[/cyan] "
+            f"({account.imap_host} / {account.smtp_host})"
+        )
+
+
+@mail_app.command("test")
+def mail_test(
+    account_id: Annotated[
+        str, typer.Argument(help="A mailbox id or address; the first one when omitted.")
+    ] = "",
+    config: ConfigOpt = None,
+    json_out: bool = typer.Option(False, "--json", help="Print JSON for the app."),
+) -> None:
+    """Log in to a mailbox over IMAP and SMTP."""
+    import imaplib
+    import smtplib
+
+    from nanomuse.vault import CredentialVault
+
+    s = _settings(config)
+    account = s.connectors.email.account(account_id or None)
+    if account is None:
+        message = "no mailbox is connected"
+        if json_out:
+            print(json.dumps({"ok": False, "error": message}))
+        else:
+            console.print(f"[red]{message}[/red]")
+        raise typer.Exit(1)
+    vault = CredentialVault(s.vault_file, s.vault_key_file)
+    address = vault.resolve(account.address)
+    password = vault.resolve(account.password)
+    out: dict[str, Any] = {"ok": True, "id": account.id, "address": address}
+    try:
+        with imaplib.IMAP4_SSL(account.imap_host, account.imap_port, timeout=15) as imap:
+            imap.login(address, password)
+            status, data = imap.select("INBOX", readonly=True)
+            out["inbox"] = int(data[0]) if status == "OK" and data and data[0] else None
+    except (imaplib.IMAP4.error, OSError) as exc:
+        out = {"ok": False, "id": account.id, "address": address, "error": f"IMAP: {exc}"}
+    if out.get("ok"):
+        try:
+            if account.smtp_starttls:
+                with smtplib.SMTP(account.smtp_host, account.smtp_port, timeout=15) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.login(address, password)
+            else:
+                with smtplib.SMTP_SSL(account.smtp_host, account.smtp_port, timeout=15) as smtp:
+                    smtp.login(address, password)
+        except (smtplib.SMTPException, OSError) as exc:
+            out = {"ok": False, "id": account.id, "address": address, "error": f"SMTP: {exc}"}
+    if json_out:
+        print(json.dumps(out, ensure_ascii=False))
+    elif out.get("ok"):
+        console.print(f"[green]{address} works[/green] (INBOX: {out.get('inbox')})")
+    else:
+        console.print(f"[red]{out.get('error')}[/red]")
+    if not out.get("ok"):
+        raise typer.Exit(1)
+
+
+app.add_typer(mail_app, name="mail")
+
+
 # ============================================================================ vault
 @vault_app.command("set")
 def vault_set(
@@ -1575,7 +1944,13 @@ def mcp(config: ConfigOpt = None) -> None:
     Another host, such as NanoLika on DeepSeek Harness (docs/harness.md), connects here. The connectors config.toml turns on (mailbox, calendar, contacts) are served too. Nothing is printed on stdout but the protocol; the hands, gui and connectors sections of the config are read when it exists."""
     import sys
 
-    from nanomuse.bridge.mcp_server import bot_project_tools, cloud_tools, connector_tools, hands_tools, serve
+    from nanomuse.bridge.mcp_server import (
+        bot_project_tools,
+        cloud_tools,
+        connector_tools,
+        hands_tools,
+        serve,
+    )
     from nanomuse.config import Settings
 
     try:

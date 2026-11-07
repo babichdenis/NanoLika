@@ -96,7 +96,7 @@ jobs:
         shell: bash
         run: |
           uv venv --python ${{ matrix.python-version }}
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev,office]"
 
       - name: Install bubblewrap (the sandbox tests run for real on Linux)
         if: env.RUN == 'true' && (runner.os == 'Linux')

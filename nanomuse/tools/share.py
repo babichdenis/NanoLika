@@ -8,8 +8,9 @@ link in the conversation.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from nanomuse.mime import file_mime
 from nanomuse.schema import RiskLevel, ToolResult
@@ -85,7 +86,7 @@ class ShareFile(BaseTool):
                 "the storage answered no link; the chat can still send the file itself"
             )
         return ToolResult(
-            output=f"link {link}\n({target.name}, {size} bytes) — put it in the reply as "
+            output=f"link {link}\n({target.name}, {size} bytes), put it in the reply as "
             f"[{target.name}]({link})"
         )
 

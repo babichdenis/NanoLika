@@ -265,4 +265,3 @@ def install(app: Any, cloud: Cloud, caller_dep: Any) -> None:
             },
             headers={"Cache-Control": "private, no-store"},
         )
-

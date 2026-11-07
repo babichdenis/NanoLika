@@ -569,9 +569,7 @@ class TelegramChannel(Channel):
                 },
             )
         with suppress(Exception):
-            await self._call(
-                "unpinChatMessage", {"chat_id": chat_id, "message_id": int(card[0])}
-            )
+            await self._call("unpinChatMessage", {"chat_id": chat_id, "message_id": int(card[0])})
 
     async def send_voice(self, chat_id: str, path: str) -> str:
         """A voice bubble: Telegram plays OGG/Opus in the chat, without opening a player."""

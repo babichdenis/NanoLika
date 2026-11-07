@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -44,12 +45,13 @@ def signed(**updates):
     return urlencode(data)
 
 
-def cloud_fixture(link=True):
+def cloud_fixture(link=True, bot_open=False):
     c = Cloud(
         Settings(
             database=":memory:",
             secret="fixture-secret",
             telegram_bot_token=TOKEN,
+            bot_signin_token=TOKEN if bot_open else "",
             public_base="https://cloud.example.test",
         ),
         Database(":memory:"),
@@ -101,11 +103,12 @@ def test_bound_account_session():
     assert 29 * 86400 < web["expires_at"] - time.time() <= 30 * 86400
 
 
-def test_unlinked_does_not_register():
+def test_unlinked_with_the_bot_door_shut_makes_no_account():
+    """The mini app may make the chat's account, but only while the bot door is open."""
     c, caller, _ = cloud_fixture(False)
     with pytest.raises(CloudError) as error:
         _telegram_session(c, 123456)
-    assert error.value.code == "telegram_not_linked"
+    assert error.value.code == "bot_off"
     assert len(c.db.keys_for(caller.account_id, live_only=True)) == 1
     assert not c.chat_link("telegram", "123456")["linked"]
 
@@ -138,7 +141,7 @@ def test_disabled_refused():
             "https://cloud.example.test",
             "application/json",
             "other",
-            409,
+            503,  # the bot door is shut in this fixture: no account is made
         ),
     ],
 )
@@ -187,9 +190,11 @@ def test_existing_telegram_owned_account():
 
 
 def test_max_with_same_numeric_id_does_not_authorize_telegram():
+    """MAX chat 123456 is not Telegram 123456: the mini app gets its own account, not that one."""
     c, owner, _ = cloud_fixture(False)
     code, _ = c.channel_code(owner)
     c.link_channel("max", "123456", code, "fixture-max")
-    with pytest.raises(CloudError) as error:
-        _telegram_session(c, 123456)
-    assert error.value.code == "telegram_not_linked"
+    c.s = dataclasses.replace(c.s, bot_signin_token=TOKEN)  # the bot door is open
+    result = _telegram_session(c, 123456)
+    telegram = c.authenticate(result["api_key"])
+    assert telegram.account_id != owner.account_id

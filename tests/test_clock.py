@@ -6,10 +6,9 @@ import asyncio
 
 import pytest
 
-from nanomuse import timeutil
-
 # the service package imports the hub and back; the app imports them in this order
 import nanomuse.server.service  # noqa: F401
+from nanomuse import timeutil
 from nanomuse.hub.service import HubService
 
 
@@ -45,6 +44,7 @@ def test_a_relay_box_in_utc_adopts_the_account_s_clock(monkeypatch) -> None:
 
 
 def test_a_desktop_teaches_the_account_its_zone_once(monkeypatch) -> None:
+    monkeypatch.setenv("NANOMUSE_DESKTOP", "1")
     monkeypatch.setattr(timeutil, "system_zone_name", lambda: "Europe/Moscow")
     h = hub()
     asyncio.run(h._sync_clock({"account": {"tz": "Asia/Vladivostok"}}))
@@ -55,6 +55,7 @@ def test_a_desktop_teaches_the_account_its_zone_once(monkeypatch) -> None:
 
 
 def test_an_empty_account_zone_leaves_the_desktop_alone(monkeypatch) -> None:
+    monkeypatch.setenv("NANOMUSE_DESKTOP", "1")
     monkeypatch.setattr(timeutil, "system_zone_name", lambda: "Europe/Moscow")
     h = hub()
     asyncio.run(h._sync_clock({"account": {}}))

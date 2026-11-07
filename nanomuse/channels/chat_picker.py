@@ -423,6 +423,7 @@ class ChatPicker:
                     for row in listing.get("conversations", [])
                     if bool(row.get("archived")) == archived and visible(row)
                 ]
+
             def folder_of(row: dict[str, Any]) -> str:
                 """The folder the account knows the chat by; an older conversation without
                 one falls back to the entrance it was born in."""
@@ -497,7 +498,9 @@ class ChatPicker:
             page_action = (
                 "chat:archive:"
                 if archived
-                else f"chat:fp:{folder_index}:" if selected_folder else "chat:page:"
+                else f"chat:fp:{folder_index}:"
+                if selected_folder
+                else "chat:page:"
             )
             rows.append(
                 [
@@ -580,8 +583,8 @@ class ChatPicker:
             await self.show(msg, int(page), False, int(index))
             return
         if action == "chats" or action.startswith("chat:page:"):
-            page = int(action.rsplit(":", 1)[-1]) if action.startswith("chat:page:") else 0
-            await self.show(msg, page)
+            number = int(action.rsplit(":", 1)[-1]) if action.startswith("chat:page:") else 0
+            await self.show(msg, number)
             return
         try:
             if not await self.available(msg):

@@ -46,6 +46,6 @@ def test_the_prompt_says_the_person_s_time(settings) -> None:
     timeutil.set_zone("Asia/Vladivostok")
     agent, *_ = make_agent(settings, [])
     text = agent.build_system_prompt("hi")
-    line = next(l for l in text.splitlines() if l.startswith("- Current date/time:"))
-    assert timeutil.now().strftime("%Y-%m-%d %H:00") in line
-    assert "UTC+1000" in line
+    line = next(row for row in text.splitlines() if row.startswith("- Current date/time:"))
+    assert timeutil.now().strftime("%Y-%m-%d, %H:00") in line
+    assert "Asia/Vladivostok" in line

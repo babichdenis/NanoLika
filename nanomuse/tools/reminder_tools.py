@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from nanomuse import timeutil
 from nanomuse.reminders import ReminderStore
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment
-
 
 DURATION = re.compile(r"\s*(\d+(?:\.\d+)?)\s*([dhms])", re.IGNORECASE)
 _UNIT = {"s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -115,7 +114,9 @@ class Reminders(BaseTool):
                 if not text:
                     return ToolResult.fail("`text` is required")
                 if duration and at:
-                    return ToolResult.fail("give `in` (a duration) or `at` (a clock time), not both")
+                    return ToolResult.fail(
+                        "give `in` (a duration) or `at` (a clock time), not both"
+                    )
                 if duration:
                     delta = parse_duration(duration)
                     if delta is None:

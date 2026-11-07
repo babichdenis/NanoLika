@@ -47,5 +47,7 @@ def test_audio_rows_name_their_own_kind():
     music = _row(kind="audio", audio={"kind": "music"}, commerce={"effective_rub": {"track": 12}})
     assert _audio_kind(music) == "music"
     assert _money(music) == "₽12.00 за трек"
-    speech = _row(kind="audio", audio={"kind": "speech"}, commerce={"effective_rub": {"speech": 1.5}})
+    speech = _row(
+        kind="audio", audio={"kind": "speech"}, commerce={"effective_rub": {"speech": 1.5}}
+    )
     assert _money(speech) == "₽1.50 за озвучку"

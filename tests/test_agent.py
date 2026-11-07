@@ -93,7 +93,9 @@ def test_system_prompt_hides_private_workspace_path_and_sentinel_mode(settings: 
     assert "relative to the active conversation workspace" in prompt
 
 
-def test_system_prompt_is_cacheable_between_minutes(settings: Settings, monkeypatch: pytest.MonkeyPatch):
+def test_system_prompt_is_cacheable_between_minutes(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+):
     """A provider caches a prefix: two turns in the same hour must send the same prompt,
     and a new hour may only change the volatile tail, not the middle of the prompt."""
     agent, *_ = make_agent(settings, [])
@@ -105,7 +107,9 @@ def test_system_prompt_is_cacheable_between_minutes(settings: Settings, monkeypa
         def now(cls, tz=None):  # type: ignore[override]
             return cls.current.astimezone(tz) if tz is not None else cls.current
 
+    monkeypatch.setenv("NANOMUSE_DESKTOP", "1")  # the clock is the person's, not a datacentre's
     monkeypatch.setattr("nanomuse.agent.core.datetime", Clock)
+    monkeypatch.setattr("nanomuse.timeutil.now", lambda: Clock.current)
     first = agent.build_system_prompt("hi")
     Clock.current = datetime(2026, 10, 31, 12, 6, tzinfo=UTC)
     second = agent.build_system_prompt("hi")
@@ -116,7 +120,7 @@ def test_system_prompt_is_cacheable_between_minutes(settings: Settings, monkeypa
     assert len(common) >= int(0.8 * len(first))
     assert "Current date/time:" in third
     assert third.index("Current date/time:") > int(0.7 * len(third))
-    assert re.search(r"Current date/time: \d{4}-\d\d-\d\d \d\d:00", third)
+    assert re.search(r"Current date/time: \d{4}-\d\d-\d\d, \d\d:\d\d", third)
 
 
 def test_capabilities_section_appears_once(settings: Settings):

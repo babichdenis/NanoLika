@@ -2042,7 +2042,12 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
                 else "application/json"
             )
         headers: dict[str, str] = {}
-        if media.startswith("text/html") or media in ("image/svg+xml", "application/xhtml+xml", "multipart/related", "application/pdf"):
+        if media.startswith("text/html") or media in (
+            "image/svg+xml",
+            "application/xhtml+xml",
+            "multipart/related",
+            "application/pdf",
+        ):
             # Files the agent wrote never run with the app's origin: no token, no API.
             headers["Content-Security-Policy"] = "sandbox allow-scripts allow-popups"
         # ``filename=`` lets Starlette write the Content-Disposition header itself, which

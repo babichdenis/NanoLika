@@ -483,6 +483,9 @@ class FakeManager:
         self.lang = "ru"
         self.sent: list[str] = []
         self._unlink_pending: dict[tuple[str, str], float] = {}
+        # the caches `_unlink_chat` clears when the relay confirms the release
+        self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float]] = {}
+        self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         settings = {
             "bot_token": "123:abc",
             "cloud_url": "http://relay.test",

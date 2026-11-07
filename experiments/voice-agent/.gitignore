@@ -1,0 +1,10 @@
+.env
+key.txt
+state.json
+books/
+music/
+cache/
+voices/
+voices-demo/
+.venv/
+keys/

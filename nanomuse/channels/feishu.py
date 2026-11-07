@@ -549,7 +549,9 @@ class FeishuChannel(Channel):
             raise RuntimeError(f"{response.msg} (code {response.code})")
         return "file", json.dumps({"file_key": response.data.file_key})
 
-    async def send(self, chat_id: str, text: str, *, files: list[str] | None = None) -> str:
+    async def send(
+        self, chat_id: str, text: str, *, files: list[str] | None = None, reply_to: str = ""
+    ) -> str:
         message_id = ""
         if text.strip():
             message_id = await asyncio.to_thread(
@@ -563,7 +565,9 @@ class FeishuChannel(Channel):
             await asyncio.to_thread(self._create, chat_id, msg_type, content)
         return message_id
 
-    async def stream(self, chat_id: str, stream_id: str, text: str, *, done: bool) -> None:
+    async def stream(
+        self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""
+    ) -> None:
         card = self._cards.get(stream_id)
         if card is None:
             self._cards[stream_id] = await asyncio.to_thread(
@@ -591,7 +595,7 @@ class FeishuChannel(Channel):
         ]
         await asyncio.to_thread(self._create, chat_id, "interactive", self._card(text, buttons))
 
-    async def typing(self, chat_id: str, on: bool) -> None:
+    async def typing(self, chat_id: str, on: bool, action: str = "") -> None:
         """A 👍 on the message being worked on; taken off when the reply is out."""
         if on:
             message_id = self._last_inbound.get(chat_id)

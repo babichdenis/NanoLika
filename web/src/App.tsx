@@ -15,6 +15,7 @@ import { signInDoorNeeded } from "./gate";
 import { useStore, type Tab } from "./store";
 import { useT } from "./i18n";
 import { cx } from "./util";
+import "./web-shell.css";
 
 // The chat and the feed are what opens first; every other screen arrives as its own chunk
 // the first time it is shown, so the first paint does not carry the provider form or the
@@ -112,7 +113,7 @@ export default function App() {
   // One column on the phone; on a wide screen (a full browser) and in the desktop app at any
   // width, a sidebar takes over from the tab bar and the chats sheet — same screens either side.
   return (
-    <div className={cx("mx-auto flex h-[100dvh] max-w-[760px] flex-col bg-bg sm:border-x sm:border-border", !state.lite && "wide:max-w-none wide:flex-row wide:border-x-0")}>
+    <div className={cx(!desktopBridge() && !state.lite && "web-shell", "mx-auto flex h-[100dvh] max-w-[760px] flex-col bg-bg sm:border-x sm:border-border", !state.lite && "wide:max-w-none wide:flex-row wide:border-x-0")}>
       {!state.lite && (
         <div className="hidden wide:block wide:h-full">
           <Sidebar />

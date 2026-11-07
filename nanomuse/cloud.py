@@ -41,6 +41,7 @@ FUNDS_MESSAGE = (
     "not retry the same request."
 )
 
+
 def charged_of(
     accounting: dict[str, Any] | None = None, headers: Mapping[str, str] | None = None
 ) -> dict[str, Any]:
@@ -84,7 +85,7 @@ def charged_line(
     return ""
 
 
-def funds_line(exc: "CloudError") -> str:
+def funds_line(exc: CloudError) -> str:
     """A money refusal as the person should hear it.
 
     The relay's own message for a priced request already names the price and the balance
@@ -356,7 +357,9 @@ class CloudClient:
         self._shelf_cache = (now, said if isinstance(said, dict) else {})
         return self._shelf_cache[1]
 
-    async def image(self, model: str, prompt: str, *, size: str = "") -> tuple[bytes, dict[str, Any]]:
+    async def image(
+        self, model: str, prompt: str, *, size: str = ""
+    ) -> tuple[bytes, dict[str, Any]]:
         """Draw one picture: PNG bytes and the relay's own accounting."""
         body: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1}
         if size:
@@ -436,12 +439,16 @@ class CloudClient:
         deadline = time.monotonic() + 15 * 60
         while time.monotonic() < deadline:
             await asyncio.sleep(4)
-            state = await self._request("GET", f"/api/v1/tasks/{quote(task, safe='')}", timeout=60.0)
+            state = await self._request(
+                "GET", f"/api/v1/tasks/{quote(task, safe='')}", timeout=60.0
+            )
             output = state.get("output") if isinstance(state, dict) else None
             output = output if isinstance(output, dict) else {}
             status = str(output.get("task_status") or "")
             if status == "SUCCEEDED":
-                meta = state.get("nanomuse") if isinstance(state.get("nanomuse"), dict) else {}
+                meta = state.get("nanomuse")
+                if not isinstance(meta, dict):
+                    meta = {}
                 url = str(meta.get("media_url") or output.get("video_url") or "")
                 if not url:
                     raise CloudError(502, "upstream", "The relay returned no clip")
@@ -457,7 +464,11 @@ class CloudClient:
                     "seconds": int(seconds),
                 }
             if status in ("FAILED", "CANCELED"):
-                raise CloudError(502, "upstream", str(output.get("message") or "the provider could not make this clip"))
+                raise CloudError(
+                    502,
+                    "upstream",
+                    str(output.get("message") or "the provider could not make this clip"),
+                )
         raise CloudError(504, "timeout", "The clip took longer than fifteen minutes")
 
     async def upload(self, name: str, data: bytes, mime: str) -> str:
@@ -521,7 +532,12 @@ class CloudClient:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         try:
             response = await self._client.post(
-                self.base_url + path, json=json, data=data, files=files, headers=headers, timeout=timeout
+                self.base_url + path,
+                json=json,
+                data=data,
+                files=files,
+                headers=headers,
+                timeout=timeout,
             )
         except httpx.TimeoutException:
             raise CloudError(0, "timeout", f"{self.base_url} did not answer in time") from None
@@ -544,7 +560,13 @@ class CloudClient:
         return response
 
     async def speech(
-        self, model: str, text: str, *, voice: str = "", fmt: str = "mp3", speed: float | None = None
+        self,
+        model: str,
+        text: str,
+        *,
+        voice: str = "",
+        fmt: str = "mp3",
+        speed: float | None = None,
     ) -> tuple[bytes, str, dict[str, str]]:
         """Текст в звук: байты, тип содержимого и заголовки с фактическим списанием."""
         payload: dict[str, Any] = {"model": model, "input": text, "response_format": fmt}

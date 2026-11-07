@@ -74,10 +74,7 @@ async def test_public_menu_exposes_current_retail_rates_without_account_or_provi
             # `plan_locked` is not an account's data: the public menu marks what a
             # signed-out person cannot open yet, and the site draws its lock badges from
             # it. Everything that names a price, a provider or a key stays out.
-            assert not (
-                {"price_in", "price_out", "price_image", "upstream", "provider", "api_key", "enabled", "default"}
-                & row.keys()
-            )
+            assert not ({"price_in", "price_out", "price_image", "upstream", "provider", "api_key", "enabled", "default"} & row.keys())
         assert "shelf" not in response.json()
 
 

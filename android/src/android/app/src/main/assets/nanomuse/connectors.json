@@ -12,6 +12,40 @@
   ],
   "connectors": [
     {
+      "id": "gmail",
+      "name": "Gmail",
+      "category": "work",
+      "url": "https://gmailmcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#EA4335",
+      "about": {
+        "en": "Search and read threads, label mail and create drafts to review.",
+        "zh": "搜索和阅读邮件、加标签，并创建待审阅的草稿。"
+      }
+    },
+    {
+      "id": "gcal",
+      "name": "Google Calendar",
+      "category": "work",
+      "url": "https://calendarmcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#4285F4",
+      "about": {
+        "en": "Events, free time and invitations in your calendar.",
+        "zh": "日历里的事件、空闲时间与邀请。"
+      }
+    },
+    {
       "id": "notion",
       "name": "Notion",
       "category": "work",
@@ -231,6 +265,23 @@
       "about": {
         "en": "Bookings, availability and event types.",
         "zh": "预约、空闲时段与活动类型。"
+      }
+    },
+    {
+      "id": "gchat",
+      "name": "Google Chat",
+      "category": "talk",
+      "url": "https://chatmcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#00AC47",
+      "about": {
+        "en": "Spaces, messages and threads in Google Chat.",
+        "zh": "Google Chat 里的空间、消息与话题。"
       }
     },
     {
@@ -671,6 +722,21 @@
       }
     },
     {
+      "id": "dadata",
+      "name": "DaData",
+      "category": "data",
+      "url": "https://mcp.dadata.ru/mcp",
+      "auth": {
+        "kind": "none"
+      },
+      "docs": "https://dadata.ru/",
+      "color": "#00A651",
+      "about": {
+        "en": "Clean addresses and look up companies by their tax number.",
+        "zh": "标准化地址，按税号查询公司信息。"
+      }
+    },
+    {
       "id": "supabase",
       "name": "Supabase",
       "category": "data",
@@ -933,6 +999,57 @@
       "about": {
         "en": "Products, payments and subscriptions.",
         "zh": "商品、付款与订阅。"
+      }
+    },
+    {
+      "id": "gdrive",
+      "name": "Google Drive",
+      "category": "files",
+      "url": "https://drivemcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#4285F4",
+      "about": {
+        "en": "Find, read and upload files in your Drive.",
+        "zh": "在云端硬盘里查找、阅读和上传文件。"
+      }
+    },
+    {
+      "id": "gsheets",
+      "name": "Google Sheets",
+      "category": "files",
+      "url": "https://sheetsmcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#0F9D58",
+      "about": {
+        "en": "Read and change sheets: values, formulas and structure.",
+        "zh": "读取和修改表格：数值、公式与结构。"
+      }
+    },
+    {
+      "id": "gdocs",
+      "name": "Google Docs",
+      "category": "files",
+      "url": "https://docsmcp.googleapis.com/mcp/v1",
+      "auth": {
+        "kind": "oauth",
+        "clientIdRequired": true,
+        "developer": "https://console.cloud.google.com/apis/credentials"
+      },
+      "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "color": "#4285F4",
+      "about": {
+        "en": "Read and edit your documents.",
+        "zh": "阅读和编辑你的文档。"
       }
     },
     {

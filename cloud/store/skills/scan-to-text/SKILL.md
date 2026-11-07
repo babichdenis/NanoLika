@@ -15,8 +15,11 @@ in the installer — it comes from the store, once per machine.
 ## 1. Is it there?
 
 ```python
-import sys; sys.path.insert(0, "<data_dir>/addons/ocr-vision")
+import sys
+
+sys.path.insert(0, "<data_dir>/addons/ocr-vision")
 import ocr_vision
+
 ok, why = ocr_vision.available()
 ```
 
@@ -26,10 +29,13 @@ Vision, no models, no pip). Then run the code again in the same session — no r
 ## 2. A picture
 
 ```python
-import sys; sys.path.insert(0, "<data_dir>/addons/ocr-vision")
+import sys
+
+sys.path.insert(0, "<data_dir>/addons/ocr-vision")
 import ocr_vision
-print(ocr_vision.text("/path/to/photo.jpg"))          # lines, top to bottom
-for word in ocr_vision.words("/path/to/photo.jpg"):    # with boxes, in pixels
+
+print(ocr_vision.text("/path/to/photo.jpg"))  # lines, top to bottom
+for word in ocr_vision.words("/path/to/photo.jpg"):  # with boxes, in pixels
     print(word.text, word.confidence, word.box)
 ```
 

@@ -11,6 +11,7 @@ the page each rule was verified against. The relay's ids are the aggregator's
 `gpt-sol`), so the same facts are written here as id patterns. A model whose levels are
 not documented gets no badge: a choice the provider would refuse is worse than no choice.
 """
+
 from __future__ import annotations
 
 # the harness's own names (pi-ai's thinking levels), strongest last

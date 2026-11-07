@@ -166,9 +166,7 @@ def jiugx_offers(data: dict) -> list[dict]:
                 continue
             offers.append(dict(model=name, unit="1M токенов (вход)", price=round(price_in, 6), currency="USD"))
             if completion > 0:
-                offers.append(
-                    dict(model=name, unit="1M токенов (выход)", price=round(price_in * completion, 6), currency="USD")
-                )
+                offers.append(dict(model=name, unit="1M токенов (выход)", price=round(price_in * completion, 6), currency="USD"))
             continue
         price = fixed * ratio
         if price <= 0:
@@ -498,9 +496,7 @@ def fetch_bothub() -> list[dict]:
         if not name:
             continue
         features = model.get("features") or []
-        generation_unit = (
-            "изображение" if "TEXT_TO_IMAGE" in features else "видео" if "TEXT_TO_VIDEO" in features else ""
-        )
+        generation_unit = "изображение" if "TEXT_TO_IMAGE" in features else "видео" if "TEXT_TO_VIDEO" in features else ""
         generation = [
             float(price["rub"])
             for price in model.get("generationPrices") or []
@@ -510,9 +506,7 @@ def fetch_bothub() -> list[dict]:
             # `generationPrices` — это реальная цена за готовую картинку/клип
             # (1K/2K/4K, размеры). `per_image` у Bothub бывает базовой ставкой
             # вроде 0,0002 ₽ и к реальному счёту отношения не имеет.
-            offers.append(
-                dict(model=str(name), unit=generation_unit, price=round(min(generation), 4), currency="RUB")
-            )
+            offers.append(dict(model=str(name), unit=generation_unit, price=round(min(generation), 4), currency="RUB"))
         for price in model.get("prices") or []:
             unit = BOTHUB_UNITS.get((price.get("unit"), price.get("key")))
             if unit is None:

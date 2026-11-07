@@ -126,10 +126,11 @@ def _max_session(cloud: Cloud, user_id: int) -> dict:
         if account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
         key, caller = cloud._issue_key(str(account["id"]), "MAX WebApp", "max_webapp", expires_at=int(time.time()) + 30 * 86400)
+        cloud._remember_channel_key("max", ident, caller.key_hash)
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
-def _telegram_session(cloud: Cloud, user_id: int) -> dict:
+def _telegram_session(cloud: Cloud, user_id: int, *, register: bool = True) -> dict:
     """The Telegram id and its mini app are one account, until an address joins them.
 
     The chat makes the account on its first message (`/v1/bot/signin`), and the mini app
@@ -146,15 +147,25 @@ def _telegram_session(cloud: Cloud, user_id: int) -> dict:
         account = (
             cloud.db.account(str(alias["account_id"])) if alias is not None else cloud.db.account_by_hashes(ident.hashes(cloud.s.hmac_key))
         )
-    if account is None:
-        # No account yet: the first visit from the mini app makes the same account the
-        # first message to the bot makes, and the key is issued to it.
-        key, caller, _created = cloud.sign_in_bot(str(user_id), "Telegram WebApp", channel="telegram")
+        if account is None:
+            if not register:
+                # The login widget shows identities, it never makes one: an account that has
+                # never linked Telegram is refused instead of gaining a second allowance here.
+                raise CloudError(
+                    409,
+                    "telegram_not_linked",
+                    "This Telegram account is not linked yet: open the bot and send it a message first.",
+                )
+            # No account yet: the first visit from the mini app makes the same account the
+            # first message to the bot makes, and the key is issued to it.
+            bootstrap, caller, _created = cloud.sign_in_bot(str(user_id), "Telegram WebApp", channel="telegram")
+            cloud.db.revoke_key(hashlib.sha256(bootstrap.encode()).hexdigest())
+            account = cloud.db.account(caller.account_id)
+        if account["disabled"]:
+            raise CloudError(403, "account_disabled", "This account is disabled")
+        key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
+        cloud._remember_channel_key("telegram", ident, caller.key_hash)
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
-    if account["disabled"]:
-        raise CloudError(403, "account_disabled", "This account is disabled")
-    key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
-    return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
 LOGIN_TTL_S = 300
@@ -205,21 +216,20 @@ class TelegramLogins:
         code = (code or "").strip().upper()
         if not _LOGIN_CODE.fullmatch(code):
             raise CloudError(400, "bad_request", "That is not a sign-in code")
-        row = None
-        with self.cloud.db.tx() as connection:
-            row = connection.execute(
-                "SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)
-            ).fetchone()
-        if row is None or int(row["expires_at"]) <= int(time.time()):
-            raise CloudError(400, "login_expired", "This sign-in code has expired; make a new one on the computer")
-        key, caller, _created = self.cloud.sign_in_bot(str(chat_id), "Telegram Desktop", channel="telegram")
-        # The bot does not keep a key: the computer gets its own in `poll`.
-        self.cloud.db.revoke_key(hashlib.sha256(key.encode()).hexdigest())
-        with self.cloud.db.tx() as connection:
-            connection.execute(
-                "UPDATE telegram_logins SET account_id=? WHERE code_hash=?",
-                (caller.account_id, self._hash(code)),
-            )
+        with self.cloud.db._lock:
+            with self.cloud.db.tx() as connection:
+                row = connection.execute("SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)).fetchone()
+            if row is None or int(row["expires_at"]) <= int(time.time()):
+                raise CloudError(400, "login_expired", "This sign-in code has expired; make a new one on the computer")
+            if row["account_id"]:
+                raise CloudError(409, "login_used", "This sign-in has already been approved")
+            key, caller, _created = self.cloud.sign_in_bot(str(chat_id), "Telegram Desktop", channel="telegram")
+            self.cloud.db.revoke_key(hashlib.sha256(key.encode()).hexdigest())
+            with self.cloud.db.tx() as connection:
+                connection.execute(
+                    "UPDATE telegram_logins SET account_id=? WHERE code_hash=?",
+                    (caller.account_id, self._hash(code)),
+                )
         return {"ok": True, "account": {"id": caller.account_id, "hint": caller.hint}}
 
     def poll(self, code: str, verifier: str) -> dict[str, Any] | None:
@@ -229,22 +239,17 @@ class TelegramLogins:
             raise CloudError(400, "bad_request", "A sign-in code and its proof are required")
         expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         with self.cloud.db.tx() as connection:
-            row = connection.execute(
-                "SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)
-            ).fetchone()
-        if row is None or int(row["expires_at"]) <= int(time.time()) or not hmac.compare_digest(str(row["challenge"]), expected):
-            raise CloudError(400, "login_expired", "This sign-in has expired; start again on the computer")
-        account_id = str(row["account_id"] or "")
-        if not account_id:
-            return None
-        with self.cloud.db.tx() as connection:
+            row = connection.execute("SELECT * FROM telegram_logins WHERE code_hash=?", (self._hash(code),)).fetchone()
+            if row is None or int(row["expires_at"]) <= int(time.time()) or not hmac.compare_digest(str(row["challenge"]), expected):
+                raise CloudError(400, "login_expired", "This sign-in has expired; start again on the computer")
+            account_id = str(row["account_id"] or "")
+            if not account_id:
+                return None
             connection.execute("DELETE FROM telegram_logins WHERE code_hash=?", (self._hash(code),))
         account = self.cloud.db.account(account_id)
         if account is None or account["disabled"]:
             raise CloudError(403, "account_disabled", "This account is disabled")
-        key, caller = self.cloud._issue_key(
-            account_id, "Telegram Desktop", "telegram_desktop", expires_at=int(time.time()) + 90 * 86400
-        )
+        key, caller = self.cloud._issue_key(account_id, "Telegram Desktop", "telegram_desktop", expires_at=int(time.time()) + 90 * 86400)
         return {"api_key": key, "created": False, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
@@ -283,9 +288,7 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
     @router.post("/v1/auth/telegram/poll")
     async def telegram_login_poll(request: Request) -> Response:
         body = await _body(request)
-        answer = await asyncio.to_thread(
-            logins.poll, str(body.get("code") or ""), str(body.get("verifier") or "")
-        )
+        answer = await asyncio.to_thread(logins.poll, str(body.get("code") or ""), str(body.get("verifier") or ""))
         if answer is None:
             return JSONResponse({"state": "pending"}, status_code=202)
         return JSONResponse(answer)
@@ -294,9 +297,7 @@ def install(app, cloud: Cloud, caller_dep, bot_caller) -> None:
     async def bot_telegram_login(request: Request) -> dict:
         bot_caller(request)
         body = await _body(request)
-        return await asyncio.to_thread(
-            logins.approve, str(body.get("code") or ""), str(body.get("chat_id") or "")
-        )
+        return await asyncio.to_thread(logins.approve, str(body.get("code") or ""), str(body.get("chat_id") or ""))
 
     @router.post("/v1/link/code")
     async def link_code(caller: Caller = Depends(caller_auth)) -> dict:

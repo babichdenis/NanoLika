@@ -18,8 +18,23 @@ import httpx
 
 from .deepseek_pricing import PRICE_URL as DEEPSEEK_PRICE_URL
 from .deepseek_pricing import catalog as deepseek_catalog
+from .providers import catalogue
 
 log = logging.getLogger(__name__)
+
+
+def _catalog_entry(name: str) -> dict[str, Any]:
+    """One provider as the catalogue describes it; an empty dict when it is absent."""
+    for entry in catalogue().get("providers", []):
+        if entry.get("id") == name:
+            return entry
+    return {}
+
+
+def _has_catalog(name: str) -> bool:
+    return bool(_catalog_entry(name).get("catalog"))
+
+
 FLASH_FAMILY = "deepseek/deepseek-v4.1-flash"
 ALIASES = {
     # Provider revision IDs are normalized to one customer-facing Flash family.
@@ -48,20 +63,9 @@ ALIASES = {
     "yandex/yandexgpt-5.1-pro": "yandex/gpt-pro-5.1",
 }
 VENDORS = {"deepseek", "openai", "anthropic", "google", "qwen", "z-ai", "meta-llama"}
-# Names with an implemented authenticated model-catalog and priced chat-route adapter.
-# This is deliberately narrower than the market-reference catalog in model_catalog.py.
-ROUTING_CATALOG_PROVIDERS = frozenset({"polza", "routerai", "openrouter", "aitunnel", "proxyapi", "deepseek"})
-# AITUNNEL's model-list schema does not return supported_parameters, even when
-# the individual model page documents function calling. Keep this allowlist
-# explicit: support varies by model, so do not infer it for the whole provider.
-AITUNNEL_TOOL_MODELS = frozenset(
-    {
-        "deepseek-v4-flash",
-        "deepseek-v4-flash-0731",
-        "deepseek-v4.1-flash",
-        "deepseek-v4.1-flash-1017",
-    }
-)
+# Names whose catalogue entry carries a `catalog` descriptor: the relay knows how to
+# read their model list. Adding a provider is a catalogue edit, not a code edit.
+ROUTING_CATALOG_PROVIDERS = frozenset(entry["id"] for entry in catalogue().get("providers", []) if entry.get("catalog"))
 
 
 def identity(model: str) -> str:
@@ -219,6 +223,9 @@ class Route:
     offer: Offer | None = None
     routing_eligible: bool = True
     exclusion_reason: str = ""
+    # Other ids of the same model family at the same supplier that claim pictures:
+    # when this id refuses one, the turn stays with the supplier instead of leaving it.
+    siblings: tuple[Offer, ...] = ()
 
 
 class ProviderRouter:
@@ -244,6 +251,13 @@ class ProviderRouter:
         self.price_mismatch_min_rub = max(0.0, float(os.getenv("CLOUD_ROUTING_PRICE_MISMATCH_MIN_RUB", "0.02")))
         self.quarantine_seconds = max(self.refresh_seconds, int(os.getenv("CLOUD_ROUTING_PRICE_QUARANTINE_SECONDS", "1800")))
         self.quarantined: dict[tuple[str, str], float] = {}
+        # What a supplier's catalog says about pictures is a claim; what it answers is a
+        # fact. `vision_confirmed` records a route that took a picture (even when its
+        # catalog said text-only), `vision_blocked` a route that refused one while another
+        # route with the same body answered — the strike count grows the pause.
+        self.vision_confirmed: dict[str, float] = {}
+        self.vision_blocked: dict[str, float] = {}
+        self.vision_strikes: dict[str, int] = {}
         self.provider_blocked_until: dict[str, float] = {}
         self.price_alerted: dict[tuple[str, str], float] = {}
         self.lock = asyncio.Lock()
@@ -268,8 +282,60 @@ class ProviderRouter:
                     self.provider_blocked_until = {
                         str(name): until for name, value in blocked.items() if (until := number(value)) is not None and until > now
                     }
+                blind = raw.get("vision_blocked", {})
+                if isinstance(blind, dict):
+                    now = time.time()
+                    self.vision_blocked = {
+                        str(key): until for key, value in blind.items() if (until := number(value)) is not None and until > now
+                    }
+                seen = raw.get("vision_confirmed", {})
+                if isinstance(seen, dict):
+                    now = time.time()
+                    self.vision_confirmed = {
+                        str(key): until for key, value in seen.items() if (until := number(value)) is not None and until > now
+                    }
+                strikes = raw.get("vision_strikes", {})
+                if isinstance(strikes, dict):
+                    self.vision_strikes = {str(key): int(value) for key, value in strikes.items() if number(value) is not None}
             except (OSError, ValueError, TypeError, KeyError):
                 pass
+
+    def _offer(self, provider: str, model: str) -> Offer | None:
+        for candidate in self.offers.get(provider, []):
+            if candidate.model == model:
+                return candidate
+        return None
+
+    def vision_siblings(self, provider: str, offer: Offer, now: float) -> tuple[Offer, ...]:
+        """Other ids of the same family at this supplier that can take a picture.
+
+        Suppliers sell one model family under several ids and only some of them see.
+        When the id a customer asked for refuses the picture, the turn stays with the
+        same supplier on a sibling id instead of the supplier being dropped.
+        """
+        family = identity(offer.canonical_model or offer.model)
+        rows = []
+        for other in self.offers.get(provider, []):
+            if other.model == offer.model:
+                continue
+            if identity(other.canonical_model or other.model) != family:
+                continue
+            pair = offer_key(provider, other.model)
+            if "image" not in other.modalities and self.vision_confirmed.get(pair, 0) <= now:
+                continue
+            if self.vision_blocked.get(pair, 0) > now:
+                continue
+            if self.quarantined.get((provider, other.model.lower()), 0) > now:
+                continue
+            if other.valid_until and now >= other.valid_until:
+                continue
+            if now - other.updated > self.max_age:
+                continue
+            if not self.allow_quantized and any(q in other.endpoint.lower() for q in ("fp4", "int4", "q4")):
+                continue
+            rows.append((other.input_rub, other.model, other))
+        rows.sort(key=lambda row: (row[0], row[1]))
+        return tuple(row[2] for row in rows)
 
     def below_balance_floor(self, balance: dict) -> bool:
         amount = number(balance.get("amount"))
@@ -280,7 +346,9 @@ class ProviderRouter:
 
     def parse(self, provider: str, data: Any, at: float) -> list[Offer]:
         """Only supported schemas with explicit currency and separate token units."""
-        if provider == "aitunnel":
+        entry = _catalog_entry(provider)
+        fmt = str((entry.get("catalog") or {}).get("format") or "")
+        if fmt == "aitunnel":
             rows = [dict(row, id=model) for model, row in data.items() if isinstance(row, dict)]
         else:
             rows = data.get("data", [])
@@ -294,22 +362,22 @@ class ProviderRouter:
             currency = price.get("currency")
             overrides = []
             request_rub = 0.0
-            if provider == "polza":
+            if fmt == "polza":
                 if currency != "RUB" or row.get("type") != "chat":
                     continue
                 inp = number(price.get("prompt_per_million"))
                 out = number(price.get("completion_per_million"))
                 cache = number(price.get("input_cache_read_per_million"))
                 parameters = endpoint.get("supported_parameters") or []
-            elif provider == "proxyapi":
+            elif fmt == "proxyapi":
                 if currency != "RUB":
                     continue
                 inp, out = number(price.get("input_tokens")), number(price.get("output_tokens"))
                 cache = number(price.get("cache_read_input_tokens"))
                 parameters = row.get("supported_parameters") or []
-            elif provider in {"openrouter", "routerai"}:
+            elif fmt in {"openrouter", "routerai"}:
                 factor = 1_000_000.0
-                if provider == "openrouter":
+                if fmt == "openrouter":
                     factor *= self.usd_rub * (1 + self.usd_fee / 100)
 
                 def rate(field: str, price: dict = price, factor: float = factor) -> float | None:
@@ -325,29 +393,52 @@ class ProviderRouter:
                             dict(rule, input_rub=ri * factor, output_rub=ro * factor, cached_rub=rc * factor if rc is not None else None)
                         )
                 parameters = row.get("supported_parameters") or []
-            elif provider == "deepseek":
+            elif fmt == "deepseek":
                 inp, out = number(price.get("input_rub")), number(price.get("output_rub"))
                 cache = number(price.get("cached_rub"))
                 overrides = price.get("overrides") or []
                 parameters = row.get("supported_parameters") or []
-            elif provider == "aitunnel":
+            elif fmt == "beatapi":
+                # `/v1/models` carries no prices: the descriptor keeps the card prices
+                # (Inspect is free), in USD per 1M tokens.
+                card = (entry.get("prices") or {}).get(model) or {}
+                factor = self.usd_rub  # the card is already USD per 1M tokens
+                inp = number(card.get("in"))
+                out = number(card.get("out"))
+                inp = inp * factor if inp is not None else None
+                out = out * factor if out is not None else None
+                cache = number(card.get("cache"))
+                parameters = ["tools", "tool_choice"] if card.get("tools") else []
+            elif fmt == "aitunnel":
                 inp, out = number(row.get("prompt_cost")), number(row.get("completion_cost"))
                 discount = number(row.get("cache_discount"))
                 cache = inp * (1 - discount) if inp is not None and discount is not None and discount <= 1 else None
                 parameters = list(row.get("supported_parameters") or [])
-                if model.lower() in AITUNNEL_TOOL_MODELS:
+                tool_models = entry.get("tool_models") or []
+                if model.lower() in tool_models:
                     parameters = list(dict.fromkeys([*parameters, "tools", "tool_choice"]))
             else:
                 continue  # An unpriced model list is not a supplier offer.
             if inp is None or out is None or inp == out == 0:
                 continue
-            architecture = row.get("architecture") or row.get("modalities") or {}
-            modalities = architecture.get("input_modalities") or architecture.get("input") or ["text"]
-            outputs = architecture.get("output_modalities") or architecture.get("output") or ["text"]
+            if fmt == "beatapi":
+                # The model list has no architecture and no prices: both come from the card.
+                card = (entry.get("prices") or {}).get(model) or {}
+                modalities = ["text", "image"] if card.get("vision") else ["text"]
+                outputs = ["text"]
+                row = {
+                    **row,
+                    "context_length": card.get("context") or row.get("context_length") or 0,
+                    "max_output": card.get("max_out") or row.get("max_output") or 0,
+                }
+            else:
+                architecture = row.get("architecture") or row.get("modalities") or {}
+                modalities = architecture.get("input_modalities") or architecture.get("input") or ["text"]
+                outputs = architecture.get("output_modalities") or architecture.get("output") or ["text"]
             if "text" not in outputs:
                 continue
             vendor = str(row.get("provider") or "")
-            canonical = f"{vendor}/{model}" if provider == "aitunnel" and "/" not in model and vendor in VENDORS else model
+            canonical = f"{vendor}/{model}" if fmt == "aitunnel" and "/" not in model and vendor in VENDORS else model
             result.append(
                 Offer(
                     provider,
@@ -366,8 +457,8 @@ class ProviderRouter:
                     request_rub,
                     tuple(outputs),
                     source_url=str(row.get("source_url") or ""),
-                    source_currency=str(row.get("source_currency") or ("USD" if provider == "openrouter" else "RUB")),
-                    fx_rub_per_unit=number(row.get("fx_rub_per_unit")) or (self.usd_rub if provider == "openrouter" else None),
+                    source_currency=str(row.get("source_currency") or ("USD" if fmt in {"openrouter", "beatapi"} else "RUB")),
+                    fx_rub_per_unit=number(row.get("fx_rub_per_unit")) or (self.usd_rub if fmt in {"openrouter", "beatapi"} else None),
                     valid_until=int(row.get("valid_until") or 0),
                 )
             )
@@ -381,31 +472,30 @@ class ProviderRouter:
             async def one(name: str, provider: Any) -> None:
                 if not provider.key() or name not in ROUTING_CATALOG_PROVIDERS:
                     return
-                url = provider.base.rstrip("/") + "/v1/models"
-                headers = {"Authorization": "Bearer " + provider.key()}
-                if name == "deepseek":
-                    url = provider.base.rstrip("/") + "/models"
-                if name == "aitunnel":
-                    url = "https://api.aitunnel.ru/public/aitunnel/models/chat"
-                    headers = {}
-                if name == "proxyapi":
-                    url = "https://www.proxyapi.ru/models/browse"
-                    headers = {}
+                descriptor = _catalog_entry(name)
+                catalog = descriptor.get("catalog") or {}
+                fmt = str(catalog.get("format") or "")
+                url = str(catalog.get("url") or (provider.base.rstrip("/") + str(catalog.get("path") or "/v1/models")))
+                headers = {} if catalog.get("auth") == "none" else {"Authorization": "Bearer " + provider.key()}
                 try:
                     response = await http.get(url, headers=headers, timeout=25)
                     response.raise_for_status()
-                    data = proxy_catalog(response.text) if name == "proxyapi" else response.json()
-                    if name == "deepseek":
-                        price_response = await http.get(DEEPSEEK_PRICE_URL, timeout=25)
+                    data = proxy_catalog(response.text) if fmt == "proxyapi" else response.json()
+                    if fmt == "deepseek":
+                        price_url = str(catalog.get("price_url") or DEEPSEEK_PRICE_URL)
+                        price_response = await http.get(price_url, timeout=25)
                         price_response.raise_for_status()
                         data = deepseek_catalog(price_response.text, data, time.time(), self.usd_rub)
-                    if name == "proxyapi":
+                    if fmt == "proxyapi":
                         # A public price is eligible only when this key can see the model.
-                        catalog = await http.get(
-                            provider.base.rstrip("/") + "/v1/models", headers={"Authorization": "Bearer " + provider.key()}, timeout=25
+                        allowed_path = str(catalog.get("allowed_models_path") or "/v1/models")
+                        catalog_response = await http.get(
+                            provider.base.rstrip("/") + allowed_path,
+                            headers={"Authorization": "Bearer " + provider.key()},
+                            timeout=25,
                         )
-                        catalog.raise_for_status()
-                        allowed = {row["id"] for row in catalog.json().get("data", [])}
+                        catalog_response.raise_for_status()
+                        allowed = {row["id"] for row in catalog_response.json().get("data", [])}
                         data["data"] = [row for row in data["data"] if row["id"] in allowed]
                     offers = self.parse(name, data, time.time())
                     offers = [replace(offer, source_url=offer.source_url or url) for offer in offers]
@@ -425,29 +515,22 @@ class ProviderRouter:
 
     async def refresh_balances(self, http: httpx.AsyncClient) -> None:
         async def one(name: str, provider: Any) -> None:
-            paths = {
-                "deepseek": "/user/balance",
-                "polza": "/v1/balance",
-                "routerai": "/v1/credits",
-                "openrouter": "/v1/credits",
-                "aitunnel": "/v1/aitunnel/balance",
-                "proxyapi": "/proxyapi/balance",
-                "proxyapi-openai": "/proxyapi/balance",
-            }
-            if name not in paths or not provider.key():
+            descriptor = _catalog_entry(name)
+            balance = descriptor.get("balance") or {}
+            path = str(balance.get("path") or "")
+            if not path or not provider.key():
                 return
-            # DeepSeek и OpenRouter считают в долларах, остальные продавцы — в рублях
-            currency = "USD" if name in ("openrouter", "deepseek") else "RUB"
+            fmt = str(balance.get("format") or "")
+            currency = str(balance.get("currency") or "RUB")
             entry = {"amount": None, "currency": currency, "checked": time.time(), "error": None}
-            base = provider.base.rstrip("/")
-            if name == "proxyapi-openai":
-                base = base.removesuffix("/openai")
-            key = os.getenv("OPENROUTER_BALANCE_KEY", provider.key()) if name == "openrouter" else provider.key()
+            base = str(balance.get("base") or provider.base.rstrip("/"))
+            key_env = balance.get("key_env")
+            key = os.getenv(str(key_env), provider.key()) if key_env else provider.key()
             try:
-                response = await http.get(base + paths[name], headers={"Authorization": "Bearer " + key}, timeout=15)
+                response = await http.get(base + path, headers={"Authorization": "Bearer " + key}, timeout=15)
                 response.raise_for_status()
                 data = response.json()
-                if name == "deepseek":
+                if fmt == "deepseek":
                     # {"is_available": false, "balance_infos": [{"currency": "USD", "total_balance": "-0.00"}, …]}
                     infos = data.get("balance_infos") or []
                     for info in infos:
@@ -459,21 +542,23 @@ class ProviderRouter:
                         (number(i.get("total_balance")) for i in infos if str(i.get("currency")).upper() == "CNY"),
                         None,
                     )
-                elif name == "openrouter":
+                elif fmt == "openrouter":
                     data = data.get("data", {})
                     total, used = number(data.get("total_credits")), number(data.get("total_usage"))
                     amount = total - used if total is not None and used is not None else None
-                elif name == "routerai":
+                elif fmt == "routerai":
                     amount = number(data.get("data", {}).get("credits"))
-                elif name == "polza":
+                elif fmt == "polza":
                     amount = number(data.get("available"))
+                elif fmt == "beatapi":
+                    amount = number((data.get("data") or {}).get("credit_balance"))
                 else:
                     amount = number(data.get("balance"))
                     budget = data.get("budget")
-                    if name == "aitunnel" and number(budget) is not None:
+                    if fmt == "aitunnel" and number(budget) is not None:
                         entry["key_budget"] = number(budget)
                         amount = min(amount, number(budget)) if amount is not None else None
-                    if name.startswith("proxyapi") and isinstance(budget, dict):
+                    if fmt == "proxyapi" and isinstance(budget, dict):
                         entry["scope"] = "key_budget"
                 if amount is None:
                     raise ValueError("unknown balance schema")
@@ -525,6 +610,9 @@ class ProviderRouter:
             "errors": dict(self.errors),
             "balances": dict(self.balances),
             "provider_blocked_until": {name: until for name, until in self.provider_blocked_until.items() if until > time.time()},
+            "vision_blocked": {key: until for key, until in self.vision_blocked.items() if until > time.time()},
+            "vision_confirmed": {key: until for key, until in self.vision_confirmed.items() if until > time.time()},
+            "vision_strikes": dict(self.vision_strikes),
             "providers": {name: len(rows) for name, rows in self.offers.items()},
         }
         if include_offers:
@@ -533,11 +621,17 @@ class ProviderRouter:
 
     def _supplier_body(self, name: str, body: dict) -> dict:
         payload = dict(body)
-        if name == "polza":
-            # polza берёт картинку только как `input_image` со строкой в image_url;
-            # стандартный `image_url` она отвергает с «нет провайдеров с поддержкой:
-            # input_image» — сообщение сбивает с толку, чиним формат на лету
-            payload["messages"] = [_polza_message(m) for m in (payload.get("messages") or [])]
+        if "messages" in payload:
+            # Defence in depth: every route to a provider gets the Chat Completions
+            # shape, even when the caller bypassed `api.chat`.
+            payload["messages"] = normalize_messages(payload["messages"])
+        patch = _catalog_entry(name).get("body") or {}
+        if isinstance(patch, dict):
+            for key, value in patch.items():
+                if key == "usage" and isinstance(value, dict) and isinstance(payload.get(key), dict):
+                    payload[key] = {**payload[key], **value}
+                else:
+                    payload[key] = dict(value) if isinstance(value, dict) else value
         if name == "deepseek":
             thinking = payload.pop("enable_thinking", None)
             if "thinking" not in payload and isinstance(thinking, bool):
@@ -545,14 +639,11 @@ class ProviderRouter:
             if payload.get("reasoning_effort") == "none":
                 payload.pop("reasoning_effort")
                 payload.setdefault("thinking", {"type": "disabled"})
-        if name == "aitunnel":
-            # Catalog rates are not a pinned inference endpoint. Ask the aggregator
-            # to try the cheapest compatible endpoint instead of its default balancer.
-            policy: dict[str, Any] = {"sort": "price", "require_parameters": True}
-            if not self.allow_quantized:
+        if name == "aitunnel" and not self.allow_quantized:
+            policy = payload.get("provider")
+            if isinstance(policy, dict):
                 # Preserve unknown precision (common for closed models); reject known 4-bit routes.
-                policy["quantizations"] = ["int8", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"]
-            payload["provider"] = policy
+                policy.setdefault("quantizations", ["int8", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"])
         return payload
 
     def routes(
@@ -576,8 +667,7 @@ class ProviderRouter:
             limit = self.expected_output  # Preserve the original body for supplier validation.
         expected = limit
         tools = bool(body.get("tools") or body.get("functions"))
-        messages = json.dumps(body.get("messages", []))
-        vision = '"image_url"' in messages or '"input_image"' in messages
+        vision = has_images(body.get("messages", []))
         candidates = []
         inventory = []
         now = time.time()
@@ -627,8 +717,24 @@ class ProviderRouter:
                     exclusions.append("flex-тариф: медленнее обычного")
                 if tools and "tools" not in offer.parameters:
                     exclusions.append("не поддерживает вызов инструментов")
-                if vision and "image" not in offer.modalities:
-                    exclusions.append("не поддерживает изображения")
+                pair = offer_key(name, offer.model)
+                siblings = self.vision_siblings(name, offer, now) if vision else ()
+                if vision and "image" not in offer.modalities and self.vision_confirmed.get(pair, 0) <= now:
+                    # The catalog says text, but the same family at this supplier has a
+                    # snapshot that sees: keep the supplier, swap the id.
+                    if siblings:
+                        offer = siblings[0]
+                        siblings = siblings[1:]
+                        pair = offer_key(name, offer.model)
+                    else:
+                        exclusions.append("не поддерживает изображения")
+                if vision and self.vision_blocked.get(pair, 0) > now:
+                    if siblings:
+                        offer = siblings[0]
+                        siblings = siblings[1:]
+                        pair = offer_key(name, offer.model)
+                    else:
+                        exclusions.append("поставщик отказал в приёме изображений")
                 if offer.context and prompt + limit > offer.context:
                     exclusions.append("недостаточный контекст")
                 if offer.output_limit and limit > offer.output_limit:
@@ -644,13 +750,6 @@ class ProviderRouter:
                     and "max_tokens" in offer.parameters
                 ):
                     payload["max_tokens"] = payload.pop("max_completion_tokens")
-                if name == "openrouter":
-                    payload["provider"] = {"sort": "price", "require_parameters": True}
-                    usage_options = payload.get("usage")
-                    payload["usage"] = {
-                        **(usage_options if isinstance(usage_options, dict) else {}),
-                        "include": True,
-                    }
                 inp, out, cache = offer.rates(now, prompt)
                 fixed = replace(offer, input_rub=inp, output_rub=out, cached_rub=cache, overrides=())
                 estimated_cost = fixed.estimate(prompt, expected)
@@ -668,11 +767,20 @@ class ProviderRouter:
                     fixed,
                     routing_eligible=not exclusions,
                     exclusion_reason="; ".join(dict.fromkeys(exclusions)),
+                    siblings=tuple(other for other in siblings if other.model != offer.model),
                 )
                 ranked = (estimated_cost, name != spec.provider, route)
                 inventory.append(ranked)
                 if not exclusions:
                     candidates.append(ranked)
+        # One request per supplier and model id: a substituted sibling is the same call
+        # as the sibling's own offer, and sending it twice only doubles the wait.
+        unique: dict[tuple[str, str], tuple[float, bool, Route]] = {}
+        for cost, deprioritized, route in candidates:
+            key = (route.provider, str(route.body.get("model") or ""))
+            if key not in unique or cost < unique[key][0]:
+                unique[key] = (cost, deprioritized, route)
+        candidates = list(unique.values())
         candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
         inventory.sort(key=lambda item: (item[0], item[1], item[2].provider))
         if include_all:
@@ -755,8 +863,36 @@ class ProviderRouter:
                     result["provider_price_alert"] = True
         return result
 
-    def note_failure(self, route: Route, status_code: int) -> None:
-        """Quarantine a provider after payment-required; don't retry it on every turn."""
+    def note_failure(
+        self,
+        route: Route,
+        status_code: int,
+        body: bytes | str | None = None,
+        proven: bool = False,
+    ) -> None:
+        """Quarantine a provider after payment-required; don't retry it on every turn.
+
+        A picture refusal is only a fact when another route with the same body answered
+        (`proven`): one oversized or broken image must not switch a supplier off. The
+        pause grows with repeated strikes and is cleared by the first picture it takes.
+        """
+        text = body.decode("utf-8", "ignore") if isinstance(body, bytes) else str(body or "")
+        if status_code == 400 and proven and route.provider and vision_refusal(text):
+            pair = offer_key(route.provider, route.body.get("model") or "")
+            strikes = self.vision_strikes.get(pair, 0) + 1
+            self.vision_strikes[pair] = strikes
+            pause = min(24 * 3600, 900 * (4 ** (strikes - 1)))
+            until = time.time() + pause
+            self.vision_blocked[pair] = until
+            log.warning(
+                "provider refused images: provider=%s model=%s strike=%s until=%s",
+                route.provider,
+                route.body.get("model") or "",
+                strikes,
+                int(until),
+            )
+            self.persist()
+            return
         if status_code != 402 or not route.provider:
             return
         until = time.time() + 300
@@ -774,6 +910,23 @@ class ProviderRouter:
             int(until),
         )
         self.persist()
+
+    def note_success(self, route: Route, vision: bool = False) -> None:
+        """A route answered. A picture it took proves the pair can see, whatever the
+        catalog said, and lifts an earlier refusal at once."""
+        if not route.provider:
+            return
+        pair = offer_key(route.provider, route.body.get("model") or "")
+        changed = False
+        if vision and self.vision_confirmed.get(pair, 0) <= time.time():
+            self.vision_confirmed[pair] = time.time() + 7 * 24 * 3600
+            changed = True
+        if pair in self.vision_blocked or pair in self.vision_strikes:
+            self.vision_blocked.pop(pair, None)
+            self.vision_strikes.pop(pair, None)
+            changed = True
+        if changed:
+            self.persist()
 
     def schedule_price_alert(self, http: httpx.AsyncClient, meta: dict) -> None:
         """Send an anomaly without blocking a user's model response; secrets stay in env."""
@@ -808,63 +961,183 @@ class ProviderRouter:
             log.exception("provider price alert could not be delivered to Telegram")
 
 
-def _polza_message(message: Any) -> Any:
-    """Картинки в сообщении — в формате, который понимает polza."""
-    if not isinstance(message, dict):
-        return message
-    content = message.get("content")
-    if not isinstance(content, list):
-        return message
-    parts = []
-    for part in content:
-        if isinstance(part, dict) and part.get("type") == "image_url":
-            url = part.get("image_url")
-            if isinstance(url, dict):
-                url = url.get("url")
-            if url:
-                parts.append({"type": "input_image", "image_url": url})
+def normalize_messages(messages: Any) -> Any:
+    """Bring every content part to the Chat Completions shape the providers validate.
+
+    Clients and older builds disagree on the names: the Responses API says
+    `input_image`/`input_text`, Polza used to demand `input_image`, a bare string is
+    legal in some SDKs. The relay speaks Chat Completions, so one shape goes out:
+    text/refusal with a string, image_url/video_url with an object holding `url`,
+    input_audio with `data` and `format`; unknown parts become text or are dropped.
+    """
+    if not isinstance(messages, list):
+        return messages
+    out = []
+    for message in messages:
+        if not isinstance(message, dict):
+            out.append(message)
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            out.append(message)
+            continue
+        parts: list[dict[str, Any]] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append({"type": "text", "text": part})
                 continue
-        parts.append(part)
-    return {**message, "content": parts}
+            if not isinstance(part, dict):
+                parts.append({"type": "text", "text": str(part)})
+                continue
+            kind = str(part.get("type") or "")
+            if kind in ("text", "refusal"):
+                key = "text" if kind == "text" else "refusal"
+                parts.append({"type": kind, key: str(part.get(key) or part.get("text") or "")})
+            elif kind in ("image_url", "input_image"):
+                raw = part.get("image_url") or part.get("url") or ""
+                url = raw.get("url") if isinstance(raw, dict) else raw
+                if url:
+                    parts.append({"type": "image_url", "image_url": {"url": str(url)}})
+            elif kind in ("video_url", "input_video"):
+                raw = part.get("video_url") or part.get("input_video") or part.get("url") or ""
+                url = raw.get("url") if isinstance(raw, dict) else raw
+                if url:
+                    parts.append({"type": "video_url", "video_url": {"url": str(url)}})
+            elif kind == "input_audio":
+                audio = part.get("input_audio") if isinstance(part.get("input_audio"), dict) else part
+                data = audio.get("data")
+                if data:
+                    parts.append(
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": str(data), "format": str(audio.get("format") or "wav")},
+                        }
+                    )
+            elif kind in ("file", "document", "search_result"):
+                parts.append(part)
+            elif part.get("text") is not None:
+                parts.append({"type": "text", "text": str(part["text"])})
+            elif part.get("url"):
+                parts.append({"type": "image_url", "image_url": {"url": str(part["url"])}})
+        out.append({**message, "content": parts if parts else ""})
+    return out
 
 
-def retryable(response: httpx.Response) -> bool:
+def offer_key(provider: str, model: str) -> str:
+    """Stable key for one supplier/model pair in the refusal map."""
+    return f"{provider}|{str(model).lower()}"
+
+
+# A picture can be refused for its own sake — too big, wrong format, broken base64. That
+# says nothing about the model's eyes, so it must never switch a supplier off.
+_IMAGE_FAULT = re.compile(
+    r"too large|payload|exceed|max(?:imum)? (?:size|dimension|resolution)|file size|mime|"
+    r"decode|invalid image|unsupported image|image size|размер|слишком бол|формат",
+    re.IGNORECASE,
+)
+
+
+def vision_refusal(text: str) -> bool:
+    """True when an upstream answer means "this route cannot take pictures".
+
+    Suppliers word it differently: Polza answers in Russian about `input_image`,
+    OpenRouter talks about endpoints that support image input. The customer should not
+    see any of it — the relay just moves to the next route.
+    """
+    if not text:
+        return False
+    low = " ".join(text.lower().split())
+    if _IMAGE_FAULT.search(low):
+        return False
+    if "input_image" in low or "input image" in low:
+        return True
+    if "image" in low and ("no endpoint" in low or "support" in low or "vision" in low):
+        return True
+    return "изображен" in low and ("поддерж" in low or "принима" in low or "видит" in low)
+
+
+def has_images(messages: Any) -> bool:
+    """True when the conversation carries a picture, whatever name the part has."""
+    try:
+        text = json.dumps(messages, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return False
+    return '"image_url"' in text or '"input_image"' in text
+
+
+def retryable(response: httpx.Response, body: bytes | None = None) -> bool:
     if response.status_code in {401, 402, 403, 404, 408, 429} or response.status_code >= 500:
         return True
     if response.status_code == 400:
         try:
             data = response.json()
-            code = str((data.get("error") or {}).get("code", ""))
-            return code in {"unsupported_parameter", "model_not_found", "unsupported_model"} or data.get("detail") == "Model not supported"
         except (ValueError, AttributeError):
-            return False
+            data = None
+        if isinstance(data, dict):
+            code = str((data.get("error") or {}).get("code", ""))
+            if code in {"unsupported_parameter", "model_not_found", "unsupported_model"} or data.get("detail") == "Model not supported":
+                return True
+        text = body.decode("utf-8", "ignore") if isinstance(body, bytes) else str(body or "")
+        return vision_refusal(text)
     return False
 
 
-async def request_chat(http: httpx.AsyncClient, routes: list[Route], stream: bool, on_failure=None) -> tuple[httpx.Response, Route]:
+async def request_chat(
+    http: httpx.AsyncClient,
+    routes: list[Route],
+    stream: bool,
+    on_failure=None,
+    on_success=None,
+    vision: bool = False,
+) -> tuple[httpx.Response, Route]:
     last: httpx.HTTPError | None = None
     failures: list[str] = []
+    refused: list[tuple[Route, int, bytes]] = []
     for index, route in enumerate(routes):
-        try:
-            request = http.build_request("POST", route.url, headers=route.headers, json=route.body)
-            response = await http.send(request, stream=stream)
-        except httpx.HTTPError as exc:
-            last = exc
-            provider = route.provider or "configured"
-            model = str(route.body.get("model") or "")
-            failure = f"{provider}/{model}:{type(exc).__name__}"
-            failures.append(failure)
-            # Never log response bodies, URLs, or credentials; identify only the route and failure class.
-            log.warning("routing transport failure provider=%s model=%s error=%s", provider, model, type(exc).__name__)
-            continue
-        if response.status_code >= 400:
-            await response.aread()
+        # The same supplier, other ids of the same family: a picture refused by one id is
+        # tried on a sibling before the turn leaves the supplier at all.
+        attempts: list[Route] = [route]
+        for sibling in route.siblings if vision else ():
+            attempts.append(
+                replace(route, body={**route.body, "model": sibling.model}, offer=sibling)
+            )
+        for position, attempt in enumerate(attempts):
+            try:
+                request = http.build_request("POST", attempt.url, headers=attempt.headers, json=attempt.body)
+                response = await http.send(request, stream=stream)
+            except httpx.HTTPError as exc:
+                last = exc
+                provider = attempt.provider or "configured"
+                model = str(attempt.body.get("model") or "")
+                failure = f"{provider}/{model}:{type(exc).__name__}"
+                failures.append(failure)
+                # Never log response bodies, URLs, or credentials; identify only the route and failure class.
+                log.warning("routing transport failure provider=%s model=%s error=%s", provider, model, type(exc).__name__)
+                continue
+            if response.status_code >= 400:
+                # Read the refusal once: both the failure hook and `retryable` judge it.
+                # A streaming response has no `content` until it is read, and touching it
+                # on a good reply would end the stream with ResponseNotRead.
+                await response.aread()
+                refusal = response.content
+                # Payment refusals count at once; a picture refusal is a fact only once
+                # another route with the same body has answered (see the success branch).
+                if on_failure is not None:
+                    on_failure(attempt, response.status_code, refusal, False)
+                more_attempts = position + 1 < len(attempts)
+                if retryable(response, refusal) and (more_attempts or index + 1 < len(routes)):
+                    log.warning("routing retry %s HTTP %s", attempt.provider or "configured", response.status_code)
+                    refused.append((attempt, response.status_code, refusal))
+                    await response.aclose()
+                    continue
+                return response, attempt
+            # Answered: the refusals before it are now proven to be about the route, not
+            # about the request, so each one may be remembered.
             if on_failure is not None:
-                on_failure(route, response.status_code)
-        if retryable(response) and index + 1 < len(routes):
-            log.warning("routing retry %s HTTP %s", route.provider or "configured", response.status_code)
-            await response.aclose()
-            continue
-        return response, route
+                for failed_route, status, refusal in refused:
+                    on_failure(failed_route, status, refusal, True)
+            if on_success is not None:
+                on_success(attempt, vision)
+            return response, attempt
     detail = ", ".join(failures) if failures else "no routes"
     raise httpx.ConnectError(f"No configured model provider answered ({detail})") from last

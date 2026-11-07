@@ -1,5 +1,14 @@
 /** Russian dictionary for the web client. Keys are the English source strings. */
 const ru: Record<string, string> = {
+  "Activity": "Действия",
+  "Off": "Выключено",
+  "Local chats": "Локальные чаты",
+  "Archive": "Архив",
+  "Voice input": "Голосовой ввод",
+  "Side chats are an optional way to keep conversations organised by topic.": "В отдельном чате удобно обсуждать одну тему.",
+  "Start a side chat": "Начать отдельный чат",
+  "Search chats": "Поиск по чатам",
+  "Idle": "Готова помочь",
   "Meet your NanoLika": "Знакомьтесь, ваша NanoLika",
   "A personal agent of your own. Three things to know:": "Личный помощник. Три вещи, которые стоит знать:",
   "It does things for you.": "Она делает, а не советует.",
@@ -69,7 +78,7 @@ const ru: Record<string, string> = {
   "Connect": "Подключиться",
   "Hi, I'm {name}.": "Привет, я {name}.",
   "I don't just answer; I get things done: research, plans, files, code, email, long-running goals. Everything I do shows up here, and anything hard to undo waits for your approval.":
-    "Я не только отвечаю: делаю research, планы, файлы, код, почту и долгие задачи. Всё видно здесь, а то, что трудно отменить, ждёт вашего подтверждения.",
+    "Я не только отвечаю: помогаю с исследованиями, планами, файлами, кодом, почтой и долгими задачами. Всё видно здесь, а то, что трудно отменить, ждёт вашего подтверждения.",
   "What can you do for me?": "Что ты умеешь?",
   "Plan my week: ask me what's on my plate": "Спланируй мою неделю: спроси, что у меня накопилось",
   "Research and compare two options for me": "Сравни два варианта и скажи, что лучше",
@@ -253,6 +262,18 @@ const ru: Record<string, string> = {
   "Compare plans": "Сравнить тарифы",
   "Lika+": "Лика+",
   "Available on Lika+": "Доступна на «Лика+»",
+  "Your email address": "Ваш адрес почты",
+  "you@yandex.ru or you@gmail.com": "вы@yandex.ru или вы@gmail.com",
+  "This is {label} — the servers are already set for you.": "{label} — серверы уже настроены за вас.",
+  "password for this app": "пароль для этого приложения",
+  "Reconnect": "Переподключить",
+  "Connect my mail": "Подключить мою почту",
+  "For advanced": "Для продвинутых",
+  "In Yandex: Passwords and authorisation → Generate app password. Paste it here.": "В Яндексе: «Пароли и авторизация» → «Создать пароль приложения». Вставьте его сюда.",
+  "In Google: your account → Security → App passwords. Paste it here.": "В Google: аккаунт → «Безопасность» → «Пароли приложений». Вставьте его сюда.",
+  "This is not your login password, but a separate app password from the provider.": "Это не ваш пароль от входа, а отдельный пароль приложения у вашего почтовика.",
+  "It reads your mail and helps with replies, and always asks before sending. Everything is set up for you — just add your address and a password.": "Лика читает вашу почту и помогает с ответами, а перед отправкой всегда спросит вас. Настройка уже готова — просто добавьте адрес и пароль.",
+  "A password is already saved. Leave blank to keep it.": "Пароль уже сохранён. Оставьте поле пустым, чтобы его не менять.",
 };
 
 export default ru;

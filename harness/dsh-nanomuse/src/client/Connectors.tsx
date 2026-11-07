@@ -41,6 +41,16 @@ const API = '/nanomuse/connectors'
 // ---- the host ------------------------------------------------------------------------
 
 /** GET when there is no body, POST with one; 204 resolves to undefined. */
+export class ConnectorsError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'ConnectorsError'
+  }
+}
+
 async function connectorsCall<T = undefined>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API}/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -48,8 +58,8 @@ async function connectorsCall<T = undefined>(path: string, body?: unknown): Prom
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   if (res.status === 204) return undefined as T
-  const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
-  if (!res.ok) throw new Error(json.error?.message ?? `${res.status}`)
+  const json = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } }
+  if (!res.ok) throw new ConnectorsError(json.error?.code ?? 'failed', json.error?.message ?? `${res.status}`)
   return json as T
 }
 
@@ -110,7 +120,7 @@ interface Entry {
   /** The tools behind it, when known. */
   tools: { name: string; description: string }[]
   /** Where "Connect" leads when it is off: a settings page, the vault steps, or the service's own sign-in. */
-  connect?: { section: string } | { steps: Step[] } | { service: CatalogueEntry }
+  connect?: { section: string } | { steps: Step[] } | { service: CatalogueEntry } | { mail: true }
   /** Where the detail's "settings" row leads, when there is a page of its own. */
   page?: string
   /** A third-party service, connected: the row the host keeps. */
@@ -123,6 +133,27 @@ interface Entry {
 
 interface Step { text: string; command?: string }
 
+/** One mailbox the runtime holds, as `nanomuse mail list` reports it. */
+interface Mailbox {
+  id: string
+  label: string
+  address: string
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  smtp_starttls: boolean
+  enabled: boolean
+}
+
+interface MailTest {
+  ok: boolean
+  id?: string
+  address?: string
+  inbox?: number | null
+  error?: string
+}
+
 /** What the page is in the middle of: a sign-in in the browser, a key to paste, a URL to add, the vault steps. */
 type Pending =
   | { kind: 'authorize'; entry: Entry; url: string; flow: string; status: FlowView['status']; error: string }
@@ -131,6 +162,8 @@ type Pending =
   | { kind: 'client'; entry: Entry; redirectUri: string; developer: string; error: string; busy: boolean }
   | { kind: 'custom'; url: string; label: string; error: string; busy: boolean }
   | { kind: 'steps'; entry: Entry }
+  /** The mailbox list and its add form: many mailboxes, each with an app password. */
+  | { kind: 'mail' }
 
 /** The service's brand mark on a white tile, or its initial on a tile of its colour. */
 function Mark({ icon, color, name, size = 18 }: { icon?: string | undefined; color: string; name: string; size?: number }): ReactNode {
@@ -192,12 +225,7 @@ export function makeConnectorsSection(t: Translate) {
 
     const builtin: Entry[] = [
       { id: 'hands', mark: builtinMark(IconHand), title: t('cnHands'), sub: has('computer_act') ? t('cnHandsOn') : seen ? (runtimeInfo ? handsOffReason(t, runtimeInfo) || t('cnHandsOffNoTools', { path: runtimeInfo.path }) : t('cnHandsOff')) : t('cnNotYet'), about: t('cnHandsAbout'), on: has('computer_act'), group: 'builtin', tools: pick('computer_screen', 'computer_act'), connect: { section: COMPUTER_SECTION }, page: COMPUTER_SECTION },
-      { id: 'email', mark: builtinMark(IconMail), title: t('cnEmail'), sub: has('read_emails') ? t('cnEmailOn') : t('cnEmailOff'), about: t('cnEmailAbout'), on: has('read_emails', 'send_email'), group: 'builtin', tools: pick('read_emails', 'send_email'), connect: { steps: [
-        { text: t('cnStepAddress'), command: 'nanomuse vault set EMAIL_ADDRESS' },
-        { text: t('cnStepPassword'), command: 'nanomuse vault set EMAIL_PASSWORD' },
-        { text: t('cnStepConfig', { file: '~/.nanomuse/config.toml' }), command: '[connectors.email]\nenabled = true\nimap_host = "imap.gmail.com"\nsmtp_host = "smtp.gmail.com"' },
-        { text: t('cnStepRestart') },
-      ] } },
+      { id: 'email', mark: builtinMark(IconMail), title: t('cnEmail'), sub: has('read_emails') ? t('cnEmailOn') : t('cnEmailOff'), about: t('cnEmailAbout'), on: has('read_emails', 'send_email'), group: 'builtin', tools: pick('read_emails', 'send_email'), connect: { mail: true } },
       { id: 'calendar', mark: builtinMark(IconCalendar), title: t('cnCalendar'), sub: has('calendar') ? t('cnCalendarOn') : t('cnCalendarOff'), about: t('cnCalendarAbout'), on: has('calendar'), group: 'builtin', tools: pick('calendar'), connect: { steps: [
         { text: t('cnStepFeed'), command: 'nanomuse vault set CALENDAR_WORK' },
         { text: t('cnStepConfig', { file: '~/.nanomuse/config.toml' }), command: '[connectors.calendar]\nenabled = true\n[[connectors.calendar.feeds]]\nname = "Work"\nurl = "{{vault:CALENDAR_WORK}}"' },
@@ -294,6 +322,7 @@ export function makeConnectorsSection(t: Translate) {
       if (!entry.connect && entry.sharedUrl) { setPending({ kind: 'custom', url: entry.sharedUrl, label: entry.title, error: '', busy: false }); return }
       if (!entry.connect) return
       if ('section' in entry.connect) { settingsBus.openSection?.(entry.connect.section); return }
+      if ('mail' in entry.connect) { setPending({ kind: 'mail' }); return }
       if ('steps' in entry.connect) { setPending({ kind: 'steps', entry }); return }
       const service = entry.connect.service
       if (service.auth.kind === 'key') { setPending({ kind: 'key', entry, where: service.auth.where, error: '', busy: false }); return }
@@ -512,9 +541,273 @@ function Detail({ t, entry, onBack, onConnect, onReconnect, onDisconnect, onRetr
     h('p', { className: 'nm-fine' }, t('cnDetailFine')))
 }
 
+/** Where each provider keeps its app passwords: the one hint people get stuck on. */
+function appPasswordHint(t: Translate, address: string): string {
+  const value = address.trim().toLowerCase()
+  if (/@(yandex|ya)\./.test(value)) return t('cnMailHintYandex')
+  if (/@(gmail|googlemail)\./.test(value)) return t('cnMailHintGmail')
+  if (/@(mail|inbox|list|bk|internet)\.ru$/.test(value)) return t('cnMailHintMailru')
+  return t('cnMailPasswordHint')
+}
+
+/** The page that mints an app password, when the provider has one we know. */
+function appPasswordPage(address: string): string {
+  const value = address.trim().toLowerCase()
+  if (/@(yandex|ya)\./.test(value)) return 'https://id.yandex.ru/security/app-passwords'
+  if (/@(gmail|googlemail)\./.test(value)) return 'https://myaccount.google.com/apppasswords'
+  if (/@(mail|inbox|list|bk|internet)\.ru$/.test(value)) return 'https://account.mail.ru/user/2-step-auth/passwords'
+  return ''
+}
+
+/** The provider's raw refusal, turned into what to do about it. */
+function mailFailure(t: Translate, error: string | undefined): string {
+  const raw = (error ?? '').trim()
+  if (/auth|credential|password|login/i.test(raw)) return t('cnMailAuthFailed')
+  return t('cnMailFailed', { error: raw })
+}
+
+/**
+ * The mailbox list and the form that adds one: address, name, app password, and the servers
+ * only for those who know their own. The runtime keeps every mailbox and its password in the
+ * vault; this page only ever sends the password one way.
+ */
+function MailSheet({ t, onClose }: { t: Translate; onClose(): void }): ReactNode {
+  const [boxes, setBoxes] = useState<Mailbox[] | null>(null)
+  const [error, setError] = useState('')
+  const [address, setAddress] = useState('')
+  const [label, setLabel] = useState('')
+  const [password, setPassword] = useState('')
+  const [advanced, setAdvanced] = useState(false)
+  const [imap, setImap] = useState('')
+  const [smtp, setSmtp] = useState('')
+  const [imapPort, setImapPort] = useState('')
+  const [smtpPort, setSmtpPort] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [armed, setArmed] = useState<string | null>(null)
+  const [note, setNote] = useState<{ id: string; ok: boolean; text: string } | null>(null)
+  /** The mailbox the form is changing; null means the form adds a new one. */
+  const [editing, setEditing] = useState<string | null>(null)
+  const [formError, setFormError] = useState('')
+  /** The installed app's runtime is older than the mail commands: nothing here can work. */
+  const [stale, setStale] = useState(false)
+  const formTop = useRef<HTMLDivElement | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const reply = await connectorsCall<{ mailboxes: Mailbox[] }>('mail')
+      setBoxes(reply.mailboxes)
+      setError('')
+      setStale(false)
+    } catch (e) {
+      setBoxes([])
+      if (e instanceof ConnectorsError && e.code === 'runtime_old') {
+        setStale(true)
+        setError('')
+        return
+      }
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [])
+  useEffect(() => {
+    load()
+  }, [load])
+
+  /** Empty the form and go back from changing a mailbox to adding one. */
+  const reset = () => {
+    setEditing(null)
+    setAddress('')
+    setLabel('')
+    setPassword('')
+    setAdvanced(false)
+    setImap('')
+    setSmtp('')
+    setImapPort('')
+    setSmtpPort('')
+    setFormError('')
+  }
+
+  const startEdit = (box: Mailbox) => {
+    setEditing(box.id)
+    setAddress(box.address)
+    setLabel(box.label)
+    setPassword('')
+    setAdvanced(false)
+    setImap(box.imap_host)
+    setSmtp(box.smtp_host)
+    setImapPort(String(box.imap_port))
+    setSmtpPort(String(box.smtp_port))
+    setFormError('')
+    setNote(null)
+    window.setTimeout(() => formTop.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 0)
+  }
+
+  /**
+   * What went wrong, in words a person can act on. A duplicate is caught here and again in
+   * the runtime: the runtime is the one that decides, this only saves a round trip.
+   */
+  const reason = (e: unknown): string => {
+    if (e instanceof ConnectorsError && e.code === 'duplicate') {
+      return t('cnMailDuplicate', { address: address.trim() })
+    }
+    if (e instanceof ConnectorsError && e.code === 'runtime_old') {
+      setStale(true)
+      return t('cnMailNeedsUpdate')
+    }
+    return e instanceof Error ? e.message : String(e)
+  }
+
+  const field = (value: string, set: (v: string) => void, placeholder: string, type = 'text') =>
+    h('input', {
+      className: 'nm-field nm-cn-field',
+      type,
+      autoComplete: 'off',
+      spellCheck: false,
+      value,
+      placeholder,
+      'aria-label': placeholder,
+      onChange: (e: { currentTarget: HTMLInputElement }) => set(e.currentTarget.value),
+      onKeyDown: (e: KeyboardEvent) => {
+        if (e.key === 'Enter' && !composing(e)) void submit()
+      },
+    })
+
+  const submit = async (check = false) => {
+    const clean = address.trim()
+    if (busy || !clean || (!editing && !password)) return
+    const clash = (boxes ?? []).find(
+      (box) => box.id !== editing && box.address.trim().toLowerCase() === clean.toLowerCase(),
+    )
+    if (clash) {
+      setFormError(t('cnMailDuplicate', { address: clean }))
+      return
+    }
+    setBusy(true)
+    setChecking(check)
+    setError('')
+    setFormError('')
+    setNote(null)
+    const wasEditing = editing !== null
+    try {
+      const box = editing
+        ? await connectorsCall<Mailbox>('mail/update', {
+            id: editing,
+            address: clean,
+            label: label.trim(),
+            ...(password ? { password } : {}),
+            ...(advanced && imap.trim() ? { imap_host: imap.trim() } : {}),
+            ...(advanced && smtp.trim() ? { smtp_host: smtp.trim() } : {}),
+            ...(advanced && imapPort ? { imap_port: Number(imapPort) } : {}),
+            ...(advanced && smtpPort ? { smtp_port: Number(smtpPort) } : {}),
+          })
+        : await connectorsCall<Mailbox>('mail/add', {
+            address: clean,
+            password,
+            ...(label.trim() ? { label: label.trim() } : {}),
+            ...(advanced && imap.trim() ? { imap_host: imap.trim() } : {}),
+            ...(advanced && smtp.trim() ? { smtp_host: smtp.trim() } : {}),
+            ...(advanced && imapPort ? { imap_port: Number(imapPort) } : {}),
+            ...(advanced && smtpPort ? { smtp_port: Number(smtpPort) } : {}),
+          })
+      await load()
+      if (wasEditing && !check) {
+        setNote({ id: box.id, ok: true, text: t('cnMailUpdated') })
+      } else {
+        if (wasEditing) setNote({ id: box.id, ok: true, text: t('cnMailTesting') })
+        const result = await connectorsCall<MailTest>('mail/test', { id: box.id })
+        setNote({
+          id: box.id,
+          ok: result.ok,
+          text: result.ok ? t('cnMailOk') : mailFailure(t, result.error),
+        })
+      }
+      reset()
+    } catch (e) {
+      setFormError(reason(e))
+    } finally {
+      setBusy(false)
+      setChecking(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    if (armed !== id) {
+      setArmed(id)
+      window.setTimeout(() => setArmed((current) => (current === id ? null : current)), 6000)
+      return
+    }
+    setArmed(null)
+    try {
+      await connectorsCall('mail/remove', { id })
+      if (editing === id) reset()
+      await load()
+    } catch (e) {
+      setFormError(reason(e))
+    }
+  }
+
+  return h(Sheet, {
+    title: t('cnMailTitle'),
+    onClose,
+    closeLabel: t('close'),
+    footer: h('div', { className: 'nm-sheet-foot-end' },
+      h('button', { type: 'button', className: 'nm-pill', onClick: onClose }, t('cnDone'))),
+  },
+    h('p', { className: 'nm-cn-consent-lead' }, t('cnMailLead')),
+    h('div', { className: 'nm-cn-mail-head' },
+      h('h2', null, t('cnMailListTitle')),
+      h('button', { type: 'button', className: 'nm-cn-note-link', onClick: () => void load() }, t('cnMailRefresh'))),
+    stale
+      ? h('div', { className: 'nm-cn-note' },
+          h('strong', null, t('cnMailNeedsUpdateTitle')),
+          h('p', null, t('cnMailNeedsUpdate')))
+      : boxes === null
+      ? h('p', { className: 'nm-fine' }, t('cnMailTesting'))
+      : boxes.length === 0
+        ? h('p', { className: 'nm-fine' }, t('cnMailEmpty'))
+        : h('div', { className: 'nm-card' }, boxes.map((box) => h('div', { key: box.id, className: 'nm-row nm-cn-mail-row' },
+          h('div', { className: 'nm-row-main' },
+            h('span', { className: 'nm-row-title' }, box.label ? `${box.label} · ${box.address}` : box.address),
+            h('span', { className: 'nm-row-sub' }, `${box.imap_host} / ${box.smtp_host}`),
+            note && note.id === box.id ? h('span', { className: `nm-row-sub nm-wrap${note.ok ? '' : ' nm-cn-warn'}` }, note.text) : null),
+          h('div', { className: 'nm-cn-mail-actions' },
+            h('button', { type: 'button', className: `nm-pill nm-pill-ghost nm-pill-sm${editing === box.id ? ' nm-cn-pill-active' : ''}`, onClick: () => startEdit(box) }, t('cnMailEdit')),
+            h('button', { type: 'button', className: `nm-pill nm-pill-ghost nm-pill-sm${armed === box.id ? ' nm-cn-pill-danger' : ''}`, onClick: () => void remove(box.id) }, armed === box.id ? t('cnMailRemoveSure') : t('cnMailRemove')))))),
+    error ? h('div', { className: 'nm-cn-warn nm-cn-warn-row' },
+      h('span', null, t('cnMailLoadFailed', { error })),
+      h('button', { type: 'button', className: 'nm-cn-note-link', onClick: () => void load() }, t('cnMailRetry'))) : null,
+    stale ? null : h('div', { ref: formTop, className: 'nm-cn-mail-form' },
+      h('h2', null, editing ? t('cnMailEditTitle') : t('cnMailAddTitle')),
+      field(address, setAddress, t('cnMailAddress'), 'email'),
+      field(label, setLabel, t('cnMailLabel')),
+      h('div', { className: 'nm-cn-note' },
+        h('strong', null, editing ? t('cnMailPasswordEditTitle') : t('cnMailPasswordTitle')),
+        h('p', null, editing ? t('cnMailPasswordKeep') : appPasswordHint(t, address)),
+        appPasswordPage(address) ? h('button', { type: 'button', className: 'nm-cn-note-link', onClick: () => openLink(appPasswordPage(address)) }, t('cnMailPasswordWhere')) : null),
+      field(password, setPassword, editing ? t('cnMailPasswordNew') : t('cnMailPassword'), 'password'),
+      h('button', { type: 'button', className: 'nm-cn-more', 'aria-expanded': advanced, onClick: () => setAdvanced(!advanced) }, advanced ? t('cnLessOptions') : t('cnMailServers')),
+      advanced ? h(Fragment, null,
+        field(imap, setImap, t('cnMailImap')),
+        field(smtp, setSmtp, t('cnMailSmtp')),
+        field(imapPort, setImapPort, t('cnMailPort'), 'number'),
+        field(smtpPort, setSmtpPort, t('cnMailPort'), 'number')) : null,
+      formError ? h('p', { className: 'nm-cn-warn' }, formError) : null,
+      h('div', { className: 'nm-cn-add-row' },
+        h('button', { type: 'button', className: 'nm-pill', disabled: busy || !address.trim() || (!editing && !password), onClick: () => void submit() },
+          busy && !checking ? h('span', { className: 'nm-spinner nm-spinner-sm nm-cn-pill-spin' }) : null,
+          editing ? t('save') : t('cnMailConnect')),
+        editing ? h('button', { type: 'button', className: 'nm-pill nm-pill-ghost', disabled: busy || !address.trim(), onClick: () => void submit(true) },
+          checking ? h('span', { className: 'nm-spinner nm-spinner-sm' }) : null,
+          t('cnMailTest')) : null,
+        editing ? h('button', { type: 'button', className: 'nm-pill nm-pill-ghost', disabled: busy, onClick: reset }, t('cancel')) : null),
+      h('p', { className: 'nm-fine' }, t('cnMailKept'))))
+}
+
+
 function PendingSheet({ t, pending, onClose, onKey, onClient, onCustom, onRetry }: { t: Translate; pending: Pending; onClose(): void; onKey(key: string): void; onClient(clientId: string, clientSecret: string): void; onCustom(url: string, label: string, key: string, clientId: string, clientSecret: string): void; onRetry(fresh: boolean): void }): ReactNode {
   switch (pending.kind) {
     case 'steps': return h(StepsSheet, { t, entry: pending.entry, onClose })
+    case 'mail': return h(MailSheet, { t, onClose })
     case 'authorize': return h(AuthorizeSheet, { t, pending, onClose, onRetry })
     case 'key': return h(KeySheet, { t, pending, onClose, onKey })
     case 'client': return h(ClientSheet, { t, pending, onClose, onClient })

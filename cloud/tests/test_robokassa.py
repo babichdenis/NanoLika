@@ -1,6 +1,6 @@
 """Robokassa callbacks are signed, account-scoped and isolated in test mode."""
 
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
@@ -156,7 +156,7 @@ async def test_live_form_signs_receipt_and_state_lookup_is_server_authenticated(
                 "nanolika",
                 "100.00",
                 params["InvId"],
-                quote(receipt, safe=""),
+                receipt,  # the raw JSON, not the URL-encoded form
                 "fixture-live-password-one",
                 "Shp_order=" + order["order_id"],
             ]

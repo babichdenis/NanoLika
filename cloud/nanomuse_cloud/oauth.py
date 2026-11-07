@@ -265,8 +265,8 @@ def read_state(cookie: str, key: str | bytes, provider: str, nonce: str) -> dict
 # ── ручки ───────────────────────────────────────────────────────────────
 def install_oauth(app, cloud, settings) -> None:
     """Три ручки: список провайдеров, старт и возврат. Плюс вход по виджету Telegram."""
+    from .desktop_oauth import desktop_redirect, desktop_request, install_desktop_exchange
     from .identifiers import parse as parse_identifier
-    from .desktop_oauth import desktop_request, desktop_redirect, install_desktop_exchange
 
     desktop_codes = install_desktop_exchange(app, cloud)
 
@@ -296,7 +296,9 @@ def install_oauth(app, cloud, settings) -> None:
         return {"providers": enabled_providers()}
 
     @app.get("/v1/auth/oauth/{provider}/start")
-    async def oauth_start(provider: str, request: Request, next: str = "", desktop_callback: str = "", desktop_challenge: str = "", desktop_state: str = ""):
+    async def oauth_start(
+        provider: str, request: Request, next: str = "", desktop_callback: str = "", desktop_challenge: str = "", desktop_state: str = ""
+    ):
         desktop = desktop_request(desktop_callback, desktop_challenge, desktop_state)
         if provider not in REDIRECT_PROVIDERS:
             return JSONResponse({"error": {"code": "no_provider"}}, status_code=404)
@@ -317,7 +319,14 @@ def install_oauth(app, cloud, settings) -> None:
         response.set_cookie(
             "nm_oauth",
             state_cookie(
-                {"provider": provider, "nonce": nonce, "next": nxt, "expires": int(time.time()) + STATE_TTL_S, "verifier": verifier, "desktop": desktop},
+                {
+                    "provider": provider,
+                    "nonce": nonce,
+                    "next": nxt,
+                    "expires": int(time.time()) + STATE_TTL_S,
+                    "verifier": verifier,
+                    "desktop": desktop,
+                },
                 settings.hmac_key,
             ),
             max_age=STATE_TTL_S,
@@ -340,6 +349,7 @@ def install_oauth(app, cloud, settings) -> None:
             if desktop:
                 return desktop_redirect(desktop, error=reason)
             return _back(nxt, reason)
+
         if error or not code or data is None:
             log.warning(
                 "oauth %s callback refused: denied=%s code_present=%s cookie_present=%s state_valid=%s",
@@ -423,11 +433,9 @@ def install_oauth(app, cloud, settings) -> None:
         from .service import CloudError
 
         try:
-            result = await asyncio.to_thread(_telegram_session, cloud, int(profile["subject"]))
+            result = await asyncio.to_thread(_telegram_session, cloud, int(profile["subject"]), register=False)
         except CloudError as exc:
-            return JSONResponse(
-                {"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status
-            )
+            return JSONResponse({"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
         caller = await asyncio.to_thread(cloud.authenticate, result["api_key"])
         response = JSONResponse({"ok": True, "account": result["account"]})
         browser_sign_in(response, cloud, caller, previous_token=request.cookies.get(SESSION_COOKIE, ""))

@@ -743,7 +743,20 @@ _MODEL_FIELDS = (
     "rates",
     "draft",
 )
-_OFFER_FIELDS = ("provider", "model", "endpoint", "input_rub", "output_rub", "cached_rub", "context_length", "eligible", "selected", "exclusion_reason", "unit", "price_rub")
+_OFFER_FIELDS = (
+    "provider",
+    "model",
+    "endpoint",
+    "input_rub",
+    "output_rub",
+    "cached_rub",
+    "context_length",
+    "eligible",
+    "selected",
+    "exclusion_reason",
+    "unit",
+    "price_rub",
+)
 
 
 def _compact(payload: dict) -> dict:
@@ -757,10 +770,7 @@ def _compact(payload: dict) -> dict:
                 "selected": routing.get("selected"),
                 "selected_model": routing.get("selected_model"),
                 "configured": routing.get("configured"),
-                "offers": [
-                    {key: offer.get(key) for key in _OFFER_FIELDS}
-                    for offer in routing.get("offers") or []
-                ],
+                "offers": [{key: offer.get(key) for key in _OFFER_FIELDS} for offer in routing.get("offers") or []],
             }
         models.append(item)
     return {

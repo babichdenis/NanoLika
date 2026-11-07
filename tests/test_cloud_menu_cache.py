@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 
 import httpx
-import pytest
 
 from nanomuse import cloud as cloud_mod
 from nanomuse.cloud import CloudClient

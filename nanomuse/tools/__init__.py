@@ -1,3 +1,4 @@
+from nanomuse.tools.beatapi import BeatAPI
 from nanomuse.tools.base import BaseTool, CallAssessment, ToolCollection, safe_execute
 from nanomuse.tools.browser import Browser, playwright_available
 from nanomuse.tools.calendar_tool import Calendar
@@ -11,8 +12,8 @@ from nanomuse.tools.memory_tools import Forget, Recall, Remember
 from nanomuse.tools.models import Models
 from nanomuse.tools.office import OfficeConvert, OfficeVba, OfficeXlsm
 from nanomuse.tools.picture import Picture
-from nanomuse.tools.share import ShareFile
 from nanomuse.tools.reminder_tools import Reminders
+from nanomuse.tools.share import ShareFile
 from nanomuse.tools.shell import PythonExecute, Shell
 from nanomuse.tools.skills_tool import Skills
 from nanomuse.tools.store import Store
@@ -24,6 +25,7 @@ from nanomuse.tools.web import WebFetch, WebSearch
 __all__ = [
     "AskUser",
     "BaseTool",
+    "BeatAPI",
     "Browser",
     "Calendar",
     "CallAssessment",

@@ -60,7 +60,9 @@ async def test_cookie_expiry_is_enforced_on_server_without_sliding_refresh():
         response = await client.get("/v1/auth/site-session")
         assert response.json()["state"] == "signed-in"
         assert "set-cookie" not in response.headers
-        store.clock = lambda: store.migration_start + MAX_AGE_S + 1
+        with cloud.db.tx() as connection:
+            created = connection.execute("SELECT created_at FROM browser_sessions").fetchone()[0]
+        store.clock = lambda: created + MAX_AGE_S + 1
         assert store.caller(token) is None
 
 

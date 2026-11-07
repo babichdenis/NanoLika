@@ -384,11 +384,11 @@ async function selectModel(){return composerControls.model();}
 /* Каждый разговор помнит свою модель: выбрали рисующую в одном чате — текстовый
    соседний остался на своей. Пусто — значит как в аккаунте по умолчанию. */
 function applyChatModel(chat){composerControls.setChatModel(chat?.model||'');composerControls.setChatReasoning(chat?.reasoning||'');}
-function wireMessage(message,seesImages=true){let text=message.content||'';for(const file of message.files||[]){if(!file.text)continue;text+=(text?'\n\n':'')+'--- Файл: '+file.name+' ---\n'+file.text;}const images=(message.files||[]).filter(file=>file.dataUrl);if(!images.length)return text;
+function wireMessage(message,seesImages=true){let text=message.content||'';for(const file of message.files||[]){if(!file.text)continue;text+=(text?'\n\n':'')+'--- Файл: '+file.name+' ---\n'+file.text;}const images=[];for(const file of message.files||[]){if(file.dataUrl)images.push({name:file.name,url:file.dataUrl});else if(Array.isArray(file.images))file.images.forEach((url,i)=>images.push({name:file.name+(file.images.length>1?' (стр. '+(i+1)+')':''),url}));}if(!images.length)return text;
  /* Текстовая модель картинку не получит: вместо ошибки релея она сама скажет об этом
     человеку — как в opencode. */
- if(!seesImages)return (text?text+'\n\n':'')+'[К сообщению приложены изображения: '+images.map(file=>file.name).join(', ')+'. Эта модель не видит изображения. Скажи об этом прямо, попроси описать словами или предложи выбрать модель, которая видит картинки. Не пересказывай этот служебный текст.]';
- const parts=[{type:'text',text:text||'Посмотри приложенные изображения: '+images.map(file=>file.name).join(', ')}];for(const image of images)parts.push({type:'image_url',image_url:{url:image.dataUrl}});return parts;}
+ if(!seesImages)return (text?text+'\n\n':'')+'[К сообщению приложены изображения: '+images.map(image=>image.name).join(', ')+'. Эта модель не видит изображения. Скажи об этом прямо, попроси описать словами или предложи выбрать модель, которая видит картинки. Не пересказывай этот служебный текст.]';
+ const parts=[{type:'text',text:text||'Посмотри приложенные изображения: '+images.map(image=>image.name).join(', ')}];for(const image of images)parts.push({type:'image_url',image_url:{url:image.url}});return parts;}
 function wireLength(message,seesImages=true){const parts=wireMessage(message,seesImages);return typeof parts==='string'?parts.length:parts.reduce((sum,part)=>sum+(part.type==='text'?part.text.length:4000),0);}
 function contextFor(chat,seesImages=true){let n=0;const selected=[];for(const m of chat.messages.filter(m=>(m.content||m.files?.length)&&!m.interrupted).slice(-20).reverse()){const length=wireLength(m,seesImages);if(n+length>65000&&selected.length)break;selected.unshift({role:m.role,content:wireMessage(m,seesImages)});n+=length;}return [{role:'system',content:'You are Lika, a warm and practical personal assistant. Reply in '+({ru:'Russian',zh:'Simplified Chinese',en:'English'}[lang])+'. This browser client has two explicit tools: conversation_open (navigation between the apps of this account) and make_document (a Word document, an Excel spreadsheet or a ZIP archive made on the server and returned as a download link). It has no computer-control, filesystem or publishing tools. When the person asks for a document, letter, plan, report, resume, list, table or archive saved as a file, call make_document with the whole content (docx text, xlsx rows, or zip files), then say the file is ready to download; a document is not a computer action. When the person asks for something that must happen on a computer or another device (open a program, a file or a folder, look at or watch the screen, monitor the computer, click, run a command, print, send mail from their mail program, change system settings), say plainly that the browser page cannot do it, and offer the desktop app: install nanoLika on the computer from https://nanolika.ru/download.html, sign in there with the same account, and that computer joins this account; the assistant on the computer can then use its windows, files and screen. Give the full link, never a page name. Do not offer the download for ordinary text questions. Do not ask what to watch, which program to open, or collect any details, checklist or plan for such a task: the browser cannot do it at all, so one short refusal, then the link and one sentence about what the desktop app adds. Never claim you clicked, changed a file, sent a message or ran background work. Help with explanations, drafts, plans and code. Documents in the local library are not available to you unless the user explicitly provides their content. Do not claim access to other conversations or devices. You cannot draw pictures in this chat: pictures are made with the picture button beside the attachments, so never pretend to draw with text, characters or ASCII art; say the picture button is the way. All synced chats share one account list. New chat creates a separate shared conversation with empty history. Opening an existing chat in a messenger preserves that chat and does not create another conversation. Never say you created a chat when only switching channels, or say no new chat was created when the user pressed New chat. For an explicit request to open this conversation in Telegram, MAX or on the computer, call conversation_open with the chosen destination. Do not claim success until the tool result confirms it. A new conversation requires the New chat control; navigation preserves the current conversation. Do not confuse these actions. Other apps are optional: the browser works on its own. Connection setup is in the account menu under Devices and channels. Do not tell the user to click channel buttons above the chat. Use the conversation_open tool for a spoken or typed navigation request. If it fails, explain the failure briefly; do not investigate infrastructure or repeat the action automatically.'},...selected];}
 /* ── вложения: картинки сжимаем в браузере, текстовые файлы читаем в контекст ── */
@@ -396,15 +396,76 @@ const ATTACH_MAX=4,ATTACH_IMAGE_SIDE=1200,ATTACH_TEXT_CHARS=20000,ATTACH_FILE_BY
 let pendingFiles=[];
 const isImageFile=file=>/^image\//i.test(file.type||'')||/\.(png|jpe?g|webp|gif|heic|heif|avif|bmp)$/i.test(file.name||'');
 const isTextFile=file=>/^text\//i.test(file.type||'')||/\.(txt|md|markdown|csv|tsv|json|log|ya?ml|xml|html?|css|scss|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cpp|sh|bash|zsh|sql|ini|toml)$/i.test(file.name||'');
+const isPdfFile=file=>/^application\/pdf$/i.test(file.type||'')||/\.pdf$/i.test(file.name||'');
+const isWordFile=file=>/\.docx$/i.test(file.name||'')||/vnd\.openxmlformats-officedocument\.wordprocessingml/i.test(file.type||'');
+const isSheetFile=file=>/\.(xlsx|xlsm|xls|ods)$/i.test(file.name||'');
+/* Word и Excel читаются здесь же: текст таблицы или документа уходит модели, файл никуда. */
+async function wordText(file){
+ if(!window.mammoth)throw new Error('unsupported');
+ const result=await window.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+ const text=(result.value||'').replace(/\n{3,}/g,'\n\n').trim();
+ if(!text)throw new Error('empty');
+ return text.slice(0,ATTACH_TEXT_CHARS);
+}
+async function sheetText(file){
+ if(!window.XLSX)throw new Error('unsupported');
+ const book=window.XLSX.read(new Uint8Array(await file.arrayBuffer()),{type:'array'});
+ const parts=[];
+ for(const name of book.SheetNames.slice(0,8)){
+  const csv=window.XLSX.utils.sheet_to_csv(book.Sheets[name],{blankrows:false}).trim();
+  if(csv)parts.push('--- лист: '+name+' ---\n'+csv);
+  if(parts.join('\n\n').length>ATTACH_TEXT_CHARS)break;
+ }
+ const text=parts.join('\n\n').trim();
+ if(!text)throw new Error('empty');
+ return text.slice(0,ATTACH_TEXT_CHARS);
+}
+/* PDF читается здесь, в браузере: текст уходит в модель, сам файл никуда не разбирается.
+   Ограничения те же, что у текстовых вложений: страницы и символы. */
+const ATTACH_PDF_PAGES=40,ATTACH_SCAN_PAGES=6,ATTACH_SCAN_SIDE=1400;
+async function pdfText(file){
+ if(!window.pdfjsLib)throw new Error('unsupported');
+ if(window.pdfjsLib.GlobalWorkerOptions&&!window.pdfjsLib.GlobalWorkerOptions.workerSrc)window.pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdf/pdf.worker.min.js';
+ const buffer=await file.arrayBuffer();
+ const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(buffer),isEvalSupported:false,useSystemFonts:true}).promise;
+ try{
+  const pages=Math.min(pdf.numPages,ATTACH_PDF_PAGES),parts=[];
+  for(let n=1;n<=pages;n++){
+   const page=await pdf.getPage(n),content=await page.getTextContent();
+   let line='';const lines=[];
+   for(const item of content.items){if(typeof item.str!=='string')continue;line+=item.str;if(item.hasEOL){lines.push(line);line='';}}
+   if(line)lines.push(line);
+   parts.push(lines.join('\n'));
+  }
+  const text=parts.join('\n\n').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+  /* Скан без текстового слоя — не отказ: страницы рисуются в картинки и уходят модели,
+     которая видит. Так же читает и Лика на компьютере, и в Telegram. */
+  if(!text)return {scan:await pdfPages(pdf)};
+  return {text:text.slice(0,ATTACH_TEXT_CHARS),cut:text.length>ATTACH_TEXT_CHARS||pdf.numPages>pages,pages:pdf.numPages};
+ }finally{try{pdf.destroy();}catch{}}
+}
+async function pdfPages(pdf){
+ const count=Math.min(pdf.numPages,ATTACH_SCAN_PAGES),shots=[];
+ for(let n=1;n<=count;n++){
+  const page=await pdf.getPage(n),base=page.getViewport({scale:1});
+  const scale=Math.min(2,ATTACH_SCAN_SIDE/Math.max(base.width||1,base.height||1));
+  const viewport=page.getViewport({scale:Math.max(scale,0.5)});
+  const canvas=document.createElement('canvas');canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
+  const pen=canvas.getContext('2d');pen.fillStyle='#ffffff';pen.fillRect(0,0,canvas.width,canvas.height);
+  await page.render({canvasContext:pen,viewport}).promise;
+  shots.push(canvas.toDataURL('image/jpeg',.82));
+ }
+ return shots;
+}
 function sizeLabel(bytes){if(bytes<1024)return bytes+' Б';if(bytes<1048576)return Math.round(bytes/1024)+' КБ';return (bytes/1048576).toFixed(1).replace('.',',')+' МБ';}
 /* CSP сайта разрешает img-src 'self' blob:, поэтому превью картинки идёт через blob:, а не data:. */
 const previewUrls=new WeakMap();
 function previewUrl(file){if(!file.dataUrl)return '';const cached=previewUrls.get(file);if(cached)return cached;try{const comma=file.dataUrl.indexOf(','),mime=(file.dataUrl.slice(5,comma).split(';')[0])||'image/jpeg',binary=atob(file.dataUrl.slice(comma+1)),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);const url=URL.createObjectURL(new Blob([bytes],{type:mime}));previewUrls.set(file,url);return url;}catch{return '';}}
-function fileChip(file,{removable=false}={}){const chip=document.createElement('span');chip.className='file-chip';if(file.dataUrl){const image=document.createElement('img');image.src=previewUrl(file);image.alt='';chip.append(image);}else chip.append(uiIcon('file'));const name=document.createElement('span');name.className='file-name';name.textContent=file.name;const meta=document.createElement('span');meta.className='file-meta';meta.textContent=sizeLabel(file.size||0);chip.append(name,meta);if(removable){const remove=document.createElement('button');remove.type='button';remove.setAttribute('aria-label',t('removeAttachment')+': '+file.name);remove.textContent='×';remove.onclick=()=>{pendingFiles=pendingFiles.filter(item=>item!==file);renderPending();$('message').focus();};chip.append(remove);}return chip;}
+function fileChip(file,{removable=false}={}){const chip=document.createElement('span');chip.className='file-chip';const shot=file.dataUrl||(Array.isArray(file.images)&&file.images[0]);if(shot){const image=document.createElement('img');image.src=file.dataUrl?previewUrl(file):shot;image.alt='';chip.append(image);}else chip.append(uiIcon('file'));const name=document.createElement('span');name.className='file-name';name.textContent=file.name;const meta=document.createElement('span');meta.className='file-meta';meta.textContent=sizeLabel(file.size||0);chip.append(name,meta);if(removable){const remove=document.createElement('button');remove.type='button';remove.setAttribute('aria-label',t('removeAttachment')+': '+file.name);remove.textContent='×';remove.onclick=()=>{pendingFiles=pendingFiles.filter(item=>item!==file);renderPending();$('message').focus();};chip.append(remove);}return chip;}
 function renderPending(){const box=$('composer-files');if(!box)return;box.replaceChildren();box.hidden=!pendingFiles.length;for(const file of pendingFiles)box.append(fileChip(file,{removable:true}));}
 async function decodeImage(file){if('createImageBitmap'in window){try{return await createImageBitmap(file);}catch{}}return new Promise((resolve,reject)=>{const url=URL.createObjectURL(file),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image);};image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('decode'));};image.src=url;});}
 async function shrinkImage(file){const source=await decodeImage(file);const scale=Math.min(1,ATTACH_IMAGE_SIDE/Math.max(source.width||1,source.height||1));const width=Math.max(1,Math.round((source.width||1)*scale)),height=Math.max(1,Math.round((source.height||1)*scale));const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const pen=canvas.getContext('2d');pen.fillStyle='#ffffff';pen.fillRect(0,0,width,height);pen.drawImage(source,0,0,width,height);if(typeof source.close==='function')source.close();return canvas.toDataURL('image/jpeg',.82);}
-async function readAttachment(file){if(file.size>ATTACH_FILE_BYTES)throw new Error('big');if(isImageFile(file))return {name:file.name||'image.jpg',mime:'image/jpeg',size:file.size,dataUrl:await shrinkImage(file)};if(isTextFile(file)){const raw=(await file.text()).replace(/\u0000/g,'');const body=raw.slice(0,ATTACH_TEXT_CHARS);return {name:file.name||'file.txt',mime:file.type||'text/plain',size:file.size,text:body,cut:raw.length>body.length};}return {name:file.name||'file',mime:file.type||'application/octet-stream',size:file.size,blob:file};}
+async function readAttachment(file){if(file.size>ATTACH_FILE_BYTES)throw new Error('big');if(isImageFile(file))return {name:file.name||'image.jpg',mime:'image/jpeg',size:file.size,dataUrl:await shrinkImage(file)};if(isTextFile(file)){const raw=(await file.text()).replace(/\u0000/g,'');const body=raw.slice(0,ATTACH_TEXT_CHARS);return {name:file.name||'file.txt',mime:file.type||'text/plain',size:file.size,text:body,cut:raw.length>body.length};}if(isWordFile(file)){const text=await wordText(file);return {name:file.name||'file.docx',mime:file.type||'application/vnd.openxmlformats-officedocument.wordprocessingml.document',size:file.size,text,cut:text.length>=ATTACH_TEXT_CHARS,blob:file};}if(isSheetFile(file)){const text=await sheetText(file);return {name:file.name||'file.xlsx',mime:file.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',size:file.size,text,cut:text.length>=ATTACH_TEXT_CHARS,blob:file};}if(isPdfFile(file)){const pdf=await pdfText(file);return {name:file.name||'file.pdf',mime:'application/pdf',size:file.size,text:pdf.text||'',cut:pdf.cut,pages:pdf.pages,...(pdf.scan?{images:pdf.scan}:{}),blob:file};}return {name:file.name||'file',mime:file.type||'application/octet-stream',size:file.size,blob:file};}
 /* Вложение уходит в S3 через релей и возвращает ссылку: её увидят другие устройства
    и мессенджеры. Не вышло — файл остаётся в браузере, в тексте будет только имя. */
 async function uploadAttachment(file){
@@ -424,7 +485,7 @@ async function uploadAttachment(file){
 }
 if($('attach')&&$('attach-input')){
  $('attach').onclick=()=>$('attach-input').click();
- $('attach-input').onchange=async event=>{const chosen=[...(event.target.files||[])];event.target.value='';if(!chosen.length)return;const room=ATTACH_MAX-pendingFiles.length;if(room<=0){notice(t('attachLimit'));return;}let refused='';for(const file of chosen.slice(0,room)){try{pendingFiles.push(await readAttachment(file));renderPending();}catch(error){const code=error?.message==='big'?'attachBig':error?.message==='unsupported'?'attachUnsupported':'attachFailed';refused=code;}}if(chosen.length>room)refused='attachLimit';if(refused)notice(t(refused));$('message').focus();};
+ $('attach-input').onchange=async event=>{const chosen=[...(event.target.files||[])];event.target.value='';if(!chosen.length)return;const room=ATTACH_MAX-pendingFiles.length;if(room<=0){notice(t('attachLimit'));return;}let refused='';for(const file of chosen.slice(0,room)){try{pendingFiles.push(await readAttachment(file));renderPending();}catch(error){const code=error?.message==='big'?'attachBig':error?.message==='scan'?'attachScan':error?.message==='empty'?'attachEmpty':error?.message==='unsupported'?'attachUnsupported':'attachFailed';refused=code;}}if(chosen.length>room)refused='attachLimit';if(refused)notice(t(refused));$('message').focus();};
 }
 let drawMode=false;
 if($('draw')){

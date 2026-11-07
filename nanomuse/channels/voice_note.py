@@ -90,7 +90,9 @@ async def _menu(
     except ValueError:
         raise VoiceError("the relay sent no model menu") from None
     if isinstance(said, dict) and isinstance(said.get("models"), list):
-        shelf = said.get("shelf") if isinstance(said.get("shelf"), dict) else {}
+        shelf = said.get("shelf")
+        if not isinstance(shelf, dict):
+            shelf = {}
         return [row for row in said["models"] if isinstance(row, dict)], shelf
     data = said.get("data") if isinstance(said, dict) else None
     return ([row for row in data if isinstance(row, dict)] if isinstance(data, list) else []), {}
@@ -100,8 +102,12 @@ def _audio_kind_of(entry: dict) -> str:
     """What this menu row can do: `speech` or `transcribe`. Three shapes answer it — the
     plain menu (`nanomuse.audio_kind`), the cabinet's catalogue (`audio.kind`) and an
     older relay's flat `audio_kind`."""
-    about = entry.get("nanomuse") if isinstance(entry.get("nanomuse"), dict) else {}
-    voice = entry.get("audio") if isinstance(entry.get("audio"), dict) else {}
+    about = entry.get("nanomuse")
+    if not isinstance(about, dict):
+        about = {}
+    voice = entry.get("audio")
+    if not isinstance(voice, dict):
+        voice = {}
     return str(entry.get("audio_kind") or about.get("audio_kind") or voice.get("kind") or "")
 
 
@@ -135,9 +141,13 @@ async def _pick(
     chosen = str((shelf.get("default") or {}).get("audio") or "")
     pick = ""
     if chosen:
-        pick = next((str(row.get("id") or "") for row in fits if str(row.get("id") or "") == chosen), "")
+        pick = next(
+            (str(row.get("id") or "") for row in fits if str(row.get("id") or "") == chosen), ""
+        )
     if not pick:
-        pick = next((str(row.get("id") or "") for row in fits if str(row.get("id") or "") in kept), "")
+        pick = next(
+            (str(row.get("id") or "") for row in fits if str(row.get("id") or "") in kept), ""
+        )
     if not pick:
         pick = str(fits[0].get("id") or "")
     if not pick:
@@ -211,14 +221,20 @@ async def say(
         raise VoiceError("no relay to ask")
     base = base.rstrip("/")
     chosen = model or await _pick(base, key, SAY, transport)
-    payload: dict[str, object] = {"model": chosen, "input": body[:TEXT_LIMIT], "response_format": fmt}
+    payload: dict[str, object] = {
+        "model": chosen,
+        "input": body[:TEXT_LIMIT],
+        "response_format": fmt,
+    }
     if voice:
         payload["voice"] = voice
     headers = {"Authorization": f"Bearer {key}"}
     for attempt in (1, 2):
         try:
             async with httpx.AsyncClient(transport=transport, timeout=SAY_TIMEOUT_S) as client:
-                response = await client.post(f"{base}/v1/audio/speech", json=payload, headers=headers)
+                response = await client.post(
+                    f"{base}/v1/audio/speech", json=payload, headers=headers
+                )
         except httpx.HTTPError as exc:
             raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
         if response.status_code == 404 and not model and attempt == 1:

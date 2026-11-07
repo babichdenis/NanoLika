@@ -18,7 +18,7 @@ from email.header import decode_header, make_header
 from email.message import EmailMessage
 from typing import Any
 
-from nanomuse.config import EmailSettings
+from nanomuse.config import EmailAccountSettings, EmailSettings, mailbox_secret
 from nanomuse.contacts import ContactBook
 from nanomuse.schema import RiskLevel, ToolResult
 from nanomuse.tools.base import BaseTool, CallAssessment, int_arg
@@ -112,15 +112,22 @@ class _EmailBase(BaseTool):
     settings: EmailSettings
     vault: CredentialVault | None = None
 
-    def _creds(self) -> tuple[str, str]:
-        address, password = self.settings.address, self.settings.password
+    def _creds(self, account: EmailAccountSettings | None = None) -> tuple[str, str]:
+        account = account or self.settings.account()
+        if account is None:
+            raise RuntimeError(
+                "no mailbox is connected: add one in the app, or `[connectors.email]` in "
+                "config.toml with the address and a vault password"
+            )
+        address, password = account.address, account.password
         if self.vault is not None:
             address = self.vault.resolve(address)
             password = self.vault.resolve(password)
         if "{{" in address or "{{" in password or not address or not password:
             raise RuntimeError(
-                "email credentials are not configured. Run `nanomuse vault set EMAIL_ADDRESS` and "
-                "`nanomuse vault set EMAIL_PASSWORD`, and set connectors.email.* in config.toml"
+                "email credentials are not configured. Add the mailbox in the app, or run "
+                f"`nanomuse vault set {mailbox_secret(account.id)}` and set "
+                "connectors.email in config.toml"
             )
         return address, password
 
@@ -128,8 +135,10 @@ class _EmailBase(BaseTool):
 class ReadEmails(_EmailBase):
     name: str = "read_emails"
     description: str = (
-        "Read the user's mailbox over IMAP. Returns the most recent messages (sender, date, subject, "
-        "text body). Filters: unread_only, search (IMAP TEXT search), folder (default INBOX)."
+        "Read the user's mail over IMAP. Returns the most recent messages (sender, date, "
+        "subject, text body). Filters: unread_only, search (IMAP TEXT search), folder "
+        "(default INBOX). Several mailboxes can be connected: `account` picks one by name or "
+        "address; without it every connected mailbox is read, each message tagged with its own."
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -138,6 +147,10 @@ class ReadEmails(_EmailBase):
             "limit": {"type": "integer", "minimum": 1, "maximum": 30},
             "unread_only": {"type": "boolean"},
             "search": {"type": "string", "description": "Free-text filter applied server-side."},
+            "account": {
+                "type": "string",
+                "description": "Which mailbox, by name or address; all of them when omitted.",
+            },
         },
     }
     risk: RiskLevel = RiskLevel.MODERATE
@@ -158,16 +171,20 @@ class ReadEmails(_EmailBase):
         limit: int = 10,
         unread_only: bool = False,
         search: str | None = None,
+        account: str | None = None,
         **_: Any,
     ) -> ToolResult:
-        if not self.settings.enabled or not self.settings.imap_host:
+        accounts = self.settings.all_accounts()
+        if account:
+            chosen = self.settings.account(account)
+            if chosen is None:
+                return ToolResult.fail(f"no mailbox named {account!r} is connected")
+            accounts = [chosen]
+        if not accounts:
             return ToolResult.fail(
-                "email connector is disabled (set connectors.email.enabled=true and imap_host)"
+                "email connector is disabled: connect a mailbox in the app, or set "
+                "connectors.email.enabled=true and imap_host in config.toml"
             )
-        try:
-            address, password = self._creds()
-        except RuntimeError as exc:
-            return ToolResult.fail(str(exc))
         limit = int_arg(limit, 10, 1, 30)
         try:
             mailbox = imap_quote(str(folder or "INBOX"))
@@ -175,10 +192,9 @@ class ReadEmails(_EmailBase):
         except RuntimeError as exc:
             return ToolResult.fail(str(exc))
 
-        def _fetch() -> list[str]:
-            with imaplib.IMAP4_SSL(
-                self.settings.imap_host, self.settings.imap_port, timeout=IMAP_TIMEOUT_S
-            ) as imap:
+        def _fetch_one(one: EmailAccountSettings) -> list[str]:
+            address, password = self._creds(one)
+            with imaplib.IMAP4_SSL(one.imap_host, one.imap_port, timeout=IMAP_TIMEOUT_S) as imap:
                 imap.login(address, password)
                 status, _ = imap.select(mailbox, readonly=True)
                 if status != "OK":
@@ -206,12 +222,23 @@ class ReadEmails(_EmailBase):
                     )
                 return out
 
-        try:
-            messages = await asyncio.to_thread(_fetch)
-        except (imaplib.IMAP4.error, OSError, RuntimeError) as exc:
-            return ToolResult.fail(f"IMAP error: {exc}")
+        messages: list[str] = []
+        errors: list[str] = []
+        tag = len(accounts) > 1
+        for one in accounts:
+            try:
+                fetched = await asyncio.to_thread(_fetch_one, one)
+            except (imaplib.IMAP4.error, OSError, RuntimeError) as exc:
+                errors.append(f"{one.label or one.address}: {exc}")
+                continue
+            prefix = f"[{one.label or one.address}]\n" if tag else ""
+            messages.extend(prefix + message for message in fetched)
         if not messages:
+            if errors:
+                return ToolResult.fail("IMAP error: " + "; ".join(errors))
             return ToolResult(output="No messages matched.")
+        if errors:
+            messages.append("Could not read: " + "; ".join(errors))
         return ToolResult(output="\n\n".join(messages))
 
 
@@ -228,6 +255,10 @@ class SendEmail(_EmailBase):
             "subject": {"type": "string"},
             "body": {"type": "string", "description": "Plain-text body."},
             "cc": {"type": "string"},
+            "account": {
+                "type": "string",
+                "description": "Which mailbox to send from, by name or address; the first when omitted.",
+            },
         },
         "required": ["to", "subject", "body"],
     }
@@ -264,23 +295,32 @@ class SendEmail(_EmailBase):
         return CallAssessment(
             risk=RiskLevel.SENSITIVE,
             egress=True,
-            egress_target=self.settings.smtp_host or None,
+            egress_target=(self.settings.account(args.get("account")) or self.settings).smtp_host
+            or None,
             target=",".join(recipients) or None,
             summary=f"send_email to={to} subject={str(args.get('subject', ''))[:80]!r}",
             warnings=warnings,
         )
 
     async def execute(
-        self, to: str = "", subject: str = "", body: str = "", cc: str | None = None, **_: Any
+        self,
+        to: str = "",
+        subject: str = "",
+        body: str = "",
+        cc: str | None = None,
+        account: str | None = None,
+        **_: Any,
     ) -> ToolResult:
-        if not self.settings.enabled or not self.settings.smtp_host:
+        chosen = self.settings.account(account)
+        if chosen is None:
             return ToolResult.fail(
-                "email connector is disabled (set connectors.email.enabled=true and smtp_host)"
+                "no mailbox is connected: add one in the app, or set connectors.email with "
+                "smtp_host in config.toml"
             )
         if not to.strip():
             return ToolResult.fail("`to` is required")
         try:
-            address, password = self._creds()
+            address, password = self._creds(chosen)
         except RuntimeError as exc:
             return ToolResult.fail(str(exc))
 
@@ -293,18 +333,14 @@ class SendEmail(_EmailBase):
             msg["Subject"] = subject
             msg["Date"] = email.utils.formatdate(localtime=True)
             msg.set_content(body)
-            if self.settings.smtp_starttls:
-                with smtplib.SMTP(
-                    self.settings.smtp_host, self.settings.smtp_port, timeout=30
-                ) as smtp:
+            if chosen.smtp_starttls:
+                with smtplib.SMTP(chosen.smtp_host, chosen.smtp_port, timeout=30) as smtp:
                     smtp.ehlo()
                     smtp.starttls()
                     smtp.login(address, password)
                     smtp.send_message(msg)
             else:
-                with smtplib.SMTP_SSL(
-                    self.settings.smtp_host, self.settings.smtp_port, timeout=30
-                ) as smtp:
+                with smtplib.SMTP_SSL(chosen.smtp_host, chosen.smtp_port, timeout=30) as smtp:
                     smtp.login(address, password)
                     smtp.send_message(msg)
 
@@ -315,7 +351,9 @@ class SendEmail(_EmailBase):
         except (smtplib.SMTPException, OSError) as exc:
             return ToolResult.fail(f"SMTP error: {exc}")
         return ToolResult(
-            output=f"Email sent to {to}" + (f" (cc {cc})" if cc else "") + f": {subject}"
+            output=f"Email sent from {address} to {to}"
+            + (f" (cc {cc})" if cc else "")
+            + f": {subject}"
         )
 
 

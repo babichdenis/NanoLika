@@ -16,7 +16,7 @@
 
 ## Mail - почта
 
-- `read_emails`: Read the user's mailbox over IMAP.
+- `read_emails`: Read the user's mail over IMAP.
 - `send_email` (needs the user's yes): Send an email from the user's account over SMTP.
 
 ## Calendar and contacts - календарь и контакты
@@ -65,6 +65,7 @@
 - `models`: Which models this account can use and what they cost.
 - `office_xlsm`: Make an Excel workbook with a working macro and a button, without Microsoft Office: data goes to a sheet, the macro reads commands from the hidden _cfg sheet (format, filter, sort, pdf, refresh, stamp, clear) and draws a button on open.
 - `picture`: Draw one picture through the account's NanoLika Cloud key and save it in the workspace, so the chat shows it.
+- `share_file`: Put a file you made into the account's own storage and get a stable link.
 - `terminate`: Finish the current task.
 - `video`: Make one short clip through the account's NanoLika Cloud key and save it in the workspace, so the chat shows it.
 

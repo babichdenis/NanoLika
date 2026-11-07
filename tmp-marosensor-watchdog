@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# Вотчдог marosensor.ru: следит за основным хостингом и публичным сайтом,
+# пишет в Telegram и на почту при смене состояния. Запускается systemd-таймером.
+set -u
+
+CONF=/etc/marosensor-watchdog.env
+[ -f "$CONF" ] && . "$CONF"
+
+ORIGIN_IP="${ORIGIN_IP:-141.8.192.217}"
+PUBLIC_URL="${PUBLIC_URL:-https://marosensor.ru/}"
+HEALTH_PATH="${HEALTH_PATH:-/marosensor-health.php}"
+STATE_DIR="${STATE_DIR:-/var/lib/marosensor-watchdog}"
+STATE_FILE="$STATE_DIR/state"
+mkdir -p "$STATE_DIR"
+
+MODE="${1:-run}"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
+
+send_telegram() {
+    local text="$1"
+    [ -n "${TG_BOT_TOKEN:-}" ] && [ -n "${TG_CHAT_ID:-}" ] || return 0
+    local proxy_args=()
+    [ -n "${TUNNEL_PROXY:-}" ] && proxy_args=(-x "$TUNNEL_PROXY")
+    curl -sS --max-time 25 "${proxy_args[@]}" -X POST \
+        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        -d "chat_id=${TG_CHAT_ID}" \
+        --data-urlencode "text=${text}" \
+        -d "disable_web_page_preview=true" >/dev/null 2>&1 \
+        || log "telegram send failed"
+}
+
+send_email() {
+    local subject="$1" body="$2"
+    [ -n "${SMTP_HOST:-}" ] && [ -n "${MAIL_TO:-}" ] || return 0
+    printf '%s\n' "$body" | /usr/local/lib/marosensor-watchdog/sendmail.py "$subject" >/dev/null 2>&1 \
+        || log "email send failed"
+}
+
+notify() {
+    local subject="$1" body="$2"
+    log "ALERT: $subject"
+    send_telegram "$body"
+    send_email "$subject" "$body"
+}
+
+check_origin() {
+    curl -sk --noproxy '*' --max-time 20 --resolve "marosensor.ru:443:${ORIGIN_IP}" \
+        "https://marosensor.ru${HEALTH_PATH}" 2>/dev/null
+}
+
+check_public() {
+    curl -sL --noproxy '*' --max-time 25 "$PUBLIC_URL" 2>/dev/null
+}
+
+origin_ok=0
+origin_via_tunnel=0
+body=$(check_origin)
+if [ "${body#ok}" != "$body" ]; then
+    origin_ok=1
+fi
+if [ "$origin_ok" = 0 ] && [ -n "${TUNNEL_PROXY:-}" ]; then
+    body=$(curl -sk --max-time 20 -x "$TUNNEL_PROXY" \
+        "https://marosensor.ru${HEALTH_PATH}" 2>/dev/null)
+    [ "${body#ok}" != "$body" ] && origin_via_tunnel=1
+fi
+
+public_ok=0
+public_via_tunnel=0
+external_up=0
+mirror=0
+page=$(check_public)
+if [ -n "$page" ]; then
+    public_ok=1
+else
+    if [ -n "${TUNNEL_PROXY:-}" ]; then
+        page=$(curl -sL --max-time 25 -x "$TUNNEL_PROXY" "$PUBLIC_URL" 2>/dev/null)
+        [ -n "$page" ] && public_via_tunnel=1
+    fi
+fi
+if [ -n "$page" ]; then
+    case "$page" in
+        *"Резервная копия сайта"*) mirror=1 ;;
+    esac
+fi
+
+# Если ни мы, ни резервный канал не видим сайт — спрашиваем внешние узлы,
+# чтобы не путать «сайт упал» с «заблокированы только наши адреса».
+if [ "$public_ok" = 0 ] && [ "$public_via_tunnel" = 0 ]; then
+    req=$(curl -sS --noproxy '*' --max-time 20 -H "Accept: application/json" \
+        "https://check-host.net/check-http?host=${PUBLIC_URL}&max_nodes=3" 2>/dev/null)
+    req_id=$(printf '%s' "$req" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')
+    if [ -n "$req_id" ]; then
+        sleep 6
+        res=$(curl -sS --noproxy '*' --max-time 20 -H "Accept: application/json" \
+            "https://check-host.net/check-result/${req_id}" 2>/dev/null)
+        printf '%s' "$res" | grep -q '"OK","200"' && external_up=1
+    fi
+fi
+
+if [ "$public_ok" = 1 ] && [ "$mirror" = 1 ]; then
+    state="mirror"
+elif [ "$public_ok" = 1 ] && [ "$origin_ok" = 1 ]; then
+    state="ok"
+elif [ "$public_ok" = 1 ]; then
+    state="degraded"
+elif [ "$public_via_tunnel" = 1 ] || [ "$external_up" = 1 ]; then
+    state="blocked"
+else
+    state="down"
+fi
+
+if [ "$origin_ok" = 1 ]; then
+    origin_note="основной сервер отвечает"
+elif [ "$origin_via_tunnel" = 1 ]; then
+    origin_note="с нашего сервера хостинг не отвечает, через резервный канал сайт работает"
+elif [ "$external_up" = 1 ]; then
+    origin_note="внешние узлы сайт видят, наши адреса — нет"
+else
+    origin_note="основной сервер (${ORIGIN_IP}) не отвечает"
+fi
+
+if [ "$public_via_tunnel" = 1 ]; then
+    public_note="через резервный канал сайт открывается"
+elif [ "$external_up" = 1 ]; then
+    public_note="внешние узлы сайт видят"
+else
+    public_note="сайт не отвечает"
+fi
+
+prev=""
+[ -f "$STATE_FILE" ] && prev=$(cat "$STATE_FILE")
+printf '%s\n' "$state" > "$STATE_FILE"
+
+if [ "$MODE" = "test" ]; then
+    log "test: origin_ok=$origin_ok origin_via_tunnel=$origin_via_tunnel public_ok=$public_ok public_via_tunnel=$public_via_tunnel external_up=$external_up mirror=$mirror state=$state prev=${prev:-none}"
+    exit 0
+fi
+
+if [ "$state" != "$prev" ]; then
+    case "$state" in
+        ok)
+            notify "Marosensor: сайт снова работает" \
+"Сайт marosensor.ru снова работает.
+
+Основной сервер: отвечает.
+Публичная проверка: ${PUBLIC_URL} — 200.
+
+$(date '+%d.%m.%Y %H:%M МСК')"
+            ;;
+        mirror)
+            notify "Marosensor: включилась резервная копия" \
+"Основной сервер marosensor.ru не отвечает, сайт отдаёт резервную копию.
+
+${origin_note}.
+Публичная проверка: ${PUBLIC_URL} — открывается копия.
+
+Форма заявок в резервном режиме не работает: office@memsnav.ru, +7 (812) 770-17-03.
+
+$(date '+%d.%m.%Y %H:%M МСК')"
+            ;;
+        degraded)
+            notify "Marosensor: сайт работает с ошибкой" \
+"Сайт marosensor.ru открывается, но состояние неполное.
+
+${origin_note}.
+Публичная проверка: ${PUBLIC_URL} — 200.
+
+$(date '+%d.%m.%Y %H:%M МСК')"
+            ;;
+        blocked)
+            notify "Marosensor: наш сервер заблокирован хостингом" \
+"Хостинг marosensor.ru не пускает наш сервер (${ORIGIN_IP}) — автопереключение под угрозой.
+
+Публичная проверка с нашего сервера: нет ответа.
+${public_note}.
+${origin_note}.
+
+Нужно написать в поддержку sprinthost и попросить разблокировать ${ORIGIN_IP}.
+
+$(date '+%d.%m.%Y %H:%M МСК')"
+            ;;
+        down)
+            notify "Marosensor: сайт недоступен" \
+"Сайт marosensor.ru не отвечает.
+
+${origin_note}.
+Публичная проверка: ${PUBLIC_URL} — нет ответа.
+
+$(date '+%d.%m.%Y %H:%M МСК')"
+            ;;
+    esac
+fi
+
+if [ -n "${HC_PING_URL:-}" ]; then
+    curl -fsS --max-time 10 "$HC_PING_URL" >/dev/null 2>&1 || true
+fi
+
+exit 0

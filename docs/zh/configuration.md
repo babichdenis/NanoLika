@@ -275,20 +275,21 @@ disabled = ["inbox-triage"]          # built-in ones to leave out of the model's
 
 ### 邮件 {#email}
 
+*设置 → 连接器 → 邮箱* 里就能完成连接：填地址、服务商提供的应用专用密码，然后点「连接」。应用专用密码不是登录密码。Yandex：「密码与授权 → 应用密码」（`id.yandex.ru/security/app-passwords`）。Google：「安全 → 应用专用密码」（`myaccount.google.com/apppasswords`），需要先开启两步验证。Mail.ru：「密码与安全 → 外部应用密码」。其他服务商：在账号设置里找同样的页面，或者展开「手动填写服务器」填 IMAP 和 SMTP。添加后应用会立刻测试；编辑表单里的「检查」会先保存再测一次。可以并排连接多个邮箱，每个邮箱的应用专用密码单独放在保险库里；列表在 `<data_dir>/app-settings.json` 的 `email.accounts`。`read_emails` 读取所有邮箱，也可以用 `account` 指定一个，并会把这段对话标记为已污染；`send_email` 默认在 `always_ask_tools` 里。
+
+不用应用、只改 `config.toml` 时：
+
 ```toml
 [connectors.email]
 enabled       = true
-imap_host     = "imap.gmail.com"
-imap_port     = 993
-smtp_host     = "smtp.gmail.com"
-smtp_port     = 587
-smtp_starttls = true
-address       = "{{vault:EMAIL_ADDRESS}}"
-password      = "{{vault:EMAIL_PASSWORD}}"
-scrub_secrets = true   # remove one-time codes and reset links before the model reads a mail
+scrub_secrets = true   # 模型读信前去掉一次性验证码和重置链接
+
+[[connectors.email.accounts]]
+address = "me@yandex.ru"   # 服务器默认跟随域名
+# 密码默认取保险库里的 EMAIL_ME_YANDEX_RU_PASSWORD
 ```
 
-用 `nanomuse vault set EMAIL_ADDRESS` 和 `nanomuse vault set EMAIL_PASSWORD` 存值。`read_emails` 会把这段对话标记为已污染；`send_email` 默认在 `always_ask_tools` 里。
+终端里用 `nanomuse mail add|edit|remove|list|test` 做同样的事，`--json` 是应用读取的格式。`read_emails` 和 `send_email` 的 `account` 可以用 id、地址或名称指定邮箱。
 
 ### 日历 {#calendar}
 

@@ -153,11 +153,7 @@ class Sentinel:
             return ["once"]
         options = ["once", "conversation"]
         unknown_destination = target is None and assessment.egress
-        if (
-            unknown_destination
-            and assessment.risk.rank >= RiskLevel.MODERATE.rank
-            and not standing
-        ):
+        if unknown_destination and assessment.risk.rank >= RiskLevel.MODERATE.rank and not standing:
             return options  # arbitrary code with network access: never a standing grant
         options += ["session", "24h"]
         if standing or target is not None or assessment.risk != RiskLevel.SENSITIVE:

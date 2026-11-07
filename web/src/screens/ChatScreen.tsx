@@ -209,7 +209,7 @@ export function ChatScreen() {
   );
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="chat-room relative flex h-full flex-col">
       {/* Muse's header: the face on its disc, the name tag with what it is doing, the round hamburger
           and menu. A scrim over the list, which scrolls under it; no bar and no line below it. */}
       <div ref={headerRef} className="pointer-events-none absolute inset-x-0 top-0 z-10">
@@ -740,7 +740,7 @@ function EmptyChat({ name, device, onSend }: { name: string; device?: string; on
       ];
   // The face is already in the header above; here the agent speaks, as it does on the phone.
   return (
-    <div className="flex flex-col items-center text-center px-6 pt-10 pb-6 gap-3">
+    <div className="chat-welcome flex flex-col items-center text-center px-6 pt-10 pb-6 gap-3">
       <div className="text-[20px] font-semibold">{device ? t("This chat goes to {device}.", { device }) : t("Hi, I'm {name}.", { name })}</div>
       <p className="text-muted text-[14.5px] leading-snug max-w-sm">
         {device
@@ -925,7 +925,7 @@ function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="shrink-0 bg-bg px-3 pt-1.5 pb-1">
+    <form onSubmit={submit} className="chat-composer shrink-0 bg-bg px-3 pt-1.5 pb-1">
       {busy && !waiting && (
         <div className="px-2 pb-1 text-[12px] text-muted">{t("{name} is working; anything you send now is picked up right away.", { name })}</div>
       )}
@@ -996,7 +996,7 @@ function Composer({
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 rounded-[26px] border border-border bg-surface px-1.5 py-1.5 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.12)] focus-within:border-fg/20">
+      <div className="composer-box flex items-end gap-2 rounded-[26px] border border-border bg-surface px-1.5 py-1.5 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.12)] focus-within:border-fg/20">
         <input
           ref={fileRef}
           type="file"
@@ -1053,7 +1053,7 @@ function Composer({
           onClick={() => setModelOpen(true)}
           title={t("Model")}
           aria-label={t("Model")}
-          className="flex h-9 max-w-[150px] shrink-0 items-center gap-1 rounded-full bg-surface-2 px-2.5 text-[12px] text-fg/80 hover:bg-border/60"
+          className="composer-model flex h-9 max-w-[150px] shrink-0 items-center gap-1 rounded-full bg-surface-2 px-2.5 text-[12px] text-fg/80 hover:bg-border/60"
         >
           <span className="truncate">{state.settings?.llm.model || t("Model")}</span>
         </button>

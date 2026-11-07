@@ -520,6 +520,7 @@ def test_a_paused_hub_is_waited_out_not_hammered(monkeypatch: pytest.MonkeyPatch
 def test_repeated_clean_closes_back_off(monkeypatch: pytest.MonkeyPatch) -> None:
     """A session that returns without an exception is still a failed connection if it
     never became stable: the next wait must grow, not reset to one second every time."""
+
     async def scenario() -> list[float]:
         client = HubClient("wss://relay.test/v1/hub", "k", "pc-1", "Desk", actions=["info"])
         waits: list[float] = []

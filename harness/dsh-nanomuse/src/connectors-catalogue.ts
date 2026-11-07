@@ -42,6 +42,13 @@ export interface CatalogueEntry {
 }
 
 export const CATALOGUE: CatalogueEntry[] = [
+  // ---- google workspace: the vendor's own MCP servers, checked 2026-11-06.
+  // Google registers no OAuth clients by itself (no registration_endpoint at
+  // accounts.google.com), so the person makes a client in Google Cloud once.
+  { id: 'gmail', name: 'Gmail', category: 'work', url: 'https://gmailmcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#EA4335',
+    about: { en: 'Search and read threads, label mail and create drafts to review.', zh: '搜索和阅读邮件、加标签，并创建待审阅的草稿。' } },
+  { id: 'gcal', name: 'Google Calendar', category: 'work', url: 'https://calendarmcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#4285F4',
+    about: { en: 'Events, free time and invitations in your calendar.', zh: '日历里的事件、空闲时间与邀请。' } },
   // ---- work: notes, tasks, projects
   { id: 'notion', name: 'Notion', category: 'work', url: 'https://mcp.notion.com/mcp', auth: { kind: 'oauth' }, docs: 'https://developers.notion.com/docs/mcp', icon: 'notion', color: '#000000',
     about: { en: 'Search, read and write your pages and databases.', zh: '搜索、阅读和编辑你的页面与数据库。' } },
@@ -73,6 +80,8 @@ export const CATALOGUE: CatalogueEntry[] = [
     about: { en: 'Bookings, availability and event types.', zh: '预约、空闲时段与活动类型。' } },
 
   // ---- talk
+  { id: 'gchat', name: 'Google Chat', category: 'talk', url: 'https://chatmcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#00AC47',
+    about: { en: 'Spaces, messages and threads in Google Chat.', zh: 'Google Chat 里的空间、消息与话题。' } },
   { id: 'slack', name: 'Slack', category: 'talk', url: 'https://mcp.slack.com/mcp', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://api.slack.com/apps' }, docs: 'https://docs.slack.dev/ai/mcp-server/', color: '#4A154B',
     about: { en: 'Search and read channels and messages in your workspace.', zh: '搜索和阅读你工作区里的频道与消息。' } },
   { id: 'discord', name: 'Discord', category: 'talk', url: 'https://mcp.discord.com/mcp', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://discord.com/developers/applications' }, docs: 'https://discord.com/developers/docs/intro', icon: 'discord', color: '#5865F2',
@@ -131,6 +140,8 @@ export const CATALOGUE: CatalogueEntry[] = [
     about: { en: 'Up-to-date documentation for libraries and frameworks.', zh: '各种库与框架的最新文档。' } },
 
   // ---- data: databases and platforms
+  { id: 'dadata', name: 'DaData', category: 'data', url: 'https://mcp.dadata.ru/mcp', auth: { kind: 'none' }, docs: 'https://dadata.ru/', color: '#00A651',
+    about: { en: 'Clean addresses and look up companies by their tax number.', zh: '标准化地址，按税号查询公司信息。' } },
   { id: 'supabase', name: 'Supabase', category: 'data', url: 'https://mcp.supabase.com/mcp', auth: { kind: 'oauth' }, docs: 'https://supabase.com/docs/guides/getting-started/mcp', icon: 'supabase', color: '#3FCF8E',
     about: { en: 'Projects, tables, SQL and edge functions.', zh: '项目、表、SQL 与边缘函数。' } },
   { id: 'neon', name: 'Neon', category: 'data', url: 'https://mcp.neon.tech/mcp', auth: { kind: 'oauth' }, docs: 'https://neon.com/docs/ai/neon-mcp-server', icon: 'neon', color: '#00E599',
@@ -170,6 +181,12 @@ export const CATALOGUE: CatalogueEntry[] = [
   { id: 'dodo', name: 'Dodo Payments', category: 'money', url: 'https://mcp.dodopayments.com/mcp', auth: { kind: 'oauth' }, docs: 'https://docs.dodopayments.com/developer-resources/mcp-server', color: '#FF6B35',
     about: { en: 'Products, payments and subscriptions.', zh: '商品、付款与订阅。' } },
   // ---- files
+  { id: 'gdrive', name: 'Google Drive', category: 'files', url: 'https://drivemcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#4285F4',
+    about: { en: 'Find, read and upload files in your Drive.', zh: '在云端硬盘里查找、阅读和上传文件。' } },
+  { id: 'gsheets', name: 'Google Sheets', category: 'files', url: 'https://sheetsmcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#0F9D58',
+    about: { en: 'Read and change sheets: values, formulas and structure.', zh: '读取和修改表格：数值、公式与结构。' } },
+  { id: 'gdocs', name: 'Google Docs', category: 'files', url: 'https://docsmcp.googleapis.com/mcp/v1', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://console.cloud.google.com/apis/credentials' }, docs: 'https://developers.google.com/workspace/guides/configure-mcp-servers', color: '#4285F4',
+    about: { en: 'Read and edit your documents.', zh: '阅读和编辑你的文档。' } },
   { id: 'dropbox', name: 'Dropbox', category: 'files', url: 'https://mcp.dropbox.com/mcp', auth: { kind: 'oauth' }, docs: 'https://www.dropbox.com/developers', icon: 'dropbox', color: '#0061FF',
     about: { en: 'Search and read the files in your Dropbox.', zh: '搜索和阅读 Dropbox 里的文件。' } },
   { id: 'box', name: 'Box', category: 'files', url: 'https://mcp.box.com', auth: { kind: 'oauth', clientIdRequired: true, developer: 'https://app.box.com/developers/console' }, docs: 'https://developer.box.com/guides/box-mcp/remote/', icon: 'box', color: '#0061D5',

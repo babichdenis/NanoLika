@@ -360,6 +360,65 @@ _EMAIL_PRESETS: dict[str, tuple[str, int, str, int, bool]] = {
 }
 
 
+def _servers_for(address: str) -> tuple[str, int, str, int, bool] | None:
+    """IMAP and SMTP for a mailbox: the preset of its domain, or the usual pattern."""
+    address = (address or "").strip()
+    if not address or "@" not in address:
+        return None
+    domain = address.rsplit("@", 1)[-1].lower()
+    return _EMAIL_PRESETS.get(domain) or (f"imap.{domain}", 993, f"smtp.{domain}", 587, True)
+
+
+def mailbox_id(address: str) -> str:
+    """A stable short id for a mailbox, from its address: dm@gmail.com → dm_gmail_com."""
+    value = re.sub(r"[^a-z0-9]+", "_", (address or "").lower()).strip("_")
+    return value or "mail"
+
+
+def mailbox_secret(account_id: str) -> str:
+    """The vault name of one mailbox's app password."""
+    return f"EMAIL_{account_id.upper()}_PASSWORD"
+
+
+class EmailAccountSettings(BaseModel):
+    """One mailbox of the person's: the address is enough, the servers come from its domain,
+    and the password lives in the vault under a name of this account's own, so several
+    mailboxes can be connected at once (Gmail, Yandex and Mail.ru side by side)."""
+
+    id: str = ""
+    label: str = ""
+    address: str = ""
+    password: str = ""
+    imap_host: str = ""
+    imap_port: int = 993
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_starttls: bool = True
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _fill(self) -> EmailAccountSettings:
+        if not self.id:
+            self.id = mailbox_id(self.address)
+        if not self.password:
+            self.password = "{{vault:" + mailbox_secret(self.id) + "}}"
+        preset = _servers_for(self.address)
+        if preset is not None:
+            imap_host, imap_port, smtp_host, smtp_port, starttls = preset
+            given = self.model_fields_set
+            if "imap_host" not in given or not self.imap_host:
+                self.imap_host = imap_host
+            if "imap_port" not in given:
+                self.imap_port = imap_port
+            if "smtp_host" not in given or not self.smtp_host:
+                self.smtp_host = smtp_host
+            if "smtp_port" not in given:
+                self.smtp_port = smtp_port
+            if "smtp_starttls" not in given:
+                self.smtp_starttls = starttls
+        return self
+
+
 class EmailSettings(BaseModel):
     enabled: bool = False
     imap_host: str = ""
@@ -373,24 +432,62 @@ class EmailSettings(BaseModel):
     password: str = "{{vault:EMAIL_PASSWORD}}"
     # Strip one-time passcodes / password-reset links before the model reads a mail.
     scrub_secrets: bool = True
+    # Several mailboxes at once; ``[connectors.email]`` above stays as the first one.
+    accounts: list[EmailAccountSettings] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _servers_from_address(self) -> "EmailSettings":
+    def _servers_from_address(self) -> EmailSettings:
         """Fill IMAP/SMTP from the domain of the address, so a person types only their
         mail and app password. Anything set by hand wins; unknown domains stay as they are."""
         address = (self.address or "").strip()
         if not address or "{{vault:" in address or "@" not in address:
             return self
-        domain = address.rsplit("@", 1)[-1].lower()
-        # A provider we have not listed still follows the usual pattern: mail on
-        # imap.<domain>:993, sending on smtp.<domain>:587. A person types no numbers either way.
-        preset = _EMAIL_PRESETS.get(domain) or (f"imap.{domain}", 993, f"smtp.{domain}", 587, True)
+        preset = _servers_for(address)
+        if preset is None:
+            return self
         imap_host, imap_port, smtp_host, smtp_port, starttls = preset
         if not self.imap_host:
             self.imap_host, self.imap_port = imap_host, imap_port
         if not self.smtp_host:
             self.smtp_host, self.smtp_port, self.smtp_starttls = smtp_host, smtp_port, starttls
         return self
+
+    def all_accounts(self) -> list[EmailAccountSettings]:
+        """Every mailbox that can be used now: the list, then the single ``[connectors.email]``
+        of an older config (kept as ``main``) when it is filled in."""
+        out = [account for account in self.accounts if account.enabled]
+        if self.enabled and self.address and "{{" not in self.address:
+            out.insert(
+                0,
+                EmailAccountSettings(
+                    id="main",
+                    address=self.address,
+                    password=self.password,
+                    imap_host=self.imap_host,
+                    imap_port=self.imap_port,
+                    smtp_host=self.smtp_host,
+                    smtp_port=self.smtp_port,
+                    smtp_starttls=self.smtp_starttls,
+                ),
+            )
+        return out
+
+    def account(self, name: str | None = None) -> EmailAccountSettings | None:
+        """The mailbox called by id, address or label; the first one when no name is given."""
+        accounts = self.all_accounts()
+        if not accounts:
+            return None
+        if not name:
+            return accounts[0]
+        wanted = name.strip().lower()
+        for account in accounts:
+            if wanted in {account.id.lower(), account.address.lower(), account.label.lower()}:
+                return account
+        for account in accounts:
+            haystack = f"{account.address} {account.label}".lower()
+            if wanted and wanted in haystack:
+                return account
+        return None
 
 
 class CalendarFeedSettings(BaseModel):
@@ -1064,6 +1161,20 @@ def apply_app_settings(settings: Settings, data: dict[str, Any]) -> None:
         for key in ("enabled", "imap_host", "imap_port", "smtp_host", "smtp_port", "smtp_starttls"):
             if key in email and email[key] is not None:
                 setattr(settings.connectors.email, key, email[key])
+        if isinstance(email.get("accounts"), list):
+            accounts = []
+            for raw_account in email["accounts"]:
+                try:
+                    accounts.append(EmailAccountSettings.model_validate(raw_account))
+                except ValueError:
+                    continue
+            # mailboxes added in the app come after the ones in config.toml; same id → app wins
+            ids = {a.id for a in accounts}
+            settings.connectors.email.accounts = [
+                a for a in settings.connectors.email.accounts if a.id not in ids
+            ] + accounts
+            if accounts:
+                settings.connectors.email.enabled = True
     if calendar := data.get("calendar"):
         cal = settings.connectors.calendar
         if "enabled" in calendar and calendar["enabled"] is not None:

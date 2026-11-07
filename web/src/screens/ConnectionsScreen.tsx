@@ -1981,6 +1981,8 @@ export function SearchCard({
 }
 
 // ------------------------------------------------------------------ email
+// The provider presets. Yandex first — in Russia it is what people actually use — so the
+// "one button" flow guesses it from the address instead of defaulting to Gmail.
 const MAIL_PRESETS: Array<{
   id: string;
   label: string;
@@ -1989,6 +1991,14 @@ const MAIL_PRESETS: Array<{
   port: number;
   starttls: boolean;
 }> = [
+  {
+    id: "yandex",
+    label: "Yandex",
+    imap: "imap.yandex.ru",
+    smtp: "smtp.yandex.ru",
+    port: 465,
+    starttls: false,
+  },
   {
     id: "gmail",
     label: "Gmail",
@@ -2059,6 +2069,7 @@ export function EmailCard({
   const [smtp, setSmtp] = useState(e.smtp_host);
   const [smtpPort, setSmtpPort] = useState(e.smtp_port);
   const [starttls, setStarttls] = useState(e.smtp_starttls);
+  const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState<"save" | "test" | "off" | null>(null);
   const [test, setTest] = useState<TestResult | null>(null);
 
@@ -2077,7 +2088,30 @@ export function EmailCard({
     setSmtp(p.smtp);
     setSmtpPort(p.port);
     setStarttls(p.starttls);
+    setAdvanced(false);
   };
+
+  // Guess the provider from the address so the user never picks one: @yandex → Yandex,
+  // @gmail → Gmail, and so on. The "one button solves everything" flow decides for them.
+  const detectPreset = (addr: string): (typeof MAIL_PRESETS)[number] | null => {
+    const a = addr.trim().toLowerCase();
+    const tails: Array<[RegExp, string]> = [
+      [/@(yandex|ya)\./, "yandex"],
+      [/@(gmail|googlemail)\./, "gmail"],
+      [/@(outlook|hotmail|live)\./, "outlook"],
+      [/@(icloud|me|mac)\./, "icloud"],
+      [/@qq\./, "qq"],
+      [/@(163|126)\./, "163"],
+      [/@fastmail\./, "fastmail"],
+    ];
+    for (const [re, id] of tails) {
+      if (re.test(a)) return MAIL_PRESETS.find((p) => p.id === id) ?? null;
+    }
+    return null;
+  };
+  const detected = detectPreset(address);
+  // the provider the advanced section lets the user override; a detected one is enough
+  const provider = advanced ? null : detected;
 
   const connect = async () => {
     setBusy("save");
@@ -2126,6 +2160,21 @@ export function EmailCard({
         ? { text: t("Incomplete"), tone: "warn" }
         : { text: t("Not connected"), tone: "off" };
 
+  // the app-password hint people actually get stuck on, per provider
+  const appPassHint = (p: (typeof MAIL_PRESETS)[number] | null): string => {
+    if (p?.id === "yandex")
+      return t(
+        "In Yandex: Passwords and authorisation → Generate app password. Paste it here.",
+      );
+    if (p?.id === "gmail")
+      return t(
+        "In Google: your account → Security → App passwords. Paste it here.",
+      );
+    return t(
+      "This is not your login password, but a separate app password from the provider.",
+    );
+  };
+
   return (
     <Card
       icon={<Mail size={19} />}
@@ -2141,134 +2190,166 @@ export function EmailCard({
     >
       <p className="text-[12.5px] text-muted -mt-1">
         {t(
-          "Reading is a moderate action; sending always asks you first. Use an app password where your provider offers one.",
+          "It reads your mail and helps with replies, and always asks before sending. Everything is set up for you — just add your address and a password.",
         )}
       </p>
-      <Field label={t("Provider")}>
-        <div className="flex flex-wrap gap-1.5">
-          {MAIL_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => applyPreset(p)}
-              className={cx(
-                "rounded-full px-3 py-1.5 text-[13px] border",
-                imap === p.imap
-                  ? "border-accent bg-accent/10 text-accent font-medium"
-                  : "border-border text-muted",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </Field>
-      <Field label={t("Address")}>
+
+      <Field label={t("Your email address")}>
         <input
           value={address}
-          onChange={(ev) => setAddress(ev.target.value)}
+          onChange={(ev) => {
+            setAddress(ev.target.value);
+            if (!advanced) {
+              const p = detectPreset(ev.target.value);
+              if (p) applyPreset(p);
+            }
+          }}
           className={inputCls}
-          placeholder="you@example.com"
+          placeholder={t("you@yandex.ru or you@gmail.com")}
           inputMode="email"
           autoComplete="off"
         />
       </Field>
-      <Field
-        label={t("Password")}
-        hint={
-          e.password_set
-            ? t("A password is in the vault. Leave blank to keep it.")
-            : t("Stored encrypted in the vault as EMAIL_PASSWORD.")
-        }
-      >
+      {provider && (
+        <div className="flex items-center gap-1.5 text-[12.5px] text-accent">
+          <Check size={14} />
+          {t("This is {label} — the servers are already set for you.", {
+            label: provider.label,
+          })}
+        </div>
+      )}
+
+      <Field label={t("Password")} hint={appPassHint(provider)}>
         <input
           type="password"
           value={password}
           onChange={(ev) => setPassword(ev.target.value)}
           className={inputCls}
-          placeholder={e.password_set ? "••••••••" : t("app password")}
+          placeholder={t("password for this app")}
           autoComplete="off"
         />
       </Field>
-      <div className="grid grid-cols-[1fr_84px] gap-2">
-        <Field label={t("IMAP server")}>
-          <input
-            value={imap}
-            onChange={(ev) => setImap(ev.target.value)}
-            className={inputCls}
-            placeholder="imap.example.com"
-          />
-        </Field>
-        <Field label={t("Port")}>
-          <input
-            type="number"
-            value={imapPort}
-            onChange={(ev) => setImapPort(Number(ev.target.value))}
-            className={inputCls}
-          />
-        </Field>
-        <Field label={t("SMTP server")}>
-          <input
-            value={smtp}
-            onChange={(ev) => setSmtp(ev.target.value)}
-            className={inputCls}
-            placeholder="smtp.example.com"
-          />
-        </Field>
-        <Field label={t("Port")}>
-          <input
-            type="number"
-            value={smtpPort}
-            onChange={(ev) => setSmtpPort(Number(ev.target.value))}
-            className={inputCls}
-          />
-        </Field>
-      </div>
-      <label className="flex items-center gap-2 text-[13.5px]">
-        <input
-          type="checkbox"
-          checked={starttls}
-          onChange={(ev) => setStarttls(ev.target.checked)}
-          className="accent-[var(--om-accent)]"
-        />{" "}
-        {t("STARTTLS for SMTP (off for port 465)")}
-      </label>
-      <div className="flex gap-2 pt-1">
+      {e.password_set && (
+        <p className="text-[11.5px] text-muted -mt-1">
+          {t("A password is already saved. Leave blank to keep it.")}
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={
+          busy !== null ||
+          !address.trim() ||
+          !imap.trim() ||
+          !smtp.trim() ||
+          (!password && !e.password_set)
+        }
+        onClick={() => void connect()}
+        className={cx(primaryBtn, "w-full")}
+      >
+        {busy === "save" ? (
+          <Loader2 size={18} className="animate-spin" />
+        ) : (
+          <Plug size={18} />
+        )}{" "}
+        {e.configured ? t("Reconnect") : t("Connect my mail")}
+      </button>
+
+      {e.enabled && (
         <button
           type="button"
-          disabled={
-            busy !== null ||
-            !address.trim() ||
-            !imap.trim() ||
-            !smtp.trim() ||
-            (!password && !e.password_set)
-          }
-          onClick={() => void connect()}
-          className={primaryBtn}
+          disabled={busy !== null}
+          onClick={() => void disconnect()}
+          className={cx(secondaryBtn, "w-full")}
         >
-          {busy === "save" ? (
+          {busy === "off" ? (
             <Loader2 size={16} className="animate-spin" />
           ) : (
-            <Plug size={16} />
+            <Unplug size={16} />
           )}{" "}
-          {e.configured ? t("Save & test") : t("Connect")}
+          {t("Disconnect")}
         </button>
-        {e.enabled && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void disconnect()}
-            className={secondaryBtn}
-          >
-            {busy === "off" ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Unplug size={16} />
-            )}{" "}
-            {t("Disconnect")}
-          </button>
-        )}
-      </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setAdvanced((v) => !v)}
+        className="flex items-center gap-1 text-[12.5px] text-muted hover:text-fg transition-colors"
+      >
+        {advanced ? (
+          <ChevronUp size={14} />
+        ) : (
+          <ChevronDown size={14} />
+        )}{" "}
+        {t("For advanced")}
+      </button>
+      {advanced && (
+        <div className="space-y-3 pt-1 border-t border-border">
+          <Field label={t("Provider")}>
+            <div className="flex flex-wrap gap-1.5">
+              {MAIL_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={cx(
+                    "rounded-full px-3 py-1.5 text-[13px] border",
+                    imap === p.imap
+                      ? "border-accent bg-accent/10 text-accent font-medium"
+                      : "border-border text-muted",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div className="grid grid-cols-[1fr_84px] gap-2">
+            <Field label={t("IMAP server")}>
+              <input
+                value={imap}
+                onChange={(ev) => setImap(ev.target.value)}
+                className={inputCls}
+                placeholder="imap.example.com"
+              />
+            </Field>
+            <Field label={t("Port")}>
+              <input
+                type="number"
+                value={imapPort}
+                onChange={(ev) => setImapPort(Number(ev.target.value))}
+                className={inputCls}
+              />
+            </Field>
+            <Field label={t("SMTP server")}>
+              <input
+                value={smtp}
+                onChange={(ev) => setSmtp(ev.target.value)}
+                className={inputCls}
+                placeholder="smtp.example.com"
+              />
+            </Field>
+            <Field label={t("Port")}>
+              <input
+                type="number"
+                value={smtpPort}
+                onChange={(ev) => setSmtpPort(Number(ev.target.value))}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-[13.5px]">
+            <input
+              type="checkbox"
+              checked={starttls}
+              onChange={(ev) => setStarttls(ev.target.checked)}
+              className="accent-[var(--om-accent)]"
+            />{" "}
+            {t("STARTTLS for SMTP (off for port 465)")}
+          </label>
+        </div>
+      )}
+
       {test && (
         <TestLine
           result={test}

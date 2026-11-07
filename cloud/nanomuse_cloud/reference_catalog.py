@@ -26,10 +26,7 @@ from typing import Any
 MANIFEST_URL = "https://github.com/ferro-labs/model-catalog/releases/latest/download/manifest.json"
 CATALOG_URL = "https://github.com/ferro-labs/model-catalog/releases/latest/download/catalog.json"
 UA = "nanoLika-cloud/1.0 (model reference catalogue)"
-CACHE = Path(
-    os.environ.get("MODEL_REFERENCE_PATH")
-    or Path(__file__).resolve().parent / "console" / "providers" / "ferro.json"
-)
+CACHE = Path(os.environ.get("MODEL_REFERENCE_PATH") or Path(__file__).resolve().parent / "console" / "providers" / "ferro.json")
 MAX_AGE_S = 7 * 86400
 
 _index: dict[str, dict[str, Any]] | None = None

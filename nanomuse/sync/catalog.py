@@ -129,8 +129,10 @@ class LazyCatalog:
                 continue
             if cid in pending and time.monotonic() >= deadline:
                 continue
-            mode = "older" if int(history.get(cid) or 0) else (
-                "after" if int(cursors.get(cid) or 0) else "newest"
+            mode = (
+                "older"
+                if int(history.get(cid) or 0)
+                else ("after" if int(cursors.get(cid) or 0) else "newest")
             )
             while True:
                 if applied >= CATALOG_MAX_APPLIED or time.monotonic() >= deadline:
@@ -170,9 +172,7 @@ class LazyCatalog:
                     history.pop(cid, None)
                     # The older part is here; now catch up on anything newer than the
                     # cursor that arrived while the history was being walked.
-                    await e.client.read(
-                        cid, e.svc.hub.device_id, int(page.get("through_seq") or 0)
-                    )
+                    await e.client.read(cid, e.svc.hub.device_id, int(page.get("through_seq") or 0))
                     self.unread[cid] = 0
                     pending.discard(cid)
                     mode = "after"
@@ -194,9 +194,7 @@ class LazyCatalog:
                 next_cursor = max(after, int(page.get("cursor") or 0))
                 cursors[cid] = next_cursor
                 if not page.get("more"):
-                    await e.client.read(
-                        cid, e.svc.hub.device_id, int(page.get("through_seq") or 0)
-                    )
+                    await e.client.read(cid, e.svc.hub.device_id, int(page.get("through_seq") or 0))
                     self.unread[cid] = 0
                     pending.discard(cid)
                     break

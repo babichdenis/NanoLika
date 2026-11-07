@@ -213,19 +213,35 @@ class MCPManager:
         self, cfg: MCPServerSettings, transport: str, stack: AsyncExitStack
     ) -> tuple[Any, Any]:
         if transport == "streamable":
-            try:  # mcp >= 2
+            try:  # mcp >= 2: the headers ride on a client of its own
                 from mcp.client.streamable_http import streamable_http_client as http_client
             except ImportError:  # mcp 1.x
                 from mcp.client.streamable_http import (  # type: ignore[attr-defined,no-redef]
-                    streamablehttp_client as http_client,
+                    streamablehttp_client as http_client,  # type: ignore[assignment]
                 )
-            streams = await stack.enter_async_context(http_client(cfg.url or "", headers=cfg.headers or None))
+
+                streams = await stack.enter_async_context(
+                    http_client(cfg.url or "", headers=cfg.headers or None)  # type: ignore[call-arg]
+                )
+            else:
+                if cfg.headers:
+                    import httpx2
+
+                    client = httpx2.AsyncClient(headers=cfg.headers)
+                    await stack.enter_async_context(client)
+                    streams = await stack.enter_async_context(
+                        http_client(cfg.url or "", http_client=client)
+                    )
+                else:
+                    streams = await stack.enter_async_context(http_client(cfg.url or ""))
             return streams[0], streams[1]
         if transport == "sse":
             # an older server speaks SSE only
             from mcp.client.sse import sse_client
 
-            streams = await stack.enter_async_context(sse_client(cfg.url or "", headers=cfg.headers or None))
+            streams = await stack.enter_async_context(
+                sse_client(cfg.url or "", headers=cfg.headers or None)
+            )
             return streams[0], streams[1]
         if not cfg.command:
             raise ValueError(f"MCP server '{cfg.name}' needs either `command` or `url`")

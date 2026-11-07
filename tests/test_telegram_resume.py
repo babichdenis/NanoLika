@@ -15,7 +15,9 @@ def world(tmp_path):
         catalog=SimpleNamespace(supported=True, rows={"shared": {"archived": False}}),
     )
     manager = SimpleNamespace(
-        svc=SimpleNamespace(data_dir=tmp_path, sync=sync, threads={"main": SimpleNamespace(title="Main")}),
+        svc=SimpleNamespace(
+            data_dir=tmp_path, sync=sync, threads={"main": SimpleNamespace(title="Main")}
+        ),
         menu=SimpleNamespace(
             private_owner=lambda msg: msg.sender_id == "42", inherit_access=lambda *a: None
         ),

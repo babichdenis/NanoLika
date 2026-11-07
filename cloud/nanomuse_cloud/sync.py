@@ -166,11 +166,7 @@ def _conversation_row(r: sqlite3.Row, names: dict[str, str]) -> dict:
         "model": str(r["model"] or "") if "model" in r.keys() else "",
         "reasoning": str(r["reasoning"] or "") if "reasoning" in r.keys() else "",
         "folder": str(r["folder"] or "") if "folder" in r.keys() else "",
-        "temperature": (
-            float(r["temperature"])
-            if "temperature" in r.keys() and r["temperature"] is not None
-            else None
-        ),
+        "temperature": (float(r["temperature"]) if "temperature" in r.keys() and r["temperature"] is not None else None),
         "seq": int(r["seq"]),
     }
 
@@ -251,9 +247,7 @@ class SyncStore:
         if crypto is None:
             # Rows written with a secret and read without one come back as empty strings:
             # quiet data loss is worse than a line at start-up that says why.
-            log.warning(
-                "sync: CLOUD_SECRET is not set; encrypted conversation texts will read as empty"
-            )
+            log.warning("sync: CLOUD_SECRET is not set; encrypted conversation texts will read as empty")
 
     def _seal(self, account_id: str, text: str) -> str:
         if not text or self.crypto is None:
@@ -421,11 +415,7 @@ class SyncStore:
             "cursor": cursor,
             "more": more,
             "conversations": [_conversation_row(r, names) for r in conversations],
-            "messages": [
-                _message_row(r, names, lambda value: self._unseal(account_id, value))
-                for _, k, r in rows
-                if k == "m"
-            ],
+            "messages": [_message_row(r, names, lambda value: self._unseal(account_id, value)) for _, k, r in rows if k == "m"],
         }
         if skipped is not None:
             out["skipped"] = skipped
@@ -552,9 +542,7 @@ class SyncStore:
         with self.db.tx() as c:
             if not self._enabled(c, account_id):
                 raise CloudError(409, "sync_off", "Conversation sync is off for this account")
-            known = c.execute(
-                "SELECT 1 FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid_ok)
-            ).fetchone()
+            known = c.execute("SELECT 1 FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid_ok)).fetchone()
             if known is None:
                 # pruned by retention, or never here: let the sender deliver, not 500
                 raise CloudError(404, "unknown_mid", "No synced message with that id")
@@ -722,19 +710,32 @@ class SyncStore:
                     reasoning = (
                         str(conv.get("reasoning") or "").strip().lower()[:24]
                         if "reasoning" in conv
-                        else str(row["reasoning"] or "") if "reasoning" in row.keys() else ""
+                        else str(row["reasoning"] or "")
+                        if "reasoning" in row.keys()
+                        else ""
                     )
-                    reasoning_changed = "reasoning" in conv and reasoning != (str(row["reasoning"] or "") if "reasoning" in row.keys() else "")
+                    reasoning_changed = "reasoning" in conv and reasoning != (
+                        str(row["reasoning"] or "") if "reasoning" in row.keys() else ""
+                    )
                     current_temperature = (
-                        float(row["temperature"])
-                        if "temperature" in row.keys() and row["temperature"] is not None
-                        else None
+                        float(row["temperature"]) if "temperature" in row.keys() and row["temperature"] is not None else None
                     )
                     temperature = _temperature(conv, current_temperature)
                     temperature_changed = "temperature" in conv and temperature != current_temperature
-                    folder = str(conv.get("folder") or "")[:120] if "folder" in conv else (str(row["folder"] or "") if "folder" in row.keys() else "")
+                    folder = (
+                        str(conv.get("folder") or "")[:120]
+                        if "folder" in conv
+                        else (str(row["folder"] or "") if "folder" in row.keys() else "")
+                    )
                     folder_changed = "folder" in conv and folder != (str(row["folder"] or "") if "folder" in row.keys() else "")
-                    if title_changed or next_archived != bool(row["archived"]) or model_changed or reasoning_changed or temperature_changed or folder_changed:
+                    if (
+                        title_changed
+                        or next_archived != bool(row["archived"])
+                        or model_changed
+                        or reasoning_changed
+                        or temperature_changed
+                        or folder_changed
+                    ):
                         seq = self._next_seq(c, account_id)
                         c.execute(
                             "UPDATE sync_conversations SET title=?, updated_at=?, archived=?, model=?, reasoning=?, temperature=?, folder=?, seq=? WHERE account_id=? AND cid=?",

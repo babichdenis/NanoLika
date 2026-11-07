@@ -41,6 +41,7 @@ dependencies = [
   "python-dateutil>=2.9",
   "pillow>=10",
   "pypdf>=4",
+  "pypdfium2>=4",
   # reading a dsh session store; its own compression.zstd arrives in Python 3.14, and this
   # project supports 3.11 and up
   "zstandard>=0.22",

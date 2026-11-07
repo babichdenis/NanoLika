@@ -467,6 +467,26 @@ CREATE TABLE IF NOT EXISTS site_messages (
 );
 CREATE INDEX IF NOT EXISTS site_messages_at ON site_messages(at);
 CREATE INDEX IF NOT EXISTS site_messages_source_at ON site_messages(source, at);
+-- 0.32: a person's own provider keys (BYOK). The key is encrypted with the deployment
+-- secret and bound to the account id, like the identifier; `key_hint` is the last four
+-- characters, so the cabinet can show which key it is without ever sending it back.
+-- `models` is a JSON array of the ids the person added; an empty array means "every model
+-- of this provider that the menu already carries".
+CREATE TABLE IF NOT EXISTS account_providers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    provider   TEXT NOT NULL,
+    label      TEXT NOT NULL DEFAULT '',
+    base_url   TEXT NOT NULL,
+    key_enc    TEXT NOT NULL,
+    key_hint   TEXT NOT NULL DEFAULT '',
+    models     TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    last_ok_at INTEGER,
+    last_error TEXT NOT NULL DEFAULT '',
+    UNIQUE (account_id, provider, label)
+);
+CREATE INDEX IF NOT EXISTS account_providers_account ON account_providers(account_id);
 """
 
 
@@ -509,6 +529,35 @@ class Database:
             if col not in cols(table):
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
                 self.added.add(f"{table}.{col}")
+
+        # 0.33: several keys per provider (issue #294). The first table was keyed
+        # (account_id, provider); recreate it with an id and a label, keeping the rows.
+        # A database that already has the new table is left alone.
+        if "account_providers" in {r["name"] for r in self._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}:
+            if "id" not in cols("account_providers"):
+                self._conn.executescript(
+                    """
+                    ALTER TABLE account_providers RENAME TO account_providers_old;
+                    CREATE TABLE account_providers (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                        provider   TEXT NOT NULL,
+                        label      TEXT NOT NULL DEFAULT '',
+                        base_url   TEXT NOT NULL,
+                        key_enc    TEXT NOT NULL,
+                        key_hint   TEXT NOT NULL DEFAULT '',
+                        models     TEXT NOT NULL DEFAULT '',
+                        created_at INTEGER NOT NULL,
+                        last_ok_at INTEGER,
+                        last_error TEXT NOT NULL DEFAULT '',
+                        UNIQUE (account_id, provider, label)
+                    );
+                    CREATE INDEX IF NOT EXISTS account_providers_account ON account_providers(account_id);
+                    INSERT INTO account_providers(account_id, provider, label, base_url, key_enc, key_hint, models, created_at, last_ok_at, last_error)
+                    SELECT account_id, provider, '', base_url, key_enc, key_hint, models, created_at, last_ok_at, last_error FROM account_providers_old;
+                    DROP TABLE account_providers_old;
+                    """
+                )
 
         add("accounts", "is_test", "INTEGER NOT NULL DEFAULT 0")
         add("sync_conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
@@ -1126,6 +1175,61 @@ class Database:
     def account(self, account_id: str) -> sqlite3.Row | None:
         with self._lock:
             return self._conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+
+    # -- own provider keys (BYOK) --------------------------------------------------------
+
+    def add_account_provider(
+        self,
+        account_id: str,
+        provider: str,
+        label: str,
+        base_url: str,
+        key_enc: str,
+        key_hint: str,
+        models: str,
+        at: int,
+    ) -> None:
+        """Store or replace one provider key of an account (one row per provider and label)."""
+        with self.tx() as c:
+            c.execute(
+                "INSERT INTO account_providers(account_id, provider, label, base_url, key_enc, key_hint, models, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(account_id, provider, label) DO UPDATE SET "
+                "base_url=excluded.base_url, key_enc=excluded.key_enc, key_hint=excluded.key_hint, "
+                "models=excluded.models, last_error=''",
+                (account_id, provider, label, base_url, key_enc, key_hint, models, at),
+            )
+
+    def account_providers(self, account_id: str) -> list[sqlite3.Row]:
+        """Every provider key of an account, without the encrypted key."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT id, account_id, provider, label, base_url, key_hint, models, created_at, last_ok_at, last_error "
+                "FROM account_providers WHERE account_id=? ORDER BY provider, label",
+                (account_id,),
+            ).fetchall()
+
+    def account_provider(self, account_id: str, provider_id: int) -> sqlite3.Row | None:
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM account_providers WHERE account_id=? AND id=?",
+                (account_id, provider_id),
+            ).fetchone()
+
+    def delete_account_provider(self, account_id: str, provider_id: int) -> int:
+        with self.tx() as c:
+            cur = c.execute(
+                "DELETE FROM account_providers WHERE account_id=? AND id=?",
+                (account_id, provider_id),
+            )
+            return int(cur.rowcount or 0)
+
+    def note_account_provider(self, account_id: str, provider_id: int, ok: bool, error: str = "") -> None:
+        """Remember the last check: when it last worked, or why it did not."""
+        with self.tx() as c:
+            c.execute(
+                "UPDATE account_providers SET last_ok_at=?, last_error=? WHERE account_id=? AND id=?",
+                (now() if ok else None, error[:300], account_id, provider_id),
+            )
 
     # -- the other ways into one account (0.26) -------------------------------------------
 

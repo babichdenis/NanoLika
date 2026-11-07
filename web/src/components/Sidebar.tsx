@@ -74,12 +74,12 @@ export function Sidebar() {
 
   const railButton = (active: boolean) =>
     cx(
-      "relative flex w-[60px] flex-col items-center gap-[3px] rounded-xl py-1.5 text-[10.5px] font-medium leading-none transition",
+      "sidebar-link relative flex w-[60px] flex-col items-center gap-[3px] rounded-xl py-1.5 text-[10.5px] font-medium leading-none transition",
       active ? "bg-surface-2 text-fg" : "text-fg/65 hover:bg-surface-2/60 hover:text-fg",
     );
 
   return (
-    <div className="flex h-full shrink-0">
+    <div className="app-sidebar flex h-full shrink-0">
       {/* the rail */}
       <aside className="relative flex h-full w-[76px] shrink-0 flex-col items-center border-r border-border bg-surface/70">
         <div className="titlebar-room" />
@@ -177,7 +177,7 @@ export function Sidebar() {
 
       {/* the chats, beside the rail while the chat is open */}
       {state.tab === "chat" && (
-        <section className="flex h-full w-[248px] shrink-0 flex-col border-r border-border bg-surface/40" aria-label={t("Chats")}>
+        <section className="sidebar-chats flex h-full w-[248px] shrink-0 flex-col border-r border-border bg-surface/40" aria-label={t("Chats")}>
           <div className="titlebar-room" />
           <div className="px-3 pb-2 pt-4">
             <h2 className="px-1 text-[15px] font-semibold tracking-tight">{t("Chats")}</h2>

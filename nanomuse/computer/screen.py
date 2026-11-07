@@ -116,7 +116,7 @@ def black_screen_hint() -> str:
     if operator_env() is not None:
         return (
             "the screenshot came back all black. The screen is captured by the desktop app's "
-            "helper, \"NanoLika Computer Use\", which holds the macOS grant; a black frame then "
+            'helper, "NanoLika Computer Use", which holds the macOS grant; a black frame then '
             "means the helper failed, not that a permission is missing. Do not send the person to "
             "System Settings and do not ask for Screen Recording or Accessibility."
         )

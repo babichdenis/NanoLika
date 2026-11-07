@@ -169,7 +169,9 @@ class ChatLink:
             async with self._client(base) as client:
                 answer = await client.post("/v1/bot/telegram-login", json=body)
         except httpx.HTTPError as exc:
-            logger.warning("{}: the relay could not be told about a desktop sign-in: {}", self.channel, exc)
+            logger.warning(
+                "{}: the relay could not be told about a desktop sign-in: {}", self.channel, exc
+            )
             return channel_text(language, "desktop_login_offline")
         if answer.status_code == 200:
             return channel_text(language, "desktop_login_done")
@@ -181,7 +183,12 @@ class ChatLink:
         name = str((error or {}).get("code") or "") if isinstance(error, dict) else ""
         if name == "login_expired":
             return channel_text(language, "desktop_login_expired")
-        logger.warning("{}: the relay refused a desktop sign-in ({}: {})", self.channel, answer.status_code, name)
+        logger.warning(
+            "{}: the relay refused a desktop sign-in ({}: {})",
+            self.channel,
+            answer.status_code,
+            name,
+        )
         return channel_text(language, "desktop_login_offline")
 
     async def release(self, chat_id: str, language: str = "") -> str:

@@ -447,7 +447,7 @@ def test_a_chat_with_its_own_model_answers_on_it(
         # another model of the account: its own client, and the turn names it
         llm, used = service.thread_model_llm("qwen-image-3.0")
         assert used == "qwen-image-3.0" and llm is not None
-        assert getattr(llm, "settings").model == "qwen-image-3.0"
+        assert llm.settings.model == "qwen-image-3.0"
         client.portal.call(llm.close)
         # signed out: no account key, so the configured model answers
         service.app.vault.delete("NANOMUSE_CLOUD_KEY")

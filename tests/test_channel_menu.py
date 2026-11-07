@@ -85,7 +85,12 @@ async def test_menu_has_all_controls_and_private_callback(channel, tmp_path):
     assert len(menu.tickets) == 0  # navigation survives restarts; changes use tickets
     args = m.channels[channel]._call.call_args
     # the home menu leads to the account console; the price list lives on the pay page
-    assert "https://cloud.nanolika.ru/web/account/?source=messenger" in str(args)
+    if channel == "telegram":
+        assert args.args[1]["reply_markup"]["is_persistent"] is True
+        assert len(args.args[1]["reply_markup"]["keyboard"]) == 3
+    else:
+        assert "open_app" in str(args)
+        assert len(args.kwargs["json"]["attachments"][0]["payload"]["buttons"]) == 4
     token = "nav:permissions"
     before = m.channels[channel]._call.call_count
     await menu.callback(channel, "other", "owner", {"menu": token})
@@ -247,12 +252,8 @@ async def test_menu_configuration_matches_vendor_command_shapes(tmp_path):
             call.args[1]["commands"] if vendor == "telegram" else call.kwargs["json"]["commands"]
         )
         field = "command" if vendor == "telegram" else "name"
-        # every command the manager answers is in the vendor's menu: a person should not
-        # have to guess that /balance or /permissions exist
-        assert {row[field] for row in commands} == {
-            "start", "menu", "new", "chats", "help", "status", "balance",
-            "model", "permissions", "rename", "unlink",
-        }
+        # Actions are discoverable through buttons; slash suggestions stay minimal.
+        assert {row[field] for row in commands} == {"start", "menu", "help"}
 
 
 @pytest.mark.asyncio
@@ -377,7 +378,9 @@ async def test_a_model_pick_belongs_to_that_chat_only(tmp_path):
     shelf's `default.chat`. Now the choice is the thread's own and goes to the relay with
     it; nothing else is written."""
     m = manager(tmp_path)
-    thread = SimpleNamespace(model="", id="channel-telegram-chat", meta=lambda: {"id": "channel-telegram-chat"})
+    thread = SimpleNamespace(
+        model="", id="channel-telegram-chat", meta=lambda: {"id": "channel-telegram-chat"}
+    )
     m.svc.threads = {"channel-telegram-chat": thread}
     m.svc._save_index = lambda: None
     m.svc.bus = SimpleNamespace(publish=lambda event: None)
@@ -398,3 +401,56 @@ async def test_a_model_pick_belongs_to_that_chat_only(tmp_path):
     assert thread.model == "picture"
     assert pushed == ["channel-telegram-chat"]
 
+
+@pytest.mark.asyncio
+async def test_balance_speaks_rubles_when_the_relay_prices_in_them(tmp_path, monkeypatch):
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    monkeypatch.setattr(
+        ChatMenu, "_cloud_access", AsyncMock(return_value=("key", "https://relay.test"))
+    )
+
+    class FakeClient:
+        def __init__(self, base_url, api_key):
+            self.base_url = base_url
+
+        async def me(self):
+            return {
+                "spend": {
+                    "left": 1.6746,
+                    "currency": "CNY",
+                    "left_rub": 21.39,
+                    "rub_per_usd": 80.5381,
+                }
+            }
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("nanomuse.cloud.CloudClient", FakeClient)
+    text = await menu.balance(msg(text="/balance"))
+    assert "21.39 ₽" in text
+    assert "CNY" not in text
+
+
+@pytest.mark.asyncio
+async def test_balance_keeps_yuan_until_the_relay_prices_in_rubles(tmp_path, monkeypatch):
+    m = manager(tmp_path)
+    menu = ChatMenu(m)
+    monkeypatch.setattr(
+        ChatMenu, "_cloud_access", AsyncMock(return_value=("key", "https://relay.test"))
+    )
+
+    class FakeClient:
+        def __init__(self, base_url, api_key):
+            self.base_url = base_url
+
+        async def me(self):
+            return {"spend": {"left": 1.6746, "currency": "CNY", "rub_per_usd": 0, "left_rub": 0.0}}
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr("nanomuse.cloud.CloudClient", FakeClient)
+    text = await menu.balance(msg(text="/balance"))
+    assert "1.6746 CNY" in text

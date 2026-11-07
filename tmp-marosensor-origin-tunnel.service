@@ -1,0 +1,14 @@
+[Unit]
+Description=Marosensor origin tunnel via backup HTTP proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/marosensor-origin-tunnel
+Restart=always
+RestartSec=3
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

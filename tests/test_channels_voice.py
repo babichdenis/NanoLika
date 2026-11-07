@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 
@@ -87,7 +85,11 @@ async def test_a_menu_without_the_model_says_so_once():
     handler, _ = relay(menu={"data": [{"id": "chat-1", "kind": "chat", "nanomuse": {}}]})
     with pytest.raises(voice_note.VoiceError):
         await voice_note.hear(
-            b"x", "voice.ogg", "audio/ogg", base="https://relay", key="k",
+            b"x",
+            "voice.ogg",
+            "audio/ogg",
+            base="https://relay",
+            key="k",
             transport=httpx.MockTransport(handler),
         )
 
@@ -179,7 +181,11 @@ async def test_a_menu_answer_older_than_the_ttl_is_asked_again(monkeypatch):
     monkeypatch.setattr(voice_note, "MENU_TTL_S", 0.0)
     for _ in range(2):
         await voice_note.hear(
-            b"OggS", "voice.ogg", "audio/ogg", base="https://relay", key="k",
+            b"OggS",
+            "voice.ogg",
+            "audio/ogg",
+            base="https://relay",
+            key="k",
             transport=httpx.MockTransport(handler),
         )
     # `/v1/me/models` is probed once (this relay has no shelf), then the plain menu is read
@@ -200,7 +206,11 @@ async def test_a_model_gone_from_the_menu_is_asked_for_once_more(monkeypatch):
                 200,
                 json={
                     "models": [
-                        {"id": model, "kind": "audio", "nanomuse": {"audio_kind": "speech", "available": True}}
+                        {
+                            "id": model,
+                            "kind": "audio",
+                            "nanomuse": {"audio_kind": "speech", "available": True},
+                        }
                     ],
                     "shelf": {"enabled": {"audio": [model]}, "default": {"audio": model}},
                 },
@@ -256,10 +266,23 @@ async def test_the_cabinet_catalogue_names_the_voice_kind_its_own_way():
                 200,
                 json={
                     "models": [
-                        {"id": "whisper-large", "kind": "audio", "audio": {"kind": "transcribe"}, "available": True},
-                        {"id": "whisper-tiny", "kind": "audio", "audio": {"kind": "transcribe"}, "available": True},
+                        {
+                            "id": "whisper-large",
+                            "kind": "audio",
+                            "audio": {"kind": "transcribe"},
+                            "available": True,
+                        },
+                        {
+                            "id": "whisper-tiny",
+                            "kind": "audio",
+                            "audio": {"kind": "transcribe"},
+                            "available": True,
+                        },
                     ],
-                    "shelf": {"enabled": {"audio": ["whisper-tiny"]}, "default": {"audio": "whisper-tiny"}},
+                    "shelf": {
+                        "enabled": {"audio": ["whisper-tiny"]},
+                        "default": {"audio": "whisper-tiny"},
+                    },
                 },
             )
         if request.url.path == "/v1/audio/transcriptions":
@@ -268,7 +291,11 @@ async def test_the_cabinet_catalogue_names_the_voice_kind_its_own_way():
         return httpx.Response(404, json={})
 
     words = await voice_note.hear(
-        b"OggS", "voice.ogg", "audio/ogg", base="https://relay", key="k",
+        b"OggS",
+        "voice.ogg",
+        "audio/ogg",
+        base="https://relay",
+        key="k",
         transport=httpx.MockTransport(handler),
     )
     assert words == "слово"

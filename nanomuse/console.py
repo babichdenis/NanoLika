@@ -35,6 +35,8 @@ class ConsoleUI:
         self.unattended = unattended
         self._streaming = False
         self._streamed_chars = 0
+        self._thinking = False
+        self._thinking_streamed = False
 
     # ------------------------------------------------------------------ output
     def on_text_delta(self, text: str) -> None:
@@ -46,7 +48,19 @@ class ConsoleUI:
         self.console.print(text, end="", markup=False, highlight=False, soft_wrap=True)
         self._streamed_chars += len(text)
 
+    def on_reasoning_delta(self, text: str) -> None:
+        if not text or not self.show_thinking or self.quiet:
+            return
+        if not self._thinking:
+            self.console.print(Text("  thinking › ", style="dim"), end="")
+            self._thinking = True
+        self.console.print(Text(text, style="dim"), end="", soft_wrap=True)
+        self._thinking_streamed = True
+
     def _end_stream(self) -> None:
+        if self._thinking:
+            self.console.print()
+            self._thinking = False
         if self._streaming:
             self.console.print()
             self._streaming = False
@@ -55,7 +69,7 @@ class ConsoleUI:
     def on_assistant_message(self, content: str | None, reasoning: str | None) -> None:
         streamed = self._streaming
         self._end_stream()
-        if reasoning and self.show_thinking:
+        if reasoning and self.show_thinking and not self._thinking_streamed:
             self.console.print(
                 Panel(
                     Text(reasoning.strip()[:4000], style="dim"),
@@ -66,6 +80,7 @@ class ConsoleUI:
         if content and not streamed:
             self.console.print(Text(f"{self.name} › ", style="bold blue"), end="")
             self.console.print(Markdown(content))
+        self._thinking_streamed = False
 
     def on_tool_call(self, call: ToolCall, summary: str) -> None:
         self._end_stream()

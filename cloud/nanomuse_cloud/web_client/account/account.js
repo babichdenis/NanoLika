@@ -24,6 +24,9 @@ Object.assign(words.zh,{
  apiDaily:'每日限额，₽',apiMonthly:'30 天限额，₽',apiLimitHint:'0 — 不限额',apiBalance:'账户余额',apiExpires:'有效期至',apiNoExpiry:'永久',apiLimits:'限额',apiToday:'今天',apiMonth:'最近 30 天',apiNoLimit:'不限额',
  apiEdit:'编辑',apiSave:'保存',apiCancel:'取消',apiKeepTerm:'保持不变',apiActive:'有效',apiExpired:'已过期',apiUsage:'消费',apiNoKeys:'暂无个人密钥。',apiRevokedHistory:'已撤销',apiEditTitle:'密钥设置',apiSaving:'保存中…',apiSaved:'密钥已更新。',apiLimitLeft:'剩余'
 });
+Object.assign(words.ru,{providers:'Свои ключи',providersTitle:'Свои ключи',providersNote:'Подключите свой ключ провайдера — запросы пойдут через него и не будут тратить баланс nanoLika. Провайдеру платить всё равно придётся.',providerName:'Провайдер',providerLabel:'Название ключа',providerCustom:'Другой (OpenAI-совместимый)',providerBase:'Адрес API (для «Другого»)',providerKey:'Ключ провайдера',providerModels:'Модели через запятую (необязательно)',providerAdd:'Подключить ключ',providerNone:'Своих ключей пока нет.',providerDelete:'Удалить',providerDeleteConfirm:'Удалить этот ключ? Запросы снова пойдут через баланс nanoLika.',providerSaved:'Ключ подключён.',providerError:'Не удалось выполнить действие с ключом провайдера.'});
+Object.assign(words.en,{providers:'Own keys',providersTitle:'Own keys',providersNote:'Connect your own provider key — requests go through it and do not spend the nanoLika balance. You still pay the provider.',providerName:'Provider',providerLabel:'Key name',providerCustom:'Other (OpenAI-compatible)',providerBase:'API address (for “Other”)',providerKey:'Provider key',providerModels:'Models, comma-separated (optional)',providerAdd:'Connect key',providerNone:'No own keys yet.',providerDelete:'Remove',providerDeleteConfirm:'Remove this key? Requests will use the nanoLika balance again.',providerSaved:'Key connected.',providerError:'Could not update the provider key.'});
+Object.assign(words.zh,{providers:'自有密钥',providersTitle:'自有密钥',providersNote:'接入你自己的服务商密钥：请求走你的密钥，不消耗 nanoLika 余额；服务商费用仍需自行支付。',providerName:'服务商',providerLabel:'密钥名称',providerCustom:'其他（OpenAI 兼容）',providerBase:'API 地址（用于“其他”）',providerKey:'服务商密钥',providerModels:'模型，用逗号分隔（可选）',providerAdd:'接入密钥',providerNone:'暂无自有密钥。',providerDelete:'删除',providerDeleteConfirm:'删除此密钥？请求将重新使用 nanoLika 余额。',providerSaved:'密钥已接入。',providerError:'无法更新服务商密钥。'});
 const $=id=>document.getElementById(id),fromConsole=new URLSearchParams(location.search).get('source')==='console',sessionKey=fromConsole?'nm.key':'nl.web.session.v1';let session=null,lang='ru',me=null,minPassword=8,revision=0;
 try{session=fromConsole?{key:localStorage.getItem(sessionKey),owner:null}:JSON.parse(localStorage.getItem(sessionKey)||'null');if(!session?.key){const key=localStorage.getItem('nm.key');if(key)session={key,owner:null};}lang=localStorage.getItem('nl.web.language')||'ru';}catch{}
 if(!words[lang])lang='ru';const T=words[lang];document.documentElement.lang=lang;document.title=`${T.title} · nanoLika`;
@@ -118,12 +121,14 @@ function openKeyEditor(k){
  $('api-key-edit-label').focus();
 }
 async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited.toLocaleLowerCase(lang):Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
+async function loadProviders(){if(!$('providers-list'))return;try{const result=await api('/v1/me/providers');renderProviders(result.providers||[]);}catch(_){empty($('providers-list'),T.unavailable);}}
+function renderProviders(list){const box=$('providers-list');box.replaceChildren();if(!list.length){box.append(h('p',T.providerNone,'pad'));return;}for(const p of list){const card=h('article',undefined,'account-row');const text=h('div');text.append(h('strong',p.label?`${p.label} · ${p.provider}`:p.provider),h('p',`${p.base_url} · ${p.key_hint}${p.last_error?' · '+p.last_error:''}`));const del=h('button',T.providerDelete,'quiet danger-text');del.type='button';del.onclick=async()=>{if(!confirm(T.providerDeleteConfirm))return;del.disabled=true;try{await api('/v1/me/providers/'+encodeURIComponent(p.id),{method:'DELETE'});await loadProviders();}catch(_){$('provider-status').textContent=T.providerError;del.disabled=false;}};card.append(text,del);box.append(card);}}
 async function loadUsage(){await usageChart.load();}
 async function load(){
  if(!session?.key){location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));return;}$('refresh').disabled=true;$('status').textContent=T.loading;
  try{me=await api('/v1/me');if(!me.account?.id||(session.owner&&me.account.id!==session.owner))throw new Error('identity');session.owner=me.account.id;renderMe();$('private-content').hidden=false;autopay.load();
- const results=await Promise.allSettled([api('/v1/devices'),api('/v1/me/sessions'),api('/v1/config'),loadUsage(),loadApiKeys(),api('/v1/link/channels')]);
- const [devices,sessions,config,usage,apiKeys,channelLinks]=results;
+ const results=await Promise.allSettled([api('/v1/devices'),api('/v1/me/sessions'),api('/v1/config'),loadUsage(),loadApiKeys(),api('/v1/link/channels'),loadProviders()]);
+ const [devices,sessions,config,usage,apiKeys,channelLinks,providers]=results;
  for(const [channel,button] of connectionButtons){const known=channel==='desktop'?devices.status==='fulfilled':channelLinks.status==='fulfilled';const linked=known&&(channel==='desktop'?(devices.value.devices||[]).some(isDesktopDevice):isChannelLinked(channelLinks.value,channel));const labels={ru:['Подключён','Не подключён'],en:['Connected','Not connected'],zh:['已连接','未连接']}[lang]||['Connected','Not connected'];button.textContent=button.dataset.label+(known?' · '+labels[linked?0:1]:'');button.dataset.connectionState=known?(linked?'connected':'disconnected'):'unknown';}
  if(devices.status==='fulfilled'){const list=groupWebDevices(devices.value.devices||[]);$('device-list').replaceChildren(...list.map(d=>{
  if(d.kind!=='web')return row(d.name||d.kind||'nanoLika',(d.online?T.online:T.offline)+(!d.online&&d.last_seen?' · '+new Date(d.last_seen*1000).toLocaleString(lang):''));
@@ -132,7 +137,7 @@ async function load(){
  d.connections.forEach((tab,i)=>box.append(row((lang==='ru'?'Подключение ':lang==='zh'?'连接 ':'Connection ')+(i+1),(tab.os?tab.os+' · ':'')+(tab.online?T.online:T.offline))));return box;
  }));if(!list.length)empty($('device-list'));}else empty($('device-list'),T.unavailable);
  if(sessions.status==='fulfilled'){const list=sessions.value.sessions||[];$('sessions').replaceChildren(...list.map(s=>{const n=row(s.device||'nanoLika',`${s.current?T.currentSession+' · ':''}${date(s.last_used_at||s.created_at)}`);if(!s.current){const b=h('button',T.revoke);b.type='button';b.onclick=async()=>{if(!confirm(T.revokeConfirm))return;b.disabled=true;try{await api('/v1/me/sessions/'+encodeURIComponent(s.prefix),{method:'DELETE'});await load();}catch(_){$('status').textContent=T.error;b.disabled=false;}};n.append(b);}return n;}));if(!list.length)empty($('sessions'));}else empty($('sessions'),T.unavailable);
- if(config.status==='fulfilled')minPassword=Math.max(1,Number(config.value.password_min_len)||8);if(usage.status==='rejected')$('status').textContent=T.usageError;if(apiKeys.status==='rejected')empty($('api-keys'),T.unavailable);
+ if(config.status==='fulfilled')minPassword=Math.max(1,Number(config.value.password_min_len)||8);if(usage.status==='rejected')$('status').textContent=T.usageError;if(apiKeys.status==='rejected')empty($('api-keys'),T.unavailable);if(providers.status==='rejected')empty($('providers-list'),T.unavailable);
  $('status').textContent='';
  }catch(e){$('private-content').hidden=true;$('identity').textContent='';if(e.status===401||e.message==='identity')location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));else $('status').textContent=T.error;}finally{$('refresh').disabled=false;}
 }
@@ -149,6 +154,20 @@ if($('create-api-key'))$('create-api-key').onclick=async()=>{
   $('new-api-key-value').textContent=result.api_key;$('new-api-key').hidden=false;$('api-key-status').textContent=T.apiCreated;
   await loadApiKeys();
  }catch(e){$('api-key-status').textContent=lang==='ru'?(e.status===401?'Войдите в аккаунт заново, затем создайте ключ.':e.status===404?'Сервис выдачи ключей недоступен. Попробуйте обновить страницу.':T.apiError):T.apiError;}finally{button.disabled=false;}
+};
+if($('add-provider'))$('add-provider').onclick=async()=>{
+ const button=$('add-provider'),status=$('provider-status');
+ button.disabled=true;status.textContent='';
+ const provider=$('provider-select').value;
+ const label=$('provider-label').value.trim();
+ const base=$('provider-base').value.trim();
+ const key=$('provider-key').value.trim();
+ const models=$('provider-models').value.split(',').map(s=>s.trim()).filter(Boolean);
+ try{
+  await api('/v1/me/providers',{method:'POST',body:JSON.stringify({provider,label,base_url:base,api_key:key,models})});
+  $('provider-key').value='';$('provider-models').value='';$('provider-base').value='';$('provider-label').value='';
+  status.textContent=T.providerSaved;await loadProviders();
+ }catch(_){status.textContent=T.providerError;}finally{button.disabled=false;}
 };
 if($('api-key-edit-form'))$('api-key-edit-form').onsubmit=async e=>{
  e.preventDefault();

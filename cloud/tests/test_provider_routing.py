@@ -418,6 +418,44 @@ def test_both_modes_fallback_before_response_only(failure, stream):
     assert seen == ["one.example", "two.example"]
 
 
+def test_streaming_success_is_not_read_before_returning():
+    """A live stream has no `content`; judging it would end the reply as unreachable."""
+    seen = []
+
+    def handle(request):
+        seen.append(request.url.host)
+        return httpx.Response(200, content=b'data: {"choices": []}\n\n')
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            routes = [Route("one", "https://one.example/v1/chat/completions", {}, {"model": "m"})]
+            response, chosen = await request_chat(c, routes, stream=True)
+            assert response.status_code == 200 and chosen.provider == "one"
+            assert await response.aread() == b'data: {"choices": []}\n\n'
+            await response.aclose()
+
+    asyncio.run(go())
+    assert seen == ["one.example"]
+
+
+def test_streaming_vision_refusal_moves_to_the_next_route():
+    refusal = "400: " + json.dumps({"error": {"code": "BAD_REQUEST", "message": "no providers with support: input_image"}})
+
+    def handle(request):
+        if request.url.host == "one.example":
+            return httpx.Response(400, content=refusal.encode())
+        return httpx.Response(200, content=b'data: {"choices": []}\n\n')
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            routes = [Route(n, f"https://{n}.example/v1/chat/completions", {}, {"model": "m"}) for n in ("one", "two")]
+            response, chosen = await request_chat(c, routes, stream=True)
+            assert response.status_code == 200 and chosen.provider == "two"
+            await response.aclose()
+
+    asyncio.run(go())
+
+
 def test_all_network_failures_raise_http_error_not_attribute_error():
     def handle(request):
         raise httpx.ConnectError("fixture", request=request)
@@ -764,6 +802,173 @@ def test_proxy_model_not_supported_is_retryable_but_input_errors_are_not():
 
     assert retryable(httpx.Response(400, json={"detail": "Model not supported"}))
     assert not retryable(httpx.Response(400, json={"detail": "Invalid messages"}))
+
+
+def test_vision_refusal_moves_to_the_next_route_and_is_remembered(monkeypatch):
+    """A supplier that advertises pictures but refuses them must not fail the turn."""
+    from nanomuse_cloud.provider_routing import retryable, vision_refusal
+
+    polza_body = (
+        b'{"error":{"code":"BAD_REQUEST","message":"\xd0\x9c\xd0\xbe\xd0\xb4\xd0\xb5\xd0\xbb\xd1\x8c '
+        b'\\"deepseek/deepseek-v4-flash\\" \xd0\xbd\xd0\xb5 \xd0\xb8\xd0\xbc\xd0\xb5\xd0\xb5\xd1\x82 '
+        b"\xd0\xb4\xd0\xbe\xd1\x81\xd1\x82\xd1\x83\xd0\xbf\xd0\xbd\xd1\x8b\xd1\x85 "
+        b"\xd0\xbf\xd1\x80\xd0\xbe\xd0\xb2\xd0\xb0\xd0\xb9\xd0\xb4\xd0\xb5\xd1\x80\xd0\xbe\xd0\xb2 "
+        b"\xd1\x81 \xd0\xbf\xd0\xbe\xd0\xb4\xd0\xb4\xd0\xb5\xd1\x80\xd0\xb6\xd0\xba\xd0\xbe\xd0\xb9: "
+        b'input_image"}}'
+    )
+    assert vision_refusal(polza_body.decode("utf-8"))
+    assert retryable(httpx.Response(400), polza_body)
+    assert not retryable(httpx.Response(400), b'{"error":{"message":"messages[0] is invalid"}}')
+
+    r = setup_router(monkeypatch)
+    route = Route("polza", "http://polza/v1/chat/completions", {}, {"model": "deepseek/deepseek-v4-flash"})
+    # An unproven refusal (no other route answered) is not a fact about the model.
+    r.note_failure(route, 400, polza_body, False)
+    assert r.vision_blocked == {}
+    r.note_failure(route, 400, polza_body, True)
+    assert r.vision_blocked["polza|deepseek/deepseek-v4-flash"] > 0
+    assert r.vision_strikes["polza|deepseek/deepseek-v4-flash"] == 1
+
+
+def test_a_big_or_broken_picture_is_not_a_vision_refusal():
+    """Size, format and decode errors say nothing about the model's eyes."""
+    from nanomuse_cloud.provider_routing import vision_refusal
+
+    for text in (
+        "image too large: maximum 5 MB",
+        "unsupported image format",
+        "could not decode image data",
+        "image size exceeds the limit",
+    ):
+        assert not vision_refusal(text), text
+    assert vision_refusal("No endpoints found that support image input")
+    assert vision_refusal("Модель не имеет доступных провайдеров с поддержкой: input_image")
+
+
+def test_a_picture_the_route_took_clears_the_pause_and_proves_vision(monkeypatch):
+    r = setup_router(monkeypatch)
+    route = Route("polza", "http://polza/v1/chat/completions", {}, {"model": "deepseek/deepseek-v4-flash"})
+    r.note_failure(route, 400, "no providers with support: input_image", True)
+    assert r.vision_blocked
+    r.note_success(route, vision=True)
+    assert r.vision_blocked == {} and r.vision_strikes == {}
+    assert r.vision_confirmed["polza|deepseek/deepseek-v4-flash"] > 0
+
+
+def test_the_pause_grows_with_repeated_strikes(monkeypatch):
+    r = setup_router(monkeypatch)
+    route = Route("polza", "http://polza/v1/chat/completions", {}, {"model": "deepseek/deepseek-v4-flash"})
+    pauses = []
+    for _ in range(4):
+        r.note_failure(route, 400, "no providers with support: input_image", True)
+        pauses.append(r.vision_blocked["polza|deepseek/deepseek-v4-flash"] - time.time())
+    assert pauses[0] < pauses[1] < pauses[2] <= 24 * 3600
+
+
+def test_refusals_are_proven_only_after_another_route_answers():
+    """One broken picture must not switch a supplier off."""
+    refusal = json.dumps({"error": {"code": "BAD_REQUEST", "message": "no providers with support: input_image"}})
+    seen = []
+
+    def handle(request):
+        if request.url.host == "one.example":
+            return httpx.Response(400, content=refusal.encode())
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            routes = [Route(n, f"https://{n}.example/v1/chat/completions", {}, {"model": "m"}) for n in ("one", "two")]
+            response, chosen = await request_chat(
+                c,
+                routes,
+                stream=False,
+                on_failure=lambda route, status, body, proven: seen.append((route.provider, proven)),
+                on_success=lambda route, vision: seen.append((f"ok:{route.provider}", vision)),
+                vision=True,
+            )
+            assert response.status_code == 200 and chosen.provider == "two"
+
+    asyncio.run(go())
+    assert ("one", False) in seen
+    assert ("one", True) in seen
+    assert ("ok:two", True) in seen
+
+
+def test_a_refused_picture_is_retried_on_a_sibling_id_at_the_same_supplier():
+    """The supplier is kept: only the id that cannot see is replaced."""
+    calls = []
+    refusal = json.dumps({"error": {"code": "BAD_REQUEST", "message": "no providers with support: input_image"}})
+
+    def handle(request):
+        model = json.loads(request.content)["model"]
+        calls.append((request.url.host, model))
+        if model == "deepseek/deepseek-v4-flash":
+            return httpx.Response(400, content=refusal.encode())
+        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    sibling = replace(quote("polza", 20, 40), model="deepseek/deepseek-v4.1-flash")
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            routes = [
+                Route(
+                    "polza",
+                    "https://polza.example/v1/chat/completions",
+                    {},
+                    {"model": "deepseek/deepseek-v4-flash"},
+                    siblings=(sibling,),
+                )
+            ]
+            response, chosen = await request_chat(c, routes, stream=False, vision=True)
+            assert response.status_code == 200
+            assert chosen.body["model"] == "deepseek/deepseek-v4.1-flash"
+            assert chosen.offer is sibling
+
+    asyncio.run(go())
+    assert calls == [
+        ("polza.example", "deepseek/deepseek-v4-flash"),
+        ("polza.example", "deepseek/deepseek-v4.1-flash"),
+    ]
+
+
+def test_routes_keep_the_supplier_and_swap_a_blind_id_for_a_seeing_sibling(monkeypatch):
+    r = setup_router(monkeypatch)
+    spec = ModelSpec("deepseek-flash", "DeepSeek V4.1 Flash", "deepseek-flash")
+    r.offers = {
+        "polza": [
+            replace(quote("polza", 5, 10), model="deepseek/deepseek-v4-flash", modalities=("text", "image")),
+            replace(quote("polza", 9, 18), model="deepseek/deepseek-v4.1-flash"),
+        ],
+    }
+    body = {
+        "model": spec.upstream,
+        "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://x/y.png"}}]}],
+        "max_tokens": 256,
+    }
+    # The pair is known to refuse pictures: the supplier stays, the id changes.
+    r.vision_blocked["polza|deepseek/deepseek-v4-flash"] = time.time() + 600
+
+    candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
+
+    assert [route.provider for route in candidates] == ["polza"]
+    assert candidates[0].body["model"] == "deepseek/deepseek-v4.1-flash"
+
+
+def test_nothing_is_proven_when_every_route_refuses():
+    refusal = json.dumps({"error": {"code": "BAD_REQUEST", "message": "no providers with support: input_image"}})
+    seen = []
+
+    def handle(request):
+        return httpx.Response(400, content=refusal.encode())
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            routes = [Route(n, f"https://{n}.example/v1/chat/completions", {}, {"model": "m"}) for n in ("one", "two")]
+            response, _ = await request_chat(c, routes, stream=False, on_failure=lambda route, status, body, proven: seen.append(proven))
+            assert response.status_code == 400
+
+    asyncio.run(go())
+    assert True not in seen
 
 
 @pytest.mark.parametrize(

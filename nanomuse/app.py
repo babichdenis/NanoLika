@@ -6,6 +6,7 @@ import contextlib
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from nanomuse import prompts
 from nanomuse.agent import MuseAgent
@@ -62,6 +63,7 @@ from nanomuse.tools import (
     WebSearch,
     playwright_available,
 )
+from nanomuse.tools.beatapi import BeatAPI
 from nanomuse.tools.bot_projects import BotProjects
 from nanomuse.tools.computer import ComputerAct, ComputerScreen, ComputerTask
 from nanomuse.tools.phone import PhoneAct, PhoneScreen, PhoneTask
@@ -83,6 +85,8 @@ class NanoMuseApp:
         self.ui = ui
         # The phone, when a server is around to hold its socket (the CLI has none).
         self.phone = phone
+        # set by MuseService, which owns the hub: the tools reach the relay through it
+        self.hub: Any = None
         setup_logging(settings.log_level, settings.data_dir / "logs")
         settings.ensure_dirs()
         self.session_id = (
@@ -359,9 +363,12 @@ class NanoMuseApp:
             OfficeXlsm(workspace=ws, extra_roots=list(s.agent.extra_roots)),
             Media(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
             Picture(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
-            ShareFile(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
+            ShareFile(
+                workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client
+            ),
             Video(workspace=ws, extra_roots=list(s.agent.extra_roots), cloud=self._cloud_client),
             Models(cloud=self._cloud_client),
+            BeatAPI(cloud=self._cloud_client),
         )
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:

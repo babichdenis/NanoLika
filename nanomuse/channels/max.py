@@ -110,6 +110,7 @@ class MaxChannel(Channel):
     def __init__(self, settings: dict[str, Any], transport: httpx.AsyncBaseTransport | None = None):
         super().__init__(settings)
         self._transport = transport
+        self.bot_id = 0
         self._http: httpx.AsyncClient | None = None
         # Media goes to signed CDN/upload hosts: a client without the bot token keeps
         # the credential out of those requests.
@@ -173,6 +174,8 @@ class MaxChannel(Channel):
             me = await self._call("GET", "/me")
             if not me.get("is_bot"):
                 raise MaxError("MAX credentials do not identify a bot")
+            bot_id = me.get("user_id")
+            self.bot_id = bot_id if type(bot_id) is int and bot_id > 0 else 0
             return str(me.get("username") or "MAX bot")
         finally:
             if own and self._http is not None:
@@ -250,7 +253,9 @@ class MaxChannel(Channel):
     async def _clear_card(self, chat_id: str, mid: str) -> None:
         # `attachments: []` clears the keyboard; `null` would leave it as it was.
         with suppress(MaxError):
-            await self._call("PUT", "/messages", params={"message_id": mid}, json={"attachments": []})
+            await self._call(
+                "PUT", "/messages", params={"message_id": mid}, json={"attachments": []}
+            )
         with suppress(MaxError):
             await self._call("DELETE", f"/chats/{chat_id}/pin", params={"message_id": mid})
 
@@ -579,9 +584,7 @@ class MaxChannel(Channel):
             last = await self._send_file(chat_id, path) or last
         return last
 
-    async def _send_part(
-        self, chat_id: str, part: telegram_format.Part, reply_to: str = ""
-    ) -> str:
+    async def _send_part(self, chat_id: str, part: telegram_format.Part, reply_to: str = "") -> str:
         """One already-rendered part of an answer, as HTML with a plain-text fallback."""
         link = {"link": {"type": "reply", "mid": reply_to}} if reply_to else {}
         try:
@@ -766,9 +769,7 @@ class MaxChannel(Channel):
             # The card blocks the turn: pinning keeps it at the top of a busy chat until the
             # answer comes. Without the right to pin the card is still there to be tapped.
             with suppress(MaxError):
-                await self._call(
-                    "PUT", f"/chats/{chat_id}/pin", json={"message_id": card_mid}
-                )
+                await self._call("PUT", f"/chats/{chat_id}/pin", json={"message_id": card_mid})
         self._approval_cards[(chat_id, approval_id)] = (card_mid, text, rows)
         while len(self._approval_cards) > 256:
             self._approval_cards.pop(next(iter(self._approval_cards)))

@@ -35,6 +35,7 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import { mountGuarded } from './admit.ts'
 import { dshHome, json, message, sameOrigin, send } from './cloud.ts'
 import { CATALOGUE, catalogueEntry, type CatalogueAuth } from './connectors-catalogue.ts'
+import { addMailbox, listMailboxes, MailError, removeMailbox, testMailbox, updateMailbox } from './mail.ts'
 import { hasUserinfo, USERINFO_TEXT } from './providers.ts'
 import { RelayError } from './relay.ts'
 import { stateDir, statePath } from './paths.ts'
@@ -697,6 +698,7 @@ export default class NanomuseConnectors extends Service {
       }
       if (req.method === 'GET' && route === '/registry') return send(res, 200, { hits: await this.registry(url.searchParams.get('q') ?? '') })
       if (req.method === 'GET' && route === '/catalogue') return send(res, 200, { entries: CATALOGUE })
+      if (req.method === 'GET' && route === '/mail') return send(res, 200, { mailboxes: await listMailboxes() })
       if (req.method !== 'POST') return send(res, 404, { error: { code: 'not_found', message: `No ${req.method ?? ''} ${route}` } })
       const body = await json(req)
       switch (route) {
@@ -719,11 +721,42 @@ export default class NanomuseConnectors extends Service {
           return send(res, 200, await this.setTool(String(body.id ?? ''), String(body.name ?? ''), body.enabled !== false))
         case '/retry':
           return send(res, 200, await this.retry(String(body.id ?? '')))
+        case '/mail/add':
+          return send(res, 200, await addMailbox({
+            address: String(body.address ?? ''),
+            password: String(body.password ?? ''),
+            ...(typeof body.label === 'string' ? { label: body.label } : {}),
+            ...(typeof body.imap_host === 'string' ? { imap_host: body.imap_host } : {}),
+            ...(typeof body.imap_port === 'number' ? { imap_port: body.imap_port } : {}),
+            ...(typeof body.smtp_host === 'string' ? { smtp_host: body.smtp_host } : {}),
+            ...(typeof body.smtp_port === 'number' ? { smtp_port: body.smtp_port } : {}),
+          }))
+        case '/mail/remove':
+          await removeMailbox(String(body.id ?? ''))
+          return send(res, 204)
+        case '/mail/update':
+          return send(res, 200, await updateMailbox({
+            id: String(body.id ?? ''),
+            ...(typeof body.address === 'string' ? { address: body.address } : {}),
+            ...(typeof body.label === 'string' ? { label: body.label } : {}),
+            ...(typeof body.password === 'string' && body.password ? { password: body.password } : {}),
+            ...(typeof body.imap_host === 'string' ? { imap_host: body.imap_host } : {}),
+            ...(typeof body.imap_port === 'number' ? { imap_port: body.imap_port } : {}),
+            ...(typeof body.smtp_host === 'string' ? { smtp_host: body.smtp_host } : {}),
+            ...(typeof body.smtp_port === 'number' ? { smtp_port: body.smtp_port } : {}),
+            ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+          }))
+        case '/mail/test':
+          return send(res, 200, await testMailbox(typeof body.id === 'string' && body.id ? body.id : undefined))
         default:
           return send(res, 404, { error: { code: 'not_found', message: `No POST ${route}` } })
       }
     } catch (error) {
       if (error instanceof RelayError) return send(res, error.status, { error: { code: error.code, message: error.message } })
+      if (error instanceof MailError) {
+        const status = error.code === 'duplicate' ? 409 : error.code === 'not_found' ? 404 : 400
+        return send(res, status, { error: { code: error.code, message: error.message } })
+      }
       this.warn(route, error)
       return send(res, 500, { error: { code: 'internal', message: message(error) } })
     }
