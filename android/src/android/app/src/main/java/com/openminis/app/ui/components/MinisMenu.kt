@@ -71,7 +71,7 @@ fun MinisMenu(
     // in dark, a subtle shade in light) so the menu pops out — same fix already
     // validated on the text-selection toolbar (T-android-text-toolbar-dark-
     // visibility). The dark-mode `border` below adds the extra edge definition.
-    // nanoMuse: pure canvas like the drawer and chat, black in dark and white in
+    // NanoLika: pure canvas like the drawer and chat, black in dark and white in
     // light. The hairline border carries the definition.
     containerColor: Color = ChatColors.background,
     tonalElevation: Dp = 3.dp,
@@ -88,7 +88,7 @@ fun MinisMenu(
     // Light mode now also gets a hairline (was null): with the launcher-style
     // soft halo replacing the old tight shadow, the popup's edge needs a
     // subtle line of its own to stay crisply bounded on light surfaces.
-    // nanoMuse: a touch stronger in dark so the black menu stays defined
+    // NanoLika: a touch stronger in dark so the black menu stays defined
     // against the black chat.
     border: BorderStroke? = if (ChatColors.isDark) {
         BorderStroke(0.75.dp, Color.White.copy(alpha = 0.14f))

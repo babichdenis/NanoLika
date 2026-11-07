@@ -104,7 +104,7 @@
     <string name="a11y_repair_in_progress">正在恢复…</string>
     <string name="a11y_repair_failed">恢复失败——请到系统设置中开启</string>
     <string name="a11y_repair_footer_shizuku">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。Shizuku 可以直接写回该授权。</string>
-    <string name="a11y_repair_footer_manual">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。安装并授权 Shizuku 后，今后点一下就能恢复。</string> <!-- nanoMuse: wording -->
+    <string name="a11y_repair_footer_manual">每次应用被强行停止，Android 都会移除无障碍授权，且不会自动恢复。安装并授权 Shizuku 后，今后点一下就能恢复。</string> <!-- NanoLika: wording -->
     <string name="bg_service_notification_title">nanoLika 正在工作</string>
     <string name="bg_service_notification_text">%1$s | %2$s | %3$s</string>
     <string name="bg_service_notification_title_completed">任务已完成</string>
@@ -535,7 +535,7 @@
     <string name="browser_settings_clear_cookies_for">清除 %1$s 的 Cookie</string>
     <string name="browser_settings_clear_all_cookies">清除所有 Cookie 与数据</string>
     <string name="browser_settings_clear_all_dialog_title">清除所有网站数据？</string>
-    <string name="browser_settings_clear_all_dialog_message">这将删除所有 Cookie 和网站数据。你会从所有网站登出。</string> <!-- nanoMuse: 你, not 您 -->
+    <string name="browser_settings_clear_all_dialog_message">这将删除所有 Cookie 和网站数据。你会从所有网站登出。</string> <!-- NanoLika: 你, not 您 -->
     <string name="browser_settings_clear">清除</string>
     <string name="browser_history_title">历史记录</string>
     <string name="browser_history_clear">清除</string>
@@ -931,7 +931,7 @@
     <string name="rootfs_reset_confirm_title">重置 Rootfs？</string>
     <string name="rootfs_reset_confirm_message">这将删除整个 rootfs。所有数据将丢失。</string>
     <string name="rootfs_reset_backup_confirm_title">备份并重置？</string>
-    <string name="rootfs_reset_backup_confirm_message">这将备份你的 /root 目录，然后重置 rootfs。之后可以恢复备份。</string> <!-- nanoMuse: 你, not 您 -->
+    <string name="rootfs_reset_backup_confirm_message">这将备份你的 /root 目录，然后重置 rootfs。之后可以恢复备份。</string> <!-- NanoLika: 你, not 您 -->
     <string name="rootfs_reset_backup_confirm_button">重置并备份</string>
     <string name="provider_list_providers">AI 服务商</string>
     <string name="provider_list_add_provider">添加 AI 服务商</string>
@@ -1561,7 +1561,7 @@
     <string name="system_permissions_a11y_restricted_manual">允许受限设置</string>
     <string name="system_permissions_a11y_restricted_manual_sub">应用详情 → 右上角 ⋮ 菜单 → 允许受限设置</string>
     <string name="system_permissions_a11y_restricted_shizuku">通过 Shizuku 允许受限设置</string>
-    <string name="system_permissions_a11y_restricted_shizuku_sub">点一下解除，无需离开 nanoLika</string> <!-- nanoMuse: wording -->
+    <string name="system_permissions_a11y_restricted_shizuku_sub">点一下解除，无需离开 nanoLika</string> <!-- NanoLika: wording -->
     <string name="system_permissions_a11y_restricted_working">正在解除…</string>
     <string name="system_permissions_a11y_restricted_failed">解除失败 — 请按下方步骤手动操作</string>
     <string name="a11y_service_label">nanoLika 无障碍</string>

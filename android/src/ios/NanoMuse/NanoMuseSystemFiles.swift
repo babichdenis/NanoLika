@@ -1,6 +1,6 @@
 //
 //  NanoMuseSystemFiles.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The agent's own files, readable and (mostly) editable by the person:
 //  SOUL.md, USER.md, GLOBAL.md and the diary in the memory folder (what

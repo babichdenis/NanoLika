@@ -1,9 +1,9 @@
 //
 //  NanoMuseModelsView.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Settings › Models (0.1.41 "Choice"): the four slots as four rows, each saying which
-//  provider and model holds it; a picker per slot, grouped nanoMuse Cloud first and then
+//  provider and model holds it; a picker per slot, grouped NanoLika Cloud first and then
 //  one group per provider of the person's own, each folded to eight rows with a "Show n
 //  more" row and a search field once there is more than that (NanoMusePickerList); "Add a
 //  provider" at the bottom. The "Use it for" card that follows a saved key lives here too.
@@ -46,7 +46,7 @@ struct NanoMuseModelsView: View {
             if chatChanged {
                 NanoMuseCaption(text: AppLocalized("Applies to the main chat and to new chats; a side chat keeps its model."))
             }
-            // The account's models as a source. Off, nanoMuse Cloud leaves the pickers and the
+            // The account's models as a source. Off, NanoLika Cloud leaves the pickers and the
             // automatic order; the sign-in stays. Not a delete: the Cloud instance is the account.
             if NanoMuseCloud.isSignedIn {
                 NanoMuseCard {
@@ -184,7 +184,7 @@ private struct NanoMuseSlotRow: View {
 
 // MARK: - The picker for one slot
 
-/// The models that can hold `slot`: nanoMuse Cloud's group first when signed in (the relay's
+/// The models that can hold `slot`: NanoLika Cloud's group first when signed in (the relay's
 /// recommended one marked), then one group per provider of the person's own that covers the
 /// slot. A group shows at most `NanoMusePickerList.fold` rows until its *Show n more* row is
 /// tapped; once the groups together hold more than that, a search field under the Automatic

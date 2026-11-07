@@ -1,6 +1,6 @@
 # The desktop window, screen by screen
 
-> What the nanoMuse desktop on DeepSeek Harness looks like and does, page by page: the
+> What the NanoLika desktop on DeepSeek Harness looks like and does, page by page: the
 > window, the first run, the profile and the face, computer use, Settings, the rooms and
 > the hamburger menu. Interface only; the plan and the record of the work are in
 > [harness.md](harness.md).
@@ -89,7 +89,7 @@ pressed, the permissions page seen, which source answers. The pages are therefor
 skipped on a fresh install and never shown twice:
 
 1. **Welcome**: the app's mark (the avatar comes with the conversation, on the Meet page),
-   *Welcome to nanoMuse*, the three feature rows (chat, hands, reach), the community notice,
+   *Welcome to NanoLika*, the three feature rows (chat, hands, reach), the community notice,
    one blue *Sign in* pill and *Use your own API key instead*, which goes to the models page
    with no account (the sign-in can come later; *Skip for now* there with no key saved is
    Welcome again). Sign-in
@@ -112,15 +112,15 @@ skipped on a fresh install and never shown twice:
    cut off before. *More ways* folds out the rest of the catalogue, the servers on this
    computer (Ollama, LM Studio, vLLM) and any OpenAI-compatible endpoint by hand. *Skip for
    now* until a key is saved or a sign-in finished; *Continue* then.
-5. **Allow nanoMuse to use your computer?** (macOS only): *Accessibility* and *Screen
+5. **Allow NanoLika to use your computer?** (macOS only): *Accessibility* and *Screen
    Recording* rows, each with *Allow* that asks the system through the desktop shell and
    turns into a green check as the system grants it (polled, and again when the window gets
    focus or the page becomes visible; one hook, `permissions.ts`, behind every place that
    shows a permission); once *Allow* has been pressed the button reads *Open System
-   Settings*. Only **nanoMuse Desktop** has to be switched on: macOS attributes the bundled
+   Settings*. Only **NanoLika Desktop** has to be switched on: macOS attributes the bundled
    runtime's captures and events to the app that started it, so there is no second entry to
    hunt for. For *Screen Recording* the shell makes one capture attempt before it opens the
-   pane, so nanoMuse is on the pane's list, and when the permission is granted while the app
+   pane, so NanoLika is on the pane's list, and when the permission is granted while the app
    runs a dialog says macOS applies it only to freshly started apps, with *Restart now*
    (`relaunch` over the bridge). *Try it* rows (a test screenshot, a mouse move) and the
    runtime row say whether it works (the row names the binary and, when its last start for
@@ -215,14 +215,14 @@ first and *Reject* in grey), and every answer is written to the agent page's
 headline. The same question, *Allow once*, *Always in <app>* (for the hands' tools; the
 app is the window title's first part), *Deny* (the host's `ApprovalDesk` sits first in
 the `approval/request` waterfall and answers for the card), is on the **capsule**, the
-small always-on-top pill the shell shows when the nanoMuse window is not in front, so
+small always-on-top pill the shell shows when the NanoLika window is not in front, so
 you can answer from wherever you are.
 *Always in <app>* writes a `computer_app:<app>` grant: the hands' tools in that app are
 allowed without asking until you revoke the grant, on the agent page or under Settings →
 Computer use → *Always allowed*. Settings → **Computer use** shows the two macOS
 permissions with *Allow* and *Open System Settings* (through the desktop shell; the
 first time the hands are about to start, the shell asks for them in order with a word on
-why, the phone's and Codex's way: Accessibility, then Screen Recording for nanoMuse
+why, the phone's and Codex's way: Accessibility, then Screen Recording for NanoLika
 Desktop, which since 0.1.36 is the binary that captures and clicks; the bundled
 `nanomuse` runtime only needs them when it runs without the shell), *Keep the screen
 awake while it works* (the shell holds a power-save
@@ -242,7 +242,7 @@ Questions keep *Open*. Stop (the square) still cancels the turn.
 **The operator.** The hands themselves are the shell's (`src/operator.ts`, a port of
 UI-TARS-desktop's `NutJSOperator` on `@computer-use/nut-js`): the screenshot through
 Electron's `desktopCapturer` at the display's size (on a Mac, through the helper
-*nanoMuse Computer Use* and ScreenCaptureKit instead; see [desktop.md](desktop.md#macos-permissions)),
+*NanoLika Computer Use* and ScreenCaptureKit instead; see [desktop.md](desktop.md#macos-permissions)),
 the pointer moved straight to the
 point and left there 100 ms before the click, drags, scrolls, typing through the
 clipboard for anything beyond ASCII, the hotkey table (`ctrl` is ⌘ on a Mac). The
@@ -285,7 +285,7 @@ says which session has the screen in `hands.run`; the glow and the capsule used 
 the calls in flight and went dark between every two), and it goes 400 ms after the turn
 ends, after *Stop*, or after five minutes without a call. The glow cannot take focus or a
 click, and it, the
-capsule and the nanoMuse window itself while the hands have the screen all have
+capsule and the NanoLika window itself while the hands have the screen all have
 `setContentProtection(true)`, so none of them is in the screenshots the runtime takes;
 on Linux, where content protection does nothing, the glow and the capsule step out of the
 way for the instant of the capture instead. The phone's long-press ring has no desktop
@@ -298,7 +298,7 @@ in a 36 px ring of three hues (the action blue, violet, cyan) breathing with fou
 bars, **Step N** and what the hands are doing (*looking at the screen*, *clicked "Save"*,
 *typed "hello"*; the last step's words stay while the model thinks about the next),
 **I'll take it** and a red **Stop**. It slides in over 320 ms when the
-hands start, stays for the whole run like the glow, is shown only while the nanoMuse
+hands start, stays for the whole run like the glow, is shown only while the NanoLika
 window is not the one in front (the chat
 shows the same in the trajectory card), and goes 220 ms after the run ends. When the
 hands are about to click or drag under it, it moves to the bottom of the work area first
@@ -353,13 +353,13 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   harness's own row in our card), **Appearance** (the harness's light / dark / system
   switch; the accent follows the face), **App behavior** when the desktop shell is there:
   *Open at login* (a login item; a freedesktop autostart entry on Linux), *Show in the
-  menu bar* / *system tray* (an icon with *Open nanoMuse*, *New chat*, *Quit*), *Quick
+  menu bar* / *system tray* (an icon with *Open NanoLika*, *New chat*, *Quit*), *Quick
   chat with ⌥ Space* (Ctrl+Alt+Space elsewhere: the window comes up with a fresh chat
   and the composer focused; pressed while it is in front, it steps aside), all kept in
   `desktop.json` under the app's home; **Shortcuts** (*Quick Chat* with its combination:
   *Change* records the next one you press, Esc cancels, *Default* puts the platform's back,
-  and a line says so when another app already holds it; and the keyboard reference); **About** (nanoMuse, built on DeepSeek Harness, the licence, and two version
-  lines that are always there: *nanoMuse Desktop <app> · harness <bundle>: installed*
+  and a line says so when another app already holds it; and the keyboard reference); **About** (NanoLika, built on DeepSeek Harness, the licence, and two version
+  lines that are always there: *NanoLika Desktop <app> · harness <bundle>: installed*
   and *Latest 0.1.x: you have it* / *0.1.x is out · Update* / *Could not check · tap to
   try again*; the check reads `nanomuse.cn/dl/index.json` first and GitHub's releases
   second, once a day); and *Developer*: *Show DeepSeek
@@ -370,7 +370,7 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   you: **Chat** (*The model that talks with you.*), **Operating the screen** (*Looks at the
   screen and acts for you. Needs a model that can see images.*), **Making pictures**
   (*Portraits of your Muse and the pictures you ask for.*) and **Making clips** (*Short
-  clips of your Muse.*), a picker on each. Every picker lists nanoMuse Cloud first while
+  clips of your Muse.*), a picker on each. Every picker lists NanoLika Cloud first while
   signed in, its recommended model marked *Recommended*, then one group per provider you
   added, each holding only the models that can do the row's job; the value reads
   `<provider> · <model>`. A chat change says *Applies to new chats.*; a hands change takes
@@ -381,9 +381,9 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   Bailian, Zhipu GLM, SiliconFlow, …*) and *Add a provider*; the page ends with *Add a
   provider*, which opens the ways on under Account. When you have not chosen, a row
   follows the provider new chats answer through (its catalogue default for the job) when
-  that is one of your own, else nanoMuse Cloud while signed in, else the first of your
+  that is one of your own, else NanoLika Cloud while signed in, else the first of your
   providers that can.
-- **Account** (under *Advanced*), the nanoMuse account: sign in or the masked
+- **Account** (under *Advanced*), the NanoLika account: sign in or the masked
   identifier, the allowance, the look, *Open Devices*, a line that opens Settings → Models
   with what chat and the hands use now, and the block the own keys share with the account:
   - **Ways on**: your account's row first while signed in (what it covers right now, from
@@ -404,24 +404,24 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
     sign-in on file comes back after a restart, with its local bridge. Signed out of the
     account, the same block is under the sign-in form, so a key can be changed without an
     account. Once a key is saved, a card asks **Use it for** (*Pick what this key should
-    handle. nanoMuse Cloud keeps the rest.*) with a toggle per thing the key can handle
+    handle. NanoLika Cloud keeps the rest.*) with a toggle per thing the key can handle
     (chat, the screen, pictures, clips), all on, each naming the model it would get; *Use
     it* switches those rows on the Models page to the provider, *Not now* changes nothing,
     and a footnote says *You can change this any time under Settings › Models.*
 - **Media**, the models that draw the face and its clips: the same two pickers as
-  Settings → Models' *Making pictures* and *Making clips*, nanoMuse Cloud first while
+  Settings → Models' *Making pictures* and *Making clips*, NanoLika Cloud first while
   signed in, then each own provider's models (the video picker has *Off* too). Pictures
   through your own key go to that provider directly (Model Studio's native image API,
   OpenRouter's image API, the OpenAI shape for OpenAI, Zhipu, SiliconFlow, Volcengine and
   xAI), and the studio says *Drawn with <provider> · <model>. Nothing is billed to your
-  nanoMuse Cloud account.* in place of the estimate; a Google key draws only through the
+  NanoLika Cloud account.* in place of the estimate; a Google key draws only through the
   OpenAI-compatible layer. When nothing configured covers pictures or clips the row says who could,
-  where you are, with the way to Settings → nanoMuse Cloud (the same sentence the avatar studio
+  where you are, with the way to Settings → NanoLika Cloud (the same sentence the avatar studio
   shows in place of the estimate), and with only the ChatGPT sign-in, that pictures and
   clips are not covered by it.
   Below: *Animate the avatar after a change*, *Make / Redo clips* with the state of each
   of the four, and the cost note. When clips through your own key failed and you are
-  signed in, the failure line offers *Use nanoMuse Cloud this time*: that one run through
+  signed in, the failure line offers *Use NanoLika Cloud this time*: that one run through
   the account, the picker untouched; the studio offers the same after a failed round.
 - **Models**, **Agents**: the harness's pages, unchanged, under *Advanced*.
 - **Connectors**, a catalogue: a search field, category chips (*All*,
@@ -485,7 +485,7 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   *key* or *address* rows.
 - **Computer use**: the system permissions (macOS), keep awake, the risk note.
 - **File system access**: the folders the agent uses (home, the Library, Downloads,
-  nanoMuse's own files; each opens in the file manager, the page grants nothing), the
+  NanoLika's own files; each opens in the file manager, the page grants nothing), the
   rules (reading anything you name; writing under the chat's permission preset, which is
   *workspace-write* unless the Agents page says otherwise: the chat's folder freely, the
   main chat's being `~/nanoMuse`, and outside it a change is refused unless the agent asks
@@ -519,7 +519,7 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   side chats* (同时同步旁聊; this computer's own switch, off by default; *Off: side
   chats stay on this device. On: this device's side chats go to the account and the
   other devices' side chats come here*; see [every-device.md](every-device.md)), *Help
-  improve nanoMuse's AI models* (the relay's switch, with how many turns it kept and
+  improve NanoLika's AI models* (the relay's switch, with how many turns it kept and
   *Delete*), as on every other app; then *On this computer*: **Import memory**,
   **Download your agent data** (a zip in Downloads: the account snapshot without the
   sign-in token, the look and faces, the rooms, memory, and the chats as the harness
@@ -535,7 +535,7 @@ page it opened, named for the page you came from; a pick in the sidebar starts f
   back to the welcome sheet, the way a fresh install starts.
 
 Wallet, secure storage and message channels are not there: the Cloud has no wallet;
-members have an allowance ([cloud.md](cloud.md#allowance)). nanoMuse keeps no
+members have an allowance ([cloud.md](cloud.md#allowance)). NanoLika keeps no
 passwords for the agent, and messages reach you through the phone app's notifications
 rather than a messenger.
 
@@ -602,7 +602,7 @@ writes in any chat (the phone's way of posting) lands in the Feed too and shows 
 
 Settings (with its shortcut; a dot on it and on the ••• button
 when a newer release is out), **Update to 0.1.x** when there is one (opens the release
-page), **About nanoMuse** (the version line *nanoMuse Desktop <app> · harness <bundle>*,
+page), **About NanoLika** (the version line *NanoLika Desktop <app> · harness <bundle>*,
 the licence, GitHub / Releases / Docs / Issues), Keyboard shortcuts, Schedules and
 the harness's other panels (Plugins and whatever else is installed), collapse / expand
 the chats column, *Report a problem*: under the desktop shell a screenshot of the
@@ -625,7 +625,7 @@ nowhere else.
   sighted only when its id says `v4.1`, `vision` or `ocr`. The hands model is written to
   `$DSH_HOME/nanomuse/hands.json` (mode 0600) and handed to `nanomuse mcp` as its
   environment by the plugin's own MCP client, which it restarts when the model changes.
-  When a model of your own fails under a turn, the card offers *Use nanoMuse Cloud this
+  When a model of your own fails under a turn, the card offers *Use NanoLika Cloud this
   time* (signed in): that one message again through the account, the chat back to its
   model when the turn ends, the Models page as it was. Nothing falls back on its own.
 - **Connectors on every device.** What you connected here (service, label, URL for a

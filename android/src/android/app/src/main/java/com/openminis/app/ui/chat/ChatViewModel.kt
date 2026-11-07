@@ -13,7 +13,7 @@ import com.openminis.app.agent.Level
 import com.openminis.app.agent.ToolLoopDetector
 import com.openminis.app.browser.BrowserActionInput
 import com.openminis.app.browser.BrowserTabPool
-import io.github.nanomuse.browser.nmBrowserHandOver // nanoMuse
+import io.github.nanomuse.browser.nmBrowserHandOver // NanoLika
 import com.openminis.app.data.db.MessageEntity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compress
@@ -167,7 +167,7 @@ class ChatViewModel(
          */
         internal fun shouldSplitOnError(error: Throwable): Boolean {
             if (error is CancellationException) return false
-            // nanoMuse: a content check saying no (the relay's `content_rejected`, a provider's
+            // NanoLika: a content check saying no (the relay's `content_rejected`, a provider's
             // `DataInspectionFailed`) is about the words, not the size; halving sends the same
             // words twice, and one long chat was refused two hundred times in an hour that way.
             if (error is LLMError.ProviderError && io.github.nanomuse.cloud.RelayRefusal.contentCheck(error.detail)) return false
@@ -804,7 +804,7 @@ class ChatViewModel(
      */
     private val _canResume = MutableStateFlow(false)
     val canResume: StateFlow<Boolean> = _canResume.asStateFlow()
-    // nanoMuse: set when the turn ceiling stops a long task; the chat shows a "continue?" card.
+    // NanoLika: set when the turn ceiling stops a long task; the chat shows a "continue?" card.
     private val _nmContinueAsk = MutableStateFlow<Int?>(null)
     val nmContinueAsk: StateFlow<Int?> = _nmContinueAsk.asStateFlow()
     fun nmContinue(keepGoing: Boolean) {
@@ -2576,7 +2576,7 @@ class ChatViewModel(
     private fun applyRequestImageBudget(messages: List<LLMMessage>): List<LLMMessage> {
         // Collect every image in chronological order so the planner can
         // walk in reverse and protect the most recent images.
-        // nanoMuse: `screenshot` marks a tool-result image (a screen the agent took), which the
+        // NanoLika: `screenshot` marks a tool-result image (a screen the agent took), which the
         // count rule below applies to; the person's own pictures are never counted (C9).
         data class ImageRef(val msgIdx: Int, val partIdx: Int, val image: ImageBudget.BudgetImage, val screenshot: Boolean = false)
         val images = mutableListOf<ImageRef>()
@@ -2602,7 +2602,7 @@ class ChatViewModel(
                                         part.imageLinuxPath,
                                         part.imageMimeType ?: "image/jpeg",
                                     ),
-                                    screenshot = true, // nanoMuse
+                                    screenshot = true, // NanoLika
                                 )
                             )
                         }
@@ -2613,7 +2613,7 @@ class ChatViewModel(
         }
         if (images.isEmpty()) return messages
 
-        // nanoMuse: the four newest screenshots only, whatever the bytes — the relay caps a request at 6 MiB (C9)
+        // NanoLika: the four newest screenshots only, whatever the bytes — the relay caps a request at 6 MiB (C9)
         val plan = io.github.nanomuse.chat.ScreenshotBudget.apply(
             ImageBudget.planRequestBudget(images.map { it.image }),
             images.map { it.image },
@@ -3616,7 +3616,7 @@ class ChatViewModel(
     /** The real session ID (same as sessionId for existing sessions, generated on first message for drafts). */
     internal var realSessionId: String = if (isDraft) "" else sessionId
 
-    // nanoMuse: the first conversation — scripted opening, "what should I call
+    // NanoLika: the first conversation — scripted opening, "what should I call
     // you?", then the name chooser. Logic lives in io.github.nanomuse.onboarding;
     // this VM only seeds the virtual messages, intercepts the name, and appends
     // the phase addendum to the system prompt. Declared before init so
@@ -3626,7 +3626,7 @@ class ChatViewModel(
     val nmNamingCard: StateFlow<io.github.nanomuse.onboarding.NamingCardState?>
         get() = nmFirstConversation.namingCard
 
-    // nanoMuse: the home shell asks the composer to take focus (profile page →
+    // NanoLika: the home shell asks the composer to take focus (profile page →
     // "Change avatar" pre-fills the text and wants the keyboard up).
     private val _nmFocusComposer = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val nmFocusComposer: kotlinx.coroutines.flow.SharedFlow<Unit> = _nmFocusComposer
@@ -3639,7 +3639,7 @@ class ChatViewModel(
 
     init {
         loadSession()
-        // nanoMuse: rows synced from the account's other devices land in this chat while it is
+        // NanoLika: rows synced from the account's other devices land in this chat while it is
         // open — reloaded from the database between turns, never under a running one; what
         // arrives during a turn is shown the moment the turn ends (C8: no reload by hand).
         viewModelScope.launch {
@@ -3719,7 +3719,7 @@ class ChatViewModel(
                         }
                 }
             }
-        // nanoMuse: the main chat follows the chat slot (Settings › Models, the "Use it for"
+        // NanoLika: the main chat follows the chat slot (Settings › Models, the "Use it for"
         // card, a pick in a chat's picker: ModelSlots.followPick → mainChatFollows). Its row is
         // rewritten there; this view-model lives as long as the app, so it is told as well and
         // re-resolves to the group that now leads with the pick. A draft (no row yet, not opened
@@ -3799,7 +3799,7 @@ class ChatViewModel(
                 // untouched (it has no in-group alternative to fall back to).
                 val groupBound = _selectedGroupId.value
                 val activeEntry = _activeEntryId.value
-                // nanoMuse: a member taken out of the bound group reaches the chats already
+                // NanoLika: a member taken out of the bound group reaches the chats already
                 // open, too. Upstream re-resolved only when the member's provider was
                 // disabled; a group edited in Settings (the Cloud card's "Change": the
                 // recommended model swapped for another) left every open chat — the main
@@ -3837,7 +3837,7 @@ class ChatViewModel(
                         currentProvider = null
                     }
                 }
-                // nanoMuse: a chat pinned to one of the Cloud's models (the picker in the
+                // NanoLika: a chat pinned to one of the Cloud's models (the picker in the
                 // chat's menu) follows the Cloud group once that model leaves it. The group
                 // is where Settings chooses the model, and a pick in the picker already
                 // moves the group (ModelSlots.followPick), so the two never disagree
@@ -3862,8 +3862,8 @@ class ChatViewModel(
                         }
                     }
                 }
-                // nanoMuse: a pin on a provider switched off since (the Cloud instance above
-                // all: Settings › Models › Use nanoMuse Cloud models) must not keep answering,
+                // NanoLika: a pin on a provider switched off since (the Cloud instance above
+                // all: Settings › Models › Use NanoLika Cloud models) must not keep answering,
                 // and spending, on it; upstream re-resolves group bindings only. Drop the
                 // provider so the default chain below runs; restoreFromBinding refuses the
                 // pin too, so a reload cannot bring it back.
@@ -3965,8 +3965,8 @@ class ChatViewModel(
         // sessionId so re-entering the session reuses the same instance.
         if (isDraft) {
             ChatViewModelStore.rename(sessionId, session.id)
-            nmFirstConversation.rebind(fromDraft = sessionId, toReal = session.id) // nanoMuse
-            // nanoMuse: the home shell's main chat may have been this draft;
+            nmFirstConversation.rebind(fromDraft = sessionId, toReal = session.id) // NanoLika
+            // NanoLika: the home shell's main chat may have been this draft;
             // prompt addenda (goal creation etc.) follow the id too.
             io.github.nanomuse.home.MainChat.onPromoted(context, sessionId, session.id)
             io.github.nanomuse.chat.SessionAddenda.rebind(sessionId, session.id)
@@ -4083,7 +4083,7 @@ class ChatViewModel(
     }.getOrDefault(false)
 
     private fun loadSession() {
-        _nmContinueAsk.value = null // nanoMuse: the "continue?" card belongs to the session that hit the ceiling
+        _nmContinueAsk.value = null // NanoLika: the "continue?" card belongs to the session that hit the ceiling
         // T-android-crash-detected-halt: when CrashFrequencyDetector
         // tripped (#459, ≥3 crashes in last hour), skip the heavy
         // session-restore path entirely. Re-running the same persisted
@@ -4139,7 +4139,7 @@ class ChatViewModel(
                     // newest-provider/newest-text-model. Was firstOrNull().
                     applyNewChatDefaultModel()
                 }
-                nmSeedFirstConversation() // nanoMuse: a fresh draft is where the first conversation starts
+                nmSeedFirstConversation() // NanoLika: a fresh draft is where the first conversation starts
                 return@launch
             }
 
@@ -4174,7 +4174,7 @@ class ChatViewModel(
                         // session whose model lives on an OAuth provider unable
                         // to restore, despite being signed in.
                         val apiKey = providerRepository.usableApiKey(instance) ?: ""
-                        // nanoMuse: `&& instance.isEnabled`, so a remembered model on a provider
+                        // NanoLika: `&& instance.isEnabled`, so a remembered model on a provider
                         // switched off since (the Cloud instance) falls back to the default.
                         if (providerRepository.hasAnyCredential(instance) && instance.isEnabled) {
                             currentProvider = ProviderFactory.create(instance, apiKey, entry.model, context)
@@ -4398,7 +4398,7 @@ class ChatViewModel(
                 }
                 applyCompactMarkerGraying(ordered, marker, loaded.messages, historyDbIds)
             }
-            nmSeedFirstConversation() // nanoMuse: re-seat the virtual opening in the session it belongs to
+            nmSeedFirstConversation() // NanoLika: re-seat the virtual opening in the session it belongs to
 
             // Cold-start interrupt detection: an agent loop that was killed by
             // the OS (or app force-quit) leaves agentHistory in one of four
@@ -4423,7 +4423,7 @@ class ChatViewModel(
             // while a request is genuinely in flight THERE. Without it, Case D
             // would light Resume on a turn that is merely still waiting.
             val trackerActive = SessionActivityTracker.isActive(activeSessionId)
-            // nanoMuse: a tail another device wrote (a message synced in while that device
+            // NanoLika: a tail another device wrote (a message synced in while that device
             // works on it) is not this phone's turn — no Resume banner, no PAUSED badge (C9).
             val nmRemoteTail = lastEntry != null &&
                 io.github.nanomuse.sync.RemoteRows.isRemote(context, activeSessionId, lastEntry.dbMessageId)
@@ -4802,7 +4802,7 @@ class ChatViewModel(
                     // [T-android-group-resolve-skip-uncredentialed] An explicit
                     // entry pin on an OAuth provider must restore too.
                     if (!providerRepository.hasAnyCredential(instance)) return false
-                    // nanoMuse: a pin on a provider that is switched off falls back to the
+                    // NanoLika: a pin on a provider that is switched off falls back to the
                     // default, as a group binding does; the Cloud instance switched off in
                     // Settings › Models must not answer a chat that once pinned one of its models.
                     if (!instance.isEnabled) return false
@@ -5148,7 +5148,7 @@ class ChatViewModel(
     fun clearChat() {
         if (_isStreaming.value) cancelStream()
         val sid = activeSessionId
-        io.github.nanomuse.guard.Grants.clearSession(sid) // nanoMuse: "allow for this chat" ends with the chat
+        io.github.nanomuse.guard.Grants.clearSession(sid) // NanoLika: "allow for this chat" ends with the chat
         // T-streaming-side-channel: ensure no stale stream delta survives a
         // session wipe; the messages list is about to be cleared, so any
         // pending key would be orphaned.
@@ -5163,7 +5163,7 @@ class ChatViewModel(
         _cachedLatestMarker = null
         toolLoopDetector.reset()
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         _attachments.value = emptyList()
         _promptQueue.value = emptyList()
         _hasInjectedShareContent.value = false
@@ -5343,11 +5343,11 @@ class ChatViewModel(
 
         val initialProvider = currentProvider
         if (initialProvider == null) {
-            _error.value = context.getString(R.string.nm_chat_no_model) // nanoMuse: where to fix it, in the person's language
+            _error.value = context.getString(R.string.nm_chat_no_model) // NanoLika: where to fix it, in the person's language
             return false
         }
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         _error.value = null
 
         // T149 parity: revoke memory_writes in the parts we're about to drop
@@ -5498,7 +5498,7 @@ class ChatViewModel(
     fun retryFromMessage(messageId: String) {
         if (_isStreaming.value) return
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         val messages = _messages.value
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
@@ -5509,7 +5509,7 @@ class ChatViewModel(
 
         val initialProvider = currentProvider
         if (initialProvider == null) {
-            _error.value = context.getString(R.string.nm_chat_no_model) // nanoMuse: where to fix it, in the person's language
+            _error.value = context.getString(R.string.nm_chat_no_model) // NanoLika: where to fix it, in the person's language
             return
         }
         val provider: LLMProvider = initialProvider
@@ -5647,7 +5647,7 @@ class ChatViewModel(
     fun deleteFromMessage(messageId: String) {
         if (_isStreaming.value) return
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         val messages = _messages.value
         val index = messages.indexOfFirst { it.id == messageId }
         if (index < 0) return
@@ -6263,7 +6263,7 @@ class ChatViewModel(
             bodyPartsJson = queuedPaste?.partsJson,
         )
         val userEntity = chatRepository.appendMessage(sid, "user", userPartsJson)
-        io.github.nanomuse.sync.ConversationSync.sent(sid) // nanoMuse: pushed at send (C8), then "working" (C9)
+        io.github.nanomuse.sync.ConversationSync.sent(sid) // NanoLika: pushed at send (C8), then "working" (C9)
         agentHistory.add(
             LLMMessage(
                 role = LLMMessage.Role.USER,
@@ -6410,7 +6410,7 @@ class ChatViewModel(
                 bodyPartsJson = drainPaste?.partsJson,
             )
             chatRepository.appendMessage(sid, "user", userPartsJson)
-            io.github.nanomuse.sync.ConversationSync.sent(sid) // nanoMuse: pushed at send (C8), then "working" (C9)
+            io.github.nanomuse.sync.ConversationSync.sent(sid) // NanoLika: pushed at send (C8), then "working" (C9)
 
             agentHistory.add(LLMMessage(
                 role = LLMMessage.Role.USER,
@@ -6429,7 +6429,7 @@ class ChatViewModel(
                     fallbackProviders = fallbackProviders,
                     fallbackStrategy = fallbackStrategy,
                 )
-                nmAfterTurn() // nanoMuse: queued prompts complete turns too
+                nmAfterTurn() // NanoLika: queued prompts complete turns too
             } catch (e: CancellationException) {
                 Log.d(TAG, "Agent loop (queued-drain) cancelled")
                 // Cancel mid-drain: cancelStream() will check _promptQueue
@@ -6444,7 +6444,7 @@ class ChatViewModel(
         }
     }
 
-    // nanoMuse: StarPrompt counts a task only for a turn the person started (composer, idea or
+    // NanoLika: StarPrompt counts a task only for a turn the person started (composer, idea or
     // goal card) after the first conversation was over. The screens mark that just before
     // sendMessage; routines, the feed and goal checks (HeadlessChatRunner) never do, and the
     // screen takes the flag back when the stream ends.
@@ -6463,19 +6463,19 @@ class ChatViewModel(
     fun nmTakeCountableTurn(): Boolean = nmCountableTurn.also { nmCountableTurn = false }
 
     fun sendMessage(text: String) {
-        // nanoMuse: "change your avatar to …" (and a pick while the options are
+        // NanoLika: "change your avatar to …" (and a pick while the options are
         // up) is handled in the app, not by the model.
         if (nmInterceptAvatar(text)) { nmCountableTurn = false; return }
-        // nanoMuse: "@Mac …" opens a turn for that device — the mention comes out of the text,
+        // NanoLika: "@Mac …" opens a turn for that device — the mention comes out of the text,
         // a one-turn note sends the work there through nanomuse-pc (contract C7, rule 8).
         val nmText = io.github.nanomuse.sync.DeviceMention.apply(context, realSessionId.ifEmpty { sessionId }, text)
-        // nanoMuse: during the first conversation the text goes to the model as
+        // NanoLika: during the first conversation the text goes to the model as
         // it is; the model says what it meant in a `nanomuse-naming` block and
         // nmAfterTurn moves the phase (see FirstConversation).
         sendMessage(nmText, skipContextCheck = false)
     }
 
-    // ─── nanoMuse: changing the face from the chat ─────────────────────────
+    // ─── NanoLika: changing the face from the chat ─────────────────────────
     // See io.github.nanomuse.avatar.AvatarFlow. The request and the pick are
     // persisted as ordinary user/assistant messages (so the history stays
     // consistent and the model later sees what happened); the options card is
@@ -6601,7 +6601,7 @@ class ChatViewModel(
         viewModelScope.launch { nmAppendAssistantLine(pending.sid, context.getString(R.string.nm_face_cost_declined)) }
     }
 
-    // ─── nanoMuse: the free allowance is spent ──────────────────────────────
+    // ─── NanoLika: the free allowance is spent ──────────────────────────────
     // The relay's 429 arrives through the model client as "rate limited"; the
     // structured body was kept aside by AllowanceSignal. When the error is about
     // to be shown, the card with the two ways on (own key, invite)
@@ -6786,7 +6786,7 @@ class ChatViewModel(
     }
     // ───────────────────────────────────────────────────────────────────────
 
-    // ─── nanoMuse: first conversation ──────────────────────────────────────
+    // ─── NanoLika: first conversation ──────────────────────────────────────
     // See io.github.nanomuse.onboarding.FirstConversation for the flow. The
     // opening and the chooser are virtual messages: in _messages only, never
     // in the DB or agentHistory. The model hears about the phase through
@@ -6821,7 +6821,7 @@ class ChatViewModel(
         )
     }
 
-    // nanoMuse: what the user typed during the first conversation goes to the model as it is —
+    // NanoLika: what the user typed during the first conversation goes to the model as it is —
     // the model reads it (a name, a "no thanks", or something else entirely) and reports back in
     // a `nanomuse-naming` block; see FirstConversation.afterTurn.
 
@@ -6926,7 +6926,7 @@ class ChatViewModel(
         // A fresh send supersedes any pending resume — mirror iOS which clears
         // canResume at the top of send().
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         // T185: clear the share-injected flag the moment the user actually
         // sends. Without this, the "Move to…" capsule (gated on
         // hasInjectedShareContent) keeps floating over the user-message row
@@ -6939,7 +6939,7 @@ class ChatViewModel(
 
         val initialProvider = currentProvider
         if (initialProvider == null) {
-            _error.value = context.getString(R.string.nm_chat_no_model) // nanoMuse: where to fix it, in the person's language
+            _error.value = context.getString(R.string.nm_chat_no_model) // NanoLika: where to fix it, in the person's language
             return
         }
         var provider: LLMProvider = initialProvider
@@ -6978,9 +6978,9 @@ class ChatViewModel(
         if (editingId != null) _editingMessageId.value = null
 
         viewModelScope.launch {
-            streamJob = coroutineContext[Job] // nanoMuse: Stop during the setup (session, attachments, the user row) cancels it too, not only the agent loop launched below (#340)
+            streamJob = coroutineContext[Job] // NanoLika: Stop during the setup (session, attachments, the user row) cancels it too, not only the agent loop launched below (#340)
             var streamLaunched = false
-            var userRowShown = false // nanoMuse: set once the person's line is on screen; a Stop before that gives the composer its text back (#340)
+            var userRowShown = false // NanoLika: set once the person's line is on screen; a Stop before that gives the composer its text back (#340)
             try {
             // Ensure session exists in DB (creates on first message for draft sessions)
             val activeSessionId = ensureSession()
@@ -7011,8 +7011,8 @@ class ChatViewModel(
                 bodyPartsJson = pasted?.partsJson,
             )
             val persistedUser = chatRepository.appendMessage(activeSessionId, "user", userPartsJson)
-            io.github.nanomuse.sync.ConversationSync.sent(activeSessionId) // nanoMuse: the person's line reaches the other devices at send (C8), then "working" (C9)
-            io.github.nanomuse.chat.RoutineWakes.claim(activeSessionId, persistedUser.id) // nanoMuse: a routine's prompt is marked as such on its row
+            io.github.nanomuse.sync.ConversationSync.sent(activeSessionId) // NanoLika: the person's line reaches the other devices at send (C8), then "working" (C9)
+            io.github.nanomuse.chat.RoutineWakes.claim(activeSessionId, persistedUser.id) // NanoLika: a routine's prompt is marked as such on its row
 
             val userMsg = ChatMessage(
                 id = persistedUser.id,
@@ -7037,7 +7037,7 @@ class ChatViewModel(
                 attachmentUris = prepared.nonImageUris + (pasted?.uiUris ?: emptyList()),
             )
             _messages.value = _messages.value + userMsg
-            userRowShown = true // nanoMuse: (#340)
+            userRowShown = true // NanoLika: (#340)
             val imageParts = prepared.imageParts
 
             // T132: build the user contentParts in iOS order — caption first
@@ -7149,7 +7149,7 @@ class ChatViewModel(
                             fallbackStrategy = activeFallbackStrategy,
                         )
                         AppLogger.info(TAG_STREAM, "send runAgentLoop RETURN normal")
-                        nmAfterTurn() // nanoMuse: the first conversation steps forward when a turn completes
+                        nmAfterTurn() // NanoLika: the first conversation steps forward when a turn completes
                         // Drain any prompts the user queued while this loop was running.
                         // Skipped on cancel: cancelled job won't reach here.
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
@@ -7192,7 +7192,7 @@ class ChatViewModel(
                 AppLogger.info(TAG_STREAM, "send streamJob EXIT")
             }
             } catch (e: CancellationException) {
-                // nanoMuse: Stop before the user row is on screen means the message was not sent; the
+                // NanoLika: Stop before the user row is on screen means the message was not sent; the
                 // composer gets its text and attachments back instead of losing them (#340)
                 if (!streamLaunched && !userRowShown) {
                     if (_inputText.value.isEmpty()) _inputText.value = text
@@ -7212,7 +7212,7 @@ class ChatViewModel(
      *
      *  Also clears [ChatMessage.isAwaitingModelResponse] — without this, an
      *  exception thrown after a tool turn (which sets isAwaitingModelResponse=
-     *  true at runAgentLoop ~4015) leaves the "nanoMuse is thinking" indicator
+     *  true at runAgentLoop ~4015) leaves the "NanoLika is thinking" indicator
      *  on screen even though streaming is over. The flag is per-message and
      *  is not implicitly cleared by isStreaming=false. */
     private fun setInlineError(errorText: String) {
@@ -7222,7 +7222,7 @@ class ChatViewModel(
         // would stick across reloads. An exception with a blank `message`
         // (`e.message ?: "Unknown error"` only guards null, not "") is the
         // realistic source. Coalesce to a generic non-empty message.
-        // nanoMuse: a turn refused for a spent allowance gets the plain sentence and the ways-on card;
+        // NanoLika: a turn refused for a spent allowance gets the plain sentence and the ways-on card;
         // a Claude sign-in on a build without its identifier gets its sentence in the person's language (#373).
         val safeError = nmAllowanceErrorText(
             io.github.nanomuse.cloud.ClaudeSignIn.userText(context, errorText).ifBlank { context.getString(R.string.error_empty_response_generic) },
@@ -7343,7 +7343,7 @@ class ChatViewModel(
      *   - Sync the DB: if we popped a trailing assistant, drop just its
      *     persisted row so a re-load doesn't resurrect the failed turn.
      */
-    // nanoMuse: "Use nanoMuse Cloud this time" — a turn on a model of the person's own that
+    // NanoLika: "Use NanoLika Cloud this time" — a turn on a model of the person's own that
     // failed is retried once on the relay's chat model; the chat's binding and every slot of
     // Settings → Models stay as they are (io.github.nanomuse.chat.CloudRetry).
     private var nmOneTurnProvider: LLMProvider? = null
@@ -7416,7 +7416,7 @@ class ChatViewModel(
             }
         }
 
-        // nanoMuse: one turn on the relay when the card asked for it; currentProvider is untouched
+        // NanoLika: one turn on the relay when the card asked for it; currentProvider is untouched
         val initialProvider = nmOneTurnProvider?.also { nmOneTurnProvider = null } ?: currentProvider ?: return
         var provider: LLMProvider = initialProvider
         _error.value = null
@@ -7509,7 +7509,7 @@ class ChatViewModel(
                             fallbackStrategy = activeFallbackStrategy,
                         )
                         AppLogger.info(TAG_STREAM, "retryLast runAgentLoop RETURN normal")
-                        nmAfterTurn() // nanoMuse
+                        nmAfterTurn() // NanoLika
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "retryLast drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {
@@ -8094,7 +8094,7 @@ class ChatViewModel(
         val allToolInputs = mutableMapOf<String, String>()
 
         // Add placeholder assistant message (once). Mark as awaiting so the
-        // "nanoMuse is thinking" indicator shows during the initial request gap
+        // "NanoLika is thinking" indicator shows during the initial request gap
         // before the first stream chunk arrives. Mirrors iOS isAwaitingModelResponse.
         // T300: snapshot the user's current thinking level at message
         // creation so the renderer can hide Deep Thinking blocks for
@@ -8282,7 +8282,7 @@ class ChatViewModel(
                     // placeholder, while `loopExitedNormally = true` below
                     // deliberately skips finalizeAtTurnLimit at the loop tail.
                     //
-                    // Without this the bubble stays on "nanoMuse is thinking"
+                    // Without this the bubble stays on "NanoLika is thinking"
                     // forever — the streamJob's finally only clears the GLOBAL
                     // _isStreaming, not the per-message flags. Reachable with no
                     // failure at all: ContextPolicy gives every model with a
@@ -8730,7 +8730,7 @@ class ChatViewModel(
                                 toolTitle = liveTitle,
                                 content = "",
                             )
-                            // nanoMuse: the words under the face follow the pill — as soon as the
+                            // NanoLika: the words under the face follow the pill — as soon as the
                             // model's tool_title is in, the status line says it (not only at dispatch).
                             if (!partialTitle.isNullOrEmpty() && partialTitle != SessionActivityTracker.currentToolTitle.value) {
                                 SessionActivityTracker.updateToolStatus(
@@ -9569,7 +9569,7 @@ class ChatViewModel(
             }
 
             // Update UI with tool statuses. Mark as awaiting the next model
-            // response so "nanoMuse is thinking" shows during the network gap
+            // response so "NanoLika is thinking" shows during the network gap
             // between tool results being sent and the next turn's first chunk.
             // Mirrors iOS isAwaitingModelResponse.
             withContext(Dispatchers.Main) {
@@ -9721,7 +9721,7 @@ class ChatViewModel(
         if (_streamingById.value.containsKey(assistantId)) {
             _streamingById.value = _streamingById.value - assistantId
         }
-        // nanoMuse: instead of an error, the chat asks "continue?" (the Resume state stays set
+        // NanoLika: instead of an error, the chat asks "continue?" (the Resume state stays set
         // underneath, so the upstream banner still works if the card is dismissed).
         _nmContinueAsk.value = MAX_AGENT_TURNS
         // [T-android-group-pause-badge-restamp] A LIVE interruption just
@@ -9857,7 +9857,7 @@ class ChatViewModel(
             // [T-vision-group-attribution / GH#182] iOS rewrites the tool block's
             // live content here so the card names the model as it works. Android
             // has no equivalent channel — no tool streams partial output to its
-            // card, and the progress label ("nanoMuse is reading Image",
+            // card, and the progress label ("NanoLika is reading Image",
             // ChatToolFormatting.kt:102) is a static per-tool string. Building
             // that plumbing is a separate change, so for now the per-attempt
             // signal goes to the log, where a fallback is still traceable. The
@@ -9950,7 +9950,7 @@ class ChatViewModel(
                 return ToolExecutionResult("Error: 'command' is required", false, toolTitle = toolTitle)
             }
 
-            // nanoMuse: delete / send / pay stop for the user's yes; installs run with a notice.
+            // NanoLika: delete / send / pay stop for the user's yes; installs run with a notice.
             var nmNotice: String? = null
             run {
                 val idx = toolBlocks.indexOfFirst { it.id == toolId }
@@ -10119,7 +10119,7 @@ class ChatViewModel(
             } ?: redactedOut
 
             ToolExecutionResult(
-                output = nmNotice?.let { "$withReminder\n\n$it" } ?: withReminder, // nanoMuse: install notice
+                output = nmNotice?.let { "$withReminder\n\n$it" } ?: withReminder, // NanoLika: install notice
                 success = result.exitCode == 0,
                 toolTitle = toolTitle,
                 timedOut = timedOut,
@@ -10132,7 +10132,7 @@ class ChatViewModel(
     private suspend fun executeBrowserUseTool(argsJson: String): ToolExecutionResult {
         val input = BrowserActionInput.parse(argsJson)
             ?: return ToolExecutionResult("Error: Invalid browser_use input", false)
-        // nanoMuse: hand_over — the page needs the person; the browser goes to them and the call waits for Done.
+        // NanoLika: hand_over — the page needs the person; the browser goes to them and the call waits for Done.
         if (input.action == com.openminis.app.browser.BrowserAction.HAND_OVER) {
             return nmBrowserHandOver(input, argsJson)
         }
@@ -10142,7 +10142,7 @@ class ChatViewModel(
             val toolTitle = try {
                 JSONObject(argsJson).optString("tool_title", "browser_use")
             } catch (_: Exception) { "browser_use" }
-            // nanoMuse: a refused password / code field hands the browser to the user.
+            // NanoLika: a refused password / code field hands the browser to the user.
             if (result.text.contains(io.github.nanomuse.guard.BrowserGuard.HANDOFF_PREFIX)) {
                 withContext(Dispatchers.Main) { openBrowserSheetForUrl(result.pageURL ?: "") }
             }
@@ -10756,7 +10756,7 @@ Memory system (currently DISABLED):
 - If the user asks why earlier memories aren't visible, or asks you to save something, tell them memory is currently disabled and point them at the /memory slash command or [Settings → Memory](minis://settings/memory) to re-enable it.
 - SOUL.md (personality / identity) is unaffected by this toggle; the persona section above still applies."""
         }
-        // nanoMuse: these former interpolation points stay empty; their unchanged text is emitted
+        // NanoLika: these former interpolation points stay empty; their unchanged text is emitted
         // in the deterministic volatile suffix after RiskPolicy and Hands.
         val memoryToolListInStablePrefix = ""
         val memoryGuidanceInStablePrefix = ""
@@ -10837,10 +10837,10 @@ CLI tools at /usr/local/bin with the `android-` prefix give you access to Androi
 - android-weather <latitude> <longitude> — Open-Meteo forecast (current + hourly + daily). No API key needed.
 - android-shizuku-cli — invoke privileged Android system APIs (package management, settings, system commands) via Shizuku when granted. Curated subcommands return structured JSON; for anything not covered, fall back to `android-shizuku-cli exec <any shell command>` which runs the command via `sh -c` with Shizuku privilege (same surface as `adb shell`). Run with no args (or --help) for the subcommand list.
 - android-a11y-cli — drive system UI (read screen, tap, type, swipe, scroll) via the Android AccessibilityService when enabled. Run with no args (or --help) for the subcommand list.
-- minis-open <url-or-path>: Opens a resource inside nanoMuse without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/minis/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: minis-open https://example.com, minis-open /var/minis/workspace/report.md, minis-open /var/minis/attachments/chart.png. Prefer this over android-open for anything that can be previewed in-app so the user doesn't lose conversation context. Use android-open for non-web schemes (tel:, mailto:, geo:, intent:, etc.) or when the user explicitly wants the system handler.
+- minis-open <url-or-path>: Opens a resource inside NanoLika without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/minis/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: minis-open https://example.com, minis-open /var/minis/workspace/report.md, minis-open /var/minis/attachments/chart.png. Prefer this over android-open for anything that can be previewed in-app so the user doesn't lose conversation context. Use android-open for non-web schemes (tel:, mailto:, geo:, intent:, etc.) or when the user explicitly wants the system handler.
 - minis-sessions-cli: Manage chat sessions. `list` recent or by date range, `search --keywords` cross-session, `messages --id` to read, `send` to create/continue a session, `retry` to re-run, `status` to check, `open` to navigate the app UI. Run --help for full options.
 - minis-model-use: Invoke other LLM models pre-configured by the user. Use `minis-model-use list` to see them (includes each model's modality capabilities like image_output, audio_output, etc.), `minis-model-use search <query>` to filter by name/provider. `minis-model-use run --model <id_or_name>` sends an OpenAI-compatible messages request; pass input via --input <json_file> or stdin, output goes to stdout or --output <path>. The OpenAI shape is the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), a custom `endpoint` path, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. For image_output models, pass generation params in the input JSON: top-level `n`/`size`/`quality`/`prompt` (OpenAI /images/generations style) or `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}` (Gemini). Run with --help for full usage.
-- minis-config: Read or change nanoMuse settings programmatically. Run `minis-config --help` for subcommands and `minis-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers an in-app confirmation sheet and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Settings → Logs → Config Changes. If the call returns `permission_denied`, the user has disabled minis-config in [Settings → Permissions](minis://settings/permissions); relay that message and don't retry. You CAN add new providers and write their `apiKey` (literal string OR a `${'$'}${'$'}ENV_VAR` reference to copy from an env var at write time), but `get` never echoes API keys / OAuth tokens / env var values back — those reads return `permission_denied` by design. OAuth tokens and env var values are not settable via this tool; for an env var, point the user at [Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=) so they enter the value themselves.
+- minis-config: Read or change NanoLika settings programmatically. Run `minis-config --help` for subcommands and `minis-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers an in-app confirmation sheet and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Settings → Logs → Config Changes. If the call returns `permission_denied`, the user has disabled minis-config in [Settings → Permissions](minis://settings/permissions); relay that message and don't retry. You CAN add new providers and write their `apiKey` (literal string OR a `${'$'}${'$'}ENV_VAR` reference to copy from an env var at write time), but `get` never echoes API keys / OAuth tokens / env var values back — those reads return `permission_denied` by design. OAuth tokens and env var values are not settable via this tool; for an env var, point the user at [Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=) so they enter the value themselves.
 - minis-scheduled: Create and manage scheduled tasks — prompts that run automatically at a chosen time. `minis-scheduled create --time HH:MM --prompt "..." [--label L] [--repeat once|daily|weekdays|custom --days mon,tue,...] [--target new|follow-up|rerun --session <id> --message <id>] [--model <modelId>] [--start YYYY-MM-DD] [--end YYYY-MM-DD]` schedules it; `list` shows existing tasks (with nextTriggerMs and run history), `delete --id <taskId>`, `enable`/`disable --id <taskId>`, and `run --id <taskId>` fires one immediately. Target modes: `new` runs the prompt in a fresh chat; `follow-up` appends the prompt to an existing chat (--session); `rerun` re-runs an existing chat (--session) from a chosen user message (--message). Use this when the user asks to "remind me / do X every morning / run this later / schedule a task". Run --help for full usage.
 Interactive terminal: minis://open_terminal opens a terminal for tasks that require interactive stdin (passwords, ssh, TUI apps like htop/vi). Write it as a Markdown link in your response — the app opens it when tapped. The optional init_command parameter pre-fills (NOT executes) a command; it MUST be fully percent-encoded (spaces → %20, & → %26, | → %7C, etc.). Only use this for genuinely interactive sessions — for everything else, use shell_execute. Examples: [Open Terminal](minis://open_terminal), [Login to SSH](minis://open_terminal?init_command=ssh%20user%40host).
 
@@ -10852,7 +10852,7 @@ Environment variables:
 
 Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended, so in-app scheduled scripts may not run as expected. For recurring tasks that must fire while the app is backgrounded, use the native alarm tool (AlarmManager) or tell the user to set up a system-level schedule (Google Calendar event, Tasker automation, etc.). (Waiting or polling WITHIN the current turn is different — that is what shell_execute `delay` chains are for, per the shell_execute notes above.)"""
 
-        // nanoMuse: match iOS suffix groups: model/tool/session state, then memory and USER.md;
+        // NanoLika: match iOS suffix groups: model/tool/session state, then memory and USER.md;
         // PromptCacheLayout appends runtime context last by contract.
         // T-skillscan: rescan disk before reading the fragment so a skill
         // that an earlier turn dropped via shell `git clone` (which bypasses
@@ -10889,7 +10889,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 "dailyChars=${dailyMemoryFragment?.length ?: 0}",
         )
 
-        // nanoMuse: cache providers match a byte prefix. Keep the safety policy and Hands ladder
+        // NanoLika: cache providers match a byte prefix. Keep the safety policy and Hands ladder
         // ahead of every memory/runtime/session fragment, then append volatile data deterministically.
         val sessionKey = realSessionId.ifEmpty { sessionId }
         val runtimeContext = """
@@ -12154,11 +12154,11 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
      */
     private fun handleUserCancelledCleanup() {
         val msgs = _messages.value.toMutableList()
-        val lastIdx = io.github.nanomuse.chat.InterruptedReply.lastRealAssistantIndex(msgs) // nanoMuse: never the on-screen-only intro (#340)
+        val lastIdx = io.github.nanomuse.chat.InterruptedReply.lastRealAssistantIndex(msgs) // NanoLika: never the on-screen-only intro (#340)
         if (lastIdx < 0) return
         var last = msgs[lastIdx]
 
-        // T73: clear "nanoMuse is thinking…" the moment the user taps Stop.
+        // T73: clear "NanoLika is thinking…" the moment the user taps Stop.
         // isAwaitingModelResponse is set true at runAgentLoop entry (≈ line
         // 2785) so the typing indicator shows during the initial request
         // gap before the first stream chunk. The cancel paths below didn't
@@ -12226,7 +12226,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // Stop fired while still in the pre-first-chunk thinking gap (no
         // partial text, no tool_use emitted, no committed history for this
         // turn). The placeholder ChatMessage runAgentLoop pushed at L5248 is
-        // not in the DB and would otherwise render as an empty "nanoMuse" header
+        // not in the DB and would otherwise render as an empty "NanoLika" header
         // bubble with no body. Drop it so the UI snaps back to idle the
         // instant the user taps Stop. Mirrors the iOS #566/#569 boundary:
         // a candidate WITH real text or any emitted tool_use is kept (handled
@@ -12254,7 +12254,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
             )
             viewModelScope.launch(Dispatchers.IO) {
                 val partsJson = buildAssistantPartsJson(parts)
-                // nanoMuse: a session id the database does not know yet (Stop inside the session insert) must not take the process down (#340)
+                // NanoLika: a session id the database does not know yet (Stop inside the session insert) must not take the process down (#340)
                 runCatching { chatRepository.appendMessage(activeSessionId, "assistant", partsJson) }
                     .onFailure { AppLogger.warning(TAG_STREAM, "cancel: interrupted reply not persisted: ${it.message}") }
             }
@@ -12310,11 +12310,11 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
     fun resume() {
         if (_isStreaming.value || !_canResume.value) return
         val provider = currentProvider ?: run {
-            _error.value = context.getString(R.string.nm_chat_no_model) // nanoMuse: where to fix it, in the person's language
+            _error.value = context.getString(R.string.nm_chat_no_model) // NanoLika: where to fix it, in the person's language
             return
         }
         _canResume.value = false
-        _nmContinueAsk.value = null // nanoMuse
+        _nmContinueAsk.value = null // NanoLika
         _error.value = null
         // [T-error-persist-android] resume() follows finalizeAtTurnLimit's
         // setInlineError (which persisted an error sticker on the last assistant
@@ -12385,7 +12385,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                             fallbackStrategy = activeFallbackStrategy,
                         )
                         AppLogger.info(TAG_STREAM, "resume runAgentLoop RETURN normal")
-                        nmAfterTurn() // nanoMuse
+                        nmAfterTurn() // NanoLika
                         drainQueuedPrompts(provider, systemPrompt, fallbackProviders, activeFallbackStrategy)
                         AppLogger.info(TAG_STREAM, "resume drainQueuedPrompts RETURN")
                     } catch (e: CancellationException) {

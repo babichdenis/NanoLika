@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">Această versiune</string>
@@ -623,10 +623,10 @@
     <string name="nm_risk_class_remote">Control la distanță</string>
     <string name="nm_hub_remote_reason">%1$s poate opera acest telefon</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">Am propria mea cheie API</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">Un agent personal open source pentru fiecare dispozitiv pe care îl ai.</string>
     <string name="nm_welcome_email">Conectează-te (gratuit)</string>
     <string name="nm_welcome_fine_print">Un singur cont îți ține dispozitivele împreună și poartă utilizarea gratuită a modelului; nu se percepe nimic. Propria cheie API poate fi adăugată imediat după.</string>
@@ -908,7 +908,7 @@
     <string name="nm_coding_fresh_hint">O conversație nouă cu %1$s. Primul tău mesaj o pornește pe computer.</string>
     <string name="nm_coding_no_transcript">Nimic de citit în această sesiune încă.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">Membru · fără limită</string>
     <string name="nm_cloud_spent_total">¥%1$s · $%2$s cheltuiți în total, plătiți de dezvoltator</string>
     <string name="nm_cloud_allowance_used">Folosit ¥%1$s · $%2$s</string>
@@ -920,7 +920,7 @@
     <string name="nm_cloud_notice_closing">Ai găsit o eroare, vrei o funcție, ai un patch? Depozitul GitHub e locul potrivit.</string>
     <string name="nm_cloud_notice">nanoLika este un proiect comunitar open source, nonprofit: gratuit, pentru totdeauna. Modelul vine cu un credit gratuit plătit de dezvoltator; după aceea, propria ta cheie. Nimic nu se vinde; ce păstrează relay-ul e în politica de confidențialitate, iar Setări → Controlul datelor e al tău. Șterge contul oricând vrei.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">Mesaje de la dispozitivele tale</string>
     <string name="nm_hub_service_channel">Conectat la dispozitivele tale</string>
     <string name="nm_hub_service_title">nanoLika · accesibil de pe dispozitivele tale</string>

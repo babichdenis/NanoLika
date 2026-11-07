@@ -1,16 +1,16 @@
 //
 //  NanoMuseMediaModels.swift
-//  nanoMuse
+//  NanoLika
 //
-//  The three models nanoMuse runs on. Muse ships with all of them built in;
+//  The three models NanoLika runs on. Muse ships with all of them built in;
 //  here each is one of the person's own providers, chosen in Settings →
 //  Image & video models:
 //
 //   - the chat model — OpenMinis' default model group, unchanged;
 //   - the image model — the avatar's four candidates and poses
-//     (NanoMuseImageGen: a Bailian key on this phone, else nanoMuse Cloud);
+//     (NanoMuseImageGen: a Bailian key on this phone, else NanoLika Cloud);
 //   - the video model — the animated avatar (NanoMuseVideoGen: Model
-//     Studio's asynchronous video API, which nanoMuse Cloud relays too;
+//     Studio's asynchronous video API, which NanoLika Cloud relays too;
 //     Wan 2.2 Flash by default, ¥0.10 a second at 480P).
 //
 //  Unset, the video model follows the image provider — the Cloud account
@@ -31,7 +31,7 @@ enum NanoMuseMediaModels {
         NanoMuseCatalogue.bundled.first { $0.id == NanoMuseCatalogue.bailian }?.defaults["video"] ?? NanoMuseVideoGen.knownDashScopeModels[0]
     }
     /// Posted after a save here, so the face view and the studio re-read what is set.
-    static let changed = Notification.Name("nanoMuse.mediaModelsChanged")
+    static let changed = Notification.Name("NanoLika.mediaModelsChanged")
 
     private enum Keys {
         static let videoInstance = "nanomuse.media.video.instance"
@@ -48,7 +48,7 @@ enum NanoMuseMediaModels {
     // MARK: Video
 
     /// Providers whose host speaks Model Studio's asynchronous video API and hold a key: Model
-    /// Studio itself, and nanoMuse Cloud, which relays those same paths under the account's token.
+    /// Studio itself, and NanoLika Cloud, which relays those same paths under the account's token.
     @MainActor
     static func eligibleVideoInstances() -> [ProviderInstance] {
         let cloudId = NanoMuseCloud.modelsOn ? NanoMuseCloud.instance?.id : nil
@@ -75,7 +75,7 @@ enum NanoMuseMediaModels {
 
     /// The instance the video model is on, or nil (0.1.41, the contract's section 3): the
     /// saved one; without a choice, the chat provider's when it is a Model Studio key of the
-    /// person's own, else nanoMuse Cloud when signed in, else the first key that can.
+    /// person's own, else NanoLika Cloud when signed in, else the first key that can.
     @MainActor
     static func videoInstance() -> ProviderInstance? {
         guard let value = NanoMuseModelSlots.videoValue() else { return nil }
@@ -219,7 +219,7 @@ enum NanoMuseMediaModels {
 
 // MARK: - Screen
 
-/// Settings → Image & video models. The one place that says what Muse never has to: nanoMuse
+/// Settings → Image & video models. The one place that says what Muse never has to: NanoLika
 /// runs on three of the person's own models. The chat model is OpenMinis' default group (a row
 /// to its picker); the image and video models are chosen here — a provider, then one of the
 /// models the key turns out to have — and each section says plainly what stops working
@@ -229,7 +229,7 @@ struct NanoMuseMediaModelsView: View {
     @ObservedObject private var motion = NanoMuseAvatarMotion.shared
     @ObservedObject private var faces = NanoMuseFaceStore.shared
 
-    // Image: a Bailian key on this phone, else nanoMuse Cloud (NanoMuseImageGen).
+    // Image: a Bailian key on this phone, else NanoLika Cloud (NanoMuseImageGen).
     @State private var imageInstances: [ProviderInstance] = []
     @State private var imageInstanceId: String?
     @State private var imageModel = ""

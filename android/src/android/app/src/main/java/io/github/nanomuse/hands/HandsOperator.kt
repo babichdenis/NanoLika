@@ -412,7 +412,7 @@ class HandsOperator(private val context: Context) {
         val outcome = runBlocking {
             RiskGate.check(sessionId ?: "hands", GuardKind.SCREEN, assessment, preview = "Tap “$short”", pageUrl = appLabel, elementText = short)
         }
-        // The user may have opened nanoMuse to answer; put the operated app back in front.
+        // The user may have opened NanoLika to answer; put the operated app back in front.
         val (nowPkg, _) = svc.foregroundPackage()
         if (nowPkg == context.packageName && pkg != null && pkg != context.packageName) {
             HandsApps.launchable(context).firstOrNull { it.packageName == pkg }?.let { HandsApps.open(context, it) }

@@ -14,17 +14,17 @@ export interface DemoRecord {
 }
 
 interface NanoMuseState {
-  /** Origin of the nanoMuse server, no trailing slash: "http://127.0.0.1:8787". */
+  /** Origin of the NanoLika server, no trailing slash: "http://127.0.0.1:8787". */
   serverUrl: string;
   /** The access token `nanomuse serve` prints (also in the QR code). */
   token: string;
   /** Mirror approvals, questions and background results into the notification shade. */
   notify: boolean;
-  /** Let nanoMuse operate this phone through its screen (its own GUI switch must be on too). */
+  /** Let NanoLika operate this phone through its screen (its own GUI switch must be on too). */
   gui: boolean;
   /** The hosted showcase session this phone is on, if any. */
   demo: DemoRecord | null;
-  /** The showcase's ticket from a nanoMuse Cloud sign-in (demo.ts), and who it is for. */
+  /** The showcase's ticket from a NanoLika Cloud sign-in (demo.ts), and who it is for. */
   ticket: string;
   visitor: { hint: string; channel: string } | null;
   /** Live state of the notification bridge's WebSocket. Not persisted. */

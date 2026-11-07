@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">Esta compilación</string>
@@ -620,10 +620,10 @@
     <string name="nm_risk_class_remote">Control remoto</string>
     <string name="nm_hub_remote_reason">%1$s puede manejar este teléfono</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">Tengo mi propia clave de API</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">Un agente personal de código abierto para todos tus dispositivos.</string>
     <string name="nm_welcome_email">Iniciar sesión (gratis)</string>
     <string name="nm_welcome_fine_print">Una cuenta mantiene tus dispositivos juntos y trae el uso gratuito del modelo; no se cobra nada. Tu propia clave de API se puede añadir justo después.</string>
@@ -905,7 +905,7 @@
     <string name="nm_coding_fresh_hint">Una conversación nueva con %1$s. Tu primer mensaje la inicia en la computadora.</string>
     <string name="nm_coding_no_transcript">Nada legible en esta sesión todavía.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">Miembro · sin límite</string>
     <string name="nm_cloud_spent_total">¥%1$s · $%2$s gastados en total, pagados por el desarrollador</string>
     <string name="nm_cloud_allowance_used">Usados ¥%1$s · $%2$s</string>
@@ -917,7 +917,7 @@
     <string name="nm_cloud_notice_closing">¿Encontraste un error, quieres una función, tienes un parche? El repositorio de GitHub es el lugar.</string>
     <string name="nm_cloud_notice">nanoLika es un proyecto comunitario de código abierto y sin ánimo de lucro: gratuito, para siempre. El modelo viene con un saldo gratuito que paga el desarrollador; después, tu propia clave. No se vende nada; lo que guarda el relay está en la política de privacidad, y Ajustes → Control de datos es tuyo. Elimina la cuenta cuando quieras.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">Mensajes de tus dispositivos</string>
     <string name="nm_hub_service_channel">Conectado a tus dispositivos</string>
     <string name="nm_hub_service_title">nanoLika · accesible desde tus dispositivos</string>

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map // nanoMuse
+import kotlinx.coroutines.flow.map // NanoLika
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,7 +56,7 @@ class ScheduledTasksViewModel(private val appContext: Context) : ViewModel() {
     val providerRepository get() = if (ready()) app.providerRepository else null
 
     val tasks: StateFlow<List<ScheduledTask>> = manager.store().observe()
-        // nanoMuse: goal checks are scheduled tasks too, but the Goals tab owns them.
+        // NanoLika: goal checks are scheduled tasks too, but the Goals tab owns them.
         .map { list -> list.filterNot { it.hidden } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

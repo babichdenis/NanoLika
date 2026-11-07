@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Settings → Network → *HTTP proxy for own providers*: one HTTP proxy, per device, that only
- * the requests to own-key providers and the ChatGPT plan go through. Never nanoMuse Cloud, the
+ * the requests to own-key providers and the ChatGPT plan go through. Never NanoLika Cloud, the
  * hub, a computer on the LAN or anything else the app fetches.
  *
  * It is installed once, in `MinisApp.onCreate`, as the process's default [ProxySelector]:
@@ -182,7 +182,7 @@ object OwnProviderProxy {
     /** The hosts the proxy is used for (tests). */
     fun routedHosts(): Set<String> = hosts
 
-    /** Whether [url] is the relay's (nanoMuse Cloud, or the one the person named): its refusals are read as the relay's. */
+    /** Whether [url] is the relay's (NanoLika Cloud, or the one the person named): its refusals are read as the relay's. */
     fun isRelay(url: String): Boolean = relayHost.isNotBlank() && hostOf(url) == relayHost
 
     /** Whether a request to [host] goes through the proxy, with the configuration in force. */

@@ -41,7 +41,7 @@
     <string name="check_update_current_version">目前版本：%1$s</string>
     <string name="check_update_check_button">檢查更新</string>
     <string name="check_update_checking">檢查中…</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="check_update_up_to_date">你使用的已是最新版本。</string>
     <string name="check_update_no_release">尚未發布任何版本。</string>
     <string name="check_update_no_apk_asset">版本 %1$s 已發布，但其中並未包含 APK。</string>
@@ -84,10 +84,10 @@
     <string name="bg_service_channel_name">Agent 狀態</string>
     <string name="bg_service_channel_description">顯示執行中 Agent 工作階段的狀態。</string>
     <string name="bg_overlay_nudge_channel_name">背景浮層權限</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="bg_overlay_nudge_channel_description">提醒你授予系統浮層權限，好讓背景工作浮層能夠顯示。</string>
     <string name="bg_overlay_nudge_title">啟用背景浮層</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="bg_overlay_nudge_body">請授予「顯示在其他應用程式上層」，讓你切換到其他應用程式時，nanoLika 仍能顯示目前的工具。點擊即可開啟權限畫面。</string>
     <string name="overlay_dismiss">關閉</string>
     <string name="overlay_completion_completed">執行完成</string>
@@ -174,7 +174,7 @@
     <string name="mcp_form_startup_timeout">啟動逾時（秒）</string>
     <string name="mcp_form_startup_timeout_placeholder">預設 60</string>
     <string name="voice_services_section">語音服務</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="voice_services_duplicate_hint">有語音服務被重複設定。語音在此會合併為單一列；若你願意，可以刪除上方多餘的供應商。</string>
     <string name="voice_services_stt_count">%1$d 個語音轉文字</string>
     <string name="voice_services_tts_count">%1$d 個文字轉語音</string>
@@ -187,7 +187,7 @@
     <string name="voice_service_shared_credential_note">此語音服務共用其供應商的 API 金鑰與端點。若要修改，請編輯該供應商。</string>
     <string name="voice_service_hidden_badge">已隱藏</string>
     <string name="add_provider_voice_chat_providers">語音對話供應商</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="add_provider_voice_templates_footer">語音轉文字與文字轉語音的服務商。供應商類型與基礎網址已預先填好——只要補上你的 API 金鑰即可。</string>
     <string name="add_provider_voice_capability_tts">語音合成（TTS）</string>
     <string name="add_provider_voice_capability_asr">語音辨識（ASR）</string>
@@ -261,12 +261,12 @@
     <string name="soul_ok">確定</string>
     <string name="soul_restore_default">還原預設值</string>
     <string name="soul_discard_confirm_title">要捨棄變更嗎？</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="soul_discard_confirm_body">你對人格的修改尚未儲存。</string>
     <string name="soul_discard_confirm">好，捨棄</string>
     <string name="soul_discard_cancel">取消，繼續編輯</string>
     <string name="soul_restore_confirm_title">要還原預設的 SOUL.md 嗎？</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="soul_restore_confirm_body">你目前的變更將被預設的人格檔案覆蓋。原始內容只是一個起點，隨時都可以再次編輯。</string>
     <string name="soul_save_error_title">無法儲存</string>
     <string name="soul_icon_choose_emoji">選擇表情符號</string>
@@ -541,7 +541,7 @@
     <string name="browser_settings_clear_cookies_for">清除 %1$s 的 Cookie</string>
     <string name="browser_settings_clear_all_cookies">清除所有 Cookie 與資料</string>
     <string name="browser_settings_clear_all_dialog_title">清除所有網站資料？</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="browser_settings_clear_all_dialog_message">這將刪除所有 Cookie 與網站資料。你將從所有網站登出。</string>
     <string name="browser_settings_clear">清除</string>
     <string name="browser_history_title">歷史記錄</string>
@@ -627,14 +627,14 @@
     <string name="appearance_section_grouping">分組</string>
     <string name="appearance_auto_grouping">自動分組</string>
     <string name="appearance_auto_grouping_subtitle">把新對話歸入相符的群組</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="appearance_auto_grouping_footer">當對話的標題首次產生時，一併把它歸入相符的既有群組。每個對話只執行一次，只會使用你已建立的群組；若沒有相符的群組，則讓對話維持未分組。</string>
     <string name="appearance_section_tool_preview">工具狀態列</string>
     <string name="appearance_tool_preview_footer">在 Agent 執行期間，於工具狀態列旁顯示即時預覽縮圖。</string>
     <string name="appearance_tool_preview_title">工具預覽視窗</string>
     <string name="appearance_section_auto_focus_after_reply">回覆後自動聚焦輸入框</string>
     <string name="appearance_auto_focus_after_reply_title">回覆後自動聚焦輸入框</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="appearance_auto_focus_after_reply_footer">啟用後，模型回覆結束時鍵盤會自動彈出，讓輸入框隨時可以接著追問。預設為開啟；若你偏好在閱讀回覆時不被鍵盤打斷，可以關閉。</string>
     <string name="appearance_section_deep_thinking">深度思考</string>
     <string name="appearance_auto_expand_thinking_title">串流時展開思考內容</string>
@@ -648,7 +648,7 @@
     <string name="appearance_font_app_base">應用程式基準</string>
     <string name="appearance_font_reset">還原為預設值</string>
     <string name="appearance_section_language">語言</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="appearance_language_footer">覆寫本應用程式的顯示語言。「系統」會跟隨你的裝置語言。</string>
     <string name="appearance_section_app_icon">應用程式圖示</string>
     <string name="appearance_app_icon_footer">變更啟動器圖示。點擊後，主畫面上的圖示可能需要幾秒鐘才會更新。</string>
@@ -729,7 +729,7 @@
     <string name="perm_a11y_system_ready">已啟用</string>
     <string name="perm_a11y_system_disabled">未啟用</string>
     <string name="perm_allow_minis_config">允許 minis-config</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="perm_minis_config_desc">停用後，Agent 將無法透過 minis-config 讀取或修改任何設定。「記錄」→「設定變更」中的變更歷史仍可查閱。Agent 會收到 permission_denied 錯誤，改以深層連結引導你操作。</string>
     <string name="perm_section_privacy">隱私</string>
     <string name="perm_section_media">媒體</string>
@@ -772,7 +772,7 @@
     <string name="shizuku_cap_service_desc">呼叫並檢視系統服務</string>
     <string name="shizuku_install_footer">安裝 Shizuku(RikkaApps)、AXManager(Axeron)或 Sui(RikkaApps)其中任一個 —— 三者實作同一套協定,可以互換。Shizuku 與 AXManager 是一般 App,透過無線 ADB 啟用。Sui 針對已經 root 的裝置:它以 Magisk/KernelSU 模組的形式安裝,無需 App,且重啟後依然保持生效。在 KernelSU 或 APatch 上,Sui 還需要額外的 Zygisk 實作(Zygisk Next / ReZygisk / NeoZygisk)—— 沒有它 Sui 不會載入。安裝其中一個後返回此頁。</string>
     <string name="shizuku_start_footer">開啟管理程式，並透過無線 ADB（不需電腦）或 root 啟動其服務。當顯示為執行中之後，再回到這裡。\n\n使用 AXManager 嗎？請另外在 AXManager 中啟用「設定」→「AX-Permission Intercept」——只有這個開關才會讓 AXManager 把它的 Shizuku 相容 binder 傳給 nanoLika。</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="shizuku_grant_footer">服務正在執行。點擊「授權 nanoLika」以授予存取權。管理程式會跳出系統對話框請你確認。</string>
     <string name="shizuku_grant_footer_sui">Sui 正在執行。點擊「授權 nanoLika」以授予存取權限 —— 確認對話框由 Sui 自己彈出,沒有單獨的管理器 App 需要開啟。</string>
     <string name="shizuku_state_not_installed">尚未安裝管理程式</string>
@@ -821,7 +821,7 @@
     <string name="skill_import_url_placeholder">github.com/user/repo/blob/main/SKILL.md</string>
     <string name="skill_import_paste_instruction">貼上 SKILL.md 檔案的內容。必須包含帶有 name 欄位的 YAML frontmatter。</string>
     <string name="skill_import_paste_label">SKILL.md 內容</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="skill_import_file_instruction">從你的裝置選擇 .md、.zip 或 .skill 檔案。</string>
     <string name="skill_import_file_button">選擇檔案</string>
     <string name="skill_import_error_no_url">請輸入網址</string>
@@ -893,14 +893,14 @@
     <string name="usage_label_cache_creation">快取建立</string>
     <string name="usage_label_cache_hit_rate">快取命中率</string>
     <string name="usage_detail_input">輸入</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="newer_db_title">你的資料來自較新的版本</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="newer_db_body">這個 nanoLika 版本比建立你資料的版本還舊，因此無法安全地開啟它。\n\n沒有任何資料被刪除——你的對話在這台裝置上完好無缺。重新安裝較新版的 nanoLika，一切就會回來。</string>
     <string name="newer_db_versions">此版本支援資料格式 %1$d</string>
     <string name="newer_db_exit">關閉</string>
     <string name="usage_attr_unknown_session">模型不明——該工作階段的紀錄已被刪除</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="usage_attr_removed">已不在你設定的供應商之中</string>
     <string name="usage_detail_output">輸出</string>
     <string name="usage_detail_cache_read">快取讀取</string>
@@ -947,7 +947,7 @@
     <string name="rootfs_reset_confirm_title">要重設 Rootfs 嗎？</string>
     <string name="rootfs_reset_confirm_message">這會刪除整個 rootfs，所有資料都會遺失。</string>
     <string name="rootfs_reset_backup_confirm_title">要重設並備份嗎？</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="rootfs_reset_backup_confirm_message">這會先備份你的 /root 目錄，然後重設 rootfs。之後你可以復原這份備份。</string>
     <string name="rootfs_reset_backup_confirm_button">重設並備份</string>
     <string name="provider_list_providers">AI 服務商</string>
@@ -1016,7 +1016,7 @@
     <string name="add_provider_save_provider">保存 AI 服務商</string>
     <string name="add_provider_opens_the_provider_s_web_sign_in_flow_af">開啟供應商的網頁登入流程。登入後,token 會自動寫入這裡。</string>
     <string name="add_provider_signing_in">正在登入…</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="add_provider_oauth_network_unreachable">無法連線至登入伺服器。請檢查你的網路或 Proxy 設定後再試一次。</string>
     <string name="add_provider_or_configure_manually">或手動配置</string>
     <string name="add_provider_for_third_party_coding_plans_e_g_minimax">For third-party Coding Plans (e.g. MiniMax, Kimi) or compatible proxy endpoints, enter the API base URL and bearer token manually.</string>
@@ -1150,12 +1150,12 @@
     <string name="notif_task_completed_default_title">工作已完成</string>
     <string name="notif_task_completed_body">點擊以開啟對話並閱讀回覆。</string>
     <string name="notif_config_confirm_channel_name">設定核准</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="notif_config_confirm_channel_description">當應用程式在背景時，若有設定變更等待你核准，就發出通知。</string>
     <string name="notif_config_confirm_title">⚙️ 設定變更待核准</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="notif_config_confirm_body_single">有一項變更需要你審核——請開啟 nanoLika 核准或拒絕。</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="notif_config_confirm_body_multi">有 %d 項變更需要你審核——請開啟 nanoLika 核准或拒絕。</string>
     <string name="notif_task_failed_body">工作因錯誤而結束。點擊以開啟對話。</string>
     <string name="selection_add_to_chat_input">加入到輸入框</string>
@@ -1272,7 +1272,7 @@
     <string name="backup_confirm_passphrase">確認通關密語</string>
     <string name="backup_passphrase_mismatch">兩次輸入的通關密語不一致。</string>
     <string name="backup_encrypt_footer_on">這組通關密語會加密整份備份，包括對話、檔案與憑證。忘記後無法復原——沒有它就打不開這份備份。</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="backup_encrypt_footer_off_creds">這份備份包含你的 API 金鑰、OAuth Token 與環境變數的值，而且並未加密——任何拿到檔案的人都能讀取。請開啟加密以保護它。</string>
     <string name="backup_encrypt_footer_off">未加密的備份沒有任何保護——任何拿到檔案的人都能讀取其內容。</string>
     <string name="backup_start">開始備份</string>
@@ -1307,12 +1307,12 @@
     <string name="backup_history_excluded">已排除的檔案</string>
     <string name="backup_history_file_count">%1$d 個檔案</string>
     <string name="backup_history_included">已包含：%1$s</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="backup_history_remove_note">這只會把紀錄從清單中移除。已儲存到你各目的地的備份檔案不會被刪除。</string>
     <string name="backup_history_remove_title">要刪除這筆備份紀錄嗎？</string>
     <string name="backup_history_remove_record_only">僅刪除紀錄</string>
     <string name="backup_history_remove_with_files">刪除紀錄與檔案</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="backup_history_remove_choice_note">「僅刪除紀錄」會移除這筆項目，並把備份檔案留在你的目的地。「刪除紀錄與檔案」還會一併從每個目的地刪除備份包——此操作無法復原。</string>
     <string name="backup_status_succeeded">已完成</string>
     <string name="backup_status_issues">完成，但有問題</string>
@@ -1378,7 +1378,7 @@
     <string name="backup_report_missing_from_package">%1$s：有 %2$d 個檔案列在備份清單中卻不存在於備份內——這份備份並不完整</string>
     <string name="backup_report_unreadable">%1$s：有 %2$d 個項目無法讀取</string>
     <string name="backup_creds_restored">已為 %1$d 個供應商連同設定一併復原 API 金鑰。這台裝置上既有的金鑰予以保留。若 OAuth 的 Token 已過期，可能仍需要重新登入。</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="backup_creds_kept">已保留你既有的 API 金鑰——備份中的金鑰與這台裝置上的憑證相符，因此不需要覆寫任何內容。</string>
     <string name="backup_creds_none">這份備份建立時未包含 API 金鑰，因此復原的供應商沒有憑證——使用前請逐一輸入 API 金鑰或重新登入。</string>
     <string name="backup_done">完成</string>
@@ -1397,12 +1397,12 @@
     <string name="backup_dest_connect">連線並選擇資料夾</string>
     <string name="backup_dest_connect_and_save">連線並儲存</string>
     <string name="backup_dest_trust_certificate">信任這台伺服器的憑證</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="backup_dest_trust_certificate_warning">無法驗證憑證。請只對你自己掌控的伺服器開啟此選項——任何能攔截連線的人都可能藉此冒充它。</string>
     <string name="backup_dest_cancel">取消</string>
     <string name="restore_browse_header">這個資料夾中的備份</string>
     <string name="restore_browse_footer">列出伺服器上這個資料夾中的 .minisbak 檔案。</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="restore_browse_footer_empty">這是伺服器上的即時清單，不是你的備份紀錄。</string>
     <string name="restore_browse_empty">這裡沒有資料夾或備份。</string>
     <string name="restore_download_title">要下載這份備份嗎？</string>
@@ -1723,7 +1723,7 @@
     <string name="scheduled_task_run_now_starting">啟動工作中…</string>
     <string name="scheduled_task_run_now_starting_body">正在派送工作，不會等待它執行完畢。</string>
     <string name="scheduled_task_run_now_started">工作已啟動</string>
-    <!-- nanoMuse: 您 → 你 (the app speaks to the person plainly) -->
+    <!-- NanoLika: 您 → 你 (the app speaks to the person plainly) -->
     <string name="scheduled_task_run_now_started_body">工作正在背景執行。完成時你會收到通知——也可以開啟對話即時觀看。</string>
     <string name="scheduled_task_menu_edit">編輯</string>
     <string name="scheduled_task_menu_runs">執行紀錄</string>

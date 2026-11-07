@@ -22,7 +22,7 @@ object TerminalSanitizer {
     fun sanitize(raw: String): String {
         if (raw.isEmpty()) return raw
 
-        // nanoMuse: strip ANSI first so escape bytes cannot occupy overwrite columns.
+        // NanoLika: strip ANSI first so escape bytes cannot occupy overwrite columns.
         val stripped = ANSI_REGEX.replace(raw, "")
 
         // Pass 2: CR folding
@@ -75,7 +75,7 @@ object TerminalSanitizer {
                 continue
             }
 
-            // nanoMuse: a CR moves the cursor to column 0 and the next segment overwrites from there;
+            // NanoLika: a CR moves the cursor to column 0 and the next segment overwrites from there;
             // shorter text keeps the old tail, so "AAAA\rBB" is "BBAA", not "BB" (#334)
             val buf = StringBuilder()
             for (segment in line.split('\r')) {

@@ -2,7 +2,7 @@ name: Showcase images
 
 # Publishes the two images the hosted demo runs (demo/showcase/docker-compose.yml):
 #   ghcr.io/nano-muse/showcase-caddy     Caddy + Cloudflare modules + the built phone (MobileGym
-#                                        with the nanoMuse app)
+#                                        with the NanoLika app)
 #   ghcr.io/nano-muse/showcase-gateway   the session gateway
 # main -> :latest and :sha-<short>. The server then does `docker compose pull && up -d`.
 # Pull requests that touch the showcase build both without pushing.
@@ -73,7 +73,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=nanoMuse showcase: Caddy and the phone
+            org.opencontainers.image.title=NanoLika showcase: Caddy and the phone
             org.opencontainers.image.licenses=GPL-3.0-or-later
 
       - name: Build and push (caddy)
@@ -97,7 +97,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
           labels: |
-            org.opencontainers.image.title=nanoMuse showcase: session gateway
+            org.opencontainers.image.title=NanoLika showcase: session gateway
             org.opencontainers.image.licenses=GPL-3.0-or-later
 
       - name: Build and push (gateway)

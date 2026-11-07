@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>nanoMuse · 在线体验</title>
+    <title>NanoLika · 在线体验</title>
     <meta
       name="description"
-      content="A simulated phone in your browser with a nanoMuse of your own on it, for a while: a new look, the apps on the phone operated for you, memory, reminders."
+      content="A simulated phone in your browser with a NanoLika of your own on it, for a while: a new look, the apps on the phone operated for you, memory, reminders."
     />
     <link rel="icon" href="/page/mark.svg" />
     <!-- MobileGym's own stylesheet (its phone rig, gesture guide and State Builder), then ours -->
@@ -28,7 +28,7 @@
           var l = s ? (s === "zh" ? "zh" : "en") : /^zh/i.test(navigator.language || "") ? "zh" : "en";
           document.documentElement.setAttribute("data-lang", l);
           document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
-          document.title = l === "zh" ? "nanoMuse · 在线体验" : "nanoMuse · Try it in the browser";
+          document.title = l === "zh" ? "NanoLika · 在线体验" : "NanoLika · Try it in the browser";
         } catch (e) {}
       })();
     </script>
@@ -49,7 +49,7 @@
          top. Its markup comes in at build time (compose.mjs); ours is the bezel around the screen
          and the column beside the phone. The whole stage fits one screen (page.js scales the phone
          to the room there is). -->
-    <section id="demo" class="hero-demo" aria-label="nanoMuse on a simulated phone">
+    <section id="demo" class="hero-demo" aria-label="NanoLika on a simulated phone">
       <div class="rig-actions">
         <button type="button" id="demo-poweroff-btn" class="hero-demo-poweroff hidden">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
@@ -89,13 +89,13 @@
           <div class="intro">
             <p class="status" id="status" aria-live="polite"><i class="en">Starting the phone…</i><i class="zh">手机启动中…</i></p>
             <h1>
-              <i class="en">A phone in your browser, with a nanoMuse of your own on it.</i>
-              <i class="zh">浏览器里的一台手机，装着一个属于你的 nanoMuse。</i>
+              <i class="en">A phone in your browser, with a NanoLika of your own on it.</i>
+              <i class="zh">浏览器里的一台手机，装着一个属于你的 NanoLika。</i>
             </h1>
             <div class="notice" role="note">
               <p>
-                <i class="en"><b>A demo in a simulator.</b> The phone and its apps are MobileGym's re-creations, and this nanoMuse is the lite web app. The apps for your own devices do far more; install one of them.</i>
-                <i class="zh"><b>这是模拟器里的演示。</b>手机和应用是 MobileGym 重做的，这个 nanoMuse 是精简版网页应用。装在你自己设备上的 App 能做的多得多，请安装一个。</i>
+                <i class="en"><b>A demo in a simulator.</b> The phone and its apps are MobileGym's re-creations, and this NanoLika is the lite web app. The apps for your own devices do far more; install one of them.</i>
+                <i class="zh"><b>这是模拟器里的演示。</b>手机和应用是 MobileGym 重做的，这个 NanoLika 是精简版网页应用。装在你自己设备上的 App 能做的多得多，请安装一个。</i>
               </p>
               <!-- every platform the project ships; the links go to GitHub's "latest" release and to
                    the docs, never to one version's own files, so they do not go stale -->
@@ -124,23 +124,23 @@
             </div>
 
             <div class="actions">
-              <button class="btn" id="open" type="button"><i class="en">Show nanoMuse</i><i class="zh">打开 nanoMuse</i></button>
+              <button class="btn" id="open" type="button"><i class="en">Show NanoLika</i><i class="zh">打开 NanoLika</i></button>
               <button class="btn" id="reset" type="button"><i class="en">Start over</i><i class="zh">重新开始</i></button>
               <a class="how" href="https://github.com/nano-muse/nanoMuse/blob/main/demo/showcase/README.md"><i class="en">How this runs</i><i class="zh">这是怎么跑起来的</i></a>
             </div>
 
             <p class="fine">
               <i class="en">
-                nanoMuse is a non-profit community project, free software under GPL-3.0-or-later. The phone, the gesture keys and the State
+                NanoLika is a non-profit community project, free software under GPL-3.0-or-later. The phone, the gesture keys and the State
                 Builder are <a href="https://github.com/Purewhiter/mobilegym">MobileGym</a>'s (Apache-2.0; its optional companion data CC BY-NC 4.0); the
                 apps on it are re-creations for an agent to practise on, not the real services, and no trademark holder is affiliated.
-                Muse is a trademark of Meta Platforms, Inc.; nanoMuse is not affiliated with or endorsed by Meta.
+                Muse is a trademark of Meta Platforms, Inc.; NanoLika is not affiliated with or endorsed by Meta.
                 What the showcase server keeps about a visit, and for how long, is on the <a href="https://nanomuse.cn/docs/privacy">privacy page</a>.
               </i>
               <i class="zh">
-                nanoMuse 是非营利的社区项目，自由软件，许可证 GPL-3.0-or-later。这台手机、手势键和 State Builder 来自
+                NanoLika 是非营利的社区项目，自由软件，许可证 GPL-3.0-or-later。这台手机、手势键和 State Builder 来自
                 <a href="https://github.com/Purewhiter/mobilegym">MobileGym</a>（Apache-2.0；其可选的配套数据为 CC BY-NC 4.0），手机里的应用是为了让智能体练习而重做的，不是真实服务，与各商标持有者无关。
-                Muse 是 Meta Platforms, Inc. 的商标；nanoMuse 与 Meta 无关，也未获其认可。
+                Muse 是 Meta Platforms, Inc. 的商标；NanoLika 与 Meta 无关，也未获其认可。
                 体验服务器会记下哪些访问信息、保存多久，写在<a href="https://nanomuse.cn/docs/zh/privacy">隐私页</a>。
               </i>
             </p>

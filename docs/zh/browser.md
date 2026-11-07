@@ -5,7 +5,7 @@
 > 下面的协议）属于 Python 线路的 Android 应用；在当前的 Android 应用里，浏览器是 OpenMinis 的
 > `browser_use` 工具，需要你的页面通过它的 `hand_over` 动作交到你手上（[android.md](android.md#what-the-phone-does)）。
 
-智能体有一个浏览器工具，和两个可以跑它的浏览器：服务器所在电脑上经 Playwright 驱动的 Chromium，以及 nanoMuse 手机 App 里手机自己的 WebView。两边的工具是同一个（同样的动作、页面上同样编号的元素、聊天里同样的画面、同样的接管方式），所以针对一边写的技能在另一边也能用，一项任务从书桌挪到手机上，一行都不用改。
+智能体有一个浏览器工具，和两个可以跑它的浏览器：服务器所在电脑上经 Playwright 驱动的 Chromium，以及 NanoLika 手机 App 里手机自己的 WebView。两边的工具是同一个（同样的动作、页面上同样编号的元素、聊天里同样的画面、同样的接管方式），所以针对一边写的技能在另一边也能用，一项任务从书桌挪到手机上，一行都不用改。
 
 浏览器在整个顺序里的位置：智能体先通过服务的 API、MCP 服务器或命令行工具去够它；然后是**带登录态的 `fetch`**（带着浏览器 cookie 的一次请求，不渲染页面）；再然后才是浏览器页面本身；最后才是手机上某个 App 的屏幕（[gui.md](gui.md)）。浏览器是这条阶梯的第二级和第三级。
 
@@ -13,13 +13,13 @@
 
 | | `playwright` | `device` |
 | --- | --- | --- |
-| 跑在哪 | 服务器上，无头 Chromium | 手机上的 nanoMuse App 里，一个离屏 WebView |
+| 跑在哪 | 服务器上，无头 Chromium | 手机上的 NanoLika App 里，一个离屏 WebView |
 | 需要什么 | `pip install "nanomuse[browser]" && playwright install chromium`（或者 `-browser` Docker 镜像） | App 已连接，两种版本都行；本地版一直带着它 |
 | 登录态存在哪 | `<workspace>/browser-profile/`，一个持久的 profile 目录，所以登录能挺过一次重启 | App 的 WebView cookie 存储，在手机上 |
 | 接管 | 在浏览器卡片上：点图片就是点击，打字，按回车 | 同一个 WebView 在 App 里滑上来：不重新加载，同样的 cookie，你的手指直接落在真实页面上 |
 | 网站看到的是 | Linux 上的 Chrome（或者 profile 设定的 user agent） | Android WebView（或者 profile 设定的 user agent） |
 
-`backend = "auto"`（默认值）在有带浏览器的 nanoMuse App 连着时用手机，否则用 Playwright。手机的本地版里没有 Chromium（PRoot 启动不了），所以 WebView 永远就是那个浏览器。
+`backend = "auto"`（默认值）在有带浏览器的 NanoLika App 连着时用手机，否则用 Playwright。手机的本地版里没有 Chromium（PRoot 启动不了），所以 WebView 永远就是那个浏览器。
 
 ```toml
 [browser]
@@ -70,7 +70,7 @@ cookie 会保留。服务器上的 Playwright profile 是一个真正的 Chromiu
 
 ### 哪些不行，为什么 {#what-does-not-work-and-why}
 
-- **Google 账号没法在 WebView 里登录。** Google 拒绝嵌入式登录（`disallowed_useragent`），理由也站得住。接管面板上有一个箭头，可以把同一个 URL 在系统浏览器里打开，但在那里完成的登录留在 Chrome 里，不在 nanoMuse 的 WebView 里。Google 的服务请走 API 这条路（日历的私密 `.ics` 链接、邮箱的应用专用密码），别用浏览器；在服务器的 Chromium 上，Google 登录能成，但可能被判为「不安全」而受到盘问。
+- **Google 账号没法在 WebView 里登录。** Google 拒绝嵌入式登录（`disallowed_useragent`），理由也站得住。接管面板上有一个箭头，可以把同一个 URL 在系统浏览器里打开，但在那里完成的登录留在 Chrome 里，不在 NanoLika 的 WebView 里。Google 的服务请走 API 这条路（日历的私密 `.ics` 链接、邮箱的应用专用密码），别用浏览器；在服务器的 Chromium 上，Google 登录能成，但可能被判为「不安全」而受到盘问。
 - **二维码没法用同一部手机扫。** 靠「用我们的 App 扫码」登录的网站（微信、支付宝、淘宝……）把二维码显示在本该举着摄像头的地方。在手机的浏览器上这是条死路；在服务器的 Chromium 上，你用手机扫聊天里的那一帧就行；这是服务器浏览器反而更省事的唯一一种情况。
 - **通行密钥（passkey）带不走。** 在手机 Chrome 里创建的通行密钥属于那个浏览器的凭据存储；WebView 看不到它，服务器上的无头 Chromium 更是一个都没有。密码加验证码的登录到哪里都行。
 - **下载**落在工作区里：服务器上（Playwright）是 `<workspace>/downloads/`，手机的本地版上也是（智能体能读到）；在连接版里，智能体在电脑上，下载会进手机的「下载」文件夹。
@@ -103,7 +103,7 @@ profile   {user_agent, width, height, mobile}  → {}
 close     {}                                   → {}
 ```
 
-未知的 op 或者一次失败，以 `{"ok": false, "error": "…"}` 返回，一条模型读得懂的消息。另一个想把自己的浏览器借给 nanoMuse 服务器的 App，实现这十四个 op 和那条 hello 就行。
+未知的 op 或者一次失败，以 `{"ok": false, "error": "…"}` 返回，一条模型读得懂的消息。另一个想把自己的浏览器借给 NanoLika 服务器的 App，实现这十四个 op 和那条 hello 就行。
 
 ## 怎么测 {#testing-it}
 

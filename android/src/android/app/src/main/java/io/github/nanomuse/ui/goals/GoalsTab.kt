@@ -90,7 +90,7 @@ private val trackingGreen = Color(0xFF34A853)
 
 /**
  * Muse's Goals page: "Tracking" (goals with a checkbox and a two-line status), then
- * "Create a goal" with its seven categories. Between them, nanoMuse's routines — OpenMinis'
+ * "Create a goal" with its seven categories. Between them, NanoLika's routines — OpenMinis'
  * scheduled tasks, in the same visual language, since a routine is what a goal's check-in is
  * made of.
  */

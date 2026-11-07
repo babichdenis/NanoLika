@@ -4,7 +4,7 @@ import { stage } from './stage';
 import { t } from './res/strings';
 
 /**
- * The simulated phone as a device nanoMuse can operate.
+ * The simulated phone as a device NanoLika can operate.
  *
  * The server asks for two things over the notification bridge's WebSocket (see
  * `nanomuse.phone.link` on the Python side): the current *screen* — a screenshot, which app is
@@ -240,7 +240,7 @@ export async function screenshot(): Promise<string | null> {
     const comma = dataUrl.indexOf(',');
     return comma >= 0 ? dataUrl.slice(comma + 1) : null;
   } catch (err) {
-    console.warn('[nanoMuse] screenshot failed', err);
+    console.warn('[NanoLika] screenshot failed', err);
     return null;
   }
 }
@@ -457,7 +457,7 @@ export async function readScreen(quiet = false): Promise<ScreenPayload> {
   try {
     nodes = collectNodes();
   } catch (err) {
-    console.warn('[nanoMuse] elements could not be read', err);
+    console.warn('[NanoLika] elements could not be read', err);
   }
   const shot = await screenshot();
   return {

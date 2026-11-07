@@ -1,21 +1,21 @@
 # The hub: every device is a Muse
 
-Sign in to the same nanoMuse Cloud account on a phone, a computer and a browser,
+Sign in to the same NanoLika Cloud account on a phone, a computer and a browser,
 and they see each other. Each device runs its own Muse with its own hands (the
 phone's apps and sandbox, the computer's shell and screen), and any of them can
 ask any other for something, from any network. The web console has no hands of
 its own; it is a front door to the rest.
 
 ```
-phone ──┐                         ┌── computer (nanoMuse Desktop)
-        ├──▶  nanoMuse Cloud  ◀───┤
+phone ──┐                         ┌── computer (NanoLika Desktop)
+        ├──▶  NanoLika Cloud  ◀───┤
 web  ───┘        /v1/hub          └── another phone / computer
 ```
 
 Every device opens one outbound WebSocket to the relay and keeps it. Nothing
 listens on the device, nothing needs a port forwarded or a shared Wi-Fi; the
 relay only routes frames between devices of one account and never looks inside
-a task. This is the way to add a computer: install nanoMuse Desktop on it and
+a task. This is the way to add a computer: install NanoLika Desktop on it and
 sign in with the same account; nothing to download by hand, no code to type.
 It is the only way in: the stand-alone host script that paired over the local
 network (0.1.13–0.1.23) is gone, so a computer that is missing from the phone's
@@ -30,7 +30,7 @@ On the phone, in any chat:
 - "让电脑把项目编译一遍，把日志发给我": `nanomuse-pc task "…" --on desk`
 - "电脑截个图给我看": `nanomuse-pc screen --on desk`
 
-On the computer, in nanoMuse Desktop (or `nanomuse chat` in a terminal):
+On the computer, in NanoLika Desktop (or `nanomuse chat` in a terminal):
 
 - "on my phone, take a screenshot": `device_screen`
 - "tell the phone's Muse to read me the last notification": `delegate`
@@ -97,13 +97,13 @@ Two kinds of request travel over the hub:
   [coding-agents.md](coding-agents.md).
 
 Each device decides what it lets others do. On the phone, *Let other devices
-operate this phone* (*Settings → nanoMuse Cloud → Devices*) off makes the phone
+operate this phone* (*Settings → NanoLika Cloud → Devices*) off makes the phone
 answer `info` and nothing else; it still sees and drives the others.
 With it on, a raw action that does something *to* the device (`shell`, `files`,
 `file.get`, `file.put`, `open`, `screen`, `coding.send`, `coding.stop`) is first
 agreed to by the person at that device: the usual approval card, *once* or
 *always for that device*; the standing answer is a grant
-(`remote_control:<device id>`) under Permissions. nanoMuse Desktop asks with the
+(`remote_control:<device id>`) under Permissions. NanoLika Desktop asks with the
 same card by default; its *Remote control without asking* (*Settings → Devices*)
 lets every device of the account run things there without the card. Nobody there, and the caller
 hears `not_allowed` when the card expires. `info` and `notify` never ask; a
@@ -321,7 +321,7 @@ computer's own hands) is in [every-device.md](every-device.md).
 - iOS: [`NanoMuse/NanoMuseHub.swift`](../android/src/ios/NanoMuse/NanoMuseHub.swift):
   `info`, `open`, `notify`, `task` (its `language` is honoured), `stop`; `screen` is
   refused (`no_screen`), the shell and files actions with `not_supported`. A step of a
-  `task` that needs approval is not sent back as an `event`: with nanoMuse in front the
+  `task` that needs approval is not sent back as an `event`: with NanoLika in front the
   phone shows its own card, in the background the step is declined and the answer says so.
   The other way round, a `task` the phone sends (`@〈device〉`,
   [`NanoMuseDeviceMention.swift`](../android/src/ios/NanoMuse/NanoMuseDeviceMention.swift))

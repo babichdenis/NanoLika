@@ -10,8 +10,8 @@ import java.io.IOException
 
 /**
  * The other devices of the account, as the phone's `nanomuse-pc` sees them, and the calls to
- * them. Everything travels through the hub: a computer joins by running nanoMuse Desktop
- * signed in to the same nanoMuse Cloud account, on any network, and answers the actions
+ * them. Everything travels through the hub: a computer joins by running NanoLika Desktop
+ * signed in to the same NanoLika Cloud account, on any network, and answers the actions
  * itself. (Until 0.1.23 a computer could also be paired over the local network with a
  * stand-alone host script; that path is gone — one way in, the same on every network.)
  *

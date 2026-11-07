@@ -7,7 +7,7 @@ private let logger = AppLogger(category: "FollowUpIntent")
 /// Sends a follow-up prompt to an existing session, continuing the conversation.
 struct FollowUpSessionIntent: AppIntent {
     static var title: LocalizedStringResource = "Follow Up Session"
-    static var description = IntentDescription("Sends a follow-up prompt to an existing nanoMuse session, continuing the conversation with the AI agent.")
+    static var description = IntentDescription("Sends a follow-up prompt to an existing NanoLika session, continuing the conversation with the AI agent.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Session")

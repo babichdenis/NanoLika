@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings › Providers › nanoMuse Cloud. Signed out: a phone number or an e-mail address, a
+/// Settings › Providers › NanoLika Cloud. Signed out: a phone number or an e-mail address, a
 /// code, done. Signed in: what is left of the starter allowance, a refresh, the way out.
 /// Mirror of the Android `CloudSignInScreen` / `CloudAccountScreen`.
 struct NanoMuseCloudView: View {
@@ -38,7 +38,7 @@ struct NanoMuseCloudView: View {
     var body: some View {
         Form {
             if signedIn {
-                // nanoMuse: the blocks and their order follow the Android account screen —
+                // NanoLika: the blocks and their order follow the Android account screen —
                 // identity, password, sessions, star, allowance, invite, usage, activity,
                 // devices, links, the ways out, the notice.
                 identitySection
@@ -190,7 +190,7 @@ struct NanoMuseCloudView: View {
         }
     }
 
-    /// What nanoMuse is, in a few lines, and where to bring a bug or a patch.
+    /// What NanoLika is, in a few lines, and where to bring a bug or a patch.
     private var noticeSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {

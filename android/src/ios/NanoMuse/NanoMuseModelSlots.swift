@@ -1,13 +1,13 @@
 //
 //  NanoMuseModelSlots.swift
-//  nanoMuse
+//  NanoLika
 //
 //  0.1.41 "Choice": the four things a model does for the person — chat, operating the screen,
 //  making pictures, making clips — as four slots, each holding one `<provider> · <model>`.
 //  Settings › Models shows them (NanoMuseModelsView); the "Use it for" card after a key is
 //  saved fills them; and when the person has not chosen, the order of `resolve` decides
 //  (the contract's section 3): an explicit choice, then the chat provider's own default for
-//  the same capability, then nanoMuse Cloud, then the first provider on the phone that can.
+//  the same capability, then NanoLika Cloud, then the first provider on the phone that can.
 //  Cloud never jumps ahead of a provider the person chose.
 //
 //  The relay's menu (`/v1/models` with `nanomuse.for` / `nanomuse.kind`) is kept on the phone
@@ -71,7 +71,7 @@ enum NanoMuseSlot: String, CaseIterable, Identifiable, Sendable {
 
 // MARK: - Resolution (pure, tested)
 
-/// What a picker and the resolver know about one provider: nanoMuse Cloud or a provider of
+/// What a picker and the resolver know about one provider: NanoLika Cloud or a provider of
 /// the person's own, with the models the app can actually use for each slot.
 struct NanoMuseSlotProvider: Equatable, Sendable {
     /// The provider instance's id (the relay's instance for Cloud).
@@ -91,7 +91,7 @@ struct NanoMuseSlotProvider: Equatable, Sendable {
     func models(for slot: NanoMuseSlot) -> [String] { models[slot] ?? [] }
 
     /// True when the provider can serve the slot: it has the capability and at least one model
-    /// for it. nanoMuse Cloud needs only the capability: the relay picks the model itself when
+    /// for it. NanoLika Cloud needs only the capability: the relay picks the model itself when
     /// the phone has no copy of its menu yet.
     func has(_ slot: NanoMuseSlot) -> Bool {
         capabilities.contains(slot.capability) && (isCloud || !models(for: slot).isEmpty)
@@ -302,7 +302,7 @@ enum NanoMuseRelayMenu {
 @MainActor
 enum NanoMuseModelSlots {
     /// Posted after a slot changed here, so the rows and the face re-read what is set.
-    static let changed = Notification.Name("nanoMuse.modelSlotsChanged")
+    static let changed = Notification.Name("NanoLika.modelSlotsChanged")
 
     /// Whether a model of a provider of one's own can hold a conversation: it writes text and
     /// is not one of the picture or video models the same key lists.
@@ -320,8 +320,8 @@ enum NanoMuseModelSlots {
         return modalities.contains(.imageInput) || NanoMuseVision.looksLikeItSees(id: entry.model.id, displayName: entry.model.displayName)
     }
 
-    /// nanoMuse Cloud as a slot provider, from the kept menu (or, until one is kept, from the
-    /// relay instance's own model list); nil when the phone is not signed in or *Use nanoMuse
+    /// NanoLika Cloud as a slot provider, from the kept menu (or, until one is kept, from the
+    /// relay instance's own model list); nil when the phone is not signed in or *Use NanoLika
     /// Cloud models* is off.
     static func cloudProvider() -> NanoMuseSlotProvider? {
         guard NanoMuseCloud.modelsOn, let inst = NanoMuseCloud.instance else { return nil }
@@ -385,7 +385,7 @@ enum NanoMuseModelSlots {
         return NanoMuseSlotProvider(id: inst.id, label: inst.label, isCloud: false, capabilities: capabilities, defaults: vendor?.defaults ?? [:], models: models, names: displayNames(entries))
     }
 
-    /// Every provider the pickers list: nanoMuse Cloud first when signed in, then the person's own in the order they were added.
+    /// Every provider the pickers list: NanoLika Cloud first when signed in, then the person's own in the order they were added.
     static func providers() -> [NanoMuseSlotProvider] {
         var out: [NanoMuseSlotProvider] = []
         if let cloud = cloudProvider() { out.append(cloud) }
@@ -429,7 +429,7 @@ enum NanoMuseModelSlots {
     /// The instance new chats start on, if any.
     static func chatProviderId() -> String? { chatEntry()?.providerInstanceId }
 
-    /// Whether the chat slot could leave `instanceId` (nanoMuse Cloud, when its switch goes
+    /// Whether the chat slot could leave `instanceId` (NanoLika Cloud, when its switch goes
     /// off): new chats do not run on it, or a provider of one's own could take them
     /// (`NanoMuseSlotResolver.nextChat`). False is the refusal the switch shows as one sentence.
     static func canLeave(_ instanceId: String) -> Bool {
@@ -486,7 +486,7 @@ enum NanoMuseModelSlots {
     /// and the chat slot is the default for new ones; but the main chat is the one
     /// conversation the Chat tab always shows and is never new, so on 0.1.41 the Models page
     /// could not move it off the provider it started on: a tester who saved a key of their own
-    /// saw their side chats answer through it while the main chat kept reading nanoMuse Cloud
+    /// saw their side chats answer through it while the main chat kept reading NanoLika Cloud
     /// under the face. Now the main chat's binding moves with the slot (the same write as a
     /// pick in the chat's own picker, SessionModelPicker); side chats are left as they are.
     /// Nothing is written when the binding already says so, which also keeps the
@@ -522,7 +522,7 @@ enum NanoMuseModelSlots {
     /// The Cloud model a chat falls back to for one turn (NanoMuseCloudOnce): the relay's
     /// recommended chat model as an entry, else the Cloud group's first member, else the first
     /// Cloud model that chats. Asks for the sign-in alone, not the switch: the button that leads
-    /// here is the consent, so it works while *Use nanoMuse Cloud models* is off.
+    /// here is the consent, so it works while *Use NanoLika Cloud models* is off.
     static func cloudChatEntry() -> ModelEntry? {
         guard NanoMuseCloud.isSignedIn, let inst = NanoMuseCloud.instance else { return nil }
         let store = ProviderConfigStore.shared
@@ -535,7 +535,7 @@ enum NanoMuseModelSlots {
 
     // MARK: Image and video
 
-    /// The image slot as the person set it (nil when nothing was chosen): nanoMuse Cloud when
+    /// The image slot as the person set it (nil when nothing was chosen): NanoLika Cloud when
     /// they picked it, else the key they picked while it is still on the phone.
     static func imageChoice() -> NanoMuseSlotChoice? {
         if NanoMuseImageGen.preferRelay, let cloud = NanoMuseCloud.instance, NanoMuseCloud.modelsOn {
@@ -637,8 +637,8 @@ enum NanoMuseModelSlots {
 
 // MARK: - "Use nanoLika Cloud this time"
 
-/// A turn on a key of one's own failed and the person asked for nanoMuse Cloud once: while
-/// armed, the chat resolves its model to the relay's chat model (one `// nanoMuse:` line at the
+/// A turn on a key of one's own failed and the person asked for NanoLika Cloud once: while
+/// armed, the chat resolves its model to the relay's chat model (one `// NanoLika:` line at the
 /// top of `resolveCurrentEntry`), and nothing in the slots changes. Disarmed when the turn
 /// ends (`nmAfterTurn`), or after ten minutes if no turn ran.
 @MainActor

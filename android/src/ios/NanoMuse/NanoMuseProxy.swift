@@ -1,9 +1,9 @@
 //
 //  NanoMuseProxy.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Settings → Network → HTTP proxy for own providers: one HTTP proxy, per device, that only
-//  the requests to own-key providers and the ChatGPT plan go through. Never nanoMuse Cloud,
+//  the requests to own-key providers and the ChatGPT plan go through. Never NanoLika Cloud,
 //  the hub, a computer on the LAN or anything else the app fetches.
 //
 //  URLSession has no per-host proxy switch, so the proxy reaches a session as a proxy
@@ -237,7 +237,7 @@ enum NanoMuseProxy {
     }
 
     /// Whether `host` is the relay's (as `refreshHosts` last read it): a 413 or a bare 5xx from
-    /// there is nanoMuse Cloud's refusal, not another provider's (NanoMuseRelayRefusal).
+    /// there is NanoLika Cloud's refusal, not another provider's (NanoMuseRelayRefusal).
     static func isRelayHost(_ host: String) -> Bool {
         let h = host.lowercased()
         lock.lock()

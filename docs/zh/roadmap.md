@@ -80,15 +80,15 @@ Meta 的 Muse 定下了这类智能体的样子；下面是我们还落后于它
 
 ## 过去的版本 {#past-releases}
 
-每个版本都是从它的标签构建出来的一个 GitHub release，标题是 `nanoMuse <version> · <Codename>`；每一版的说明在 [releases/](../releases/)，逐条的记录是[更新日志](../../CHANGELOG.md)。
+每个版本都是从它的标签构建出来的一个 GitHub release，标题是 `NanoLika <version> · <Codename>`；每一版的说明在 [releases/](../releases/)，逐条的记录是[更新日志](../../CHANGELOG.md)。
 
 | 版本 | 代号 | 一句话 |
 |---|---|---|
-| 0.1.1 – 0.1.11 | Foundation … Hatch | OpenMinis 变成 nanoMuse：名字和形象、一条主对话、带范围的审批、记忆文件、动态、形象工作室、小龙 |
+| 0.1.1 – 0.1.11 | Foundation … Hatch | OpenMinis 变成 NanoLika：名字和形象、一条主对话、带范围的审批、记忆文件、动态、形象工作室、小龙 |
 | 0.1.12 Hands · 0.1.15 Stage | | 手机的屏幕当手，以及展示它干活的舞台 |
 | 0.1.13 Reach | | 手机驱动你的电脑（0.1.24 起由 hub 取代） |
-| 0.1.18 Open | | nanoMuse Cloud：不用 key 就能开始，注册向所有人开放（包含起草了但从未发布的 0.1.17 Doorstep） |
-| 0.1.19 Ensemble | | 每一台设备：桌面 App、hub 上的运行时、nanoMuse Web |
+| 0.1.18 Open | | NanoLika Cloud：不用 key 就能开始，注册向所有人开放（包含起草了但从未发布的 0.1.17 Doorstep） |
+| 0.1.19 Ensemble | | 每一台设备：桌面 App、hub 上的运行时、NanoLika Web |
 | 0.1.20 – 0.1.25 | Presence … Mirror | 账号优先、一个声音、邀请、手机号登录、每台设备上同一个形象 |
 | 0.1.26 – 0.1.30 | Window … Rooms | 展示站；桌面迁到 DeepSeek Harness，采用 Muse 的形态和房间 |
 | 0.1.31 Locks | | 审计留下的问题都合上了：任何 URL 里都没有令牌，远程控制须经同意 |
@@ -96,10 +96,10 @@ Meta 的 Muse 定下了这类智能体的样子；下面是我们还落后于它
 | 0.1.36 – 0.1.38 | Thread · Weave · Loom | 多台设备上同一条对话，先从主对话开始；桌面的手从 UI-TARS-desktop 移植过来，Mac 的权限交给一个辅助 App；文档站，以及一条命令的自己部署 |
 | 0.1.39 | Keys | 一份服务商目录，写明每把 key 覆盖什么，每个客户端和中继都有；ChatGPT 套餐可以用来登录；共用的设备上每个账号只看到自己的对话；手的点击在 Ubuntu 上能点准，Mac 辅助 App 保得住它的授权，iPhone 引导结束后不再崩溃；每种语言都补全；终端版去掉 |
 | 0.1.40 | Clear | iPhone 的输入框不再消失：它之前藏在底栏后面，现在是一个普通的行，设置里多了一个「输入框检查」页；手机上的每条聊天都属于一个账号，退出登录时会问你怎么处理它们；中继的每一种拒绝在每个客户端上都是一句话或一张卡片；中继上给运营者的「控制」「统计」「官网」页；Mac 上用 ScreenCaptureKit，不再有替代图片；Windows 在把 App 挪了位置的那次更新之后又能启动；桌面的灯光和手的光晕像手机上那样动起来 |
-| 0.1.41 | Choice | 设置 › 模型 的四行（对话、操作屏幕、生成图片、生成视频），Android、iPhone、桌面和网页都有；保存 key 之后的「用它来做什么」卡片；「自动」按一个顺序走（对话服务商，然后 nanoMuse Cloud，然后第一把能做的 key）；不悄悄回退，失败的一轮给「这次改用 nanoMuse Cloud」；桌面用你自己的 key 画图，换手的模型不用重启；`PUT /api/connections/image` 和 `/video`；README 以影片开场，论文上了 arXiv，文档站有简体中文版 |
-| 1.0.0 | Keel | 第一个稳定版：Android 和 iPhone 的手机 App、Mac、Windows 和 Linux 的桌面 App、网页控制台和中继，一个账号贯穿所有设备；nanoMuse Cloud 可以作为模型来源关掉，有自己 key 的设备退出登录也能用；主聊天跟着你选的对话模型走；模型选择器会折叠、能搜索；桌面上自己的 key 也能选思考深度；「我已经点过 Star」；桌面版等待 Windows 上慢的启动；回复跟随 App 的语言；`auto` 在带污点的外发和警告前会问；hub 和中继加固；人读到的话里不再有破折号 |
-| 1.0.1 | Ballast | 手机 App 有了自己的 URL scheme，不再和 OpenMinis 相撞；内容审核拒绝在每个客户端都是一句话，中继的健康页把它和上游错误分开计数；桌面端从别的设备收到的聊天能滚到开头，操作屏幕时呼吸灯整段亮着，Windows 上的形象会动了；网页控制台可以让某一轮走 nanoMuse Cloud；TestFlight 测试版通过了 Apple 的审核 |
+| 0.1.41 | Choice | 设置 › 模型 的四行（对话、操作屏幕、生成图片、生成视频），Android、iPhone、桌面和网页都有；保存 key 之后的「用它来做什么」卡片；「自动」按一个顺序走（对话服务商，然后 NanoLika Cloud，然后第一把能做的 key）；不悄悄回退，失败的一轮给「这次改用 NanoLika Cloud」；桌面用你自己的 key 画图，换手的模型不用重启；`PUT /api/connections/image` 和 `/video`；README 以影片开场，论文上了 arXiv，文档站有简体中文版 |
+| 1.0.0 | Keel | 第一个稳定版：Android 和 iPhone 的手机 App、Mac、Windows 和 Linux 的桌面 App、网页控制台和中继，一个账号贯穿所有设备；NanoLika Cloud 可以作为模型来源关掉，有自己 key 的设备退出登录也能用；主聊天跟着你选的对话模型走；模型选择器会折叠、能搜索；桌面上自己的 key 也能选思考深度；「我已经点过 Star」；桌面版等待 Windows 上慢的启动；回复跟随 App 的语言；`auto` 在带污点的外发和警告前会问；hub 和中继加固；人读到的话里不再有破折号 |
+| 1.0.1 | Ballast | 手机 App 有了自己的 URL scheme，不再和 OpenMinis 相撞；内容审核拒绝在每个客户端都是一句话，中继的健康页把它和上游错误分开计数；桌面端从别的设备收到的聊天能滚到开头，操作屏幕时呼吸灯整段亮着，Windows 上的形象会动了；网页控制台可以让某一轮走 NanoLika Cloud；TestFlight 测试版通过了 Apple 的审核 |
 | 1.0.2 | Trim | 把项目的每一部分过了一遍：Sentinel 的污点规则在自动模式下对 `shell` 和 `send_email` 也成立；Android App 能和 OpenMinis 装在一起启动；桌面端在运行时拒绝某一步时重新弹出权限卡，Linux 上读图不再弄死 harness，Windows 的窗口按钮不再盖住页面按钮；记忆整理判断不了的就拒绝；`doctor` 会点名没人读的配置键；网页控制台和命令行的报错更清楚；iPhone 的页面有了全部九种语言；文档里没有破折号了 |
 | 1.0.3 | Helm | 聊天在每台设备上长得一样：和输入框一样宽的悬浮毛玻璃底栏、主题底色上的黑白药丸、当顶栏的一层遮罩，从 @Ichiro786 的 Android 改版带到 iPhone、网页控制台和桌面端；Android、iPhone 和桌面端可以用自己的一段视频当脸；桌面端和网页控制台能同时配置多个 OpenAI 兼容端点；一个下午报来的十个 Android 问题都修了，其中包括又能发送的自有 Anthropic key；iPhone 的操作按钮能发起语音提示；OpenCode Go 在每个客户端上可用；中继的镜像以非特权用户运行 |
 | 1.0.4 | Compass | 1.0.3 之后一周的整体体检：中继在朋友第一次使用时才发邀请奖励、能看出谁邀请了谁、记下操作者的每一步；运行时把 MCP 服务器的密钥放进保险库，建例行、触发器或目标前先问一句；网页控制台读屏可用、菜单能用键盘；桌面端在能播的电脑上接受 HEVC 视频，在 Cursor、Codex 和 Claude Code 旁边列出 DeepSeek Harness；Android 手机加密保存代理密码、跟随选中的模型组；iPad 的聊天是一根列、底栏重新是玻璃，别的设备上的 Muse 问起某一步时在手机上回答；You.com 不用 key 也能搜索 |
-| 1.0.5 | Lookout | Compass 次日的第二次体检：运维控制台能搜人、搜账单、搜事件；停用的账号从登录入口探不出来；运行时列出 DeepSeek Harness，一个地址只对应一个端点；桌面端八个失灵的按钮又能用了，退出前先护住进行中的工作，hub 断线一分钟内就能发现，Windows 版带上了更新所需的文件；Android 的审批卡片装得下屏幕，ChatGPT 登录在代理下有了出路；iPhone 的对话从顶栏底下滑过、Siri 短语有九种语言、能显示在别处设的 emoji 脸；手机和桌面端都安静地写每日动态；文档用 nanoMuse 自己的话描述它 |
+| 1.0.5 | Lookout | Compass 次日的第二次体检：运维控制台能搜人、搜账单、搜事件；停用的账号从登录入口探不出来；运行时列出 DeepSeek Harness，一个地址只对应一个端点；桌面端八个失灵的按钮又能用了，退出前先护住进行中的工作，hub 断线一分钟内就能发现，Windows 版带上了更新所需的文件；Android 的审批卡片装得下屏幕，ChatGPT 登录在代理下有了出路；iPhone 的对话从顶栏底下滑过、Siri 短语有九种语言、能显示在别处设的 emoji 脸；手机和桌面端都安静地写每日动态；文档用 NanoLika 自己的话描述它 |

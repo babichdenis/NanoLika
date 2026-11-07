@@ -1,6 +1,6 @@
 //
 //  NanoMuseFaces.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The agent's face: the five moods, the dragon that every account starts
 //  with, and the look the user drew in the avatar studio (kept on disk and

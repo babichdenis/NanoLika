@@ -57,7 +57,7 @@ import io.github.nanomuse.ui.muse.MuseRowDivider
 import io.github.nanomuse.ui.muse.MuseSectionLabel
 
 /**
- * The account's devices on the hub, under the nanoMuse Cloud account: this phone's two
+ * The account's devices on the hub, under the NanoLika Cloud account: this phone's two
  * switches (be reachable; be operable), its name, the other devices with an online dot, and
  * the web console's address. Shown only while signed in.
  */

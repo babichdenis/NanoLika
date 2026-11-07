@@ -1,6 +1,6 @@
 //
 //  NanoMuseAvatarMotion.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The face in motion: one short looping clip per mood, drawn from that
 //  mood's pose by the video model — Muse's fixed set: a head shake and a

@@ -1,6 +1,6 @@
-# 自己部署 nanoMuse
+# 自己部署 NanoLika
 
-nanoMuse 是跑在你自己设备上的一个智能体，里面没有任何东西非得经过我们的服务器。自己运行它有三条路，从最省事到最费事。多数人要的是第一条；想要自己的登录的一家人或一个小团体要第二条；第三条是给想在自己机器上跑网页版的人。
+NanoLika 是跑在你自己设备上的一个智能体，里面没有任何东西非得经过我们的服务器。自己运行它有三条路，从最省事到最费事。多数人要的是第一条；想要自己的登录的一家人或一个小团体要第二条；第三条是给想在自己机器上跑网页版的人。
 
 | | 你要运行什么 | 你得到什么 |
 |---|---|---|
@@ -77,7 +77,7 @@ bash scripts/self-host.sh --local --bind 0.0.0.0   # reachable from the phones o
 ### 更新 {#updating}
 
 ```bash
-cd nanoMuse && git pull
+cd NanoLika && git pull
 bash scripts/self-host.sh        # Enter through the questions; secrets and accounts are kept
 # or: cd cloud && docker compose up -d --build
 ```

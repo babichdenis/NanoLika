@@ -30,12 +30,12 @@
   <a href="https://discord.gg/bkTySmm28X"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-**nanoMuse 是一個開源的個人智慧體，面向你的每一台裝置。** 一個有名字、有自己形象的智慧體，和 Meta 的 [Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) 是同一類東西：不只回答問題，而是動手做事；App 關了也繼續做；記得你；遇到無法復原的操作會先停下來問你。
+**NanoLika 是一個開源的個人智慧體，面向你的每一台裝置。** 一個有名字、有自己形象的智慧體，和 Meta 的 [Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) 是同一類東西：不只回答問題，而是動手做事；App 關了也繼續做；記得你；遇到無法復原的操作會先停下來問你。
 
 *nano* 的意思是完整的一套，小到你自己就能跑、能部署：手機 App、桌面 App、網頁主控台，還有把它們連在一起的中繼，都在這個儲存庫裡，GPL-3.0-or-later。**[免費、開源、非營利。一起把它做好。](../../CONTRIBUTING.md)** 登入就有一份免費的模型額度，走社群中繼，錢是開發者出的；用完可以[換成自己的 key](../own-key.md)。同一套中繼也能跑在你自己的伺服器上，資料不必出門。最新版本：**1.0.5 Lookout**，[發行說明](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.5) · [線上體驗](https://demo.nanomuse.dev/)。
 
 > [!NOTE]
-> **nanoMuse 在持續進化**
+> **NanoLika 在持續進化**
 >
 > 個人智慧體不該只長在別人的雲裡，nanoMuse 想做一個開源、低成本的替代方案：裝在自己的裝置上，模型自己選，中繼也能自己架。我們希望和全球的開發者、使用者一起，讓每個人真正擁有自己的個人智慧體。開個 [issue](https://github.com/nano-muse/nanoMuse/issues/new/choose) 或發個 [PR](../../CONTRIBUTING.md) 都是在幫 nanoMuse 變得更好。
 
@@ -48,8 +48,8 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 - `2026-10-13` ⭐ GitHub 上 1000 個 star，距首發十八天，期間連續四天進入 GitHub Trending 的 Swift 榜（[Trendshift](https://trendshift.io/repositories/286894) 的記錄：10 月 7 日第七，10 月 10 日第四）。謝謝每一次試用、每一個問題回報和每一個 pull request。我們會繼續做下去：每隔幾天一個版本，下一步做什麼寫在[路線圖](../roadmap.md)裡。
 - `2026-10-09` 🚀 版本 [1.0.0 Keel](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.0) 發布，手機、電腦和瀏覽器都有；安裝在上一版之上，資料保留，每一處改動都寫在發布說明裡。
 - `2026-10-08` 🤗 我們的論文登上 [Hugging Face Daily Papers](https://huggingface.co/papers/2610.08699)，在 10 月 8 日的榜單上排第三；歡迎到論文頁提問和留言。
-- `2026-10-07` 📄 我們的論文已發布在 [arXiv](https://arxiv.org/abs/2610.08699)：《nanoMuse: An Open-Source Personal Agent for Every Device You Own》，作者 Guangyi Liu、Yong Liu、Jiangning Zhang（浙江大學）；引用格式見本頁末尾。
-- `2026-09-25` 🎉 nanoMuse 以 GPL-3.0-or-later 發布在 GitHub：一個基於 OpenMinis 1.13 的 Android 應用程式；中繼、電腦版和 iPhone 版在隨後幾天陸續到來。
+- `2026-10-07` 📄 我們的論文已發布在 [arXiv](https://arxiv.org/abs/2610.08699)：《NanoLika: An Open-Source Personal Agent for Every Device You Own》，作者 Guangyi Liu、Yong Liu、Jiangning Zhang（浙江大學）；引用格式見本頁末尾。
+- `2026-09-25` 🎉 NanoLika 以 GPL-3.0-or-later 發布在 GitHub：一個基於 OpenMinis 1.13 的 Android 應用程式；中繼、電腦版和 iPhone 版在隨後幾天陸續到來。
 
 全部版本：[releases](https://github.com/nano-muse/nanoMuse/releases)。
 
@@ -57,7 +57,7 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 
 | | |
 |---|---|
-| **瀏覽器** | [demo.nanomuse.dev](https://demo.nanomuse.dev/)：一台模擬手機上的 nanoMuse，登入後體驗。這是示範；下面的用戶端才是正式的 |
+| **瀏覽器** | [demo.nanomuse.dev](https://demo.nanomuse.dev/)：一台模擬手機上的 NanoLika，登入後體驗。這是示範；下面的用戶端才是正式的 |
 | **Android** 8.0 以上，arm64 | [nanoMuse-1.0.5-arm64.apk](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-1.0.5-arm64.apk)：每個版本都用同一把金鑰簽署，直接覆蓋安裝即可升級 |
 | **iPhone / iPad** | [TestFlight](https://testflight.apple.com/join/ZHexbDqc)：測試版，已通過 Apple 的 beta 審核；從這個連結安裝 · [iOS](../ios.md) |
 | **macOS** 12 以上 | [Apple 晶片](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-Desktop-1.0.5-mac-arm64.dmg) · [Intel](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-Desktop-1.0.5-mac-x64.dmg)。未經公證：第一次右鍵 → 打開 |
@@ -90,7 +90,7 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 
 ## 怎麼運作
 
-每台裝置上都跑著自己的智慧體：手機上在 APK 裡（proot 下的 Alpine Linux、shell、瀏覽器、MCP），電腦上在 nanoMuse Desktop 裡（DeepSeek Harness 加上負責「手」的 Python 執行環境）。登入後它們在中繼上相遇，可以互相請對方做事；對話的文字經中繼傳遞，檔案和截圖留在產生它們的裝置上。
+每台裝置上都跑著自己的智慧體：手機上在 APK 裡（proot 下的 Alpine Linux、shell、瀏覽器、MCP），電腦上在 NanoLika Desktop 裡（DeepSeek Harness 加上負責「手」的 Python 執行環境）。登入後它們在中繼上相遇，可以互相請對方做事；對話的文字經中繼傳遞，檔案和截圖留在產生它們的裝置上。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/nano-muse/nanoMuse/main/assets/brand/devices-loop.png" alt="Android、桌面端（Mac、Windows、Linux）、iPhone 和 iPad、網頁版圍繞同一個帳號：中繼負責登入，並在裝置之間同步對話" width="92%">
@@ -100,7 +100,7 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 
 ## 和 Muse、OpenMinis 的比較
 
-| | Meta Muse | OpenMinis | nanoMuse |
+| | Meta Muse | OpenMinis | NanoLika |
 |---|---|---|---|
 | 智慧體跑在哪 | 每人一台雲端 VM | 裝了它的那台手機 | 你的手機、你的電腦，或者你自己的伺服器，一個帳號串起來 |
 | 沒有 API 的 App | 碰不到；VM 不碰你的裝置 | Android 上的一個無障礙 CLI | 手機和電腦上都把螢幕當手：看截圖，先試 API，登入由你接管。iOS 上沒有，系統不允許 |
@@ -148,11 +148,11 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 
 ## ⭐️ 引用
 
-如果 nanoMuse 對你有幫助，歡迎引用我們的論文。
+如果 NanoLika 對你有幫助，歡迎引用我們的論文。
 
 ```bibtex
 @misc{liu2026nanomuseopensourcepersonalagent,
-      title={nanoMuse: An Open-Source Personal Agent for Every Device You Own}, 
+      title={NanoLika: An Open-Source Personal Agent for Every Device You Own}, 
       author={Guangyi Liu and Yong Liu and Jiangning Zhang},
       year={2026},
       eprint={2610.08699},
@@ -164,7 +164,7 @@ https://github.com/user-attachments/assets/bf0ec2ae-59aa-4358-9dd0-c9d045ee7bee
 
 ## 致謝
 
-nanoMuse 站在別人的工作之上；條款見 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)。
+NanoLika 站在別人的工作之上；條款見 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)。
 
 - [OpenMinis](https://github.com/OpenMinis/OpenMinis)：手機 App 所基於的裝置端智慧體，沙箱來自 [proot](https://github.com/nano-muse/proot) 和 [Alpine Linux](https://alpinelinux.org/)。
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：桌面 App 作為外掛程式執行在它上面。
@@ -173,13 +173,13 @@ nanoMuse 站在別人的工作之上；條款見 [THIRD_PARTY_NOTICES.md](../../
 
 ## 聲明
 
-nanoMuse 是獨立的社群專案，與 Meta Platforms, Inc. 無關，也未獲其背書；Muse 是他們的商標。小龍是本專案自己的。
+NanoLika 是獨立的社群專案，與 Meta Platforms, Inc. 無關，也未獲其背書；Muse 是他們的商標。小龍是本專案自己的。
 
 ## 授權
 
 [GPL-3.0-or-later](../../LICENSE)。手機 App 基於 OpenMinis 1.13（GPL-3.0），自 2026-09-24 起修改，見 [NOTICE](../../NOTICE)。Python 這一支更早的版本採 MIT 授權（tag `pre-openminis`）。
 
 <p align="center">
-  <em>感謝來訪 ✨ nanoMuse。</em><br><br>
+  <em>感謝來訪 ✨ NanoLika。</em><br><br>
   <img src="https://hits.sh/github.com/nano-muse/nanoMuse.svg?label=visitors&color=0a66e4&extraCount=16719" alt="Visitors">
 </p>

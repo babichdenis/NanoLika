@@ -24,7 +24,7 @@
 
 读取是尽力而为：解析不了的一行跳过，目录不存在就当这个助手没有会话。`~` 是用户的主目录，除非 `NANOMUSE_CODING_HOME` 指向了别的目录（比如一个把宿主机的 CLI 主目录挂到别处的容器，或者一个测试）。一个会话列出它的助手、id、标题（第一条用户消息）、工作区、时间戳、消息数、最后一轮对话，以及是否 `resumable`。Cursor 的 IDE 聊天能读但不能从 CLI 续上（`resumable: false`，`source: "ide"`）：发给它的消息会直接作为一个新的 CLI 聊天在同一个工作区里发出，引用旧聊天的标题和最后一轮对话，运行结果写明 `resumed: false`；App 会在输入框上方说明这一点。当一个被存储标为可续的聊天在 CLI 那里查无此号时，走的也是同样的回退。
 
-dsh 就是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：`dsh web` 和 DeepSeek 自己的桌面应用里的聊天，存在 `~/.dsh` 下。运行时和 nanoMuse 桌面版都能读取并驱动它们；运行时用它的依赖 `zstandard` 读取这个存储。nanoMuse 桌面版自己的聊天存在它自己的目录里，不在其中。
+dsh 就是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：`dsh web` 和 DeepSeek 自己的桌面应用里的聊天，存在 `~/.dsh` 下。运行时和 NanoLika 桌面版都能读取并驱动它们；运行时用它的依赖 `zstandard` 读取这个存储。NanoLika 桌面版自己的聊天存在它自己的目录里，不在其中。
 
 dsh 的存储有两点要说明：它是 **zstd** 压缩的，而且是随着会话写入**一帧帧追加**的，所以只解压一次会在第一帧结束处停下，长聊天会丢掉开头几行之后的所有内容。因此会一帧接一帧地读到文件末尾；最后一帧如果正写到一半，只丢掉这一帧。另有两种会话不是人聊过的对话，会被排除：`source.kind` 不是 `user` 的 `user/message`（运行时上下文、技能目录、后台任务通知都是以这种方式到达的），以及 header 里写着 `origin: "subagent"` 或带有 `parentSession` 的会话。
 
@@ -38,7 +38,7 @@ dsh 也是唯一不只从 `PATH` 上找命令行的助手：桌面版把 harness
 
 每个助手都以它在那台电脑上拥有的权限运行（Codex 在 `workspace-write` 下，Claude Code 带 `acceptEdits`，Cursor 带 `--force`，dsh headless 按它自己的沙箱策略），并且在那里改文件。所以发一条消息被当作在那台电脑上运行一条命令来对待：请求只在同一个账号的设备之间传递，走该账号自己的 hub 会话，而且那台电脑可以完全拒绝远程控制（「远程控制」关掉后，`coding.*` 只在本机可用）。在桌面版上，`coding.send` 和 `coding.stop` 过的是和 `shell`、`files` 同一道关：「远程控制」关着时，尚未信任的设备会在屏幕上弹出一张卡片，由回答（这一次、总是、不行，或没人及时回答）决定；只读动作直接应答，不问。
 
-助手自己的 API key 和登录状态是它们自己的；nanoMuse 从不接触。记录是从磁盘读出来给你看的；除了发起请求的那台设备，不会发给任何地方。
+助手自己的 API key 和登录状态是它们自己的；NanoLika 从不接触。记录是从磁盘读出来给你看的；除了发起请求的那台设备，不会发给任何地方。
 
 ## API {#the-api}
 

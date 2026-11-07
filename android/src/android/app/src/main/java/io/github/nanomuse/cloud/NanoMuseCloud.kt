@@ -30,7 +30,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * nanoMuse Cloud: the "start now" path. An e-mail address, a code, and the
+ * NanoLika Cloud: the "start now" path. An e-mail address, a code, and the
  * app has a provider with a starter allowance — no key of one's own needed. The server is the
  * relay in `cloud/` of the repository; anyone can run one, and "Use a different server" on the
  * sign-in screen points the phone at it ([RelayAddress]).
@@ -256,7 +256,7 @@ object NanoMuseCloud {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /**
-     * The relay this phone talks to: nanoMuse Cloud, or the one the person named on the
+     * The relay this phone talks to: NanoLika Cloud, or the one the person named on the
      * sign-in screen ("Use a different server" — people who run their own, 0.1.38). Kept
      * across launches; the hub, the console links and the media models all read it from here.
      */
@@ -288,10 +288,10 @@ object NanoMuseCloud {
     }
 
     /**
-     * Whether nanoMuse Cloud is one of the model sources: signed in and the Cloud provider
+     * Whether NanoLika Cloud is one of the model sources: signed in and the Cloud provider
      * instance switched on (upstream's `isEnabled`, the switch Settings › Models shows as *Use
-     * nanoMuse Cloud models*). Off, no automatic choice and no side call (title, memory,
-     * pictures, clips) goes through the relay; only the explicit *Use nanoMuse Cloud this time*
+     * NanoLika Cloud models*). Off, no automatic choice and no side call (title, memory,
+     * pictures, clips) goes through the relay; only the explicit *Use NanoLika Cloud this time*
      * button does ([io.github.nanomuse.chat.CloudRetry]). The sign-in itself is untouched:
      * sync, the hub and the account page keep working.
      */
@@ -1130,7 +1130,7 @@ object NanoMuseCloud {
     private fun request(context: Context, method: String, path: String, body: JSONObject?, token: String?): Request {
         val builder = Request.Builder().url(baseUrl(context) + path)
         if (token != null) builder.header("Authorization", "Bearer $token")
-        builder.header("User-Agent", "nanoMuse-Android/${BuildConfig.VERSION_NAME}")
+        builder.header("User-Agent", "NanoLika-Android/${BuildConfig.VERSION_NAME}")
         when (method) {
             "GET" -> builder.get()
             else -> builder.method(method, (body?.toString() ?: "{}").toRequestBody(json))

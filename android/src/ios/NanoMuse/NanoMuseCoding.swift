@@ -1,6 +1,6 @@
 //
 //  NanoMuseCoding.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The coding agents on another computer of the account, over the hub:
 //  the `coding.*` actions the runtime there answers (docs/coding-agents.md).

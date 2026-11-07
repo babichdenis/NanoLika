@@ -88,7 +88,7 @@ fun ProviderDetailScreen(
     onModelEntryClick: (String) -> Unit = {},
     onAddCustomModel: () -> Unit = {},
     onVoiceServiceClick: (String) -> Unit = {},
-    onKeyAdded: (String) -> Unit = {}, // nanoMuse: a key where there was none → the "Use it for" card
+    onKeyAdded: (String) -> Unit = {}, // NanoLika: a key where there was none → the "Use it for" card
 ) {
     val config by providerRepository.config.collectAsState()
     val instance = config.instances.find { it.id == instanceId }
@@ -209,7 +209,7 @@ fun ProviderDetailScreen(
                             keyVisible = false
                         },
                         onSave = {
-                            val nmFirstKey = storedKey.isBlank() && editKeyValue.isNotBlank() // nanoMuse
+                            val nmFirstKey = storedKey.isBlank() && editKeyValue.isNotBlank() // NanoLika
                             providerRepository.saveApiKey(instanceId, editKeyValue)
                             // [T-android-provider-apikey-save-stale] Reflect the
                             // just-saved value in UI state immediately rather than
@@ -219,7 +219,7 @@ fun ProviderDetailScreen(
                             isEditingKey = false
                             editKeyValue = ""
                             keyVisible = false
-                            if (nmFirstKey) onKeyAdded(instanceId) // nanoMuse
+                            if (nmFirstKey) onKeyAdded(instanceId) // NanoLika
                         },
                     )
                 }
@@ -244,7 +244,7 @@ fun ProviderDetailScreen(
 
         // ─── Custom Base URL ────────────────────────────────────────
         if (instance.providerType != ProviderType.openRouter) {
-            // nanoMuse: plain http:// only for addresses on the local network (io.github.nanomuse.net.LanOnly)
+            // NanoLika: plain http:// only for addresses on the local network (io.github.nanomuse.net.LanOnly)
             val baseUrlProblem = io.github.nanomuse.net.LanOnly.refusedHost(customBaseURL)?.let { stringResource(R.string.nm_lan_only_https, it) }
             SettingsSection(header = stringResource(R.string.provider_detail_custom_api_base), footer = baseUrlProblem) {
                 // URL input row — tighter vertical padding to match T226's
@@ -325,7 +325,7 @@ fun ProviderDetailScreen(
                 // Save action — TextButton presentation so it reads as a list
                 // row rather than a floating filled button inside the card.
                 MinisSmallTextButton(
-                    enabled = baseUrlProblem == null, // nanoMuse: LanOnly
+                    enabled = baseUrlProblem == null, // NanoLika: LanOnly
                     onClick = {
                         providerRepository.updateInstance(
                             instance.copy(
@@ -488,7 +488,7 @@ fun ProviderDetailScreen(
 
         // ─── Status ─────────────────────────────────────────────────
         SettingsSection(header = stringResource(R.string.provider_detail_status)) {
-            // nanoMuse: the Cloud instance off is the same switch as Settings › Models (refused, with the
+            // NanoLika: the Cloud instance off is the same switch as Settings › Models (refused, with the
             // sentence, while nothing else could answer); a provider of the person's own off while new
             // chats answered through it moves the chat slot to the next source (ModelSlots.chatLeaves)
             val nmCloud = io.github.nanomuse.cloud.NanoMuseCloud.instance(exportContext)?.id == instanceId
@@ -497,7 +497,7 @@ fun ProviderDetailScreen(
                 title = stringResource(R.string.provider_detail_enabled),
                 checked = isEnabled,
                 onCheckedChange = {
-                    if (nmCloud) { // nanoMuse: see above
+                    if (nmCloud) { // NanoLika: see above
                         val done = io.github.nanomuse.cloud.NanoMuseCloud.setModelsOn(exportContext, it)
                         nmRefused = !done
                         if (done) isEnabled = it
@@ -505,12 +505,12 @@ fun ProviderDetailScreen(
                         isEnabled = it
                         providerRepository.updateInstance(instance.copy(isEnabled = it))
                         AppLogger.info(TAG, "Set enabled=$it for ${instance.id}")
-                        if (!it) io.github.nanomuse.models.ModelSlots.chatLeaves(exportContext, instance.id) // nanoMuse: see above
+                        if (!it) io.github.nanomuse.models.ModelSlots.chatLeaves(exportContext, instance.id) // NanoLika: see above
                     }
                 },
                 showDivider = false,
             )
-            if (nmRefused) { // nanoMuse: the refusal, under the switch
+            if (nmRefused) { // NanoLika: the refusal, under the switch
                 Text(
                     text = stringResource(R.string.nm_models_cloud_off_refused),
                     style = MaterialTheme.typography.bodySmall,
@@ -747,7 +747,7 @@ fun ProviderDetailScreen(
 
         // nanoMuse: the Cloud instance is the account itself (io.github.nanomuse.cloud.NanoMuseCloud);
         // deleting it here signed the phone out. It is switched off above instead, and signed out
-        // under Settings › nanoMuse Cloud.
+        // under Settings › NanoLika Cloud.
         if (io.github.nanomuse.cloud.NanoMuseCloud.instance(exportContext)?.id == instanceId) {
             Text(
                 text = stringResource(R.string.nm_cloud_provider_no_delete),
@@ -955,7 +955,7 @@ private fun OAuthCredentialBlock(
         ) {
             Text(stringResource(R.string.provider_detail_sign_in))
         }
-        // nanoMuse: a proxy or VPN can swallow the localhost callback; after ten seconds the person can paste the address (#441).
+        // NanoLika: a proxy or VPN can swallow the localhost callback; after ten seconds the person can paste the address (#441).
         io.github.nanomuse.oauth.OAuthCallbackRescue(active = isAuthenticating, providerType = instance.providerType)
     }
 }

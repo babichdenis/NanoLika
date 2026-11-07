@@ -1,6 +1,6 @@
 //
 //  NanoMuseComposerCheck.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Settings → Appearance → Composer check: what the device knows about the
 //  chat's composer, readable without a Mac. Four rounds of "the input field

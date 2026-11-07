@@ -78,15 +78,15 @@ final class ChatMessage: Identifiable, ObservableObject {
     var lastSourceSortOrder: Int?
     /// Links back to the QueuedPrompt so we can withdraw it.
     var queuedPromptId: UUID?
-    /// nanoMuse: C8 — the device this row was written on when it came down through account sync
+    /// NanoLika: C8 — the device this row was written on when it came down through account sync
     /// (the bubble's "From {device}" caption); nil for this phone's own rows.
-    var nmFromDevice: String? // nanoMuse:
-    /// nanoMuse: a routine sent this user row (the daily feed, a check-in, a routine of the person's):
+    var nmFromDevice: String? // NanoLika:
+    /// NanoLika: a routine sent this user row (the daily feed, a check-in, a routine of the person's):
     /// the chat shows it as one quiet line, not a bubble in their voice (NanoMuseRoutineWakes).
-    var nmRoutine: NanoMuseRoutineWakes.Wake? // nanoMuse:
-    /// nanoMuse: C9 — the device at work on this conversation, shown as "{device} is working…"
+    var nmRoutine: NanoMuseRoutineWakes.Wake? // NanoLika:
+    /// NanoLika: C9 — the device at work on this conversation, shown as "{device} is working…"
     /// under this row while it is the last one and a remote user line (NanoMusePresence).
-    @Published var nmWorkingDevice: String? // nanoMuse:
+    @Published var nmWorkingDevice: String? // NanoLika:
     let timestamp = Date()
 
     init(role: ChatMessageRole, content: String, blocks: [AssistantBlock] = [], isQueued: Bool = false) {

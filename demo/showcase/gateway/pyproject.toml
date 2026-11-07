@@ -1,7 +1,7 @@
 [project]
 name = "nanomuse-showcase-gateway"
 version = "0.3.0"
-description = "Hands a visitor of the nanoMuse showcase a private, short-lived nanoMuse and meters what it spends"
+description = "Hands a visitor of the NanoLika showcase a private, short-lived NanoLika and meters what it spends"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 dependencies = [

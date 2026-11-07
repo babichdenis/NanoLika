@@ -8,15 +8,15 @@ import io.github.nanomuse.home.MainChat
  * default for new ones; but the main chat is the one conversation the home always shows and is
  * never new, so on 0.1.41 the Models page could not move it off the provider it started on: a
  * person who saved a key of their own saw their side chats answer through it while the main chat
- * kept nanoMuse Cloud under the face. Now the main chat's binding moves with the slot, as the
+ * kept NanoLika Cloud under the face. Now the main chat's binding moves with the slot, as the
  * iPhone does (`NanoMuseModelSlots.mainChatFollows`); side chats are left as they are.
  *
  * A chat that has no row yet (a draft: the main chat before its first message, a new chat
  * opened and not yet written to) follows too. Its view-model resolved the default when it was
  * built and keeps that provider until it is told otherwise, so without this a draft main chat
  * answered through the provider the default was on when the home opened: a person who signed
- * in to nanoMuse Cloud after a plan sign-in (the sign-in gives the account a fresh draft main
- * chat), then picked a Cloud model under Settings › Models, saw the row say nanoMuse Cloud
+ * in to NanoLika Cloud after a plan sign-in (the sign-in gives the account a fresh draft main
+ * chat), then picked a Cloud model under Settings › Models, saw the row say NanoLika Cloud
  * while the first message still went through the plan. A draft opened on a group of its own
  * (new chat in a group) is not new in this sense and keeps that group.
  *

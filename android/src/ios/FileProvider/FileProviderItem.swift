@@ -32,7 +32,7 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     }
 
     var filename: String {
-        if isRoot { return "nanoMuse" }
+        if isRoot { return "NanoLika" }
         return fileURL.lastPathComponent
     }
 

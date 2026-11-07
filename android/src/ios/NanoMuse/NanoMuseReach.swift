@@ -1,6 +1,6 @@
 //
 //  NanoMuseReach.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Reaching the account's other devices from this iPhone through the hub:
 //  open a link there, send a note, ask for a screenshot, run a shell

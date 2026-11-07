@@ -1,4 +1,4 @@
-import Combine // nanoMuse: NanoMuseStar publishes its pending ask
+import Combine // NanoLika: NanoMuseStar publishes its pending ask
 import Foundation
 import UIKit
 

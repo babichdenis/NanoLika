@@ -1,6 +1,6 @@
 //
 //  NanoMuseAvatarFlow.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Changing the face from inside the conversation, the way Muse does it: a
 //  message such as "把虚拟形象换成一只小狗" / "change your avatar to a corgi"

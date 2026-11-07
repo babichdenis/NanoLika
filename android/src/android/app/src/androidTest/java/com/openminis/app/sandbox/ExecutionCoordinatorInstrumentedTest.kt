@@ -51,7 +51,7 @@ class ExecutionCoordinatorInstrumentedTest {
         val sessionId = "session-mount-test"
         val result = ExecutionCoordinator.execute(sessionId, "echo hello")
 
-        // nanoMuse: the coordinator keeps one shell per session; there is no single mounted id.
+        // NanoLika: the coordinator keeps one shell per session; there is no single mounted id.
         assertEquals(0, result.exitCode)
         assertTrue(ExecutionCoordinator.hasShell(sessionId))
     }
@@ -60,7 +60,7 @@ class ExecutionCoordinatorInstrumentedTest {
     fun executeSwitchesSessionMounts() = runBlocking {
         skipIfNoBoot()
 
-        // nanoMuse: sessions no longer swap one mount; each keeps its own shell side by side.
+        // NanoLika: sessions no longer swap one mount; each keeps its own shell side by side.
         val resultA = ExecutionCoordinator.execute("session-A", "echo a")
         assertEquals(0, resultA.exitCode)
         assertTrue(ExecutionCoordinator.hasShell("session-A"))
@@ -84,7 +84,7 @@ class ExecutionCoordinatorInstrumentedTest {
 
         // Mounts should remain the same (not cleared and re-added)
         assertEquals(mountCount, PRootKernel.bindMounts.size)
-        // nanoMuse: the session's shell is reused, not remounted.
+        // NanoLika: the session's shell is reused, not remounted.
         assertTrue(ExecutionCoordinator.hasShell("session-X"))
     }
 
@@ -97,7 +97,7 @@ class ExecutionCoordinatorInstrumentedTest {
         // Should have session-level + global bind mounts
         // Session: attachments, offloads, workspace, browser (4)
         // Global: memory, skills (2)
-        // nanoMuse: the coordinator's global set is memory, skills, shared and mcp-servers, so eight mounts in all.
+        // NanoLika: the coordinator's global set is memory, skills, shared and mcp-servers, so eight mounts in all.
         assertEquals(8, PRootKernel.bindMounts.size)
 
         // Verify session-level mounts
@@ -242,13 +242,13 @@ class ExecutionCoordinatorInstrumentedTest {
         skipIfNoBoot()
 
         ExecutionCoordinator.execute("session-terminate", "echo test")
-        // nanoMuse: observe the session's shell instead of the removed mountedSessionId.
+        // NanoLika: observe the session's shell instead of the removed mountedSessionId.
         assertTrue(ExecutionCoordinator.hasShell("session-terminate"))
         assertTrue(PRootKernel.bindMounts.isNotEmpty())
 
         ExecutionCoordinator.sessionDidTerminate("session-terminate")
 
-        // nanoMuse: sessionDidTerminate stops and drops the shell; it does not touch the
+        // NanoLika: sessionDidTerminate stops and drops the shell; it does not touch the
         // kernel's bind mount table, so only the registry entry is asserted.
         assertFalse(ExecutionCoordinator.hasShell("session-terminate"))
     }
@@ -262,7 +262,7 @@ class ExecutionCoordinatorInstrumentedTest {
 
         ExecutionCoordinator.sessionDidTerminate("session-other")
 
-        // nanoMuse: terminating another session leaves this session's shell in place.
+        // NanoLika: terminating another session leaves this session's shell in place.
         assertTrue(ExecutionCoordinator.hasShell("session-keep"))
         assertFalse(ExecutionCoordinator.hasShell("session-other"))
         assertEquals(mountsBefore, PRootKernel.bindMounts.size)
@@ -271,7 +271,7 @@ class ExecutionCoordinatorInstrumentedTest {
     @Test
     fun sessionDidTerminateIsNoOpWhenNoSession() {
         ExecutionCoordinator.sessionDidTerminate("any-session")
-        // nanoMuse: nothing was registered for this id, so nothing is registered afterwards.
+        // NanoLika: nothing was registered for this id, so nothing is registered afterwards.
         assertFalse(ExecutionCoordinator.hasShell("any-session"))
     }
 
@@ -362,12 +362,12 @@ class ExecutionCoordinatorInstrumentedTest {
         PRootKernel.clearBindMounts()
         PRootKernel.customEnvironment.clear()
 
-        // nanoMuse: there is no mountedSessionId field to reset any more; stop and drop every
+        // NanoLika: there is no mountedSessionId field to reset any more; stop and drop every
         // per-session shell a previous test may have left behind instead.
         testSessionIds.forEach { ExecutionCoordinator.sessionDidTerminate(it) }
     }
 
-    // nanoMuse: shared between the per-session reset above and the directory cleanup below.
+    // NanoLika: shared between the per-session reset above and the directory cleanup below.
     private val testSessionIds = listOf("session-mount-test", "session-A", "session-B", "session-X",
         "session-mounts", "session-dirs-test", "session-verify-paths",
         "session-output", "session-fail", "session-ok", "session-timeout",

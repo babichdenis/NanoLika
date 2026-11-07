@@ -212,7 +212,7 @@ extension AIChatViewModel {
                 currentEntryId = nextEntryId
                 currentProvider = await makeAgentProvider(for: nextEntry)
                 // Rebuild system prompt for the new model's capabilities
-                // nanoMuse: model metadata and session state remain after the cache-stable base.
+                // NanoLika: model metadata and session state remain after the cache-stable base.
                 currentSystemPrompt = NanoMusePromptCacheLayout.buildWithSuffix(
                     stableSections: [baseSystemPrompt],
                     leadingVolatileSections: [
@@ -266,7 +266,7 @@ extension AIChatViewModel {
                     triedEntries.insert(nextEntryId)
                     currentEntryId = nextEntryId
                     currentProvider = await makeAgentProvider(for: nextEntry)
-                    // nanoMuse: preserve the stable-prefix / volatile-suffix boundary on fallback.
+                    // NanoLika: preserve the stable-prefix / volatile-suffix boundary on fallback.
                     currentSystemPrompt = NanoMusePromptCacheLayout.buildWithSuffix(
                         stableSections: [baseSystemPrompt],
                         leadingVolatileSections: [
@@ -349,7 +349,7 @@ extension AIChatViewModel {
                     triedEntries.insert(nextEntryId)
                     currentEntryId = nextEntryId
                     currentProvider = await makeAgentProvider(for: nextEntry)
-                    // nanoMuse: preserve the stable-prefix / volatile-suffix boundary on fallback.
+                    // NanoLika: preserve the stable-prefix / volatile-suffix boundary on fallback.
                     currentSystemPrompt = NanoMusePromptCacheLayout.buildWithSuffix(
                         stableSections: [baseSystemPrompt],
                         leadingVolatileSections: [

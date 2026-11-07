@@ -1,6 +1,6 @@
 # Showcase: seven things a Chinese day asks for
 
-nanoMuse is one agent with several hands. It reads and writes files, searches the web, runs commands, drives a browser; it calls MCP servers and command-line tools; it follows skills; and, when it runs on a phone, it uses the phone's own calendar, clipboard and alarms, and, as the last resort, the apps on the phone's screen. The [ladder](gui.md#the-ladder) says which hand comes first: a skill, a CLI or an MCP server; then a fetch with the user's login; then the in-app browser; only then the screen. Of the seven cases below, one uses the screen. That is the point.
+NanoLika is one agent with several hands. It reads and writes files, searches the web, runs commands, drives a browser; it calls MCP servers and command-line tools; it follows skills; and, when it runs on a phone, it uses the phone's own calendar, clipboard and alarms, and, as the last resort, the apps on the phone's screen. The [ladder](gui.md#the-ladder) says which hand comes first: a skill, a CLI or an MCP server; then a fetch with the user's login; then the in-app browser; only then the screen. Of the seven cases below, one uses the screen. That is the point.
 
 Nothing here spends money: every send, order or payment stops for your approval, and the operator never fills in passwords or codes. Which services stand behind the cases, and which have been run where: [services.md](services.md).
 

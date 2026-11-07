@@ -1,6 +1,6 @@
 //
 //  NanoMuseFeed.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The Feed, Muse style: short posts the agent writes for the person, from
 //  what it remembers (GLOBAL.md, the last week of diary, USER.md, goals).
@@ -798,5 +798,5 @@ struct NanoMuseFeedFenceCard: View {
 
 extension Notification.Name {
     /// Switch the Muse shell to a room: object is "feed" | "goals" | "ideas" | "library".
-    static let nanoMuseOpenRoom = Notification.Name("nanoMuse.openRoom")
+    static let nanoMuseOpenRoom = Notification.Name("NanoLika.openRoom")
 }

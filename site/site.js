@@ -1,4 +1,4 @@
-// nanoMuse landing page: language toggle + the live phone mock in the hero.
+// NanoLika landing page: language toggle + the live phone mock in the hero.
 (function () {
   "use strict";
 
@@ -11,7 +11,7 @@
     } catch (e) {
       /* private mode */
     }
-    document.title = lang === "zh-CN" ? "nanoMuse — 开源的个人 AI 智能体" : "nanoMuse — an open-source personal AI agent";
+    document.title = lang === "zh-CN" ? "NanoLika — 开源的个人 AI 智能体" : "NanoLika — an open-source personal AI agent";
   }
   var saved = null;
   try {

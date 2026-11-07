@@ -20,9 +20,9 @@
          policy, not an OS runtime check, and Minis ships as a sideload.
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- nanoMuse: the hub connection (this phone reachable from the user's other devices) -->
+    <!-- NanoLika: the hub connection (this phone reachable from the user's other devices) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
-    <!-- nanoMuse: the screen-lock confirmation on the approval card's "always" for a payment
+    <!-- NanoLika: the screen-lock confirmation on the approval card's "always" for a payment
          (guard/DeviceCredential.kt, the framework BiometricPrompt); a normal permission, granted
          at install, and the prompt refuses the call without it -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -43,7 +43,7 @@
          can be issued without falling through to the broader settings list. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- nanoMuse: the alarm receiver must stay exported for BOOT_COMPLETED, but only the
+    <!-- NanoLika: the alarm receiver must stay exported for BOOT_COMPLETED, but only the
          system and this app (its own AlarmManager PendingIntents) may broadcast to it;
          a signature permission keeps other apps from posting alarm notifications. -->
     <permission
@@ -120,7 +120,7 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
-        <!-- nanoMuse: the hands (0.1.12) list the apps with a launcher icon, so the
+        <!-- NanoLika: the hands (0.1.12) list the apps with a launcher icon, so the
              screen model can open one by name. Android 11+ package visibility. -->
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -175,7 +175,7 @@
          uses for its list<->detail back transition. Required on Android 13-15;
          16+ enables it by default, so this is the compatibility switch rather
          than a new behaviour. -->
-    <!-- nanoMuse: allowBackup="false" — chats, memory and the account's data stay on this phone and
+    <!-- NanoLika: allowBackup="false" — chats, memory and the account's data stay on this phone and
          never go to Google's device backup; a reinstall starts empty and the account's chats come
          back through sync at sign-in (docs/sync.md). The two rule files below are kept for the day
          the switch is turned on again. -->
@@ -226,7 +226,7 @@
                  calls keep working because MainActivity is always enabled.
                  The minis:// deep-link filter stays on MainActivity since
                  deep-links never go through the LAUNCHER category. -->
-            <!-- nanoMuse: the scheme the system knows us by is `nanomuse`, not upstream's `minis`,
+            <!-- NanoLika: the scheme the system knows us by is `nanomuse`, not upstream's `minis`,
                  so a phone with OpenMinis installed too never gets a chooser for either app's links
                  (io.github.nanomuse.deeplink.OwnScheme reads both; the app's own links go to this
                  activity by name). -->
@@ -393,7 +393,7 @@
              home-screen icons pinned before the rename are not preserved
              and will return "intent not found" on tap; the user has to
              re-add them from inside the app. -->
-        <!-- nanoMuse: not exported — a pinned shortcut is started by the system with this app's
+        <!-- NanoLika: not exported — a pinned shortcut is started by the system with this app's
              own identity, so nothing else needs to reach the activity; other apps could otherwise
              open any saved web app here by guessing its id. -->
         <activity
@@ -496,7 +496,7 @@
         <receiver
             android:name=".offload.AlarmReceiver"
             android:exported="true"
-            android:permission="${applicationId}.permission.ALARM"><!-- nanoMuse: only this app's own alarms reach the receiver -->
+            android:permission="${applicationId}.permission.ALARM"><!-- NanoLika: only this app's own alarms reach the receiver -->
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
@@ -516,7 +516,7 @@
             android:name=".scheduled.ScheduledTaskAlarmReceiver"
             android:exported="false" />
 
-        <!-- nanoMuse: Allow / Deny buttons on the approval notification -->
+        <!-- NanoLika: Allow / Deny buttons on the approval notification -->
         <receiver
             android:name="io.github.nanomuse.guard.RiskApprovalReceiver"
             android:exported="false" />
@@ -583,7 +583,7 @@
                 android:resource="@xml/minis_accessibility_service" />
         </service>
 
-        <!-- nanoMuse: keeps the phone on the hub in the background -->
+        <!-- NanoLika: keeps the phone on the hub in the background -->
         <service
             android:name="io.github.nanomuse.hub.HubService"
             android:exported="false"

@@ -91,7 +91,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val PROVIDER_LIST = "providers"
     const val ADD_PROVIDER = "add_provider"
-    // nanoMuse: the same form, pre-filled for a known vendor (`bailian` = Alibaba Cloud Bailian)
+    // NanoLika: the same form, pre-filled for a known vendor (`bailian` = Alibaba Cloud Bailian)
     const val ADD_PROVIDER_PATTERN = "add_provider?preset={preset}"
     fun addProvider(preset: String?): String = if (preset.isNullOrBlank()) ADD_PROVIDER else "add_provider?preset=$preset"
     const val PROVIDER_DETAIL = "provider/{instanceId}"
@@ -244,7 +244,7 @@ fun AppNavigation(
         (context.applicationContext as com.openminis.app.MinisApp).mountedFoldersStore
     }
 
-    // nanoMuse: whether SESSION_LIST renders the home shell (compact windows) — decided here,
+    // NanoLika: whether SESSION_LIST renders the home shell (compact windows) — decided here,
     // ahead of the deep-link effects, and published for the non-composable entry points
     // (MainActivity's warm deep links). Written during composition on purpose so the effects
     // below already see it. Wide windows keep the upstream list/detail behaviour.
@@ -255,7 +255,7 @@ fun AppNavigation(
     // launch, with the voice / camera action seeded so ChatScreen consumes it on its first
     // LaunchedEffect tick. Upstream mounted the NavHost straight into chat/<draft>; in compact
     // windows the home shell opens the draft itself (see the deep-link effect and the
-    // startDestination block below). nanoMuse: remembered, so a recomposition does not mint a
+    // startDestination block below). NanoLika: remembered, so a recomposition does not mint a
     // new id and re-seed the action.
     val quickActionSession: String? = remember(initialDeepLink) {
         when (initialDeepLink) {
@@ -279,7 +279,7 @@ fun AppNavigation(
                 navController.safeNavigate(Routes.terminal(initialDeepLink.initCommand))
             }
             is DeepLinkAction.OpenSession -> {
-                // nanoMuse: in compact windows the home shell shows the chat itself.
+                // NanoLika: in compact windows the home shell shows the chat itself.
                 if (io.github.nanomuse.ui.home.HomeShell.openSession(navController, initialDeepLink.sessionId)) {
                     return@LaunchedEffect
                 }
@@ -318,7 +318,7 @@ fun AppNavigation(
             is DeepLinkAction.OpenPermissionSettings -> {
                 navController.safeNavigate(Routes.PERMISSIONS)
             }
-            // nanoMuse: a cold start from the feed's notification: the shell mounts on its own and
+            // NanoLika: a cold start from the feed's notification: the shell mounts on its own and
             // picks the tab up from the bus
             is DeepLinkAction.OpenHomeTab -> {
                 io.github.nanomuse.ui.home.HomeShell.openTab(navController, initialDeepLink.tab)
@@ -337,7 +337,7 @@ fun AppNavigation(
                 // Navigation handled by startDestination = chat/<__new__…>
                 // when the launch intent carries one of these actions.
                 // Nothing to do here — see startDestination block below.
-                // nanoMuse: except in compact windows, where the home shell opens the draft.
+                // NanoLika: except in compact windows, where the home shell opens the draft.
                 if (nmHomeActive && quickActionSession != null) {
                     io.github.nanomuse.ui.home.HomeShell.openSession(navController, quickActionSession)
                 }
@@ -356,7 +356,7 @@ fun AppNavigation(
     // regardless of mode 1 / 2 / 0. Wait for the start destination to
     // settle into RESUMED before navigating; for mode 3 (Home) we don't
     // need to navigate at all so we can skip the wait entirely.
-    // nanoMuse: in compact windows SESSION_LIST renders the home shell
+    // NanoLika: in compact windows SESSION_LIST renders the home shell
     // (io.github.nanomuse.ui.home), which opens on the main chat by itself —
     // the launch-session resolver and the warm-share fallback below step
     // aside for it (`nmHomeActive`, decided above). Wide windows keep the
@@ -364,7 +364,7 @@ fun AppNavigation(
     LaunchedEffect(Unit) {
         val hasDeepLink = initialDeepLink != null && initialDeepLink !is DeepLinkAction.Unknown
         if (hasDeepLink) return@LaunchedEffect
-        if (nmHomeActive) return@LaunchedEffect // nanoMuse
+        if (nmHomeActive) return@LaunchedEffect // NanoLika
         val hasPendingShare =
             com.openminis.app.share.ShareCoordinator.bufferVersion.value > 0
         val rawMode = getAppearancePrefs(context).getInt(KEY_LAUNCH_SESSION, 0)
@@ -489,7 +489,7 @@ fun AppNavigation(
     LaunchedEffect(shareBufferVersion) {
         if (shareBufferVersion == 0) return@LaunchedEffect
         val current = navController.currentDestination?.route ?: return@LaunchedEffect
-        // nanoMuse: the home shell has a ChatScreen mounted that drains the buffer itself.
+        // NanoLika: the home shell has a ChatScreen mounted that drains the buffer itself.
         if (current == Routes.SESSION_LIST && !nmHomeActive) {
             navController.safeNavigate(Routes.chat("__new__${java.util.UUID.randomUUID()}")) {
                 popUpTo(Routes.SESSION_LIST) { inclusive = false }
@@ -508,7 +508,7 @@ fun AppNavigation(
     // draft chat, seeding the pending action so ChatScreen consumes it on
     // its first LaunchedEffect tick. Mirrors the htmlShortcut path —
     // avoids a sessions-list flash and a duplicate back-stack entry.
-    // nanoMuse: the draft id is minted (and the action seeded) in `quickActionSession` above;
+    // NanoLika: the draft id is minted (and the action seeded) in `quickActionSession` above;
     // in compact windows the home shell opens it, so the NavHost starts on SESSION_LIST.
     val quickActionStart: String? = quickActionSession?.takeIf { !nmHomeActive }?.let { Routes.chat(it) }
     val startDestination = when {
@@ -591,7 +591,7 @@ fun AppNavigation(
         // them keeps working unchanged. On a phone the scaffold resolves to a
         // single pane, so those pushes look and behave exactly as before.
         composable(Routes.SESSION_LIST) {
-            // nanoMuse: compact windows open on the home shell (main chat +
+            // NanoLika: compact windows open on the home shell (main chat +
             // bottom tabs); the upstream split keeps wide windows.
             if (!shouldUseTwoPane()) {
                 io.github.nanomuse.ui.home.NanoMuseHome(
@@ -614,7 +614,7 @@ fun AppNavigation(
             )
         }
 
-        // nanoMuse: the agent's system files (SOUL / USER / MEMORY / feed
+        // NanoLika: the agent's system files (SOUL / USER / MEMORY / feed
         // preferences / HEARTBEAT), one file page, and the memory import.
         composable(io.github.nanomuse.ui.sysfiles.ROUTE_SYSTEM_FILES) {
             io.github.nanomuse.ui.sysfiles.SystemFilesScreen(
@@ -641,7 +641,7 @@ fun AppNavigation(
         composable(io.github.nanomuse.ui.sysfiles.ROUTE_MEMORY_IMPORT) {
             io.github.nanomuse.ui.sysfiles.MemoryImportScreen(onBack = { navController.safePopBackStack() })
         }
-        // nanoMuse: the face — generate, pick, pose.
+        // NanoLika: the face — generate, pick, pose.
         composable(io.github.nanomuse.ui.avatar.ROUTE_AVATAR_STUDIO) {
             io.github.nanomuse.ui.avatar.AvatarStudioScreen(
                 onBack = { navController.safePopBackStack() },
@@ -649,7 +649,7 @@ fun AppNavigation(
                 onOpenMediaModels = { navController.safeNavigate(io.github.nanomuse.ui.media.ROUTE_MEDIA_MODELS) },
             )
         }
-        // nanoMuse: Settings → Models — the four slots (chat, the screen, pictures, clips), each
+        // NanoLika: Settings → Models — the four slots (chat, the screen, pictures, clips), each
         // row a picker; and the "Use it for" card after a provider of the person's own is saved.
         composable(io.github.nanomuse.ui.models.ROUTE_MODELS) {
             io.github.nanomuse.ui.models.ModelsScreen(
@@ -680,7 +680,7 @@ fun AppNavigation(
                 onDone = { navController.safePopBackStack() },
             )
         }
-        // nanoMuse: the three models — chat, image, video — and what stops without each.
+        // NanoLika: the three models — chat, image, video — and what stops without each.
         composable(io.github.nanomuse.ui.media.ROUTE_MEDIA_MODELS) {
             io.github.nanomuse.ui.media.MediaModelsScreen(
                 onBack = { navController.safePopBackStack() },
@@ -688,7 +688,7 @@ fun AppNavigation(
                 onOpenProviders = { navController.safeNavigate(Routes.PROVIDER_LIST) },
             )
         }
-        // nanoMuse: nanoMuse Cloud — sign in with a phone/e-mail code for a starter allowance,
+        // NanoLika: NanoLika Cloud — sign in with a phone/e-mail code for a starter allowance,
         // and the account page (balance, sign out) behind Settings.
         composable(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_SIGN_IN) {
             io.github.nanomuse.ui.cloud.CloudSignInScreen(
@@ -703,22 +703,22 @@ fun AppNavigation(
                 onOpenProvider = { id -> navController.safeNavigate(Routes.providerDetail(id)) },
                 onOpenModelGroups = { navController.safeNavigate(Routes.MODEL_GROUPS) },
                 onOpenDataControls = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_DATA_CONTROLS) },
-                // nanoMuse: "Ask this device" — back to the chat with "@<name> " in the composer
+                // NanoLika: "Ask this device" — back to the chat with "@<name> " in the composer
                 onAskDevice = { name -> io.github.nanomuse.ui.home.HomeShell.prefill(navController, "@$name ") },
             )
         }
-        // nanoMuse: Settings → Data controls — the switch over what nanoMuse Cloud keeps of the chats.
+        // NanoLika: Settings → Data controls — the switch over what NanoLika Cloud keeps of the chats.
         composable(io.github.nanomuse.ui.cloud.ROUTE_DATA_CONTROLS) {
             io.github.nanomuse.ui.cloud.DataControlsScreen(
                 onBack = { navController.safePopBackStack() },
                 onSignIn = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_SIGN_IN) },
             )
         }
-        // nanoMuse: Settings → Network — the HTTP proxy for own providers and the ChatGPT plan.
+        // NanoLika: Settings → Network — the HTTP proxy for own providers and the ChatGPT plan.
         composable(io.github.nanomuse.ui.net.ROUTE_NETWORK) {
             io.github.nanomuse.ui.net.NetworkScreen(onBack = { navController.safePopBackStack() })
         }
-        // nanoMuse: the phone's screen as a hand — the switch, what it needs, the screen model.
+        // NanoLika: the phone's screen as a hand — the switch, what it needs, the screen model.
         composable(io.github.nanomuse.ui.hands.ROUTE_HANDS) {
             io.github.nanomuse.ui.hands.HandsScreen(
                 onBack = { navController.safePopBackStack() },
@@ -726,28 +726,28 @@ fun AppNavigation(
                 onOpenHandsModel = { navController.safeNavigate(io.github.nanomuse.ui.models.modelPickRoute(io.github.nanomuse.models.ModelSlots.Slot.HANDS)) },
             )
         }
-        // nanoMuse: the account's computers, and how one joins.
+        // NanoLika: the account's computers, and how one joins.
         composable(io.github.nanomuse.ui.reach.ROUTE_COMPUTERS) {
             io.github.nanomuse.ui.reach.ComputersScreen(
                 onBack = { navController.safePopBackStack() },
                 onOpenAccount = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_ACCOUNT) },
             )
         }
-        // nanoMuse: the services the agent can be let into — the connectors catalogue, each a remote MCP server.
+        // NanoLika: the services the agent can be let into — the connectors catalogue, each a remote MCP server.
         composable(io.github.nanomuse.ui.connectors.ROUTE_CONNECTORS) {
             io.github.nanomuse.ui.connectors.ConnectorsScreen(
                 onBack = { navController.safePopBackStack() },
                 onOpenMcp = { navController.safeNavigate(Routes.MCP) },
             )
         }
-        // nanoMuse: the coding agents (Cursor, Codex, Claude Code) on the account's computers.
+        // NanoLika: the coding agents (Cursor, Codex, Claude Code) on the account's computers.
         composable(io.github.nanomuse.ui.coding.ROUTE_CODING) {
             io.github.nanomuse.ui.coding.CodingScreen(
                 onBack = { navController.safePopBackStack() },
                 onOpenDevices = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_ACCOUNT) },
             )
         }
-        // nanoMuse: the agent's page behind the face — today's activity, approvals, daily,
+        // NanoLika: the agent's page behind the face — today's activity, approvals, daily,
         // soul & memory; the pen offers "Change avatar" (back to the chat, pre-typed) and
         // "Edit name".
         composable(io.github.nanomuse.ui.profile.ROUTE_AGENT_PROFILE) {
@@ -771,7 +771,7 @@ fun AppNavigation(
             )
         }
 
-        // nanoMuse: the full OpenMinis session list (folders, search, bulk
+        // NanoLika: the full OpenMinis session list (folders, search, bulk
         // actions), one tap behind the drawer's archive glyph. Picking a chat
         // hands it to the home shell underneath.
         composable(io.github.nanomuse.ui.home.ROUTE_ALL_CHATS) {
@@ -824,16 +824,16 @@ fun AppNavigation(
                 onMemoryClick = { navController.safeNavigate(Routes.MEMORY) },
                 onMcpClick = { navController.safeNavigate(Routes.MCP) },
                 onSoulClick = { navController.safeNavigate(Routes.SOUL) },
-                onSystemFilesClick = { navController.safeNavigate(io.github.nanomuse.ui.sysfiles.ROUTE_SYSTEM_FILES) }, // nanoMuse
-                onAvatarClick = { navController.safeNavigate(io.github.nanomuse.ui.avatar.ROUTE_AVATAR_STUDIO) }, // nanoMuse
-                onModelsClick = { navController.safeNavigate(io.github.nanomuse.ui.models.ROUTE_MODELS) }, // nanoMuse
-                onCloudClick = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_ACCOUNT) }, // nanoMuse
-                onHandsClick = { navController.safeNavigate(io.github.nanomuse.ui.hands.ROUTE_HANDS) }, // nanoMuse
-                onDataControlsClick = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_DATA_CONTROLS) }, // nanoMuse
-                onNetworkClick = { navController.safeNavigate(io.github.nanomuse.ui.net.ROUTE_NETWORK) }, // nanoMuse
-                onComputersClick = { navController.safeNavigate(io.github.nanomuse.ui.reach.ROUTE_COMPUTERS) }, // nanoMuse
-                onCodingClick = { navController.safeNavigate(io.github.nanomuse.ui.coding.ROUTE_CODING) }, // nanoMuse
-                onConnectorsClick = { navController.safeNavigate(io.github.nanomuse.ui.connectors.ROUTE_CONNECTORS) }, // nanoMuse
+                onSystemFilesClick = { navController.safeNavigate(io.github.nanomuse.ui.sysfiles.ROUTE_SYSTEM_FILES) }, // NanoLika
+                onAvatarClick = { navController.safeNavigate(io.github.nanomuse.ui.avatar.ROUTE_AVATAR_STUDIO) }, // NanoLika
+                onModelsClick = { navController.safeNavigate(io.github.nanomuse.ui.models.ROUTE_MODELS) }, // NanoLika
+                onCloudClick = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_CLOUD_ACCOUNT) }, // NanoLika
+                onHandsClick = { navController.safeNavigate(io.github.nanomuse.ui.hands.ROUTE_HANDS) }, // NanoLika
+                onDataControlsClick = { navController.safeNavigate(io.github.nanomuse.ui.cloud.ROUTE_DATA_CONTROLS) }, // NanoLika
+                onNetworkClick = { navController.safeNavigate(io.github.nanomuse.ui.net.ROUTE_NETWORK) }, // NanoLika
+                onComputersClick = { navController.safeNavigate(io.github.nanomuse.ui.reach.ROUTE_COMPUTERS) }, // NanoLika
+                onCodingClick = { navController.safeNavigate(io.github.nanomuse.ui.coding.ROUTE_CODING) }, // NanoLika
+                onConnectorsClick = { navController.safeNavigate(io.github.nanomuse.ui.connectors.ROUTE_CONNECTORS) }, // NanoLika
                 onPermissionsClick = { navController.safeNavigate(Routes.PERMISSIONS) },
                 onUsageClick = { navController.safeNavigate(Routes.USAGE_STATS) },
                 onAppearanceClick = { navController.safeNavigate(Routes.APPEARANCE) },
@@ -1104,16 +1104,16 @@ fun AppNavigation(
         }
 
         composable(
-            route = Routes.ADD_PROVIDER_PATTERN, // nanoMuse: optional ?preset=…; plain ADD_PROVIDER still matches
+            route = Routes.ADD_PROVIDER_PATTERN, // NanoLika: optional ?preset=…; plain ADD_PROVIDER still matches
             arguments = listOf(navArgument("preset") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { backStackEntry ->
-            // nanoMuse: the instances before the form, so the save can open "Use it for" on the new one
+            // NanoLika: the instances before the form, so the save can open "Use it for" on the new one
             val nmBefore = remember { providerRepository.config.value.instances.map { it.id }.toSet() }
             AddProviderScreen(
                 providerRepository = providerRepository,
                 onBack = { navController.safePopBackStack() },
-                onSaved = { io.github.nanomuse.ui.models.UseItFor.afterProviderSaved(navController, providerRepository, nmBefore) }, // nanoMuse
-                preset = backStackEntry.arguments?.getString("preset"), // nanoMuse
+                onSaved = { io.github.nanomuse.ui.models.UseItFor.afterProviderSaved(navController, providerRepository, nmBefore) }, // NanoLika
+                preset = backStackEntry.arguments?.getString("preset"), // NanoLika
             )
         }
 
@@ -1135,7 +1135,7 @@ fun AppNavigation(
                 onVoiceServiceClick = { id ->
                     navController.safeNavigate(Routes.shadowVoiceDetail(id))
                 },
-                onKeyAdded = { id -> io.github.nanomuse.ui.models.UseItFor.open(navController, id) }, // nanoMuse: the "Use it for" card
+                onKeyAdded = { id -> io.github.nanomuse.ui.models.UseItFor.open(navController, id) }, // NanoLika: the "Use it for" card
             )
         }
 

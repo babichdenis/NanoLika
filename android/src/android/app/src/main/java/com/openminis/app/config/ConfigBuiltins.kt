@@ -276,7 +276,7 @@ internal object ConfigBuiltins {
                 prefs = prefs,
                 key = "theme_mode",
                 cases = listOf("system", "light", "dark"),
-                defaultIndex = 1, // nanoMuse: paper default
+                defaultIndex = 1, // NanoLika: paper default
             )
         )
         // T-chat-title-pill: sticky session-title pill on the chat screen.
@@ -965,7 +965,7 @@ internal object ConfigBuiltins {
             ClosureField(
                 path = "soul.name",
                 displayName = "Soul name",
-                description = "The agent's name as shown in chat bubble headers and as the system-prompt identity. Trimmed; empty falls back to \"nanoMuse\".",
+                description = "The agent's name as shown in chat bubble headers and as the system-prompt identity. Trimmed; empty falls back to \"NanoLika\".",
                 valueSchema = ConfigSchema.Str(maxLength = 64),
                 risk = ConfigRisk.SENSITIVE,
                 revertable = true,

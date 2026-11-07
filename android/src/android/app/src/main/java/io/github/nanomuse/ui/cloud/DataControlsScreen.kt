@@ -46,7 +46,7 @@ import kotlinx.coroutines.launch
 const val ROUTE_DATA_CONTROLS = "nanomuse_data_controls"
 
 /**
- * Settings → Data controls: the one switch over what nanoMuse Cloud keeps of this account's
+ * Settings → Data controls: the one switch over what NanoLika Cloud keeps of this account's
  * chats — "Help improve nanoLika's AI models" —, what exactly that is, how new accounts
  * start, the privacy policy, and the way to delete what was kept; below it, the switch over the
  * conversations synced between the account's devices ([SyncConversationsCard]). The shape of

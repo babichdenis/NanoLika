@@ -100,7 +100,7 @@ class BackgroundTaskNotifier(
         }
 
         val deepLink = Uri.parse("minis://session/$sessionId")
-        // nanoMuse: to MainActivity by name, never through the system's choice of an app for the scheme.
+        // NanoLika: to MainActivity by name, never through the system's choice of an app for the scheme.
         // FLAG_ACTIVITY_NEW_TASK because we're posting from a background scope without an Activity
         // context; FLAG_ACTIVITY_CLEAR_TOP so MainActivity (singleTask) reuses the existing instance
         // and routes the deep-link via onNewIntent rather than spawning a duplicate.
@@ -115,8 +115,8 @@ class BackgroundTaskNotifier(
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_nanomuse) // nanoMuse: flat status-bar mark
-            .setLargeIcon(io.github.nanomuse.identity.NanoMuseIdentity.face(context)) // nanoMuse: the agent is the sender
+            .setSmallIcon(R.drawable.ic_stat_nanomuse) // NanoLika: flat status-bar mark
+            .setLargeIcon(io.github.nanomuse.identity.NanoMuseIdentity.face(context)) // NanoLika: the agent is the sender
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

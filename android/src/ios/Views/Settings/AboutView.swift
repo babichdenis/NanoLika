@@ -43,7 +43,7 @@ struct AboutView: View {
                                     .stroke(Color(UIColor.separator), lineWidth: 0.5)
                             )
                     }
-                    Text("nanoMuse")
+                    Text("NanoLika")
                         .font(.title2.bold())
                     Text("Version \(appVersion)")
                         .font(.subheadline)
@@ -94,7 +94,7 @@ struct AboutView: View {
                 }
             }
 
-            // nanoMuse: where this comes from, and what it is not.
+            // NanoLika: where this comes from, and what it is not.
             Section(AppLocalized("Credits")) {
                 Link(destination: URL(string: "https://github.com/OpenMinis/OpenMinis")!) {
                     Label {

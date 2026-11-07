@@ -38,7 +38,7 @@ object LLMRequestLog {
 
     private val entries = mutableListOf<Entry>()
 
-    // nanoMuse: header names whose values are credentials; matched case-insensitively, and any
+    // NanoLika: header names whose values are credentials; matched case-insensitively, and any
     // name containing "token" or "secret" counts too. The copy keeps the caller's order (#347).
     private val CREDENTIAL_HEADERS = setOf(
         "authorization", "proxy-authorization", "x-api-key", "api-key", "apikey",
@@ -65,7 +65,7 @@ object LLMRequestLog {
         // each entry truncated to MAX_BODY_CHARS so even a single retained
         // entry can't push a memory-tight device over the line.
         if (!BuildConfig.DEBUG) return
-        // nanoMuse: keep an independent, masked copy of the headers so no credential sits
+        // NanoLika: keep an independent, masked copy of the headers so no credential sits
         // in this buffer and a later change to the caller's map cannot rewrite the entry (#347).
         val masked = entry.copy(requestHeaders = maskHeaders(entry.requestHeaders))
         val safeEntry = if (masked.requestBody.length > MAX_BODY_CHARS) {

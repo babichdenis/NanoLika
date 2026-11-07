@@ -75,7 +75,7 @@ const val ROUTE_CLOUD_ACCOUNT = "nanomuse/cloud/account"
 private const val CLOUD_DOC_URL = "https://github.com/nano-muse/nanoMuse/blob/main/docs/cloud.md"
 
 /**
- * Sign in to nanoMuse Cloud: a mainland phone number (the code comes by SMS) or an e-mail
+ * Sign in to NanoLika Cloud: a mainland phone number (the code comes by SMS) or an e-mail
  * address, then the code it receives — or the account's password. The code box is marked as a
  * one-time code so the system's autofill or the keyboard can offer the SMS it just saw.
  * On success the relay is a provider with a default model, and the caller decides where to
@@ -445,7 +445,7 @@ fun CloudSignInScreen(
 
 /**
  * The relay's address for people who run their own (0.1.38): the field, *Check* (the relay's
- * `/healthz`, its version shown), *Use this server*, and a way back to nanoMuse Cloud. https
+ * `/healthz`, its version shown), *Use this server*, and a way back to NanoLika Cloud. https
  * unless the host is on a private network. What is chosen here is what the key will belong
  * to — the account page shows it, and changing it later means signing out first.
  */

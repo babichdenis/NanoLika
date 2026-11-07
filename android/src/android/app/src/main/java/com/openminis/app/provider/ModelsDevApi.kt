@@ -145,7 +145,7 @@ object ModelsDevApi {
             maxOutputTokens = devModel.maxOutputTokens ?: model.maxOutputTokens,
             supportsReasoning = devModel.reasoning ?: model.supportsReasoning,
             interleavedReasoningField = devModel.interleavedField ?: model.interleavedReasoningField,
-            // nanoMuse: the provider that serves the model knows what it takes
+            // NanoLika: the provider that serves the model knows what it takes
             // better than a catalog entry published by someone else. The
             // fallback scan above picks one of many providers listing the same
             // id, and they disagree (one `qwen3.8-27b` entry says text-only

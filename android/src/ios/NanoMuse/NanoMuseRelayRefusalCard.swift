@@ -1,8 +1,8 @@
 //
 //  NanoMuseRelayRefusalCard.swift
-//  nanoMuse
+//  NanoLika
 //
-//  A turn nanoMuse Cloud refused (docs/parity.md, item 35): one plain sentence from
+//  A turn NanoLika Cloud refused (docs/parity.md, item 35): one plain sentence from
 //  `NanoMuseCloud.describe` and the button that fits — *New chat* for a message too large,
 //  *Sign in* for a key the relay no longer takes, *Open Settings* for a model that left the
 //  menu or an account the relay does not take, *Try again* for the rest (busy, the provider
@@ -127,7 +127,7 @@ struct NanoMuseRelayRefusalCard: View {
         }
     }
 
-    /// Settings → nanoMuse Cloud is the first row of the nanoMuse settings home.
+    /// Settings → NanoLika Cloud is the first row of the NanoLika settings home.
     private func openSettings() {
         NotificationCenter.default.post(name: .nanoMuseHomeAction, object: "settings")
     }

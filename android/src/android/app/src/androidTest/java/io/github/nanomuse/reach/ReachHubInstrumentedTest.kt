@@ -13,7 +13,7 @@ import org.junit.runner.RunWith
 
 /**
  * `nanomuse-pc` against a real computer on the hub — the way the phone's agent drives one,
- * minus the sandbox hop. Needs this phone signed in to nanoMuse Cloud with a computer named
+ * minus the sandbox hop. Needs this phone signed in to NanoLika Cloud with a computer named
  * "desk" online on the same account; otherwise the tests are skipped, not failed.
  *
  *   ./gradlew :app:connectedDebugAndroidTest -Pnm.abi=x86_64 \

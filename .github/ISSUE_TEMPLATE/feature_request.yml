@@ -1,5 +1,5 @@
 name: Feature request / 功能建议
-description: Something nanoMuse should do, or should do differently. / nanoMuse 应该做的事，或者应该换个做法的事。
+description: Something NanoLika should do, or should do differently. / NanoLika 应该做的事，或者应该换个做法的事。
 labels: ["enhancement"]
 body:
   - type: markdown

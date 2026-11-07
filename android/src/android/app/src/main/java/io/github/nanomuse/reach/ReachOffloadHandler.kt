@@ -112,7 +112,7 @@ class ReachOffloadHandler(private val context: Context) : NativeOffloadHandler {
                     Computers.approve(c, id, allow = gate.denied == null)
                     steps.put(JSONObject().put("approval", preview).put("allowed", gate.denied == null).apply { gate.notice?.let { put("notice", it) } })
                 }
-                // nanoMuse: the runtime's progress stages (docs/hub.md) — a tool starting, a tool
+                // NanoLika: the runtime's progress stages (docs/hub.md) — a tool starting, a tool
                 // done, a line of interim text; the terminal binary's older "step"/"thinking" too
                 "tool" -> (ev.optString("summary").ifBlank { ev.optString("name") }.ifBlank { ev.optString("text") }.ifBlank { ev.optString("tool") })
                     .takeIf { it.isNotBlank() }?.let { steps.put(JSONObject().put("step", it.take(200))) }

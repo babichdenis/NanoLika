@@ -30,7 +30,7 @@ class MinisAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MinisA11y"
-        val SERVICE_ID = "${BuildConfig.APPLICATION_ID}/com.openminis.app.accessibility.MinisAccessibilityService" // nanoMuse: the applicationId is not the package
+        val SERVICE_ID = "${BuildConfig.APPLICATION_ID}/com.openminis.app.accessibility.MinisAccessibilityService" // NanoLika: the applicationId is not the package
         private const val EVENT_RING_CAP = 1024
 
         @Volatile

@@ -7,7 +7,7 @@ import UserNotifications
 /// The agent continues running in the background — use Get Session Status to poll for completion.
 struct SendPromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Send Prompt"
-    static var description = IntentDescription("Sends a prompt to the nanoMuse AI agent. Returns session info immediately while the task runs in the background.")
+    static var description = IntentDescription("Sends a prompt to the NanoLika AI agent. Returns session info immediately while the task runs in the background.")
     static var openAppWhenRun = false
 
     // [T-shortcuts-automation-no-prompt-field] `requestValueDialog` alone marks
@@ -19,7 +19,7 @@ struct SendPromptIntent: AppIntent {
     // makes the text field appear. `inputConnectionBehavior` additionally lets
     // the field accept the previous action's output as a variable.
     @Parameter(title: "Prompt",
-               requestValueDialog: "What would you like to ask nanoMuse?",
+               requestValueDialog: "What would you like to ask NanoLika?",
                inputConnectionBehavior: .connectToPreviousIntentResult)
     var prompt: String
 
@@ -265,7 +265,7 @@ struct SendPromptIntent: AppIntent {
     // the "Show More" section — `\.$files` first so the attachment slot is the
     // first thing surfaced when chaining from a previous action.
     static var parameterSummary: some ParameterSummary {
-        Summary("Send \(\.$prompt) to nanoMuse") {
+        Summary("Send \(\.$prompt) to NanoLika") {
             \.$files
             \.$session
             \.$model

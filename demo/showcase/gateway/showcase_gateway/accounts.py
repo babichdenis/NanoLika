@@ -1,7 +1,7 @@
-"""nanoMuse Web: a Muse of your own in the browser, kept for you.
+"""NanoLika Web: a Muse of your own in the browser, kept for you.
 
 The showcase gives a visitor a Muse for half an hour. An *account* — someone signed in to
-nanoMuse Cloud with an e-mail or phone code — gets one that stays: a container of its own
+NanoLika Cloud with an e-mail or phone code — gets one that stays: a container of its own
 with a volume for its data and its workspace, started when the person arrives, put to sleep
 after a long quiet spell (``docker stop``; the volume remains), woken on the next visit. It
 signs in to the Cloud with the account's own key, so its model use is the account's daily
@@ -233,7 +233,7 @@ class AccountManager:
             raise
         key = str(data.get("api_key") or "")
         if not key:
-            raise Refused(502, "relay_error", "nanoMuse Cloud returned no key.")
+            raise Refused(502, "relay_error", "NanoLika Cloud returned no key.")
         try:
             await self._relay("POST", "/v1/auth/sign-out", None, ip, key=standing)
         except Refused as exc:
@@ -245,7 +245,7 @@ class AccountManager:
         container carries its key in its environment, so the old one goes; the volumes stay)."""
         key = str(data.get("api_key") or "")
         if not key:
-            raise Refused(502, "relay_error", "nanoMuse Cloud returned no key.")
+            raise Refused(502, "relay_error", "NanoLika Cloud returned no key.")
         key, key_expires_at = await self._session_key(key, ip)
         raw_account = data.get("account")
         account_info: dict[str, Any] = raw_account if isinstance(raw_account, dict) else {}

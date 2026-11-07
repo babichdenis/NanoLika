@@ -7,7 +7,7 @@
 > Android app the browser is OpenMinis's `browser_use` tool, and a page that needs you is
 > handed over through its `hand_over` action ([android.md](android.md#what-the-phone-does)).
 
-The agent has one browser tool and two browsers to run it in: Chromium through Playwright on the computer the server runs on, and the phone's own WebView inside the nanoMuse app. The tool is the same either way (the same actions, the same numbered elements on the page, the same pictures in the chat, the same take-over), so a skill written against one works on the other, and a task can move from the desk to the phone without changing a line.
+The agent has one browser tool and two browsers to run it in: Chromium through Playwright on the computer the server runs on, and the phone's own WebView inside the NanoLika app. The tool is the same either way (the same actions, the same numbered elements on the page, the same pictures in the chat, the same take-over), so a skill written against one works on the other, and a task can move from the desk to the phone without changing a line.
 
 Where the browser sits in the order of things: the agent reaches a service through its API, MCP server or command-line tool first; then through a **logged-in `fetch`** (a request that carries the browser's cookies, no page rendered); then through the browser page itself; and only last through the screen of an app on the phone ([gui.md](gui.md)). The browser is rung two and three of that ladder.
 
@@ -15,13 +15,13 @@ Where the browser sits in the order of things: the agent reaches a service throu
 
 | | `playwright` | `device` |
 | --- | --- | --- |
-| Runs | on the server, headless Chromium | in the nanoMuse app on the phone, an offscreen WebView |
+| Runs | on the server, headless Chromium | in the NanoLika app on the phone, an offscreen WebView |
 | Needs | `pip install "nanomuse[browser]" && playwright install chromium` (or the `-browser` Docker image) | the app connected, either flavour; the local build always has it |
 | Logins live in | `<workspace>/browser-profile/`, a persistent profile, so a login survives a restart | the app's WebView cookie store, on the phone |
 | Take over | from the browser card: tap the picture to click, type, press Enter | the same WebView slides up in the app: no reload, same cookies, your fingers on the real page |
 | Sites see | Chrome on Linux (or the profile's user agent) | Android WebView (or the profile's user agent) |
 
-`backend = "auto"` (the default) uses the phone when a nanoMuse app with a browser is connected and Playwright otherwise. On the phone's local build there is no Chromium (PRoot cannot start one), so the WebView is the browser, always.
+`backend = "auto"` (the default) uses the phone when a NanoLika app with a browser is connected and Playwright otherwise. On the phone's local build there is no Chromium (PRoot cannot start one), so the WebView is the browser, always.
 
 ```toml
 [browser]
@@ -72,7 +72,7 @@ Cookies persist. On the server the Playwright profile is a real Chromium profile
 
 ### What does not work, and why
 
-- **Google accounts cannot sign in inside a WebView.** Google refuses embedded sign-in (`disallowed_useragent`) for good reasons. The take-over sheet has an arrow that opens the same URL in the system browser, but a login made there stays in Chrome, not in nanoMuse's WebView. For Google services use the API path (a calendar's private `.ics` link, an app password for mail) instead of the browser; on the server's Chromium a Google login works but may be challenged as "not secure".
+- **Google accounts cannot sign in inside a WebView.** Google refuses embedded sign-in (`disallowed_useragent`) for good reasons. The take-over sheet has an arrow that opens the same URL in the system browser, but a login made there stays in Chrome, not in NanoLika's WebView. For Google services use the API path (a calendar's private `.ics` link, an app password for mail) instead of the browser; on the server's Chromium a Google login works but may be challenged as "not secure".
 - **A QR code cannot be scanned on the same phone.** Sites that log in by "scan with our app" (微信, 支付宝, 淘宝 …) show the code where the camera would need to be. On the phone's browser this is a dead end; on the server's Chromium you scan the frame in the chat with the phone, which is the one case where the server's browser is the easier one.
 - **Passkeys are not portable.** A passkey created in the phone's Chrome belongs to that browser's credential store; the WebView does not see it, and a headless Chromium on a server has none. Password-and-code logins work everywhere.
 - **Downloads** land in the workspace: `<workspace>/downloads/` on the server (Playwright) and in the local build on the phone (where the agent can read them); in the connect build, whose agent is on the computer, they go to the phone's Downloads folder.
@@ -105,7 +105,7 @@ profile   {user_agent, width, height, mobile}  → {}
 close     {}                                   → {}
 ```
 
-An unknown op or a failure comes back as `{"ok": false, "error": "…"}`, a message the model can read. Another app that wants to lend its browser to a nanoMuse server implements these fourteen ops and the hello.
+An unknown op or a failure comes back as `{"ok": false, "error": "…"}`, a message the model can read. Another app that wants to lend its browser to a NanoLika server implements these fourteen ops and the hello.
 
 ## Testing it
 

@@ -185,7 +185,7 @@ object ProviderCatalogue {
      * Which catalogue vendor a configured provider is: by the host of its base URL first (a
      * Bailian key pasted into an "OpenAI / compatible" form is Bailian's), else by the
      * provider type for the vendors upstream has a type for. Null for an endpoint the
-     * catalogue does not know — a gateway, a relay of one's own, nanoMuse Cloud.
+     * catalogue does not know — a gateway, a relay of one's own, NanoLika Cloud.
      */
     fun match(list: List<CatalogueProvider>, inst: ProviderInstance): CatalogueProvider? {
         val host = inst.customBaseURL?.let { host(it) }

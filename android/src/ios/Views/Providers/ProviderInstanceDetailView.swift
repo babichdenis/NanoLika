@@ -28,7 +28,7 @@ struct ProviderInstanceDetailView: View {
     @State private var editingModelEntry: ModelEntry?
     @State private var pendingDeleteModelEntry: ModelEntry?
     @State private var showKeyRevealed = false
-    @State private var nmCloudOffRefused = false // nanoMuse: the Cloud switch refused (see the Status section)
+    @State private var nmCloudOffRefused = false // NanoLika: the Cloud switch refused (see the Status section)
 
     private var instance: ProviderInstance? {
         store.instance(for: instanceId)
@@ -249,11 +249,11 @@ struct ProviderInstanceDetailView: View {
             }
 
             // MARK: Status
-            Section { // nanoMuse: was `Section("Status")`; the header moved below to make room for a footer
+            Section { // NanoLika: was `Section("Status")`; the header moved below to make room for a footer
                 Toggle("Enabled", isOn: Binding(
                     get: { instance.isEnabled },
                     set: { newValue in
-                        // nanoMuse: the Cloud instance off is the same switch as Settings › Models: the
+                        // NanoLika: the Cloud instance off is the same switch as Settings › Models: the
                         // chat slot moves to the first own model, or the switch is refused with one sentence
                         // while nothing else could answer. A provider of one's own keeps upstream's path.
                         if instance.id == NanoMuseCloud.instance?.id {
@@ -272,7 +272,7 @@ struct ProviderInstanceDetailView: View {
             } header: {
                 Text("Status")
             } footer: {
-                // nanoMuse: the refusal, under the switch, where the page has it
+                // NanoLika: the refusal, under the switch, where the page has it
                 if nmCloudOffRefused {
                     Text(AppLocalized("Add a provider of your own first; with nanoLika Cloud off, nothing else could answer."))
                         .foregroundStyle(.red)
@@ -382,7 +382,7 @@ struct ProviderInstanceDetailView: View {
             }
 
             // MARK: Danger Zone
-            // nanoMuse: the Cloud instance is the account; deleting it would sign the person out.
+            // NanoLika: the Cloud instance is the account; deleting it would sign the person out.
             // The row offers the switch (Settings → Models) instead, and says so.
             if NanoMuseCloud.instance?.id == instanceId {
                 Section {

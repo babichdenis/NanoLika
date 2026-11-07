@@ -28,7 +28,7 @@ import io.github.nanomuse.ui.avatar.AgentMood
 /**
  * The one line under the name in the chat header, Muse style: what the agent is doing right now
  * ("Starting browser", "Searching 12306…") or that it is waiting on you. Null when idle, and the
- * caller shows its usual provider · model rows instead — that is the one place nanoMuse differs
+ * caller shows its usual provider · model rows instead — that is the one place NanoLika differs
  * from Muse, which has a single model and nothing to pick.
  *
  * With the steps hidden from the chat (the default) this line is the whole account of the work,

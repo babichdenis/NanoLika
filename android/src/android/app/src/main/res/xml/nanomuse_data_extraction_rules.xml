@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: Android 12+ backup and device-to-device transfer rules; same list as
+<!-- NanoLika: Android 12+ backup and device-to-device transfer rules; same list as
      nanomuse_backup_rules.xml — secrets stay on this phone. Not consulted since 0.1.40
      (allowBackup="false", docs/sync.md); kept for the day the switch is turned on again. -->
 <data-extraction-rules>

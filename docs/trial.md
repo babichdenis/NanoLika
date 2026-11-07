@@ -11,10 +11,10 @@ free pool work is [cloud.md](cloud.md); a relay of your own is [self-hosting.md]
 
 Install the app ([android.md](android.md), [ios.md](ios.md)). The first screen is the
 account: a phone number or an e-mail address and a code, or a password once you have set
-one. That single sign-in sets up the nanoMuse Cloud provider, the four rows of *Settings →
+one. That single sign-in sets up the NanoLika Cloud provider, the four rows of *Settings →
 Models* and the connection to the other devices.
 
-*Settings → nanoMuse Cloud → Devices* is where the phone's side lives: *Reachable from your
+*Settings → NanoLika Cloud → Devices* is where the phone's side lives: *Reachable from your
 devices* keeps the phone connected so the others can ask it for things (a quiet
 notification shows while it is on); *Let other devices operate this phone* decides whether
 they may run a shell command, read files, take a screenshot or hand over a task here, and
@@ -79,7 +79,7 @@ each one's *Settings → Models* is its own.
 ## 7. Your own relay
 
 [self-hosting.md](self-hosting.md) runs the same relay on a small VPS. The phones take its
-address under *Use a different server* on the sign-in screen; nanoMuse Desktop takes it in
+address under *Use a different server* on the sign-in screen; NanoLika Desktop takes it in
 the desktop profile's `cordis.patch.yml`; the console is whatever relay serves it at `/app/`.
 Every device of one account must point at the same relay, since the devices and the
 conversations live there.

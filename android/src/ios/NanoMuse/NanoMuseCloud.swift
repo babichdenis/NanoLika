@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// nanoMuse Cloud: the "start now" path. A phone number or an e-mail address, a code, and the
+/// NanoLika Cloud: the "start now" path. A phone number or an e-mail address, a code, and the
 /// app has a provider with a starter allowance — no key of one's own needed. The server is the
 /// relay in `cloud/` of the repository; anyone can run one, and the app can be pointed at it
 /// ("Use a different server" on the sign-in page, `NanoMuseRelayPicker`).
@@ -255,10 +255,10 @@ enum NanoMuseCloud {
         return !(ProviderKeychainHelper.loadAPIKey(instanceId: inst.id) ?? "").isEmpty
     }
 
-    /// *Use nanoMuse Cloud models*: the account's models as a source. Signed in and the Cloud
+    /// *Use NanoLika Cloud models*: the account's models as a source. Signed in and the Cloud
     /// instance switched on. Off, the account leaves the pickers and the automatic order of
     /// every slot while the sign-in stays for sync and the hub; the one thing that may still run
-    /// on it is the explicit *Use nanoMuse Cloud this time* (NanoMuseCloudOnce). The one decision
+    /// on it is the explicit *Use NanoLika Cloud this time* (NanoMuseCloudOnce). The one decision
     /// point: every slot, picker and side call asks this, not `isSignedIn`.
     static var modelsOn: Bool {
         guard let inst = instance, inst.isEnabled else { return false }
@@ -398,7 +398,7 @@ enum NanoMuseCloud {
 
         let parsed = parseAccount(reply)
         account = parsed
-        NanoMuseNudges.shared.absorb(me: reply) // nanoMuse: contract C1 — the star policy rides along
+        NanoMuseNudges.shared.absorb(me: reply) // NanoLika: contract C1 — the star policy rides along
         // C12: whoever was here is put aside, and this account's own set comes back (or starts empty)
         let after = NanoMuseAccountData.shared.current
         if after != before {
@@ -424,7 +424,7 @@ enum NanoMuseCloud {
             let menu = me["models"] as? [[String: Any]] ?? NanoMuseRelayMenu.cached
             NanoMuseRelayMenu.store(menu)
             provisionDefaults(store: ProviderConfigStore.shared, instance: inst, models: menu)
-            NanoMuseNudges.shared.absorb(me: me) // nanoMuse: contract C1
+            NanoMuseNudges.shared.absorb(me: me) // NanoLika: contract C1
             NanoMuseAllowance.shared.absorb(me: me) // the 80 % heads-up, the region's guidance (contract C11)
             return parsed
         } catch let error as CloudError where error.status == 401 {
@@ -679,7 +679,7 @@ enum NanoMuseCloud {
 
     private static var userAgent: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        return "nanoMuse-iOS/\(version)"
+        return "NanoLika-iOS/\(version)"
     }
 
     private static let session: URLSession = {

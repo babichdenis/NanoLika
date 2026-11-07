@@ -1,9 +1,9 @@
 //
 //  NanoMuseChatGlue.swift
-//  nanoMuse
+//  NanoLika
 //
-//  The few places the upstream chat pipeline hands control to nanoMuse —
-//  one `// nanoMuse:` line each in AIChatViewModel: before a send, after a
+//  The few places the upstream chat pipeline hands control to NanoLika —
+//  one `// NanoLika:` line each in AIChatViewModel: before a send, after a
 //  turn, while the system prompt is assembled. Everything else lives here.
 //  Android: the same hooks in ChatViewModel for AvatarFlow, GoalFlow,
 //  FeedFlow, FirstConversation and SessionAddenda.
@@ -16,7 +16,7 @@ import Foundation
 extension Notification.Name {
     /// `object` is the chat's session key (`nmSessionKey`); `userInfo["action"]` a
     /// `NanoMuseChatAction` raw value. AIChatView acts on it for its own chat.
-    static let nanoMuseChatAction = Notification.Name("nanoMuse.chatAction")
+    static let nanoMuseChatAction = Notification.Name("NanoLika.chatAction")
 }
 
 /// What the Muse header's ••• menu can ask of the chat under it (the entries
@@ -42,7 +42,7 @@ extension AIChatViewModel {
 
     // MARK: Hooks
 
-    /// Before the model sees a message. True when nanoMuse handled the text itself (the
+    /// Before the model sees a message. True when NanoLika handled the text itself (the
     /// composer is cleared, nothing is sent); false to carry on as usual.
     func nmInterceptSend(_ text: String) -> Bool {
         guard !text.isEmpty else { return false }

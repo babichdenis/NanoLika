@@ -50,7 +50,7 @@ import io.github.nanomuse.ui.home.MuseTones
 /** The in-app link that starts a new chat (the 413's way on). */
 private const val NEW_CHAT_DEEP_LINK = "minis://action/new_chat"
 
-/** The in-app link that opens Settings → nanoMuse Cloud (sign in again, pick another model). */
+/** The in-app link that opens Settings → NanoLika Cloud (sign in again, pick another model). */
 private const val CLOUD_DEEP_LINK = "minis://settings/cloud"
 
 /**

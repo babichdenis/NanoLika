@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * The relay's refusals, caught on their way through the model client. nanoMuse Cloud refuses
+ * The relay's refusals, caught on their way through the model client. NanoLika Cloud refuses
  * a model call with a stable `error.code` (docs/cloud.md): `allowance_exhausted` with what is
  * left, the pool, the invite link, what an invitation adds to each side, the guide for one's
  * own key and — relay 0.21 — the ways-on card as data (`guidance`); `daily_cap`; and the rest

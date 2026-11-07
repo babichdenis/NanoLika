@@ -147,8 +147,8 @@ private struct UserBubbleSurface: ViewModifier {
                         .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                         .foregroundStyle(ChatColors.secondaryText.opacity(0.5))
                 )
-        } else if NanoMuseShellPrefs.shell { // nanoMuse: Muse's user pill: the ink colour, black in light and white in dark, 18 pt, no glass (Android: ChatColors.userBubble)
-            content.background(shape.fill(NanoMuseTones.ink)) // nanoMuse:
+        } else if NanoMuseShellPrefs.shell { // NanoLika: Muse's user pill: the ink colour, black in light and white in dark, 18 pt, no glass (Android: ChatColors.userBubble)
+            content.background(shape.fill(NanoMuseTones.ink)) // NanoLika:
         } else if #available(iOS 26.0, *) {
             content.glassEffect(.regular, in: shape)
         } else {
@@ -379,14 +379,14 @@ struct ChatMessageRow: View {
                     QueuedAttachmentPreview(attachments: message.inputAttachments)
                 }
 
-                if let wake = message.nmRoutine { // nanoMuse: a routine's prompt is one quiet line, not a bubble in the person's voice
+                if let wake = message.nmRoutine { // NanoLika: a routine's prompt is one quiet line, not a bubble in the person's voice
                     NanoMuseRoutineWakeRow(label: wake.label, at: wake.at)
                 } else if !userDisplayText.isEmpty {
                     HStack(spacing: 6) {
                         Text(userDisplayText)
                             .font(.system(size: FontSettings.shared.scaledMessage(16.5)))
-                            // nanoMuse: on the ink pill the text takes the canvas colour (white on black in light, black on white in dark); a queued line keeps upstream's grey (Android: ChatColors.onUserBubble)
-                            .foregroundStyle(message.isQueued ? ChatColors.secondaryText : (NanoMuseShellPrefs.shell ? NanoMuseTones.onInk : ChatColors.primaryText)) // nanoMuse:
+                            // NanoLika: on the ink pill the text takes the canvas colour (white on black in light, black on white in dark); a queued line keeps upstream's grey (Android: ChatColors.onUserBubble)
+                            .foregroundStyle(message.isQueued ? ChatColors.secondaryText : (NanoMuseShellPrefs.shell ? NanoMuseTones.onInk : ChatColors.primaryText)) // NanoLika:
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .modifier(UserBubbleSurface(isQueued: message.isQueued))
@@ -404,7 +404,7 @@ struct ChatMessageRow: View {
                         }
                     }
                 }
-                NanoMuseFromDeviceCaption(message.nmFromDevice, working: message.nmWorkingDevice) // nanoMuse: C8 "From Pixel 8" + C9 "{device} is working…"
+                NanoMuseFromDeviceCaption(message.nmFromDevice, working: message.nmWorkingDevice) // NanoLika: C8 "From Pixel 8" + C9 "{device} is working…"
             }
             .modifier(MinisOpenURLHandler())
             .contentShape(Rectangle())
@@ -428,14 +428,14 @@ struct ChatMessageRow: View {
                         Label(AppLocalized("Copy Screenshot"), systemImage: "camera.viewfinder")
                     }
                 }
-                if let onEdit, message.nmFromDevice == nil { // nanoMuse: C8 — another device's line is read-only here
+                if let onEdit, message.nmFromDevice == nil { // NanoLika: C8 — another device's line is read-only here
                     Button {
                         onEdit()
                     } label: {
                         Label("Edit", systemImage: "square.and.pencil")
                     }
                 }
-                if let onRetry, message.nmFromDevice == nil { // nanoMuse: C8
+                if let onRetry, message.nmFromDevice == nil { // NanoLika: C8
                     Button {
                         onRetry()
                     } label: {
@@ -485,7 +485,7 @@ struct ChatMessageRow: View {
     private var assistantRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Assistant label
-            if !NanoMuseShellPrefs.shell { // nanoMuse: in the Muse shell the grey bubble is the agent's; no label over it
+            if !NanoMuseShellPrefs.shell { // NanoLika: in the Muse shell the grey bubble is the agent's; no label over it
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 18, weight: .semibold))
@@ -502,7 +502,7 @@ struct ChatMessageRow: View {
                     .foregroundStyle(ChatColors.primaryText)
             }
             .padding(.top, 4)
-            } // nanoMuse:
+            } // NanoLika:
 
             ForEach(message.blocks) { block in
                 AssistantBlockView(
@@ -538,7 +538,7 @@ struct ChatMessageRow: View {
                 )
             }
 
-            NanoMuseFromDeviceCaption(message.nmFromDevice) // nanoMuse: C8 — "From Pixel 8" under a synced reply
+            NanoMuseFromDeviceCaption(message.nmFromDevice) // NanoLika: C8 — "From Pixel 8" under a synced reply
 
             // Typing indicator — "request out, nothing back yet", evaluated per
             // ROUND. See `ChatMessage.shouldShowTypingIndicator`.
@@ -548,12 +548,12 @@ struct ChatMessageRow: View {
 
             // Inline error + retry
             if let error = message.error {
-                // nanoMuse: a provider that could not be reached (or refused the region, or whose sign-in ran out) is a card, not the transport's text
+                // NanoLika: a provider that could not be reached (or refused the region, or whose sign-in ran out) is a card, not the transport's text
                 if let reach = NanoMuseProviderReach.classify(error) {
                     NanoMuseProviderReachCard(reach: reach, onRetry: onRetry)
                 } else {
                     inlineError(error)
-                    NanoMuseCloudOnceRow(onRetry: onRetry) // nanoMuse: "Use nanoMuse Cloud this time" after a key of one's own failed
+                    NanoMuseCloudOnceRow(onRetry: onRetry) // NanoLika: "Use NanoLika Cloud this time" after a key of one's own failed
                 }
             }
 

@@ -1,6 +1,6 @@
 //
 //  NanoMuseRooms.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Two of the rooms next to the chat: Ideas (the bundled catalogue — one
 //  tap sends a prompt to a new chat, schedules a routine or starts a goal)

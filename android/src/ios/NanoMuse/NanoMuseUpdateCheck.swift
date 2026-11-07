@@ -1,6 +1,6 @@
 //
 //  NanoMuseUpdateCheck.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The version row in Settings (contract C2): what is installed, what the latest
 //  release is, and a link to it when it is newer. The download index on nanomuse.cn
@@ -157,7 +157,7 @@ final class NanoMuseUpdateCheck: ObservableObject {
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("nanoMuse-iOS/\(installed)", forHTTPHeaderField: "User-Agent")
+        request.setValue("NanoLika-iOS/\(installed)", forHTTPHeaderField: "User-Agent")
         guard let result = try? await URLSession.shared.data(for: request) else { return nil }
         let (data, response) = result
         guard (200..<300).contains((response as? HTTPURLResponse)?.statusCode ?? 0) else { return nil }

@@ -1,8 +1,8 @@
-"""Who is trying the showcase: a nanoMuse Cloud sign-in before a demo Muse.
+"""Who is trying the showcase: a NanoLika Cloud sign-in before a demo Muse.
 
 The phone in the browser is a demo — a MobileGym with a lite web app in it, a long way from
 the Android app — and the project wants to know who is trying it and be able to reach them.
-So a visitor signs in to nanoMuse Cloud first (a code to a phone or an inbox, or the account's
+So a visitor signs in to NanoLika Cloud first (a code to a phone or an inbox, or the account's
 password), the same account the apps use; a first sign-in creates the account, with its free
 allowance, for the day the person installs the app.
 
@@ -341,7 +341,7 @@ class VisitorBook:
     def check(self, ticket: str | None) -> Visitor:
         """The visitor behind a ticket, or a refusal the page turns into the sign-in."""
         if not ticket:
-            raise Refused(401, "signin_required", "Sign in to nanoMuse Cloud to start a demo.")
+            raise Refused(401, "signin_required", "Sign in to NanoLika Cloud to start a demo.")
         visitor = self.store.redeem(ticket, self.clock())
         if visitor is None:
             raise Refused(401, "signin_expired", "Your sign-in has lapsed; sign in again.")

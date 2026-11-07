@@ -420,7 +420,7 @@ export function apply(ctx: ClientContext): void {
   /**
    * Delete a chat here and in the account (C11): the relay tombstones the conversation and
    * drops its texts, the copy here leaves both columns (the harness column lists sessions,
-   * so archiving is how a row leaves it; the nanoMuse column hides it by the host's `gone`).
+   * so archiving is how a row leaves it; the NanoLika column hides it by the host's `gone`).
    * The session file stays — dsh keeps logs.
    */
   const deleteEverywhere = async (sessionId: string): Promise<void> => {

@@ -1,6 +1,6 @@
 //
 //  NanoMuseToolBar.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The step bar above the composer, as the Muse shell draws it. Upstream's
 //  bar (FloatingToolBar in ToolLiveSheet.swift) is 38 pt tall with a 100 × 65

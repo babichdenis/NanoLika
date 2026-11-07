@@ -380,7 +380,7 @@ class ThinkingRulesRegressionTest {
             "literal 'ultra' must never be sent (backends 400 on it): $body",
             body.optString("reasoning_effort", "") == "ultra",
         )
-        // nanoMuse: GPT-6 series models reach MAX in ThinkingLevelCatalog (#475)
+        // NanoLika: GPT-6 series models reach MAX in ThinkingLevelCatalog (#475)
         for (id in listOf("gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6-astra")) {
             org.junit.Assert.assertEquals(
                 ThinkingLevel.MAX,

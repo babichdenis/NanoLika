@@ -245,7 +245,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
     @Volatile
     private var audioPipeWrite: android.os.ParcelFileDescriptor? = null
 
-    // nanoMuse: a retired writer can fail after a segment restart publishes its replacement.
+    // NanoLika: a retired writer can fail after a segment restart publishes its replacement.
     private val audioPipeStream = java.util.concurrent.atomic.AtomicReference<java.io.OutputStream?>()
 
     /** Read end, handed to the recogniser; closed once it has taken ownership. */
@@ -308,7 +308,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
         }
         audioPipeRead = pipe[0]
         audioPipeWrite = pipe[1]
-        // nanoMuse: publish the stream atomically for the capture worker.
+        // NanoLika: publish the stream atomically for the capture worker.
         audioPipeStream.set(android.os.ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]))
 
         val det = VoiceActivityDetector(
@@ -409,7 +409,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
         // ONE capture serves both: the VAD judges these samples and the very
         // same frames go down the pipe to the recogniser.
         det.rawAudioSink = { bytes, len ->
-            // nanoMuse: retain the identity of the stream used by this write.
+            // NanoLika: retain the identity of the stream used by this write.
             val out = audioPipeStream.get()
             if (out != null) {
                 try {
@@ -418,7 +418,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
                     // Recogniser closed its end (finished or died). Stop
                     // writing; the session is over either way.
                     Log.i(TAG, "[vad] audio pipe closed by reader: ${t.javaClass.simpleName}")
-                    // nanoMuse: a failed old write must not clear a newer segment's pipe.
+                    // NanoLika: a failed old write must not clear a newer segment's pipe.
                     audioPipeStream.compareAndSet(out, null)
                 }
             }
@@ -492,7 +492,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
         }
         audioPipeRead = pipe[0]
         audioPipeWrite = pipe[1]
-        // nanoMuse: publish the replacement independently of any retiring write.
+        // NanoLika: publish the replacement independently of any retiring write.
         audioPipeStream.set(android.os.ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]))
         feedingAudio = true
 
@@ -514,7 +514,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
     }
 
     private fun closeAudioPipe() {
-        // nanoMuse: detach before closing; an in-flight write only owns the retired stream.
+        // NanoLika: detach before closing; an in-flight write only owns the retired stream.
         audioPipeStream.getAndSet(null)?.let { runCatching { it.close() } }
         audioPipeWrite = null
         audioPipeRead?.let { runCatching { it.close() } }
@@ -551,7 +551,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
     private fun startInternal(locale: Locale, allowOnDeviceRetry: Boolean) {
         mainHandler.post {
             try {
-                // nanoMuse: Keep the factory's actual mode when on-device creation falls back.
+                // NanoLika: Keep the factory's actual mode when on-device creation falls back.
                 // Only reach for the on-device recognizer when the user actually
                 // asked for offline. It used to be created unconditionally on
                 // S+, which silently overrode the panel's "System Recognition
@@ -674,7 +674,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
      */
     @Volatile var preferOffline: Boolean = false
 
-    // nanoMuse: Use the framework's error name in this locale explanation.
+    // NanoLika: Use the framework's error name in this locale explanation.
     /**
      * [T-android-asr-script-subtag] Strip the SCRIPT subtag from a language tag
      * before handing it to the recognizer.
@@ -684,7 +684,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
      * matches its language packs on plain `language-REGION` tags, so the script
      * subtag makes it report "Locale not supported" / "Failed to get language
      * pack of required locale" and fail the session.
-     * nanoMuse: The framework calls this ERROR_LANGUAGE_NOT_SUPPORTED (12).
+     * NanoLika: The framework calls this ERROR_LANGUAGE_NOT_SUPPORTED (12).
      * The mic opens and immediately closes. Observed on a
      * Pixel 4a whose system locale is zh-Hans-CN.
      *
@@ -1076,7 +1076,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
             SpeechRecognizer.ERROR_AUDIO -> RecognitionError.AUDIO_ERROR
             SpeechRecognizer.ERROR_CLIENT -> RecognitionError.OEM_NO_SERVICE
             SpeechRecognizer.ERROR_SERVER -> RecognitionError.NETWORK
-            // nanoMuse: API 31 language errors are 12/13; 11 is a service disconnect.
+            // NanoLika: API 31 language errors are 12/13; 11 is a service disconnect.
             SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
             SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> RecognitionError.LANGUAGE_UNSUPPORTED
             else -> RecognitionError.UNKNOWN
@@ -1092,7 +1092,7 @@ class SystemSpeechRecognitionEngine(private val appContext: Context) : SpeechRec
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
             SpeechRecognizer.ERROR_SERVER -> "Server error"
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"
-            // nanoMuse: Match the existing language messages to the framework's error codes.
+            // NanoLika: Match the existing language messages to the framework's error codes.
             SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ->
                 "Language not supported by the recognizer"
             SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->

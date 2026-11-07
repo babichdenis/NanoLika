@@ -340,7 +340,7 @@ fun BrowserSheet(
                 }
             }
 
-            // nanoMuse: while the browser is handed to the person, the one line and Done sit above the downloads.
+            // NanoLika: while the browser is handed to the person, the one line and Done sit above the downloads.
             io.github.nanomuse.ui.chat.BrowserHandOverBanner(accent)
 
             // ── Download progress banner ──
@@ -602,10 +602,10 @@ private fun AgentBrowsingOverlay(accent: Color, onTakeover: () -> Unit) {
                     .background(accent.copy(alpha = breathingAlpha), CircleShape),
             )
             Spacer(Modifier.width(12.dp))
-            // nanoMuse: "<name> is browsing" — the Soul name, like the composer placeholder.
+            // NanoLika: "<name> is browsing" — the Soul name, like the composer placeholder.
             val browsingSoul by com.openminis.app.agent.SoulStore.cachedMetadata.collectAsState()
             Text(
-                stringResource(R.string.browser_minis_browsing, browsingSoul.name.trim().ifEmpty { "nanoMuse" }),
+                stringResource(R.string.browser_minis_browsing, browsingSoul.name.trim().ifEmpty { "NanoLika" }),
                 color = Color.White.copy(alpha = 0.9f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

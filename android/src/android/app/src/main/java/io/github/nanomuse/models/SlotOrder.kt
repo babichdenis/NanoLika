@@ -21,7 +21,7 @@ object SlotOrder {
 
     /**
      * The first of the four rungs that has a value: what the person chose, the chat provider's
-     * own model for the slot, nanoMuse Cloud's (null when signed out or the relay has none),
+     * own model for the slot, NanoLika Cloud's (null when signed out or the relay has none),
      * the first own provider's. Null when nothing can serve the slot.
      */
     fun <T : Any> resolve(chosen: T?, chatProvider: T?, cloud: T?, firstOwn: T?): Pick<T>? = when {

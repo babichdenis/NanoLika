@@ -109,7 +109,7 @@ object ImageGen {
         }
     }
 
-    /** Names that mean "text to image" across the providers nanoMuse meets. */
+    /** Names that mean "text to image" across the providers NanoLika meets. */
     fun looksLikeImageModel(id: String): Boolean {
         val s = id.lowercase()
         if (s.contains("embedding") || s.contains("-vl") || s.contains("vision") || s.contains("caption")) return false
@@ -133,14 +133,14 @@ object ImageGen {
     private val DATED = Regex("-\\d{4}-\\d{2}-\\d{2}$")
 
     /**
-     * The model nanoMuse would pick for [instance]: the catalogue's `defaults.image` for its
+     * The model NanoLika would pick for [instance]: the catalogue's `defaults.image` for its
      * vendor (0.1.41), else the host's known default. Empty when neither knows the host.
      */
     fun recommendedModel(context: Context, instance: ProviderInstance): String =
         io.github.nanomuse.models.ModelSlots.defaultOf(context, instance, io.github.nanomuse.models.ModelSlots.Slot.IMAGE)
             ?: recommendedModel(instance)
 
-    /** The model nanoMuse would pick on this host, list or no list. Empty when the host is unknown. */
+    /** The model NanoLika would pick on this host, list or no list. Empty when the host is unknown. */
     fun recommendedModel(instance: ProviderInstance): String {
         val base = baseUrlOf(instance)
         return when {
@@ -181,7 +181,7 @@ object ImageGen {
      * The image model: the one chosen (Settings → Models, or → Image & video models); with
      * nothing chosen, in the Models page's order (0.1.41, [io.github.nanomuse.models.SlotOrder]):
      * the chat provider's own image model when the chat provider is the person's own and
-     * draws, else nanoMuse Cloud's when signed in, else the first own provider that draws.
+     * draws, else NanoLika Cloud's when signed in, else the first own provider that draws.
      * [automatic] leaves the choice aside and answers what that order gives now (the picker's
      * *Automatic* row says so).
      */

@@ -45,7 +45,7 @@ enum OpenAIModelsAPI {
         return enriched
     }
 
-    // nanoMuse: query https://chatgpt.com/backend-api/codex/models when an OAuth token is present (#475)
+    // NanoLika: query https://chatgpt.com/backend-api/codex/models when an OAuth token is present (#475)
     static func fetchModelsOAuth(accessToken: String?, accountId: String? = nil) async -> [LLMModel] {
         let token = (accessToken ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty,
@@ -91,7 +91,7 @@ enum OpenAIModelsAPI {
     }
 
     private static func performFetch(_ request: URLRequest, filterOpenAIOnly: Bool = true) async throws -> [LLMModel] {
-        let (data, response) = try await NanoMuseProxy.session.data(for: request) // nanoMuse: Settings → Network
+        let (data, response) = try await NanoMuseProxy.session.data(for: request) // NanoLika: Settings → Network
         let http = response as? HTTPURLResponse
         let statusCode = http?.statusCode ?? -1
 

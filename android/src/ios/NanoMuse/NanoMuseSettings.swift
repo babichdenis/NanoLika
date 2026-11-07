@@ -1,6 +1,6 @@
 //
 //  NanoMuseSettings.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Settings as Muse cards, in Android's order: the model, the agent, the
 //  phone, the app, about. Reached from the drawer, the ••• menus and the

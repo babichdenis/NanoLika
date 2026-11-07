@@ -1,6 +1,6 @@
 //
 //  NanoMuseAgentPage.swift
-//  nanoMuse
+//  NanoLika
 //
 //  What opens when the face is tapped: the agent's own page. The face,
 //  large, with a pen badge (Change avatar / Edit name / Your own clip… / Avatar studio…),
@@ -15,11 +15,11 @@ import UIKit
 
 extension Notification.Name {
     /// The face was tapped: present the agent page.
-    static let nanoMuseOpenAgentPage = Notification.Name("nanoMuse.openAgentPage")
+    static let nanoMuseOpenAgentPage = Notification.Name("NanoLika.openAgentPage")
     /// Put words into the composer of a chat. object: target id (session or draft); userInfo["text"].
-    static let nanoMuseComposerPrefill = Notification.Name("nanoMuse.composerPrefill")
+    static let nanoMuseComposerPrefill = Notification.Name("NanoLika.composerPrefill")
     /// Switch to Goals and scroll to routines.
-    static let nanoMuseOpenRoutines = Notification.Name("nanoMuse.openRoutines")
+    static let nanoMuseOpenRoutines = Notification.Name("NanoLika.openRoutines")
 }
 
 // MARK: - Page

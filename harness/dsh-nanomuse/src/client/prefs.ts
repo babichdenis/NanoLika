@@ -30,7 +30,7 @@ export interface ApprovalRecord {
 const KEY = 'nanomuse.prefs'
 /**
  * Bumped when a default changes in a way that installations which already wrote the old
- * one must follow. 4: the chats column is the nanoMuse one by default (virtual folders by
+ * one must follow. 4: the chats column is the NanoLika one by default (virtual folders by
  * origin); a profile written before it is migrated once, the Developer switch stands after.
  */
 const SCHEMA = 4
@@ -44,7 +44,7 @@ function appPlatform(): string | undefined {
 }
 
 /**
- * The nanoMuse column is the default everywhere: it lists the account's chats (the harness's
+ * The NanoLika column is the default everywhere: it lists the account's chats (the harness's
  * own column lists workspaces and hides a chat that has no turns here yet — the reason a new
  * device "saw nothing"). The harness controls stay one switch away in Settings.
  */
@@ -67,7 +67,7 @@ function read(): Prefs {
     if (!raw) return DEFAULTS
     const parsed = JSON.parse(raw) as Partial<Prefs> & { schema?: number }
     // A profile written before schema 3 carries a default (the harness column on macOS and
-    // Windows), not a choice: it is read once with the current default, the nanoMuse chat
+    // Windows), not a choice: it is read once with the current default, the NanoLika chat
     // column. A switch touched since (`schema` 3) stands as the person left it.
     const schema = typeof parsed.schema === 'number' ? parsed.schema : 1
     return {

@@ -2194,7 +2194,7 @@ class ProviderRepository(private val context: Context) {
         if (instance.providerType == ProviderType.openAI
             && instance.credentialType == ProviderCredential.oauth
         ) {
-            // nanoMuse: query live Codex OAuth models with accountId (#475)
+            // NanoLika: query live Codex OAuth models with accountId (#475)
             val accountId = runCatching { com.openminis.app.auth.OpenAIOAuthManager(context, instance.id).accountId }.getOrNull()
             val models = OpenAIModelsApi.fetchModelsOAuth(apiKey, accountId)
             if (models.isNotEmpty()) {

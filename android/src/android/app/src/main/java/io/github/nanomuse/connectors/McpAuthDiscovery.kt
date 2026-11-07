@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  * The MCP authorization flow's first half, as the desktop host does it (`connectors.ts`): ask
  * the server what it wants with a bare `initialize`; on a 401, follow `WWW-Authenticate` to the
  * protected-resource metadata, from there to the authorization server's metadata (RFC 8414 /
- * OpenID), and register nanoMuse as a client there (RFC 7591) — so a person connects without
+ * OpenID), and register NanoLika as a client there (RFC 7591) — so a person connects without
  * ever seeing a client id. The result is the same static [MCPOAuthConfig] the upstream PKCE
  * flow ([com.openminis.app.mcp.oauth.MCPOAuthController]) runs with.
  */
@@ -57,7 +57,7 @@ object McpAuthDiscovery {
         ).toString()
 
     /**
-     * What [url] wants, registering nanoMuse at its authorization server when it is OAuth.
+     * What [url] wants, registering NanoLika at its authorization server when it is OAuth.
      * [redirectUri] is the loopback the PKCE step listens on. Blocking; call off the main thread.
      * Throws with a readable message when the server misbehaves.
      */

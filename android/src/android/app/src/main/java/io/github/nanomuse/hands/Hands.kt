@@ -84,7 +84,7 @@ object Hands {
     enum class Why { CHOSEN, CHAT_PROVIDER, MENU, DEFAULT, CHAT, GROUP, VISION_GROUP, ANY }
 
     /**
-     * The hands' default model wherever it is served (contract C4): `qwen3.8-27b` on nanoMuse
+     * The hands' default model wherever it is served (contract C4): `qwen3.8-27b` on NanoLika
      * Cloud and 阿里云百炼, `qwen/qwen3.8-27b` on OpenRouter. The chat model is a separate
      * setting; a chat model that happens to see is not thereby the one that operates the phone.
      */
@@ -123,7 +123,7 @@ object Hands {
      * the one chosen in Settings → Models (or → Hands); the chat provider's own model for the
      * screen (the catalogue's `defaults.hands`, else its first model that sees) when the chat
      * provider is the person's own and sees — the relay never jumps ahead of a provider the
-     * person chose; nanoMuse Cloud's model for the screen (`qwen3.8-27b`, what the relay marks
+     * person chose; NanoLika Cloud's model for the screen (`qwen3.8-27b`, what the relay marks
      * `for: gui`), when signed in; the same default under the person's own key (`qwen3.8-27b`
      * on 百炼, `qwen/qwen3.8-27b` on OpenRouter); then, for a set-up with none of those, the
      * chat model the person last picked when it sees, the first sighted member of the default

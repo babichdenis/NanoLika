@@ -21,7 +21,7 @@ struct AssistantBlockView: View {
     @Binding var detailBlock: AssistantBlock?
     private var isHighlighted: Bool { highlightedBlockId == block.id }
 
-    // nanoMuse: "Show the agent's steps" (Settings → Chat) is off by default — a finished
+    // NanoLika: "Show the agent's steps" (Settings → Chat) is off by default — a finished
     // message keeps to the conversation; the steps of the message still running stay visible.
     @AppStorage(NanoMuseSteps.key) private var showSteps: Bool = NanoMuseSteps.defaultValue
 
@@ -38,7 +38,7 @@ struct AssistantBlockView: View {
         switch block.kind {
         case .text:
             if NanoMuseFences.contains(block.content) {
-                // nanoMuse: a `nanomuse-*` fence (goal, check-in, feed post, avatar takes) renders as its card.
+                // NanoLika: a `nanomuse-*` fence (goal, check-in, feed post, avatar takes) renders as its card.
                 NanoMuseFenceBlockView(content: block.content)
                     .padding(.vertical, 2)
             } else if !block.content.isEmpty {
@@ -48,7 +48,7 @@ struct AssistantBlockView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(ChatColors.accent.opacity(isHighlighted ? 0.10 : 0))
                     )
-                    .modifier(NanoMuseAssistantBubble(content: block.content)) // nanoMuse: Muse's grey bubble around the reply in the shell
+                    .modifier(NanoMuseAssistantBubble(content: block.content)) // NanoLika: Muse's grey bubble around the reply in the shell
             }
         case .thinking:
             ThinkingBlockView(
@@ -1026,7 +1026,7 @@ struct TypingIndicator: View {
     /// `.soulMdChanged` Notification — same wiring used by `AssistantSoulName`.
     @State private var soulName: String = {
         let n = SoulStore.cachedMetadata.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return n.isEmpty ? "nanoMuse" : n
+        return n.isEmpty ? "NanoLika" : n
     }()
 
     var body: some View {
@@ -1036,7 +1036,7 @@ struct TypingIndicator: View {
         // duplicate here was redundant. ThinkingLevelSheetView is unchanged;
         // it's still presented from the nav-bar badge.
         HStack(spacing: 0) {
-            Text("\(soulName) is on it") // nanoMuse: what it is doing, not that it is "thinking" (the phone/web/desktop say the same)
+            Text("\(soulName) is on it") // NanoLika: what it is doing, not that it is "thinking" (the phone/web/desktop say the same)
             ForEach(0..<3, id: \.self) { i in
                 Text(".")
                     .offset(y: dotOffsets[i] ? -3 : 1)
@@ -1044,7 +1044,7 @@ struct TypingIndicator: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .soulMdChanged)) { _ in
             let n = SoulStore.cachedMetadata.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            soulName = n.isEmpty ? "nanoMuse" : n
+            soulName = n.isEmpty ? "NanoLika" : n
         }
         .font(.system(size: 15, weight: .medium))
         .foregroundStyle(ChatColors.tertiaryText)

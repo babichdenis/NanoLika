@@ -8,9 +8,9 @@ messages marked "said on a call" still display.
 
 What remains is voice **input**: on the phone the microphone button in the
 composer (the system's or a provider's speech recognition, as in OpenMinis);
-in nanoMuse Web and the desktop app a microphone button next to *Send* that
+in NanoLika Web and the desktop app a microphone button next to *Send* that
 uses the browser's own speech recognition where it exists (Chrome, Edge,
-Safari); nothing is sent anywhere by nanoMuse, no model is involved, and the
+Safari); nothing is sent anywhere by NanoLika, no model is involved, and the
 words land in the box for you to send.
 
 The design and the code of the calls live in the history of the repository

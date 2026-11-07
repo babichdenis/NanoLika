@@ -220,7 +220,7 @@ extension AIChatViewModel {
     /// 30MB"` — we keep the agent-visible record (`raw`) for diagnosis but
     /// surface a localized hint to the user. T-imgsize-13b7d81c.
     static func friendlyErrorMessage(_ raw: String) -> String {
-        if let line = NanoMuseReachSignal.shared.lineForError(raw) { return line } // nanoMuse: a provider's 401/403/429 kept aside for the reach card
+        if let line = NanoMuseReachSignal.shared.lineForError(raw) { return line } // NanoLika: a provider's 401/403/429 kept aside for the reach card
         let lower = raw.lowercased()
         if lower.contains("image content cannot exceed")
             || lower.contains("image_too_large")
@@ -257,7 +257,7 @@ extension AIChatViewModel {
     /// App Group container root for FileProvider-visible directories.
     /// Everything under this path is exposed to iOS Files via the replicated
     /// FileProvider extension. Keep ONLY user-facing subdirs (shared, skills,
-    /// memory) here — anything else leaks into "On My iPhone → nanoMuse".
+    /// memory) here — anything else leaks into "On My iPhone → NanoLika".
     nonisolated static var minisAppGroupRoot: URL {
         FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: SharedContainerStore.appGroupID

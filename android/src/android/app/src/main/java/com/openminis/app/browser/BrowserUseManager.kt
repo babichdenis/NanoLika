@@ -652,7 +652,7 @@ class BrowserUseManager(
 
     suspend fun execute(input: BrowserActionInput): BrowserActionResult {
         val prevUrl = withContext(Dispatchers.Main) { webView.url }
-        val nmGate = nmGuard(input) // nanoMuse: secret fields refused, pay/send/delete taps approved first
+        val nmGate = nmGuard(input) // NanoLika: secret fields refused, pay/send/delete taps approved first
         nmGate.blocked?.let { return it }
         var result: BrowserActionResult = when (input.action) {
             BrowserAction.NAVIGATE -> navigate(input.url)
@@ -679,7 +679,7 @@ class BrowserUseManager(
             BrowserAction.WAIT_FOR_DOM_STABLE -> return waitForDomStable(input.timeoutMs)
             BrowserAction.NEW_TAB, BrowserAction.CLOSE_TAB, BrowserAction.LIST_TABS ->
                 return BrowserActionResult.error("Tab management actions must be routed through BrowserTabPool")
-            // nanoMuse: handled by the chat before the pool sees it
+            // NanoLika: handled by the chat before the pool sees it
             BrowserAction.HAND_OVER ->
                 return BrowserActionResult.error("hand_over is handled by the chat, not by a tab")
         }
@@ -703,7 +703,7 @@ class BrowserUseManager(
             }
         }
 
-        // nanoMuse: a remembered approval (or a payment that ran on one) is told to the model.
+        // NanoLika: a remembered approval (or a payment that ran on one) is told to the model.
         nmGate.notice?.let { if (result.success) result = result.copy(text = result.text + "\n" + it) }
         return result
     }
@@ -992,10 +992,10 @@ class BrowserUseManager(
         return file
     }
 
-    // nanoMuse: the guard's word on an action — [blocked] when it may not run, else an optional [notice] for the model.
+    // NanoLika: the guard's word on an action — [blocked] when it may not run, else an optional [notice] for the model.
     private data class NmGate(val blocked: BrowserActionResult? = null, val notice: String? = null)
 
-    // nanoMuse: what a click or type is about to touch, judged before it happens.
+    // NanoLika: what a click or type is about to touch, judged before it happens.
     private suspend fun nmGuard(input: BrowserActionInput): NmGate {
         if (input.action != BrowserAction.CLICK && input.action != BrowserAction.TYPE) return NmGate()
         val guard = io.github.nanomuse.guard.BrowserGuard

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mirrors the newest nanoMuse releases so a download in China does not have to reach GitHub.
+"""Mirrors the newest NanoLika releases so a download in China does not have to reach GitHub.
 
 Asks the GitHub API for the repository's releases, takes the newest KEEP that are neither
 drafts nor pre-releases, and fetches every asset of each into WWW_ROOT/dl/<tag>/<name> —

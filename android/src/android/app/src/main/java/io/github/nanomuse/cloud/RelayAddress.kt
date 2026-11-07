@@ -77,7 +77,7 @@ object RelayAddress {
         return host + port
     }
 
-    /** True when [baseUrl] is nanoMuse Cloud itself rather than someone's own relay. */
+    /** True when [baseUrl] is NanoLika Cloud itself rather than someone's own relay. */
     fun isDefault(baseUrl: String): Boolean = baseUrl.trimEnd('/') == NanoMuseCloud.DEFAULT_BASE
 
     /**

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">Binaan ini</string>
@@ -617,10 +617,10 @@
     <string name="nm_risk_class_remote">Kawalan jauh</string>
     <string name="nm_hub_remote_reason">%1$s boleh mengendalikan telefon ini</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">Saya ada kunci API sendiri</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">Ejen peribadi sumber terbuka untuk setiap peranti yang anda miliki.</string>
     <string name="nm_welcome_email">Log masuk (percuma)</string>
     <string name="nm_welcome_fine_print">Satu akaun menyatukan peranti anda dan membawa penggunaan model percuma; tiada apa-apa dicaj. Kunci API anda sendiri boleh ditambah sejurus selepas itu.</string>
@@ -902,7 +902,7 @@
     <string name="nm_coding_fresh_hint">Perbualan baharu dengan %1$s. Mesej pertama anda memulakannya di komputer.</string>
     <string name="nm_coding_no_transcript">Belum ada yang boleh dibaca dalam sesi ini.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">Ahli · tiada had</string>
     <string name="nm_cloud_spent_total">¥%1$s · $%2$s dibelanjakan kesemuanya, dibayar oleh pembangun</string>
     <string name="nm_cloud_allowance_used">Digunakan ¥%1$s · $%2$s</string>
@@ -914,7 +914,7 @@
     <string name="nm_cloud_notice_closing">Jumpa pepijat, mahu ciri, ada tampalan? Repositori GitHub ialah tempatnya.</string>
     <string name="nm_cloud_notice">nanoLika ialah projek komuniti sumber terbuka bukan untuk keuntungan: percuma, selamanya. Model datang dengan peruntukan percuma yang dibayar oleh pembangun; selepas itu, kunci anda sendiri. Tiada apa-apa dijual; apa yang disimpan relay ada dalam dasar privasi, dan Tetapan → Kawalan data adalah milik anda. Padam akaun bila-bila anda suka.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">Mesej daripada peranti anda</string>
     <string name="nm_hub_service_channel">Disambungkan ke peranti anda</string>
     <string name="nm_hub_service_title">nanoLika · boleh dicapai dari peranti anda</string>

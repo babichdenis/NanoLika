@@ -871,7 +871,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         let dateStr = df.string(from: crashDate)
 
         var report = """
-        === nanoMuse Crash Report ===
+        === NanoLika Crash Report ===
         Date:    \(dateStr)
         Type:    \(type)
         Build:   \(displayBuild)
@@ -892,7 +892,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         let foreign = Self.detectInjectedDylibs()
         if !foreign.isEmpty {
             report += "\n⚠️ Injected: \(foreign.joined(separator: ", "))"
-            report += "\n         (third-party tweak/hook libraries loaded in-process — crashes may originate there, not in nanoMuse)"
+            report += "\n         (third-party tweak/hook libraries loaded in-process — crashes may originate there, not in NanoLika)"
         }
 
         if let phase = lastPhase {

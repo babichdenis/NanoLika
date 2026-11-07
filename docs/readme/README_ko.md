@@ -48,7 +48,7 @@ https://github.com/user-attachments/assets/c7694d5a-9450-4f99-9254-5d70560d7565
 - `2026-10-13` ⭐ GitHub 스타 1000개를 넘었습니다. 첫 공개 후 18일 만이며, 그 사이 GitHub Trending의 Swift 목록에 나흘 동안 올랐습니다([Trendshift](https://trendshift.io/repositories/286894) 기록: 10월 7일 7위, 10월 10일 4위). 써 보신 분, 문제를 알려 주신 분, pull request를 보내 주신 분 모두 고맙습니다. 계속 이어갑니다: 며칠에 한 번씩 새 버전을 내고, 다음에 할 일은 [로드맵](../roadmap.md)에 적어 두었습니다.
 - `2026-10-09` 🚀 버전 [1.0.0 Keel](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.0)이 나왔습니다. 휴대폰과 데스크톱과 브라우저 모두를 위한 버전입니다; 이전 버전 위에 설치되어 데이터가 그대로 남고, 릴리스 노트에 모든 변경 사항이 적혀 있습니다.
 - `2026-10-08` 🤗 저희 논문이 [Hugging Face Daily Papers](https://huggingface.co/papers/2610.08699)에 올라 10월 8일 목록에서 3위를 차지했습니다; 질문과 의견은 논문 페이지에 남겨 주세요.
-- `2026-10-07` 📄 저희 논문이 [arXiv](https://arxiv.org/abs/2610.08699)에 공개되었습니다: 『nanoMuse: An Open-Source Personal Agent for Every Device You Own』, 저자 Guangyi Liu, Yong Liu, Jiangning Zhang(저장대학교); 인용 정보는 이 페이지 끝에 있습니다.
+- `2026-10-07` 📄 저희 논문이 [arXiv](https://arxiv.org/abs/2610.08699)에 공개되었습니다: 『NanoLika: An Open-Source Personal Agent for Every Device You Own』, 저자 Guangyi Liu, Yong Liu, Jiangning Zhang(저장대학교); 인용 정보는 이 페이지 끝에 있습니다.
 - `2026-09-25` 🎉 nanoMuse를 GPL-3.0-or-later로 GitHub에 공개했습니다: OpenMinis 1.13을 바탕으로 한 Android 앱입니다; 릴레이, 데스크톱 앱, iPhone 앱이 그 뒤 며칠에 걸쳐 차례로 더해졌습니다.
 
 모든 버전: [releases](https://github.com/nano-muse/nanoMuse/releases).
@@ -90,7 +90,7 @@ https://github.com/user-attachments/assets/c7694d5a-9450-4f99-9254-5d70560d7565
 
 ## 어떻게 동작하나
 
-모든 기기가 자기 에이전트를 돌립니다. 휴대폰은 APK 안에서(proot 위의 Alpine Linux, 셸, 브라우저, MCP), 컴퓨터는 nanoMuse Desktop 안에서(DeepSeek Harness와 손을 위한 Python 런타임). 로그인하면 릴레이에서 만나 서로 부탁할 수 있습니다. 대화 텍스트는 릴레이를 지나지만, 파일과 스크린샷은 만들어진 기기에 남습니다.
+모든 기기가 자기 에이전트를 돌립니다. 휴대폰은 APK 안에서(proot 위의 Alpine Linux, 셸, 브라우저, MCP), 컴퓨터는 NanoLika Desktop 안에서(DeepSeek Harness와 손을 위한 Python 런타임). 로그인하면 릴레이에서 만나 서로 부탁할 수 있습니다. 대화 텍스트는 릴레이를 지나지만, 파일과 스크린샷은 만들어진 기기에 남습니다.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/nano-muse/nanoMuse/main/assets/brand/devices-loop.png" alt="Android, 데스크톱(Mac, Windows, Linux), iPhone과 iPad, 웹 앱이 하나의 계정을 둘러싼다: 릴레이가 기기를 로그인시키고 기기 사이에서 대화를 전달한다" width="92%">
@@ -100,7 +100,7 @@ https://github.com/user-attachments/assets/c7694d5a-9450-4f99-9254-5d70560d7565
 
 ## Muse, OpenMinis와 비교
 
-| | Meta Muse | OpenMinis | nanoMuse |
+| | Meta Muse | OpenMinis | NanoLika |
 |---|---|---|---|
 | 에이전트가 도는 곳 | 사용자마다 클라우드 VM 하나 | 설치된 휴대폰 | 당신의 휴대폰, 컴퓨터, 또는 자신의 서버, 하나의 계정으로 |
 | API 없는 앱 | 닿지 않음. VM은 기기를 건드리지 않음 | Android의 접근성 CLI | 휴대폰과 컴퓨터 모두 화면을 손으로 씀: 스크린샷을 보고, API를 먼저 시도하고, 로그인은 당신이 맡음. iOS에서는 안 됨. 시스템이 허용하지 않음 |
@@ -152,7 +152,7 @@ nanoMuse가 도움이 되었다면 논문을 인용해 주세요.
 
 ```bibtex
 @misc{liu2026nanomuseopensourcepersonalagent,
-      title={nanoMuse: An Open-Source Personal Agent for Every Device You Own}, 
+      title={NanoLika: An Open-Source Personal Agent for Every Device You Own}, 
       author={Guangyi Liu and Yong Liu and Jiangning Zhang},
       year={2026},
       eprint={2610.08699},
@@ -180,6 +180,6 @@ nanoMuse는 독립적인 커뮤니티 프로젝트로, Meta Platforms, Inc.와 �
 [GPL-3.0-or-later](../../LICENSE). 휴대폰 앱은 OpenMinis 1.13(GPL-3.0)을 바탕으로 2026-09-24부터 수정했습니다. [NOTICE](../../NOTICE) 참고. 그 이전 Python 계열 버전은 MIT였습니다(태그 `pre-openminis`).
 
 <p align="center">
-  <em>방문해 주셔서 감사합니다 ✨ nanoMuse.</em><br><br>
+  <em>방문해 주셔서 감사합니다 ✨ NanoLika.</em><br><br>
   <img src="https://hits.sh/github.com/nano-muse/nanoMuse.svg?label=visitors&color=0a66e4&extraCount=16719" alt="Visitors">
 </p>

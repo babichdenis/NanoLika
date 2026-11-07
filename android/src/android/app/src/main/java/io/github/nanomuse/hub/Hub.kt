@@ -13,8 +13,8 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * This phone on the nanoMuse hub: one outbound socket to the cloud the account is signed in
- * to, so the user's other devices — computers running nanoMuse Desktop, other phones, the web
+ * This phone on the NanoLika hub: one outbound socket to the cloud the account is signed in
+ * to, so the user's other devices — computers running NanoLika Desktop, other phones, the web
  * console — can reach it wherever it is, and it can reach them. What they may do here is
  * decided here ([HubActions]); what this phone asks of them is judged before it is sent
  * (`nanomuse-pc`).

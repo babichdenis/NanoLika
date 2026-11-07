@@ -2,17 +2,17 @@ import type { AppManifest } from '@/os/types/manifest';
 import { IcLauncher } from './res/icons';
 
 /**
- * nanoMuse as an app on the simulated phone.
+ * NanoLika as an app on the simulated phone.
  *
- * The app is a thin shell: it shows the nanoMuse web app (served by `nanomuse serve` on the
+ * The app is a thin shell: it shows the NanoLika web app (served by `nanomuse serve` on the
  * host) full-screen, and mirrors what the server wants from you — approvals, questions,
  * background results — into the simulator's notification shade.
  */
 export const manifest: AppManifest = {
   id: 'nanomuse',
   packageName: 'org.nanomuse.app',
-  displayName: 'nanoMuse',
-  displayNameEn: 'nanoMuse',
+  displayName: 'NanoLika',
+  displayNameEn: 'NanoLika',
   aliases: ['muse', 'open muse', 'personal agent', 'assistant'],
   version: '0.2.0',
   versionCode: 2,

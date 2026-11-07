@@ -1,8 +1,8 @@
 //
 //  NanoMuseDataControls.swift
-//  nanoMuse
+//  NanoLika
 //
-//  Data controls for a nanoMuse Cloud account: whether the text of chats
+//  Data controls for a NanoLika Cloud account: whether the text of chats
 //  with the Cloud models is kept to train the community's model, how many
 //  turns were kept, and a way to delete them. Android: ui/cloud/DataControlsScreen.kt.
 //

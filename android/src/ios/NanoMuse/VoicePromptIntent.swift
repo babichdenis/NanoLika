@@ -1,6 +1,6 @@
 //
 //  VoicePromptIntent.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The Action Button's way in (#296): a Shortcut that opens the app and starts voice input,
 //  so a prompt can be spoken instead of typed. Bound once in Shortcuts, it sits on the Action
@@ -25,7 +25,7 @@ import Foundation
 
 private let logger = AppLogger(category: "VoicePromptIntent")
 
-/// Opens nanoMuse and starts voice input in a chat.
+/// Opens NanoLika and starts voice input in a chat.
 struct VoicePromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Voice Prompt"
     static var description = IntentDescription(

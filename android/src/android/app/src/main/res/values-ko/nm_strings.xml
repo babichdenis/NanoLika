@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">이 빌드</string>
@@ -617,10 +617,10 @@
     <string name="nm_risk_class_remote">원격 제어</string>
     <string name="nm_hub_remote_reason">%1$s이(가) 이 휴대전화를 조작할 수 있음</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">내 API 키가 있어요</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">내가 가진 모든 기기를 위한 오픈 소스 개인 에이전트.</string>
     <string name="nm_welcome_email">로그인(무료)</string>
     <string name="nm_welcome_fine_print">계정 하나가 기기들을 묶어 주고 무료 모델 사용량을 담습니다. 요금은 없습니다. 내 API 키는 바로 다음에 추가할 수 있습니다.</string>
@@ -902,7 +902,7 @@
     <string name="nm_coding_fresh_hint">%1$s와(과)의 새 대화입니다. 첫 메시지를 보내면 컴퓨터에서 시작됩니다.</string>
     <string name="nm_coding_no_transcript">이 세션에는 아직 읽을 수 있는 내용이 없습니다.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">멤버 · 한도 없음</string>
     <string name="nm_cloud_spent_total">총 ¥%1$s · $%2$s 사용, 개발자 부담</string>
     <string name="nm_cloud_allowance_used">사용 ¥%1$s · $%2$s</string>
@@ -914,7 +914,7 @@
     <string name="nm_cloud_notice_closing">버그를 찾았거나, 원하는 기능이 있거나, 패치가 있나요? GitHub 저장소가 그 자리입니다.</string>
     <string name="nm_cloud_notice">nanoMuse는 비영리 오픈 소스 커뮤니티 프로젝트입니다: 영원히 무료. 모델에는 개발자가 부담하는 무료 사용량이 딸려 있고, 그다음은 내 키입니다. 아무것도 팔지 않습니다. 릴레이가 보관하는 것은 개인정보 처리방침에 있고, 설정 → 데이터 관리는 내 것입니다. 계정은 원할 때 언제든 삭제하세요.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">내 기기에서 온 메시지</string>
     <string name="nm_hub_service_channel">내 기기와 연결됨</string>
     <string name="nm_hub_service_title">nanoLika · 내 기기에서 접근 가능</string>

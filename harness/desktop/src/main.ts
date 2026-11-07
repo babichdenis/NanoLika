@@ -128,7 +128,7 @@ if (process.platform === "darwin") {
  * The app's data folder, under the product's own name.
  *
  * Electron names it after `package.json`'s `name`, which is still `nanomuse-desktop` from the
- * days the app was nanoMuse. The folder is renamed once, so the account, the chats, the
+ * days the app was NanoLika. The folder is renamed once, so the account, the chats, the
  * profile and the helper's copy carry on instead of a fresh start; the old folder stays only
  * while something still holds it open.
  */
@@ -2470,8 +2470,8 @@ function about(): void {
     `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
     "",
     zh
-      ? "NanoLika 建立在开源项目 nanoMuse 之上（GPL-3.0-or-later）。名称、外观和文字是我们的。我们与 Meta 及其 Muse 产品没有关系。"
-      : "NanoLika is built on the open-source nanoMuse project (GPL-3.0-or-later). The name, the design and the wording are ours. We are not connected with Meta or its Muse product.",
+      ? "NanoLika 建立在开源项目 NanoLika 之上（GPL-3.0-or-later）。名称、外观和文字是我们的。我们与 Meta 及其 Muse 产品没有关系。"
+      : "NanoLika is built on the open-source NanoLika project (GPL-3.0-or-later). The name, the design and the wording are ours. We are not connected with Meta or its Muse product.",
   ];
   void dialog.showMessageBox({
     type: "info",
@@ -2600,7 +2600,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
   app.setAboutPanelOptions({
     applicationName: "NanoLika",
     applicationVersion: app.getVersion(),
-    copyright: "GPL-3.0-or-later · NanoLika, built on the open-source nanoMuse project and DeepSeek Harness",
+    copyright: "GPL-3.0-or-later · NanoLika, built on the open-source NanoLika project and DeepSeek Harness",
     website: "https://nanolika.ru/",
   });
   app.whenReady().then(async () => {

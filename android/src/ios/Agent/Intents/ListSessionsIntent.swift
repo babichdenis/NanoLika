@@ -4,11 +4,11 @@ import Foundation
 /// Lists all chat sessions — useful for automation scripts that need a session ID.
 struct ListSessionsIntent: AppIntent {
     static var title: LocalizedStringResource = "List Sessions"
-    static var description = IntentDescription("Lists all nanoMuse chat sessions with their titles and IDs.")
+    static var description = IntentDescription("Lists all NanoLika chat sessions with their titles and IDs.")
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let sessions = await NanoMuseSync.shared.visible(await ChatStore.shared.listSessions()) // nanoMuse: C12 — another account's chats stay hidden
+        let sessions = await NanoMuseSync.shared.visible(await ChatStore.shared.listSessions()) // NanoLika: C12 — another account's chats stay hidden
 
         if sessions.isEmpty {
             return .result(value: "No sessions found.")

@@ -1,6 +1,6 @@
 //
 //  NanoMuseRelayPicker.swift
-//  nanoMuse
+//  NanoLika
 //
 //  "Use a different server": anyone can run the relay in `cloud/`, and the
 //  app can sign in against it. The sheet takes an address, checks it against

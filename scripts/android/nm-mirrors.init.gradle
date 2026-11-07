@@ -1,4 +1,4 @@
-// nanoMuse build: prefer CN mirrors, fall through to the originals.
+// NanoLika build: prefer CN mirrors, fall through to the originals.
 def mirrors = { RepositoryHandler h ->
     h.maven { url = uri("https://maven.aliyun.com/repository/google"); name = "aliyun-google" }
     h.maven { url = uri("https://maven.aliyun.com/repository/public"); name = "aliyun-public" }

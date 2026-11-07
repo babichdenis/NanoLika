@@ -78,7 +78,7 @@ object AgentTools {
             "Use set_cookies to write cookies into the current page's cookie store via the native cookie store (so even HttpOnly cookies, which JS cannot set, land). Pass a 'cookies' array of objects, each with name + value (required) and optional domain (defaults to the current page host), path (defaults to '/'), secure, http_only, and expires (Unix timestamp in seconds; omit for a session cookie). " +
             "Use wait_for_dom_stable to wait until the page DOM stops changing (useful after navigation or interactions that trigger async data loading — polls every 0.5s, resolves when mutation rate gradient is stable for 3+ intervals, default timeout 10s). " +
             "Use tab_id to target a specific tab (defaults to the most recently used tab). " +
-            // nanoMuse: the page needs the person — hand the browser over instead of describing the login page
+            // NanoLika: the page needs the person — hand the browser over instead of describing the login page
             "When a page needs the person themselves — a login, a password, a verification code, a payment, a CAPTCHA — call hand_over with a short 'reason' in their language (e.g. '登录携程', 'Sign in to GitHub'): the page opens for them in this app, with their session, and the call returns when they are done; then continue on the page as it is. Never type credentials and never end your turn by telling them to log in themselves.",
         parameters = mapOf(
             "tool_title" to AgentToolParam("string", "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Open Wikipedia homepage', 'Take screenshot of current page'). Use the same language as the user."),
@@ -87,7 +87,7 @@ object AgentTools {
             "url" to AgentToolParam("string", "URL to navigate to (for navigate action) or resource to download (for fetch action)"),
             "selector" to AgentToolParam("string", "CSS selector for targeting elements (click, type, get_text, scroll, hover, find_elements). For scroll: specify a scrollable container to scroll (e.g. 'div.timeline'); if omitted, auto-detects the best scrollable element."),
             "text" to AgentToolParam("string", "Text to type (for type action)"),
-            // nanoMuse: for hand_over
+            // NanoLika: for hand_over
             "reason" to AgentToolParam("string", "For hand_over: what the person has to do on the page, a few words in their language (e.g. '登录携程')."),
             "coordinate_x" to AgentToolParam("integer", "X coordinate for click (alternative to selector)"),
             "coordinate_y" to AgentToolParam("integer", "Y coordinate for click (alternative to selector)"),

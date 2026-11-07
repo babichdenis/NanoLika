@@ -1,6 +1,6 @@
 //
 //  NanoMuseVoicePrompt.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Carries one "start voice input" request from `VoicePromptIntent` (the Action Button, Back
 //  Tap, a Shortcut) to the chat that should listen, and starts the listening there.

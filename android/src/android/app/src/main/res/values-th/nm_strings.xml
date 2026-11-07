@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">บิลด์นี้</string>
@@ -617,10 +617,10 @@
     <string name="nm_risk_class_remote">ควบคุมระยะไกล</string>
     <string name="nm_hub_remote_reason">%1$s ควบคุมโทรศัพท์เครื่องนี้ได้</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">ฉันมีคีย์ API ของตัวเอง</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">เอเจนต์ส่วนตัวแบบโอเพนซอร์สสำหรับทุกอุปกรณ์ที่คุณมี</string>
     <string name="nm_welcome_email">ลงชื่อเข้าใช้ (ฟรี)</string>
     <string name="nm_welcome_fine_print">บัญชีเดียวเชื่อมอุปกรณ์ของคุณไว้ด้วยกันและมาพร้อมการใช้โมเดลฟรี ไม่มีค่าใช้จ่าย เพิ่มคีย์ API ของคุณเองได้ทันทีหลังจากนี้</string>
@@ -902,7 +902,7 @@
     <string name="nm_coding_fresh_hint">บทสนทนาใหม่กับ %1$s ข้อความแรกของคุณจะเริ่มมันบนคอมพิวเตอร์</string>
     <string name="nm_coding_no_transcript">ยังไม่มีอะไรที่อ่านได้ในเซสชันนี้</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">สมาชิก · ไม่มีขีดจำกัด</string>
     <string name="nm_cloud_spent_total">ใช้ไปทั้งหมด ¥%1$s · $%2$s ผู้พัฒนาออกค่าใช้จ่ายให้</string>
     <string name="nm_cloud_allowance_used">ใช้ไป ¥%1$s · $%2$s</string>
@@ -914,7 +914,7 @@
     <string name="nm_cloud_notice_closing">พบบั๊ก อยากได้ฟีเจอร์ หรือมีแพตช์ ที่เก็บโค้ดบน GitHub คือที่ที่ควรไป</string>
     <string name="nm_cloud_notice">nanoLika เป็นโครงการชุมชนโอเพนซอร์สที่ไม่แสวงหากำไร ฟรีตลอดไป โมเดลมาพร้อมโควตาฟรีที่ผู้พัฒนาออกค่าใช้จ่ายให้ หลังจากนั้นใช้คีย์ของคุณเอง ไม่มีการขายอะไร สิ่งที่รีเลย์เก็บไว้ระบุในนโยบายความเป็นส่วนตัว และ การตั้งค่า → การควบคุมข้อมูล เป็นของคุณ ลบบัญชีได้ทุกเมื่อที่ต้องการ</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">ข้อความจากอุปกรณ์ของคุณ</string>
     <string name="nm_hub_service_channel">เชื่อมต่อกับอุปกรณ์ของคุณแล้ว</string>
     <string name="nm_hub_service_title">nanoLika · อุปกรณ์ของคุณติดต่อได้</string>

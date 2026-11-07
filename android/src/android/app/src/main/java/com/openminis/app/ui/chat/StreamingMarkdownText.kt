@@ -1700,7 +1700,7 @@ private fun RenderBlock(block: MdBlock) {
             )
         }
 
-        is MdBlock.CodeBlock -> if (block.language.startsWith("nanomuse-")) { // nanoMuse: goal cards etc.
+        is MdBlock.CodeBlock -> if (block.language.startsWith("nanomuse-")) { // NanoLika: goal cards etc.
             io.github.nanomuse.ui.chat.NanoMuseBlock(block.language, block.code)
         } else {
             val clipboardManager = LocalClipboardManager.current

@@ -291,7 +291,7 @@ internal fun ToolDetailSheet(
         block.toolStatus == ToolBlockStatus.PENDING
     val toolAccent = toolAccentColor(block.toolName)
 
-    // nanoMuse (issue #67): one way out for the ✕, the scrim and the back
+    // NanoLika (issue #67): one way out for the ✕, the scrim and the back
     // gesture — slide the sheet down, then tell the owner, and tell the owner
     // anyway if the animation is cut short — so the sheet can never stay on
     // screen with its close control dead.
@@ -310,7 +310,7 @@ internal fun ToolDetailSheet(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0) },
     ) {
-        // nanoMuse (issue #67): inside the sheet's own window, so the back
+        // NanoLika (issue #67): inside the sheet's own window, so the back
         // gesture reaches it — the one outside would never be asked.
         androidx.activity.compose.BackHandler(onBack = dismiss)
         Column(
@@ -319,7 +319,7 @@ internal fun ToolDetailSheet(
                 .fillMaxHeight(0.85f)
                 .background(ChatColors.secondaryBg),
         ) {
-            // ── Top Nav Bar (iOS: X button + "nanoMuse Computer" + action button) ──
+            // ── Top Nav Bar (iOS: X button + "NanoLika Computer" + action button) ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -334,7 +334,7 @@ internal fun ToolDetailSheet(
                         .background(ChatColors.secondaryBg, CircleShape)
                         .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
                         .clip(CircleShape)
-                        .clickable(onClick = dismiss), // nanoMuse (issue #67)
+                        .clickable(onClick = dismiss), // NanoLika (issue #67)
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -353,7 +353,7 @@ internal fun ToolDetailSheet(
                 // the elapsed-duration text) so it sits next to where the
                 // user is already scanning timing info.
                 Text(
-                    text = "nanoMuse Computer",
+                    text = "NanoLika Computer",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ChatColors.primaryText,
@@ -1203,7 +1203,7 @@ internal fun ToolDetailSheet(
                     // Title + subtitle
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = toolTitleLabel(block.toolName, block.toolStatus), // nanoMuse (issue #67): past tense once over
+                            text = toolTitleLabel(block.toolName, block.toolStatus), // NanoLika (issue #67): past tense once over
                             fontSize = 14.sp,
                             lineHeight = 16.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1253,7 +1253,7 @@ internal fun ToolDetailSheet(
                 }
 
                 // Navigation row: |< ... 1/N ... >|
-                // nanoMuse (issue #67): the arrows only when there is
+                // NanoLika (issue #67): the arrows only when there is
                 // somewhere to go — a single step showed "1 / 1" between
                 // two dead arrows.
                 val pager = toolBlocks.size > 1
@@ -1265,7 +1265,7 @@ internal fun ToolDetailSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Back button (iOS: backward.end.fill)
-                    if (pager) IconButton( // nanoMuse: no arrows for a single step
+                    if (pager) IconButton( // NanoLika: no arrows for a single step
                         onClick = { if (currentIdx > 0) currentIdx-- },
                         enabled = currentIdx > 0,
                         modifier = Modifier.size(32.dp),
@@ -1300,7 +1300,7 @@ internal fun ToolDetailSheet(
                         }
                     } else {
                         Text(
-                            // nanoMuse (issue #67): one step says so; a count of one is not a position.
+                            // NanoLika (issue #67): one step says so; a count of one is not a position.
                             if (pager) "${currentIdx + 1} / ${toolBlocks.size}" else when (block.toolStatus) {
                                 ToolBlockStatus.FAILED, ToolBlockStatus.TIMEOUT -> "Failed"
                                 ToolBlockStatus.CANCELLED -> "Stopped"
@@ -1316,7 +1316,7 @@ internal fun ToolDetailSheet(
                     Spacer(modifier = Modifier.weight(1f))
 
                     // Forward button (iOS: forward.end.fill)
-                    if (pager) IconButton( // nanoMuse: no arrows for a single step
+                    if (pager) IconButton( // NanoLika: no arrows for a single step
                         onClick = { if (currentIdx < toolBlocks.lastIndex) currentIdx++ },
                         enabled = currentIdx < toolBlocks.lastIndex,
                         modifier = Modifier.size(32.dp),

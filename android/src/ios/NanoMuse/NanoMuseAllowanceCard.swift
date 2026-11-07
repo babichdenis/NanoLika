@@ -1,6 +1,6 @@
 //
 //  NanoMuseAllowanceCard.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The ways on when the free allowance is spent, paused by the operator, or today's share is
 //  used (contract C11, docs/parity.md item 33): one's own key — the vendors as the relay lists

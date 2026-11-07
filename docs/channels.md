@@ -1,6 +1,6 @@
 # Chat apps
 
-Your nanoMuse inside the chat apps you already use: Feishu (飞书 / Lark), DingTalk
+Your NanoLika inside the chat apps you already use: Feishu (飞书 / Lark), DingTalk
 (钉钉), WeCom (企业微信) and Telegram. Write to the bot from your phone and the same
 Muse answers: one conversation per chat, the reply typed out as it comes, tool work
 shown as a status line, approvals answered with a word or a button. Chats you mark
@@ -259,7 +259,7 @@ front of the text.
 
 | What you see | What it means |
 |---|---|
-| **Not installed** | the SDK is missing on the machine running nanoMuse: run the line shown (`pip install 'nanomuse[feishu]'`), then switch the channel on again |
+| **Not installed** | the SDK is missing on the machine running NanoLika: run the line shown (`pip install 'nanomuse[feishu]'`), then switch the channel on again |
 | **Needs settings** | a required field is empty; the card names it |
 | **Error** with the vendor's words | the credentials were refused or the vendor is unreachable; fix and switch off/on, or *Save* again |
 | the bot does not answer in a group | the group policy is *mention* and the bot was not @-mentioned; or the sender is not paired (groups never show codes) |

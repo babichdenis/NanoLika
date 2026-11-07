@@ -1,6 +1,6 @@
 //
 //  NanoMuseProviderReachCard.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The card the chat shows for a failed turn when the provider could not be reached (DNS,
 //  connect, TLS, a timeout, an interception page), OpenAI refused the region, the sign-in ran
@@ -24,7 +24,7 @@ struct NanoMuseProviderReachCard: View {
 
     var body: some View {
         if reach.kind == .relay, let refusal = NanoMuseRelayRefusal.fromCanonical(reach.detail) {
-            // nanoMuse Cloud refused the turn: its own card (one sentence, the right button)
+            // NanoLika Cloud refused the turn: its own card (one sentence, the right button)
             NanoMuseRelayRefusalCard(refusal: refusal, onRetry: onRetry)
         } else {
             card
@@ -151,7 +151,7 @@ struct NanoMuseProviderReachCard: View {
     // MARK: - Actions
 
     /// A key of one's own failed and the relay could take this one turn: the slots stay as
-    /// they are, the retry runs on nanoMuse Cloud (NanoMuseCloudOnce). Not for the relay's own failures.
+    /// they are, the retry runs on NanoLika Cloud (NanoMuseCloudOnce). Not for the relay's own failures.
     private var cloudOnce: Bool {
         onRetry != nil && reach.kind != .relay && !NanoMuseProxy.isRelayHost(reach.host) && NanoMuseCloudOnce.available
     }

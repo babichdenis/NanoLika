@@ -8,11 +8,11 @@ import { stage } from './stage';
 /**
  * The notification bridge.
  *
- * nanoMuse pushes real Web Push notifications to real phones. Inside the simulator there is
- * no push service, so this module keeps one WebSocket to the nanoMuse server open for the
+ * NanoLika pushes real Web Push notifications to real phones. Inside the simulator there is
+ * no push service, so this module keeps one WebSocket to the NanoLika server open for the
  * whole simulator session and turns the events a phone would be notified about into
  * simulated Android notifications: approvals waiting for you, questions the agent asked,
- * and results of background work. Tapping one opens the nanoMuse app on that chat.
+ * and results of background work. Tapping one opens the NanoLika app on that chat.
  *
  * The same socket makes this simulated phone a device the agent can operate (see `gui.ts`):
  * after `hello` the module announces itself with `{"kind": "device", "gui": true, "capsule":
@@ -25,11 +25,11 @@ import { stage } from './stage';
  * While the hands work, the person stays in the operated app: an `approval` the run raises
  * is shown on the capsule with **Allow once / Deny** and answered from here
  * (`POST /api/approvals/{id}`, the token in the Authorization header), never by sending the
- * phone back into nanoMuse; a `hold` (the agent handed the phone over, or the person took it
+ * phone back into NanoLika; a `hold` (the agent handed the phone over, or the person took it
  * from the chat) is a card with **Done** (`POST /api/holds/{id}/done`). Only a question a
  * finished task left offers *Open*.
  *
- * When a task is over — its `end`, or Stop — the phone comes back to nanoMuse, where the
+ * When a task is over — its `end`, or Stop — the phone comes back to NanoLika, where the
  * agent's report is, the way the Android app brings itself to the front after its hands are
  * done. The capsule does not depend on the `end` arriving: the server's `hello` carries the
  * task under way (`state.phone.task`) and the open holds (`state.holds`), so a socket that
@@ -87,7 +87,7 @@ const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
 /** A socket lost under a task: this long for it to come back before the capsule comes down. */
 const LINK_LOST_MS = 15000;
-/** The tick (or the cross) is seen this long before the phone comes back to nanoMuse. */
+/** The tick (or the cross) is seen this long before the phone comes back to NanoLika. */
 const COME_BACK_MS = 1300;
 
 function threadRoute(thread: string): string {
@@ -106,7 +106,7 @@ function simOs(): SimOs | undefined {
 }
 
 /** The agent's name as the user set it; learnt from the server's hello and profile updates. */
-let agentName = 'nanoMuse';
+let agentName = 'NanoLika';
 
 /** Same titles the server uses for its Web Push notifications, in the phone's language. */
 function backgroundTitle(about: string): string {
@@ -179,7 +179,7 @@ class MuseBridge {
   private lostTimer: ReturnType<typeof setTimeout> | null = null;
   private backTimer: ReturnType<typeof setTimeout> | null = null;
   /** Acts the agent made outside a task (`phone_act` straight from the chat: open an app, read
-   * it) since nanoMuse last came back; they too can leave another app in front. */
+   * it) since NanoLika last came back; they too can leave another app in front. */
   private loneActs = 0;
   /** The approval on the capsule, so a failed answer can put the card back as it was. */
   private approvalShown: { id: string; summary: string; purpose: string } | null = null;
@@ -205,10 +205,10 @@ class MuseBridge {
         headers: { authorization: `Bearer ${settings.token}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!r.ok) console.warn(`[nanoMuse] ${path} → ${r.status}`);
+      if (!r.ok) console.warn(`[NanoLika] ${path} → ${r.status}`);
       return r.ok;
     } catch (err) {
-      console.warn(`[nanoMuse] ${path} failed`, err);
+      console.warn(`[NanoLika] ${path} failed`, err);
       return false;
     }
   }
@@ -285,7 +285,7 @@ class MuseBridge {
   }
 
   /** The task is over without a word from the server: the capsule comes down, and if the
-   * hands went anywhere, the phone comes back to nanoMuse — the report is there. */
+   * hands went anywhere, the phone comes back to NanoLika — the report is there. */
   private gone(): void {
     if (!stage.active) return;
     const wentSomewhere = stage.steps > 0;
@@ -306,7 +306,7 @@ class MuseBridge {
     if (wasOn) this.comeBack();
   }
 
-  /** Bring nanoMuse to the front, on a chat. */
+  /** Bring NanoLika to the front, on a chat. */
   private openApp(thread: string): void {
     try {
       const os = simOs();
@@ -318,7 +318,7 @@ class MuseBridge {
   }
 
   /**
-   * After the capsule's last moment, nanoMuse to the front as it was — the chat the task was
+   * After the capsule's last moment, NanoLika to the front as it was — the chat the task was
    * given in, with the agent's report arriving — unless it is there already. What the Android
    * app's `HandsCapsule.bringAppToFront` does once its hands are done.
    */
@@ -462,7 +462,7 @@ class MuseBridge {
       this.stopped = false;
       stage.begin(text);
     } else if (event === 'end') {
-      // over: the tick, then back to nanoMuse — if the hands went anywhere (a task that
+      // over: the tick, then back to NanoLika — if the hands went anywhere (a task that
       // ended before its first action left the phone where it was)
       const wentSomewhere = stage.active && stage.steps > 0;
       stage.end();
@@ -583,7 +583,7 @@ class MuseBridge {
       if (ev.type === 'approval' || ev.type === 'question') {
         if (ev.thread) this.lastThread = ev.thread;
         // while the hands work, the capsule carries the approval — Allow once / Deny, decided
-        // here — so the person is not sent back into nanoMuse for it
+        // here — so the person is not sent back into NanoLika for it
         if (ev.type === 'approval' && (stage.active || this.approvalShown?.id === ev.id)) {
           this.approval(ev);
           if (ev.status === 'pending') return; // the capsule asks; no notification on top of it
@@ -600,7 +600,7 @@ class MuseBridge {
           if (wentSomewhere) this.comeBack();
         } else if (this.loneActs > 0) {
           // No task, but the agent opened or worked an app straight from the chat and has now
-          // answered: the answer is in nanoMuse, so nanoMuse comes to the front for it.
+          // answered: the answer is in NanoLika, so NanoLika comes to the front for it.
           this.comeBack();
         }
       }

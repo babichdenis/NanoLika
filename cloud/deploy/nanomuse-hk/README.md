@@ -1,4 +1,4 @@
-# nanoMuse Cloud on nanomuse-hk
+# NanoLika Cloud on nanomuse-hk
 
 The production relay behind `https://cloud.nanomuse.cn` runs on the same Hong
 Kong box as the project site, behind the showcase's Caddy
@@ -36,7 +36,7 @@ ALLOWED_IDENTIFIERS=
 ALLOWANCE_CNY=10
 INVITE_BONUS_CNY=5
 OWN_KEY_DOCS=https://nanomuse.cn/own-key
-# what "Help improve nanoMuse's AI models" starts as for new accounts (1 = on
+# what "Help improve NanoLika's AI models" starts as for new accounts (1 = on
 # until turned off under Settings → Data controls); say it in PRIVACY_URL
 IMPROVE_DEFAULT=1
 PRIVACY_URL=https://nanomuse.cn/privacy/

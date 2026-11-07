@@ -8,7 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * A provider switched off while new chats answered through it (nanoMuse Cloud under Settings ›
+ * A provider switched off while new chats answered through it (NanoLika Cloud under Settings ›
  * Models, or a provider of the person's own on its page): the chat slot moves to the first row
  * of the picker that is not the leaving provider's, in the picker's order.
  */

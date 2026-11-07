@@ -20,7 +20,7 @@ def test_native_display_branding_preserves_identifiers(tmp_path):
     after = source.read_text()
     assert 'title = "nanoLika Cloud"' in after
     assert "class NanoMuseCloud" in after
-    assert '"nanoMuse.openChat"' in after
+    assert '"NanoLika.openChat"' in after
     assert '"nanoMuse/1.0"' in after
     assert "github.com/nano-muse/nanoMuse" in after
     module.customer_branding(tmp_path)
@@ -40,19 +40,19 @@ def test_localized_upstream_spots_follow_catalogue_without_renaming_storage(tmp_
     source.parent.mkdir(parents=True)
     source.write_text(
         "class NanoMuseIntent {}\n"
-        "// nanoMuse: localized notification title.\n"
-        'let title = AppLocalized(\n    "nanoMuse: Retrying")\n'
-        'let event = "nanoMuse.openChat"\nlet storage = "nanoMuse"\n'
+        "// NanoLika: localized notification title.\n"
+        'let title = AppLocalized(\n    "NanoLika: Retrying")\n'
+        'let event = "NanoLika.openChat"\nlet storage = "NanoLika"\n'
     )
     catalogue = root / "Localizable.xcstrings"
     catalogue.write_text(
-        json.dumps({"strings": {"nanoMuse: Retrying": {"shouldTranslate": False}}})
+        json.dumps({"strings": {"NanoLika: Retrying": {"shouldTranslate": False}}})
     )
     module.customer_branding(tmp_path)
     after = source.read_text()
     assert '"nanoLika: Retrying"' in after
     assert "class NanoMuseIntent" in after
-    assert '"nanoMuse.openChat"' in after and 'storage = "nanoMuse"' in after
+    assert '"NanoLika.openChat"' in after and 'storage = "NanoLika"' in after
     assert "nanoLika: Retrying" in json.loads(catalogue.read_text())["strings"]
     catalog_after = catalogue.read_bytes()
     module.customer_branding(tmp_path)

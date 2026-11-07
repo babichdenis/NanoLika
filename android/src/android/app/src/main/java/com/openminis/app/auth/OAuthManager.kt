@@ -30,7 +30,7 @@ abstract class OAuthManager(
         internal val httpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .proxyAuthenticator(io.github.nanomuse.net.OwnProviderProxy.authenticator) // nanoMuse: Settings → Network, a proxy with a password
+            .proxyAuthenticator(io.github.nanomuse.net.OwnProviderProxy.authenticator) // NanoLika: Settings → Network, a proxy with a password
             .build()
 
         /**

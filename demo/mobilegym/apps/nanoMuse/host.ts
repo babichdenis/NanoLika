@@ -10,7 +10,7 @@ import { useNanoMuseStore, type DemoRecord, type LinkState } from './state';
  * to this app through `window.__NANOMUSE__` on the frame's window (the way MobileGym itself
  * exposes `__OS__` and `__SIM_INPUT__`) and hears from it through `subscribe`:
  *
- *   open()           bring the nanoMuse app to the front
+ *   open()           bring the NanoLika app to the front
  *   draft(text)      open it and put `text` in the chat's composer — sending is the person's tap
  *   start()          what the Start pill does: ask the showcase for a Muse and open the chat;
  *                    false when the page is not at that step (no sign-in yet, a Muse already)
@@ -18,7 +18,7 @@ import { useNanoMuseStore, type DemoRecord, type LinkState } from './state';
  *   language(code)   'en' or 'zh': the page's language; a hosted Muse answers in it (its
  *                    reply language is set, now and for the sessions that follow)
  *   state()          where things stand: configured, link, the hosted session, the web app, the sign-in,
- *                    whether nanoMuse is the app on the screen, whether start() would do anything
+ *                    whether NanoLika is the app on the screen, whether start() would do anything
  *   subscribe(fn)    fn(state) now and on every change; returns the unsubscribe
  *
  * The web app inside the phone is on another origin (the session's hostname); the draft goes
@@ -41,9 +41,9 @@ export interface HostState {
   name: string;
   /** Whether a hosted showcase is available at all (set at build time). */
   hosted: boolean;
-  /** The visitor is signed in to nanoMuse Cloud for the showcase (holds a ticket). */
+  /** The visitor is signed in to NanoLika Cloud for the showcase (holds a ticket). */
   signedIn: boolean;
-  /** nanoMuse is the app on the screen right now (the page's dock lights its icon). */
+  /** NanoLika is the app on the screen right now (the page's dock lights its icon). */
   front: boolean;
   /** The welcome or meet page is up with its Start pill: `start()` would press it. */
   startable: boolean;
@@ -101,7 +101,7 @@ function notify() {
     try {
       fn(state);
     } catch (err) {
-      console.error('[nanoMuse host] listener failed', err);
+      console.error('[NanoLika host] listener failed', err);
     }
   }
 }
@@ -150,7 +150,7 @@ async function reset() {
 
 /**
  * The Start pill, pressed by the page around the phone (it turns the phone on and brings
- * nanoMuse up without a tap, and starts the Muse once it has reason to think a person is
+ * NanoLika up without a tap, and starts the Muse once it has reason to think a person is
  * looking). Only the pill's own step: a welcome page that asks for a sign-in first, or a
  * Muse already running, leaves this a no-op.
  */
@@ -189,7 +189,7 @@ function subscribe(fn: Listener): () => void {
   try {
     fn(current());
   } catch (err) {
-    console.error('[nanoMuse host] listener failed', err);
+    console.error('[NanoLika host] listener failed', err);
   }
   return () => {
     listeners.delete(fn);

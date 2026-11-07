@@ -18,7 +18,7 @@ Decision of 2026-10-23: the bot runs on the client's own computer; the server ke
 
 | Where | What runs there | What it holds |
 |-------|-----------------|---------------|
-| Client machine | nanoMuse app, the bot process, the agent's tools, the workspace | the Telegram bot token, the bot's files, its settings, the conversation history |
+| Client machine | NanoLika app, the bot process, the agent's tools, the workspace | the Telegram bot token, the bot's files, its settings, the conversation history |
 | Our relay | FastAPI + SQLite: accounts, plans, ledger, hub, `BotGateway` | `accounts`, `bot_projects` (platform, provider id, label, **`token_hash`**, `secret_hash`, `enabled`, created at), ledger rows |
 | Our tunnel | `nanolika-tunnel:1.0.0` sidecar | nothing; it is a pipe to the Riga proxy |
 | Transit only | relay memory | running Telegram calls, and incoming webhook deliveries on their way to the worker; never written to the database |

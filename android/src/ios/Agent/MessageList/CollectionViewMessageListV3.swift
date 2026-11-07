@@ -55,7 +55,7 @@ struct CollectionViewMessageListV3: UIViewControllerRepresentable {
     var maxContentWidth: CGFloat
     var floatingBarHeight: CGFloat
     var inputBarHeight: CGFloat
-    /// nanoMuse: a header of the chat's own lying over the list's top edge (the Muse shell's,
+    /// NanoLika: a header of the chat's own lying over the list's top edge (the Muse shell's,
     /// `nmTopOverlay`), which the list extends under; added to `contentInset.top` so the first
     /// row starts below it. 0 without such a header.
     var topOverlay: CGFloat = 0
@@ -167,7 +167,7 @@ struct CollectionViewMessageListV3: UIViewControllerRepresentable {
         // room. iOS 26 returns 0 here (liquid-glass + .automatic adjustment
         // already position content), so this is a no-op there.
         let cvTop = vc.collectionView!
-        // nanoMuse: plus the header the list extends under (`topOverlay`), which UIKit's safe area
+        // NanoLika: plus the header the list extends under (`topOverlay`), which UIKit's safe area
         // knows nothing about: SwiftUI's `safeAreaInset` is not in `cv.safeAreaInsets`. Should a
         // host ever fold it in (the view's safe area would then exceed its window's), it is not
         // added twice.
@@ -218,7 +218,7 @@ struct CollectionViewMessageListV3: UIViewControllerRepresentable {
 
 // MARK: - V3 Bridged Cell Views (no GeometryReader)
 
-/// Header: "✦ nanoMuse" label at the top of each assistant turn.
+/// Header: "✦ NanoLika" label at the top of each assistant turn.
 /// Name comes from SOUL.md (user-editable in Soul Settings).
 ///
 /// [T-ios-assistant-header-open-soul] Tapping the row opens Soul Settings.
@@ -257,7 +257,7 @@ private struct BridgedAssistantHeaderV3: View {
                     endPoint: .bottomTrailing
                 )
             )
-            Text(soulMeta.name.isEmpty ? "nanoMuse" : soulMeta.name)
+            Text(soulMeta.name.isEmpty ? "NanoLika" : soulMeta.name)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(ChatColors.primaryText)
         }
@@ -292,7 +292,7 @@ private struct BridgedAssistantHeaderV3: View {
         }
         .padding(.top, 4)
         .padding(.bottom, 0)
-        // nanoMuse: the 16 pt sit inside the width cap, as in ChatMessageRow, so on an iPad the
+        // NanoLika: the 16 pt sit inside the width cap, as in ChatMessageRow, so on an iPad the
         // row's edges meet the composer's (NanoMuseColumn: 760 wide, 16 in); the height
         // estimators already take width - 32 as the text width. No change without a cap.
         .padding(.horizontal, 16)
@@ -348,7 +348,7 @@ private struct BridgedAssistantBlockV3: View {
             highlightedBlockId: .constant(nil),
             detailBlock: $bridge.detailBlock
         )
-        .padding(.horizontal, 16) // nanoMuse: inside the width cap, so the block's edges meet the composer's on an iPad (see BridgedAssistantHeaderV3)
+        .padding(.horizontal, 16) // NanoLika: inside the width cap, so the block's edges meet the composer's on an iPad (see BridgedAssistantHeaderV3)
         .frame(maxWidth: maxWidth > 0 ? maxWidth : nil, alignment: .leading)
         .frame(maxWidth: .infinity)
         .opacity(message.isCompactedHistory ? 0.5 : 1.0)
@@ -503,7 +503,7 @@ private struct BridgedAssistantFooterV3: View {
                 }
             }
         }
-        .padding(.horizontal, hasFooterContent ? 16 : 0) // nanoMuse: inside the width cap, so the footer's edges meet the composer's on an iPad (see BridgedAssistantHeaderV3)
+        .padding(.horizontal, hasFooterContent ? 16 : 0) // NanoLika: inside the width cap, so the footer's edges meet the composer's on an iPad (see BridgedAssistantHeaderV3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: maxWidth > 0 ? maxWidth : nil, alignment: .leading)
         .frame(maxWidth: .infinity)
@@ -2783,7 +2783,7 @@ extension CollectionViewMessageListV3 {
 
                     switch item {
                     case .assistantHeader:
-                        // Header is always a fixed "sparkles nanoMuse" label row (measured: 28pt)
+                        // Header is always a fixed "sparkles NanoLika" label row (measured: 28pt)
                         layout.setEstimatedHeight(28, at: i)
 
                     case .assistantFooter:
@@ -3211,7 +3211,7 @@ extension CollectionViewMessageListV3 {
                 // which does not change when a block is appended, so the diff is
                 // empty for it and UIKit never re-configures the cell (same
                 // mechanism as gap 1 in cd50865c). The footer therefore keeps the
-                // TALLER height it measured while "nanoMuse is thinking…" was
+                // TALLER height it measured while "NanoLika is thinking…" was
                 // showing, and once the first tool block lands the indicator
                 // disappears but the reserved space does not — the blank strip
                 // above the tool row that the user reported. It healed only on

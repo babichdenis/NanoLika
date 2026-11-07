@@ -2,7 +2,7 @@
 
 > **Historical.** This describes the two-flavour Android shell of the Python line
 > (tag `pre-openminis`): a WebView around `nanomuse serve`, with an on-phone runtime
-> in a chroot. The app in `android/` today is a different program — nanoMuse built on
+> in a chroot. The app in `android/` today is a different program — NanoLika built on
 > OpenMinis — and is described in [../android.md](../android.md). Nothing below is a
 > download you can get; it is kept because the design of the capsule, the device
 > bridge and the notification service carried over.
@@ -10,7 +10,7 @@
 
 `android/` is a native shell around the web app, in two flavours:
 
-- **nanomuse.apk** (`local`) runs nanoMuse **on the phone itself**: the Python server, its tools and a small Alpine Linux live inside the app, unpacked on first start and run under a user-mode chroot. Nothing to install on a computer. arm64 phones, Android 8.0 or newer. How it works, what it can and cannot do: [local-runtime.md](../local-runtime.md).
+- **nanomuse.apk** (`local`) runs NanoLika **on the phone itself**: the Python server, its tools and a small Alpine Linux live inside the app, unpacked on first start and run under a user-mode chroot. Nothing to install on a computer. arm64 phones, Android 8.0 or newer. How it works, what it can and cannot do: [local-runtime.md](../local-runtime.md).
 - **nanomuse-connect.apk** (`connect`) is the **remote for a `nanomuse serve` on your computer** — the same web app in a WebView, plus what a browser tab cannot do on a home network: notifications while the app is closed. Web Push needs `https://` and a push service in the middle; the app keeps its own connection to your server instead. Any CPU.
 
 The local build offers both on its first screen (*Run on this phone* / *Connect to my computer*), so it is the one to download unless the phone is 32-bit or storage is tight.

@@ -18,10 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape // nanoMuse
-import androidx.compose.foundation.border // nanoMuse
-import androidx.compose.foundation.selection.selectable // nanoMuse
-import androidx.compose.ui.semantics.Role // nanoMuse
+import androidx.compose.foundation.shape.CircleShape // NanoLika
+import androidx.compose.foundation.border // NanoLika
+import androidx.compose.foundation.selection.selectable // NanoLika
+import androidx.compose.ui.semantics.Role // NanoLika
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -105,7 +105,7 @@ fun SettingsScaffold(
                     }
                 }
             }
-            // nanoMuse: Muse's bar on every settings page — the back glyph on a
+            // NanoLika: Muse's bar on every settings page — the back glyph on a
             // white disc, the title centred (so `centerTitle` is always true), no
             // container tint. A custom `navigation` slot (a Cancel text action)
             // is placed as-is, without the disc.
@@ -214,7 +214,7 @@ fun SettingsSection(
             .padding(top = 24.dp),
     ) {
         if (header != null) {
-            // nanoMuse: Muse's section label — small, grey, sentence case, no
+            // NanoLika: Muse's section label — small, grey, sentence case, no
             // tracking (was Material's small caps).
             Text(
                 text = header,
@@ -241,7 +241,7 @@ fun SettingsSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                // nanoMuse: Muse's card — 16dp corners, white on the grey canvas.
+                // NanoLika: Muse's card — 16dp corners, white on the grey canvas.
                 .clip(RoundedCornerShape(16.dp))
                 .background(io.github.nanomuse.ui.home.MuseTones.surface),
             content = content,
@@ -296,13 +296,13 @@ fun SettingsRow(
                 // is what made a no-subtitle last row read ~50px shorter.
                 .heightIn(min = minHeight)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(horizontal = 16.dp, vertical = 12.dp), // nanoMuse: 16dp like Muse
+                .padding(horizontal = 16.dp, vertical = 12.dp), // NanoLika: 16dp like Muse
             // #10 keep the trailing control (Switch/value) vertically centered
             // against the title — already centered, kept explicit.
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) {
-                // nanoMuse: Muse draws the glyph bare, in ink, 22dp — no coloured
+                // NanoLika: Muse draws the glyph bare, in ink, 22dp — no coloured
                 // tile behind it. `iconColor` is kept for the callers but only
                 // the glyph remains.
                 @Suppress("UNUSED_EXPRESSION") iconColor
@@ -354,7 +354,7 @@ fun SettingsRow(
         }
 
         if (showDivider) {
-            val insetStart = if (icon != null) 52.dp else 16.dp // nanoMuse: bare glyph inset
+            val insetStart = if (icon != null) 52.dp else 16.dp // NanoLika: bare glyph inset
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -445,7 +445,7 @@ fun SettingsChoiceRow(
                 // [T-android-settings-ui-md3] #1 match SettingsRow's 56dp min so
                 // choice/radio rows line up with toggle/value rows in mixed lists.
                 .heightIn(min = 56.dp)
-                // nanoMuse: a radio row says whether it is the chosen one to TalkBack
+                // NanoLika: a radio row says whether it is the chosen one to TalkBack
                 .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -460,7 +460,7 @@ fun SettingsChoiceRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            // nanoMuse: Muse's radio — a hollow ring, or an ink disc with a
+            // NanoLika: Muse's radio — a hollow ring, or an ink disc with a
             // white check when selected (was a bare blue check mark).
             Box(
                 modifier = Modifier

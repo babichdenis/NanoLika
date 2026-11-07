@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Build the site for local development of the showcase: MobileGym with the nanoMuse app
+# Build the site for local development of the showcase: MobileGym with the NanoLika app
 # installed and pointed at the gateway, as /phone.html, and the page around it (page/) at /.
 # Production builds the same thing inside caddy/Dockerfile; this is for running the gateway on
 # your machine with SITE_DIR.

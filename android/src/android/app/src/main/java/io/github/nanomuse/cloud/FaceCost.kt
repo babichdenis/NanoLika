@@ -10,7 +10,7 @@ import io.github.nanomuse.ui.avatar.AgentMood
 import java.util.Locale
 
 /**
- * What a new face costs when the pictures and clips are paid from the nanoMuse Cloud
+ * What a new face costs when the pictures and clips are paid from the NanoLika Cloud
  * allowance — asked of the relay before anything is drawn, so the person sees the number
  * next to what they have left today and says yes first. A face drawn with the user's own
  * key has no allowance and is not asked about.

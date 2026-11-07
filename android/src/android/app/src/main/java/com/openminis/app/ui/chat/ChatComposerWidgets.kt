@@ -120,7 +120,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.outlined.Mic // nanoMuse
+import androidx.compose.material.icons.outlined.Mic // NanoLika
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.CloseFullscreen
@@ -373,7 +373,7 @@ internal fun AttachmentChip(
 @Composable
 internal fun InputCircleButton(
     onClick: () -> Unit,
-    plain: Boolean = false, // nanoMuse: bare glyph, no disc (Muse's composer pill)
+    plain: Boolean = false, // NanoLika: bare glyph, no disc (Muse's composer pill)
     content: @Composable () -> Unit,
 ) {
     Box(
@@ -409,14 +409,14 @@ internal fun MicButton(
     // [T-android-voice-panel] While the inline voice panel is active the same
     // slot switches back to text input — keyboard glyph (mirrors iOS "T").
     isVoiceActive: Boolean = false,
-    plain: Boolean = false, // nanoMuse: bare glyph, no disc (Muse's composer pill)
+    plain: Boolean = false, // NanoLika: bare glyph, no disc (Muse's composer pill)
 ) {
     val bg = if (isRecording) Color.Red.copy(alpha = 0.15f)
              else if (plain) Color.Transparent
              else ChatColors.inputIconBg
     val tint = if (isRecording) Color.Red
                else MaterialTheme.colorScheme.onSurfaceVariant
-    val borderColor = if (isRecording || plain) Color.Transparent else ChatColors.inputIconBorder // nanoMuse: plain composer
+    val borderColor = if (isRecording || plain) Color.Transparent else ChatColors.inputIconBorder // NanoLika: plain composer
     Box(
         modifier = Modifier
             .size(38.dp)
@@ -430,11 +430,11 @@ internal fun MicButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            if (isVoiceActive) Icons.Default.Keyboard else if (plain) Icons.Outlined.Mic else Icons.Default.Mic, // nanoMuse: plain composer
+            if (isVoiceActive) Icons.Default.Keyboard else if (plain) Icons.Outlined.Mic else Icons.Default.Mic, // NanoLika: plain composer
             contentDescription = if (isVoiceActive) "Switch to keyboard"
             else if (isRecording) "Stop recording" else "Voice input",
             tint = tint,
-            modifier = Modifier.size(if (plain) 22.dp else 20.dp), // nanoMuse: Muse's outlined mic
+            modifier = Modifier.size(if (plain) 22.dp else 20.dp), // NanoLika: Muse's outlined mic
         )
         if (!localeBadge.isNullOrEmpty()) {
             Text(
@@ -712,7 +712,7 @@ private fun ToolPreviewThumbnail(
                         try { android.graphics.BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
                     }
                 }
-                // nanoMuse: a finished action that saved no screenshot keeps its last live frame.
+                // NanoLika: a finished action that saved no screenshot keeps its last live frame.
                 val bitmap = liveBitmap ?: savedBitmap ?: io.github.nanomuse.status.BrowserFrames.get(block.id)
                 if (bitmap != null) {
                     Image(
@@ -875,7 +875,7 @@ internal fun FloatingToolStatusBar(
             // stays clean.
 
             // Tool title
-            // nanoMuse: a finished browser step reads "<title> · Done", the way Muse closes its browser card.
+            // NanoLika: a finished browser step reads "<title> · Done", the way Muse closes its browser card.
             val nmTitle = block.toolTitle.ifEmpty { block.toolName }
             Text(
                 text = if (isDone && block.toolName == "browser_use") "$nmTitle · ${stringResource(R.string.nm_tool_done)}" else nmTitle,

@@ -6,7 +6,7 @@ Start with `nanomuse doctor`: it prints the config file in use, the data directo
 
 **"web app not built" on start.** You are running from a checkout without the built front-end. `cd web && npm install && npm run build`, or install the package instead.
 
-**"port 8787 on 127.0.0.1 is already in use by nanoMuse 1.0.1" on start.** A nanoMuse is already serving there (an earlier `nanomuse serve`, the daemon, a container), and `serve` stops before touching the data directory. Open that one in the browser, or stop it before starting another; `--port 8790` runs this one beside it. *By another program* means something else holds the port: stop it or choose another port.
+**"port 8787 on 127.0.0.1 is already in use by NanoLika 1.0.1" on start.** A NanoLika is already serving there (an earlier `nanomuse serve`, the daemon, a container), and `serve` stops before touching the data directory. Open that one in the browser, or stop it before starting another; `--port 8790` runs this one beside it. *By another program* means something else holds the port: stop it or choose another port.
 
 **Replies come back in the wrong language.** With `agent.language = "auto"` the system prompt names the language of your latest message (detected by script). If a model still drifts, set a fixed language in *You → Reply language* or `agent.language = "English"`.
 
@@ -16,7 +16,7 @@ Start with `nanomuse doctor`: it prints the config file in use, the data directo
 
 **"does not support tools" in the log, then the agent carries on.** That is `auto` doing its job: Ollama refused function calling for this model, so tools are described in the prompt from then on. Pick a model with a tool template (`qwen3:8b`, `llama3.1:8b`) for better results on long tasks.
 
-**Empty replies, or Ideas that stay on the starter list, with a reasoning model.** DeepSeek's thinking variants and the OpenAI o-series count their reasoning against `max_tokens`; on a hard prompt they can spend the whole budget thinking and return nothing (`finish_reason = "length"`). nanoMuse asks once more with four times the budget when that happens. If it keeps happening, raise `max_tokens` under `[llm]` (16384 is a sensible value for these models).
+**Empty replies, or Ideas that stay on the starter list, with a reasoning model.** DeepSeek's thinking variants and the OpenAI o-series count their reasoning against `max_tokens`; on a hard prompt they can spend the whole budget thinking and return nothing (`finish_reason = "length"`). NanoLika asks once more with four times the budget when that happens. If it keeps happening, raise `max_tokens` under `[llm]` (16384 is a sensible value for these models).
 
 **429 / rate limits.** Requests retry with exponential back-off (`max_retries`, default 5). Lower `agent.max_steps`, or add `web_fetch` to `always_ask_tools` to slow the loop down.
 
@@ -32,7 +32,7 @@ Start with `nanomuse doctor`: it prints the config file in use, the data directo
 
 **"The data folder … is not writable" / "cannot write to the data directory" right after installing (Windows, 0.1.20–0.1.21).** The runtime created its `workspace` folder relative to wherever the launcher started it (`C:\Windows\System32` when the installer opened the app) and stopped when that failed. Since 0.1.22 the workspace defaults to `<data dir>\workspace` and the shell starts the runtime inside its data folder; update, or set `NANOMUSE_WORKSPACE` for an older version.
 
-**macOS: Finder "can't complete the operation … error code -36" while dragging nanoMuse.app out of the dmg (0.1.20–0.1.21).** The image was HFS+; since 0.1.22 the dmg is APFS and the release also carries a `.zip` of the app: download it, double-click to unpack, drag `nanoMuse.app` to Applications.
+**macOS: Finder "can't complete the operation … error code -36" while dragging NanoLika.app out of the dmg (0.1.20–0.1.21).** The image was HFS+; since 0.1.22 the dmg is APFS and the release also carries a `.zip` of the app: download it, double-click to unpack, drag `NanoLika.app` to Applications.
 
 **macOS: "nanoMuse.app is damaged and can't be opened" or "Apple could not verify…".** Builds made without an Apple developer certificate are ad-hoc signed, so macOS asks once (a release signed and notarized with the project's Developer ID opens without the question; [desktop.md](desktop.md#macos-signing) says how that is done). Open it, dismiss the dialog, then System Settings → Privacy & Security → *Open Anyway* (or, from a terminal, `xattr -dr com.apple.quarantine /Applications/nanoMuse.app`). Windows shows "Windows protected your PC" for the same reason: *More info* → *Run anyway*.
 
@@ -40,13 +40,13 @@ Start with `nanomuse doctor`: it prints the config file in use, the data directo
 
 **The Android app says "Refused by the relay; sign in again" under Devices.** The relay no longer accepts this phone's key (signed out everywhere, or the account was deleted). Sign out and in again on the Account screen; the hub joins again on its own.
 
-**The chat says the model provider's content check declined the request.** The provider that answers (nanoMuse Cloud's upstream, or the vendor behind a key of your own: Alibaba Cloud's `DataInspectionFailed`, for one) read something in the conversation it will not process, and said so before any model ran. It is not an outage and nothing retries it by itself: the card offers *Try again* and *New chat*. Different words usually get through; if the refusal comes back, the words it objects to are probably earlier in the conversation, and a new chat is the way on. On the relay's Health page these refusals are counted apart from upstream errors, since they say nothing about the provider's health.
+**The chat says the model provider's content check declined the request.** The provider that answers (NanoLika Cloud's upstream, or the vendor behind a key of your own: Alibaba Cloud's `DataInspectionFailed`, for one) read something in the conversation it will not process, and said so before any model ran. It is not an outage and nothing retries it by itself: the card offers *Try again* and *New chat*. Different words usually get through; if the refusal comes back, the words it objects to are probably earlier in the conversation, and a new chat is the way on. On the relay's Health page these refusals are counted apart from upstream errors, since they say nothing about the provider's health.
 
 **Reset everything.** Stop the server and delete `~/.nanolika` (or your `data_dir`). The vault key lives there too, so export secrets first if you need them.
 
 
 ## iPhone says no model is configured
 
-This message is shown before the app calls a model. It means the phone could not resolve a chat model from its saved choices, not that the desktop must be running. Under Settings, Models, check that nanoMuse Cloud is signed in and enabled, or select an enabled provider of your own with a model that can chat. A task addressed to a computer still needs that computer online; an ordinary conversation does not.
+This message is shown before the app calls a model. It means the phone could not resolve a chat model from its saved choices, not that the desktop must be running. Under Settings, Models, check that NanoLika Cloud is signed in and enabled, or select an enabled provider of your own with a model that can chat. A task addressed to a computer still needs that computer online; an ordinary conversation does not.
 
 The iOS sign-in uses the model menu in the authenticated sign-in reply before attempting the separate model-list refresh. Checking the account again also repairs a missing chat entry or a default group whose members are all unavailable, using the account's current model menu. Working model choices and an intentional Cloud opt-out are kept. This recovery requires the updated iOS app; changing the relay alone cannot change an installed client's local model selection.

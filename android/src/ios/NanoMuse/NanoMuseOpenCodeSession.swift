@@ -1,6 +1,6 @@
 //
 //  NanoMuseOpenCodeSession.swift
-//  nanoMuse
+//  NanoLika
 //
 //  OpenCode Go asks every client to name itself with its own user agent and to send one stable
 //  id per conversation in `x-opencode-session` (opencode.ai/docs/go, "Where can I use it?"); the

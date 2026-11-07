@@ -1,6 +1,6 @@
 //
 //  NanoMuseComposerWatch.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The composer that disappears: the watch behind it, and the evidence for
 //  the next report.

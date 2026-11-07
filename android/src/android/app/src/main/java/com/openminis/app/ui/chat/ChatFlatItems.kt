@@ -443,14 +443,14 @@ internal sealed class FlatChatItem {
         override val contentType = "info"
     }
 
-    // nanoMuse: the first-conversation name chooser; rendered by
+    // NanoLika: the first-conversation name chooser; rendered by
     // io.github.nanomuse.ui.onboarding.NamingCard from the view model's state.
     data class NanoMuseNaming(val messageId: String) : FlatChatItem() {
         override val key = "nm_naming:$messageId"
         override val contentType = "nm_naming"
     }
 
-    // nanoMuse: the "change your avatar" options card (live state in AvatarFlow / AvatarStudio)
+    // NanoLika: the "change your avatar" options card (live state in AvatarFlow / AvatarStudio)
     // and the share card once the new face is done.
     data class NanoMuseAvatarOptions(val messageId: String) : FlatChatItem() {
         override val key = "nm_avatar_options:$messageId"
@@ -462,13 +462,13 @@ internal sealed class FlatChatItem {
         override val contentType = "nm_avatar_share"
     }
 
-    /** nanoMuse: the cost of a new face on the Cloud allowance, asked before drawing (the text is the whole sentence). */
+    /** NanoLika: the cost of a new face on the Cloud allowance, asked before drawing (the text is the whole sentence). */
     data class NanoMuseAvatarConfirm(val messageId: String, val text: String) : FlatChatItem() {
         override val key = "nm_avatar_confirm:$messageId"
         override val contentType = "nm_avatar_confirm"
     }
 
-    /** nanoMuse: the free allowance is spent — the two ways on (own key, invite). */
+    /** NanoLika: the free allowance is spent — the two ways on (own key, invite). */
     data class NanoMuseAllowance(val messageId: String) : FlatChatItem() {
         override val key = "nm_allowance:$messageId"
         override val contentType = "nm_allowance"
@@ -555,7 +555,7 @@ internal fun buildFlatChatItems(
     // prefix so the defensive key-collision suffixing behaves exactly as a
     // single full build would.
     seedKeys: Set<String> = emptySet(),
-    // nanoMuse: false leaves the agent's steps out — no tool pills, no
+    // NanoLika: false leaves the agent's steps out — no tool pills, no
     // reasoning rows — so the chat keeps only what it said (Settings →
     // Appearance → "Show the agent's steps", off by default). The typing
     // indicator then stays up while a tool runs, since nothing else shows.
@@ -590,11 +590,11 @@ internal fun buildFlatChatItems(
             is FlatChatItem.AssistantThinking -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantToolUse -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantInfo -> item.copy(messageId = "${item.messageId}#$n")
-            is FlatChatItem.NanoMuseNaming -> item.copy(messageId = "${item.messageId}#$n") // nanoMuse
-            is FlatChatItem.NanoMuseAvatarOptions -> item.copy(messageId = "${item.messageId}#$n") // nanoMuse
-            is FlatChatItem.NanoMuseAvatarShare -> item.copy(messageId = "${item.messageId}#$n") // nanoMuse
-            is FlatChatItem.NanoMuseAvatarConfirm -> item.copy(messageId = "${item.messageId}#$n") // nanoMuse
-            is FlatChatItem.NanoMuseAllowance -> item.copy(messageId = "${item.messageId}#$n") // nanoMuse
+            is FlatChatItem.NanoMuseNaming -> item.copy(messageId = "${item.messageId}#$n") // NanoLika
+            is FlatChatItem.NanoMuseAvatarOptions -> item.copy(messageId = "${item.messageId}#$n") // NanoLika
+            is FlatChatItem.NanoMuseAvatarShare -> item.copy(messageId = "${item.messageId}#$n") // NanoLika
+            is FlatChatItem.NanoMuseAvatarConfirm -> item.copy(messageId = "${item.messageId}#$n") // NanoLika
+            is FlatChatItem.NanoMuseAllowance -> item.copy(messageId = "${item.messageId}#$n") // NanoLika
             is FlatChatItem.AssistantTyping -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantError -> item.copy(messageId = "${item.messageId}#$n")
             is FlatChatItem.AssistantLegacyContent -> FlatChatItem.AssistantLegacyContent(
@@ -628,7 +628,7 @@ internal fun buildFlatChatItems(
             continue
         }
         // System messages (slash-command notices, compact divider, etc.) render
-        // as horizontal-divider rows — no "nanoMuse" attribution, no card. Skip
+        // as horizontal-divider rows — no "NanoLika" attribution, no card. Skip
         // the assistant header so each info block stands on its own. Mirrors
         // iOS systemDividerRow / compactDividerRow.
         val isSystem = message.role == "system"
@@ -641,12 +641,12 @@ internal fun buildFlatChatItems(
         // T83: when Resume creates a fresh assistant bubble after the user
         // stopped a streaming turn, the previous (cancelled) assistant
         // message is right before this one in the list. Visually they should
-        // read as one continuous turn — suppress the duplicate "nanoMuse"
+        // read as one continuous turn — suppress the duplicate "NanoLika"
         // header. Skip system rows when looking back since they render as
         // dividers, not as separate speaker turns. iOS achieves this by
         // reusing the existing ChatMessage in runAgentLoop(resumingAt:);
         // we reach the same end-result at the render layer.
-        // nanoMuse: with the steps hidden, a finished turn that was all
+        // NanoLika: with the steps hidden, a finished turn that was all
         // steps — no words, no error — would be a face with nothing under
         // it; leave the whole turn out (its steps are still in the history).
         // The look-back below skips such turns too, so the reply that
@@ -679,7 +679,7 @@ internal fun buildFlatChatItems(
                 "text" -> {
                     if (block.content.isNotEmpty()) {
                         val isLastText = index == lastTextIdx
-                        // nanoMuse: keep each assistant text block in a single markdown
+                        // NanoLika: keep each assistant text block in a single markdown
                         // bubble (matching iOS) so lists, headings, paragraphs, and code
                         // blocks from one turn stay together inside one bubble.
                         out.add(dedupe(FlatChatItem.AssistantMarkdownBlock(
@@ -693,7 +693,7 @@ internal fun buildFlatChatItems(
                         )))
                     }
                 }
-                "thinking" -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantThinking( // nanoMuse: a step
+                "thinking" -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantThinking( // NanoLika: a step
                     messageId = message.id,
                     block = block,
                     isLast = block.id == lastThinkingId,
@@ -705,12 +705,12 @@ internal fun buildFlatChatItems(
                     messageId = message.id,
                     block = block,
                 )))
-                "nm_naming" -> out.add(dedupe(FlatChatItem.NanoMuseNaming(message.id))) // nanoMuse
-                "nm_avatar_options" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarOptions(message.id))) // nanoMuse
-                "nm_avatar_share" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarShare(message.id, block.content))) // nanoMuse
-                "nm_avatar_confirm" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarConfirm(message.id, block.content))) // nanoMuse
-                "nm_allowance" -> out.add(dedupe(FlatChatItem.NanoMuseAllowance(message.id))) // nanoMuse
-                else -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // nanoMuse: a step
+                "nm_naming" -> out.add(dedupe(FlatChatItem.NanoMuseNaming(message.id))) // NanoLika
+                "nm_avatar_options" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarOptions(message.id))) // NanoLika
+                "nm_avatar_share" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarShare(message.id, block.content))) // NanoLika
+                "nm_avatar_confirm" -> out.add(dedupe(FlatChatItem.NanoMuseAvatarConfirm(message.id, block.content))) // NanoLika
+                "nm_allowance" -> out.add(dedupe(FlatChatItem.NanoMuseAllowance(message.id))) // NanoLika
+                else -> if (showSteps) out.add(dedupe(FlatChatItem.AssistantToolUse( // NanoLika: a step
                     messageId = message.id,
                     block = block,
                     allToolBlocks = toolPillBlocks,
@@ -739,9 +739,9 @@ internal fun buildFlatChatItems(
         val hasVisibleContent = message.content.isNotEmpty() || blocks.any {
             when (it.kind) {
                 "info" -> false
-                "thinking" -> showSteps && (message.thinkingLevel?.isEnabled ?: true) // nanoMuse: hidden steps do not count
+                "thinking" -> showSteps && (message.thinkingLevel?.isEnabled ?: true) // NanoLika: hidden steps do not count
                 "text" -> it.content.isNotEmpty()
-                "tool_use" -> showSteps // pills render immediately — when the steps are shown (nanoMuse)
+                "tool_use" -> showSteps // pills render immediately — when the steps are shown (NanoLika)
                 else -> true // the app's own cards
             }
         }
@@ -767,7 +767,7 @@ internal fun buildFlatChatItems(
     return out
 }
 
-/** nanoMuse: a finished assistant turn made of steps alone — nothing the chat would show with the steps hidden. */
+/** NanoLika: a finished assistant turn made of steps alone — nothing the chat would show with the steps hidden. */
 private fun stepsOnlyTurn(m: ChatMessage): Boolean =
     m.role == "assistant" && !m.isStreaming && m.error == null && m.content.isEmpty() &&
         m.toolBlocks.isNotEmpty() && m.toolBlocks.all {

@@ -11,8 +11,8 @@ class InterruptedReplyTest {
     private fun intro(i: Int) = ChatMessage(
         id = "nm_intro_$i",
         role = "assistant",
-        content = "Hello, I am nanoMuse. $i",
-        toolBlocks = listOf(AssistantBlock(id = "nm_intro_${i}_text", kind = "text", content = "Hello, I am nanoMuse. $i")),
+        content = "Hello, I am NanoLika. $i",
+        toolBlocks = listOf(AssistantBlock(id = "nm_intro_${i}_text", kind = "text", content = "Hello, I am NanoLika. $i")),
     )
     private val namingCard = ChatMessage(id = "nm_naming_card", role = "system", content = "")
     private val user = ChatMessage(id = "u-1", role = "user", content = "Call yourself Pip")

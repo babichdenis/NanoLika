@@ -1,26 +1,26 @@
 /* Info.plist permission strings — English */
 
-"NSLocationWhenInUseUsageDescription" = "nanoMuse uses your location to record where agent sessions are started for your session history.";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "nanoMuse uses background location to keep agent tasks running when the app is in the background. Location data is only used to record session connection history.";
-"NSCalendarsUsageDescription" = "nanoMuse uses calendar access so the AI agent can query your schedule, check availability, and create events on your behalf.";
-"NSCalendarsFullAccessUsageDescription" = "nanoMuse uses calendar access so the AI agent can query your schedule, check availability, and create events on your behalf.";
-"NSRemindersUsageDescription" = "nanoMuse uses reminders access so the AI agent can query and create reminders on your behalf.";
-"NSRemindersFullAccessUsageDescription" = "nanoMuse uses reminders access so the AI agent can query and create reminders on your behalf.";
-"NSCameraUsageDescription" = "nanoMuse needs camera access to take photos for AI conversations.";
-"NSPhotoLibraryUsageDescription" = "nanoMuse needs photo library access to attach images to AI conversations.";
-"NSPhotoLibraryAddUsageDescription" = "nanoMuse needs permission to save videos and images to your photo library.";
-"NSHealthShareUsageDescription" = "nanoMuse uses HealthKit access so the AI agent can read your health data such as steps, heart rate, sleep, and workouts on your behalf.";
-"NSHealthUpdateUsageDescription" = "nanoMuse uses HealthKit write access so the AI agent can log health data such as steps, weight, and water intake on your behalf.";
-"NSContactsUsageDescription" = "nanoMuse uses contacts access so the AI agent can search, view, and manage your contacts on your behalf.";
-"NSAppleMusicUsageDescription" = "nanoMuse uses media library access so the AI agent can search your music library and control playback on your behalf.";
-"NSMicrophoneUsageDescription" = "nanoMuse needs microphone access for voice-to-text input in chat.";
-"NSSpeechRecognitionUsageDescription" = "nanoMuse uses speech recognition to convert your voice into text messages.";
-"NSHomeKitUsageDescription" = "nanoMuse uses HomeKit access so the AI agent can query and control your smart home accessories on your behalf.";
-"NSAlarmKitUsageDescription" = "nanoMuse uses AlarmKit so the AI agent can set alarms and timers on your behalf.";
-"NSLocalNetworkUsageDescription" = "nanoMuse uses the local network for the debug server and so the AI agent can reach services running on your own network."; /* nanoMuse: the app has no VM; the sentence matches Info.plist */
+"NSLocationWhenInUseUsageDescription" = "NanoLika uses your location to record where agent sessions are started for your session history.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "NanoLika uses background location to keep agent tasks running when the app is in the background. Location data is only used to record session connection history.";
+"NSCalendarsUsageDescription" = "NanoLika uses calendar access so the AI agent can query your schedule, check availability, and create events on your behalf.";
+"NSCalendarsFullAccessUsageDescription" = "NanoLika uses calendar access so the AI agent can query your schedule, check availability, and create events on your behalf.";
+"NSRemindersUsageDescription" = "NanoLika uses reminders access so the AI agent can query and create reminders on your behalf.";
+"NSRemindersFullAccessUsageDescription" = "NanoLika uses reminders access so the AI agent can query and create reminders on your behalf.";
+"NSCameraUsageDescription" = "NanoLika needs camera access to take photos for AI conversations.";
+"NSPhotoLibraryUsageDescription" = "NanoLika needs photo library access to attach images to AI conversations.";
+"NSPhotoLibraryAddUsageDescription" = "NanoLika needs permission to save videos and images to your photo library.";
+"NSHealthShareUsageDescription" = "NanoLika uses HealthKit access so the AI agent can read your health data such as steps, heart rate, sleep, and workouts on your behalf.";
+"NSHealthUpdateUsageDescription" = "NanoLika uses HealthKit write access so the AI agent can log health data such as steps, weight, and water intake on your behalf.";
+"NSContactsUsageDescription" = "NanoLika uses contacts access so the AI agent can search, view, and manage your contacts on your behalf.";
+"NSAppleMusicUsageDescription" = "NanoLika uses media library access so the AI agent can search your music library and control playback on your behalf.";
+"NSMicrophoneUsageDescription" = "NanoLika needs microphone access for voice-to-text input in chat.";
+"NSSpeechRecognitionUsageDescription" = "NanoLika uses speech recognition to convert your voice into text messages.";
+"NSHomeKitUsageDescription" = "NanoLika uses HomeKit access so the AI agent can query and control your smart home accessories on your behalf.";
+"NSAlarmKitUsageDescription" = "NanoLika uses AlarmKit so the AI agent can set alarms and timers on your behalf.";
+"NSLocalNetworkUsageDescription" = "NanoLika uses the local network for the debug server and so the AI agent can reach services running on your own network."; /* NanoLika: the app has no VM; the sentence matches Info.plist */
 
-/* nanoMuse: the keys Info.plist declares but this file lacked, so the prompt is in the person's language */
-"NFCReaderUsageDescription" = "nanoMuse uses NFC so the AI agent can read and write NFC tags on your behalf.";
-"NSBluetoothAlwaysUsageDescription" = "nanoMuse uses Bluetooth so the AI agent can scan for, connect to, and communicate with nearby BLE devices on your behalf.";
-"NSBluetoothPeripheralUsageDescription" = "nanoMuse uses Bluetooth so the AI agent can scan for, connect to, and communicate with nearby BLE devices on your behalf.";
-"NSFaceIDUsageDescription" = "nanoMuse uses Face ID to protect locked chat sessions so only you can view their contents.";
+/* NanoLika: the keys Info.plist declares but this file lacked, so the prompt is in the person's language */
+"NFCReaderUsageDescription" = "NanoLika uses NFC so the AI agent can read and write NFC tags on your behalf.";
+"NSBluetoothAlwaysUsageDescription" = "NanoLika uses Bluetooth so the AI agent can scan for, connect to, and communicate with nearby BLE devices on your behalf.";
+"NSBluetoothPeripheralUsageDescription" = "NanoLika uses Bluetooth so the AI agent can scan for, connect to, and communicate with nearby BLE devices on your behalf.";
+"NSFaceIDUsageDescription" = "NanoLika uses Face ID to protect locked chat sessions so only you can view their contents.";

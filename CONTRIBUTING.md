@@ -1,6 +1,6 @@
 # Contributing
 
-Open an issue or send a pull request; either one helps nanoMuse get better. Use nanoMuse for a real task, report what broke, then pick something focused. For anything larger than a fix, open an issue first so we can agree on the shape. [docs/roadmap.md](docs/roadmap.md) says where help is wanted and where to start in each area. For a quick question or to talk through an idea before writing it up, there is a [Discord](https://discord.gg/bkTySmm28X); decisions still land in issues and pull requests, where they can be found later.
+Open an issue or send a pull request; either one helps NanoLika get better. Use NanoLika for a real task, report what broke, then pick something focused. For anything larger than a fix, open an issue first so we can agree on the shape. [docs/roadmap.md](docs/roadmap.md) says where help is wanted and where to start in each area. For a quick question or to talk through an idea before writing it up, there is a [Discord](https://discord.gg/bkTySmm28X); decisions still land in issues and pull requests, where they can be found later.
 
 [AGENTS.md](AGENTS.md) is the short version of this file for coding agents and for people in a hurry: the layout, the check commands per area, and the conventions below in one screen. The two must agree; when they do not, fix both.
 
@@ -11,7 +11,7 @@ Open an issue or send a pull request; either one helps nanoMuse get better. Use 
 
 ## Licence and sign-off
 
-nanoMuse is **GPL-3.0-or-later** ([LICENSE](LICENSE), [NOTICE](NOTICE)). By contributing you agree that your contribution is licensed the same way. Every commit must carry a [Developer Certificate of Origin](https://developercertificate.org) sign-off; `git commit -s` adds the line:
+NanoLika is **GPL-3.0-or-later** ([LICENSE](LICENSE), [NOTICE](NOTICE)). By contributing you agree that your contribution is licensed the same way. Every commit must carry a [Developer Certificate of Origin](https://developercertificate.org) sign-off; `git commit -s` adds the line:
 
 ```
 Signed-off-by: Your Name <you@example.com>
@@ -21,7 +21,7 @@ CI checks it. Not accepted, ever:
 
 - code under a licence that cannot be combined with GPL-3.0 (GPL-2.0-*only*, SSPL, BUSL, "source-available", proprietary SDKs);
 - anything obtained by decompiling, unpacking, intercepting or scraping the Meta Muse app (its system prompt included), or the OpenMinis binaries beyond what their source already shows;
-- the OpenMinis or Meta Muse names and logos as part of nanoMuse's own identity (attribution in the About screen and NOTICE is required and stays), and Meta's brand screenshots;
+- the OpenMinis or Meta Muse names and logos as part of NanoLika's own identity (attribution in the About screen and NOTICE is required and stays), and Meta's brand screenshots;
 - internal planning: budgets, capacity estimates, promotion drafts. The repository holds what runs and what explains it.
 
 ## Working in `android/`
@@ -30,7 +30,7 @@ Upstream is a mirror of a private tree, squashed roughly monthly, and does not t
 
 1. **Do not rename the Kotlin package** `com.openminis.app` or the Gradle `namespace`. Only the `applicationId` (`io.github.nanomuse.app`) is ours.
 2. **Do not rename sandbox paths or CLI names** inside the root file system (`/var/minis`, `minis-global`, `minis-open`, `minis-mcp-cli`, `android-*`). They are upstream's contract with itself.
-3. **New code goes in new files**: package `io.github.nanomuse.*` or a new file next to the upstream one. When an upstream file must change, add a `// nanoMuse:` comment at the spot, and make one change per spot.
+3. **New code goes in new files**: package `io.github.nanomuse.*` or a new file next to the upstream one. When an upstream file must change, add a `// NanoLika:` comment at the spot, and make one change per spot.
 4. **Rebranding is a script, not hand edits.** `scripts/rebrand.py` (names, ids, colours, links; Android and iOS), `scripts/gen-android-icons.py` and `scripts/gen-ios-icons.py` (icons) are idempotent; run them after every upstream pull. Do not fix a rebranding miss by hand; fix the script.
 5. **Binary resources** (icon PNGs) are overwritten under the upstream name; on a pull conflict take ours (`git checkout --ours`).
 6. **iOS follows the same rules.** The iOS half of upstream lives at `android/src/ios` (see [docs/ios.md](docs/ios.md)); our Swift goes in `android/src/ios/NanoMuse/`, an edit inside an upstream Swift file carries a `// nanoMuse:` comment.
@@ -45,7 +45,7 @@ git subtree pull --prefix=android openminis 1.14 -m "Merge OpenMinis 1.14"
 git checkout --ours -- 'android/src/android/app/src/main/res/mipmap-*' \
     'android/src/ios/Assets.xcassets/AppIcon.appiconset' 'android/src/ios/Resources/AlternateIcons'
 python scripts/rebrand.py && python scripts/gen-android-icons.py && python scripts/gen-ios-icons.py
-# resolve the remaining conflicts at the `// nanoMuse:` marks, build, run the smoke list
+# resolve the remaining conflicts at the `// NanoLika:` marks, build, run the smoke list
 ```
 
 ## Working in the runtime, the relay and the web console
@@ -89,7 +89,7 @@ Rules for a Chinese page:
 
 | English | 简体中文 | English | 简体中文 |
 |---|---|---|---|
-| agent | 智能体 | the relay / nanoMuse Cloud | 中继 / nanoMuse Cloud |
+| agent | 智能体 | the relay / NanoLika Cloud | 中继 / NanoLika Cloud |
 | free, open-source, non-profit | 免费、开源、非营利 | allowance, free allowance | 额度，免费额度 |
 | sign in / sign out | 登录 / 退出登录 | one-time code | 验证码 |
 | your own key | 自己的 key | provider | 服务商 |
@@ -113,7 +113,7 @@ Rules for a Chinese page:
 | avatar / the avatar studio | 形象 / 形象工作室 | moods (idle, working, waiting, happy, error) | 状态（待命、干活中、等你回复、搞定、出了点问题） |
 | picture model / video model | 图像模型 / 视频模型 | skills / MCP server | 技能 / MCP 服务器 |
 | Models (Chat / Operating the screen / Making pictures / Making clips) | 模型（对话 / 操作屏幕 / 生成图片 / 生成视频） | Automatic | 自动 |
-| Use it for | 用它来做什么 | Use nanoMuse Cloud this time | 这次改用 nanoMuse Cloud |
+| Use it for | 用它来做什么 | Use NanoLika Cloud this time | 这次改用 NanoLika Cloud |
 | connectors | 连接器 | coding agents | 编程助手 |
 | channels (Feishu, DingTalk, WeCom, Telegram) | 聊天入口 | deliver here | 推送到这里 |
 | the web console / the web app | 网页控制台 / 网页版 | the desktop app | 桌面版 |
@@ -121,7 +121,7 @@ Rules for a Chinese page:
 | the showcase | 展示站 | self-hosting | 自己部署 |
 | quick chat / dictation | 快速唤起 / 听写 | roadmap / changelog / release notes | 路线图 / 更新日志 / 发布说明 |
 
-Two that go wrong most often: 非营利, never 非盈利; and `nanoMuse Cloud`, the product's name, which is never translated (not 云, not 云端).
+Two that go wrong most often: 非营利, never 非盈利; and `NanoLika Cloud`, the product's name, which is never translated (not 云, not 云端).
 
 ## Facts come from the repository
 
@@ -151,7 +151,7 @@ Every feature, number and count in a README, a docs page or a release note is so
 
 ## Releasing (maintainers)
 
-A version is a plain number (`0.1.41`, `1.0.0`, …) because the apps' update check compares them; each release also carries a codename, one capitalised English word that no earlier release used (Foundation, Identity, Home, … Helm, Compass; `CHANGELOG.md` has the list), and its title is `nanoMuse <version> · <Codename>`. The apps, the runtime, the web console and the desktop app share one version; the relay has its own (`cloud/pyproject.toml`) and moves only when it changed. Versions move in the release commit and nowhere else.
+A version is a plain number (`0.1.41`, `1.0.0`, …) because the apps' update check compares them; each release also carries a codename, one capitalised English word that no earlier release used (Foundation, Identity, Home, … Helm, Compass; `CHANGELOG.md` has the list), and its title is `NanoLika <version> · <Codename>`. The apps, the runtime, the web console and the desktop app share one version; the relay has its own (`cloud/pyproject.toml`) and moves only when it changed. Versions move in the release commit and nowhere else.
 
 A release goes out as soon as a fix people are waiting for is on `main` (a crash, a security issue, an app that will not install), and otherwise every few days, when the *Unreleased* block has something worth a version. What ships: the APK, the TestFlight build, the desktop installers for Windows, macOS and Linux, the harness tarball and the Docker image; no terminal builds and no pre-releases, every release is *Latest*. Before tagging, a maintainer installs the build that will ship on a phone and taps through the main flows.
 

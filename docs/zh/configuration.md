@@ -1,6 +1,6 @@
 # 配置
 
-nanoMuse 只读一个 TOML 文件。`nanomuse config init` 把带注释的 [`config/config.example.toml`](../../config/config.example.toml) 抄一份写到 `config/config.toml`；`nanomuse config show` 打印实际生效的设置，机密值打码。
+NanoLika 只读一个 TOML 文件。`nanomuse config init` 把带注释的 [`config/config.example.toml`](../../config/config.example.toml) 抄一份写到 `config/config.toml`；`nanomuse config show` 打印实际生效的设置，机密值打码。
 
 查找顺序：
 
@@ -32,9 +32,9 @@ nanoMuse 只读一个 TOML 文件。`nanomuse config init` 把带注释的 [`con
 | `NANOMUSE_GUI_ENABLED=1`、`NANOMUSE_GUI_PROVIDER`、`NANOMUSE_GUI_MODEL`、`NANOMUSE_GUI_BASE_URL`、`NANOMUSE_GUI_API_KEY` | `[gui]`：操作手机，以及干这件事的模型 |
 | `NANOMUSE_IMAGE_PROVIDER`、`NANOMUSE_IMAGE_MODEL`、`NANOMUSE_IMAGE_BASE_URL`、`NANOMUSE_IMAGE_API_KEY`；把 `IMAGE` 换成 `VIDEO` 也一样 | [`[image]` 和 `[video]` 槽位](#image-and-video)：图片和短视频从哪里来 |
 | `NANOMUSE_VAULT_KEY` | 保险库的 Fernet 密钥（默认：`<data_dir>/vault.key`） |
-| `NANOMUSE_CLOUD_BASE_URL`、`NANOMUSE_CLOUD_REQUIRED`、`NANOMUSE_CLOUD_SYNC` | `[cloud]`：托管运行时登录的那个中继、是否必须有 nanoMuse Cloud 账号，以及「在我的设备之间同步对话」的默认值（`sync`，除非设为 `0` 否则是开的；「设置 → 数据控制」里的开关只要动过一次，就以它为准；[every-device.md](every-device.md#the-same-conversations-everywhere)）（[cloud.md](cloud.md)；中继自己的变量在 [cloud/README.md](../../cloud/README.md)） |
+| `NANOMUSE_CLOUD_BASE_URL`、`NANOMUSE_CLOUD_REQUIRED`、`NANOMUSE_CLOUD_SYNC` | `[cloud]`：托管运行时登录的那个中继、是否必须有 NanoLika Cloud 账号，以及「在我的设备之间同步对话」的默认值（`sync`，除非设为 `0` 否则是开的；「设置 → 数据控制」里的开关只要动过一次，就以它为准；[every-device.md](every-device.md#the-same-conversations-everywhere)）（[cloud.md](cloud.md)；中继自己的变量在 [cloud/README.md](../../cloud/README.md)） |
 | `NANOMUSE_HUB_NAME` | `hub.name`，这台设备在其他设备上叫什么 |
-| `NANOMUSE_CLOUD_KEY`、`NANOMUSE_CLOUD_HINT`、`NANOMUSE_CLOUD_CHANNEL`、`NANOMUSE_ONBOARDED` | 托管的运行时（nanoMuse Web）一启动就是登录状态：创建容器的网关交来账号 key（和手动输入的一样进保险库）、账号页要显示的打码标识和渠道，以及首次运行是否已经完成；保险库里已经有 key 时什么都不做 |
+| `NANOMUSE_CLOUD_KEY`、`NANOMUSE_CLOUD_HINT`、`NANOMUSE_CLOUD_CHANNEL`、`NANOMUSE_ONBOARDED` | 托管的运行时（NanoLika Web）一启动就是登录状态：创建容器的网关交来账号 key（和手动输入的一样进保险库）、账号页要显示的打码标识和渠道，以及首次运行是否已经完成；保险库里已经有 key 时什么都不做 |
 | `NANOMUSE_IN_CONTAINER=1` | 说明运行时在容器里（镜像会设置它；`/.dockerenv` 也会被读取），于是 `sandbox.mode = auto` 把容器当作箱子，而不是报告缺少 bubblewrap |
 | `NANOMUSE_CODING_HOME` | 到哪里找编程 CLI 各自的家目录（`~/.codex`、`~/.claude`……），默认是用户的家目录（[coding-agents.md](coding-agents.md)） |
 | `NANOMUSE_LOG_LEVEL` | `log_level` |
@@ -64,7 +64,7 @@ video_model   = ""                 # the same for clips
 video_base_url = ""                # the asynchronous video API when it is not on this host (a relaying gateway)
 ```
 
-`proxy` 让这个槽位的请求（`chatgpt` 槽位还包括登录的令牌刷新）走那个代理，并对它们忽略环境里的 `HTTPS_PROXY`；留空则由环境决定。它从不作用于 nanoMuse Cloud 和 hub。（手机上同样的开关在「设置 → 网络」；[own-key.md](own-key.md#when-the-provider-cannot-be-reached)。）
+`proxy` 让这个槽位的请求（`chatgpt` 槽位还包括登录的令牌刷新）走那个代理，并对它们忽略环境里的 `HTTPS_PROXY`；留空则由环境决定。它从不作用于 NanoLika Cloud 和 hub。（手机上同样的开关在「设置 → 网络」；[own-key.md](own-key.md#when-the-provider-cannot-be-reached)。）
 
 各服务商的写法：
 
@@ -94,7 +94,7 @@ provider = "chatgpt"     # the sign-in from `nanomuse chatgpt login`; no base_ur
 model    = ""            # empty → gpt-5.6-sol (also gpt-6.1-sol, gpt-6-sol, gpt-6-luna, gpt-6-astra, gpt-5.4, gpt-5.4-mini)
 ```
 
-有 ChatGPT 套餐（Plus、Pro、Team）的人可以让 nanoMuse 用它来聊天和动手，方式和 OpenAI 自己的 Codex CLI 一样：`nanomuse chatgpt login` 在浏览器里打开 OpenAI 的登录页（PKCE，和 Codex 相同的 client id、scope 和重定向地址），在运行时所在机器的 1455 端口等回调，然后把令牌存进 `<data_dir>/chatgpt.json`（权限 0600），到期前自动刷新。`nanomuse chatgpt status` 说明是谁登录的、有效到什么时候（从不显示令牌）；`nanomuse chatgpt logout` 删掉存储。同样的三步也在网页控制台的「连接」屏幕上（「或者用 ChatGPT 套餐登录」），它调用运行时的 `POST /api/chatgpt/login`、`GET /api/chatgpt/status` 和 `POST /api/chatgpt/logout`（[web.md](web.md)）。登录之后什么都不会自己切换：在这里设 `provider = "chatgpt"`，在网页上选「让它来回答对话」，或者 `PUT /api/connections/llm {"provider": "chatgpt"}`。`[gui] provider = "chatgpt"` 对手同样适用。
+有 ChatGPT 套餐（Plus、Pro、Team）的人可以让 NanoLika 用它来聊天和动手，方式和 OpenAI 自己的 Codex CLI 一样：`nanomuse chatgpt login` 在浏览器里打开 OpenAI 的登录页（PKCE，和 Codex 相同的 client id、scope 和重定向地址），在运行时所在机器的 1455 端口等回调，然后把令牌存进 `<data_dir>/chatgpt.json`（权限 0600），到期前自动刷新。`nanomuse chatgpt status` 说明是谁登录的、有效到什么时候（从不显示令牌）；`nanomuse chatgpt logout` 删掉存储。同样的三步也在网页控制台的「连接」屏幕上（「或者用 ChatGPT 套餐登录」），它调用运行时的 `POST /api/chatgpt/login`、`GET /api/chatgpt/status` 和 `POST /api/chatgpt/logout`（[web.md](web.md)）。登录之后什么都不会自己切换：在这里设 `provider = "chatgpt"`，在网页上选「让它来回答对话」，或者 `PUT /api/connections/llm {"provider": "chatgpt"}`。`[gui] provider = "chatgpt"` 对手同样适用。
 
 它覆盖什么：聊天和视觉（手要读截图）。Codex 后端没有图片和视频端点，所以图片和短视频仍然需要一把 key：下面的 `[image]` 或 `[video]` 槽位，或者一家主机会画图的聊天服务商。`chatgpt` 槽位里的 `base_url` 和 `api_key` 会被忽略，并在日志里留一条警告。
 
@@ -110,7 +110,7 @@ model    = ""            # empty → gpt-5.6-sol (also gpt-6.1-sol, gpt-6-sol, g
 
 | `tool_mode` | 发生什么 |
 |---|---|
-| `auto`（默认） | 用 API 的函数调用。如果端点*拒绝* `tools` 字段（Ollama 跑一个没有工具模板的模型（"does not support tools"）、vLLM 启动时没带工具解析器），nanoMuse 记一条警告，这次运行余下的时间改在提示词里描述工具。 |
+| `auto`（默认） | 用 API 的函数调用。如果端点*拒绝* `tools` 字段（Ollama 跑一个没有工具模板的模型（"does not support tools"）、vLLM 启动时没带工具解析器），NanoLika 记一条警告，这次运行余下的时间改在提示词里描述工具。 |
 | `native` | 始终用函数调用 API；被拒绝就是错误。 |
 | `prompt` | 工具写在系统提示词里，调用从 `<tool_call>` 块里解析。对那些默默*无视* `tools` 的端点（不报错，模型就是从不调用任何东西）来说，这是唯一能用的模式；有些「agent 应用」网关就是这样。 |
 
@@ -129,7 +129,7 @@ Ollama 在 `http://localhost:11434/v1` 提供 OpenAI 兼容的 API；带工具�
 | `gemma3:4b` | 提示词，经 `auto` 回退 | 5/5 | Ollama 对它拒绝 `tools`；它输出 ```` ```tool_call ```` 围栏，提示词解析器接受 |
 | DeepSeek V4.1 Flash（在线） | 原生 | 5/5 | 每个任务 1–4 秒 |
 
-小模型会以可预料的方式扭曲协议，nanoMuse 选择迁就它们而不是让任务失败：回复如果是一个光秃秃的或围栏里的 JSON 对象、点名了某个工具（并带一个 arguments 对象），在任何模式下都算作工具调用；JSON 字符串里可以有真正的换行；`files.write` 遇到只有一行、却含两个及以上拼出来的 `\n` 的文本时会把它拆成多行（代码本来就有真正的换行，从不动它）。带其他键的加引号 JSON 对象仍当文字。
+小模型会以可预料的方式扭曲协议，NanoLika 选择迁就它们而不是让任务失败：回复如果是一个光秃秃的或围栏里的 JSON 对象、点名了某个工具（并带一个 arguments 对象），在任何模式下都算作工具调用；JSON 字符串里可以有真正的换行；`files.write` 遇到只有一行、却含两个及以上拼出来的 `\n` 的文本时会把它拆成多行（代码本来就有真正的换行，从不动它）。带其他键的加引号 JSON 对象仍当文字。
 
 把 `max_tokens` 设成模型一轮能产出的量（对这些模型 4096 就够），`agent.max_context_messages` 别太大：一个 8k 上下文窗口的本地 8B 模型，工具结果一开始回传，很快就满了。
 
@@ -137,7 +137,7 @@ Ollama 在 `http://localhost:11434/v1` 提供 OpenAI 兼容的 API；带工具�
 
 ## `[image]` 和 `[video]` {#image-and-video}
 
-形象工作室的图片和形象的短视频不在聊天模型的主机上生成时，从哪里来。两个槽位都空（默认）时按一个顺序来（模型约定，0.1.41）：聊天服务商自己的图片模型（它有的话），账号的中继、阿里云百炼，以及目录里任何带 `image` 的服务商（它的 `defaults.image`；`[llm] image_model` / `video_model` 仍可指定别的）；否则在你登录了 nanoMuse Cloud 时是账号的中继，哪怕聊天模型在别处；再否则没有。短视频同理：图片主机会说视频 API 就用它，否则登录时用账号 key 走中继。设一个槽位，就能换到别处画，或者在聊天模型是 DeepSeek、ChatGPT 套餐或本地模型而你没有登录时才有地方画：
+形象工作室的图片和形象的短视频不在聊天模型的主机上生成时，从哪里来。两个槽位都空（默认）时按一个顺序来（模型约定，0.1.41）：聊天服务商自己的图片模型（它有的话），账号的中继、阿里云百炼，以及目录里任何带 `image` 的服务商（它的 `defaults.image`；`[llm] image_model` / `video_model` 仍可指定别的）；否则在你登录了 NanoLika Cloud 时是账号的中继，哪怕聊天模型在别处；再否则没有。短视频同理：图片主机会说视频 API 就用它，否则登录时用账号 key 走中继。设一个槽位，就能换到别处画，或者在聊天模型是 DeepSeek、ChatGPT 套餐或本地模型而你没有登录时才有地方画：
 
 ```toml
 [image]
@@ -161,7 +161,7 @@ api_key  = "{{vault:VIDEO_API_KEY}}"
 
 ```toml
 [agent]
-name                 = "nanoMuse"      # what the agent calls itself (the app's profile overrides this)
+name                 = "NanoLika"      # what the agent calls itself (the app's profile overrides this)
 max_steps            = 0               # 0 = 不限制每项任务的工具调用步数；仅在需要时手动设置正数
 # workspace          = "./workspace"   # the only directory the files tool can touch; default ./workspace if present here, else <data_dir>/workspace
 extra_roots          = []              # directories outside the workspace the files tool may read and write, e.g. ["~/Documents/notes"]; writable inside the sandbox too
@@ -200,7 +200,7 @@ side_chats = false   # off: only the main conversation travels between devices
 base_url = "https://cloud.nanomuse.cn"   # 自己架的中继写在这里
 required = true
 sync = true
-models = true        # 账号的模型是否作为来源；控制台里的「使用 nanoMuse Cloud 模型」
+models = true        # 账号的模型是否作为来源；控制台里的「使用 NanoLika Cloud 模型」
 
 [hub]
 enabled = true
@@ -209,7 +209,7 @@ memory_sharing = true
 name = ""            # 空：用主机名
 ```
 
-`[cloud]` 是这个运行时登录的中继（[cloud.md](cloud.md)）：`base_url` 是它的公网地址（按 [self-hosting.md](self-hosting.md) 自己架一台后填这里）；`required = false` 允许首次运行不登录账号就完成，适合完全不用中继的运行时；`sync` 是整个账号「数据控制 → 同步」开关的默认值，人一旦选过，以选择为准；`models = false`（控制台里的「使用 nanoMuse Cloud 模型」开关，存在 app-settings 里）把账号的模型从动手、生成图片、短视频的自动顺序和服务商列表里拿掉，登录保持不变，于是除了明确点下的「这次改用 nanoMuse Cloud」，没有什么会消耗额度。账号密钥本身是保险库里的 `NANOMUSE_CLOUD_KEY`。
+`[cloud]` 是这个运行时登录的中继（[cloud.md](cloud.md)）：`base_url` 是它的公网地址（按 [self-hosting.md](self-hosting.md) 自己架一台后填这里）；`required = false` 允许首次运行不登录账号就完成，适合完全不用中继的运行时；`sync` 是整个账号「数据控制 → 同步」开关的默认值，人一旦选过，以选择为准；`models = false`（控制台里的「使用 NanoLika Cloud 模型」开关，存在 app-settings 里）把账号的模型从动手、生成图片、短视频的自动顺序和服务商列表里拿掉，登录保持不变，于是除了明确点下的「这次改用 NanoLika Cloud」，没有什么会消耗额度。账号密钥本身是保险库里的 `NANOMUSE_CLOUD_KEY`。
 
 `[hub]` 是把这台电脑当作账号的一台设备（[hub.md](hub.md)）：`enabled` 表示账号登录后就加入 hub；`remote_control = false` 会拒绝其他设备对这台机器的操作；`memory_sharing` 独立控制账号设备能否读取、保存和删除共享记忆事实（默认 `true`，保持原有行为）；`name` 是其他设备对它的称呼（空：用主机名）。`device_id` 按安装生成，由 App 写入。
 
@@ -269,7 +269,7 @@ dir      = ""                        # your skills; empty → <data_dir>/skills
 disabled = ["inbox-triage"]          # built-in ones to leave out of the model's list
 ```
 
-一个技能就是一个带 `SKILL.md` 的文件夹（YAML front matter 里有 `name` 和 `description`，后面是 Markdown 写的步骤），采用 [Agent Skills](https://agentskills.io) 格式，所以给其他智能体写的技能在这里也能用。nanoMuse 多读一个键 `channel`：技能在[阶梯](gui.md#the-ladder)的哪一级上工作：`api`（MCP 服务器或连接器）、`cli`、`web`（一次抓取）、`browser`、`gui`（手机屏幕；也接受 `app-only`）或 `mixed`。`gui` 技能在智能体的索引里标为*在手机屏幕上*，这样它开始之前就知道这活需要手机；必须严格遵守共享格式的技能可以改用 `metadata.channel`。内置十一个（`weekly-review`、`trip-plan`、`inbox-triage`、`compare-options`、`meeting-prep`；`phone-messages` 用于手机屏幕；五个面向不需要屏幕的中国服务：`feishu` 经 lark-cli、`tencent-meeting` 经 tmeet、`amap` 经高德 MCP 服务器、`kuaidi100` 经快递100 服务器，以及 `train-tickets`，它通过 12306 服务器查询，只在被明确要求时才在手机上订票；哪些在哪里跑过，见 [services.md](services.md)）；`dir` 里一个和内置同名的文件夹会替换掉内置的那个。模型在系统提示词里拿到索引（每个启用技能的名字和描述），请求合适时用 `skills` 工具读取技能的步骤；聊天消息开头的 `/name` 直接运行一个。从聊天里保存或删除技能是敏感调用：无论哨兵是什么模式，都先问。在 App 里关掉的技能记在 `app-settings.json`；这里的列表和那份会合并。在[沙箱](sentinel.md#the-sandbox)里，技能的文件夹（它的脚本和参考文件）以只读方式可见。见 [App → 技能](app.md#skills)和 [CLI](cli.md#skills) 里的 `nanomuse skills`。
+一个技能就是一个带 `SKILL.md` 的文件夹（YAML front matter 里有 `name` 和 `description`，后面是 Markdown 写的步骤），采用 [Agent Skills](https://agentskills.io) 格式，所以给其他智能体写的技能在这里也能用。NanoLika 多读一个键 `channel`：技能在[阶梯](gui.md#the-ladder)的哪一级上工作：`api`（MCP 服务器或连接器）、`cli`、`web`（一次抓取）、`browser`、`gui`（手机屏幕；也接受 `app-only`）或 `mixed`。`gui` 技能在智能体的索引里标为*在手机屏幕上*，这样它开始之前就知道这活需要手机；必须严格遵守共享格式的技能可以改用 `metadata.channel`。内置十一个（`weekly-review`、`trip-plan`、`inbox-triage`、`compare-options`、`meeting-prep`；`phone-messages` 用于手机屏幕；五个面向不需要屏幕的中国服务：`feishu` 经 lark-cli、`tencent-meeting` 经 tmeet、`amap` 经高德 MCP 服务器、`kuaidi100` 经快递100 服务器，以及 `train-tickets`，它通过 12306 服务器查询，只在被明确要求时才在手机上订票；哪些在哪里跑过，见 [services.md](services.md)）；`dir` 里一个和内置同名的文件夹会替换掉内置的那个。模型在系统提示词里拿到索引（每个启用技能的名字和描述），请求合适时用 `skills` 工具读取技能的步骤；聊天消息开头的 `/name` 直接运行一个。从聊天里保存或删除技能是敏感调用：无论哨兵是什么模式，都先问。在 App 里关掉的技能记在 `app-settings.json`；这里的列表和那份会合并。在[沙箱](sentinel.md#the-sandbox)里，技能的文件夹（它的脚本和参考文件）以只读方式可见。见 [App → 技能](app.md#skills)和 [CLI](cli.md#skills) 里的 `nanomuse skills`。
 
 ## 连接器 {#connectors}
 
@@ -344,7 +344,7 @@ base_url = ""                    # searxng: your instance, e.g. "http://127.0.0.
 fallback = true                  # false：搜索失败就失败，不再转去 DuckDuckGo
 ```
 
-You.com 不带 key 时走 `api.you.com`，每个地址每天 100 次，不用注册；超出后搜索会说明原因，由 DuckDuckGo 补答一次。带 key 时走 `ydc-index.io`，也就是额度更高的付费 Search API；哨兵显示的是这次搜索真正去的主机。发往 You.com 的请求带 `youdotcom-integration/nano-muse-nanomuse` 这个 User-Agent，是应对方要求加的，方便他们认出来自 nanoMuse 的流量；除此之外不多发任何东西，其他服务商也不会收到它。
+You.com 不带 key 时走 `api.you.com`，每个地址每天 100 次，不用注册；超出后搜索会说明原因，由 DuckDuckGo 补答一次。带 key 时走 `ydc-index.io`，也就是额度更高的付费 Search API；哨兵显示的是这次搜索真正去的主机。发往 You.com 的请求带 `youdotcom-integration/nano-muse-nanomuse` 这个 User-Agent，是应对方要求加的，方便他们认出来自 NanoLika 的流量；除此之外不多发任何东西，其他服务商也不会收到它。
 
 不管选的是谁，一次失败的搜索（key 过期、被限流、实例挂了）都改由 DuckDuckGo 回答，只补这一次，并在结果顶上加一条说明，任务就能继续（这时查询词除了到你选的服务商，也会到 DuckDuckGo 的主机；不希望这样，就在 `[connectors.search]` 下设 `fallback = false`）；`nanomuse doctor` 会报告缺了必要配置的服务商。工具的 `region` 参数（`cn-zh`、`us-en`）按每家服务商自己的写法传过去。服务商的主机是你选定的目的地，所以读过私密数据之后再搜索，不像去一个陌生主机那样需要审批（见[污点追踪](sentinel.md#taint-tracking)）；对搜索结果做 `web_fetch` 仍然需要。
 
@@ -365,7 +365,7 @@ hook_min_seconds  = 10   # deliveries to one webhook closer together than this g
 ```toml
 [browser]
 enabled    = true      # pip install "nanomuse[browser]" && playwright install chromium
-backend    = "auto"    # auto | playwright | device — the phone's own WebView when a nanoMuse app is connected, Chromium otherwise
+backend    = "auto"    # auto | playwright | device — the phone's own WebView when a NanoLika app is connected, Chromium otherwise
 profile    = ""        # mobile | desktop | "" (mobile on the phone, desktop on a computer)
 headless   = true      # Playwright only
 timeout_ms = 30000

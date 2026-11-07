@@ -1,4 +1,4 @@
-// nanoMuse: the account's devices on the hub, shown under the nanoMuse Cloud account —
+// NanoLika: the account's devices on the hub, shown under the NanoLika Cloud account —
 // this iPhone's two switches (reachable · operable), its name, the other devices with an
 // online dot (tap an offline one to forget it), and the web console's address.
 

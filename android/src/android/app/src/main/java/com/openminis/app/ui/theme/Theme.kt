@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight // nanoMuse
+import androidx.compose.ui.text.font.FontWeight // NanoLika
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 //
 // Names keep the `Teal` prefix only to avoid churning 90+ call sites; the
 // value is the contract, not the name.
-// nanoMuse: generated paper/sage values from scripts/nanolika_theme.py.
+// NanoLika: generated paper/sage values from scripts/nanolika_theme.py.
 private val TealPrimary = Color(0xFF52694E)
 private val TealOnPrimary = Color(0xFFFFFFFF)
 private val TealPrimaryContainer = Color(0xFFE1E8D8)
@@ -174,7 +174,7 @@ fun MinisTheme(
 private fun TextStyle.scale(factor: Float): TextStyle =
     if (factor == 1f) this else copy(fontSize = fontSize * factor)
 
-// nanoMuse: Muse's type, on the system face. Material's scale carries tracking
+// NanoLika: Muse's type, on the system face. Material's scale carries tracking
 // (0.1–0.5sp) and small labels (11–12sp) that read as "Android"; Muse sets
 // everything at zero tracking, runs body at 16 and its captions at 13, and
 // weights titles SemiBold. The face stays the device's default so the app
@@ -204,7 +204,7 @@ private fun museTypography(): Typography {
 }
 
 private fun scaledTypography(factor: Float): Typography {
-    val base = museTypography() // nanoMuse: was Material's default scale
+    val base = museTypography() // NanoLika: was Material's default scale
     return Typography(
         displayLarge = base.displayLarge.scale(factor),
         displayMedium = base.displayMedium.scale(factor),

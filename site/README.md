@@ -24,7 +24,7 @@ Then open <http://127.0.0.1:8000/>.
 | `nanolika.css` | Brand palette, responsive layout, illustration, and motion preferences. |
 | `nanolika.js` | Mobile navigation and current-year footer. |
 | `nanolika-icon.svg` | NanoLika favicon. |
-| `legacy.html`, `style.css`, `site.js` | The earlier nanoMuse presentation; retained separately. |
-| `promo/` and `media/` | The earlier nanoMuse promo storyboard and rendered film. |
+| `legacy.html`, `style.css`, `site.js` | The earlier NanoLika presentation; retained separately. |
+| `promo/` and `media/` | The earlier NanoLika promo storyboard and rendered film. |
 
 The domain, signup, payment, and admin experiences are not connected in this draft.

@@ -6,7 +6,7 @@
 > （默认是那只小龙）。
 
 
-Muse 在西方的能力来自带 API 的服务。而中国人在手机上做的大多数事（12306、微信、支付宝、美团）都没有一个个人智能体可以调用的 API。所以 nanoMuse 多了第二双手：打开「手机」开关后，智能体可以看手机的屏幕，在各个 App 里点、输入、滑动，像人一样操作。它还是同一个智能体，前面挡着的还是同一个哨兵（Sentinel）；屏幕上的每一步只是多出来的工具调用。
+Muse 在西方的能力来自带 API 的服务。而中国人在手机上做的大多数事（12306、微信、支付宝、美团）都没有一个个人智能体可以调用的 API。所以 NanoLika 多了第二双手：打开「手机」开关后，智能体可以看手机的屏幕，在各个 App 里点、输入、滑动，像人一样操作。它还是同一个智能体，前面挡着的还是同一个哨兵（Sentinel）；屏幕上的每一步只是多出来的工具调用。
 
 这部分怎么做，由三件事决定：
 
@@ -63,10 +63,10 @@ api_key  = "{{vault:GUI_API_KEY}}"
 聊天模型和手的模型是两个设置：手机和桌面版是 设置 → 模型 里的「操作屏幕」一行，网页控制台是「连接」页的「手的模型」下拉，这里是 `[gui] model`。留空（也就是那一行的「自动」）时，手按一个顺序走：
 
 - 对话模型所在的服务商，只要它是你自己的 key、而且目录里给它在同一个端点上指定了手的模型（阿里云百炼 `qwen3.8-27b`，OpenRouter `qwen/qwen3.8-27b`）；已知看不见图的模型（不含 `v4.1`、`vision` 或 `ocr` 的 DeepSeek id）从不会被列为手的模型；
-- 否则，有 nanoMuse Cloud 账号时用中继的手的模型：除非中继另有指定，否则是 `qwen3.8-27b`（`/v1/models` 会说明哪些模型 `for` `chat`、`gui` 或两者皆可）；那边的聊天默认模型是 `deepseek-v4.1-flash`，它也能看图，但手需要的是专门训练过、会在屏幕上指位置的模型，所以两者分开；
+- 否则，有 NanoLika Cloud 账号时用中继的手的模型：除非中继另有指定，否则是 `qwen3.8-27b`（`/v1/models` 会说明哪些模型 `for` `chat`、`gui` 或两者皆可）；那边的聊天默认模型是 `deepseek-v4.1-flash`，它也能看图，但手需要的是专门训练过、会在屏幕上指位置的模型，所以两者分开；
 - 否则就用聊天模型本身，前提是它能看图（手机和桌面版在这之前还会先试你第一把带能看图模型的 key）。
 
-你在那一行做过的选择永远优先，那一行也写着「自动」现在给的是什么。你自己的手的模型失败时什么都不会自动切换；卡片上给「这次改用 nanoMuse Cloud」，只管这一轮（[own-key.md](own-key.md#which-model-does-what)）。
+你在那一行做过的选择永远优先，那一行也写着「自动」现在给的是什么。你自己的手的模型失败时什么都不会自动切换；卡片上给「这次改用 NanoLika Cloud」，只管这一轮（[own-key.md](own-key.md#which-model-does-what)）。
 
 key 和其他 key 一样放进保险库（`nanomuse vault set GUI_API_KEY`，或者直接在「手机」卡片里输入）。操作器的模型**必须接受图片**：一张截图就是全部的观察。操作器以温度 0 调用它：定位要的是模型的第一选择，不是采样。
 
@@ -76,12 +76,12 @@ key 和其他 key 一样放进保险库（`nanomuse vault set GUI_API_KEY`，或
 
 ## 连接手机 {#connecting-a-phone}
 
-智能体不一定要跑在手机上。一台*设备*通过应用用的同一条 WebSocket 连到 nanoMuse 服务器，报上自己，然后回应屏幕请求和动作请求。目前有两种设备：
+智能体不一定要跑在手机上。一台*设备*通过应用用的同一条 WebSocket 连到 NanoLika 服务器，报上自己，然后回应屏幕请求和动作请求。目前有两种设备：
 
-- **MobileGym**：[mobilegym.dev](https://mobilegym.dev/) 上的模拟手机，里面的中国 App（微信、支付宝、铁路12306、地图、小红书……）是浏览器里的 React 应用。它的 nanoMuse 模块（`demo/mobilegym/`）在设置页上有「允许 nanoMuse 操作这台手机」开关。这是展示站用的环境：不会碰到任何真实的东西。
-- **Android**：nanoMuse 应用，通过它自己的无障碍服务：`takeScreenshot()` 取图，`dispatchGesture()` 动手指，无障碍树给元素列表，`performGlobalAction` 做返回 / 主屏 / 最近任务，`open_app` 用应用自己维护的可启动 App 列表。同一套协议，真实的 App。需要 **Android 11 或更新**（从这个版本起无障碍服务才能截图），并且把服务打开：
+- **MobileGym**：[mobilegym.dev](https://mobilegym.dev/) 上的模拟手机，里面的中国 App（微信、支付宝、铁路12306、地图、小红书……）是浏览器里的 React 应用。它的 NanoLika 模块（`demo/mobilegym/`）在设置页上有「允许 NanoLika 操作这台手机」开关。这是展示站用的环境：不会碰到任何真实的东西。
+- **Android**：NanoLika 应用，通过它自己的无障碍服务：`takeScreenshot()` 取图，`dispatchGesture()` 动手指，无障碍树给元素列表，`performGlobalAction` 做返回 / 主屏 / 最近任务，`open_app` 用应用自己维护的可启动 App 列表。同一套协议，真实的 App。需要 **Android 11 或更新**（从这个版本起无障碍服务才能截图），并且把服务打开：
 
-  1. 「连接 → 手机 → 这台手机 → 打开无障碍设置」，在「已下载的应用」下找到 **nanoMuse** 并打开。Android 会说明这个服务能做什么（查看屏幕、执行手势），并要你确认。
+  1. 「连接 → 手机 → 这台手机 → 打开无障碍设置」，在「已下载的应用」下找到 **NanoLika** 并打开。Android 会说明这个服务能做什么（查看屏幕、执行手势），并要你确认。
   2. Android 13 及更新版本上，从下载（而不是应用商店）安装的应用，开关会变灰并显示「受限设置」。打开应用在设置里的页面（同一张卡片上的「应用设置」），点 ⋮ → **允许受限设置**，再回到第 1 步。
   3. Android 时不时会自己把无障碍服务关掉：更新之后、激进的电池清理之后、有些手机重启之后。「手机」卡片实时显示「就绪」/「还没有」；手机不回应时先看这里。服务一开一关，应用立刻把变化报告给服务器，所以「连接 → 手机」不会过时。
 
@@ -111,7 +111,7 @@ key 和其他 key 一样放进保险库（`nanomuse vault set GUI_API_KEY`，或
 
 它以 `done` 结束，附带模型的 `answer`（从屏幕上读到的文字放在这里）；模型调用 `ask_user` 或哨兵需要一个决定时以 `ask` 结束（主智能体问你，再拿你的回答继续）；两次被拒之后是 `blocked`；你在手机上按下**停止**是 `stopped`；`terminate(failure)`、超过 `max_steps` 或手机不再回应时是 `failed`。同一个动作连续三次会在历史里记一笔，好让模型换个法子。
 
-在带胶囊的设备上，操作器还会告诉手机任务什么时候**开始**（胶囊带着目标出现）、什么时候**结束**（胶囊消失）、什么时候**需要你**：一次 `ask` 或 `blocked` 会在手机上变成一张卡片，上面是问题和一个进入聊天的「打开」按钮，因为你那一刻看着的是微信，不是 nanoMuse。
+在带胶囊的设备上，操作器还会告诉手机任务什么时候**开始**（胶囊带着目标出现）、什么时候**结束**（胶囊消失）、什么时候**需要你**：一次 `ask` 或 `blocked` 会在手机上变成一张卡片，上面是问题和一个进入聊天的「打开」按钮，因为你那一刻看着的是微信，不是 NanoLika。
 
 操作器自己的规则写在它的提示词里：绝不输入密码、PIN、卡号或验证码（先 `ask_user`）；绝不确认一笔没有被明确要求的付款或转账；只做查询要求的事，查询是「查一下」的时候，读完就 `answer`，不再多按。
 
@@ -228,11 +228,11 @@ MobileGym 执行器（`demo/mobilegym/apps/nanoMuse/gui.ts`）是一个可读的
 
 ### 胶囊 {#the-capsule}
 
-在带胶囊的设备上（Android 应用，以及在模拟手机里画同一个胶囊的 MobileGym 模块），任务从来不是无声的：屏幕顶部有一个胶囊，显示小熊猫、正在进行的步骤（*Muse · 点击「查询车票」*）和一个**停止**按钮，盖在正被操作的 App 上面。它在 `task begin` 时出现，跟着每一步走，在 `task end` 时消失：先打一个勾停留片刻，然后手机回到 nanoMuse，那里有智能体的报告（Android 应用把自己拉到前台；MobileGym 模块恢复 nanoMuse 应用）；它不在截图里。停止是用户的刹车；不用长按、没有菜单：点一下，进行中的动作以 `nanomuse:stop` 失败，胶囊显示「已停止」并隐藏自己，手机回到 nanoMuse，智能体不再继续，而是问接下来做什么。智能体需要用户时（`ask`、`blocked`），胶囊长成一张卡片，上面是问题和一个把 nanoMuse 拉到前台的「打开」按钮；停留一分钟，然后收起。
+在带胶囊的设备上（Android 应用，以及在模拟手机里画同一个胶囊的 MobileGym 模块），任务从来不是无声的：屏幕顶部有一个胶囊，显示小熊猫、正在进行的步骤（*Muse · 点击「查询车票」*）和一个**停止**按钮，盖在正被操作的 App 上面。它在 `task begin` 时出现，跟着每一步走，在 `task end` 时消失：先打一个勾停留片刻，然后手机回到 NanoLika，那里有智能体的报告（Android 应用把自己拉到前台；MobileGym 模块恢复 NanoLika 应用）；它不在截图里。停止是用户的刹车；不用长按、没有菜单：点一下，进行中的动作以 `nanomuse:stop` 失败，胶囊显示「已停止」并隐藏自己，手机回到 NanoLika，智能体不再继续，而是问接下来做什么。智能体需要用户时（`ask`、`blocked`），胶囊长成一张卡片，上面是问题和一个把 NanoLika 拉到前台的「打开」按钮；停留一分钟，然后收起。
 
 ### 桌面上也一样 {#the-same-on-the-desktop}
 
-桌面版用手机那套词汇画手，只是按指针的尺度缩放（[desktop-muse.md](desktop-muse.md#computer-use)）：沿显示器边缘呼吸的光晕（蓝色是在干活，琥珀色是在等），操作器动过的那个点上的标记（圆环、转动的青色弧、圆点、胶囊里的动作名），拖动是一条带箭头的虚线，屏幕顶部一个胶囊，有脸、*第 N 步*、这一步的话、「我来接手」和「停止」，在 nanoMuse 窗口不在前台时显示。那里没有任何东西流动或扫过；每一处光都以 2.4 s 亮起、2.4 s 暗下的节奏呼吸，在「减弱动态效果」下保持静止。
+桌面版用手机那套词汇画手，只是按指针的尺度缩放（[desktop-muse.md](desktop-muse.md#computer-use)）：沿显示器边缘呼吸的光晕（蓝色是在干活，琥珀色是在等），操作器动过的那个点上的标记（圆环、转动的青色弧、圆点、胶囊里的动作名），拖动是一条带箭头的虚线，屏幕顶部一个胶囊，有脸、*第 N 步*、这一步的话、「我来接手」和「停止」，在 NanoLika 窗口不在前台时显示。那里没有任何东西流动或扫过；每一处光都以 2.4 s 亮起、2.4 s 暗下的节奏呼吸，在「减弱动态效果」下保持静止。
 
 **轨迹。** 手机把手指的动作当场显示出来，桌面版还把这次运行留下来可以回看：聊天里，在这次运行最后一次手的调用下面，显示每一步的截图，动作画在上面（点击标记、拖动箭头、滚动的 V 形、标签胶囊里输入的文字或按键组合），还有智能体在这一步之前说的话；可以上一步 / 下一步、用方向键、「放大查看」和「复制这一步」。它完全由手本来就返回的东西拼成：`computer_screen` / `computer_act` / `device_screen` 给出图片，图片的第一行给出标题和尺寸；`computer_act` 的参数给出动作，包括拖动的 `x2`/`y2`（或 `box2`）和滚动的 `dy`。所以工具、MCP 结果和 hub 帧都没有为它增加任何东西。宿主在内存里保留**每次运行 40 步、4 次运行、64 MB 图片**，通过 `GET /nanomuse/cloud/trajectory?session=<id>` 和 `GET /nanomuse/cloud/stage/frame?seq=N` 提供给窗口；格式和上限见 [desktop-muse.md](desktop-muse.md#computer-use)。
 
@@ -250,11 +250,11 @@ MobileGym 执行器（`demo/mobilegym/apps/nanoMuse/gui.ts`）是一个可读的
 | `pyautogui` | `pyautogui.size()` | macOS 上是点，其他平台是物理像素；在桌面版下的 Mac 上不用 |
 | `xdotool` | `xdotool getdisplaygeometry` | X11 根窗口像素 |
 
-在桌面版下的 macOS 上**只有一条路**：每张截图、每次移动都由操作器来做，否则工具带着操作器给的原因失败；没有录屏权限时，那句话是「macOS：在系统设置 → 隐私与安全性 → 录屏 里打开 nanoMuse Desktop，然后退出并重新打开应用。」（操作器检测到拒绝和全黑的截图，回答 `403`）。运行时在那里从不回退到 `mss` / `screencapture` 或 `pyautogui`：权限属于应用包，回退会让 TCC 为一个不在面板里的进程再问一次，而一张黑图会被当成屏幕送到模型那里。Linux 和 Windows 保留 Python 回退，不经应用启动的运行时也保留（[desktop.md](desktop.md#macos-permissions)）。
+在桌面版下的 macOS 上**只有一条路**：每张截图、每次移动都由操作器来做，否则工具带着操作器给的原因失败；没有录屏权限时，那句话是「macOS：在系统设置 → 隐私与安全性 → 录屏 里打开 NanoLika Desktop，然后退出并重新打开应用。」（操作器检测到拒绝和全黑的截图，回答 `403`）。运行时在那里从不回退到 `mss` / `screencapture` 或 `pyautogui`：权限属于应用包，回退会让 TCC 为一个不在面板里的进程再问一次，而一张黑图会被当成屏幕送到模型那里。Linux 和 Windows 保留 Python 回退，不经应用启动的运行时也保留（[desktop.md](desktop.md#macos-permissions)）。
 
-从 0.1.38 起，Mac 上的操作器把截图和输入交给 **nanoMuse Computer Use**，桌面包里的一个小 Swift 应用，两项授权都由它自己持有（截图用 ScreenCaptureKit，macOS 14 及更新版本上是主显示器的 `SCScreenshotManager`，12 和 13 上是 `CGDisplayCreateImage`；鼠标和键盘用 `CGEvent`，任何文字的字符都直接输入）。macOS 把权限归到 LaunchServices 启动的那个进程上，所以通过 `open` 启动的辅助程序在录屏和辅助功能面板里有自己的一行（要打开的是「nanoMuse Computer Use」，不是应用本身），录屏授权要等应用重启那一个进程后才生效，这一步应用会自己做。上面说的操作器契约不变：同样的路由、同样的坐标（点）、缺少授权时同样的 `403`，只是那句话现在点名的是辅助程序。辅助程序取图失败时（ScreenCaptureKit 拒绝、没有图像、辅助程序死掉或根本没启动），操作器**不会**改用一帧 `desktopCapturer` 顶上：`/screenshot` 带着辅助程序自己的话失败（「没有截图：nanoMuse Computer Use 拍不到图，ScreenCaptureKit userDeclined (-3801)：……」，或「……没有启动（……）」），日志写 `helper screenshot failed (…) — not falling back to desktopCapturer`，`computer_screen` 把这句话带进聊天。`desktopCapturer` 和 nut.js 只在没有辅助程序包的构建里仍是那条路（[desktop.md](desktop.md#macos-permissions)）。
+从 0.1.38 起，Mac 上的操作器把截图和输入交给 **NanoLika Computer Use**，桌面包里的一个小 Swift 应用，两项授权都由它自己持有（截图用 ScreenCaptureKit，macOS 14 及更新版本上是主显示器的 `SCScreenshotManager`，12 和 13 上是 `CGDisplayCreateImage`；鼠标和键盘用 `CGEvent`，任何文字的字符都直接输入）。macOS 把权限归到 LaunchServices 启动的那个进程上，所以通过 `open` 启动的辅助程序在录屏和辅助功能面板里有自己的一行（要打开的是「NanoLika Computer Use」，不是应用本身），录屏授权要等应用重启那一个进程后才生效，这一步应用会自己做。上面说的操作器契约不变：同样的路由、同样的坐标（点）、缺少授权时同样的 `403`，只是那句话现在点名的是辅助程序。辅助程序取图失败时（ScreenCaptureKit 拒绝、没有图像、辅助程序死掉或根本没启动），操作器**不会**改用一帧 `desktopCapturer` 顶上：`/screenshot` 带着辅助程序自己的话失败（「没有截图：NanoLika Computer Use 拍不到图，ScreenCaptureKit userDeclined (-3801)：……」，或「……没有启动（……）」），日志写 `helper screenshot failed (…) — not falling back to desktopCapturer`，`computer_screen` 把这句话带进聊天。`desktopCapturer` 和 nut.js 只在没有辅助程序包的构建里仍是那条路（[desktop.md](desktop.md#macos-permissions)）。
 
-**macOS 上的窗口模式**（[every-device.md](every-device.md#window-mode-macos)）走同一个辅助程序：运行时向操作器要屏幕上的窗口（`GET /windows`：id、进程、应用、bundle id、标题、以点为单位的位置和尺寸），以及某一个窗口自己的像素（`POST /window {id}`：`SCContentFilter(desktopIndependentWindow:)`，不带阴影、不带光标，连同窗口位置一起返回，这样图上的一个像素能对应到屏幕上的一个点）。在应用下的 Mac 上，运行时从不自己截取窗口；窗口模式的鼠标和键盘事件仍由运行时发给窗口所属的进程（`CGEventPostToPid`），这就是为什么辅助功能面板里除了辅助程序那一行，还需要「nanoMuse」那一行。拒绝（辅助程序的录屏那一行没开，`403`）或窗口已不在（`404`）都以操作器的话返回，下一次看屏幕时重试；辅助程序根本不存在时，手对这个目标退回到整个屏幕，原因写进观察里。没有辅助程序包时，运行时保留自己的 `CGWindowListCreateImage` 路径，并在日志里说明（`window mode: the runtime captures windows itself …`）。
+**macOS 上的窗口模式**（[every-device.md](every-device.md#window-mode-macos)）走同一个辅助程序：运行时向操作器要屏幕上的窗口（`GET /windows`：id、进程、应用、bundle id、标题、以点为单位的位置和尺寸），以及某一个窗口自己的像素（`POST /window {id}`：`SCContentFilter(desktopIndependentWindow:)`，不带阴影、不带光标，连同窗口位置一起返回，这样图上的一个像素能对应到屏幕上的一个点）。在应用下的 Mac 上，运行时从不自己截取窗口；窗口模式的鼠标和键盘事件仍由运行时发给窗口所属的进程（`CGEventPostToPid`），这就是为什么辅助功能面板里除了辅助程序那一行，还需要「NanoLika」那一行。拒绝（辅助程序的录屏那一行没开，`403`）或窗口已不在（`404`）都以操作器的话返回，下一次看屏幕时重试；辅助程序根本不存在时，手对这个目标退回到整个屏幕，原因写进观察里。没有辅助程序包时，运行时保留自己的 `CGWindowListCreateImage` 路径，并在日志里说明（`window mode: the runtime captures windows itself …`）。
 
 Linux 上操作器只在 **X11**（Xorg）下工作。手的空间是以像素计的 X 根窗口（HiDPI 桌面上那是逻辑尺寸 × 缩放系数，1920×1080、缩放 2 的显示器就是 3840×2160），`/info` 会这么说；图就是这个根窗口，按上面的方式为模型缩放。**Wayland** 下没有程序可以驱动的全局屏幕或光标，所以 `/info` 说手是关着的（「Wayland 会话：……请用 Xorg 登录……」），`/screenshot` 用同一句话拒绝（`503`）而不是打开门户的选择器，运行时在第一次尝试时就直说：它不会落到 `xdotool` 或 `pyautogui` 上，那两个会在 XWayland 下启动，然后什么你能看到的东西都动不了。会话类型从 `XDG_SESSION_TYPE` 读，或者从一个没有 `DISPLAY` 的 `WAYLAND_DISPLAY` 判断。0.1.38 在 X11 路径上修了两件事：光晕（手干活时应用沿屏幕画的那个框）也是一个 X 窗口，而 X11 每次映射或重新配置它时都会忘掉它的点击穿透形状，所以点进去的每一下都落了空：现在操作器会等光晕可以穿透之后再移动指针；还有 libnut 的 `type` 在美式键盘布局的符号上丢了 Shift（`*` 打成 `8`，`!` 打成 `1`，`_` 打成 `-`），现在这些以 Shift + 下面那个键的方式输入，ASCII 之外的文字仍像以前一样通过剪贴板和 Ctrl+V 输入。
 
@@ -266,6 +266,6 @@ Linux 上操作器只在 **X11**（Xorg）下工作。手的空间是以像素�
 
 - 一次一台手机：最近连上的、`gui: true` 的设备就是智能体操作的那台。
 - 操作器看到的正是设备画出来的东西。图里读不出的字它就没法去动：它点到目标旁边时，第一件要查的是截图分辨率低不低。图和点击空间是同一个 `width` × `height`，所以更清楚的图意味着设备要报到（并在其中点击）一个更大的尺寸。
-- MobileGym 里用 iframe 渲染的 App（nanoMuse 自己就是一个）在页内截图里是空白的；操作器会被告知屏幕是黑的，而不是看到错误的东西。
+- MobileGym 里用 iframe 渲染的 App（NanoLika 自己就是一个）在页内截图里是空白的；操作器会被告知屏幕是黑的，而不是看到错误的东西。
 - 哨兵依据操作器自己对它要按什么的描述来判断。一个把「支付」藏在没有文字的图标后面的屏幕不会触发词表，所以付款步骤还另外有操作器自己付款前停下来问的规则，付款也一次只批准一次；Android 应用只允许在用锁屏确认之后，为单个 App 或网站记住一次，并把它列在设置 → 权限的最前面。Android 上审批还会读无障碍树说手指下面是什么，和操作器报告的 label 并排，两者中更严的那个说了算。
 - Android 上：执行器需要 Android 11+；`FLAG_SECURE` 屏幕（银行 App、支付面板、密码管理器）回来是黑的，操作器会被告知；Android 执行器完全拒绝往密码框里 `type`，不管 label 怎么写；而且 Android 可能悄悄拒绝从后台发起的 `open_app`：执行器会说明，并请用户按主屏键再点图标（Android 14 之前，「显示在其他应用上层」权限会有帮助）。文字在输入框允许时通过 `ACTION_SET_TEXT` 输入，否则通过剪贴板粘贴。

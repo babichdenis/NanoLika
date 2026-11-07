@@ -1,6 +1,6 @@
 //
 //  NanoMuseFirstRun.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The first run, the way Android does it (ui/onboarding/FirstRunSetup.kt):
 //  Welcome (the account) → Password (only after a sign-in that created the

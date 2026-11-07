@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Data controls → the conversations synced between the account's devices (contract C7): the
- * switch, what it means in one line, and the way to delete what nanoMuse Cloud keeps. Signed
+ * switch, what it means in one line, and the way to delete what NanoLika Cloud keeps. Signed
  * out there is nothing to sync: the switch is off and disabled, the caption says to sign in.
  */
 @Composable

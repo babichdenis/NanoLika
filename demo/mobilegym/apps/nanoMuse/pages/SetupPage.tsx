@@ -21,10 +21,10 @@ import { fmt, useNanoMuseStrings } from '../res/strings';
 /**
  * The first page — the Android app's welcome page (ui/onboarding/FirstRunSetup.kt), with the
  * same face, title, line, three rows and pill. On the hosted showcase (`demoGateway` set at
- * build time) the pill is the Android app's door — "Sign in — free", nanoMuse Cloud's sign-in,
+ * build time) the pill is the Android app's door — "Sign in — free", NanoLika Cloud's sign-in,
  * then the meet page — when the showcase asks for a sign-in, and starts a private Muse on the
  * showcase's server otherwise; "I have my own API key" opens the three fields for one's own
- * model. "Connect your own nanoMuse" leads to the form for a server of one's own: paste the
+ * model. "Connect your own NanoLika" leads to the form for a server of one's own: paste the
  * link `nanomuse serve` prints (it carries the token), or the address and token separately.
  * The token is checked by opening the server's WebSocket once — the same thing the
  * notification bridge does — so no CORS setup is needed. In a normal checkout that form is
@@ -51,7 +51,7 @@ type Step = 'welcome' | 'signin' | 'meet';
 /**
  * The pages before a Muse on the showcase server. The welcome page first; when the showcase
  * asks for a sign-in (visitors.py: the project wants to know who is trying), the pill leads
- * to nanoMuse Cloud's sign-in and then to the meet page, the Android app's order; a visitor
+ * to NanoLika Cloud's sign-in and then to the meet page, the Android app's order; a visitor
  * the browser remembers goes straight from the welcome page to a Muse.
  */
 function ShowcaseFlow({ gateway, onOwnServer }: { gateway: string; onOwnServer: () => void }) {
@@ -171,7 +171,7 @@ function ShowcaseFlow({ gateway, onOwnServer }: { gateway: string; onOwnServer: 
     return (
       <Page
         hero={<FaceDisc />}
-        title={fmt(s.meet_title, 'nanoMuse')}
+        title={fmt(s.meet_title, 'NanoLika')}
         subtitle={s.meet_sub}
         message={message}
         primary={startPill}
@@ -248,7 +248,7 @@ function NoticeCard({ title, body, closing }: { title: string; body: string; clo
 type SignInMode = 'code' | 'password';
 
 /**
- * nanoMuse Cloud's sign-in, the Android app's (ui/cloud/*): a phone number or an e-mail, a
+ * NanoLika Cloud's sign-in, the Android app's (ui/cloud/*): a phone number or an e-mail, a
  * code sent to it — or the account's password. The relay's refusals come back by code and are
  * said in the phone's language.
  */
@@ -395,7 +395,7 @@ function SignInPage({
   );
 }
 
-/** The form for a nanoMuse of one's own: the link `nanomuse serve` prints, or address + token. */
+/** The form for a NanoLika of one's own: the link `nanomuse serve` prints, or address + token. */
 function OwnServerPage({ onBack }: { onBack?: () => void }) {
   const current = useNanoMuseStore((s) => s.serverUrl);
   const currentToken = useNanoMuseStore((s) => s.token);

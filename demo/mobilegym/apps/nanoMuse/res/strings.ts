@@ -9,7 +9,7 @@ import { useAppStrings } from '@/os/useAppStrings';
  */
 export const strings = {
   // ---- the welcome page (nm_setup_* / nm_welcome_* on Android)
-  setup_title: '欢迎使用 nanoMuse',
+  setup_title: '欢迎使用 NanoLika',
   welcome_tagline: '一个开源的个人智能体，装在你的每一台设备上。',
   welcome_feat_chat: '对话、图片、视频',
   welcome_feat_chat_sub: '能力不错的模型，图片与视频生成，工具、技能和记忆，都在你的手机上',
@@ -19,15 +19,15 @@ export const strings = {
   welcome_feat_reach_sub: '配对一台 Mac、Windows 或 Linux 电脑，在手机上派活给它',
   setup_start: '开始',
   setup_own_key: '我有自己的 API key',
-  setup_own_server: '连接自己的 nanoMuse',
+  setup_own_server: '连接自己的 NanoLika',
   welcome_get_app: '这是模拟器里的演示；完整体验请下载 App',
   welcome_notice_title: '免费 · 开源 · 非营利',
-  welcome_notice: 'nanoMuse 是非营利的开源社区项目，永久免费。模型自带一份由开发者承担的免费额度，用完换自己的 key。数据不会出售；服务器保存什么写在隐私政策里，「设置 → 数据控制」由你决定。',
+  welcome_notice: 'NanoLika 是非营利的开源社区项目，永久免费。模型自带一份由开发者承担的免费额度，用完换自己的 key。数据不会出售；服务器保存什么写在隐私政策里，「设置 → 数据控制」由你决定。',
   welcome_notice_closing: '发现问题、想要新功能、愿意改代码，都欢迎到 GitHub 上提。',
   // the sign-in before a Muse on the showcase (nm_welcome_email / nm_cloud_* on Android)
   welcome_signin: '登录，免费开始',
-  welcome_signin_fine_print: '体验前先登录 nanoMuse Cloud，我们想知道是谁在体验。同一个账号在 App 里也能用，自带一份免费额度。',
-  signin_title: '用 nanoMuse Cloud 开始',
+  welcome_signin_fine_print: '体验前先登录 NanoLika Cloud，我们想知道是谁在体验。同一个账号在 App 里也能用，自带一份免费额度。',
+  signin_title: '用 NanoLika Cloud 开始',
   signin_sub: '手机号或邮箱收一个验证码；设过密码的话也可以直接用密码。',
   signin_identifier: '中国大陆手机号或邮箱',
   signin_identifier_hint: '138 0000 0000 · you@example.com',
@@ -42,7 +42,7 @@ export const strings = {
   signin_fine_print: '体验服务器记下账号 id、打码后的手机号或邮箱，以及每次体验的时间和来源地址；不保存任何消息内容。完整清单在隐私页。',
   signin_signed_in_as: '已登录 %s',
   signin_sign_out: '退出登录',
-  // nanoMuse Cloud's refusals, in the phone's language (nm_cloud_err_* on Android)
+  // NanoLika Cloud's refusals, in the phone's language (nm_cloud_err_* on Android)
   relay_bad_identifier: '请输入中国大陆手机号或邮箱地址。',
   relay_code_wrong: '验证码不对。',
   relay_code_expired: '验证码已过期，请重新发送。',
@@ -56,7 +56,7 @@ export const strings = {
   relay_password_wrong: '密码不对。',
   relay_locked: '错误次数太多，请过几分钟再试。',
   relay_rate_limited: '请求太快了，稍等一下。',
-  relay_unreachable: '连不上 nanoMuse Cloud，请稍后再试。',
+  relay_unreachable: '连不上 NanoLika Cloud，请稍后再试。',
   relay_bad_request: '体验服务器没有接受这个请求，刷新页面再试一次。',
   relay_server_error: '体验服务器出了点问题，请稍后再试。',
   relay_generic: '登录时出了点问题。',
@@ -75,9 +75,9 @@ export const strings = {
   hosted_model: '模型，例如 deepseek-flash',
   hosted_api_key: 'API key',
   hosted_failed: '启动你的 Muse 时出了点问题。',
-  // ---- a nanoMuse of one's own
+  // ---- a NanoLika of one's own
   setup_title_own: '连接你的 Muse',
-  setup_sub_own: '把这台手机指向你电脑上的 nanoMuse。',
+  setup_sub_own: '把这台手机指向你电脑上的 NanoLika。',
   setup_address: '服务器地址或链接',
   setup_token: '访问令牌（链接里没有时填）',
   setup_token_hint: 'nanomuse serve 启动时会打印',
@@ -163,7 +163,7 @@ export const strings = {
 export type NanoMuseStringKey = keyof typeof strings;
 
 export const stringsEn: Record<NanoMuseStringKey, string> = {
-  setup_title: 'Welcome to nanoMuse',
+  setup_title: 'Welcome to NanoLika',
   welcome_tagline: 'An open-source personal agent for every device you own.',
   welcome_feat_chat: 'Chat, pictures, video',
   welcome_feat_chat_sub: 'A capable model, image and video generation, tools, skills and memory, on your phone',
@@ -173,16 +173,16 @@ export const stringsEn: Record<NanoMuseStringKey, string> = {
   welcome_feat_reach_sub: 'Pair a Mac, Windows or Linux machine and give it work from the phone',
   setup_start: 'Start',
   setup_own_key: 'I have my own API key',
-  setup_own_server: 'Connect your own nanoMuse',
+  setup_own_server: 'Connect your own NanoLika',
   welcome_get_app: 'A demo in a simulator; for the real thing, get the app',
   welcome_notice_title: 'Free, open source, non-profit',
   welcome_notice:
-    'nanoMuse is a non-profit open-source community project, free for good. The model comes with a free allowance paid by the developer; after that, your own key. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours.',
+    'NanoLika is a non-profit open-source community project, free for good. The model comes with a free allowance paid by the developer; after that, your own key. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours.',
   welcome_notice_closing: 'Found a bug, want a feature, have a patch? The GitHub repository is the place.',
   welcome_signin: 'Sign in, free',
   welcome_signin_fine_print:
-    'Sign in to nanoMuse Cloud before you try it; we would like to know who is trying. The same account works in the app, with a free allowance.',
-  signin_title: 'Start with nanoMuse Cloud',
+    'Sign in to NanoLika Cloud before you try it; we would like to know who is trying. The same account works in the app, with a free allowance.',
+  signin_title: 'Start with NanoLika Cloud',
   signin_sub: 'A code to your phone or inbox, or your password once you have set one.',
   signin_identifier: 'Mainland China phone number or e-mail',
   signin_identifier_hint: '138 0000 0000 · you@example.com',
@@ -210,7 +210,7 @@ export const stringsEn: Record<NanoMuseStringKey, string> = {
   relay_password_wrong: 'The password is not right.',
   relay_locked: 'Too many attempts; try again in a few minutes.',
   relay_rate_limited: 'Too fast; give it a moment.',
-  relay_unreachable: 'nanoMuse Cloud cannot be reached right now.',
+  relay_unreachable: 'NanoLika Cloud cannot be reached right now.',
   relay_bad_request: 'The showcase server did not accept the request; reload the page and try again.',
   relay_server_error: 'The showcase server ran into a problem; try again in a moment.',
   relay_generic: 'Something went wrong signing in.',
@@ -228,7 +228,7 @@ export const stringsEn: Record<NanoMuseStringKey, string> = {
   hosted_api_key: 'API key',
   hosted_failed: 'Something went wrong starting your Muse.',
   setup_title_own: 'Connect your Muse',
-  setup_sub_own: 'Point this phone at the nanoMuse on your computer.',
+  setup_sub_own: 'Point this phone at the NanoLika on your computer.',
   setup_address: 'Server address or link',
   setup_token: 'Access token (if the link has none)',
   setup_token_hint: 'printed by nanomuse serve',

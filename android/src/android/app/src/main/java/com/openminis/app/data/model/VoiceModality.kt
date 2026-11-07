@@ -89,7 +89,7 @@ val LLMModel.hasAudioOutput: Boolean
  */
 val LLMModel.hasImageInput: Boolean
     get() = normalizedInputs?.contains("image")
-        // nanoMuse: nobody declared the modalities (a hand-typed id, a provider
+        // NanoLika: nobody declared the modalities (a hand-typed id, a provider
         // that lists ids only, a model newer than the catalog). Unknown used to
         // read as "cannot see" and the model was told so in its own prompt;
         // now the name decides (io.github.nanomuse.chat.VisionFamilies).

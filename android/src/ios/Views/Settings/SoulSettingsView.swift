@@ -47,7 +47,7 @@ struct SoulSettingsView: View {
 
             Section(AppLocalized("Identity")) {
                 LabeledContent(AppLocalized("Name")) {
-                    TextField("nanoMuse", text: $name)
+                    TextField("NanoLika", text: $name)
                         .multilineTextAlignment(.trailing)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
@@ -222,7 +222,7 @@ struct SoulSettingsView: View {
                 Text(AppLocalized("Images must have a transparent background (PNG). Photos without transparency can't be used."))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(name.isEmpty ? "nanoMuse" : name)
+                Text(name.isEmpty ? "NanoLika" : name)
                     .font(.title3.weight(.semibold))
                 if !style.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(style)
@@ -327,7 +327,7 @@ struct SoulSettingsView: View {
         do {
             let f = currentFile
             try SoulStore.save(f)
-            NanoMuseProfileSync.shared.nameChanged() // nanoMuse: C8 — a rename here reaches the account's other devices
+            NanoMuseProfileSync.shared.nameChanged() // NanoLika: C8 — a rename here reaches the account's other devices
             loadedRef.value = f
             saveError = nil
             withAnimation { didJustSave = true }

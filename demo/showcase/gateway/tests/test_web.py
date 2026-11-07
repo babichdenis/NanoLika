@@ -1,4 +1,4 @@
-"""nanoMuse Web: sign in with a code, get a kept Muse, come back to it."""
+"""NanoLika Web: sign in with a code, get a kept Muse, come back to it."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ async def test_the_page_and_a_first_sign_in(web):
     async with app.router.lifespan_context(app):
         c = await client_for(app)
         r = await c.get("/web/")
-        assert r.status_code == 200 and "nanoMuse Web" in r.text and "/api/web/verify" in r.text
+        assert r.status_code == 200 and "NanoLika Web" in r.text and "/api/web/verify" in r.text
         r = await c.get("/web", follow_redirects=False)
         assert r.status_code == 308 and r.headers["location"] == "/web/"
 

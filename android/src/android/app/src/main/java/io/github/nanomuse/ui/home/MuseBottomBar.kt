@@ -42,7 +42,7 @@ import dev.chrisbanes.haze.hazeEffect
 import io.github.nanomuse.ui.chat.NM_CHAT_COMPOSER_BOTTOM_GAP
 
 /**
- * nanoMuse's bottom bar: a floating frosted-glass pill, five glyphs, icons only. The pill blurs
+ * NanoLika's bottom bar: a floating frosted-glass pill, five glyphs, icons only. The pill blurs
  * whatever is behind it (Haze, in the Pixel taskbar's manner) and carries a hairline edge. The
  * current tab shows a filled glyph on a soft indicator pill that springs in; the others are
  * outlined. No labels: the fill and the indicator are the state.

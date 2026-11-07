@@ -11,7 +11,7 @@
 appId: io.github.nanomuse.desktop
 productName: NanoLika
 executableName: NanoLika
-copyright: GPL-3.0-or-later · NanoLika, built on the open-source nanoMuse project and DeepSeek Harness
+copyright: GPL-3.0-or-later · NanoLika, built on the open-source NanoLika project and DeepSeek Harness
 artifactName: NanoLika-Desktop-${version}-${os}-${arch}.${ext}
 # A share link from nanolika.ru ("Открыть в Лике") opens the app with the inviter's code
 # already in the sign-in field: the scheme is what makes the system hand the link over

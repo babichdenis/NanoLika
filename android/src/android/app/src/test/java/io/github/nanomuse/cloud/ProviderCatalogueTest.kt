@@ -93,7 +93,7 @@ class ProviderCatalogueTest {
         assertEquals("xai", ProviderCatalogue.match(shipped, inst(ProviderType.xAI))?.id)
         assertEquals("moonshot", ProviderCatalogue.match(shipped, inst(ProviderType.kimiCode, cred = ProviderCredential.oauth))?.id)
         assertEquals("openai", ProviderCatalogue.match(shipped, inst(ProviderType.openAI))?.id)
-        // a relay of one's own, nanoMuse Cloud: not in the catalogue, not gated
+        // a relay of one's own, NanoLika Cloud: not in the catalogue, not gated
         assertNull(ProviderCatalogue.match(shipped, inst(ProviderType.openAI, "https://relay.example.org/v1")))
         assertNull(ProviderCatalogue.match(shipped, inst(ProviderType.openAI, "http://192.168.1.20:11434/v1")))
     }

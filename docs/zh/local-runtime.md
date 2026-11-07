@@ -1,4 +1,4 @@
-# 手机上的 nanoMuse：本地运行时
+# 手机上的 NanoLika：本地运行时
 
 > **Python 线的设计记录。** 现在的 Android App 通过 OpenMinis 自己的 Linux 沙箱在手机上
 > 运行智能体，不是通过这套 PRoot + Alpine + Python 的安排；你下载的 APK 里没有 `rootfs.yml`，
@@ -12,7 +12,7 @@ Python 线的 Android App 有两个变体。**connect** 是你电脑上那个 `n
 一句话说清这个想法：APK 带一个小小的 Alpine Linux 根文件系统，里面有 Python 和 `nanomuse`；第一次启动时 App 把它解压到自己的私有存储，在 [PRoot](https://proot-me.github.io/)（一个不需要 root 的用户态 `chroot`）下面运行 `nanomuse serve`；然后 App 的 WebView 打开 `http://127.0.0.1:<port>/`。大脑没变。Kotlin 只是托着它。
 
 ```
-┌─ nanoMuse.apk ───────────────────────────────────────────────────┐
+┌─ NanoLika.apk ───────────────────────────────────────────────────┐
 │  Kotlin shell            assets/rootfs.tar.xz     lib/…/libproot.so │
 │  ConnectActivity         Alpine 3.21 aarch64      PRoot 5.1        │
 │  RuntimeService  ──┐     python 3.12, nanomuse    libproot-loader.so│
@@ -29,7 +29,7 @@ Python 线的 Android App 有两个变体。**connect** 是你电脑上那个 `n
 
 ## 用户看到什么 {#what-the-user-sees}
 
-第一屏问**你的 nanoMuse 该住在哪**：「在这台手机上运行」或「连接我的电脑」。选第一个，会带着进度条解压根文件系统（磁盘上约 330 MB，一分钟上下），启动运行时，等它第一次健康检查通过，然后打开 App。从那以后，每次打开 App 都会启动运行时；一条安静的通知（「在这台手机上运行」，或者智能体此刻在做什么）表明它活着，带一个**停止**动作。手机重启后运行时自己回来，例程和目标检查照常进行。
+第一屏问**你的 NanoLika 该住在哪**：「在这台手机上运行」或「连接我的电脑」。选第一个，会带着进度条解压根文件系统（磁盘上约 330 MB，一分钟上下），启动运行时，等它第一次健康检查通过，然后打开 App。从那以后，每次打开 App 都会启动运行时；一条安静的通知（「在这台手机上运行」，或者智能体此刻在做什么）表明它活着，带一个**停止**动作。手机重启后运行时自己回来，例程和目标检查照常进行。
 
 失败都落在一个屏幕上，带运行时最后几行日志、一个**重试**和一个**从头开始**。从头开始回到第一屏；它不会删手机上的数据。
 

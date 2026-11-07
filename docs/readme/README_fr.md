@@ -30,12 +30,12 @@
   <a href="https://discord.gg/bkTySmm28X"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
-**nanoMuse est un agent personnel open source pour chacun de vos appareils.** Un seul agent, avec un nom et une apparence à lui, dans l'esprit du [Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) de Meta : il agit au lieu de répondre à des questions, continue de travailler quand l'app est fermée, se souvient de vous, et s'arrête pour demander avant tout ce que vous ne pourriez pas annuler.
+**NanoLika est un agent personnel open source pour chacun de vos appareils.** Un seul agent, avec un nom et une apparence à lui, dans l'esprit du [Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) de Meta : il agit au lieu de répondre à des questions, continue de travailler quand l'app est fermée, se souvient de vous, et s'arrête pour demander avant tout ce que vous ne pourriez pas annuler.
 
 *nano* veut dire l'ensemble complet, assez petit pour que vous le fassiez tourner et le déployiez vous-même : l'app du téléphone, l'app de bureau, la console web et le relais qui les relie sont tous dans ce dépôt, sous GPL-3.0-or-later. **[Gratuit, open source, à but non lucratif. Construisons-le ensemble.](../../CONTRIBUTING.md)** Connectez-vous et vous recevez un crédit gratuit d'utilisation des modèles sur le relais de la communauté (payé par le développeur) ; quand il est épuisé, [utilisez votre propre clé](../own-key.md). Le même relais tourne sur un serveur à vous, et rien n'a besoin de sortir de chez vous. Dernière version : **1.0.5 Lookout**, [notes de version](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.5) · [essayer dans le navigateur](https://demo.nanomuse.dev/).
 
 > [!NOTE]
-> **nanoMuse continue d'évoluer**
+> **NanoLika continue d'évoluer**
 >
 > Un agent personnel ne devrait pas vivre seulement dans le cloud de quelqu'un d'autre, alors nanoMuse est l'alternative open source et à bas coût : sur vos propres appareils, avec le modèle que vous choisissez et un relais que vous pouvez héberger vous-même. Nous voulons le construire avec des développeurs et des utilisateurs du monde entier, pour que chacun possède vraiment un agent personnel à lui. Ouvrez une [issue](https://github.com/nano-muse/nanoMuse/issues/new/choose) ou envoyez une [pull request](../../CONTRIBUTING.md) ; l'une comme l'autre aide nanoMuse à s'améliorer.
 
@@ -48,8 +48,8 @@ https://github.com/user-attachments/assets/c7694d5a-9450-4f99-9254-5d70560d7565
 - `2026-10-13` ⭐ 1 000 étoiles sur GitHub, dix-huit jours après la première version, avec quatre jours dans la liste Swift de GitHub Trending en chemin ([Trendshift](https://trendshift.io/repositories/286894) : septième le 7 octobre, quatrième le 10 octobre). Merci pour chaque essai, chaque signalement et chaque pull request. Nous continuons : une version tous les quelques jours, et la [feuille de route](../roadmap.md) dit ce qui vient ensuite.
 - `2026-10-09` 🚀 La version [1.0.0 Keel](https://github.com/nano-muse/nanoMuse/releases/tag/v1.0.0) est sortie, pour le téléphone, l'ordinateur et le navigateur ; elle s'installe par-dessus la précédente en gardant vos données, et ses notes de version listent chaque changement.
 - `2026-10-08` 🤗 Notre article est sur [Hugging Face Daily Papers](https://huggingface.co/papers/2610.08699), classé troisième de la liste du 8 octobre ; questions et commentaires sont les bienvenus sur la page de l'article.
-- `2026-10-07` 📄 Notre article est disponible sur [arXiv](https://arxiv.org/abs/2610.08699) : *nanoMuse: An Open-Source Personal Agent for Every Device You Own*, par Guangyi Liu, Yong Liu et Jiangning Zhang (université du Zhejiang) ; la citation est en bas de cette page.
-- `2026-09-25` 🎉 nanoMuse est publié sur GitHub sous GPL-3.0-or-later : une application Android construite sur OpenMinis 1.13 ; le relais, l'application de bureau et l'application iPhone sont arrivés dans les jours suivants.
+- `2026-10-07` 📄 Notre article est disponible sur [arXiv](https://arxiv.org/abs/2610.08699) : *NanoLika: An Open-Source Personal Agent for Every Device You Own*, par Guangyi Liu, Yong Liu et Jiangning Zhang (université du Zhejiang) ; la citation est en bas de cette page.
+- `2026-09-25` 🎉 NanoLika est publié sur GitHub sous GPL-3.0-or-later : une application Android construite sur OpenMinis 1.13 ; le relais, l'application de bureau et l'application iPhone sont arrivés dans les jours suivants.
 
 Toutes les versions : [releases](https://github.com/nano-muse/nanoMuse/releases).
 
@@ -57,7 +57,7 @@ Toutes les versions : [releases](https://github.com/nano-muse/nanoMuse/releases)
 
 | | |
 |---|---|
-| **Navigateur** | [demo.nanomuse.dev](https://demo.nanomuse.dev/) : un nanoMuse sur un téléphone simulé, après connexion. Une démo ; les apps ci-dessous sont les vraies |
+| **Navigateur** | [demo.nanomuse.dev](https://demo.nanomuse.dev/) : un NanoLika sur un téléphone simulé, après connexion. Une démo ; les apps ci-dessous sont les vraies |
 | **Android** 8.0+, arm64 | [nanoMuse-1.0.5-arm64.apk](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-1.0.5-arm64.apk) : chaque version est signée avec la même clé et s'installe par-dessus la précédente |
 | **iPhone / iPad** | [TestFlight](https://testflight.apple.com/join/ZHexbDqc) : une bêta validée par la revue bêta d'Apple ; le lien l'installe · [iOS](../ios.md) |
 | **macOS** 12+ | [Apple Silicon](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-Desktop-1.0.5-mac-arm64.dmg) · [Intel](https://github.com/nano-muse/nanoMuse/releases/download/v1.0.5/nanoMuse-Desktop-1.0.5-mac-x64.dmg). Non notarisé : clic droit → *Ouvrir* la première fois |
@@ -90,7 +90,7 @@ Tous les téléchargements viennent de la [dernière version](https://github.com
 
 ## Comment ça marche
 
-Chaque appareil fait tourner son propre agent : le téléphone dans l'APK (Alpine Linux sous proot, un shell, un navigateur, MCP), l'ordinateur dans nanoMuse Desktop (DeepSeek Harness avec le runtime Python pour les mains). Connectés, ils se retrouvent sur le relais et peuvent se demander des choses ; le texte des conversations passe par lui, les fichiers et les captures restent là où ils ont été faits.
+Chaque appareil fait tourner son propre agent : le téléphone dans l'APK (Alpine Linux sous proot, un shell, un navigateur, MCP), l'ordinateur dans NanoLika Desktop (DeepSeek Harness avec le runtime Python pour les mains). Connectés, ils se retrouvent sur le relais et peuvent se demander des choses ; le texte des conversations passe par lui, les fichiers et les captures restent là où ils ont été faits.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/nano-muse/nanoMuse/main/assets/brand/devices-loop.png" alt="Android, l'ordinateur (Mac, Windows, Linux), iPhone et iPad, et l'application web autour d'un même compte : le relais connecte les appareils et transporte la conversation entre eux" width="92%">
@@ -100,7 +100,7 @@ Chaque appareil fait tourner son propre agent : le téléphone dans l'APK (Alpin
 
 ## Comparé à Muse et à OpenMinis
 
-| | Meta Muse | OpenMinis | nanoMuse |
+| | Meta Muse | OpenMinis | NanoLika |
 |---|---|---|---|
 | Où tourne l'agent | Une VM cloud par utilisateur | Le téléphone où il est installé | Votre téléphone, votre ordinateur ou un serveur à vous, un compte pour tous |
 | Les apps sans API | Hors de portée ; la VM ne touche jamais vos appareils | Une CLI d'accessibilité sur Android | L'écran comme main, sur le téléphone et l'ordinateur : captures, API d'abord, vous reprenez la main pour les connexions. Pas sur iOS, où le système ne le permet pas |
@@ -148,11 +148,11 @@ Toutes les personnes dont un changement a été intégré dans `main`, d'après 
 
 ## ⭐️ Citation
 
-Si nanoMuse vous est utile, merci de citer l'article.
+Si NanoLika vous est utile, merci de citer l'article.
 
 ```bibtex
 @misc{liu2026nanomuseopensourcepersonalagent,
-      title={nanoMuse: An Open-Source Personal Agent for Every Device You Own}, 
+      title={NanoLika: An Open-Source Personal Agent for Every Device You Own}, 
       author={Guangyi Liu and Yong Liu and Jiangning Zhang},
       year={2026},
       eprint={2610.08699},
@@ -164,7 +164,7 @@ Si nanoMuse vous est utile, merci de citer l'article.
 
 ## Remerciements
 
-nanoMuse s'appuie sur le travail d'autres personnes ; [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) en donne les termes.
+NanoLika s'appuie sur le travail d'autres personnes ; [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) en donne les termes.
 
 - [OpenMinis](https://github.com/OpenMinis/OpenMinis) : l'agent embarqué sur lequel est bâtie l'app du téléphone, avec [proot](https://github.com/nano-muse/proot) et [Alpine Linux](https://alpinelinux.org/) pour le bac à sable.
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) : le harnais d'agents dont l'app de bureau est un plugin.
@@ -173,13 +173,13 @@ nanoMuse s'appuie sur le travail d'autres personnes ; [THIRD_PARTY_NOTICES.md](.
 
 ## Avertissement
 
-nanoMuse est un projet communautaire indépendant, sans lien avec Meta Platforms, Inc. et sans son soutien ; Muse est leur marque. Le dragon appartient au projet.
+NanoLika est un projet communautaire indépendant, sans lien avec Meta Platforms, Inc. et sans son soutien ; Muse est leur marque. Le dragon appartient au projet.
 
 ## Licence
 
 [GPL-3.0-or-later](../../LICENSE). L'app du téléphone est basée sur OpenMinis 1.13 (GPL-3.0), modifiée depuis le 2026-09-24 ; voir [NOTICE](../../NOTICE). Les versions antérieures de la ligne Python étaient sous MIT (tag `pre-openminis`).
 
 <p align="center">
-  <em>Merci de votre visite ✨ nanoMuse.</em><br><br>
+  <em>Merci de votre visite ✨ NanoLika.</em><br><br>
   <img src="https://hits.sh/github.com/nano-muse/nanoMuse.svg?label=visitors&color=0a66e4&extraCount=16719" alt="Visitors">
 </p>

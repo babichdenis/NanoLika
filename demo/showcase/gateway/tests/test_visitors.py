@@ -1,4 +1,4 @@
-"""The visitors' sign-in: a nanoMuse Cloud account before a demo Muse."""
+"""The visitors' sign-in: a NanoLika Cloud account before a demo Muse."""
 
 from __future__ import annotations
 
@@ -279,17 +279,17 @@ async def test_switched_off_means_the_old_way(showcase):
         ),
         # a JSON list, a string, a bare message and FastAPI's detail: no code to pass on, and
         # no AttributeError on this side of the wire
-        (400, "[1, 2]", "relay_error", "nanoMuse Cloud refused the request."),
-        (400, '"nope"', "relay_error", "nanoMuse Cloud refused the request."),
+        (400, "[1, 2]", "relay_error", "NanoLika Cloud refused the request."),
+        (400, '"nope"', "relay_error", "NanoLika Cloud refused the request."),
         (400, '{"error": "nope"}', "relay_error", "nope"),
         (422, '{"detail": "identifier: too short"}', "relay_error", "identifier: too short"),
         (
             422,
             '{"detail": [{"loc": ["body"]}]}',
             "relay_error",
-            "nanoMuse Cloud refused the request.",
+            "NanoLika Cloud refused the request.",
         ),
-        (502, "<html>bad gateway</html>", "relay_error", "nanoMuse Cloud refused the request."),
+        (502, "<html>bad gateway</html>", "relay_error", "NanoLika Cloud refused the request."),
     ],
 )
 async def test_a_refusal_of_any_shape_reaches_the_browser_as_a_refusal(status, text, code, message):

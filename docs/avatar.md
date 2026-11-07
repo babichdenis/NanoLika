@@ -11,7 +11,7 @@ The agent's face is the bundled Lika fairy until you ask for another. The intern
    phone's page: the face at the top with what it is, a description, the seven style chips,
    *Draw four*, and the rest of this list without a card in the chat (the progress comes over
    the socket as `{"kind": "studio", "current"}`). The agent is not run for it.
-2. **The cost first.** A card says what it will take: with the account's model (nanoMuse
+2. **The cost first.** A card says what it will take: with the account's model (NanoLika
    Cloud), the relay's figure (`GET /v1/estimate`) next to what is left in your allowance
    (about ¥1.5 for the eight pictures at qwen-image-3.0's price); with a key of your own, the
    count, at your provider's prices. *Draw* or *Not now*.
@@ -55,7 +55,7 @@ use them), `POST /api/avatar/moods` draws the poses and clips of the worn face a
 of finished sessions are cleared after a day; faces stay in the workspace as long as the
 profile, or you, want them.
 
-With a nanoMuse Cloud account the face follows you to every device ([docs/cloud.md](cloud.md)):
+With a NanoLika Cloud account the face follows you to every device ([docs/cloud.md](cloud.md)):
 the stills go to the relay once, the other devices wear them from `avatar/sync-<hash>/`
 with the description and style in their `face.json`, and a device keeps the face it drew,
 clips and all, when the account's pictures are the ones it already wears.
@@ -78,7 +78,7 @@ desktop where the system has the decoder, and its preview refuses a clip it cann
 takes H.264 only today). A longer or larger clip, or another format, is refused with a sentence
 that states the limits; nothing is trimmed or re-encoded, and the sound is never played.
 
-The clip stays on the device that chose it. It is not uploaded to nanoMuse Cloud and does not
+The clip stays on the device that chose it. It is not uploaded to NanoLika Cloud and does not
 sync to your other devices, unlike the stills of a studio face; each device chooses its own.
 On Android it lives under `minis-global/nanomuse/avatar/own-clip.mp4` with its first frame
 beside it as `own-clip.png`, filed with the signed-in account's other files; on iOS under the

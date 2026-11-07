@@ -1,10 +1,10 @@
 # The Android app
 
-`android/` is nanoMuse for the phone: [OpenMinis](https://github.com/OpenMinis/OpenMinis)
+`android/` is NanoLika for the phone: [OpenMinis](https://github.com/OpenMinis/OpenMinis)
 1.13 (GPL-3.0): a native app whose agent runs **on the phone**, with a Linux shell, a
-browser, MCP servers, skills and scheduled tasks inside the APK, with nanoMuse's own
-identity, design and features on top. Everything of nanoMuse's lives in
-`io.github.nanomuse.*`; edits inside OpenMinis files are marked `// nanoMuse:`. The
+browser, MCP servers, skills and scheduled tasks inside the APK, with NanoLika's own
+identity, design and features on top. Everything of NanoLika's lives in
+`io.github.nanomuse.*`; edits inside OpenMinis files are marked `// NanoLika:`. The
 application id is `io.github.nanomuse.app` and the URL scheme the system knows the app by is
 `nanomuse://`, so a phone that also has OpenMinis installed never has two apps claiming one
 scheme; inside the app, links stay `minis://…` (upstream's vocabulary, shared with the sandbox,
@@ -22,7 +22,7 @@ around a Python server, two APK flavours) is kept as a design record in
 [archive/android-python-line.md](archive/android-python-line.md) and is not what you
 download today.
 
-One APK, one architecture: `nanoMuse-<version>-arm64.apk` (arm64-v8a, Android 8.0 / API 26
+One APK, one architecture: `NanoLika-<version>-arm64.apk` (arm64-v8a, Android 8.0 / API 26
 or newer, `targetSdk` 35). Every release is signed with the same key, so a newer APK
 installs over the old one and keeps its data. No Play Store listing: *Settings → Version* shows
 the installed build next to the newest release (`nanomuse.cn/dl/index.json` first, this
@@ -31,9 +31,9 @@ update*) and offers the download.
 
 ## Install
 
-1. Download `nanoMuse-<version>-arm64.apk` from the
+1. Download `NanoLika-<version>-arm64.apk` from the
    [latest release](https://github.com/nano-muse/nanoMuse/releases/latest). Verify with
-   `sha256sum -c nanoMuse-<version>-arm64.apk.sha256` if you like.
+   `sha256sum -c NanoLika-<version>-arm64.apk.sha256` if you like.
 2. Open it. Android asks once to allow installs from your browser or file manager.
 3. **Sign in.** The first screen is the account: a phone number or an e-mail address,
    a code, or a password once you have set one. It is what lets your devices work as one
@@ -46,7 +46,7 @@ update*) and offers the download.
    you (the account's menu opens on `deepseek-v4.1-flash`); **Operating the screen**, the one
    that looks at the screen (`qwen3.8-27b`, the account's or the same model under your own
    key); **Making pictures** and **Making clips**. Each row shows `<provider> · <model>` and
-   opens a picker: the *nanoMuse Cloud* group first when signed in, the recommended model
+   opens a picker: the *NanoLika Cloud* group first when signed in, the recommended model
    first and marked, then one group per provider of your own with only the models that fit
    the row. A group shows eight models until you tap *Show N more* (the catalogue's default
    for the row first, then the one in use, then the rest as the provider lists them); past
@@ -56,17 +56,17 @@ update*) and offers the download.
    chat's own `•••` menu, is the default for new chats and moves the main chat
    (*Applies to the main chat and to new chats; a side chat keeps its model.*); a side
    chat already open keeps its model. The other three pickers
-   open with *Automatic* (*Currently nanoMuse Cloud · qwen3.8-27b*), which forgets a choice
+   open with *Automatic* (*Currently NanoLika Cloud · qwen3.8-27b*), which forgets a choice
    made there and lets the row follow the order below again. Signed in, the page opens with
-   one switch, *Use nanoMuse Cloud models*: off, the account leaves every picker and the
+   one switch, *Use NanoLika Cloud models*: off, the account leaves every picker and the
    automatic order, no side call (titles, memory, pictures, clips) runs on it, and only the
-   *Use nanoMuse Cloud this time* button on a refused turn does; the sign-in stays for sync and
+   *Use NanoLika Cloud this time* button on a refused turn does; the sign-in stays for sync and
    your devices. If the chat model is still the account's at that moment, the Chat row moves
    to your first own chat model (the catalogue's default for that provider), as every client
    does, and the page says *Applies to the main chat and to new chats*. Switching off is
    refused with one sentence while the chat model is still the account's and you have no
    chat model of your own, since nothing else could answer: the switch stays on and *Add a
-   provider of your own first; with nanoMuse Cloud off, nothing else could answer.* appears
+   provider of your own first; with NanoLika Cloud off, nothing else could answer.* appears
    under it. The Cloud provider's own page (Settings → *Manage Providers*) follows the same
    rule; a provider of your own switched off there while the chat ran on it hands the chat
    to the next source, and when none is left a send says *No model can answer right now.
@@ -85,17 +85,17 @@ gives the vendor (chat, operating the screen, making pictures, making clips), al
 it* switches the ticked rows to this provider, each on the catalogue's default for that job
 (`defaults.chat` and friends in `providers.json`), or on the first model of its list that
 fits when the default is not there; *Not now* changes nothing, and so does an unticked switch.
-Signed in, the body says nanoMuse Cloud keeps the rest. The page is the place to change it later.
+Signed in, the body says NanoLika Cloud keeps the rest. The page is the place to change it later.
 
 **When you have not chosen.** Chat is the relay's recommended model when signed in, else the
 first provider of your own. The screen, pictures and clips follow the chat provider when it is
 a provider of your own with that capability (its catalogue default); else the relay's model
 when signed in; else the first provider of your own that can. A choice always wins, and
-nanoMuse Cloud never steps in front of a provider you chose. When a model of your own fails,
-nothing falls back on its own: the error card gets *Use nanoMuse Cloud this time* (signed in
+NanoLika Cloud never steps in front of a provider you chose. When a model of your own fails,
+nothing falls back on its own: the error card gets *Use NanoLika Cloud this time* (signed in
 only), which runs that one turn on the relay's chat model and changes no row.
 
-**Your own relay.** The sign-in screen talks to nanoMuse Cloud unless you tell it
+**Your own relay.** The sign-in screen talks to NanoLika Cloud unless you tell it
 otherwise: *Use a different server* under the sign-in form takes the address of a relay
 you run yourself ([cloud.md](cloud.md), `cloud/docker-compose.yml`), *Check* asks its
 `/healthz` and shows the version it answers with, *Use this server* keeps the address
@@ -120,14 +120,14 @@ prefix caching.
 | | |
 | --- | --- |
 | **The agent, on the phone** | A sandboxed Alpine Linux, a real shell, files, a browser, MCP servers, skills in the Agent Skills format, memory, scheduled tasks; approvals before deleting, sending or paying. The model is the account's or your own; nothing you say passes through the project's relay when you use your own key. |
-| **Hands** (`hands/`) | With *Hands* on and the accessibility service enabled, the agent looks at the phone's screen and taps, types and swipes in its apps: the last rung after APIs, fetches and the browser. A stage over the app shows where it is about to tap and a capsule with the step and **Stop**; a glow breathes along the screen's edges (blue working, amber waiting; 2.4 s in, 2.4 s out, like every working light on every client since round 9: nothing runs round the rim or slides down the screen, and the capsule's ring and bars breathe at the same pace; everything holds still under the system's reduce-motion setting); when a tap would send, post or delete, the capsule itself asks (**Allow** / **Deny**, the same request the chat card and the notification show), so you are not pulled back into nanoMuse (money is confirmed with the screen lock in the chat card; the capsule offers *Open* for that one); the capsule only ever answers its own request, never a shell or browser card of another conversation, and **Stop** while a card is waiting denies it and ends the run at once. Passwords and codes are always yours to type. The same action a third time on a screen that did not change gets a line in the history so the model changes tack, and a sixth ends the run as *infeasible* with the action named (`HandsLoopWatch`, the floor the runtime has too), instead of one model call per step until the thirty-minute limit. Every step's screenshot is written next to the run's trace under the session's `attachments/hands/<run>/`; the ten newest runs keep all of theirs, an older run keeps its trace and the last screen (the one the chat shows), and past 200 runs the oldest is removed (`HandsTraces`). [gui.md](gui.md) is the design record; the app's own hands are in `io.github.nanomuse.hands`. |
-| **Reach** (`reach/`) | Your computers, from the phone: "say it on the phone, it gets done there" (a shell command, a file, the computer's screen, or a whole task for the nanoMuse running there). The way in is the hub (next row): install nanoMuse Desktop on the computer and sign in with the same account, and it is under *Account → Devices* within seconds, on any network, the only way since 0.1.24 (the local-network host script is gone). *Settings → Computers* lists the account's computers and says which account the phone uses, since a missing computer has nearly always signed in with another one. Approvals are decided on the phone before anything is sent. [every-device.md](every-device.md). |
+| **Hands** (`hands/`) | With *Hands* on and the accessibility service enabled, the agent looks at the phone's screen and taps, types and swipes in its apps: the last rung after APIs, fetches and the browser. A stage over the app shows where it is about to tap and a capsule with the step and **Stop**; a glow breathes along the screen's edges (blue working, amber waiting; 2.4 s in, 2.4 s out, like every working light on every client since round 9: nothing runs round the rim or slides down the screen, and the capsule's ring and bars breathe at the same pace; everything holds still under the system's reduce-motion setting); when a tap would send, post or delete, the capsule itself asks (**Allow** / **Deny**, the same request the chat card and the notification show), so you are not pulled back into NanoLika (money is confirmed with the screen lock in the chat card; the capsule offers *Open* for that one); the capsule only ever answers its own request, never a shell or browser card of another conversation, and **Stop** while a card is waiting denies it and ends the run at once. Passwords and codes are always yours to type. The same action a third time on a screen that did not change gets a line in the history so the model changes tack, and a sixth ends the run as *infeasible* with the action named (`HandsLoopWatch`, the floor the runtime has too), instead of one model call per step until the thirty-minute limit. Every step's screenshot is written next to the run's trace under the session's `attachments/hands/<run>/`; the ten newest runs keep all of theirs, an older run keeps its trace and the last screen (the one the chat shows), and past 200 runs the oldest is removed (`HandsTraces`). [gui.md](gui.md) is the design record; the app's own hands are in `io.github.nanomuse.hands`. |
+| **Reach** (`reach/`) | Your computers, from the phone: "say it on the phone, it gets done there" (a shell command, a file, the computer's screen, or a whole task for the NanoLika running there). The way in is the hub (next row): install NanoLika Desktop on the computer and sign in with the same account, and it is under *Account → Devices* within seconds, on any network, the only way since 0.1.24 (the local-network host script is gone). *Settings → Computers* lists the account's computers and says which account the phone uses, since a missing computer has nearly always signed in with another one. Approvals are decided on the phone before anything is sent. [every-device.md](every-device.md). |
 | **The hub** (`hub/`) | Every signed-in device of the account meets on the relay's hub: the phone sees your computers, asks them to do things, gets their approvals as cards, and can be asked by them. A foreground service keeps it reachable in the background (Android 13+ asks for the notification permission for that). [hub.md](hub.md). |
 | **Coding agents** (`ui/coding/`) | The Cursor, Codex and Claude Code sessions on your computers, seen and steered from the phone. [coding-agents.md](coding-agents.md). |
 | **Account** (`ui/cloud/`) | Who is signed in, the password, every device holding a key, usage by kind and by model, the ways out. When the free pool is spent or past 80 %, the account page and the refused turn show the ways on: your own key, that is, the providers of the catalogue, the region's first (Alibaba Cloud Bailian for people in mainland China: the UI in simplified Chinese, a phone-number sign-in, or the relay saying so; OpenRouter and OpenAI everywhere else), each saying what it covers; a subscription you already pay for (ChatGPT, Claude, Kimi, OpenRouter sign in instead of a key); and an invitation. See [Your own key](#your-own-key) below. A phone shows and syncs the signed-in account's conversations only: since 0.1.40 every chat has an owner, synced or not, and a sign-out asks *Keep this account's chats on this device* (off by default: the account's chats, memory, feed, goals, routines and face leave the phone; on: put aside until it returns); deleting the account removes all of it; a key the relay refuses (`401 bad_key`) puts the account's data aside as *Keep* would and the sign-in page says so until the next sign-in; only `401 account_deleted` removes it; signed out, only the chats made while signed out show ([sync.md](sync.md)). |
 | **The browser handed over** (`browser/`) | A page that needs you (a login, a verification code, a payment, a CAPTCHA) is handed over instead of described: `browser_use`'s `hand_over` action opens the agent's own tab (same WebView, same session) in the browser sheet with the agent's hold released, a **Your turn** card above the composer says what the page asks of you with *Open the page* and *Done, continue*, the sheet carries the same line and button, and the tool call waits for *Done* (fifteen minutes at most) before the agent goes on from the page as it is. `io.github.nanomuse.browser.BrowserHandOver`. |
 | **Connectors** (`connectors/`, `ui/connectors/`) | The services the agent can be let into: the desktop's catalogue of 75 remote MCP servers (Notion, Linear, GitHub, GitLab, Slack, Stripe, Miro, …), shipped as `assets/nanomuse/connectors.json`. The only Settings row for all of this is *Connectors*; the upstream MCP editor (by address, by command, imported JSON) is *Your own servers* at the end of the page. Open servers add with a tap; a key service takes the key; an OAuth service runs the MCP authorization flow (discovery, dynamic client registration, PKCE in a Custom Tab) and the token goes into the entry's `Authorization` header for the in-guest MCP client, refreshed at app start; a service whose authorization server registers no clients (`clientIdRequired`: GitHub, Slack, Discord, HubSpot, Render, Bitrise, PagerDuty, Box) asks for an OAuth client id and secret made at the vendor's developer page with the app's callback address, which the sheet shows and copies. A connected service is an MCP server entry under the same id; *Your own servers* manages it too. What is connected is shared with the account's other devices through the relay profile, the entries (id, label, address, kind of auth, which device, when), never a token, so the page also lists *On your other devices*: a service connected on the desktop shows as *Connected on <device>. Sign in here to use it on this phone*, one tap into the same sheet. |
-| **The chat, plain** | While the agent works, the line under its avatar names the step under way (*nanoMuse is using Shell*, *Writing the reply*, *On it: book the table*), never a state of mind. The tool pills, the Computer sheet and the floating step bar are **on by default** since 0.1.37; *Settings → Appearance → Show the agent's steps* turns them off. With them on, a finished step reads *nanoMuse used Shell · Done*, and its sheet closes on ×, swipe or Back. |
+| **The chat, plain** | While the agent works, the line under its avatar names the step under way (*NanoLika is using Shell*, *Writing the reply*, *On it: book the table*), never a state of mind. The tool pills, the Computer sheet and the floating step bar are **on by default** since 0.1.37; *Settings → Appearance → Show the agent's steps* turns them off. With them on, a finished step reads *NanoLika used Shell · Done*, and its sheet closes on ×, swipe or Back. |
 
 The chat sits on the same canvas as the pill bar, the menus and the drawer: pure black in the
 dark theme, pure white in the light one. Your messages are white pills with black text (black
@@ -195,7 +195,7 @@ closing the app (`io.github.nanomuse.cloud.ClaudeSignIn`).
 [cloud.md](cloud.md)): the providers for the person's region in the relay's order, each with
 what it covers, the plans one can sign in with and which clients they are for, the local
 servers, the docs link and the honest line about the ChatGPT sign-in. `cloud/Guidance.kt`
-parses it, `Ways.resolve` prefers it, and the card and Settings → nanoMuse Cloud read the
+parses it, `Ways.resolve` prefers it, and the card and Settings → NanoLika Cloud read the
 bundled catalogue only when the relay sent none (an older relay), so a vendor added on the
 relay shows before the app is updated, and a provider the relay no longer lists is gone the same
 day. A `429 allowance_exhausted` carries the same block beside the figures.
@@ -206,7 +206,7 @@ provider only among those whose vendor has `image`; clips among those with `vide
 app can drive (Bailian's video API); the screen's model and its picker list only models of
 vendors with `vision`. A ChatGPT plan signed in through Codex is chat and vision (the Codex
 backend has no image or video endpoints), so it is never offered for pictures. A vendor the
-catalogue does not know (a gateway, a relay of your own, nanoMuse Cloud) is taken at its
+catalogue does not know (a gateway, a relay of your own, NanoLika Cloud) is taken at its
 models' word, as before. When no configured provider has a capability, the page says so in one
 sentence (*Pictures need a provider with image models: Bailian, OpenAI, Gemini or
 OpenRouter.*) instead of failing.
@@ -221,7 +221,7 @@ A failed turn whose error is the transport's (OkHttp's *failed to connect to cha
 shown as a card instead of the red banner: what happened, what helps (a VPN on this phone, the
 proxy under *Settings → Network*, another provider with a key of your own), *Try again*, and the
 raw line behind *Details*. The 401/403/429 whose bodies upstream's `mapHttpError` drops are
-kept for a few seconds by `ReachSignal` (one `// nanoMuse:` spot in `OpenAIProvider`) and
+kept for a few seconds by `ReachSignal` (one `// NanoLika:` spot in `OpenAIProvider`) and
 written into the message as a canonical `nm_reach:` line, so an expired ChatGPT sign-in reads
 *Sign in again* and a spent plan window reads *The ChatGPT plan has nothing left for now* with
 OpenAI's own sentence and the reset time; a plain *Invalid API key* on a key provider stays
@@ -231,10 +231,10 @@ of your own (Ollama, LM Studio, vLLM on a computer you own) and, for a signed-in
 computer: *@* and its name in the chat runs the turn there.
 
 **When the relay refuses a turn** (`cloud/RelayRefusal.kt`, `ui/chat/RelayRefusalCard.kt`).
-Every refusal nanoMuse Cloud sends is one plain sentence in the phone's language and the button
+Every refusal NanoLika Cloud sends is one plain sentence in the phone's language and the button
 that fits, never a status code, the relay's JSON or upstream's *Rate limited*. The reply is
 read where the body is still whole (`AllowanceSignal.noteHttpError`, through the same
-`// nanoMuse:` spot in `OpenAIProvider`), stored in the message as a canonical `nm_relay:` line
+`// NanoLika:` spot in `OpenAIProvider`), stored in the message as a canonical `nm_relay:` line
 and drawn by the card: `413 too_large` (also a proxy's plain 413 from the relay's host) → *That
 message is too large for the model. Shorten it, leave out some attachments, or start a new
 chat.* with *New chat*; `400 content_rejected` (the provider's content check declined the
@@ -316,7 +316,7 @@ IPv6 ULA, `localhost`, a name without a dot, and the suffixes `.local`, `.lan`, 
 and refuses it at the provider URL field for anything else (`io.github.nanomuse.net.LanOnly`).
 The address is parsed before it is judged, so a public name such as `10.foo.example.com` is
 not taken for a private address. The same rule decides whether a relay of your own may be
-`http://`; nanoMuse Cloud and the hub to it are TLS only. The in-app web view is not exported
+`http://`; NanoLika Cloud and the hub to it are TLS only. The in-app web view is not exported
 to other apps. Voice input through a provider's speech model keeps the microphone open only
 while a recording is on: stopping or cancelling the recording closes the recorder at once, and a
 cancelled recording's audio is dropped, never sent to the provider.
@@ -344,7 +344,7 @@ load. The upstream tree carries lint findings of its own; read the report for `i
 `export GOPROXY=https://goproxy.cn,direct` first, and `env.sh` keeps whatever you exported.
 
 `scripts/rebrand.py` carries the version (`VERSION_NAME`, `VERSION_CODE`) and applies
-nanoMuse's naming to the OpenMinis tree; `android/BUILDING.md` covers the native pieces.
+NanoLika's naming to the OpenMinis tree; `android/BUILDING.md` covers the native pieces.
 Without a signing key the release build is signed with the debug key, which installs but
 cannot update a properly signed build. To sign, create a key once and keep it outside the
 repository:
@@ -384,11 +384,11 @@ like the Python package's version does.
 | `reach/` | `Computers` (the account's devices as the hub lists them, and the calls to them; no pairing and no tokens of its own since 0.1.24), the offload handler that sends work to a computer |
 | `models/` | Settings → Models behind the screens: `ModelSlots` (the four slots, what each is set to and where that is kept, the groups a picker shows, `followPick` for the chat default, `applyProvider` for the *Use it for* card), `SlotOrder` (the resolution order and the catalogue default, pure Kotlin, unit-tested), `PickerList` (the picker's eight-row groups, their order and the search filter, pure Kotlin, unit-tested) |
 | `ui/models/` | The Models page, the picker behind each row, the *Use it for* card (`minis://settings/models`) |
-| `chat/CloudRetry.kt` | *Use nanoMuse Cloud this time*: whether the card offers it and the one-turn provider `ChatViewModel.retryLast` uses |
+| `chat/CloudRetry.kt` | *Use NanoLika Cloud this time*: whether the card offers it and the one-turn provider `ChatViewModel.retryLast` uses |
 | `chat/RoutineWakes.kt`, `ui/chat/NmRoutineWakeRow.kt` | A scheduled task's turn is the routine's, not the person's: `ScheduledAgentRunner` arms a wake before the prompt goes out, `ChatViewModel` binds it to the persisted row, and the chat draws that row as one quiet line, *Routine · 〈label〉 · 08:00*, instead of a bubble in the person's voice; the model gets a one-turn `SessionAddenda` saying so, so it opens with the result rather than thanking anyone for asking. Up to 1.0.4 the prompt stood in the chat as if the person had typed it |
 | `feed/` | The Feed: `FeedFlow` keeps the daily scheduled task and the conversation it writes in, which is the agent's working room and stays out of the drawer, the chat list and the main-chat fallback (`FeedFlow.hidden`, read by `ChatRepository.observeSessions()`, `MainChat` and the move-to sheet); `FeedStore` holds the posts. When the task has written posts while the app is in the background, one notification names them and opens the Feed tab (`minis://feed`), in place of the generic "task done" notice with the model's text that up to 1.0.4 opened the conversation |
 | `hands/` | The accessibility service as the hand, the stage and the capsule, the screen reader; `Hands.screenModel` picks the screen's model (chosen → the chat provider's own default when it sees → the Cloud's `qwen3.8-27b` → the same under your own key → a chat model that sees → the Vision Group) |
 | `ui/coding/` | The coding agents of your computers |
 | `connectors/`, `ui/connectors/` | The connectors catalogue (`ConnectorsCatalogue` reads the asset), MCP authorization discovery + registration (`McpAuthDiscovery`), connecting and token refresh (`Connectors`), what this phone connected as published to the profile and what the other devices did (`SharedConnectors`), the Settings → Connectors page |
 | `ui/cloud/` | Sign-in, the Account screen, the Devices section |
-| `res/values*/nm_strings.xml` | Every nanoMuse string in the seventeen languages the app has (English, 简体中文, 繁體中文, German, Spanish, Filipino, French, Indonesian, Japanese, Korean, Malay, Polish, Brazilian Portuguese, Romanian, Russian, Thai, Turkish); every file carries the same keys, apart from the two the English file marks `translatable="false"` (the relay address example and the product name `nanoMuse Cloud`), and a missing one falls back to English |
+| `res/values*/nm_strings.xml` | Every NanoLika string in the seventeen languages the app has (English, 简体中文, 繁體中文, German, Spanish, Filipino, French, Indonesian, Japanese, Korean, Malay, Polish, Brazilian Portuguese, Romanian, Russian, Thai, Turkish); every file carries the same keys, apart from the two the English file marks `translatable="false"` (the relay address example and the product name `NanoLika Cloud`), and a missing one falls back to English |

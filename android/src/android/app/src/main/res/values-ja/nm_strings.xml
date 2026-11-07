@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">このビルド</string>
@@ -617,10 +617,10 @@
     <string name="nm_risk_class_remote">リモート操作</string>
     <string name="nm_hub_remote_reason">%1$s はこの端末を操作できます</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">自分の API キーがあります</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">あなたのすべてのデバイスのための、オープンソースのパーソナルエージェント。</string>
     <string name="nm_welcome_email">サインイン（無料）</string>
     <string name="nm_welcome_fine_print">1 つのアカウントでデバイスがつながり、無料のモデル利用も付いてきます。料金はかかりません。自分の API キーはすぐあとで追加できます。</string>
@@ -902,7 +902,7 @@
     <string name="nm_coding_fresh_hint">%1$s との新しい会話です。最初のメッセージでコンピューター上で始まります。</string>
     <string name="nm_coding_no_transcript">このセッションにはまだ読めるものがありません。</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">メンバー · 上限なし</string>
     <string name="nm_cloud_spent_total">累計 ¥%1$s · $%2$s を使用、開発者が負担</string>
     <string name="nm_cloud_allowance_used">使用 ¥%1$s · $%2$s</string>
@@ -914,7 +914,7 @@
     <string name="nm_cloud_notice_closing">バグを見つけた、機能がほしい、パッチがある？GitHub のリポジトリへどうぞ。</string>
     <string name="nm_cloud_notice">nanoLika は非営利のオープンソースコミュニティプロジェクトです：ずっと無料です。モデルには開発者が負担する無料枠が付き、その後は自分のキーを使います。何も売りません。リレーが保持するものはプライバシーポリシーに書かれ、設定 → データ管理はあなたのものです。アカウントはいつでも削除できます。</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">デバイスからのメッセージ</string>
     <string name="nm_hub_service_channel">デバイスと接続中</string>
     <string name="nm_hub_service_title">nanoLika · デバイスから到達可能</string>

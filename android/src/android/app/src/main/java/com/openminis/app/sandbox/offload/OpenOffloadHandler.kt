@@ -55,7 +55,7 @@ class OpenOffloadHandler(private val context: Context) : NativeOffloadHandler {
                     selector = null
                 }
             } else if (io.github.nanomuse.deeplink.OwnScheme.isOwn(Uri.parse(url).scheme)) {
-                // nanoMuse: `minis://` and `nanomuse://` are this app's; to MainActivity by name
+                // NanoLika: `minis://` and `nanomuse://` are this app's; to MainActivity by name
                 io.github.nanomuse.deeplink.OwnScheme.intent(context, Uri.parse(url))
             } else {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))

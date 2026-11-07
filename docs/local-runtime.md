@@ -1,4 +1,4 @@
-# nanoMuse on the phone: the local runtime
+# NanoLika on the phone: the local runtime
 
 > **Design record of the Python line.** The current Android app runs its agent on the
 > phone through OpenMinis's own Linux sandbox, not through this PRoot + Alpine + Python
@@ -13,7 +13,7 @@ The Python line's Android app came in two flavours. **connect** was the remote f
 The idea in one sentence: the APK carries a small Alpine Linux root file system with Python and `nanomuse` inside; on first start the app unpacks it into its private storage and runs `nanomuse serve` in it under [PRoot](https://proot-me.github.io/), a user-mode `chroot` that needs no root; the app's WebView then opens `http://127.0.0.1:<port>/`. The brain is unchanged. Kotlin only hosts it.
 
 ```
-┌─ nanoMuse.apk ───────────────────────────────────────────────────┐
+┌─ NanoLika.apk ───────────────────────────────────────────────────┐
 │  Kotlin shell            assets/rootfs.tar.xz     lib/…/libproot.so │
 │  ConnectActivity         Alpine 3.21 aarch64      PRoot 5.1        │
 │  RuntimeService  ──┐     python 3.12, nanomuse    libproot-loader.so│
@@ -30,7 +30,7 @@ The idea in one sentence: the APK carries a small Alpine Linux root file system 
 
 ## What the user sees
 
-The first screen asks **where your nanoMuse should live**: *Run on this phone* or *Connect to my computer*. The first choice unpacks the root file system (about 330 MB on disk, a minute or so) with a progress bar, starts the runtime, waits for its first health check, and opens the app. From then on the app starts the runtime whenever it is opened; a quiet notification (*Running on this phone*, or what the agent is doing right now) shows it is alive, with a **Stop** action. After a reboot the runtime comes back on its own so routines and check-ins keep running.
+The first screen asks **where your NanoLika should live**: *Run on this phone* or *Connect to my computer*. The first choice unpacks the root file system (about 330 MB on disk, a minute or so) with a progress bar, starts the runtime, waits for its first health check, and opens the app. From then on the app starts the runtime whenever it is opened; a quiet notification (*Running on this phone*, or what the agent is doing right now) shows it is alive, with a **Stop** action. After a reboot the runtime comes back on its own so routines and check-ins keep running.
 
 Failures land on one screen with the runtime's last log lines, a **Try again** and a **Start over**. Starting over returns to the first screen; it does not delete the phone's data.
 

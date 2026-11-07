@@ -1,8 +1,8 @@
 # The public showcase
 
 A page anyone can open: a phone in the browser with 微信, 支付宝, 铁路12306 and the other
-[MobileGym](https://github.com/Purewhiter/mobilegym) apps on it, and nanoMuse installed. The
-page opens on the nanoMuse app, and a **private nanoMuse is started for you** on the showcase
+[MobileGym](https://github.com/Purewhiter/mobilegym) apps on it, and NanoLika installed. The
+page opens on the NanoLika app, and a **private NanoLika is started for you** on the showcase
 server (your own container, your own token, phone operation on) for thirty minutes and
 within a model budget. Beside the phone are a few lines to try, one set per language ([The
 lines](#the-lines)): a new look for the Muse (it draws itself), the apps on the phone operated
@@ -13,7 +13,7 @@ there. This is nanoMuse's web entry, what [nanomuse.cn/web](https://nanomuse.cn/
 to.
 
 The page (`site/page/`) is plain HTML and a little script, with MobileGym in a frame on the
-same origin as `/phone.html`; it talks to the nanoMuse app on the phone through
+same origin as `/phone.html`; it talks to the NanoLika app on the phone through
 `window.__NANOMUSE__` on that frame (open, draft, start, reset, state, subscribe; see
 `demo/mobilegym/README.md`) and the app passes drafts on to the web app over `postMessage`.
 On a hosted session the web app runs lite (`?ui=lite`): the phone layout at any width, drawn
@@ -32,11 +32,11 @@ They are not copied into this repository: `site/compose.mjs` lifts the markup fr
 checkout's `web/index.html` at build time and takes its `styles.css`, `state-builder.js`,
 `boot-hero.js` and icons as they are (one default changed: the phone's address is
 `/phone.html`), so an upstream change arrives with the next build. One thing is added to the
-dock, first in it: nanoMuse's launcher icon, a shortcut: a tap brings the app to the front
-(or turns the phone on), and it is lit while nanoMuse is the app on the screen; it carries no
+dock, first in it: NanoLika's launcher icon, a shortcut: a tap brings the app to the front
+(or turns the phone on), and it is lit while NanoLika is the app on the screen; it carries no
 State Builder tab, so their script leaves it alone (`page.js` handles it, reading `front` from
 `window.__NANOMUSE__.state()`). Our panel sits beside the phone, two columns wide: the words
-(the status, the headline, the notice with the downloads, *Show nanoMuse* / *Start over*, the
+(the status, the headline, the notice with the downloads, *Show NanoLika* / *Start over*, the
 fine print) and the lines to try. The phone is scaled to the window's height and the panel is
 no taller than the stage, so the whole page is in view at once and nothing in it scrolls (only
 in a window shorter than about 600px do the lines scroll inside their column); below 1280px
@@ -44,7 +44,7 @@ their chrome folds under the phone, and below 1000px everything is one column, t
 its own size, and the page itself scrolls.
 
 **The phone turns itself on, and the Muse starts when a person is looking.** On this page and
-in the frame alike the phone boots as soon as the page is there and nanoMuse comes to the
+in the frame alike the phone boots as soon as the page is there and NanoLika comes to the
 front, so the first thing a visitor sees is the welcome page. Pressing *Start* is another
 matter: it starts a container on the server and takes a share of the day's model budget, so
 the page does not press it for every load. It presses it (`window.__NANOMUSE__.start()`, what
@@ -78,7 +78,7 @@ and MobileGym's guide and dock cards going dark with them.
 The column beside the phone is not one list translated twice: the English set stays on the
 apps of the phone an international visitor knows by name and the Chinese set on the ones a
 Chinese visitor uses, and three ideas (the look, the memory, the reminder) are the same in
-both. MobileGym's phone has 27 apps of its own (nanoMuse is the 28th) and every one of them
+both. MobileGym's phone has 27 apps of its own (NanoLika is the 28th) and every one of them
 has an English interface (`res/strings.en.ts`), but the seeded data is Chinese: the contacts,
 the chats, the bills, the SMS threads. So the English lines go where that shows least: Spotify, Weather, Reddit,
 X, and the Messages thread where the tap that sends is the point. The Chinese set keeps to
@@ -153,20 +153,20 @@ phone lives in the visitor's tab (~400 MB of *their* memory). The server runs th
 
 | | |
 |---|---|
-| **Caddy** | HTTPS, the static site (the page at `/`, MobileGym + the nanoMuse app at `/phone.html`), `/api/demo/*` to the gateway, and one hostname per session |
-| **gateway** (`gateway/`) | Starts a nanoMuse container per visitor, relays the phone's HTTP and WebSocket to it, proxies the container's model calls to the provider with the demo key, keeps the books |
+| **Caddy** | HTTPS, the static site (the page at `/`, MobileGym + the NanoLika app at `/phone.html`), `/api/demo/*` to the gateway, and one hostname per session |
+| **gateway** (`gateway/`) | Starts a NanoLika container per visitor, relays the phone's HTTP and WebSocket to it, proxies the container's model calls to the provider with the demo key, keeps the books |
 | **sessions** | `ghcr.io/nano-muse/nanomuse` containers on an internal Docker network with no way out; the gateway is the only thing they can reach |
 
 ```
-visitor's browser ──HTTPS──▶ Caddy ── demo.nanomuse.dev ──▶ /srv/site (the page; /phone.html = MobileGym + nanoMuse app)
+visitor's browser ──HTTPS──▶ Caddy ── demo.nanomuse.dev ──▶ /srv/site (the page; /phone.html = MobileGym + NanoLika app)
    │  the page                   │                      └▶ /api/demo/* ──▶ gateway
    │   └ MobileGym phone (frame) └── <id>.s.nanomuse.dev ─────────────────▶ gateway ──▶ nm-<id>:8787
-   │      └ nanoMuse app (iframe)                                                          │
+   │      └ NanoLika app (iframe)                                                          │
    └──────────────────────────────────────────────────────────────────────────────┘        │
           models, pictures, clips ◀── gateway ◀── /llm/<id>/{main,gui}[/images/*|/api/v1/*] ◀─┘
 ```
 
-A session is one hostname (`<id>.s.nanomuse.dev`) because the nanoMuse web app and the
+A session is one hostname (`<id>.s.nanomuse.dev`) because the NanoLika web app and the
 MobileGym module both take a server *origin*, and because the browser then keeps each session's
 token in its own `localStorage`. The wildcard certificate that needs is why Caddy is built with
 the Cloudflare DNS module. The token itself travels as the socket's first frame and in the
@@ -199,7 +199,7 @@ httpx's) carries the value: it is rewritten to `token=[redacted]` before it is w
   up (no container, a health check that never answered) is not counted. `MAX_SESSIONS`
   overall. The counts live in the gateway's memory; a restart starts them over.
 - **Who is trying it** (`DEMO_SIGNIN_REQUIRED=1`, the default): before the phone starts a Muse,
-  the visitor signs in to nanoMuse Cloud (the Android app's door: a code to a phone or an
+  the visitor signs in to NanoLika Cloud (the Android app's door: a code to a phone or an
   inbox, or the account's password) on the phone's own pages (`demo/mobilegym`,
   `SetupPage.tsx`). The gateway puts the sign-in to the relay (`POST /v1/auth/code`,
   `/verify`, `/login`, the visitor's address forwarded), notes the account in `VISITOR_DB`: its
@@ -235,7 +235,7 @@ httpx's) carries the value: it is rewritten to `token=[redacted]` before it is w
 Two lanes, two models, both set by the operator in the gateway's `.env` (`.env.example` lists
 the names; `docker-compose.yml` pins none): `main` (the model that talks to the visitor) is
 whatever `MAIN_MODEL` names on `MAIN_BASE_URL` with `MAIN_API_KEY`, and empty means the
-gateway's own default, the chat model every nanoMuse client starts with (`deepseek-v4.1-flash`
+gateway's own default, the chat model every NanoLika client starts with (`deepseek-v4.1-flash`
 on 阿里云百炼 at the time of writing); `gui` (the one that reads screens and taps; many small
 calls with a screenshot each) is `GUI_MODEL`, and empty means `qwen3.8-27b` on the main lane's
 host and key, a fixed default not derived from the chat model; set `GUI_*` to change it or to
@@ -248,7 +248,7 @@ actually uses is what `GET /api/demo/info` says (`demo_model`, `gui_model`), not
 **The capsule decides.** While the hands work on the simulated phone, an approval the run
 raises (a tap on *Pay*, *Send*, *Delete*…) is shown on the capsule over the operated app with
 **Allow once / Deny**, answered from there (`POST /api/approvals/{id}`, `scope: once`); the
-visitor is not sent back into the nanoMuse app for it, and the shade gets no notification on
+visitor is not sent back into the NanoLika app for it, and the shade gets no notification on
 top of the card. A hold, whether the agent hands the phone over (*Your turn*, the reason under it) or the
 visitor takes it from the chat (*You have the phone*), is a card with **Done**
 (`POST /api/holds/{id}/done`). Only a question a finished task left offers *Open*.
@@ -258,7 +258,7 @@ chat is the avatar studio's ([docs/avatar.md](../../docs/avatar.md)): eight pict
 candidates, then the chosen one's poses. The container speaks the OpenAI images API at its
 model's address (`…/images/generations`, `…/images/edits`); the gateway answers those two
 calls itself, on Model Studio's native multimodal endpoint with the demo key, the way
-nanoMuse Cloud's relay does, and tells the container the model's name
+NanoLika Cloud's relay does, and tells the container the model's name
 (`NANOMUSE_LLM_IMAGE_MODEL`). On by itself when `MAIN_BASE_URL` is a Model Studio host
 (`IMAGE_MODEL=qwen-image-3.0`), off with `IMAGE_MODEL=` empty; `IMAGE_PER_SESSION` (12) and
 `DAILY_IMAGES` (400) count apart from the chat budget. A visitor's own key draws nothing
@@ -290,7 +290,7 @@ together may spend `TRIAL_DAILY_TOKENS` a day; each is held to `TRIAL_RPM` reque
 Trials live in SQLite on the `gateway-data` volume and survive restarts; `GET /api/trial/<id>`
 with the key shows what is left, and `/api/demo/info` carries the totals.
 
-### nanoMuse Web: a kept Muse per Cloud account
+### NanoLika Web: a kept Muse per Cloud account
 
 The showcase gives a visitor a Muse for half an hour. With `WEB_ENABLED=1` the same gateway
 gives a *person* one that stays: a kept Muse per account, for anyone who would rather not
@@ -300,7 +300,7 @@ the showcase site, the phone, so [nanomuse.cn/web/](https://nanomuse.cn/web/), w
 project site's Caddy block hands to the gateway, stays the web entry either way. On, `/web/`
 is a sign-in page (served by the gateway; the site's Caddy block hands `/web/*` and
 `/api/web/*` over to it): an e-mail or a mobile number, then the six-digit code.
-The gateway asks nanoMuse Cloud for the code and checks it (`POST /v1/auth/code`,
+The gateway asks NanoLika Cloud for the code and checks it (`POST /v1/auth/code`,
 `/v1/auth/verify`, the visitor's address forwarded so the relay's per-address limits still
 count the right person), gets the account's key back, and starts, or wakes, the account's
 container: `nmw-<slug>` with three named volumes (`/data`, `/workspace`, `/home/muse`), on the
@@ -360,7 +360,7 @@ docker compose up -d --build
 docker compose logs -f gateway
 ```
 
-Open `https://demo.nanomuse.dev`: the phone turns itself on with nanoMuse in front, and a
+Open `https://demo.nanomuse.dev`: the phone turns itself on with NanoLika in front, and a
 Muse starts after the sign-in (or by itself once the page has been in view for a while, see
 above). `curl https://demo.nanomuse.dev/api/demo/info` shows sessions in use and today's spend.
 

@@ -1,6 +1,6 @@
 //
 //  NanoMuseBackgroundSettings.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Two settings pages Android has and the shell was missing:
 //  "Background & notifications" (what the phone lets the agent do while the

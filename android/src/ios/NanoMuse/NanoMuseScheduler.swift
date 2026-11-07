@@ -1,6 +1,6 @@
 //
 //  NanoMuseScheduler.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The iPhone's scheduler primitive: a due-list of routines (the daily
 //  feed, goal check-ins, the routines made from Ideas) kept in a JSON file,

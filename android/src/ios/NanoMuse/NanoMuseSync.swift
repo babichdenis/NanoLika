@@ -1,6 +1,6 @@
 //
 //  NanoMuseSync.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Contract C7, display rules C8: the account's conversations are the same
 //  on every device. This is the client: a side table that gives each local

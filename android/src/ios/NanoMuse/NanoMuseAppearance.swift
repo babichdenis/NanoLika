@@ -1,6 +1,6 @@
 //
 //  NanoMuseAppearance.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The Appearance settings: how big the face is in the header (or hidden),
 //  whether the model shows under the name, whether the agent's steps show
@@ -79,7 +79,7 @@ final class NanoMuseAppearance: ObservableObject {
 struct NanoMuseAppearanceView: View {
     @ObservedObject private var appearance = NanoMuseAppearance.shared
     @AppStorage(NanoMuseSteps.key) private var showSteps = NanoMuseSteps.defaultValue
-    @AppStorage("appearanceMode") private var appearanceMode = 1 // nanoMuse: paper default
+    @AppStorage("appearanceMode") private var appearanceMode = 1 // NanoLika: paper default
     @AppStorage("nanomuse.shell.enabled") private var shellEnabled = true
     @AppStorage("nanomuse.header.enabled") private var museHeader = true
     @State private var confirmWelcome = false

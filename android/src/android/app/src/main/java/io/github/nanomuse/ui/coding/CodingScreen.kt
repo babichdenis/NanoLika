@@ -195,7 +195,7 @@ fun CodingScreen(onBack: () -> Unit, onOpenDevices: () -> Unit) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        // nanoMuse: a computer that is missing here has nearly always signed in with another account — say which this phone uses
+                        // NanoLika: a computer that is missing here has nearly always signed in with another account — say which this phone uses
                         val accountHint = remember { io.github.nanomuse.cloud.NanoMuseCloud.account(context)?.hint }
                         if (connected && !accountHint.isNullOrBlank()) {
                             Text(

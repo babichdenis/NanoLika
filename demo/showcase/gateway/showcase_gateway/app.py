@@ -5,11 +5,11 @@ Two kinds of host reach this process:
 - ``<session-id>.<SESSION_DOMAIN>`` — the phone talking to its Muse. Everything on such a host
   is relayed to that session's container (HTTP and ``/ws``).
 - ``<account-slug>.<SESSION_DOMAIN>`` — someone in the browser with their own, kept Muse
-  (nanoMuse Web, accounts.py); relayed the same way, the container woken when it slept.
+  (NanoLika Web, accounts.py); relayed the same way, the container woken when it slept.
 - everything else — the showcase itself: ``/api/demo/*`` to start and inspect sessions,
   ``/api/trial`` for the phone app's trial credentials, ``/llm/*`` for the containers' model
   calls (they reach us over the sessions network) and the trials' (they come from the
-  internet, through Caddy), ``/web/`` and ``/api/web/*`` for nanoMuse Web's sign-in, and,
+  internet, through Caddy), ``/web/`` and ``/api/web/*`` for NanoLika Web's sign-in, and,
   in development, the built MobileGym as static files.
 """
 
@@ -53,7 +53,7 @@ _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
 # what a browser sees at the address of a session that is over; both languages are in the
 # page and the html's lang (lang.py) picks the one shown, so no script is needed
-ENDED_PAGE = """<!doctype html><html lang="__LANG__"><meta charset="utf-8"><title>nanoMuse</title>
+ENDED_PAGE = """<!doctype html><html lang="__LANG__"><meta charset="utf-8"><title>NanoLika</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>i{font-style:normal}html[lang=en] .zh,html[lang=zh] .en{display:none}</style>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
@@ -61,8 +61,8 @@ font:15px/1.5 system-ui,sans-serif;color:#1b1730;background:#f4f3fa;text-align:c
 <div><div style="font-size:40px">🧸</div><p style="margin:12px 0 4px;font-weight:600">
 <i class="en">This Muse has ended.</i><i class="zh">这个 Muse 已经结束。</i></p>
 <p style="margin:0;color:#6b6880"><i class="en">Demo sessions last a while, then go, with everything in them.<br>
-Open nanoMuse on the phone for a new one.</i><i class="zh">体验会话只持续一段时间，之后连同里面的一切一起消失。<br>
-在手机上打开 nanoMuse 可以重新开始。</i></p></div></body></html>"""
+Open NanoLika on the phone for a new one.</i><i class="zh">体验会话只持续一段时间，之后连同里面的一切一起消失。<br>
+在手机上打开 NanoLika 可以重新开始。</i></p></div></body></html>"""
 
 
 def ended_page(request: Request) -> str:
@@ -197,7 +197,7 @@ def create_app(
             await manager.shutdown()
             await http.aclose()
 
-    app = FastAPI(title="nanoMuse showcase gateway", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="NanoLika showcase gateway", version=__version__, lifespan=lifespan)
     # the request lines (uvicorn's, and httpx's for what is relayed) never carry a session
     # token, whatever form a client still uses to send it (logs.py)
     redact_tokens_in_logs()
@@ -220,7 +220,7 @@ def create_app(
     signin_url = f"{settings.site_origin()}/web/"
 
     # The phone in the browser runs on the site's origin while its Muse answers on the
-    # session's host, so what the nanoMuse app module posts from the phone itself — Allow
+    # session's host, so what the NanoLika app module posts from the phone itself — Allow
     # once / Deny on the capsule (POST /api/approvals/{id}), Done on a hold, the reply
     # language from the page's (PUT /api/settings) — is a cross-origin request with a JSON body and a bearer header: the browser asks first
     # (OPTIONS), and the runtime inside the container knows nothing of this origin and
@@ -416,7 +416,7 @@ def create_app(
         visitors.sign_out(llm.bearer(request))
         return Response(status_code=204)
 
-    # ------------------------------------------------------------- nanoMuse Web (accounts)
+    # ------------------------------------------------------------- NanoLika Web (accounts)
     @app.get("/web", include_in_schema=False)
     async def web_root() -> Response:
         return RedirectResponse("/web/", status_code=308)

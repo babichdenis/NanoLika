@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: what a device backup (Android 11 and earlier: full-backup-content) may copy.
+<!-- NanoLika: what a device backup (Android 11 and earlier: full-backup-content) may copy.
      Since 0.1.40 the manifest says allowBackup="false" — nothing of the app goes to the device
      backup at all (docs/sync.md) — and this file is not consulted; it is kept for the day the
      switch is turned on again. Encrypted stores cannot be read on another device anyway (the

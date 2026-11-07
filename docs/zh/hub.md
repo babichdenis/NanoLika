@@ -1,14 +1,14 @@
 # hub：每台设备都是一个 Muse
 
-在手机、电脑和浏览器上登录同一个 nanoMuse Cloud 账号，它们就能看见彼此。每台设备跑着自己的 Muse，带着自己的手（手机上的 App 和沙箱，电脑上的 shell 和屏幕），其中任何一台都可以从任何网络拜托任何另一台做点什么。网页控制台自己没有手；它是通往其余设备的前门。
+在手机、电脑和浏览器上登录同一个 NanoLika Cloud 账号，它们就能看见彼此。每台设备跑着自己的 Muse，带着自己的手（手机上的 App 和沙箱，电脑上的 shell 和屏幕），其中任何一台都可以从任何网络拜托任何另一台做点什么。网页控制台自己没有手；它是通往其余设备的前门。
 
 ```
-phone ──┐                         ┌── computer (nanoMuse Desktop)
-        ├──▶  nanoMuse Cloud  ◀───┤
+phone ──┐                         ┌── computer (NanoLika Desktop)
+        ├──▶  NanoLika Cloud  ◀───┤
 web  ───┘        /v1/hub          └── another phone / computer
 ```
 
-每台设备向中继开一条出站的 WebSocket 并一直保持。设备上不监听任何东西，不需要端口转发，也不需要同一个 Wi-Fi；中继只在一个账号的设备之间转发帧，从不看任务里面是什么。添加一台电脑就是这么做的：在上面装 nanoMuse Desktop，用同一个账号登录，不用手动下载什么，也不用输什么码。这也是唯一的入口：那个通过局域网配对的独立主机脚本（0.1.13–0.1.23）已经去掉了，所以手机列表里缺了一台电脑，几乎总是因为它登录的是另一个账号；手机上的 *设置 → 电脑* 显示手机用的是哪个账号。
+每台设备向中继开一条出站的 WebSocket 并一直保持。设备上不监听任何东西，不需要端口转发，也不需要同一个 Wi-Fi；中继只在一个账号的设备之间转发帧，从不看任务里面是什么。添加一台电脑就是这么做的：在上面装 NanoLika Desktop，用同一个账号登录，不用手动下载什么，也不用输什么码。这也是唯一的入口：那个通过局域网配对的独立主机脚本（0.1.13–0.1.23）已经去掉了，所以手机列表里缺了一台电脑，几乎总是因为它登录的是另一个账号；手机上的 *设置 → 电脑* 显示手机用的是哪个账号。
 
 ## 你可以说什么 {#what-you-can-say}
 
@@ -18,7 +18,7 @@ web  ───┘        /v1/hub          └── another phone / computer
 - 「让电脑把项目编译一遍，把日志发给我」：`nanomuse-pc task "…" --on desk`
 - 「电脑截个图给我看」：`nanomuse-pc screen --on desk`
 
-在电脑上，nanoMuse 桌面版里（或终端里的 `nanomuse chat`）：
+在电脑上，NanoLika 桌面版里（或终端里的 `nanomuse chat`）：
 
 - 「在我手机上截个图」：`device_screen`
 - 「让手机的 Muse 把最后一条通知读给我」：`delegate`
@@ -35,7 +35,7 @@ hub 上传递两类请求：
 
 - **编程助手。** `coding.agents`、`coding.sessions`、`coding.session`、`coding.send`、`coding.stop`、`coding.runs`：电脑上的 Cursor / Codex / Claude Code 会话，由那里的运行时或桌面版从磁盘读取，并通过这些助手自己的 CLI 来驱动。`coding.send {agent, text, session_id?, workspace?, wait}` 以 `event` 帧把运行过程流式传回（`started`、`text`、`tool`、`done`、`error`，每个都带运行 id，发起方据此可以 `coding.stop`），最后以完成的运行作答。只有电脑会宣告这些动作：装了这个模块的运行时，或者桌面版。[coding-agents.md](coding-agents.md)。
 
-每台设备自己决定允许别人做什么。手机上，「允许其他设备操作这台手机」（*设置 → nanoMuse Cloud → 设备*）关着时，这台手机拒绝设备操作，但仍回应 `info`；它仍然能看见并操纵其他设备。开着时，任何*对*这台设备做事的原始动作（`shell`、`files`、`file.get`、`file.put`、`open`、`screen`、`coding.send`、`coding.stop`）都要先经这台设备旁的人同意：惯常的审批卡片，「允许一次」或「对这台设备总是允许」；后一种长期有效的回答是「权限」下的一条授权（`remote_control:<device id>`）。nanoMuse 桌面版默认用同一张卡片询问；它的「免询问远程控制」（设置 → 设备）让账号下的每台设备都能不经卡片在那里做事。旁边没人，卡片过期后发起方听到的是 `not_allowed`。`info` 和 `notify` 从不询问；`task` 在设备自己的哨兵（Sentinel）之下运行，它的卡片照旧传回发起方。一台设备只能 `approve` 发给它的、属于它自己发起的运行的卡片，绝不能回答「是否允许它运行某事」的那张卡片。
+每台设备自己决定允许别人做什么。手机上，「允许其他设备操作这台手机」（*设置 → NanoLika Cloud → 设备*）关着时，这台手机拒绝设备操作，但仍回应 `info`；它仍然能看见并操纵其他设备。开着时，任何*对*这台设备做事的原始动作（`shell`、`files`、`file.get`、`file.put`、`open`、`screen`、`coding.send`、`coding.stop`）都要先经这台设备旁的人同意：惯常的审批卡片，「允许一次」或「对这台设备总是允许」；后一种长期有效的回答是「权限」下的一条授权（`remote_control:<device id>`）。NanoLika 桌面版默认用同一张卡片询问；它的「免询问远程控制」（设置 → 设备）让账号下的每台设备都能不经卡片在那里做事。旁边没人，卡片过期后发起方听到的是 `not_allowed`。`info` 和 `notify` 从不询问；`task` 在设备自己的哨兵（Sentinel）之下运行，它的卡片照旧传回发起方。一台设备只能 `approve` 发给它的、属于它自己发起的运行的卡片，绝不能回答「是否允许它运行某事」的那张卡片。
 
 `info` 无需询问即可返回设备名称、系统和运行时版本。只有远程控制开启且调用设备已获永久 `remote_control` 授权时，才返回本机用户名、主目录、工作目录、主机名、Shell 和 Python 版本。
 

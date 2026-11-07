@@ -1,6 +1,6 @@
 //
 //  NanoMuseAccountData.swift
-//  nanoMuse — contract C12 (0.1.40): what of this phone is the signed-in account's, and what
+//  NanoLika — contract C12 (0.1.40): what of this phone is the signed-in account's, and what
 //  happens to it when the account leaves. The table is in docs/sync.md.
 //
 //  - Chats are rows in upstream's store; each has an owner here (`nanomuse-owners.json`): the

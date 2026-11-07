@@ -1,11 +1,11 @@
 //
 //  NanoMuseConnectors.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The connectors catalogue: the vendors' own remote MCP servers, each one
 //  tap away. Connecting creates an MCP server entry (MCPStore) and, for
 //  OAuth servers, discovers the authorization server (RFC 9728 / 8414),
-//  registers nanoMuse as a client (RFC 7591) and signs in through
+//  registers NanoLika as a client (RFC 7591) and signs in through
 //  MCPOAuthController. Android: connectors/*.kt, ui/connectors/*.kt.
 //
 

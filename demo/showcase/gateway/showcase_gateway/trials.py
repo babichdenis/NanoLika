@@ -1,6 +1,6 @@
 """Trial credentials: a first million tokens for every new phone, on us.
 
-The nanoMuse app on a phone has no model of its own to start with. It asks this gateway for a
+The NanoLika app on a phone has no model of its own to start with. It asks this gateway for a
 *trial*: ``POST /api/trial`` with the device's id gives back a key and a model address —
 ``https://<site>/llm/trial/<id>/main`` — that the app puts straight into its ``[llm]`` and
 ``[gui]`` settings. Calls made with it pass through the same proxy the demo sessions use, the

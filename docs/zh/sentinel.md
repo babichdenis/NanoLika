@@ -1,6 +1,6 @@
 # 哨兵（Sentinel）
 
-Meta 把 Muse 的安全模型描述为一个独立的「哨兵」（Sentinel）智能体，坐在模型和它的工具之间：审批敏感操作、让凭据不落入模型之手、记录发生了什么。nanoMuse 实现了同样的分离。智能体从不自己执行工具，而是把调用交给 `Sentinel.guard()`：
+Meta 把 Muse 的安全模型描述为一个独立的「哨兵」（Sentinel）智能体，坐在模型和它的工具之间：审批敏感操作、让凭据不落入模型之手、记录发生了什么。NanoLika 实现了同样的分离。智能体从不自己执行工具，而是把调用交给 `Sentinel.guard()`：
 
 ```
 agent ──► Sentinel.guard() ──► policy ──► approval (if needed) ──► vault.resolve ──► execute
@@ -25,10 +25,10 @@ agent ◄── redact(result)   ◄── taint bookkeeping ◄─────�
 
 ## 沙箱 {#the-sandbox}
 
-Meta Muse 给每个用户的智能体一台独立的 VM。nanoMuse 跑在你的机器上，所以在 Linux 上做了退而求其次的事：每一次 `shell` 和 `python_execute` 调用都在自己的命名空间里运行，由 [bubblewrap](https://github.com/containers/bubblewrap) 创建（Flatpak 背后的那个工具；无需特权，`apt install bubblewrap` / `dnf install bubblewrap`）。箱子里面：
+Meta Muse 给每个用户的智能体一台独立的 VM。NanoLika 跑在你的机器上，所以在 Linux 上做了退而求其次的事：每一次 `shell` 和 `python_execute` 调用都在自己的命名空间里运行，由 [bubblewrap](https://github.com/containers/bubblewrap) 创建（Flatpak 背后的那个工具；无需特权，`apt install bubblewrap` / `dnf install bubblewrap`）。箱子里面：
 
 - 工作区（和 `agent.extra_roots`）是仅有的可写位置：`/usr`、`/etc`、`/opt`、`/var` 只读，`/tmp` 是这次调用私有的，`/proc` 和 `/dev` 是全新的；
-- 你的家目录不存在，连带保险库、数据目录、ssh 密钥、云凭据和浏览器配置都不存在。仅有的例外：正在运行的 Python 所在的目录（venv 或 `uv` 管理的解释器常常在家目录下），只读，这样 `python_execute` 用的解释器和包和 nanoMuse 一样；技能文件夹（内置的和你的），只读，这样技能的脚本和参考文件能在里面运行和读取；还有你刻意共享的：`[sandbox] share_read_only` 给程序（装着 node 和飞书 CLI 的 `~/.nvm`），`share` 给工具还必须写入的状态（它的登录态，`~/.lark-cli` 和 `~/.local/share/lark-cli`）。你家目录下共享的目录在箱子自己的家目录下同一位置也看得到，所以到 `$HOME` 里找东西的工具能找到；家目录的其余部分留在外面。位于工作区之内的数据目录会被遮住；
+- 你的家目录不存在，连带保险库、数据目录、ssh 密钥、云凭据和浏览器配置都不存在。仅有的例外：正在运行的 Python 所在的目录（venv 或 `uv` 管理的解释器常常在家目录下），只读，这样 `python_execute` 用的解释器和包和 NanoLika 一样；技能文件夹（内置的和你的），只读，这样技能的脚本和参考文件能在里面运行和读取；还有你刻意共享的：`[sandbox] share_read_only` 给程序（装着 node 和飞书 CLI 的 `~/.nvm`），`share` 给工具还必须写入的状态（它的登录态，`~/.lark-cli` 和 `~/.local/share/lark-cli`）。你家目录下共享的目录在箱子自己的家目录下同一位置也看得到，所以到 `$HOME` 里找东西的工具能找到；家目录的其余部分留在外面。位于工作区之内的数据目录会被遮住；
 - **没有网络**，除非这次调用被评估为需要它：运行网络程序（`curl`、`wget`、`pip`、`git`、`ssh`、`npm`、`docker`……）、含有 URL 或主机名、或者写了 `network=true` 的 `shell` 命令；导入网络模块（`requests`、`httpx`、`socket`、`urllib`……）或启动其他程序的 `python_execute` 脚本。其他一切只带回环接口运行。因为没有网络而失败的命令，结果里会附一条说明，模型可以带 `network=true` 再跑一次，那就成了一次外发调用，和其他任何调用一样过同样的审查；
 - 进程树、IPC、UTS 和 cgroup 命名空间都是分开的；`HOME` 和 `TMPDIR` 指向私有的 `/tmp`；设置了 `NANOMUSE_SANDBOX=bwrap`，脚本能据此判断。
 
@@ -36,7 +36,7 @@ Meta Muse 给每个用户的智能体一台独立的 VM。nanoMuse 跑在你的�
 
 `[sandbox] mode` 是 `auto`（默认：bubblewrap 装了并且能在这里创建命名空间时就用）、`bwrap`（坚持用：用不了时 `nanomuse doctor` 失败，日志说明原因）或 `off`。在它跑不起来的地方，也就是 macOS、Windows 和大多数 Docker 容器（默认的 seccomp 配置挡住了非特权用户命名空间，这没关系：容器本身就是箱子），命令照旧运行，带着清洗过的环境，以工作区为工作目录，「设置 → 安全」会说明这一点。`nanomuse doctor` 打印沙箱那一行；设置 API 把它放在 `sandbox` 下。
 
-**Ubuntu 24.04 及其衍生版**用 AppArmor 限制非特权用户命名空间：`kernel.apparmor_restrict_unprivileged_userns=1` 让没有自己 AppArmor 配置的程序创建的命名空间没有任何 capability。看机器不同，bubblewrap 要么直接失败（`bwrap: setting up uid map: Permission denied`），要么箱子建起来了但建不了它的网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`）。第二种情况下 nanoMuse 保留文件系统的箱子，放弃网络：状态行写着「网络未被阻断」，`shell` 命令按没有箱子的方式判断：每一条都可能访问外部。两种情况的解法都是 `/usr/bin/bwrap` 的标准配置，Ubuntu 25.04 随 `apparmor` 提供，24.04 在 `apparmor-profiles` 里（Flatpak 出过一次回归之后它被从默认集合里拿掉了）：
+**Ubuntu 24.04 及其衍生版**用 AppArmor 限制非特权用户命名空间：`kernel.apparmor_restrict_unprivileged_userns=1` 让没有自己 AppArmor 配置的程序创建的命名空间没有任何 capability。看机器不同，bubblewrap 要么直接失败（`bwrap: setting up uid map: Permission denied`），要么箱子建起来了但建不了它的网络命名空间（`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`）。第二种情况下 NanoLika 保留文件系统的箱子，放弃网络：状态行写着「网络未被阻断」，`shell` 命令按没有箱子的方式判断：每一条都可能访问外部。两种情况的解法都是 `/usr/bin/bwrap` 的标准配置，Ubuntu 25.04 随 `apparmor` 提供，24.04 在 `apparmor-profiles` 里（Flatpak 出过一次回归之后它被从默认集合里拿掉了）：
 
 ```bash
 sudo apt install apparmor-profiles
@@ -114,7 +114,7 @@ App 里的活动面板（点形象）读的是同一个文件。
 
 ## 它能防什么、不能防什么 {#what-this-does-and-does-not-protect-against}
 
-Meta Muse 把每个用户的智能体跑在各自的云端 VM 里，哨兵在 VM 之外。nanoMuse 跑在你的机器上，以你的用户身份，哨兵是同一个进程里的一个模块。这改变了这些保护措施能承诺什么。老实说：
+Meta Muse 把每个用户的智能体跑在各自的云端 VM 里，哨兵在 VM 之外。NanoLika 跑在你的机器上，以你的用户身份，哨兵是同一个进程里的一个模块。这改变了这些保护措施能承诺什么。老实说：
 
 **覆盖到的**
 
@@ -125,7 +125,7 @@ Meta Muse 把每个用户的智能体跑在各自的云端 VM 里，哨兵在 VM
 
 **没覆盖到的：运行之前先知道**
 
-- *操作系统级隔离，在沙箱跑不起来的地方。* Linux 上有 bubblewrap 时，箱子里的命令只看得到工作区，够不着你的家目录，没有网络，除非调用声明需要（见[沙箱](#the-sandbox)）；但 bubblewrap 命名空间不是 VM，内核漏洞或你批准的一次 `network=true` 调用，该是什么还是什么。其他所有地方 `shell` 和 `python_execute` 以你的身份运行：你批准的命令能做你能做的一切，模式检查只是绊线，对抗性脚本躲得开。如果工作区碰得到任何你丢了会心疼的东西，就在容器里或一个专用用户账号下运行 nanoMuse（Docker 镜像就是这样一种配置）。
+- *操作系统级隔离，在沙箱跑不起来的地方。* Linux 上有 bubblewrap 时，箱子里的命令只看得到工作区，够不着你的家目录，没有网络，除非调用声明需要（见[沙箱](#the-sandbox)）；但 bubblewrap 命名空间不是 VM，内核漏洞或你批准的一次 `network=true` 调用，该是什么还是什么。其他所有地方 `shell` 和 `python_execute` 以你的身份运行：你批准的命令能做你能做的一切，模式检查只是绊线，对抗性脚本躲得开。如果工作区碰得到任何你丢了会心疼的东西，就在容器里或一个专用用户账号下运行 NanoLika（Docker 镜像就是这样一种配置）。
 - *磁盘上的保险库密钥。* 默认情况下 Fernet 密钥就放在保险库旁边（`vault.key`，权限 600）。能读你数据目录的人就能解开保险库。如果这对你重要，从密钥管理服务设置 `NANOMUSE_VAULT_KEY`。
 - *DNS 重绑定。* `web_fetch` 在请求前检查解析出来的地址；一个片刻之后给出不同答案的恶意 DNS 服务器仍能把请求指向内部地址。污点规则和白名单限制了这样一次抓取能和什么组合起来。
 - *糟糕的授权。* 「总是允许 `shell:curl`」就和它听起来的一样强。警告仍会问，但 `curl` 的目的地不会被检查。

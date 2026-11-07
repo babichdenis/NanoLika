@@ -165,7 +165,7 @@ final class OpenAIAgentProvider: AgentProvider {
             Self.injectThinkingParams(into: &body, model: model, level: thinkingLevel, isOpenRouter: provider.useOpenRouterCompat, maxTokens: maxTokens, offEffort: offEffort, unifiedReasoningEffort: provider.usesUnifiedReasoningEffort, isMistral: provider.isMistral, isXAI: provider.isXAI, isDashScope: provider.isDashScope, providerInstanceId: provider.providerInstanceId)
         }
 
-        // nanoMuse: OpenCode Go wants one stable id per conversation (NanoMuseOpenCodeSession)
+        // NanoLika: OpenCode Go wants one stable id per conversation (NanoMuseOpenCodeSession)
         let opencodeSession = NanoMuseOpenCodeSession.wants(provider.customBaseURL) ? Self.derivePromptCacheKey(from: messages) : nil
         let (lineStream, _) = try await provider.streamRaw(body: body, isResponsesAPI: false, opencodeSession: opencodeSession)
 
@@ -543,7 +543,7 @@ final class OpenAIAgentProvider: AgentProvider {
             body["service_tier"] = "priority"
         }
 
-        // nanoMuse: OpenCode Go wants one stable id per conversation (NanoMuseOpenCodeSession)
+        // NanoLika: OpenCode Go wants one stable id per conversation (NanoMuseOpenCodeSession)
         let opencodeSession = NanoMuseOpenCodeSession.wants(provider.customBaseURL) ? Self.derivePromptCacheKey(from: messages) : nil
         let (lineStream, _) = try await provider.streamRaw(body: body, isResponsesAPI: true, opencodeSession: opencodeSession)
 
@@ -1767,7 +1767,7 @@ final class OpenAIAgentProvider: AgentProvider {
         return Self.dedupeResponsesCallIds(result)
     }
 
-    // nanoMuse: Responses rejects duplicate function_call call_id values across the
+    // NanoLika: Responses rejects duplicate function_call call_id values across the
     // whole input. Rename later calls deterministically and queue each rewritten id so
     // parallel/repeated function_call_output items keep the same pairing. Deliberately
     // inspect call_id only: reasoning item ids and function_call item ids are untouched.

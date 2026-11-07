@@ -1,6 +1,6 @@
 //
 //  NanoMuseOwnClip.swift
-//  nanoMuse
+//  NanoLika
 //
 //  A clip of the person's own as the face (#324). One short video from the
 //  photo library plays muted in a loop wherever the face moves: for the mood

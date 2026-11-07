@@ -1,12 +1,12 @@
 //
 //  NanoMuseImageGen.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Where the pictures for the face come from. With an Alibaba Cloud Bailian
 //  key on this phone (an OpenAI-compatible provider whose base URL is on
 //  dashscope / aliyuncs), the face is drawn with that key through Model
 //  Studio's native multimodal endpoint — the compatible endpoint answers 404
-//  to image models. Otherwise through nanoMuse Cloud, where a cost estimate
+//  to image models. Otherwise through NanoLika Cloud, where a cost estimate
 //  is shown first. Android: avatar/ImageGen.kt.
 //
 
@@ -58,7 +58,7 @@ extension NanoMuseImageGen {
     private static let defaultsPreferRelayKey = "nanomuse.avatar.prefer_relay"
     private static let defaultsRelayModelKey = "nanomuse.avatar.relay_model"
 
-    /// The person chose nanoMuse Cloud for pictures (Settings › Models, or the older Image &
+    /// The person chose NanoLika Cloud for pictures (Settings › Models, or the older Image &
     /// video models page). An explicit choice: it wins over any key on the phone while signed in.
     static var preferRelay: Bool {
         get { UserDefaults.standard.bool(forKey: defaultsPreferRelayKey) }
@@ -71,7 +71,7 @@ extension NanoMuseImageGen {
         return s.isEmpty ? nil : s
     }
 
-    /// Pictures through nanoMuse Cloud from now on, with `model` when the person picked one.
+    /// Pictures through NanoLika Cloud from now on, with `model` when the person picked one.
     @MainActor
     static func useRelay(model: String? = nil) {
         preferRelay = true
@@ -116,7 +116,7 @@ extension NanoMuseImageGen {
         return host
     }
 
-    /// Bailian instances with a key on this phone, the nanoMuse Cloud instance excluded.
+    /// Bailian instances with a key on this phone, the NanoLika Cloud instance excluded.
     @MainActor
     static func bailianInstances() -> [ProviderInstance] {
         let cloudId = NanoMuseCloud.instance?.id
@@ -131,10 +131,10 @@ extension NanoMuseImageGen {
 
     /// Where the next picture is drawn (0.1.41, the contract's section 3): the person's choice
     /// first; without one, the chat provider's own image model when the chat runs on a key of
-    /// their own that draws, then nanoMuse Cloud when signed in, then the first key on the
+    /// their own that draws, then NanoLika Cloud when signed in, then the first key on the
     /// phone that draws. Cloud no longer loses to a Bailian key the person did not pick, and a
     /// Bailian key the person did pick is never passed over for Cloud. `.relay` when nothing
-    /// can draw: the relay call then says *Sign in to nanoMuse Cloud first*.
+    /// can draw: the relay call then says *Sign in to NanoLika Cloud first*.
     @MainActor
     static func route() -> Route {
         let candidates = bailianInstances()

@@ -1,10 +1,10 @@
 # 各客户端的功能对照
 
-nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android、iOS）、电脑（nanoMuse 桌面版，即 Electron 外壳里的 `dsh-nanomuse` harness 包）和浏览器（nanoMuse Web，由运行时提供）。从 0.1.32 起的规则是**取并集**：一个客户端能做的，每个客户端都要能做，除非平台本身不允许（电脑不会像手机那样搭一个迷你 Linux；iOS 不让一个 App 操控另一个）。这一页是账本：每个客户端有什么，哪些是有意为之的平台差异，哪些还等着拍板。
+NanoLika 是同一个智能体，在每台设备上都是它：手机（Android、iOS）、电脑（NanoLika 桌面版，即 Electron 外壳里的 `dsh-nanomuse` harness 包）和浏览器（NanoLika Web，由运行时提供）。从 0.1.32 起的规则是**取并集**：一个客户端能做的，每个客户端都要能做，除非平台本身不允许（电脑不会像手机那样搭一个迷你 Linux；iOS 不让一个 App 操控另一个）。这一页是账本：每个客户端有什么，哪些是有意为之的平台差异，哪些还等着拍板。
 
 图例：**✓** 已做 · **◐** 部分（缺什么写在备注里）· **—** 这个客户端上没有 · **n/a** 平台特有，本来就不打算做。
 
-## 账号（nanoMuse Cloud） {#account-nanomuse-cloud}
+## 账号（NanoLika Cloud） {#account-nanomuse-cloud}
 
 | 功能 | Android | iOS | 桌面 | 网页 |
 |---|---|---|---|---|
@@ -24,16 +24,16 @@ nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android�
 | 数据控制（中继保留聊天的哪些部分） | ✓ | ✓ 0.1.33 | ✓ | ✓ |
 | 自己的 key 预设（百炼 · OpenRouter，按地区） | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 |
 | 对话模型和手的模型是两项设置（`deepseek-v4.1-flash` / `qwen3.8-27b`，中继的 `for`） | ✓ 0.1.34 | ✓ 0.1.34 *（只有对话；没有手）* | ✓ 0.1.34 | ✓ 0.1.34 |
-| 模型页，四个槽位（「对话」·「操作屏幕」·「生成图片」·「生成视频」）：每行 `服务商 · 模型`，选择器列出 nanoMuse Cloud 的模型（登录时，推荐的有标记）和你每家服务商里合适的模型；空的一行点明谁能提供，并给「添加服务商」 | ✓ 0.1.41 设置 → 模型，设置顶部的卡片打开它；设置 → 手 和「图像与视频模型」用同一份选择 | ✓ 0.1.41 设置的第一张卡；「操作屏幕」一行是灰的（「不在 iPhone 上」；电脑用它自己的设置）；图片和视频的选择器只列 nanoMuse Cloud 和 DashScope 主机上的自有服务商 *(40)* | ✓ 0.1.41 紧跟「通用」；手只说 OpenAI 的接口形状，Anthropic 和原生 Gemini 的 key 在行下点出、不列入；用自有服务商画图直接发给它，不计入账号 | ✓ 0.1.41 「连接」页：「对话模型」卡、「手的模型」下拉、「生成图片」「生成视频」两行（`PUT /api/connections/image` · `/video`） |
-| 「操作屏幕」「生成图片」「生成视频」三行的「自动」，写着它现在给的是什么；没选时的顺序：对话服务商是自己的且能做 → 登录时 nanoMuse Cloud → 第一家能做的自有服务商；选过的永远优先 | ✓ 0.1.41 `SlotOrder` | ✓ 0.1.41 图片和视频（屏幕是 n/a） | ✓ 0.1.41 `handsChoice`、`imageEndpoint`、`videoEndpoint`；手的改动在手的下一步生效，不用重启 | ✓ 0.1.41 由运行时解析（`effective_*`）；每个控件下一行「当前为 服务商 · 模型」 |
+| 模型页，四个槽位（「对话」·「操作屏幕」·「生成图片」·「生成视频」）：每行 `服务商 · 模型`，选择器列出 NanoLika Cloud 的模型（登录时，推荐的有标记）和你每家服务商里合适的模型；空的一行点明谁能提供，并给「添加服务商」 | ✓ 0.1.41 设置 → 模型，设置顶部的卡片打开它；设置 → 手 和「图像与视频模型」用同一份选择 | ✓ 0.1.41 设置的第一张卡；「操作屏幕」一行是灰的（「不在 iPhone 上」；电脑用它自己的设置）；图片和视频的选择器只列 NanoLika Cloud 和 DashScope 主机上的自有服务商 *(40)* | ✓ 0.1.41 紧跟「通用」；手只说 OpenAI 的接口形状，Anthropic 和原生 Gemini 的 key 在行下点出、不列入；用自有服务商画图直接发给它，不计入账号 | ✓ 0.1.41 「连接」页：「对话模型」卡、「手的模型」下拉、「生成图片」「生成视频」两行（`PUT /api/connections/image` · `/video`） |
+| 「操作屏幕」「生成图片」「生成视频」三行的「自动」，写着它现在给的是什么；没选时的顺序：对话服务商是自己的且能做 → 登录时 NanoLika Cloud → 第一家能做的自有服务商；选过的永远优先 | ✓ 0.1.41 `SlotOrder` | ✓ 0.1.41 图片和视频（屏幕是 n/a） | ✓ 0.1.41 `handsChoice`、`imageEndpoint`、`videoEndpoint`；手的改动在手的下一步生效，不用重启 | ✓ 0.1.41 由运行时解析（`effective_*`）；每个控件下一行「当前为 服务商 · 模型」 |
 | 保存 key 之后的「用它来做什么」：服务商有的每项能力一个开关，全开；「就这样」把这几行切到目录里的默认模型，「暂不」什么都不改；只保存不切换任何东西 | ✓ 0.1.41 | ✓ 0.1.41（没有屏幕开关） | ✓ 0.1.41 | — 自有 key 表单设的是对话服务商；图片和视频在各自的行里设 *(40)* |
-| 「使用 nanoMuse Cloud 模型」是开关，不是删除：关掉后账号退出每个槽位的选择器和自动顺序，除了明确点下的「这次改用 nanoMuse Cloud」没有什么会消耗额度；登录保持，用于同步和 hub，nanoMuse Cloud 这一行服务商不能删除 | ✓ 「设置 → 模型」 | ✓ 「设置 → 模型」 | ✓ 「设置 → 模型」 | ✓ 「连接」里的 nanoMuse Cloud 卡片（`POST /api/cloud/models`）；对话模型还是账号的时候会被拒绝，因为运行时只有一个对话模型 |
+| 「使用 NanoLika Cloud 模型」是开关，不是删除：关掉后账号退出每个槽位的选择器和自动顺序，除了明确点下的「这次改用 NanoLika Cloud」没有什么会消耗额度；登录保持，用于同步和 hub，NanoLika Cloud 这一行服务商不能删除 | ✓ 「设置 → 模型」 | ✓ 「设置 → 模型」 | ✓ 「设置 → 模型」 | ✓ 「连接」里的 NanoLika Cloud 卡片（`POST /api/cloud/models`）；对话模型还是账号的时候会被拒绝，因为运行时只有一个对话模型 |
 | 有自己的 key，App 不登录也能用（对话、动手、图片、短片）；第一屏给出「改用自己的 API key」，登录留给 Cloud 模型、同步和设备 | ✓ | ✓ | ✓ 登录从来不是墙 | ✓ 有模型就绪或按过那个按钮后登录页让开 |
-| 不悄悄回退：自有模型失败的一轮给「这次改用 nanoMuse Cloud」（登录时），只这一轮走账号，不改任何一行 | ✓ 0.1.41 `CloudRetry` | ✓ 0.1.41 `NanoMuseCloudOnce` | ✓ 0.1.41 形象工作室的一轮失败和一组短视频失败之后也有 | ✓ 1.0.1 失败的那一轮下面（发送时带 `via: "cloud"`）；各行保持原样 |
+| 不悄悄回退：自有模型失败的一轮给「这次改用 NanoLika Cloud」（登录时），只这一轮走账号，不改任何一行 | ✓ 0.1.41 `CloudRetry` | ✓ 0.1.41 `NanoMuseCloudOnce` | ✓ 0.1.41 形象工作室的一轮失败和一组短视频失败之后也有 | ✓ 1.0.1 失败的那一轮下面（发送时带 `via: "cloud"`）；各行保持原样 |
 | 「继续用的办法」按地区排序（中国大陆百炼在前，其他地区 OpenRouter 在前） | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 |
 | 自己的 key 的目录（`providers.json`：21 家服务商，各家覆盖什么（对话 · 屏幕 · 图片 · 短视频）、拿 key 的页面、地区；一个文件，为每个客户端生成） | ✓ 0.1.39 | ✓ 0.1.40 `NanoMuseCatalogue` *(32)* | ✓ 0.1.39 | ✓ 0.1.39 |
-| 从目录生成「继续用的办法」：先是本地区的首选，再「更多服务商」，可以直接登录的套餐，key 就地填 | ✓ 0.1.39 | ✓ 0.1.40 置顶卡片、设置 → nanoMuse Cloud 和自己的 key 面板，同一个列表（`NanoMuseWaysList`）*(32)* | ✓ 0.1.39 设置 → nanoMuse Cloud，自己的 key 的首次运行步骤 | ✓ 0.1.39 |
-| 办法读自中继的 `spend.guidance`（本地区的服务商、套餐、注意事项、文档），而不是 App 里写死的列表；只有中继没给时才用内置目录 | ✓ 0.1.40 先用 `guidance`，没有时用目录 *(34)* | ✓ 0.1.40 相同（`NanoMuseWays`）*(32)* | ✓ 0.1.40 聊天卡片和设置 → nanoMuse Cloud，同一个组件 | ✓ 0.1.39 |
+| 从目录生成「继续用的办法」：先是本地区的首选，再「更多服务商」，可以直接登录的套餐，key 就地填 | ✓ 0.1.39 | ✓ 0.1.40 置顶卡片、设置 → NanoLika Cloud 和自己的 key 面板，同一个列表（`NanoMuseWaysList`）*(32)* | ✓ 0.1.39 设置 → NanoLika Cloud，自己的 key 的首次运行步骤 | ✓ 0.1.39 |
+| 办法读自中继的 `spend.guidance`（本地区的服务商、套餐、注意事项、文档），而不是 App 里写死的列表；只有中继没给时才用内置目录 | ✓ 0.1.40 先用 `guidance`，没有时用目录 *(34)* | ✓ 0.1.40 相同（`NanoMuseWays`）*(32)* | ✓ 0.1.40 聊天卡片和设置 → NanoLika Cloud，同一个组件 | ✓ 0.1.39 |
 | 被拒的一轮（`429 allowance_exhausted`）在聊天里是它下面的一张卡片：一句话、三个继续用的办法、「打开设置」「再试一次」；绝不把中继的回复当文字显示 | ✓ 0.1.39 `AllowanceWaysCard` | ✓ 0.1.40 像 Star 卡片一样钉在页眉下（`NanoMuseAllowanceCard`）*(33)* | ✓ 0.1.40 *（之前：显示 JSON，重试五次后当成限流）* | ✓ 0.1.39 带办法的提示 |
 | 中继的其他拒绝是一句话加一个按钮：413 *太大* → 「新对话」，401 → 「登录」，403，429 忙（附等待时间），每日上限，404 模型，5xx / 没有回应 → 「再试一次」；绝不显示状态码或 JSON | ✓ 0.1.40 `RelayRefusal` + `RelayRefusalCard`，17 种语言 *(35)* | ✓ 0.1.40 `NanoMuseRelayRefusal` + `NanoMuseRelayRefusalCard`，9 种语言；被拒的聊天轮次经过 `describe` *(35)* | ✓ 0.1.40 | ✓ 0.1.40 `failures.py`（新增 413、`not_invited`、`too_many_in_flight`、`provider_busy`） |
 | 运营者的开关（中继 0.22，[cloud.md](cloud.md#controls)）显示为平白的句子：额度*已暂停，不是用完了*（同一张卡片）、`service_paused`、`sync_paused`、`hub_paused`，登录时的 `signup_closed` | ✓ 0.1.40 *(35)* | ✓ 0.1.40 *(35)* | ✓ 0.1.40 | ✓ 0.1.40 |
@@ -75,7 +75,7 @@ nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android�
 | 反馈问题：点一下打开一个 GitHub issue | ✓ 设置 → 账号 | ✓ 关于 → 「报告问题」 | ✓ 角落菜单；在外壳里截图存到「下载」，issue 带着内容打开 | ✓ 设置 → 反馈 |
 | 已安装和最新版本并排显示（先 `nanomuse.cn/dl/index.json`，再 GitHub，缓存一天） | ✓ 0.1.35 设置 → 版本 | ✓ 0.1.35 设置 → 版本 | ✓ 0.1.35 关于，设置里一行 | ✓ 0.1.35 设置 |
 | 全黑的截图是一个带修法的错误（录屏、Wayland），绝不是一张图 | n/a | n/a | ✓ 0.1.33 | n/a |
-| macOS 权限实时读回；询问后「打开系统设置」；录屏需要重启的提示 | n/a | n/a | ✓ 0.1.33；0.1.35：只需打开一项，「试一下」行，录屏打开时弹重启对话框；0.1.38 起那一项是辅助应用「nanoMuse Computer Use」 *(26)* | n/a |
+| macOS 权限实时读回；询问后「打开系统设置」；录屏需要重启的提示 | n/a | n/a | ✓ 0.1.33；0.1.35：只需打开一项，「试一下」行，录屏打开时弹重启对话框；0.1.38 起那一项是辅助应用「NanoLika Computer Use」 *(26)* | n/a |
 | 设备上的迷你 Linux 沙箱 | ✓ | ✓ 上游（iSH） | n/a（运行时有自己的沙箱） | n/a |
 
 ## 形象、房间、外观 {#face-rooms-look}
@@ -118,7 +118,7 @@ nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android�
 8. **桌面 · 技能页和编程助手页。** harness 有自己的技能，技能页会和它们重复：不做。编程助手页做完了：「设置 → 编程助手」先显示这台电脑的 CLI 和聊天，再是账号下的其他电脑，而且桌面版自己声明并应答 `coding.*` hub 动作（`src/coding.ts`），所以手机把只装了桌面版的电脑也看作一台编程电脑。
 9. **iOS · 编程助手。** 0.1.34 做完（`NanoMuseCoding.swift`，hub 的 `coding.*`）。
 10. **iOS · 手。** iOS 不让一个 App 操控另一个；App Intents / 快捷指令是那扇门。不打算做成「手」。0.1.36 定下：设置里有那一行（「Hands：iPhone 上不可用」），点开是一页，说明为什么，以及账号上的一台电脑能做什么；App 开着时，iPhone 自己的 Muse 接受其他设备发来的 `task` 调用（`@iPhone …`）。
-11. **iOS · Muse 外壳。** 0.1.33 在 iPhone 上做完；0.1.34 起动态和目标是真的（`NanoMuseScheduler.swift`：回到前台时补跑、`BGAppRefreshTask`、到点的本地通知），iPad 也跑这个外壳，外壳和页眉的开关在 nanoMuse 设置页里，工作室通过中继或你自己的百炼 key 画图。还剩的：例程在 iOS 上从不在后台跑，刷新任务只负责发提醒；文案就是这么写的（*到点时手机提醒你打开它*）；hub 这条路（账号上的一台电脑替它跑）仍然是稳妥的那条。iPad 的布局就是放大的 iPhone 布局。0.1.35 定下：不单独做分栏布局。
+11. **iOS · Muse 外壳。** 0.1.33 在 iPhone 上做完；0.1.34 起动态和目标是真的（`NanoMuseScheduler.swift`：回到前台时补跑、`BGAppRefreshTask`、到点的本地通知），iPad 也跑这个外壳，外壳和页眉的开关在 NanoLika 设置页里，工作室通过中继或你自己的百炼 key 画图。还剩的：例程在 iOS 上从不在后台跑，刷新任务只负责发提醒；文案就是这么写的（*到点时手机提醒你打开它*）；hub 这条路（账号上的一台电脑替它跑）仍然是稳妥的那条。iPad 的布局就是放大的 iPhone 布局。0.1.35 定下：不单独做分栏布局。
 12. **Android · Emoji 形象。** 在网页或桌面上把形象设成 emoji，Android 上显示的是小龙。小问题。iOS 从 1.0.5 起会显示它。
 13. **主题色色块。** 0.1.33 定下：从桌面移除；到处一条规则，强调色跟着形象走。
 14. **Android · 记忆作为一个房间。** 手机上它是一个设置页，别处是一个房间。设计上的取舍。
@@ -133,7 +133,7 @@ nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android�
 23. **自己的 key 预设和对话默认模型。** 保存百炼或 OpenRouter 的 key 之后，由服务商的 `/models` 列表决定提供哪些；`deepseek-v4.1-flash` 不会自动排到最前（只有 Cloud 模型组有 `followPick`）。*建议：列表里有它时就把它提到前面。*
 24. **中继对推理 token 的计费。** 算作补全 token；当服务商单独报告推理 token 且数量超过补全数时相加，否则视为已包含。一家单独报告*且*数量更小的服务商会被少算。*决定：保留这个启发式，还是按服务商分别处理？*
 25. **桌面 · 第一次打开和第一次对话。** 0.1.35 照手机定下：宿主保存 `firstrun.json`，全新安装绝不跳过那几页；App 先开口（三句写好的话，不花 token），问该怎么称呼你，模型的 `nanomuse-naming` 围栏变成起名卡片（`take_name` / `ask_user_question` 去掉了）。有意留下的：那几句写好的话是客户端叠上去的，不是存下来的消息；称呼是一条记忆，而不是对 `GLOBAL.md` 的修改；第一次打开那几页上的齿轮只在本次会话里关掉它们。
-26. **桌面 · macOS 权限。** 0.1.35 重新审过：TCC 把内置的运行时归到负责的进程名下，所以只需打开「nanoMuse Desktop」一项（现在文案就这么说；运行时不再作为第二个条目出现让人去找）。0.1.38 起这两项授权改归辅助应用「nanoMuse Computer Use」（见 [desktop.md](desktop.md#macos-permissions)）。还要在 Mac 上试：刚授权后的「试一下」行、录屏打开时的重启对话框、胶囊的 `showInactive`（17）、窗口模式里不走 AX 的点击和 Retina 映射（19）、0.1.36 改动后点形象是否正常（形象下面完全没有拖动区域；形象在标题栏带之下），都在 Mac 任务单 `docs/tasks/mac-check-0.1.36.md` 上，写法让一个在 Mac 上的智能体可以从头跑到尾，把修复发回来。
+26. **桌面 · macOS 权限。** 0.1.35 重新审过：TCC 把内置的运行时归到负责的进程名下，所以只需打开「NanoLika Desktop」一项（现在文案就这么说；运行时不再作为第二个条目出现让人去找）。0.1.38 起这两项授权改归辅助应用「NanoLika Computer Use」（见 [desktop.md](desktop.md#macos-permissions)）。还要在 Mac 上试：刚授权后的「试一下」行、录屏打开时的重启对话框、胶囊的 `showInactive`（17）、窗口模式里不走 AX 的点击和 Retina 映射（19）、0.1.36 改动后点形象是否正常（形象下面完全没有拖动区域；形象在标题栏带之下），都在 Mac 任务单 `docs/tasks/mac-check-0.1.36.md` 上，写法让一个在 Mac 上的智能体可以从头跑到尾，把修复发回来。
 27. **网页 · 短视频。** 短视频是每台设备各自的（在形象所在的地方画：手机、iPhone、桌面）。网页版显示静止的形象。*决定：也在运行时里画，还是让网页保持静止？*
 28. **请求点 Star · 什么算数。** 策略是中继的（`/v1/admin/nudges`，控制台 → 请求点 Star），一天之内不用更新就能到达每个客户端。还剩两处小差异：额度用完时 Android 每台手机问一次（其他客户端相同）；起名对话期间换了形象的话，第一天的动态不会写（第一次打开永远到不了 *done*）。小问题。
 29. **每台设备上同一条对话。** 0.1.36 定下（`docs/cloud.md` 里的约定 C7）：聊天的文字住在中继上（`/v1/sync/*`，中继 0.19），登录后默认开，每个客户端的数据控制下都有开关和删除；每个账号一条主要聊天；设备自己发起的（例程、目标、动态、替另一台设备干的活）留在它自己那里。0.1.37 起是一条线（约定 C8）：每台设备上的主要聊天是所有设备上说过的话按时间顺序的并集，其他设备的轮次是只读气泡（*来自 Pixel 8*），模型也读；别处的旁聊到了这台设备上立刻就是一条聊天；这个人的消息一发出就上传，回复在这一轮结束时上传；登录时整段历史回填。桌面把其他设备的轮次追加到 dsh 会话日志里（`user/message`，来源 `nanomuse-sync`），在浏览器里给它们穿上样子。还剩的：dsh 插件没有删除，所以归档的会话不是墓碑，在别处删掉的消息是隐藏而不是从日志里移除；在一台设备上关掉同步，要到其他设备下一次推或拉时（一个 `409`）才传到，不是立刻；iOS 上晚到的拉取消息排在本地消息之后（OpenMinis 的存储是追加式的）。`@<device name>` 在另一台设备上跑一轮（电脑只要在线就行，手机要 App 开着）；iOS 上这个提及直接发到 hub（那里没有 `delegate` 工具），iPhone 自己回应 `task` 调用。
@@ -141,13 +141,13 @@ nanoMuse 是同一个智能体，在每台设备上都是它：手机（Android�
 31. **桌面 · Mac 和 Windows 上的操作器。** 从 UI-TARS-desktop 移植，在 Linux X11 上验证过；原生插件、坐标空间（Mac 上是 point，Windows 上是物理像素）、滚动单位、`ctrl` 对应 ⌘、光晕的内容保护都在 Mac 任务单上（`docs/tasks/mac-check-0.1.36.md`，F）。Wayland 仍是第 21 条。
 32. **iOS · 基于目录的办法卡片。** 0.1.39 给了 iPhone 按账号区分的对话（约定 C10，`NanoMuseSync`）和内置的 `providers.json`，但额度卡片仍然提供 0.1.34 的预设，也没有套餐登录；Android 的 `AllowanceWaysCard` 是样板（本地区的首选、「更多服务商」、套餐、选择器为空时的一句话）。*0.1.40 定下：* `NanoMuseCatalogue` 读内置的 `providers.json`（或中继的 guidance），`NanoMuseWaysList` 是置顶卡片、账号页和自己的 key 面板上共用的那一个列表，`NanoMuseVendorSheet` 收 key 或跑套餐登录（ChatGPT 走上游的 Codex OAuth，Claude、OpenRouter，Kimi 的设备码），以及本地服务器的地址。选择器（图片、短视频）为空时的那一句话随 0.1.41 的模型页到了：空的一行写明缺什么，并给「添加服务商」。
 33. **iOS · 额度卡片和聊天里的提醒。** 中继以 `allowance_exhausted` 拒绝的一轮，在 iOS 上以上游的错误文字结束；办法只在账号页上，`spend.warn` 只给那里的进度条上色，聊天里没有一行。*提议*：流以这个代码结束时，像 Star 卡片（3）那样在页眉下钉一张卡片，办法取自 `spend.guidance`（和 32 一起）；80 % 时输入框上方一行，每个额度池一次，和其他三个客户端一样。*0.1.40 定下：* `NanoMuseAllowance` 两者都管；外壳钉上 `NanoMuseAllowanceCard`（带「再试一次」），`NanoMuseChatCardsHost` 显示提醒；`AIChatView.body` 上没有新的链接。
-34. **Android · 从中继的 guidance 取办法。** `AllowanceWaysCard` 读内置的 `providers.json`；`/v1/me` 带着 `spend.guidance`（本地区的服务商、套餐、注意事项），卡片却不理它。*提议*：中继给了 `guidance` 就优先用，没有再退回目录，网页和桌面已经这么做了；`AllowanceWaysCard.kt` 和 `NanoMuseCloud.kt` 里几十行。*0.1.40 定下：* `Guidance.kt` 解析它，`Ways.resolve` 优先用它，卡片和设置 → nanoMuse Cloud 都读它。
+34. **Android · 从中继的 guidance 取办法。** `AllowanceWaysCard` 读内置的 `providers.json`；`/v1/me` 带着 `spend.guidance`（本地区的服务商、套餐、注意事项），卡片却不理它。*提议*：中继给了 `guidance` 就优先用，没有再退回目录，网页和桌面已经这么做了；`AllowanceWaysCard.kt` 和 `NanoMuseCloud.kt` 里几十行。*0.1.40 定下：* `Guidance.kt` 解析它，`Ways.resolve` 优先用它，卡片和设置 → NanoLika Cloud 都读它。
 35. **手机 · 413、其余的拒绝和运营者的开关。** 手机的 `describe` 认得额度、每日上限、限流、坏 key、停用的账号和上游出问题，但不认得 `too_large`（413）、`not_invited`、`too_many_in_flight` 或 `provider_busy`，也不认得中继 0.22 的 `service_paused`、`sync_paused`、`hub_paused`、`signup_closed` 和带 `paused: true` 的 `allowance_exhausted`（中继说*已暂停*，额度卡片却说*已用完*）；这些到人眼前时是上游的文字或中继的英文句子。网页和桌面在 0.1.40 定下（`nanomuse/server/failures.py`、`harness/dsh-nanomuse/src/refusals.ts`：参考句子，en 和 zh）。*提议*：两个 `describe` 都加上这九个代码和那些句子，413 那条指向「新对话」，暂停的额度在同一张卡片上换一个开头；iOS 上被拒的聊天轮次也经过 `describe`。手机上每种语言都要有字符串。*0.1.40 定下*，两台手机都做了：`RelayRefusal` / `NanoMuseRelayRefusal` 给回复分类，`describe` 认得每一个代码，聊天里的卡片带着按钮（「新对话」·「登录」·「打开设置」·「再试一次」）。
 36. **桌面和网页上的语音。** 听写靠 Web Speech API，而 Electron 外壳不带它（那是 Chrome 里 Google 的服务），所以桌面打开听写页，网页只在有它的浏览器里能用；两者都不朗读回复。*提议*：语音进出都走运行时（`/api/speech`），用已配置服务商的模型（百炼的 `paraformer` / `cosyvoice`，OpenAI 的 `whisper` / `tts`），用这个人自己的 key 或中继，两个客户端一份实现；手机继续用系统的引擎。
 37. **网页 · 数据导出。** 桌面的房间宿主把智能体数据的 zip（`/data/export`）写到「下载」；网页版能分享形象卡片，也有数据控制，但没有文件。*提议*：运行时里加 `GET /api/data/export` 写同一个 zip，数据控制下加一行「下载你的智能体数据」。
 38. **界面语言。** 手机跟随系统（17 和 9 种语言），网页有应用内切换（自动 · en · zh-CN），桌面通过 harness 的语言行有英文和中文。*提议*：桌面的 `locales.ts` 随着大家的要求加上手机的那些语言，de 和 ja 先；手机上的应用内覆盖由上游决定。
 39. **网页 · 第一次对话。** 已按手机的做法做完，状态由运行时掌握：阶段机、提示词附加段和保存都在 `nanomuse/server/firstrun.py`（状态存在资料旁边的 `firstrun.json`），围栏的解析在 `nanomuse/fences.py`，路由是 `/api/firstrun*`，socket 帧是 `firstrun`；聊天说出那三句并画起名卡片（`web/src/components/FirstConversation.tsx`），首次运行的清单去掉了「认识你的 nanoMuse」那一页。称呼写进资料，也作为「Call them: …」写进记忆（运行时没有 USER.md）。身份表单留在「设置」里供以后修改。对约定的一处补充：运行时记下按「开始」时的语言（`lang`），附加段里引用的开场就是这个人看到的那几句。[web.md](web.md#the-first-run-and-the-chat-s-opening) 有完整的流程。
-40. **模型页，四个槽位（0.1.41）。** Android、iOS 和桌面版已定为同一个页面，加上保存 key 之后的「用它来做什么」卡片和自有模型失败时的「这次改用 nanoMuse Cloud」；网页控制台在「连接」页上有同样的四个槽位（运行时的 `PUT /api/connections/gui`、`/image`、`/video`，每个都有「自动」），1.0.1 起自有 key 的一轮失败后也有「这次改用 nanoMuse Cloud」，但没有「用它来做什么」卡片：自有 key 表单设的是对话服务商，图片和视频在各自的行里设。iOS 上还剩：图片和视频的选择器除了 nanoMuse Cloud 只列 DashScope 主机上的自有服务商（阿里云百炼），因为 iPhone 的图片和视频代码只说 DashScope 的接口。*提议*：有人要时，网页加上这张卡片，iPhone 加上 OpenAI 的图片接口形状。
+40. **模型页，四个槽位（0.1.41）。** Android、iOS 和桌面版已定为同一个页面，加上保存 key 之后的「用它来做什么」卡片和自有模型失败时的「这次改用 NanoLika Cloud」；网页控制台在「连接」页上有同样的四个槽位（运行时的 `PUT /api/connections/gui`、`/image`、`/video`，每个都有「自动」），1.0.1 起自有 key 的一轮失败后也有「这次改用 NanoLika Cloud」，但没有「用它来做什么」卡片：自有 key 表单设的是对话服务商，图片和视频在各自的行里设。iOS 上还剩：图片和视频的选择器除了 NanoLika Cloud 只列 DashScope 主机上的自有服务商（阿里云百炼），因为 iPhone 的图片和视频代码只说 DashScope 的接口。*提议*：有人要时，网页加上这张卡片，iPhone 加上 OpenAI 的图片接口形状。
 
 ## 让这页保持真实 {#keeping-this-true}
 

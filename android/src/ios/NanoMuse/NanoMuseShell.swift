@@ -1,6 +1,6 @@
 //
 //  NanoMuseShell.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The Muse shell on iPhone and iPad: one main chat pinned to the Chat tab,
 //  a bottom bar for Chat / Feed / Ideas / Goals / Library, and a side
@@ -735,7 +735,7 @@ struct NanoMuseHomeView: View {
         .accessibilityLabel(Text(AppLocalized("More")))
     }
 
-    /// One of this chat's own menu entries: AIChatView acts on it (see its `// nanoMuse:` hook).
+    /// One of this chat's own menu entries: AIChatView acts on it (see its `// NanoLika:` hook).
     private func chatAction(_ action: NanoMuseChatAction) {
         guard let id = main.chatId else { return }
         NanoMuseChatAction.post(action, session: main.liveId ?? id)
@@ -822,7 +822,7 @@ struct NanoMuseHomeView: View {
 
 extension Notification.Name {
     /// `object` is a session id (or a `__new__…` draft id): the shell shows it.
-    static let nanoMuseOpenChat = Notification.Name("nanoMuse.openChat")
+    static let nanoMuseOpenChat = Notification.Name("NanoLika.openChat")
 }
 
 /// The upstream layout, presented from the drawer as a sheet (swipe down
@@ -1011,7 +1011,7 @@ private struct NanoMuseCategoryShape: Shape {
 extension Notification.Name {
     /// `object` is one of "settings", "coding", "routines", "systemFiles", "sharedFolders",
     /// "chatFiles": the home opens that page over the current tab.
-    static let nanoMuseHomeAction = Notification.Name("nanoMuse.homeAction")
+    static let nanoMuseHomeAction = Notification.Name("NanoLika.homeAction")
 }
 
 /// What Feed / Ideas / Goals / Library need to draw the Muse header: the

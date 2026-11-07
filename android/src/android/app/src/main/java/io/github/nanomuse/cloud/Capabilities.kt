@@ -12,7 +12,7 @@ import com.openminis.app.data.model.ProviderInstance
  *
  * The catalogue ([ProviderCatalogue]) says what a known vendor covers — and what its sign-in
  * covers when that is less: a ChatGPT plan through the Codex OAuth is chat and vision only.
- * An endpoint the catalogue does not know (a gateway, a relay of one's own, nanoMuse Cloud)
+ * An endpoint the catalogue does not know (a gateway, a relay of one's own, NanoLika Cloud)
  * is not gated here; its models' own modalities decide, as before.
  */
 object Capabilities {

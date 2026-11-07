@@ -98,12 +98,12 @@ class PickerListTest {
 
     @Test fun `a query shows every match of every group with no cap and hides groups without one`() {
         val groups = listOf(
-            Group("nanoMuse Cloud", rows("deepseek-v4.1-flash", "qwen3.8-27b")),
+            Group("NanoLika Cloud", rows("deepseek-v4.1-flash", "qwen3.8-27b")),
             Group("OpenRouter", many(50, "openai/gpt-") + many(30, "qwen/qwen-")),
             Group("SiliconFlow", many(20, "Qwen/Qwen3-")),
         )
         val out = PickerList.filter(groups, "qwen", { it.rows }, { it.id }, { it.name }, { g, r -> g.copy(rows = r) })
-        assertEquals(listOf("nanoMuse Cloud", "OpenRouter", "SiliconFlow"), out.map { it.provider })
+        assertEquals(listOf("NanoLika Cloud", "OpenRouter", "SiliconFlow"), out.map { it.provider })
         assertEquals(1, out[0].rows.size)
         assertEquals(30, out[1].rows.size)
         assertEquals(20, out[2].rows.size)

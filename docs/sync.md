@@ -2,7 +2,7 @@
 
 A phone can be signed in as one account today and another tomorrow: a family's
 tablet, a phone handed on, a tester with two accounts. This page is the table of
-every piece of state the nanoMuse apps keep on the phone, where it lives, whether
+every piece of state the NanoLika apps keep on the phone, where it lives, whether
 it belongs to the **account**, the **device** or to nobody in particular, and what
 happens to it on each of the four events: *sign out*, *switch* (sign in as
 another account), *delete the account* and *reinstall*. Contract C12, 0.1.40; the

@@ -1,6 +1,6 @@
 //
 //  NanoMuseGoals.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Goals, Muse style: shaped in the chat (three short questions), handed
 //  over by the model as a ```nanomuse-goal``` block, turned into a goal

@@ -1,6 +1,6 @@
 //
 //  NanoMuseRoutineWakes.swift
-//  nanoMuse
+//  NanoLika
 //
 //  A routine's turn is not the person's words. When a routine fires (the
 //  daily feed, a goal check-in, a routine made from an idea), its prompt

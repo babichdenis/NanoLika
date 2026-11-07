@@ -18,7 +18,7 @@ Linux 上的代理（**L**）负责其余一切并统一发布；你负责 **只
 
 ## 0. 项目、现状、分工
 
-**nanoMuse** 是一个开源（GPL-3.0-or-later）的个人 agent：手机 app（Android 和 iOS，基于上游
+**NanoLika** 是一个开源（GPL-3.0-or-later）的个人 agent：手机 app（Android 和 iOS，基于上游
 OpenMinis 子树 `android/`）、桌面 app（`harness/dsh-nanomuse/` 是 DeepSeek Harness 插件，
 `harness/desktop/` 是 Electron 壳，壳里带 Python 运行时给「手」用）、Python 运行时 `nanomuse/`、
 Web 控制台 `web/`、中继 `cloud/`（登录、模型、hub、会话同步）。先读 [AGENTS.md](../../AGENTS.md)
@@ -47,7 +47,7 @@ Web 控制台 `web/`、中继 `cloud/`（登录、模型、hub、会话同步）
 **仓库约定里和你最相关的几条**（全文在 AGENTS.md）：
 
 - `android/` 是上游子树，要保持可拉取：新代码放新文件（`android/src/ios/NanoMuse/*.swift`），
-  改上游文件时每处带一行 `// nanoMuse:` 注释，一处一改；不改 Xcode 工程结构、不改沙盒路径；
+  改上游文件时每处带一行 `// NanoLika:` 注释，一处一改；不改 Xcode 工程结构、不改沙盒路径；
   品牌替换只走 `scripts/rebrand.py`（跑完必须输出 `clean`）。
 - 用户可见的字符串先英文、再简体中文、再 `Localizable.xcstrings` 已有的全部 locale；语气平实，
   无感叹号、无营销词；不照抄 Meta 的界面文案。
@@ -126,7 +126,7 @@ L 在 Linux 上把壳和胶囊的代码从头读了一遍，没找到能让胶�
 
 ## 3. 代码在哪
 
-- 聊天界面 `Views/Chat/AIChatView.swift`（上游文件，6500 行，我们的改动都带 `// nanoMuse:`）：
+- 聊天界面 `Views/Chat/AIChatView.swift`（上游文件，6500 行，我们的改动都带 `// NanoLika:`）：
   - `body`（~498 行）：`ZStack { messagesArea.safeAreaInset(edge: .top){…}.modifier(NanoMuseComposerHost(failSafe:stack:)) …; kernelBootOverlay }`。
   - `nmComposerStack` / `nmComposerTree`（~3499 行）：`ZStack(alignment: .bottom) { VStack { NanoMuseChatCardsHost; floatingToolPreview; inputBar }.background(NanoMuseComposerProbe).id(rebuildTick); inputPopupOverlay }`。
   - `inputBar`（~3778 行）：`nmPill` 为真时走 `nmPillRows` → `NanoMuseComposerPill { nmPillField }`；外面 `ComposerSurface(pill:)` 是灰色胶囊；`.onGeometryChange` 给 `inputBarHeight`（消息列表的底部内边距）和 `nmComposer.geometry(height:)`。
@@ -270,7 +270,7 @@ L 这边同时在做：拿到你的 PR 后合并、发 0.1.40、TestFlight build
 | 壳 | `NanoMuse/NanoMuseShell.swift`（`NanoMuseHomeView`、`chatLayer`、`NanoMuseBottomBar`） |
 | 日志 | Console.app，`subsystem:io.github.nanomuse.app`（`nm.composer`、`InputBarLayout`）；`idevicesyslog` |
 | 调试服务（DEBUG） | `Debug/DebugServer.swift`，端口 8321，`iproxy 8321 8321` |
-| 上游改动标记 | `// nanoMuse:`；品牌替换 `python scripts/rebrand.py`（必须输出 `clean`） |
+| 上游改动标记 | `// NanoLika:`；品牌替换 `python scripts/rebrand.py`（必须输出 `clean`） |
 | Mac 桌面端 | `harness/desktop/mac/computer-use/`、`harness/desktop/src/{mac-helper,mac-permissions}.ts`；数据目录 `~/.nanomuse/desktop`（`desktop.log`） |
 | 已发布的安装包 | `https://github.com/nano-muse/nanoMuse/releases/tag/v0.1.39`；TestFlight build 10 = 0.1.39 |
 | 上一轮的任务单（背景） | [mac-work-0.1.39.md](mac-work-0.1.39.md)、[mac-check-0.1.37.md](mac-check-0.1.37.md) |

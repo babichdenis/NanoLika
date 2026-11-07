@@ -39,7 +39,7 @@ private func resolvedAPIBase(_ base: String, appendV1: Bool) -> String {
 private let streamingSession: URLSession = {
     let config = URLSessionConfiguration.default
     config.timeoutIntervalForRequest = 600  // 10 minutes
-    NanoMuseProxy.apply(to: config) // nanoMuse: Settings → Network, the proxy for own providers
+    NanoMuseProxy.apply(to: config) // NanoLika: Settings → Network, the proxy for own providers
     let session = URLSession(configuration: config)
     // Evict this session's pooled (possibly stale) connections on network
     // transitions — see LLMSessionRegistry / Android #740.
@@ -81,7 +81,7 @@ private func makeStreamingSession() -> URLSession {
     config.timeoutIntervalForRequest = 600  // 10 minutes — matches the shared session
     // One stream per session, so there is no second connection to pool.
     config.httpMaximumConnectionsPerHost = 1
-    NanoMuseProxy.apply(to: config) // nanoMuse: Settings → Network, the proxy for own providers
+    NanoMuseProxy.apply(to: config) // NanoLika: Settings → Network, the proxy for own providers
     return URLSession(configuration: config)
 }
 
@@ -510,7 +510,7 @@ final class OpenAIProvider: LLMProvider {
 
         guard (200..<300).contains(statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // nanoMuse: the header rides along
+            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // NanoLika: the header rides along
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -587,7 +587,7 @@ final class OpenAIProvider: LLMProvider {
             var body = ""
             for try await line in byteStream.lines { body += line }
             session.finishTasksAndInvalidate()
-            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // nanoMuse: the header rides along
+            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // NanoLika: the header rides along
         }
 
         return AsyncThrowingStream { continuation in
@@ -609,7 +609,7 @@ final class OpenAIProvider: LLMProvider {
                               let event = try? JSONSerialization.jsonObject(with: eventData) as? [String: Any] else { continue }
 
                         if self.usesChatCompletionsAPI {
-                            // nanoMuse: an error inside the stream (nanoMuse Cloud answers 200 and puts the
+                            // NanoLika: an error inside the stream (NanoLika Cloud answers 200 and puts the
                             // provider's refusal in a data: line, as OpenRouter does) ends the turn with that
                             // error and its card, not with an empty reply; the status is unknown here (0)
                             if let inline = event["error"] as? [String: Any], !inline.isEmpty {
@@ -802,7 +802,7 @@ final class OpenAIProvider: LLMProvider {
     func streamRaw(
         body: [String: Any],
         isResponsesAPI: Bool,
-        opencodeSession: String? = nil // nanoMuse: the conversation's id for OpenCode (NanoMuseOpenCodeSession)
+        opencodeSession: String? = nil // NanoLika: the conversation's id for OpenCode (NanoMuseOpenCodeSession)
     ) async throws -> (AsyncThrowingStream<String, Error>, Int) {
         let url: URL
         var request: URLRequest
@@ -872,7 +872,7 @@ final class OpenAIProvider: LLMProvider {
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        // nanoMuse: OpenCode Go wants one stable id per conversation
+        // NanoLika: OpenCode Go wants one stable id per conversation
         if let opencodeSession { request.setValue(opencodeSession, forHTTPHeaderField: NanoMuseOpenCodeSession.header) }
         // [T-ios-openai-body-oom] Must run BEFORE serializing: an out-of-memory
         // inside JSONSerialization aborts the process and cannot be caught. This
@@ -934,7 +934,7 @@ final class OpenAIProvider: LLMProvider {
             var body = ""
             for try await line in byteStream.lines { body += line }
             session.finishTasksAndInvalidate()
-            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // nanoMuse: the header rides along
+            throw mapHTTPError(statusCode: statusCode, body: body, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // NanoLika: the header rides along
         }
 
         let lineStream = AsyncThrowingStream<String, Error> { continuation in
@@ -1687,7 +1687,7 @@ final class OpenAIProvider: LLMProvider {
 
             guard (200..<300).contains(statusCode) else {
                 let responseBody = String(data: data, encoding: .utf8) ?? ""
-                throw mapHTTPError(statusCode: statusCode, body: responseBody, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // nanoMuse: the header rides along
+                throw mapHTTPError(statusCode: statusCode, body: responseBody, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // NanoLika: the header rides along
             }
 
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -1868,7 +1868,7 @@ final class OpenAIProvider: LLMProvider {
 
         guard (200..<300).contains(statusCode) else {
             let responseBody = String(data: data, encoding: .utf8) ?? ""
-            throw mapHTTPError(statusCode: statusCode, body: responseBody, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // nanoMuse: the header rides along
+            throw mapHTTPError(statusCode: statusCode, body: responseBody, retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")) // NanoLika: the header rides along
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -2074,8 +2074,8 @@ final class OpenAIProvider: LLMProvider {
         return .providerError(message: error.localizedDescription)
     }
 
-    func mapHTTPError(statusCode: Int, body: String, retryAfter: String? = nil) -> LLMError { // nanoMuse: the Retry-After header, for the card's "Resets in"
-        // nanoMuse: the plan's "region not supported" / "sign-in expired" / "nothing left" are a
+    func mapHTTPError(statusCode: Int, body: String, retryAfter: String? = nil) -> LLMError { // NanoLika: the Retry-After header, for the card's "Resets in"
+        // NanoLika: the plan's "region not supported" / "sign-in expired" / "nothing left" are a
         // 403, a 401 and a 429 whose bodies the mapping below drops; keep them for the chat's card.
         NanoMuseReachSignal.shared.noteHTTPError(status: statusCode, body: body, host: isOAuth ? "chatgpt.com" : (NanoMuseProxy.hostOf(customBaseURL ?? "") ?? "api.openai.com"), oauth: isOAuth, retryAfter: retryAfter)
         if statusCode == 401 || statusCode == 403 { return .invalidAPIKey(detail: "HTTP \(statusCode): \(String(body.prefix(200)))") }

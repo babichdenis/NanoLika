@@ -17,7 +17,7 @@ enum LLMError: LocalizedError {
         case .invalidAPIKey(let detail):
             return detail.isEmpty ? "Invalid API key" : "Invalid API key: \(detail)"
         case .networkError(let error):
-            return "Network error: \(error.localizedDescription)" + NanoMuseProviderReach.hostTag(error) // nanoMuse: the host, for the chat's reach card
+            return "Network error: \(error.localizedDescription)" + NanoMuseProviderReach.hostTag(error) // NanoLika: the host, for the chat's reach card
         case .providerError(let message):
             return "Provider error: \(message)"
         case .transientError(let message):

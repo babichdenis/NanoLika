@@ -78,7 +78,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            // nanoMuse: the installed build and the latest release (tap: check again / get it).
+            // NanoLika: the installed build and the latest release (tap: check again / get it).
             io.github.nanomuse.ui.settings.VersionLines()
             Text(
                 stringResource(R.string.about_minis_tagline),
@@ -105,7 +105,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
         }
 
-        // nanoMuse: licence, upstream and trademark lines (GPL-3.0 attribution
+        // NanoLika: licence, upstream and trademark lines (GPL-3.0 attribution
         // to OpenMinis; see NOTICE in the repository).
         SettingsSection(header = stringResource(R.string.nm_about_build)) {
             SettingsRow(

@@ -18,7 +18,7 @@ class RelaySyncApiTest {
 
     @Before fun up() {
         server.start()
-        api = RelaySyncApi(server.url("/").toString().trimEnd('/'), "nm_secret", "nanoMuse-Android/test")
+        api = RelaySyncApi(server.url("/").toString().trimEnd('/'), "nm_secret", "NanoLika-Android/test")
     }
 
     @After fun down() {

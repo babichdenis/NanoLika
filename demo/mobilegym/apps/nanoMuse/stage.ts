@@ -11,7 +11,7 @@ import { t } from './res/strings';
  *   When the hands need the user it grows into a card — *Your turn* with **Continue** for a
  *   password field, *Waiting for your approval* with **Allow once / Deny** for a tap that
  *   needs a yes (decided right here, `POST /api/approvals/{id}` through the bridge; the
- *   person is never sent back into the nanoMuse app for it), *Your turn — <reason>* or *You
+ *   person is never sent back into the NanoLika app for it), *Your turn — <reason>* or *You
  *   have the phone* with **Done** while a hold is on (the agent handed the phone over, or the
  *   person took it; `POST /api/holds/{id}/done`), the agent's question with **Open** when the
  *   task ends asking — and the ring stands still. *Done* in green and *Stopped* in red for a
@@ -203,7 +203,7 @@ export class Stage {
   steps = 0;
   state: PillState = 'working';
   /** The agent's name and face, from the server's profile. */
-  name = 'nanoMuse';
+  name = 'NanoLika';
   face = '';
 
   onStop: (() => void) | null = null;
@@ -298,7 +298,7 @@ export class Stage {
 
   /** The agent's face and name, as the capsule shows them. */
   setIdentity(name: string, face: string): void {
-    this.name = name || 'nanoMuse';
+    this.name = name || 'NanoLika';
     this.face = face;
     if (this.layer?.isConnected) this.applyFace();
   }
@@ -368,7 +368,7 @@ export class Stage {
     this.staleTimer = setTimeout(() => {
       this.staleTimer = null;
       if (!this.active || this.state !== 'working') return;
-      console.info('[nanoMuse] nothing from the server for a while: the task is taken as over');
+      console.info('[NanoLika] nothing from the server for a while: the task is taken as over');
       const went = this.steps > 0;
       this.reset();
       if (went) this.onGone?.();
@@ -510,7 +510,7 @@ export class Stage {
   /**
    * A tap waits for the person's yes: the card carries the request and **Allow once / Deny**,
    * decided here (the bridge answers `POST /api/approvals/{id}`). Nothing sends the person
-   * back into the nanoMuse app.
+   * back into the NanoLika app.
    */
   approval(id: string, what: string, purpose = ''): void {
     const s = t();

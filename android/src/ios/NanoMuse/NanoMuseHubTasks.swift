@@ -1,6 +1,6 @@
 //
 //  NanoMuseHubTasks.swift
-//  nanoMuse
+//  NanoLika
 //
 //  The iPhone as a target of other devices' `task` calls: "@iPhone …" said on
 //  the Android phone or a computer reaches this phone's Muse through the hub,
@@ -10,7 +10,7 @@
 //  in the background. `stop {call}` or `stop {conversation}` from the device
 //  that asked ends the run and the task answers `cancelled`. Android:
 //  HubActions.task / HubTasks; runtime: nanomuse/hub/service.py _task. Works
-//  while nanoMuse is open, that is the hub connection itself.
+//  while NanoLika is open, that is the hub connection itself.
 //
 
 import Combine

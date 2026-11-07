@@ -11,7 +11,7 @@ import java.util.UUID
 
 class ChatRepository(internal val dao: ChatDao) {
 
-    // nanoMuse: signed in, the list is the account's: chats synced under another account stay on the phone, out of sight (contract C10);
+    // NanoLika: signed in, the list is the account's: chats synced under another account stay on the phone, out of sight (contract C10);
     // the feed's working conversation is the agent's, not a chat of the person's, and stays out too (FeedFlow.hidden)
     fun observeSessions(): Flow<List<ChatSessionEntity>> =
         kotlinx.coroutines.flow.combine(dao.observeSessions(), io.github.nanomuse.sync.ConversationSync.hidden, io.github.nanomuse.feed.FeedFlow.hidden) { list, hidden, feed ->
@@ -38,7 +38,7 @@ class ChatRepository(internal val dao: ChatDao) {
             memoryEnabled = if (memoryEnabled) 1 else 0,
         )
         dao.insertSession(session)
-        io.github.nanomuse.account.AccountData.claim(session.id) // nanoMuse: the chat belongs to whoever is signed in now (contract C12)
+        io.github.nanomuse.account.AccountData.claim(session.id) // NanoLika: the chat belongs to whoever is signed in now (contract C12)
         return session
     }
 
@@ -98,12 +98,12 @@ class ChatRepository(internal val dao: ChatDao) {
 
     suspend fun updateSessionTitle(id: String, title: String) {
         dao.updateSessionTitle(id, title, System.currentTimeMillis())
-        io.github.nanomuse.sync.ConversationSync.changed() // nanoMuse: the new title reaches the account's other devices
+        io.github.nanomuse.sync.ConversationSync.changed() // NanoLika: the new title reaches the account's other devices
     }
 
     suspend fun updateSessionTitleAndCategory(id: String, title: String, category: String?) {
         dao.updateSessionTitleAndCategory(id, title, category, System.currentTimeMillis())
-        io.github.nanomuse.sync.ConversationSync.changed() // nanoMuse
+        io.github.nanomuse.sync.ConversationSync.changed() // NanoLika
     }
 
     suspend fun updateSessionModel(sessionId: String, modelId: String) {
@@ -117,8 +117,8 @@ class ChatRepository(internal val dao: ChatDao) {
     suspend fun deleteSession(id: String) {
         dao.deleteMessages(id)
         dao.deleteSession(id)
-        io.github.nanomuse.guard.Grants.clearSession(id) // nanoMuse
-        io.github.nanomuse.sync.ConversationSync.changed() // nanoMuse: a tombstone goes to the other devices
+        io.github.nanomuse.guard.Grants.clearSession(id) // NanoLika
+        io.github.nanomuse.sync.ConversationSync.changed() // NanoLika: a tombstone goes to the other devices
     }
 
     // ─── Session groups ("folders") ────────────────────────────────────────
@@ -323,7 +323,7 @@ class ChatRepository(internal val dao: ChatDao) {
 
     suspend fun deleteMessagesAfter(sessionId: String, keepCount: Int) {
         dao.deleteMessagesAfter(sessionId, keepCount)
-        io.github.nanomuse.sync.ConversationSync.changed() // nanoMuse: an edit or regenerate — the cut rows become tombstones
+        io.github.nanomuse.sync.ConversationSync.changed() // NanoLika: an edit or regenerate — the cut rows become tombstones
     }
 
     /**
@@ -413,7 +413,7 @@ class ChatRepository(internal val dao: ChatDao) {
         } else {
             dao.touchSession(sessionId, now)
         }
-        // nanoMuse: a moment after the turn's last row, the chat reaches the account's other devices
+        // NanoLika: a moment after the turn's last row, the chat reaches the account's other devices
         io.github.nanomuse.sync.ConversationSync.changed()
         return message
     }

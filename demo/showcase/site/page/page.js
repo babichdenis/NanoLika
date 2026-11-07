@@ -1,7 +1,7 @@
 // The page around the phone: the language, the status line, the lines to try, and the two
 // buttons. The phone is MobileGym in a frame on this origin, booted and framed by MobileGym's own
 // scripts (state-builder.js powers it on into #demo-frame and runs the State Builder; boot-hero.js
-// runs the gesture keys and the power button). The nanoMuse app on the phone exposes
+// runs the gesture keys and the power button). The NanoLika app on the phone exposes
 // window.__NANOMUSE__ on the frame's window (demo/mobilegym/apps/nanoMuse/host.ts), which is how
 // a tap here becomes text in the chat there. The whole stage fits one screen: the phone is scaled
 // to the room there is beside the panel.
@@ -43,7 +43,7 @@
   function setLang(l) {
     root.setAttribute("data-lang", l);
     root.lang = l === "zh" ? "zh-CN" : "en";
-    document.title = l === "zh" ? "nanoMuse · 在线体验" : "nanoMuse · Try it in the browser";
+    document.title = l === "zh" ? "NanoLika · 在线体验" : "NanoLika · Try it in the browser";
     try {
       localStorage.setItem("nm-lang", l);
     } catch (e) {
@@ -53,7 +53,7 @@
     render();
   }
   // The phone has a language of its own (MobileGym's Settings; its default is Chinese) and
-  // nanoMuse's welcome page, the capsule and the notifications follow it. The switch up here is
+  // NanoLika's welcome page, the capsule and the notifications follow it. The switch up here is
   // the one a visitor sees, so the phone follows it: on the first boot and on every change.
   // The phone follows the page's language: its own strings, and the Muse's replies (the
   // hosted runtime's reply language, so what it reads on a Chinese screen is told in the
@@ -138,7 +138,7 @@
     if (btn) btn.click();
   }
 
-  // ---- the phone's nanoMuse app ---------------------------------------------------------
+  // ---- the phone's NanoLika app ---------------------------------------------------------
   var hostWindow = null; // the frame's window the host below belongs to
   var host = null; // window.__NANOMUSE__ of the frame
   var state = null; // what it last told us
@@ -181,7 +181,7 @@
     render();
   }
 
-  // Bring nanoMuse to the front once the simulated phone has booted (a beat after
+  // Bring NanoLika to the front once the simulated phone has booted (a beat after
   // __OS__ appears, so the launcher is there to animate from).
   function launch(w) {
     if (launched || !host || !w || !w.__OS__) return;
@@ -196,7 +196,7 @@
     }, 1200);
   }
 
-  // nanoMuse's icon at the top of the dock beside the phone (compose.mjs puts it there): a tap
+  // NanoLika's icon at the top of the dock beside the phone (compose.mjs puts it there): a tap
   // brings the app to the front — or turns the phone on — and it is lit while the app is on
   // the screen.
   var dockApp = document.querySelector("[data-nanomuse-open]");
@@ -447,7 +447,7 @@
 
   // ---- the phone turns itself on, and the Muse starts once a person is looking --------------
   // The phone is on as soon as the page is, the frame on the project site included, and
-  // nanoMuse comes to the front (launch, above): the visitor sees the welcome page, and a
+  // NanoLika comes to the front (launch, above): the visitor sees the welcome page, and a
   // sign-in the showcase asks for is theirs to do. Pressing Start (a container on the server,
   // a share of the day's model budget) is not done for every page load: it is pressed once
   // this page has been in view for a few seconds with the tab in front, or at the first sign

@@ -136,22 +136,22 @@ def test_a_download_is_a_dot_file_until_it_is_whole(tmp_path: Path, monkeypatch)
         return Body(b"PACKAGE")
 
     monkeypatch.setattr(rs.urllib.request, "urlopen", fake_urlopen)
-    dst = tmp_path / "nanoMuse-1.0.apk"
-    assert rs.part_of(dst).name == ".nanoMuse-1.0.apk.part"
+    dst = tmp_path / "NanoLika-1.0.apk"
+    assert rs.part_of(dst).name == ".NanoLika-1.0.apk.part"
     rs.download("https://example.invalid/a.apk", dst, len(b"PACKAGE"))
     assert dst.read_bytes() == b"PACKAGE"
-    assert [p.name for p in tmp_path.iterdir()] == ["nanoMuse-1.0.apk"]
+    assert [p.name for p in tmp_path.iterdir()] == ["NanoLika-1.0.apk"]
     # a size that does not match leaves nothing behind, visible or hidden
     with pytest.raises(OSError):
         rs.download("https://example.invalid/b.apk", tmp_path / "b.apk", 3)
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["nanoMuse-1.0.apk"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["NanoLika-1.0.apk"]
     # nor does a connection that breaks
     monkeypatch.setattr(
         rs.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError())
     )
     with pytest.raises(OSError):
         rs.download("https://example.invalid/c.apk", tmp_path / "c.apk", 0)
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["nanoMuse-1.0.apk"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["NanoLika-1.0.apk"]
 
 
 def test_the_releases_list_must_be_a_list(monkeypatch):
@@ -188,7 +188,7 @@ releaseDate: '2026-10-14T00:00:00.000Z'
 def windows_set(folder: Path, version: str, installer: bytes, blockmap: bool = True) -> str:
     """What the Windows build attaches to a release, written into a tag's folder: the
     installer, its .blockmap and latest.yml with the installer's SHA-512. Returns the name."""
-    name = f"nanoMuse-Desktop-{version}-win-x64.exe"
+    name = f"NanoLika-Desktop-{version}-win-x64.exe"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / name).write_bytes(installer)
     if blockmap:
@@ -235,7 +235,7 @@ def test_the_windows_feed_moves_only_to_a_complete_set(tmp_path: Path, monkeypat
     assert os.readlink(root / "latest") == "v2" and os.readlink(root / "win") == "v1"
     assert index()["win"] == "v1"
     # the blockmap arrives: the feed moves
-    (root / "v2" / "nanoMuse-Desktop-1.0.2-win-x64.exe.blockmap").write_bytes(b"blocks")
+    (root / "v2" / "NanoLika-Desktop-1.0.2-win-x64.exe.blockmap").write_bytes(b"blocks")
     assert rs.main() == 0
     assert os.readlink(root / "win") == "v2" and index()["win"] == "v2"
     # a release whose installer is not the one latest.yml promises never becomes the feed,

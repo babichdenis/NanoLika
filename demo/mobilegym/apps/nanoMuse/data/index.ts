@@ -7,7 +7,7 @@ import { manifest } from '../manifest';
  *
  * `demoGateway` is the hosted showcase's gateway (`/api/demo` on the public site), set at
  * build time with `VITE_NANOMUSE_DEMO`. Empty in a normal checkout: the app then asks for the
- * address of your own nanoMuse.
+ * address of your own NanoLika.
  */
 export const NANOMUSE_CONFIG = {
   ...defaults,

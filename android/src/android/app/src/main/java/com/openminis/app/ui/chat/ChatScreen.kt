@@ -50,7 +50,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.map // nanoMuse
+import kotlinx.coroutines.flow.map // NanoLika
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -133,9 +133,9 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.outlined.Tune // nanoMuse
+import androidx.compose.material.icons.outlined.Tune // NanoLika
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreHoriz // nanoMuse
+import androidx.compose.material.icons.filled.MoreHoriz // NanoLika
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -531,10 +531,10 @@ fun ChatScreen(
      *  management screen — wired to the "Edit" button on the model picker's
      *  Model Groups section header. */
     onModelGroupsClick: () -> Unit = {},
-    // nanoMuse: non-null when this chat is a tab of the home shell — hamburger
+    // NanoLika: non-null when this chat is a tab of the home shell — hamburger
     // instead of back, round kebab, big-face header on the main chat.
     nmHome: io.github.nanomuse.ui.chat.NmHomeChrome? = null,
-    // nanoMuse: height of the floating pill bar overlaying the bottom. The
+    // NanoLika: height of the floating pill bar overlaying the bottom. The
     // composer sits above it; the message list slides behind it for the blur.
     nmBottomOverlay: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
@@ -568,22 +568,22 @@ fun ChatScreen(
     val messages by viewModel.uiMessages.collectAsState()
     val hasOlderMessages by viewModel.hasOlderMessages.collectAsState()
     val isStreaming by viewModel.isStreaming.collectAsState()
-    // nanoMuse: the screen stays on while the agent drives the browser or another app's screen.
+    // NanoLika: the screen stays on while the agent drives the browser or another app's screen.
     io.github.nanomuse.status.KeepAwake.Effect(isStreaming)
     val canResume by viewModel.canResume.collectAsState()
-    // nanoMuse: the rows the account's other devices wrote — never this phone's turn to resume (C9)
+    // NanoLika: the rows the account's other devices wrote — never this phone's turn to resume (C9)
     val nmRemoteRows by io.github.nanomuse.sync.ConversationSync.remoteRows.collectAsState()
-    val nmContinueAsk by viewModel.nmContinueAsk.collectAsState() // nanoMuse: "continue?" card replaces the banner while shown
-    // nanoMuse: Muse's header carries only the name; the model rows under it are a
+    val nmContinueAsk by viewModel.nmContinueAsk.collectAsState() // NanoLika: "continue?" card replaces the banner while shown
+    // NanoLika: Muse's header carries only the name; the model rows under it are a
     // Setting (Appearance → Home), off by default on the main chat of the home shell.
     val nmHeaderModelShown by io.github.nanomuse.ui.chat.rememberHeaderModelShown()
     val nmHideModelRows = nmHome != null && nmHome.isMainChat && !nmHeaderModelShown
-    val nmAvatarSize by io.github.nanomuse.ui.avatar.rememberAvatarSize() // nanoMuse: Settings → Appearance → Avatar size
-    // nanoMuse: the agent's steps (tool pills, reasoning, the bar over the
+    val nmAvatarSize by io.github.nanomuse.ui.avatar.rememberAvatarSize() // NanoLika: Settings → Appearance → Avatar size
+    // NanoLika: the agent's steps (tool pills, reasoning, the bar over the
     // composer) are a Setting (Appearance → Conversation), off by default;
     // the status line under the face carries what it is doing instead.
     val nmShowSteps by io.github.nanomuse.ui.chat.rememberShowSteps()
-    // nanoMuse: for that status line — true while the reply's own words are
+    // NanoLika: for that status line — true while the reply's own words are
     // arriving; mapped and de-duplicated here so the per-token stream never
     // recomposes the screen for it.
     val nmReplying by remember(viewModel) {
@@ -591,11 +591,11 @@ fun ChatScreen(
             stream.values.any { d -> !d.isAwaitingModelResponse && d.toolBlocks.lastOrNull()?.let { it.kind == "text" && it.content.isNotEmpty() } == true }
         }.distinctUntilChanged()
     }.collectAsState(initial = false)
-    // nanoMuse: …and the request it is on, for the moments between steps.
+    // NanoLika: …and the request it is on, for the moments between steps.
     val nmRequestBrief = remember(messages) {
         io.github.nanomuse.ui.header.requestBrief(messages.lastOrNull { it.role == "user" }?.content)
     }
-    // nanoMuse: after a finished task, one card under the reply asking for a star when the
+    // NanoLika: after a finished task, one card under the reply asking for a star when the
     // relay's policy says this is a moment for it (StarPrompt / Nudges: a few counts, a
     // cooldown, a lifetime cap, and never again after the person went).
     var nmStarNudge by remember { mutableStateOf<io.github.nanomuse.community.StarPrompt.Ask?>(null) }
@@ -618,7 +618,7 @@ fun ChatScreen(
         io.github.nanomuse.community.StarPrompt.markShown(context, ask)
         nmStarNudge = ask
     }
-    // nanoMuse: the asks that arrive away from any screen (the 7th / 30th day the app was
+    // NanoLika: the asks that arrive away from any screen (the 7th / 30th day the app was
     // opened) show here, in the main chat, when the agent is not mid-reply.
     if (nmHome != null && nmHome.isMainChat) {
         val nmPendingAsk by io.github.nanomuse.community.StarPrompt.pending.collectAsState()
@@ -1079,7 +1079,7 @@ fun ChatScreen(
         // [T-android-overlay-hide-camera] Suppress the floating bg-overlay
         // BEFORE handing off to the system camera. The camera Activity
         // takes foreground, which by #451's rule would otherwise satisfy
-        // "nanoMuse backgrounded → show overlay" and the capsule would draw
+        // "NanoLika backgrounded → show overlay" and the capsule would draw
         // on top of the viewfinder. Cleared in the ActivityResult callback.
         com.openminis.app.service.SessionActivityTracker.setCameraSuppressActive(true)
         runCatching { cameraLauncher.launch(intent) }
@@ -1195,7 +1195,7 @@ fun ChatScreen(
             "ScrollSrc",
             "scrollToItem src=$source idx=$idx off=$off canBwd=${listState.canScrollBackward} firstIdx=${listState.firstVisibleItemIndex} firstOff=${listState.firstVisibleItemScrollOffset} inProgress=${listState.isScrollInProgress}",
         )
-        // nanoMuse: contentPadding clears the measured footer. Offset zero
+        // NanoLika: contentPadding clears the measured footer. Offset zero
         // pins the latest row above it; another overlay offset would count it twice.
         runCatching { listState.scrollToItem(idx, off) }
         Unit
@@ -1751,7 +1751,7 @@ fun ChatScreen(
         viewModel.endSlashSessionForSend()
         viewModel.setInputText("")
         releaseComposerAfterSend()
-        viewModel.nmMarkPersonTurn() // nanoMuse: the person started this turn (StarPrompt counts those)
+        viewModel.nmMarkPersonTurn() // NanoLika: the person started this turn (StarPrompt counts those)
         viewModel.sendMessage(rawText)
         noteSendForInputModePref()
         userScrolledAway = false
@@ -2302,7 +2302,7 @@ fun ChatScreen(
             }
         }
     }
-    // nanoMuse: the profile page's "Change avatar" pre-fills the composer and
+    // NanoLika: the profile page's "Change avatar" pre-fills the composer and
     // asks for the keyboard (Muse hands you back to the chat with "把虚拟形象改成"
     // already typed). Same guard as above.
     LaunchedEffect(viewModel) {
@@ -2607,7 +2607,7 @@ fun ChatScreen(
         containerColor = ChatColors.background,
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            // nanoMuse: the header is an overlay. The list slides underneath and
+            // NanoLika: the header is an overlay. The list slides underneath and
             // the scrim melts it away: a soft shade at the top edge dissolving
             // to clear, never a bar.
             Box(
@@ -2623,7 +2623,7 @@ fun ChatScreen(
             ) {
             TopAppBar(
                 title = {
-                    // iOS-style centered layout: "nanoMuse" + group row + provider·model row
+                    // iOS-style centered layout: "NanoLika" + group row + provider·model row
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center,
@@ -2656,12 +2656,12 @@ fun ChatScreen(
                                 // the longest title.
                                 .padding(horizontal = 32.dp, vertical = 2.dp),
                         ) {
-                            // nanoMuse: the face above the name, as in Muse's
+                            // NanoLika: the face above the name, as in Muse's
                             // header. Its mood follows this session's streaming
                             // state and the app-wide "needs you" gates; tapping
                             // it opens Settings → Soul (name / icon / style).
                             val nmMood = io.github.nanomuse.ui.avatar.rememberAgentMood(isStreaming, error)
-                            // nanoMuse: side chats inside the home shell show
+                            // NanoLika: side chats inside the home shell show
                             // their title where the face would be (Muse puts
                             // the face only on the main chat); the main chat
                             // gets the big face on its disc.
@@ -2681,7 +2681,7 @@ fun ChatScreen(
                                     modifier = Modifier.padding(bottom = 1.dp),
                                 )
                             } else if (nmMainChat) {
-                                // nanoMuse: the disc follows Settings → Appearance → Avatar size;
+                                // NanoLika: the disc follows Settings → Appearance → Avatar size;
                                 // "hidden" leaves the name tag alone. Tapping the face opens the
                                 // agent's profile page, as in Muse.
                                 val nmDisc = nmAvatarSize.disc
@@ -2703,7 +2703,7 @@ fun ChatScreen(
                                 onClick = { io.github.nanomuse.ui.header.openAgentProfile(context) },
                             )
                             if (!nmSideChat && !nmMainChat) Spacer(Modifier.height(2.dp))
-                            // nanoMuse: the pill is the agent's name (Muse's
+                            // NanoLika: the pill is the agent's name (Muse's
                             // header), never the session title — that one
                             // stays in the session list and in the chat
                             // menu's "Rename chat" (showChatTitlePill is
@@ -2716,14 +2716,14 @@ fun ChatScreen(
                             val topBarSoul by com.openminis.app.agent.SoulStore
                                 .cachedMetadata.collectAsState()
                             val displayTitle = topBarSoul.name.trim().ifEmpty { stringResource(R.string.app_name) }
-                            // nanoMuse: while the agent works or waits, the
+                            // NanoLika: while the agent works or waits, the
                             // status line says what it is doing (Muse's
                             // "Generating options" / "正在等待批准").
                             val nmStatusLine = io.github.nanomuse.ui.header.rememberNanoMuseStatusLine(isStreaming, nmMood, replying = nmReplying, request = nmRequestBrief)
-                            // nanoMuse: no name pill on side chats — their
+                            // NanoLika: no name pill on side chats — their
                             // title took the slot above.
                             if (nmMainChat) {
-                                // nanoMuse: Muse's name tag hangs off the chin
+                                // NanoLika: Muse's name tag hangs off the chin
                                 // of the face and carries the status as its
                                 // second line; two lines are always reserved so
                                 // the bar never jumps. Tap: the profile page.
@@ -2750,20 +2750,20 @@ fun ChatScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 style = noFontPad,
                                 modifier = Modifier
-                                    // nanoMuse: the name sits in a capsule under the face (Muse's name pill).
+                                    // NanoLika: the name sits in a capsule under the face (Muse's name pill).
                                     .clip(CircleShape)
-                                    // nanoMuse: not userBubble, which is now the
+                                    // NanoLika: not userBubble, which is now the
                                     // white message pill; the capsule keeps a
                                     // neutral wash.
                                     .background(ChatColors.secondaryBg)
                                     .clickable { io.github.nanomuse.ui.header.openSoulSettings(context) }
                                     .padding(horizontal = 12.dp, vertical = 3.dp),
                             )
-                            // nanoMuse: outside the home shell the status line
+                            // NanoLika: outside the home shell the status line
                             // takes the model rows' slot; on the main chat it
                             // is inside the name tag, so the rows stay put.
                             if (nmStatusLine != null && !nmMainChat) io.github.nanomuse.ui.header.NanoMuseStatusLine(nmStatusLine, nmMood)
-                            // nanoMuse: no model rows under the name unless the Setting asks for them.
+                            // NanoLika: no model rows under the name unless the Setting asks for them.
                             else if (!nmHideModelRows)
                             // Model picker subtitle: green dot + group +
                             // provider/model. Tap opens the model picker —
@@ -2959,7 +2959,7 @@ fun ChatScreen(
                     }
                 },
                 navigationIcon = {
-                    // nanoMuse: inside the home shell the slot is Muse's round
+                    // NanoLika: inside the home shell the slot is Muse's round
                     // hamburger, which opens the chats drawer.
                     if (nmHome != null) {
                         io.github.nanomuse.ui.home.MuseRoundButton(
@@ -3049,7 +3049,7 @@ fun ChatScreen(
                 actions = {
                     // iOS: "..." circle button → dropdown menu
                     Box {
-                        // nanoMuse: Muse's round "•••" when hosted in the home shell.
+                        // NanoLika: Muse's round "•••" when hosted in the home shell.
                         if (nmHome != null) {
                             io.github.nanomuse.ui.home.MuseRoundButton(
                                 icon = Icons.Filled.MoreHoriz,
@@ -3089,7 +3089,7 @@ fun ChatScreen(
                                     Icon(Icons.Outlined.Forum, contentDescription = null)
                                 },
                             )
-                            // nanoMuse: the top-bar pill now carries the agent's
+                            // NanoLika: the top-bar pill now carries the agent's
                             // name, so the session edit sheet (title / emoji)
                             // moved here from the title tap.
                             DropdownMenuItem(
@@ -3104,7 +3104,7 @@ fun ChatScreen(
                                     Icon(Icons.Default.Edit, contentDescription = null)
                                 },
                             )
-                            // nanoMuse: with the model rows off the header, the
+                            // NanoLika: with the model rows off the header, the
                             // picker opens from here.
                             if (nmHideModelRows) {
                                 DropdownMenuItem(
@@ -3351,7 +3351,7 @@ fun ChatScreen(
                     }
                 },
                 windowInsets = WindowInsets.statusBars,
-                // nanoMuse: transparent; the gradient wrapper behind this bar
+                // NanoLika: transparent; the gradient wrapper behind this bar
                 // carries the header fade from the top edge.
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
@@ -3370,19 +3370,19 @@ fun ChatScreen(
                 // user-configured font scale on xhdpi/xxhdpi without
                 // re-clipping (T-topbar-model-row-clip regression check).
                 // Font sizes + lineHeights stay untouched per spec.
-                // nanoMuse: 68dp held the 3-row title; the face (36dp) and the
+                // NanoLika: 68dp held the 3-row title; the face (36dp) and the
                 // capsule padding sit on top of that. In the home shell the
                 // main chat's disc (76dp) needs more, a side chat's one-line
                 // title less.
                 expandedHeight = when {
                     nmHome == null -> 108.dp
-                    // nanoMuse: disc (per the Avatar size setting; 10dp spacer when hidden)
+                    // NanoLika: disc (per the Avatar size setting; 10dp spacer when hidden)
                     // + the two-line name tag area, + the model rows when on.
                     nmHome.isMainChat -> (nmAvatarSize.disc ?: 10.dp) + 55.dp + (if (nmHideModelRows) 0.dp else 20.dp)
                     else -> 72.dp
                 },
             )
-            } // nanoMuse: close the header-fade wrapper
+            } // NanoLika: close the header-fade wrapper
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -3392,14 +3392,14 @@ fun ChatScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // nanoMuse: the message list slides under the header, which is an
+                // NanoLika: the message list slides under the header, which is an
                 // overlay, so only the bottom bar insets the content. The
                 // header itself is a scrim over the scrolling list.
                 .padding(bottom = padding.calculateBottomPadding())
                 .imePadding()
                 .onGloballyPositioned { chatPaneWidthPx = it.size.width },
         ) {
-        // nanoMuse: merge live steps once so the footer and its reserve agree
+        // NanoLika: merge live steps once so the footer and its reserve agree
         // on the same frame, including tools still in the streaming side channel.
         val streamingById by viewModel.streamingById.collectAsState()
         val lastToolBlocks = remember(messages, streamingById) {
@@ -3415,14 +3415,14 @@ fun ChatScreen(
             else if (nmBarLingers) { kotlinx.coroutines.delay(1_500); nmBarLingers = false }
         }
         val nmToolBarShown = nmShowSteps && (isStreaming || nmBarLingers) && lastToolBlocks.isNotEmpty()
-        // nanoMuse: only live browser controls suppress the scrolling fade.
+        // NanoLika: only live browser controls suppress the scrolling fade.
         val nmBrowserHandOver by io.github.nanomuse.browser.BrowserHandOver.pending.collectAsState()
         val nmBrowserToolMenuShown =
             nmToolBarShown && lastToolBlocks.lastOrNull()?.toolName == "browser_use"
         val nmComposerFadeSuppressed =
             nmBrowserToolMenuShown || showBrowserSheet || nmBrowserHandOver != null
 
-        // nanoMuse: the composer and scrolling fade share one rounded outline.
+        // NanoLika: the composer and scrolling fade share one rounded outline.
         val nmRecState by com.openminis.app.speech.SpeechRecognitionManager.state.collectAsState()
         val nmRecording = nmRecState == com.openminis.app.speech.RecognitionState.RECORDING ||
             nmRecState == com.openminis.app.speech.RecognitionState.STARTING ||
@@ -3437,7 +3437,7 @@ fun ChatScreen(
         val nmComposerTopPadding = 2.dp
         val nmComposerBottomPadding = io.github.nanomuse.ui.chat.NM_CHAT_COMPOSER_BOTTOM_GAP
 
-        // nanoMuse: measure the whole footer before the list, while keeping the
+        // NanoLika: measure the whole footer before the list, while keeping the
         // list full-size behind the pill for Haze. No asynchronous height feedback.
         io.github.nanomuse.ui.chat.NmChatBottomLayout(
             modifier = Modifier.fillMaxSize(),
@@ -3462,14 +3462,14 @@ fun ChatScreen(
             }
 
             // Messages + scroll-to-bottom button
-            // nanoMuse: the list fills the whole Box, extending behind the
+            // NanoLika: the list fills the whole Box, extending behind the
             // pill bar so the haze has content to blur. Bottom contentPadding
             // keeps the last message clear of the composer + pill.
             Box(modifier = Modifier.fillMaxSize()) {
-                // nanoMuse: the measured footer already includes the tool preview,
+                // NanoLika: the measured footer already includes the tool preview,
                 // approval cards, composer and pill inset. Only breathing room is extra.
                 val bottomReserve = if (nmToolBarShown) 14.dp else 20.dp
-                // nanoMuse: when the measured footer changes (tools, composer,
+                // NanoLika: when the measured footer changes (tools, composer,
                 // approval or keyboard), re-pin to bottom
                 // if we are currently following. Without this, the new
                 // contentPadding is honoured for layout but reverseLayout
@@ -3547,7 +3547,7 @@ fun ChatScreen(
                 // scope. The flatten still runs per token (cheap-ish; ran
                 // before too), but the rebuild stays off the main UI
                 // composable's invalidation list.
-                // nanoMuse: keyed on the steps switch too — flipping it in
+                // NanoLika: keyed on the steps switch too — flipping it in
                 // Settings rebuilds the rows with or without the steps.
                 LaunchedEffect(messages, sessionId, nmShowSteps) {
                     // [T-android-stream-pipeline-incremental] Frozen/live split.
@@ -3637,7 +3637,7 @@ fun ChatScreen(
                                     // threw ConcurrentModificationException from
                                     // a later frame's SubList.equals. Copying
                                     // severs the view so it can't comodify.
-                                    buildFlatChatItems(msgs.take(splitIdx), sessionId, showSteps = nmShowSteps) // nanoMuse
+                                    buildFlatChatItems(msgs.take(splitIdx), sessionId, showSteps = nmShowSteps) // NanoLika
                                 }
                                 val buildMs = (System.nanoTime() - tBuildStart) / 1_000_000
                                 frozenRows = rows
@@ -3713,7 +3713,7 @@ fun ChatScreen(
                             } else {
                                 withContext(Dispatchers.Default) {
                                     val merged = mergeStreamingOverlay(msgs, stream)
-                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys, showSteps = nmShowSteps) // nanoMuse
+                                    buildFlatChatItems(merged, null, fromIndex = splitIdx, seedKeys = frozenKeys, showSteps = nmShowSteps) // NanoLika
                                 }
                             }
                             flatItems = if (liveRows.isEmpty()) frozenRows else frozenRows + liveRows
@@ -3829,11 +3829,11 @@ fun ChatScreen(
                     is FlatChatItem.AssistantThinking -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantToolUse -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantInfo -> false  // system rows never grayed
-                    is FlatChatItem.NanoMuseNaming -> false // nanoMuse
-                    is FlatChatItem.NanoMuseAvatarOptions -> false // nanoMuse
-                    is FlatChatItem.NanoMuseAvatarShare -> false // nanoMuse
-                    is FlatChatItem.NanoMuseAvatarConfirm -> false // nanoMuse
-                    is FlatChatItem.NanoMuseAllowance -> false // nanoMuse
+                    is FlatChatItem.NanoMuseNaming -> false // NanoLika
+                    is FlatChatItem.NanoMuseAvatarOptions -> false // NanoLika
+                    is FlatChatItem.NanoMuseAvatarShare -> false // NanoLika
+                    is FlatChatItem.NanoMuseAvatarConfirm -> false // NanoLika
+                    is FlatChatItem.NanoMuseAllowance -> false // NanoLika
                     is FlatChatItem.AssistantTyping -> false
                     is FlatChatItem.AssistantError -> grayedMap[originalMessageId(messageId)] == true
                     is FlatChatItem.AssistantLegacyContent -> grayedMap[originalMessageId(messageId)] == true
@@ -3982,13 +3982,13 @@ fun ChatScreen(
                     // the bubble's 4dp = 8dp (≈22px), tighter but still a clear
                     // breath under the title bar. Bottom padding and inter-
                     // message spacing are untouched.
-                    // nanoMuse: the list slides under the overlay header, so it
+                    // NanoLika: the list slides under the overlay header, so it
                     // starts below it: the Scaffold's top inset is the header's
                     // measured height (status bar included), plus breathing room.
                     // The bottom clears the floating pill bar the same way.
                     contentPadding = PaddingValues(
                         top = padding.calculateTopPadding() + 8.dp,
-                        // nanoMuse: use this layout pass's full footer height.
+                        // NanoLika: use this layout pass's full footer height.
                         bottom = bottomChromeHeight + bottomReserve,
                     ),
                     modifier = Modifier
@@ -4094,7 +4094,7 @@ fun ChatScreen(
                             )
                         }
                     }
-                    // nanoMuse: the last line came from another device (C9) — never this phone's
+                    // NanoLika: the last line came from another device (C9) — never this phone's
                     // turn to resume; while that device works, say so in the banner's place.
                     val nmLastId = messages.lastOrNull()?.id
                     val nmRemoteTail = nmLastId != null && nmLastId.substringBefore('#') in nmRemoteRows
@@ -4109,7 +4109,7 @@ fun ChatScreen(
                                 viewModel.resume()
                                 // T282: same dual-scroll trick as the regular
                                 // send paths (T281). Resume kicks off a fresh
-                                // stream, so the "nanoMuse is thinking" indicator
+                                // stream, so the "NanoLika is thinking" indicator
                                 // mounts a frame or two later — pin once now,
                                 // then again after 100ms so the indicator
                                 // doesn't land below the fold.
@@ -4122,7 +4122,7 @@ fun ChatScreen(
                             })
                         }
                     }
-                    // nanoMuse: the ask for a star under a finished task, or on the 7th / 30th
+                    // NanoLika: the ask for a star under a finished task, or on the 7th / 30th
                     // day (reverseLayout: declared first, drawn at the bottom).
                     val nmStarAsk = nmStarNudge
                     if (nmStarAsk != null && !isStreaming) {
@@ -4246,10 +4246,10 @@ fun ChatScreen(
                                 ),
                         ) {
                         when (item) {
-                            is FlatChatItem.UserBubble -> Column { // nanoMuse: a column, for the sync caption over the bubble
-                                // nanoMuse: "From Pixel 8" when the line was written on another device (C8)
+                            is FlatChatItem.UserBubble -> Column { // NanoLika: a column, for the sync caption over the bubble
+                                // NanoLika: "From Pixel 8" when the line was written on another device (C8)
                                 io.github.nanomuse.ui.chat.NmSyncCaption(item.message.id.substringBefore('#'), end = true)
-                                // nanoMuse: a row a routine sent is one quiet line, not a bubble in the person's voice
+                                // NanoLika: a row a routine sent is one quiet line, not a bubble in the person's voice
                                 io.github.nanomuse.ui.chat.NmRoutineWakeRow(item.message.id.substringBefore('#')) {
                                 // User bubbles intentionally don't register
                                 // MinisTextKit shards — long-press on a user
@@ -4326,15 +4326,15 @@ fun ChatScreen(
                                     }
                                 },
                             )
-                            } // nanoMuse: close NmRoutineWakeRow
+                            } // NanoLika: close NmRoutineWakeRow
                             } // close UserBubble SideEffect + UserMessageBubble block
-                            // nanoMuse: in the home shell the agent's reply is Muse's —
+                            // NanoLika: in the home shell the agent's reply is Muse's —
                             // grey bubbles per block, no name above each turn (the face
                             // in the header says who is talking); a small gap keeps the
                             // turns apart.
                             is FlatChatItem.AssistantHeader -> Column {
                                 if (nmHome != null) Spacer(Modifier.height(6.dp)) else AssistantHeader()
-                                // nanoMuse: "From Pixel 8" when the reply was written on another device (C8)
+                                // NanoLika: "From Pixel 8" when the reply was written on another device (C8)
                                 io.github.nanomuse.ui.chat.NmSyncCaption(item.messageId.substringBefore('#'), end = false)
                             }
                             is FlatChatItem.AssistantText -> BoundsTrackedBlock(
@@ -4362,7 +4362,7 @@ fun ChatScreen(
                                         ),
                                     )
                                 }
-                            } } // nanoMuse: bubble
+                            } } // NanoLika: bubble
                             is FlatChatItem.AssistantMarkdownBlock -> BoundsTrackedBlock(
                                 messageId = item.messageId,
                                 slotKey = "mdblock:${item.parentBlockId}:${item.blockIndex}",
@@ -4385,7 +4385,7 @@ fun ChatScreen(
                                         ),
                                     )
                                 }
-                            } } // nanoMuse: bubble
+                            } } // NanoLika: bubble
                             is FlatChatItem.AssistantThinking -> {
                                 // T300: hide Deep Thinking block when the user
                                 // currently has thinking turned off — even if
@@ -4469,7 +4469,7 @@ fun ChatScreen(
                                     { viewModel.revertCompact() }
                                 } else null,
                             )
-                            // nanoMuse: the first-conversation name chooser.
+                            // NanoLika: the first-conversation name chooser.
                             // A chip names the agent (and sends the name as the
                             // user's message, as Muse does); the dashed row
                             // hands over to the composer.
@@ -4486,26 +4486,26 @@ fun ChatScreen(
                                     )
                                 }
                             }
-                            // nanoMuse: the four candidates for a new face;
+                            // NanoLika: the four candidates for a new face;
                             // tapping one adopts it (typing "第二个" works too).
                             is FlatChatItem.NanoMuseAvatarOptions -> io.github.nanomuse.ui.avatar.AvatarOptionsCard(
                                 onPick = { index -> viewModel.nmChooseAvatar(index) },
                                 onAgain = { viewModel.nmRegenerateAvatar() },
                                 onDismiss = { viewModel.nmCancelAvatar() },
                             )
-                            // nanoMuse: the new face is done — show it off.
+                            // NanoLika: the new face is done — show it off.
                             is FlatChatItem.NanoMuseAvatarShare -> io.github.nanomuse.ui.avatar.AvatarShareCard(
                                 description = item.description,
                                 onDismiss = { viewModel.nmDismissAvatarShare() },
                             )
-                            // nanoMuse: what the face costs on the Cloud allowance — drawn only after the yes.
+                            // NanoLika: what the face costs on the Cloud allowance — drawn only after the yes.
                             is FlatChatItem.NanoMuseAvatarConfirm -> io.github.nanomuse.ui.avatar.AvatarConfirmCard(
                                 text = item.text,
                                 blocked = viewModel.nmAvatarConfirmBlocked(),
                                 onConfirm = { viewModel.nmConfirmAvatar() },
                                 onDismiss = { viewModel.nmDeclineAvatar() },
                             )
-                            // nanoMuse: the relay refused the turn for a spent allowance — the two ways on.
+                            // NanoLika: the relay refused the turn for a spent allowance — the two ways on.
                             is FlatChatItem.NanoMuseAllowance -> {
                                 val info by viewModel.nmAllowance.collectAsState()
                                 info?.let {
@@ -4516,7 +4516,7 @@ fun ChatScreen(
                                 }
                             }
                             is FlatChatItem.AssistantTyping -> TypingIndicator()
-                            // nanoMuse: a provider that could not be reached (or refused the
+                            // NanoLika: a provider that could not be reached (or refused the
                             // region, or whose sign-in ran out) is a card, not the socket's text
                             is FlatChatItem.AssistantError -> io.github.nanomuse.ui.chat.NmProviderErrorOrBanner(
                                 error = item.error,
@@ -4524,7 +4524,7 @@ fun ChatScreen(
                                     coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-LAST", 0, 0) }
                                     safeMutate { viewModel.retryLast() }
                                 },
-                                // nanoMuse: one turn on nanoMuse Cloud after a model of the person's own failed; nothing is switched
+                                // NanoLika: one turn on NanoLika Cloud after a model of the person's own failed; nothing is switched
                                 onRetryOnCloud = if (viewModel.nmOffersCloudRetry()) ({
                                     coroutineScope.launch { tracedScrollToItem("INLINE-RETRY-LAST", 0, 0) }
                                     safeMutate { viewModel.nmRetryLastOnCloud() }
@@ -4560,7 +4560,7 @@ fun ChatScreen(
                                         ),
                                     )
                                 }
-                            } } // nanoMuse: bubble
+                            } } // NanoLika: bubble
                         }
                         } // Box (alpha wrapper)
                     }
@@ -4684,7 +4684,7 @@ fun ChatScreen(
                 // draws above the list, the FABs and the floating tool bar
                 // (iOS mounts its SpeechPlayerControl at app root; chat-screen
                 // scope is the Android first pass).
-                // nanoMuse: speech controls and scroll buttons share the same
+                // NanoLika: speech controls and scroll buttons share the same
                 // measured footer obstruction, even when no tools are shown.
                 val upFabVisible = messages.isNotEmpty() && !isNearBottom.value
                 val downFabVisible =
@@ -4749,7 +4749,7 @@ fun ChatScreen(
                     if (leftover > 0.dp) leftover / 2 else 0.dp
                 }
 
-                // nanoMuse: fade into the canvas above the composer while reading
+                // NanoLika: fade into the canvas above the composer while reading
                 // older messages. Live browser controls hide it immediately, even
                 // if a scroll animation or the alpha tween is still in progress.
                 val nmEdgeFade = ChatColors.background
@@ -4763,7 +4763,7 @@ fun ChatScreen(
                 if (!nmComposerFadeSuppressed) {
                     val nmFadeHeight = 90.dp
                     val nmFooterHeight = (bottomChromeHeight - nmBottomOverlay).coerceAtLeast(0.dp)
-                    // nanoMuse: a rounded halo fades into the composer and
+                    // NanoLika: a rounded halo fades into the composer and
                     // away before the navigation glass, without square edges.
                     io.github.nanomuse.ui.chat.NmComposerVignette(
                         color = nmEdgeFade,
@@ -4782,7 +4782,7 @@ fun ChatScreen(
                     )
                 }
 
-                // nanoMuse: the top vignette. When scrolled up away from the
+                // NanoLika: the top vignette. When scrolled up away from the
                 // latest, the top edge gets a slow fade in the canvas colour so
                 // messages dissolve under the header instead of hitting a hard
                 // edge. Distinct from the header's static scrim; this one comes
@@ -4827,7 +4827,7 @@ fun ChatScreen(
                 // spacing). Tapping walks BACK one user turn at a time rather
                 // than jumping to the oldest message.
                 if (messages.isNotEmpty() && !isNearBottom.value) {
-                    // nanoMuse: clear every visible part of the measured footer.
+                    // NanoLika: clear every visible part of the measured footer.
                     val upBaseBottom = bottomChromeHeight + 8.dp
                     androidx.compose.material3.FilledIconButton(
                         onClick = {
@@ -4870,7 +4870,7 @@ fun ChatScreen(
                 }
 
                 if (userScrolledAway && contentOverflows.value && messages.isNotEmpty()) {
-                    // nanoMuse: clear every visible part of the measured footer.
+                    // NanoLika: clear every visible part of the measured footer.
                     val fabBottomPadding = bottomChromeHeight + 8.dp
                     androidx.compose.material3.FilledIconButton(
                         onClick = {
@@ -4900,7 +4900,7 @@ fun ChatScreen(
                                 tracedScrollToItem("FAB-DOWN/settle", 0, 0)
                             }
                         },
-                        // nanoMuse: scroll-to-latest, centered under the conversation:
+                        // NanoLika: scroll-to-latest, centered under the conversation:
                         // a disc in the send button's colour with an arrow in the
                         // canvas colour (white on black in dark, inverted in light).
                         modifier = Modifier
@@ -4932,13 +4932,13 @@ fun ChatScreen(
                 // T-chat-title-pill: sticky session title overlay. Sits
                 // above the LazyColumn (top-center), animates in once the
 
-                // nanoMuse: dim the conversation while the approval card is up.
+                // NanoLika: dim the conversation while the approval card is up.
                 io.github.nanomuse.ui.guard.RiskScrim(sessionId = viewModel.activeSessionId)
             }
 
             },
             bottomContent = {
-            // nanoMuse: tools and composer are siblings in one footer, so their
+            // NanoLika: tools and composer are siblings in one footer, so their
             // bounds cannot overlap regardless of composer/preview height.
             if (nmToolBarShown) {
                 Box(
@@ -4958,14 +4958,14 @@ fun ChatScreen(
                 }
             }
 
-            // nanoMuse: Muse's "Needs approval" card sits between the messages and the composer.
+            // NanoLika: Muse's "Needs approval" card sits between the messages and the composer.
             io.github.nanomuse.ui.guard.RiskApprovalHost(
                 sessionId = viewModel.activeSessionId,
                 onOpenSession = { onMoveToSession(it) },
             )
-            // nanoMuse: a long task that hit the step ceiling asks "continue?" here.
+            // NanoLika: a long task that hit the step ceiling asks "continue?" here.
             io.github.nanomuse.ui.chat.ContinueAskHost(viewModel)
-            // nanoMuse: the browser handed to the person (a login, a code) — "Your turn", Open, Done.
+            // NanoLika: the browser handed to the person (a login, a code) — "Your turn", Open, Done.
             io.github.nanomuse.ui.chat.BrowserHandOverHost(viewModel)
 
             // T-chat-title-pill-edit: reuse SessionEditSheet from the session
@@ -4988,7 +4988,7 @@ fun ChatScreen(
             var composerWidthPx by remember { mutableStateOf(0) }
 
             // ─── Input area (iOS-style: rounded box with text + buttons below) ───
-            // nanoMuse: the footer places the composer above the pill.
+            // NanoLika: the footer places the composer above the pill.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -5013,13 +5013,13 @@ fun ChatScreen(
                     // which is exactly how the first attempt at this fix still
                     // looked broken.
                     .onGloballyPositioned { composerWidthPx = it.size.width }
-                    // nanoMuse: the footer owns the home pill inset; standalone
+                    // NanoLika: the footer owns the home pill inset; standalone
                     // chats still consume their system navigation inset here.
                     .then(
                         if (nmBottomOverlay > 0.dp) Modifier
                         else Modifier.navigationBarsPadding()
                     )
-                    // nanoMuse: match the fade and the nav surround's upper edge.
+                    // NanoLika: match the fade and the nav surround's upper edge.
                     .padding(horizontal = nmComposerHorizontalInset)
                     .padding(top = nmComposerTopPadding, bottom = nmComposerBottomPadding),
             ) {
@@ -5542,7 +5542,7 @@ fun ChatScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // nanoMuse: fill, clip and soft shadow follow the same outline.
+                        // NanoLika: fill, clip and soft shadow follow the same outline.
                         .shadow(
                             elevation = 4.dp,
                             shape = nmComposerShape,
@@ -5556,7 +5556,7 @@ fun ChatScreen(
                             else ChatColors.inputBg,
                             shape = nmComposerShape,
                         )
-                        .padding(top = if (attachments.isNotEmpty()) 8.dp else if (nmPill) 0.dp else 4.dp), // nanoMuse: pill composer
+                        .padding(top = if (attachments.isNotEmpty()) 8.dp else if (nmPill) 0.dp else 4.dp), // NanoLika: pill composer
                 ) {
                     // T185: Move-to capsule lives INSIDE the composer card,
                     // pinned 8dp from the top-right corner, mirroring iOS
@@ -5855,11 +5855,11 @@ fun ChatScreen(
                     // InlineVoiceInputView). The legacy in-composer waveform
                     // branch below only serves captures started OUTSIDE the
                     // panel (none today, kept as a safety net).
-                    // nanoMuse: the text field, declared once and placed either
+                    // NanoLika: the text field, declared once and placed either
                     // on its own row (upstream layout) or between the buttons
                     // (the pill — see nmPill above).
                     val nmTextField: @Composable (Modifier) -> Unit = { nmFieldModifier ->
-                    // Text field (iOS: placeholder "Message nanoMuse", no border)
+                    // Text field (iOS: placeholder "Message NanoLika", no border)
                     run {
                         val interactionSource = remember { MutableInteractionSource() }
                         // [T-android-composer-placeholder-rotation] Which entry
@@ -5923,7 +5923,7 @@ fun ChatScreen(
                             lastSendTimeMs = System.currentTimeMillis()
                             viewModel.setInputText("")
                             releaseComposerAfterSend()
-                            viewModel.nmMarkPersonTurn() // nanoMuse: the person started this turn (StarPrompt counts those)
+                            viewModel.nmMarkPersonTurn() // NanoLika: the person started this turn (StarPrompt counts those)
                             viewModel.sendMessage(toSend)
                             noteSendForInputModePref()
                             userScrolledAway = false
@@ -6075,7 +6075,7 @@ fun ChatScreen(
                                     caret = value.selection.end,
                                 )
                             },
-                            modifier = nmFieldModifier // nanoMuse: fillMaxWidth on its own row, weight(1f) in the pill
+                            modifier = nmFieldModifier // NanoLika: fillMaxWidth on its own row, weight(1f) in the pill
                                 .heightIn(min = 25.dp)
                                 .focusRequester(inputFocusRequester)
                                 .onFocusChanged {
@@ -6258,7 +6258,7 @@ fun ChatScreen(
                                         // swaps instantly — matching the iOS
                                         // Reduce Motion branch.
                                         val fadeMs = if (animationsDisabled(context)) 0 else 220
-                                        // nanoMuse: while the name chooser is
+                                        // NanoLika: while the name chooser is
                                         // up, the composer asks for a name
                                         // (Muse: "Write a name here").
                                         val nmNamingCard by viewModel.nmNamingCard.collectAsState()
@@ -6270,7 +6270,7 @@ fun ChatScreen(
                                         ) { idx ->
                                             Text(
                                                 if (nmChoosingName) stringResource(R.string.nm_naming_placeholder)
-                                                // nanoMuse: Muse's pill says just "Message".
+                                                // NanoLika: Muse's pill says just "Message".
                                                 else if (nmPill) stringResource(R.string.nm_composer_placeholder)
                                                 else composerPlaceholderText(idx, soulName.name),
                                                 color = if (nmPill) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
@@ -6357,7 +6357,7 @@ fun ChatScreen(
                     } else if (!nmPill) nmTextField(Modifier.fillMaxWidth())
 
                     // Button row below text field (iOS layout: + / ... mic send)
-                    // nanoMuse: in the pill this is THE row — "+", the field, mic/send.
+                    // NanoLika: in the pill this is THE row — "+", the field, mic/send.
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -6374,7 +6374,7 @@ fun ChatScreen(
                         Box {
                             InputCircleButton(
                                 onClick = { showAttachMenu = true },
-                                plain = nmPill, // nanoMuse: a bare glyph inside the pill
+                                plain = nmPill, // NanoLika: a bare glyph inside the pill
                             ) {
                                 Icon(
                                     Icons.Default.Add,
@@ -6387,7 +6387,7 @@ fun ChatScreen(
                                 expanded = showAttachMenu,
                                 onDismissRequest = { showAttachMenu = false },
                             ) {
-                                // nanoMuse: the "/" button has no seat in the pill,
+                                // NanoLika: the "/" button has no seat in the pill,
                                 // so the slash commands open from here (typing "/"
                                 // still opens them inline).
                                 if (nmPill) {
@@ -6444,7 +6444,7 @@ fun ChatScreen(
                         }
 
                         if (nmPill) {
-                            nmTextField(Modifier.weight(1f)) // nanoMuse: the field between the buttons
+                            nmTextField(Modifier.weight(1f)) // NanoLika: the field between the buttons
                         } else {
                         Spacer(modifier = Modifier.width(8.dp))
 
@@ -6469,7 +6469,7 @@ fun ChatScreen(
                         // is non-null. Tap clears the edit flag + composer text
                         // without truncating history. iOS parity:
                         // AIChatView.swift L1586 editExitButton.
-                        // (nanoMuse: editingId is read once, above the text field.)
+                        // (NanoLika: editingId is read once, above the text field.)
                         if (editingId != null) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
@@ -6490,7 +6490,7 @@ fun ChatScreen(
                         }
 
                         Spacer(modifier = Modifier.weight(1f))
-                        } // nanoMuse: end of the two-row layout's left group
+                        } // NanoLika: end of the two-row layout's left group
 
                         // Right: Mic button — only renders when a speech engine
                         // is actually available on this device (handles the
@@ -6892,7 +6892,7 @@ fun ChatScreen(
                         // RECOVERABLE states, explained inside the panel with a
                         // link to the relevant settings rather than by silently
                         // removing the control.
-                        // nanoMuse: in the pill the mic gives way to the send
+                        // NanoLika: in the pill the mic gives way to the send
                         // arrow once there is something to send (or a stop
                         // square while the agent answers), as on Muse.
                         val nmPillBusy = nmPill && (inputText.isNotBlank() || attachments.isNotEmpty() || isStreaming)
@@ -6905,12 +6905,12 @@ fun ChatScreen(
                                 onClick = { triggerVoiceInput() },
                                 onLongClick = { showLangSheet = true },
                                 isVoiceActive = com.openminis.app.ui.chat.voice.VoiceModePrefs.isVoiceActive,
-                                plain = nmPill, // nanoMuse
+                                plain = nmPill, // NanoLika
                             )
                         }
 
                         if (!nmPill) Spacer(modifier = Modifier.width(8.dp))
-                        if (!nmPill || nmPillBusy) { // nanoMuse: the pill shows send/stop only when there is something to do
+                        if (!nmPill || nmPillBusy) { // NanoLika: the pill shows send/stop only when there is something to do
 
                         // Right: 3-state Send / Enqueue / Stop button (mirrors iOS sendButton).
                         //   • streaming + hasText  → SEND (routes through viewModel.sendMessage,
@@ -6929,7 +6929,7 @@ fun ChatScreen(
                         val hasContent = hasText || attachments.isNotEmpty()
                         val showStop = isStreaming && !hasContent
                         if (showStop) {
-                            // nanoMuse: match the monochrome send button (black disc with
+                            // NanoLika: match the monochrome send button (black disc with
                             // white square in light theme, inverted in dark, matching iOS).
                             Box(
                                 modifier = Modifier
@@ -6950,7 +6950,7 @@ fun ChatScreen(
                             // Streaming with content → Send-into-queue; Idle with content → Send.
                             // Idle without text or attachments → disabled.
                             val canActivate = hasContent
-                            // nanoMuse: monochrome send. The palette's sendButton is
+                            // NanoLika: monochrome send. The palette's sendButton is
                             // white in the dark theme and black in the light one, the
                             // arrow takes the canvas colour; no blue accent.
                             val nmSendBg = if (canActivate) {
@@ -6991,7 +6991,7 @@ fun ChatScreen(
                                 )
                             }
                         }
-                        } // nanoMuse: send/stop
+                        } // NanoLika: send/stop
                     }
                 }
             }
@@ -7270,7 +7270,7 @@ fun ChatScreen(
                 } else {
                     viewModel.selectGroup(groupId)
                     showModelPicker = false
-                    // nanoMuse: a group picked here is the default for new chats too, and the
+                    // NanoLika: a group picked here is the default for new chats too, and the
                     // main chat follows it (ModelSlots.followPick, with the member the
                     // view-model resolved); the same line as for a model says so.
                     viewModel.activeEntryId.value?.let { resolved ->
@@ -7297,7 +7297,7 @@ fun ChatScreen(
                 } else {
                     viewModel.selectGroupEntry(groupId, entryId)
                     showModelPicker = false
-                    // nanoMuse: as for a group pick, the default for new chats and the main chat follow
+                    // NanoLika: as for a group pick, the default for new chats and the main chat follow
                     if (entry != null) {
                         val name = entry.model.displayName.ifBlank { entry.model.id }
                         val sticks = io.github.nanomuse.models.ModelSlots.followPick(context, entryId, groupId)
@@ -7321,7 +7321,7 @@ fun ChatScreen(
                 } else {
                     viewModel.selectEntry(entryId)
                     showModelPicker = false
-                    // nanoMuse: a pick in the picker is meant as "the model from now on" —
+                    // NanoLika: a pick in the picker is meant as "the model from now on" —
                     // the default for new chats follows it (a group named after the pick's
                     // provider, Settings → Models shows the same), and a line says so, since
                     // the picker's own binding is per chat and the next new chat would

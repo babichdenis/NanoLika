@@ -1,4 +1,4 @@
-# Mac 侧协作任务 — nanoMuse 0.1.39（Mac 上的 Computer use、iOS 闪退、iOS 账号隔离）
+# Mac 侧协作任务 — NanoLika 0.1.39（Mac 上的 Computer use、iOS 闪退、iOS 账号隔离）
 
 这份文档是给在维护者（lgy0404）的 Mac 上运行的 Cursor 代理看的。把它整个粘贴给代理，它就有了
 全部上下文。维护者在 Linux 上开发，Linux 上另有一个代理（下文叫 **L**）同时在做这一版的其他事情；
@@ -12,7 +12,7 @@
 
 ## 0. 项目与分工
 
-nanoMuse 是一个开源（GPL-3.0-or-later）的个人 agent：手机 app（Android 和 iOS，基于 OpenMinis
+NanoLika 是一个开源（GPL-3.0-or-later）的个人 agent：手机 app（Android 和 iOS，基于 OpenMinis
 子树 `android/`）、桌面 app（`harness/dsh-nanomuse/` 是一个 DeepSeek Harness 插件，
 `harness/desktop/` 是包着它的 Electron 壳，壳里带着 Python 运行时给「手」用）、Python 运行时
 `nanomuse/`（agent 循环、Sentinel、工具、手机/电脑操作器）、Web 控制台 `web/`、中继 `cloud/`
@@ -96,14 +96,14 @@ bash mac/computer-use/build.sh                       # → mac/computer-use/buil
 权限相关的系统命令：`tccutil reset ScreenCapture io.github.nanomuse.desktop.computer-use`、
 `tccutil reset Accessibility io.github.nanomuse.desktop.computer-use`（0.1.37 及之前的 bundle id 是
 `io.github.nanomuse.desktop`，一并 reset）；`codesign -dv --verbose=2 <app>`；`spctl -a -vv <app>`；
-`xattr -l <app>`；Console.app 里按 `syspolicyd`、`tccd`、`nanoMuse` 过滤。
+`xattr -l <app>`；Console.app 里按 `syspolicyd`、`tccd`、`NanoLika` 过滤。
 
 ## 2. 任务 A — Mac 上的 Computer use（最高优先级）
 
 ### A.1 现状和维护者看到的现象
 
 维护者的原话只有一句：「mac 的 CUA 还是不行」。没有更多细节，所以 **第一步是在这台 Mac 上用
-已发布的 0.1.38 复现并说清楚到底哪一步坏了**：是权限面板里没有出现「nanoMuse Computer Use」
+已发布的 0.1.38 复现并说清楚到底哪一步坏了**：是权限面板里没有出现「NanoLika Computer Use」
 这一行、授权了但截图是黑的、截图对了但点击落不到位置、点击落对了但 app 没反应、还是 Settings →
 Computer use 页面本身就报错。把 `desktop.log` 里 `helper:`、`operator`、`hands`、`runtime:`
 开头的行、系统设置两个面板的截图、`codesign`/`spctl`/`xattr` 的输出一起记下来。
@@ -117,7 +117,7 @@ Computer use 页面本身就报错。把 `desktop.log` 里 `helper:`、`operator
 壳的操作器服务（`harness/desktop/src/operator.ts`，loopback HTTP，`NANOMUSE_OPERATOR_URL` /
 `_TOKEN`；`GET /info`、`POST /screenshot`、`POST /execute`）。
 
-0.1.38 在 macOS 上把截图和输入挪进了一个独立的小 app——**nanoMuse Computer Use.app**
+0.1.38 在 macOS 上把截图和输入挪进了一个独立的小 app——**NanoLika Computer Use.app**
 （学 Codex 的做法：macOS 把权限记在 LaunchServices 启动的「责任进程」名下，壳的子进程算壳自己，
 所以运行时过去从不出现在权限面板里；通过 `open` 启动的 app bundle 对自己负责，面板里就有它自己的
 一行）。实现：
@@ -144,7 +144,7 @@ Computer use 页面本身就报错。把 `desktop.log` 里 `helper:`、`operator
   `permissions.ts`、`Capsule.tsx`（`helper` 标志决定文案）、`locales.ts` 的 `pmOnlyHelper`、
   `pmTryShotBlackHelper`、`pmBlackBodyHelper`、`pmBlackRelaunchHelper` 等 key。
 - 打包：`electron-builder.yml` `mac.extraFiles` 把 `build/nanoMuse Computer Use.app` 放到
-  `nanoMuse.app/Contents/Helpers/`；`scripts/desktop-app/package-mac.sh` 先签助手再签外层
+  `NanoLika.app/Contents/Helpers/`；`scripts/desktop-app/package-mac.sh` 先签助手再签外层
   （没有证书时都是 ad-hoc）；`.github/workflows/desktop-app.yml` 的 macOS job 跑 `build.sh`
   （CI 上 0 warning 通过）。
 - 文档：`docs/desktop.md` → *macOS permissions*、*macOS signing*。
@@ -160,7 +160,7 @@ Computer use 页面本身就报错。把 `desktop.log` 里 `helper:`、`operator
    可能的修法：首启时对自己 bundle 内的助手 `xattr -d com.apple.quarantine`（bundle 在用户可写的
    `/Applications` 里时可行）；或者不走 `open` 而用 `posix_spawn` + 让 TCC 把责任算给助手的别的办法；
    或者两条路都做并记录各自的权限归属结果。拿到 Developer ID 证书之前这是现实约束，文档要如实写。
-2. **TCC 归属。** 面板里出现的到底是「nanoMuse Computer Use」、「nanoMuse」还是「Electron」？
+2. **TCC 归属。** 面板里出现的到底是「NanoLika Computer Use」、「NanoLika」还是「Electron」？
    授权后 app 重启、助手重启，授权是否还在？ad-hoc 签名每次构建 cdhash 变，TCC 会忘记——开发态
    每次重编都要重新授权，这是已知的，写进文档即可；打包态同一个包内必须稳定。
 3. **截图。** 授权前是黑帧还是报错（0.1.38 的 UI 文案按「黑帧 → 一句话指引」设计，见
@@ -178,7 +178,7 @@ Computer use 页面本身就报错。把 `desktop.log` 里 `helper:`、`operator
 
 在一台重置过 TCC 的 Mac 上，用打包态的 app：
 
-1. Settings → Computer use 把人引导到系统设置里**正确的那一行**（nanoMuse Computer Use）去开
+1. Settings → Computer use 把人引导到系统设置里**正确的那一行**（NanoLika Computer Use）去开
    屏幕录制和辅助功能，一次说清楚，不多弹、不乱弹；
 2. 授权（及必要的重启）后，页面里的测试截图是真实屏幕；
 3. 一个真实任务跑通，例如「打开计算器，算 12×34，告诉我结果」或「打开系统设置，把音量调低」：
@@ -216,7 +216,7 @@ TestFlight 上 build 8 = 0.1.37，build 9 = 0.1.38（2026-10-05 上传）。先�
 ### B.3 嫌疑（按可能性）
 
 0.1.38 在 iOS 上新加/改的东西都在 `android/src/ios/NanoMuse/`（上游文件里的改动都带
-`// nanoMuse:`）：
+`// NanoLika:`）：
 
 1. **首次拉取写入的数据让启动时的加载崩了。** 0.1.38 的同步契约 C9：登录后第一次拉
    `GET /v1/sync/changes?since=0&scope=…&tail=300`，把最新 300 条消息及其会话落到本地
@@ -241,7 +241,7 @@ TestFlight 上 build 8 = 0.1.37，build 9 = 0.1.38（2026-10-05 上传）。先�
 ### B.4 验收
 
 根因写清楚（栈、哪一行、为什么）；修复在 `mac/ios-crash-0139`，新文件放 `NanoMuse/`，上游文件
-的改动带 `// nanoMuse:`；能加回归测试就加到 `MinisTests/`（0.1.38 加了
+的改动带 `// NanoLika:`；能加回归测试就加到 `MinisTests/`（0.1.38 加了
 `NanoMuseRound5Tests.swift`，照它的样子）；复现脚本在真机或模拟器上走三遍不崩；
 `xcodebuild build -project Minis.xcodeproj -scheme Minis -configuration Debug -destination
 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO` 零 warning（`NanoMuse/` 下）；`CHANGELOG.md`
@@ -302,6 +302,6 @@ Android、桌面、运行时由 L 做，**iOS 由你做**。规则：
 | 桌面 app 数据目录 / 日志 | `~/.nanomuse/desktop/desktop.log`（`NANOMUSE_DESKTOP_HOME` 可改） |
 | 打包 | `cd harness/desktop && npm run dist:dir && ../../scripts/desktop-app/package-mac.sh arm64` |
 | iOS 工程 | `android/src/ios/Minis.xcodeproj`，scheme `Minis`，我们的代码在 `NanoMuse/`，测试在 `MinisTests/`，字符串 `Localizable.xcstrings` |
-| 上游改动标记 | `// nanoMuse:`；品牌替换 `python scripts/rebrand.py`（必须输出 `clean`） |
+| 上游改动标记 | `// NanoLika:`；品牌替换 `python scripts/rebrand.py`（必须输出 `clean`） |
 | 文档 | `docs/desktop.md`（macOS 两节）、`docs/gui.md`、`docs/ios.md`、`docs/every-device.md`、`docs/hub.md`、`docs/cloud.md` |
 | 已发布的安装包 | `https://github.com/nano-muse/nanoMuse/releases/tag/v0.1.38` |

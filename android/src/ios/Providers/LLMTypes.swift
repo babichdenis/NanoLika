@@ -254,7 +254,7 @@ struct LLMModel: Equatable, Hashable, Identifiable, Sendable, Codable {
 
     // MARK: - OpenAI Models
 
-    // nanoMuse: GPT-6 series models on ChatGPT / Codex OAuth (#475)
+    // NanoLika: GPT-6 series models on ChatGPT / Codex OAuth (#475)
     static let gpt61Sol = LLMModel(
         id: "gpt-6.1-sol",
         displayName: "GPT-6.1 Sol",
@@ -459,7 +459,7 @@ struct LLMModel: Equatable, Hashable, Identifiable, Sendable, Codable {
     /// carry more. Re-probe before adding anything back; do not restore an id
     /// from documentation alone.
     static let allOpenAICodexOAuth: [LLMModel] = [
-        .gpt61Sol, .gpt6Sol, .gpt6Luna, .gpt6Astra, // nanoMuse: GPT-6 series (#475)
+        .gpt61Sol, .gpt6Sol, .gpt6Luna, .gpt6Astra, // NanoLika: GPT-6 series (#475)
         .gpt56Sol, .gpt56Terra, .gpt56Luna,
         .gpt55, .gpt54, .gpt54Mini,
         // gptImage2 is kept: it is an image endpoint, not a Codex chat model,
@@ -582,7 +582,7 @@ struct LLMModel: Equatable, Hashable, Identifiable, Sendable, Codable {
         // First: enrich from models.dev (fills modality, contextWindow, maxOutputTokens if available)
         var enriched = ModelsDevAPI.enrichModel(self)
 
-        // nanoMuse: DeepSeek's rule (contract C4) wins over models.dev — text only unless the id
+        // NanoLika: DeepSeek's rule (contract C4) wins over models.dev — text only unless the id
         // names v4.1 or later, `vision` or `ocr`; the relay's and Bailian's `deepseek-v4.1-flash` sees.
         if let sees = NanoMuseVision.deepSeekSees((id + " " + displayName).lowercased()) {
             enriched.modalityOverride = sees ? .vision : .textOnly
@@ -592,7 +592,7 @@ struct LLMModel: Equatable, Hashable, Identifiable, Sendable, Codable {
         // If models.dev already set the modality, we're done
         if enriched.modalityOverride != nil { return enriched }
 
-        // nanoMuse: families we know see (Qwen 3, GLM-4V, Kimi VL, …) before the broad pattern pass.
+        // NanoLika: families we know see (Qwen 3, GLM-4V, Kimi VL, …) before the broad pattern pass.
         if let guess = NanoMuseVision.guess(id: id, displayName: displayName) {
             enriched.modalityOverride = guess
             return enriched

@@ -1,4 +1,4 @@
-# Mac 实机检查任务 — nanoMuse Desktop 0.1.36
+# Mac 实机检查任务 — NanoLika Desktop 0.1.36
 
 这份文档是给在一台 Mac 上运行的 Cursor（或任何编码代理）看的。把它整个粘贴给代理，它就有了
 全部上下文：仓库是什么、怎么在 Mac 上构建桌面端、要检查哪几件事、每件事的预期、代码在哪、
@@ -11,7 +11,7 @@
 ## 0. 背景
 
 - 仓库 https://github.com/nano-muse/nanoMuse （GPL-3.0-or-later）。桌面端在 `harness/`：
-  `harness/dsh-nanomuse` 是跑在 DeepSeek Harness（dsh）里的 nanoMuse 插件包（TypeScript，React
+  `harness/dsh-nanomuse` 是跑在 DeepSeek Harness（dsh）里的 NanoLika 插件包（TypeScript，React
   通过 `h()` 写，样式在 `src/client/styles.ts` 一个文件里），`harness/desktop` 是 Electron 外壳
   （`src/main.ts` 主进程、`src/preload.ts`、`resources/*.html` 启动页/发光层/胶囊），
   `nanomuse/` 是 Python 运行时（电脑端的「双手」，`nanomuse/computer/`），由外壳作为子进程拉起。
@@ -22,7 +22,7 @@
   让聊天顶栏不再是窗口拖拽区（`styles.ts` 平台块，`MuseHeader.tsx` 里新增的空拖拽条
   `.nm-header-drag`），并把形象整体下移到 macOS 标题栏带以下。这需要实机确认。
 - 规则：不改版本号（版本号只在发布提交里改）；新代码放在我们自己的文件/命名空间里；改
-  上游文件要留 `// nanoMuse:` 注释；字符串英文在前、中文随后（`locales.ts` 两份）；不往仓库里
+  上游文件要留 `// NanoLika:` 注释；字符串英文在前、中文随后（`locales.ts` 两份）；不往仓库里
   放笔记、截图、日志。提交用 `git commit -s`（DCO 签名）。
 
 ## 1. 环境
@@ -103,7 +103,7 @@ cd harness/desktop && npm ci && npm run typecheck
 
 ### C. 屏幕录制的重启对话框
 
-- 做法：应用运行中，到系统设置 → 隐私与安全性 → 屏幕录制，打开 nanoMuse Desktop。
+- 做法：应用运行中，到系统设置 → 隐私与安全性 → 屏幕录制，打开 NanoLika Desktop。
 - 预期：应用弹一次对话框「屏幕录制已允许，重新启动后生效」（英文 “Screen Recording is on; it
   takes effect after a restart”），按钮「立即重启 / 稍后」；点「立即重启」应用重开（`app.relaunch`），
   之后截图不再是黑的。对话框只出现一次，不重复弹；「稍后」之后也不要再弹。
@@ -122,7 +122,7 @@ cd harness/desktop && npm ci && npm run typecheck
 - 背景：macOS 上 `[hands] mode = auto` 时，一旦指定目标应用，双手就进入「窗口模式」——截图只
   截那个窗口，事件直接发给那个进程（`nanomuse/computer/mac_window.py`）。Retina 屏的窗口截图是
   点数的两倍，`WindowFrame.to_screen` 负责把图上的像素映射回屏幕点。
-- 做法：开一个 TextEdit 窗口放在屏幕右下（避开左上角默认位置），对 nanoMuse 说「在 TextEdit 里
+- 做法：开一个 TextEdit 窗口放在屏幕右下（避开左上角默认位置），对 NanoLika 说「在 TextEdit 里
   点一下工具栏最左边的按钮」或通过工具直接调用：先 `computer_screen`（app=TextEdit）看图，再
   `computer_act click` 到图上某个明确的按钮坐标。
 - 预期：点在图上那个按钮上（用 `cliclick p` 读当前鼠标位置，和换算后的屏幕点比对；差距应在 2 pt 内）。
@@ -150,9 +150,9 @@ cd harness/desktop && npm ci && npm run typecheck
   1. **原生模块能加载。** 打包后：`node scripts/prepare-dsh.mjs` 之后 `npm run dist:dir`，确认
      `dist/mac-arm64/*.app/Contents/Resources/app.asar.unpacked/node_modules/@computer-use/libnut-darwin/build/Release/libnut.node`
      存在；跑 `node scripts/smoke.mjs --app dist/mac-arm64 --operator`（`/info` 可用、无 token → 401、
-     320×180 PNG 可解码）。另外 `open -a "nanoMuse Desktop" --args --operator-check=/tmp/op.json`
+     320×180 PNG 可解码）。另外 `open -a "NanoLika Desktop" --args --operator-check=/tmp/op.json`
      （加 `--operator-move` 会把鼠标移到屏幕中心）写出一份自检 JSON，贴进报告。
-  2. **权限归属。** 首次使用前 TCC 应各弹一次提示，并且两项都归在 **nanoMuse Desktop** 名下
+  2. **权限归属。** 首次使用前 TCC 应各弹一次提示，并且两项都归在 **NanoLika Desktop** 名下
      （不是 Electron，不是 Python）。`tccutil reset ScreenCapture io.github.nanomuse.desktop` /
      `tccutil reset Accessibility io.github.nanomuse.desktop` 后重做一次。权限 `not-determined` 时
      `/info` 应为 `available:false` 且 reason 说清缺哪一项；此时运行时会退回 pyautogui 并缓存到重启——
@@ -171,7 +171,7 @@ cd harness/desktop && npm ci && npm run typecheck
   8. **窗口模式**（与 E 节一起）：`[hands] mode = window` 时点击仍应准确，Retina 映射不重复缩放。
 - 诊断：`desktop.log` 中搜 `operator`（启动行有端口和 available；token 不打印）。要 `curl` 时从
   运行时进程的环境里取：`PID=$(pgrep -f "[n]anomuse mcp" | head -1); ps eww -p "$PID" | tr ' ' '\\n' | grep NANOMUSE_OPERATOR_`
-  （只在本机终端里用，不要把 token 写进报告）。常见原因：权限未归到 nanoMuse Desktop → 按 2 节 reset；`libnut.node` 缺失 → `asarUnpack` 没生效，
+  （只在本机终端里用，不要把 token 写进报告）。常见原因：权限未归到 NanoLika Desktop → 按 2 节 reset；`libnut.node` 缺失 → `asarUnpack` 没生效，
   检查 `electron-builder.yml`；坐标偏一倍 → `display.scaleFactor` 在 Mac 上没取 1，看 `operator.ts`
   的 `screenSpace`。
 - 代码：`harness/desktop/src/operator.ts`、`operator-server.ts`、`main.ts`（启动/注入/`--operator-check`）、
@@ -180,7 +180,7 @@ cd harness/desktop && npm ci && npm run typecheck
 
 ### G. 启动页与图标
 
-- 启动时先出现启动页：nanoMuse 图标在一个安静的加载圆环里，下面是字标和「正在启动」；没有
+- 启动时先出现启动页：NanoLika 图标在一个安静的加载圆环里，下面是字标和「正在启动」；没有
   龙、没有任何形象。深浅色模式都看。Dock 图标、菜单栏托盘图标正常。
 - 代码：`harness/desktop/resources/loading.html`、`main.ts` 的 `createWindow`。
 

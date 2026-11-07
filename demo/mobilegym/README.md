@@ -1,34 +1,34 @@
-# nanoMuse as an app on a simulated phone
+# NanoLika as an app on a simulated phone
 
 Muse lives on a phone: it sits among your other apps, and when it needs you (an approval, a
 question, something it finished in the background) it comes through the notification shade.
-This directory makes nanoMuse behave that way inside [MobileGym](https://github.com/Purewhiter/mobilegym),
+This directory makes NanoLika behave that way inside [MobileGym](https://github.com/Purewhiter/mobilegym),
 a browser-hosted Android simulator with a launcher, a notification shade and 28 re-implemented
 apps (WeChat, Alipay, 12306, …). No device, no emulator: one browser tab.
 
 <p align="center">
-  <img src="screenshots/setup.png" width="24%" alt="First launch: connect the phone to your nanoMuse server">
-  <img src="screenshots/heads-up.png" width="24%" alt="A heads-up notification from nanoMuse on the home screen, badge on the icon">
+  <img src="screenshots/setup.png" width="24%" alt="First launch: connect the phone to your NanoLika server">
+  <img src="screenshots/heads-up.png" width="24%" alt="A heads-up notification from NanoLika on the home screen, badge on the icon">
   <img src="screenshots/shade.png" width="24%" alt="The notification in the shade">
-  <img src="screenshots/app.png" width="24%" alt="Tapping it opens nanoMuse on that chat">
+  <img src="screenshots/app.png" width="24%" alt="Tapping it opens NanoLika on that chat">
 </p>
 
 `apps/nanoMuse/` is an app module in MobileGym's own format (manifest, entry component,
 navigation declaration, Zustand store; see the platform's app module contract). It is a thin
-shell around the real nanoMuse web app:
+shell around the real NanoLika web app:
 
-- **The app** shows the nanoMuse web app full screen, served by `nanomuse serve` on your
+- **The app** shows the NanoLika web app full screen, served by `nanomuse serve` on your
   computer. Everything you see is the same code a real phone gets; the shell only keeps the
   tab bar clear of the simulator's gesture bar.
 - **Notifications.** Real phones get Web Push. The simulator has no push service, so the
   module keeps one WebSocket to the server open for the whole simulator session (the store is
   loaded at boot, before any app is opened) and turns the events a phone would be notified
   about into simulated Android notifications: *Muse needs your approval*, *Muse has a
-  question*, and the last word of a background pass or check-in. Tapping one opens nanoMuse
+  question*, and the last word of a background pass or check-in. Tapping one opens NanoLika
   on that chat. A card you decide from another device takes its notification down again; the
   launcher icon carries the unread badge.
 - **The first page.** The Android app's welcome page (`FirstRunSetup.kt`): the dragon's face,
-  *Welcome to nanoMuse*, the one line, the three rows, a pill. In a checkout it asks for the
+  *Welcome to NanoLika*, the one line, the three rows, a pill. In a checkout it asks for the
   server address: paste the link `nanomuse serve` prints (it carries the access token). The
   token is checked by opening the server's WebSocket once, so the server needs no CORS
   configuration.
@@ -51,7 +51,7 @@ shell around the real nanoMuse web app:
   capsule itself (**Allow once** / **Deny**, `POST /api/approvals/{id}` with scope `once`),
   so the person is not bounced into the app; only a question still becomes a card with
   *Open*. When the task is over (a tick, or
-  *Stopped*) the phone comes back to nanoMuse, where the report is, as the Android app
+  *Stopped*) the phone comes back to NanoLika, where the report is, as the Android app
   brings itself to the front; and the capsule follows the server's word on the task
   (`phone.task` in the socket's `hello`) rather than the one `end` message, so a socket that
   drops mid-task does not leave it on the screen. The marks are left out of the
@@ -63,15 +63,15 @@ shell around the real nanoMuse web app:
   简体中文 and English; where the Android app has the same string, the wording is its).
 
 - **The hosted showcase.** Built with `VITE_NANOMUSE_DEMO=/api/demo`, the first page's pill
-  is the Android app's door: *Sign in, free*, nanoMuse Cloud's sign-in page (a mainland phone
+  is the Android app's door: *Sign in, free*, NanoLika Cloud's sign-in page (a mainland phone
   number or an e-mail, a code or the account's password; the relay's refusals in the phone's
   language), then the meet page, whose *Start* asks the *showcase gateway*
-  ([`demo/showcase/`](../showcase/)) for a private nanoMuse for this visitor, for a while and
+  ([`demo/showcase/`](../showcase/)) for a private NanoLika for this visitor, for a while and
   within a model budget. The browser keeps the sign-in's ticket, so the next visit goes from
   the welcome page straight to a Muse (*Signed in as* the masked number *· Sign out* under the
   pill). A showcase that asks for no sign-in (`DEMO_SIGNIN_REQUIRED=0`) starts on the first
   tap. *I have my own API key* opens the fields for the visitor's own model, *Connect your own
-  nanoMuse* the form for a server of one's own, and a line under the pill says what this is (a
+  NanoLika* the form for a server of one's own, and a line under the pill says what this is (a
   demo in a simulator) and where the app is. A normal checkout has the variable empty and
   never asks the gateway for anything.
 
@@ -82,20 +82,20 @@ bar, approval cards) minus the notifications, which is what this module adds.
 ## Run it
 
 Node 22+, Python 3.11+, a Chromium-based desktop browser. MobileGym's 1.9 GB companion
-dataset is optional here: nanoMuse does not need it, the simulated media apps just render empty
+dataset is optional here: NanoLika does not need it, the simulated media apps just render empty
 without it.
 
 ```bash
-# 1. nanoMuse, as usual; prints a link with a one-time token
+# 1. NanoLika, as usual; prints a link with a one-time token
 nanomuse serve --port 8787
 
-# 2. MobileGym with the nanoMuse app installed
+# 2. MobileGym with the NanoLika app installed
 git clone --depth 1 https://github.com/Purewhiter/mobilegym.git
 demo/mobilegym/install.sh mobilegym          # copies apps/nanoMuse into the checkout
 cd mobilegym && npm install && npm run dev   # http://127.0.0.1:3000
 ```
 
-Open the simulator, find **nanoMuse** in the launcher (search works too), paste the link from
+Open the simulator, find **NanoLika** in the launcher (search works too), paste the link from
 step 1, *Connect*. Then go back to the home screen and give the agent something to do from
 another tab or the CLI: `nanomuse chat`, or the web app in a normal browser tab: the phone
 lights up when it needs you.
@@ -107,7 +107,7 @@ the simulated apps: "打开微信，看看最新一条消息是谁发的", "用 
 through its screens, and stops at the send button until you approve.
 
 `install.sh` only copies files; MobileGym discovers apps by directory convention, nothing in the
-checkout is edited. Run it again after pulling a newer nanoMuse.
+checkout is edited. Run it again after pulling a newer NanoLika.
 
 ## Notes
 
@@ -140,7 +140,7 @@ checkout is edited. Run it again after pulling a newer nanoMuse.
 - **Deep links.** The OS hands the app `/?thread=<id>`; the shell forwards `thread` and `tab`
   to the web app's own deep links (`docs/app.md`).
 - **Not a MobileGym benchmark task.** The module declares its UI states and transitions like
-  every MobileGym app, so the platform's analyzer sees it, but nanoMuse's content is live
+  every MobileGym app, so the platform's analyzer sees it, but NanoLika's content is live
   server output and is not deterministic; it is here to show the product, not to be graded.
 
 ## Layout
@@ -163,7 +163,7 @@ apps/nanoMuse/
 ├── hooks/useNanoMuseGestures.ts
 ├── data/                     defaults
 ├── res/strings.ts            简体中文 and English for the shell, the notifications and the capsule
-├── res/icons.tsx             the shell's icons; the launcher icon is the nanoMuse mark
+├── res/icons.tsx             the shell's icons; the launcher icon is the NanoLika mark
 ├── res/mark.tsx              the mark: the one-stroke N of assets/brand/nanomuse-mark.svg, as the Android launcher icon
 └── res/dragon-idle.webp      the dragon's face at rest, for the welcome page (web/public/avatars)
 ```

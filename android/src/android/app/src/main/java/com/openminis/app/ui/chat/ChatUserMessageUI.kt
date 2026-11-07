@@ -374,7 +374,7 @@ internal fun UserMessageBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        // nanoMuse: ink on the user pill (white pill, black ink in
+                        // NanoLika: ink on the user pill (white pill, black ink in
                         // the dark theme, inverted in light), not onSurface.
                         val textColor = if (isQueued) secondaryTextColor else ChatColors.onUserBubble
                         val bubbleBg = if (isQueued) Color.Transparent else userBubbleColor
@@ -736,7 +736,7 @@ private fun ImageGalleryDialog(
     }
 }
 
-// ─── Assistant Message (left-aligned, no bubble, with "nanoMuse" header like iOS) ─
+// ─── Assistant Message (left-aligned, no bubble, with "NanoLika" header like iOS) ─
 
 // ─── Flattened chat items ────────────────────────────────────────────────────
 // Each message is expanded into a sequence of independent LazyColumn items (header,

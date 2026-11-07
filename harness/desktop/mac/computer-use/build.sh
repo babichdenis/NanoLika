@@ -22,7 +22,7 @@
 #   OUT_DIR                     where build/ goes
 #
 # Warnings: the compiler's output is kept and any `warning:` line is surfaced as a GitHub
-# annotation (::warning::) so it is seen without failing the release build; a NanoMuse Swift
+# annotation (::warning::) so it is seen without failing the release build; a NanoLika Swift
 # file with a warning is treated as a failure by the project's rules — fix it.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

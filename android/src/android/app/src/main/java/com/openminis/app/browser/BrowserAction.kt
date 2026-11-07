@@ -26,7 +26,7 @@ enum class BrowserAction(val value: String) {
     SET_COOKIES("set_cookies"),
     SCROLL_AND_COLLECT("scroll_and_collect"),
     WAIT_FOR_DOM_STABLE("wait_for_dom_stable"),
-    // nanoMuse: the page needs the person (login, code, payment, CAPTCHA) — the browser goes to them (io.github.nanomuse.browser.BrowserHandOver).
+    // NanoLika: the page needs the person (login, code, payment, CAPTCHA) — the browser goes to them (io.github.nanomuse.browser.BrowserHandOver).
     HAND_OVER("hand_over");
 
     /**

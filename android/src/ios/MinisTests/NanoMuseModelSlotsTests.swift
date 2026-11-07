@@ -10,7 +10,7 @@ final class NanoMuseModelSlotsTests: XCTestCase {
 
     private var cloud: NanoMuseSlotProvider {
         NanoMuseSlotProvider(
-            id: cloudId, label: "nanoMuse Cloud", isCloud: true,
+            id: cloudId, label: "NanoLika Cloud", isCloud: true,
             capabilities: ["chat", "vision", "image", "video"],
             defaults: ["chat": "deepseek-v4.1-flash", "image": "qwen-image-3.0", "video": "wan2.2-i2v-flash"],
             models: [.chat: ["deepseek-v4.1-flash", "qwen3.8-27b"], .hands: ["qwen3.8-27b"], .image: ["qwen-image-3.0"], .video: ["wan2.2-i2v-flash"]]
@@ -121,7 +121,7 @@ final class NanoMuseModelSlotsTests: XCTestCase {
         XCTAssertEqual(NanoMuseSlotResolver.resolve(slot: .chat, chosen: nil, chatProviderId: nil, providers: [openrouter, bailian]), NanoMuseSlotChoice(providerId: "openrouter-1", model: "deepseek/deepseek-v4.1-flash"))
     }
 
-    // MARK: - nanoMuse Cloud switched off while the chat was the account's (Android: ChatLeavesTest)
+    // MARK: - NanoLika Cloud switched off while the chat was the account's (Android: ChatLeavesTest)
 
     func testChatLeavesCloudForTheFirstOwnProvidersDefault() {
         // The first own provider in the order they were added, on the catalogue's default for it.

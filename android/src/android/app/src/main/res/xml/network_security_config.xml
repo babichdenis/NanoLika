@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- nanoMuse: the platform config cannot express "any private address", so the rule that
+    <!-- NanoLika: the platform config cannot express "any private address", so the rule that
          plain http:// is for the local network only (10/8, 172.16/12, 192.168/16, 100.64/10,
          link-local, .local names) is applied in code — io.github.nanomuse.net.LanOnly — where an
          endpoint is entered. This file stays as OpenMinis left it so those LAN endpoints work. -->

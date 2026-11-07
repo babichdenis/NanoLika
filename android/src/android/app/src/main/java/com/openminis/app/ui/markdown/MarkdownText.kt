@@ -110,7 +110,7 @@ private fun BlockContent(
     when (block) {
         is MarkdownParser.Block.Heading -> HeadingBlock(block, color)
         is MarkdownParser.Block.Paragraph -> ParagraphBlock(block.content, color, baseStyle, mathSpans)
-        // nanoMuse: `nanomuse-*` fences are app protocol (goal created / goal
+        // NanoLika: `nanomuse-*` fences are app protocol (goal created / goal
         // update) and render as cards, never as code.
         is MarkdownParser.Block.CodeBlock ->
             if (block.language.startsWith("nanomuse-")) io.github.nanomuse.ui.chat.NanoMuseBlock(block.language, block.code)

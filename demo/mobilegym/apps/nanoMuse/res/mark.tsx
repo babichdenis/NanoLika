@@ -1,7 +1,7 @@
 import { useId, type CSSProperties } from 'react';
 
 /**
- * The nanoMuse mark — the one-stroke N in the brand gradient — as the launcher icon of the
+ * The NanoLika mark — the one-stroke N in the brand gradient — as the launcher icon of the
  * simulated phone: the same icon the Android app has (scripts/gen-android-icons.py draws it
  * from assets/brand/nanomuse-mark.svg onto a white tile; this is that path). It takes the
  * props the launcher passes a lucide icon and keeps its own colours.

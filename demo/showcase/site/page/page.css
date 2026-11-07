@@ -203,8 +203,8 @@ html[data-theme="dark"] .nm-dock-app[aria-pressed="true"] { background: #e8e8e8;
   .hero-demo .phone-rig .state-dock-hint { left: calc(100% + 16px); top: calc(100% + 16px); }
 }
 
-/* nanoMuse first in the dock (compose.mjs puts it above their State Builder tabs): the launcher
-   icon — the mark on a white tile — lit while nanoMuse is the app on the screen */
+/* NanoLika first in the dock (compose.mjs puts it above their State Builder tabs): the launcher
+   icon — the mark on a white tile — lit while NanoLika is the app on the screen */
 .nm-dock-app .state-dock-tab-icon-img {
   background: #fff;
   border: 1px solid rgba(28, 25, 23, 0.12);

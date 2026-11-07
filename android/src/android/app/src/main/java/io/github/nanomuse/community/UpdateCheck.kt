@@ -117,7 +117,7 @@ object UpdateCheck {
 
     private fun get(url: String): String? = try {
         val req = Request.Builder().url(url).get()
-            .header("User-Agent", "nanoMuse-Android/${BuildConfig.VERSION_NAME}")
+            .header("User-Agent", "NanoLika-Android/${BuildConfig.VERSION_NAME}")
             .header("Accept", "application/json")
             .build()
         http.newCall(req).execute().use { r ->

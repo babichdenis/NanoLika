@@ -32,7 +32,7 @@ model when the provider has no model that sees and you are signed in; a
 provider without `vision` and no account gets the one sentence instead of a
 blind hands model. A *Proxy (optional)* field under them takes an
 `http://host:port`, `https://` or `socks5://` address for this provider's
-requests only (`[llm] proxy`; nanoMuse Cloud never goes through it, a SOCKS
+requests only (`[llm] proxy`; NanoLika Cloud never goes through it, a SOCKS
 address needs `httpx[socks]` on the runtime); a saved password comes back as
 dots, and an emptied field clears it.
 
@@ -78,12 +78,12 @@ Models contract (0.1.41), one card each under the chat model. The value is
 `image` / `video`: the slot as set and its `effective_*`): an explicit choice,
 else the chat provider's own picture model when it has one, else your account's
 when signed in, else the one sentence and an *Add a provider* button. The
-picker offers *Automatic* first, a *nanoMuse Cloud* group when signed in, *The chat model's provider* when it has the capability
+picker offers *Automatic* first, a *NanoLika Cloud* group when signed in, *The chat model's provider* when it has the capability
 (its key serves, nothing to paste), and under *Add a provider* every catalogue
 provider with the capability for your region, plus *Other OpenAI-compatible
 endpoint* with a base URL; a provider without the capability is not offered.
 A model may be picked from what the endpoint lists (the relay's menu and the
-account's other models on nanoMuse Cloud) or left to the catalogue's default.
+account's other models on NanoLika Cloud) or left to the catalogue's default.
 *Save* calls `PUT /api/connections/image` or `/video` with `provider` (a
 catalogue id, or `openai` with a `base_url`), `model`, `base_url`, `api_key`
 (into the vault as `IMAGE_API_KEY` / `VIDEO_API_KEY`; the relay's row names the
@@ -214,7 +214,7 @@ with an error: …* and the five the operator's switches send
 | `429 provider_busy` | The model provider is busy; try again in a moment. |
 | `429 allowance_exhausted` with `paused: true` | The free allowance is paused on this relay for now, not used up. Your own model key under Connections keeps you going; your sign-in, your devices and what is left stay as they are. (the same ways card as a spent pool, the notice carries `paused`) |
 | `403 signup_closed` | New sign-ups are paused on this relay for now; existing accounts keep working. Try again later. |
-| `503 service_paused` | nanoMuse Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later. |
+| `503 service_paused` | NanoLika Cloud is paused by its operator for now; your sign-in and your data are kept. Try again later. |
 | `503 sync_paused` | Conversation sync is paused on this relay for now; what is stored is kept and your devices keep working on their own. |
 | `503 hub_paused` | The device hub is paused on this relay for now; each device keeps working on its own. |
 
@@ -222,21 +222,21 @@ The raw reply stays under *Details* for a bug report, never as the only thing sh
 
 **A turn your own model failed** (a refused key, a model the endpoint does not
 know, a rate limit, a timeout, no connection) shows its sentence and, when you
-are signed in and the chat is not on the account, *Use nanoMuse Cloud this time*
+are signed in and the chat is not on the account, *Use NanoLika Cloud this time*
 (the own-key models contract, section 4; the desktop and the phones have the
 same). It sends the same words again with `via: "cloud"` (`POST
 /api/threads/{id}/send`, or the socket's `send` frame): the runtime runs that
 one turn on the relay's recommended chat model under the account's key, and the
-next turn is back on your model. `[llm]`, *Use nanoMuse Cloud models* and the
+next turn is back on your model. `[llm]`, *Use NanoLika Cloud models* and the
 conversation stay as they were; with the Cloud models switched off this button
 is the only thing that spends the allowance. The user bubble, the reply and a
 failure of that turn carry `model_used` (the model id); the reply shows
-*Answered by nanoMuse Cloud this time (model)* under it, and a notice that
+*Answered by NanoLika Cloud this time (model)* under it, and a notice that
 carries `model_used` does not offer the button again. Signed out, the runtime
-answers `401 signed_out` with *Sign in to nanoMuse Cloud first.*, shown under the
-button. Switching *Use nanoMuse Cloud models* off while the chat model is the
+answers `401 signed_out` with *Sign in to NanoLika Cloud first.*, shown under the
+button. Switching *Use NanoLika Cloud models* off while the chat model is the
 account's is refused with `409 chat_on_cloud` (*Add a provider of your own
-first; with nanoMuse Cloud off, nothing else could answer.*), shown under the
+first; with NanoLika Cloud off, nothing else could answer.*), shown under the
 switch.
 
 **A connection test that fails** (*Test* under a model, the hands) says the same

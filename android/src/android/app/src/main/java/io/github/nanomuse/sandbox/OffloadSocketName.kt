@@ -7,7 +7,7 @@ package io.github.nanomuse.sandbox
  * Abstract sockets live in one namespace for every app on the device, so a name has to be
  * the app's own: OpenMinis binds `native-offload`, and a second app binding the same name
  * fails with EADDRINUSE and, upstream, dies in `onCreate` before its first screen (#271).
- * nanoMuse's name carries the application id instead, and when even that is taken after
+ * NanoLika's name carries the application id instead, and when even that is taken after
  * the bind retries (a previous process of ours the kernel has not reaped yet) the server
  * falls back to a per-process name rather than giving up. proot is told whichever name
  * was bound, on its command line, so nothing else needs to know.

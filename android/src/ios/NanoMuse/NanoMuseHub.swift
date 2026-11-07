@@ -1,5 +1,5 @@
-// nanoMuse: this iPhone on the hub — one outbound WebSocket to the relay the account is signed
-// in to, so the user's other devices (computers running nanoMuse Desktop, Android phones, the
+// NanoLika: this iPhone on the hub — one outbound WebSocket to the relay the account is signed
+// in to, so the user's other devices (computers running NanoLika Desktop, Android phones, the
 // web console) reach it from any network, and it can ask them for things.
 //
 // The protocol is docs/hub.md. What this phone does for others is decided here: `info`, `open`,
@@ -182,7 +182,7 @@ final class NanoMuseHub: ObservableObject {
         reconnectTask = nil
         var request = URLRequest(url: url)
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("nanoMuse-iOS/\(Self.version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("NanoLika-iOS/\(Self.version)", forHTTPHeaderField: "User-Agent")
         let task = URLSession.shared.webSocketTask(with: request)
         task.maximumMessageSize = 16 * 1024 * 1024
         generation += 1

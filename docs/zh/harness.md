@@ -1,10 +1,10 @@
-# 跑在 DeepSeek Harness 上的 nanoMuse
+# 跑在 DeepSeek Harness 上的 NanoLika
 
 > **状态：已发布。** 代码在 `main` 分支的 [`harness/`](../../harness/) 里。从 0.1.30 起，它就是
-> **nanoMuse 桌面版**，唯一的那个桌面 App：Windows、macOS 和 Linux 的安装包，里面装着 harness、
+> **NanoLika 桌面版**，唯一的那个桌面 App：Windows、macOS 和 Linux 的安装包，里面装着 harness、
 > 这个 bundle 和负责「手」的运行时（[desktop.md](desktop.md)）；bundle 也单独打包发布为
 > `dsh-nanomuse-<v>.tgz`，给已经在跑 DeepSeek Harness Desktop 的人用（[harness/README.md](../../harness/README.md)）。
-> 它分两步到位：bundle 从 0.1.27 起就有，外壳在 0.1.28–0.1.29 以 *nanoMuse Harness* 之名和旧的
+> 它分两步到位：bundle 从 0.1.27 起就有，外壳在 0.1.28–0.1.29 以 *NanoLika Harness* 之名和旧的
 > Electron App 并列（[阶段](#phases)）。这一页是设计和计划；[desktop-muse.md](desktop-muse.md) 讲的是
 > 窗口该长什么样。
 
@@ -18,7 +18,7 @@
 计划模式、压缩、委派、审批策略、电脑操作，以及一个从配置里接任何 OpenAI 兼容端点的模型层。它现在是
 0.2.0-rc，一个插件 API 还会变的开发者预览版，但它有的社区，我们自己的项目多年之内都不会有。
 
-所以下一代桌面版是 **dsh 加 nanoMuse 插件**：让 nanoMuse 之所以是 nanoMuse 的那些东西，即账号、形象、
+所以下一代桌面版是 **dsh 加 NanoLika 插件**：让 NanoLika 之所以是 NanoLika 的那些东西，即账号、形象、
 口吻、手（Hands）、Reach、哨兵（Sentinel），以插件的形式进去；循环、工具和界面是 dsh 的。我们不再为
 桌面维护第二个 harness。手机继续用 Python 运行时（dsh 是 Node 的，跑不了 Android），浏览器演示暂时也
 继续用，账号是它们之间的桥梁，和今天一样。
@@ -30,15 +30,15 @@
 
 - **账号。** 宿主侧的服务 `nanomuseCloud` 用手机和桌面版同样的两个调用（`/v1/auth/code`、
   `/v1/auth/verify`）向中继登录，把 key 以 `NANOMUSE_CLOUD_TOKEN` 存进 dsh 的凭据存储，再把账号的
-  聊天模型写进 dsh 的模型适配器（`dsh-llm-pi-ai`），作为一个叫 *nanoMuse Cloud* 的服务商，base URL
+  聊天模型写进 dsh 的模型适配器（`dsh-llm-pi-ai`），作为一个叫 *NanoLika Cloud* 的服务商，base URL
   是中继的 `/v1`。我们没有自己的模型适配器：中继说的是 OpenAI Chat Completions，dsh 原样回应。退出
   登录把两样都删掉。一个回环 API（`/nanomuse/cloud/{status,code,verify,refresh,sign-out}`，仅限同源）
   给设置里的那一节供数据。
-- **形象和名字。** 浏览器这一半填上 dsh 的插槽：侧边栏品牌位和主视觉里的小龙、*nanoMuse* 字标，以及
-  设置里的 *nanoMuse Cloud* 一节（手机号或邮箱 → 验证码 → 已登录，显示打了码的标识、额度和模型）。
+- **形象和名字。** 浏览器这一半填上 dsh 的插槽：侧边栏品牌位和主视觉里的小龙、*NanoLika* 字标，以及
+  设置里的 *NanoLika Cloud* 一节（手机号或邮箱 → 验证码 → 已登录，显示打了码的标识、额度和模型）。
   原装的品牌插件被 patch 关掉；静态图由宿主这一半提供。
 - **口吻。** dsh 的网页会话由一个*智能体预设*组合而成，预设里的人设优先于全局的，所以 bundle 声明了
-  一个预设 `nanomuse`（插件列表和 dsh 的 *Standard* 一样，人设换成 nanoMuse 的），并把它设为默认。
+  一个预设 `nanomuse`（插件列表和 dsh 的 *Standard* 一样，人设换成 NanoLika 的），并把它设为默认。
   人仍然可以选 *Standard*、*PTC* 或 *Minimal*。
 - **手（Hands），我们第一个以插件形式进去的能力。** 预设把 dsh 的 MCP 客户端挂在 `nanomuse mcp` 上
   （[cli.md](cli.md#audit-and-config)）：运行时的 `computer_screen` 和 `computer_act` 经 stdio 提供，
@@ -52,7 +52,7 @@
   用于它不在 `PATH` 上的情况；没有运行时，预设就只是没有手。
 
 在一个干净的安装上对着本地中继做了端到端验证：登录，两个聊天模型不用重启就出现在选择器的
-*nanoMuse Cloud* 下，新会话以 *nanoMuse* 的身份开始，「你是谁？」经中继以 nanoMuse 的口吻作答，
+*NanoLika Cloud* 下，新会话以 *NanoLika* 的身份开始，「你是谁？」经中继以 NanoLika 的口吻作答，
 「我屏幕上有什么？」在一次 `mcp__nanomuse__computer_screen` 调用后作答，对桌面的描述准确。
 [`harness/README.md`](../../harness/README.md) 有具体做法。
 
@@ -75,7 +75,7 @@
   `dsh-nanomuse/reach` 注册手机和运行时都有的那些工具：`devices`、`device_screen`（模型接受图片时，
   静态图作为图片送入）、`device_shell` 和 `device_open`（先出 dsh 的审批卡片，命令或 URL 写在里面）、
   `device_files`、`device_notify`，以及 `delegate`：由另一台设备自己的 Muse 来跑任务，当*它*要求
-  审批时，问题以审批卡片的形式回到这里，答复再经 hub 传回去。「设置 → *nanoMuse Cloud*」列出各设备，
+  审批时，问题以审批卡片的形式回到这里，答复再经 hub 传回去。「设置 → *NanoLika Cloud*」列出各设备，
   带在线圆点，可以给这台电脑改名、忘掉离线的设备。
 - **胶囊。** 手或 Reach 工作时，窗口顶部的一个小条显示形象、跳动的竖条、*双手 · 第 N 步* 或
   *多端 · 第 N 步*、它在做什么（「on Laptop B: uname -a」「asking Laptop B's Muse」），以及*停止*，
@@ -95,7 +95,7 @@ Laptop B 上设置的名字和 emoji 几秒内就出现在桌面版的品牌标�
   `force`、`.nanomuse-part` 改名）、`open` 和 `screen`（依次尝试 `screencapture`、PowerShell、
   `gnome-screenshot` / `spectacle` / `grim` / `scrot` / `import`）。同样的名字、同样的形状、同样的
   错误码，所以手机分不出对面是运行时还是 dsh 桌面版。
-- **远程控制开关。** 「设置 → *nanoMuse Cloud* → *这台电脑*」下面，和运行时一样的开关：打开，设备在
+- **远程控制开关。** 「设置 → *NanoLika Cloud* → *这台电脑*」下面，和运行时一样的开关：打开，设备在
   `hello` 里声明六个动作；关闭，只声明 `info` 和 `notify`，其余一律以 `not_allowed` 拒绝（手机看到的
   提示和运行时给的一样）。拨动它会重新向 hub 打招呼，账号的设备表立刻更新。约定不变：发出请求的设备
   在发送前先判断命令（手机和运行时上是哨兵，这里是审批卡片）；目标设备不再问第二遍。
@@ -163,7 +163,7 @@ Laptop B 自己的聊天里让它的 Muse「在 Desk A 上」运行一条命令�
   关掉的插件的设置里）原样放行。
 - **第一次打开。** 全窗口的几张页：带形象和一个*登录*药丸的欢迎页 → *登录或创建账户*
   （手机号或邮箱）→ 六格验证码（或密码：`/v1/auth/login`）→ 转圈 → 权限轮播（‹ ›）：macOS 上的
-  *允许 nanoMuse 使用你的电脑？*（辅助功能、录屏，各有一个*允许*，经外壳的桥申请，授予后打绿勾）、
+  *允许 NanoLika 使用你的电脑？*（辅助功能、录屏，各有一个*允许*，经外壳的桥申请，授予后打绿勾）、
   *……访问你的文件？*（工作文件夹，*更改*走系统原生选择器）、*你的其他设备* → *就绪*。
 - **桌面外壳的桥。** `harness/desktop/src/preload.ts` 把 `window.nanomuseHarness` 暴露给页面
   （沙箱化，经 IPC 到主进程）：`permissions()`、`requestPermission(kind)`（`systemPreferences`）、
@@ -180,9 +180,9 @@ Laptop B 自己的聊天里让它的 Muse「在 Desk A 上」运行一条命令�
 标签；资料面板在聊天旁边；设置有九个页面。Electron 外壳在 Linux 上用它的桥启动同一个 bundle
 （截图检查）。
 
-## nanoMuse 的每一部分去了哪 {#where-each-part-of-nanomuse-goes}
+## NanoLika 的每一部分去了哪 {#where-each-part-of-nanomuse-goes}
 
-| 今天的 nanoMuse（Python 运行时）                        | 在 dsh 上                                                                                                                                    | 状态       |
+| 今天的 NanoLika（Python 运行时）                        | 在 dsh 上                                                                                                                                    | 状态       |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | Cloud 账号、服务商配置（[cloud.md](cloud.md)） | `dsh-nanomuse/cloud` 服务 + `llm-pi-ai` 服务商 + 凭据存储                                                                                     | 已完成     |
 | 人设、智能体名字（[design.md](design.md)）            | 智能体预设 `nanomuse`（`@deepseek-ai/dsh-persona`）；账号在资料里选定的名字，放在品牌位和一条系统提示上下文里 | 已完成     |
@@ -242,10 +242,10 @@ Laptop B 自己的聊天里让它的 Muse「在 Desk A 上」运行一条命令�
 
 ## 名字和许可 {#names-and-licences}
 
-DeepSeek Harness 是 MIT 许可；它是依赖，不是内嵌的拷贝，它的声明随它一起走。我们的 bundle 和 nanoMuse
+DeepSeek Harness 是 MIT 许可；它是依赖，不是内嵌的拷贝，它的声明随它一起走。我们的 bundle 和 NanoLika
 的其余部分一样是 GPL-3.0-or-later，所以「没有闭源组件」的承诺依然成立。「DeepSeek Harness」和「DSH」
 是 DeepSeek 的名字：我们说*基于 DeepSeek Harness 构建*，从不把它们用进我们自己的名字里，出厂的「关于」
-文字和品牌素材保持原样。惯常的声明（Muse 是 Meta 的商标，nanoMuse 是社区项目，与 Meta 无关）照旧
+文字和品牌素材保持原样。惯常的声明（Muse 是 Meta 的商标，NanoLika 是社区项目，与 Meta 无关）照旧
 适用。
 
 ## 阶段 {#phases}
@@ -261,9 +261,9 @@ DeepSeek Harness 是 MIT 许可；它是依赖，不是内嵌的拷贝，它的�
 5. **日常可用。** 哨兵变成审批预设、形象工作室搬到这里、不要 Python 的手（dsh 电脑操作接缝后的原生
    驱动）、给其他设备发来的任务选定一个工作区；人可以在里面处理文件和网页上的日常工作。
 6. **发布。** 外壳，分两步。dsh 自己的桌面 App 是同一个网页 App 的 Electron 包装，带一个接受外部
-   插件的 `desktop` profile（`dsh plugin --profile desktop add …`），所以第一个 nanoMuse 桌面版就是
+   插件的 `desktop` profile（`dsh plugin --profile desktop add …`），所以第一个 NanoLika 桌面版就是
    那个 App 加上 profile 里的 bundle：**从 0.1.27 起每个版本都带打包好的 bundle**（当时叫
-   `nanoMuse-Harness-<v>.tgz`，从 0.1.30 起叫 `dsh-nanomuse-<v>.tgz`），安装方法在
+   `NanoLika-Harness-<v>.tgz`，从 0.1.30 起叫 `dsh-nanomuse-<v>.tgz`），安装方法在
    [harness/README.md](../../harness/README.md)（`.github/workflows/harness.yml` 构建、测试、打包它，
    并把 tar 包装进一个全新的 dsh profile）。**从 0.1.28 起第二步也到位了**：我们自己的外壳，在
    [`harness/desktop/`](../../harness/desktop/)，不是重新构建 dsh 的 `apps/desktop`（它的流水线要
@@ -278,8 +278,8 @@ DeepSeek Harness 是 MIT 许可；它是依赖，不是内嵌的拷贝，它的�
    （electron-builder 的 NSIS 目标默认把视频文件排除在这个压缩档之外、再逐个加回去，加回去时跳过所有
    `node_modules`，而插件的短片正好放在那里；`electron-builder.yml` 里的
    `nsis.preCompressedFileExtensions: []` 关掉了这个行为，`tests/installer.test.mjs` 守着它），然后附到
-   发布上（设置了同一组 Apple 密钥时，还会给 macOS 构建签名和公证）。它在 0.1.28 和 0.1.29 以 *nanoMuse Harness* 之名和旧桌面 App 并列发布；**从
-   0.1.30 起它就是 nanoMuse 桌面版**，唯一的那个桌面 App（`nanoMuse-Desktop-<v>-…`，沿用已退役的
+   发布上（设置了同一组 Apple 密钥时，还会给 macOS 构建签名和公证）。它在 0.1.28 和 0.1.29 以 *NanoLika Harness* 之名和旧桌面 App 并列发布；**从
+   0.1.30 起它就是 NanoLika 桌面版**，唯一的那个桌面 App（`NanoLika-Desktop-<v>-…`，沿用已退役的
    `desktop/app` 的应用 id，所以可以直接覆盖安装），站点的下载也指向这里。
 7. **新外壳上的日常可用。** 聊天旁边的那些房间（动态、点子、目标、资源库）、手在这块屏幕上
    工作时的实时舞台、两个平台上的签名、我们自己的更新推送、harness 桌面版有的 macOS 关闭到 Dock 和

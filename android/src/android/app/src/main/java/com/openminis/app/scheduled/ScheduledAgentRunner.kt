@@ -6,7 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.openminis.app.MinisApp
-import com.openminis.app.R // nanoMuse
+import com.openminis.app.R // NanoLika
 import com.openminis.app.debug.HeadlessChatRunner
 import com.openminis.app.logging.AppLogger
 import com.openminis.app.service.AgentForegroundService
@@ -168,7 +168,7 @@ object ScheduledAgentRunner {
                 timeoutMs = RUN_TIMEOUT_MS,
             )
         } else {
-            // nanoMuse: the row this sends is the routine's, not the person's: the chat draws it as
+            // NanoLika: the row this sends is the routine's, not the person's: the chat draws it as
             // a quiet line and the model is told so for this one turn (RoutineWakes).
             io.github.nanomuse.chat.RoutineWakes.arm(app, sessionId, task.label)
             HeadlessChatRunner.prompt(
@@ -188,7 +188,7 @@ object ScheduledAgentRunner {
             responseText = "Error: ${t.message}",
             timedOut = false,
         )
-    }.also { if (it.status == "Error") io.github.nanomuse.chat.RoutineWakes.disarm(sessionId) } // nanoMuse: a prompt that never went out leaves no mark
+    }.also { if (it.status == "Error") io.github.nanomuse.chat.RoutineWakes.disarm(sessionId) } // NanoLika: a prompt that never went out leaves no mark
 
     private suspend fun resolveSessionId(app: MinisApp, task: ScheduledTask): String? {
         return when (val mode = task.targetMode) {
@@ -301,10 +301,10 @@ object ScheduledAgentRunner {
         sessionId: String,
         preview: String,
     ) {
-        // nanoMuse: the feed's routine tells of its posts itself (and opens the Feed, not a chat).
+        // NanoLika: the feed's routine tells of its posts itself (and opens the Feed, not a chat).
         if (io.github.nanomuse.feed.FeedFlow.notifyIfFeed(context, task)) return
         val deepLink = Uri.parse("minis://session/$sessionId")
-        // nanoMuse: to MainActivity by name; the manifest no longer registers the `minis` scheme
+        // NanoLika: to MainActivity by name; the manifest no longer registers the `minis` scheme
         val openIntent: Intent = io.github.nanomuse.deeplink.OwnScheme.intent(context, deepLink, flags = 0)
         val notificationId = task.id.hashCode() and 0x7FFFFFFF
         val contentPi = PendingIntent.getActivity(
@@ -313,11 +313,11 @@ object ScheduledAgentRunner {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        // nanoMuse: the agent's own name, as on every other notification it sends.
+        // NanoLika: the agent's own name, as on every other notification it sends.
         val title = "${io.github.nanomuse.identity.NanoMuseIdentity.name(context)}: ${task.label.ifBlank { "Scheduled task" }}"
         val notification = NotificationCompat.Builder(context, ScheduledTaskManager.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_nanomuse) // nanoMuse: flat status-bar mark
-            .setLargeIcon(io.github.nanomuse.identity.NanoMuseIdentity.face(context)) // nanoMuse: the agent is the sender
+            .setSmallIcon(R.drawable.ic_stat_nanomuse) // NanoLika: flat status-bar mark
+            .setLargeIcon(io.github.nanomuse.identity.NanoMuseIdentity.face(context)) // NanoLika: the agent is the sender
             .setContentTitle(title)
             .setContentText(preview)
             .setStyle(NotificationCompat.BigTextStyle().bigText(preview))

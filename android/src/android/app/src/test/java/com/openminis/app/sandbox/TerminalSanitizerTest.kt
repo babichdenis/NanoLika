@@ -123,7 +123,7 @@ class TerminalSanitizerTest {
     @Test
     fun `sanitize strips ANSI after CR folding`() {
         val input = "\u001B[32mdownloading\u001B[0m\r\u001B[32mcomplete   \u001B[0m"
-        // nanoMuse: sanitize() trims the final result, so the trailing spaces do not survive (#334)
+        // NanoLika: sanitize() trims the final result, so the trailing spaces do not survive (#334)
         assertEquals("complete", TerminalSanitizer.sanitize(input))
     }
 
@@ -131,7 +131,7 @@ class TerminalSanitizerTest {
     fun `sanitize handles real-world wget output`() {
         // wget progress: "  50%[=====>    ] 500K  --.-KB/s\r 100%[=========>] 1.0M  1.5MB/s"
         val input = "  50%[=====>    ]\r 100%[=========>]"
-        // nanoMuse: sanitize() trims the final result, so the leading space does not survive (#334)
+        // NanoLika: sanitize() trims the final result, so the leading space does not survive (#334)
         assertEquals("100%[=========>]", TerminalSanitizer.sanitize(input))
     }
 

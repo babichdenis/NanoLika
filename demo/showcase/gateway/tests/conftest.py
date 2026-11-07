@@ -35,7 +35,7 @@ class FakeRunner:
     async def gateway_address(self) -> str | None:
         return "10.0.0.1"
 
-    # kept containers (nanoMuse Web): created once, then stopped and started by name
+    # kept containers (NanoLika Web): created once, then stopped and started by name
     @property
     def kept(self) -> dict[str, dict]:
         if not hasattr(self, "_kept"):
@@ -179,7 +179,7 @@ class Upstream:
         self.animate_busy = 0  # how many 429s the video endpoint answers first
 
     def relay(self, request: httpx.Request) -> httpx.Response:
-        """A little nanoMuse Cloud: any identifier gets the code 246810."""
+        """A little NanoLika Cloud: any identifier gets the code 246810."""
         data = json.loads(request.content or b"{}")
         ident = str(data.get("identifier", "")).lower()
         if request.url.path == "/v1/auth/code":

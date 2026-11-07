@@ -46,7 +46,7 @@ enum DeepLinkRouter {
 
     @MainActor
     static func handle(url incoming: URL, shareCoordinator: ShareCoordinator) {
-        let url = NanoMuseOwnScheme.internalURL(incoming) // nanoMuse: nanomuse://… from the system reads as minis://…
+        let url = NanoMuseOwnScheme.internalURL(incoming) // NanoLika: nanomuse://… from the system reads as minis://…
         guard url.scheme == "minis", let host = url.host else {
             deepLinkLog.info("ignored — non-minis or missing host: \(url.absoluteString)")
             return

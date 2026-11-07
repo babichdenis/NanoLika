@@ -445,7 +445,7 @@ class OpenAIProvider private constructor(
         // a local proxy got reused on every retry (silent infinite hang).
         .connectionPool(com.openminis.app.network.NetworkMonitor.sharedLLMConnectionPool)
         .eventListenerFactory { OkHttpNetTraceListener() }
-        .proxyAuthenticator(io.github.nanomuse.net.OwnProviderProxy.authenticator) // nanoMuse: Settings → Network, a proxy with a password
+        .proxyAuthenticator(io.github.nanomuse.net.OwnProviderProxy.authenticator) // NanoLika: Settings → Network, a proxy with a password
         .build()
 
     /** Detect OpenRouter base URL. */
@@ -706,7 +706,7 @@ class OpenAIProvider private constructor(
                 memBefore, serStartNs, failure = null,
             )
         }
-        // nanoMuse: OpenCode Go wants one stable id per conversation (io.github.nanomuse.net.OpenCodeSession)
+        // NanoLika: OpenCode Go wants one stable id per conversation (io.github.nanomuse.net.OpenCodeSession)
         val request = buildRequest(bodyStr, if (io.github.nanomuse.net.OpenCodeSession.wants(basePath)) derivePromptCacheKey(messages) else null)
         val headerMap = mutableMapOf<String, String>()
         for (name in request.headers.names()) {
@@ -2390,7 +2390,7 @@ class OpenAIProvider private constructor(
      * the OAuth byte build, and the OkHttp RequestBody. Per-call peak heap
      * dropped by ~2× the body size (often tens of MB on long agent loops).
      */
-    private suspend fun buildRequest(bodyStr: String, opencodeSession: String? = null): Request { // nanoMuse: + opencodeSession
+    private suspend fun buildRequest(bodyStr: String, opencodeSession: String? = null): Request { // NanoLika: + opencodeSession
         val token = getToken()
 
         if (isOAuth && !forceChatCompletions) {
@@ -2459,7 +2459,7 @@ class OpenAIProvider private constructor(
         for ((key, value) in extraHeaders) {
             builder.header(key, value)
         }
-        // nanoMuse: the conversation's id for OpenCode, before the per-call overrides so those still win
+        // NanoLika: the conversation's id for OpenCode, before the per-call overrides so those still win
         opencodeSession?.let { builder.header(io.github.nanomuse.net.OpenCodeSession.HEADER, it) }
         // [T-android-model-use-passthrough-mode] Per-call chat header overrides,
         // applied AFTER the ctor extraHeaders → same-name REPLACE over any
@@ -3289,7 +3289,7 @@ class OpenAIProvider private constructor(
                 })
             }
         }
-        // nanoMuse: Responses rejects duplicate function_call call_id values across the
+        // NanoLika: Responses rejects duplicate function_call call_id values across the
         // whole input. Rename later calls deterministically and queue each rewritten id so
         // parallel/repeated function_call_output items keep the same pairing. Deliberately
         // inspect call_id only: reasoning item ids and function_call item ids are untouched.
@@ -3467,7 +3467,7 @@ class OpenAIProvider private constructor(
     }
 
     private fun mapHttpError(statusCode: Int, body: String): LLMError {
-        // nanoMuse: the relay's "allowance used up" is a 429 with a structured body, and the
+        // NanoLika: the relay's "allowance used up" is a 429 with a structured body, and the
         // ChatGPT plan's "region not supported" / "sign-in expired" / "nothing left" are a 403,
         // a 401 and a 429 whose bodies the mapping below drops; keep them for the chat's cards.
         io.github.nanomuse.cloud.AllowanceSignal.noteHttpError(statusCode, body, fromRelay = io.github.nanomuse.net.OwnProviderProxy.isRelay(basePath))

@@ -91,7 +91,7 @@ import io.github.nanomuse.ui.avatar.AgentMood
 import io.github.nanomuse.ui.home.MuseTones
 
 /**
- * nanoMuse's first run: a few full pages in Muse's shape, one blue pill each.
+ * NanoLika's first run: a few full pages in Muse's shape, one blue pill each.
  *
  * 1. **Welcome** — the face, what it is, and the notice that matters most: free, open-source,
  *    non-profit, and what signing in gives. *Sign in — free* (a phone number or an e-mail) is the door most people take
@@ -280,7 +280,7 @@ private fun WelcomePage(onSignIn: () -> Unit, onOwnKey: () -> Unit) {
 }
 
 /**
- * Right after the sign-in: which model answers. The account's own (nanoMuse Cloud, already
+ * Right after the sign-in: which model answers. The account's own (NanoLika Cloud, already
  * set up as a provider by the sign-in) or a key of one's own — the second door leads to
  * OpenMinis' provider screen; the Cloud provider stays either way.
  */

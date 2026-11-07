@@ -1,8 +1,8 @@
-# nanoMuse on DeepSeek Harness: the bundle (harness/dsh-nanomuse) as a package:
+# NanoLika on DeepSeek Harness: the bundle (harness/dsh-nanomuse) as a package:
 #
 #   dsh-nanomuse-<v>.tgz            what `dsh plugin --profile desktop add <file>` installs
 #                                   into a DeepSeek Harness Desktop someone already has
-#                                   (docs/harness.md, harness/README.md); nanoMuse Desktop
+#                                   (docs/harness.md, harness/README.md); NanoLika Desktop
 #                                   itself carries the same bundle (desktop-app.yml)
 #
 # A push or pull request that touches harness/ builds, typechecks and tests the bundle and the

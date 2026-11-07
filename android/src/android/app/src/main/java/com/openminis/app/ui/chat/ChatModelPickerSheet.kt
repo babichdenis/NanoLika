@@ -329,7 +329,7 @@ internal fun ModelPickerSheet(
     val allInstanceIds = remember(config) {
         config.instances.filter { it.isEnabled }.map { it.id }.toSet()
     }
-    // nanoMuse: the Cloud provider opens expanded — for most people it is the only provider,
+    // NanoLika: the Cloud provider opens expanded — for most people it is the only provider,
     // and a collapsed card hid the fact that there is anything to switch to.
     val nmContext = LocalContext.current
     val nmCloudId = remember(config) { io.github.nanomuse.cloud.NanoMuseCloud.instance(nmContext)?.id }
@@ -370,7 +370,7 @@ internal fun ModelPickerSheet(
                 var entries = config.modelEntries.filter {
                     it.providerInstanceId == instance.id && !it.isHidden
                 }
-                // nanoMuse: the Cloud's menu first, in the menu's order; the catalog beyond
+                // NanoLika: the Cloud's menu first, in the menu's order; the catalog beyond
                 // it (models a member may name) after, so the recommended ones are on top.
                 if (instance.id == nmCloudId) {
                     val menu = io.github.nanomuse.cloud.NanoMuseCloud.menuModelIds(nmContext)
@@ -1122,7 +1122,7 @@ internal fun ModelPickerSheet(
                                         }
                                     }
                                 } else {
-                                    // nanoMuse: where the Cloud's menu ends and its catalog begins
+                                    // NanoLika: where the Cloud's menu ends and its catalog begins
                                     val nmFirstCatalog = if (instance.id == nmCloudId) {
                                         entries.indexOfFirst { io.github.nanomuse.cloud.NanoMuseCloud.isCatalogModel(nmContext, it.model.id) }
                                     } else {

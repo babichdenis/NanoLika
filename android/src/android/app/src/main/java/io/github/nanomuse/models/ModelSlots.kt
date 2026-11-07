@@ -58,7 +58,7 @@ object ModelSlots {
         val displayName: String? = null,
     )
 
-    /** One group of the picker: nanoMuse Cloud first when signed in, then each configured own provider. */
+    /** One group of the picker: NanoLika Cloud first when signed in, then each configured own provider. */
     data class Group(val instance: ProviderInstance, val cloud: Boolean, val options: List<Option>)
 
     /** What a row shows: `<provider> · <model>`. */
@@ -80,7 +80,7 @@ object ModelSlots {
 
     private fun repo(context: Context): ProviderRepository? = (context.applicationContext as? MinisApp)?.providerRepositoryOrNull
 
-    /** The provider's name as the rows show it: `nanoMuse Cloud` for the relay, the person's label otherwise. */
+    /** The provider's name as the rows show it: `NanoLika Cloud` for the relay, the person's label otherwise. */
     fun providerLabel(context: Context, inst: ProviderInstance): String =
         if (isCloud(context, inst)) NanoMuseCloud.LABEL else inst.label.ifBlank { inst.providerType.name }
 
@@ -163,7 +163,7 @@ object ModelSlots {
 
     /**
      * *Automatic*: forgets the choice for [slot] (for clips, Off too) and changes nothing else,
-     * so the slot follows the order again: the chat provider when it can, nanoMuse Cloud when
+     * so the slot follows the order again: the chat provider when it can, NanoLika Cloud when
      * signed in, the first own model that can. Chat is left alone.
      */
     fun clear(context: Context, slot: Slot) {
@@ -227,7 +227,7 @@ object ModelSlots {
         )
         val out = mutableListOf<Group>()
         // the relay's recommended model first and marked; a provider of the person's own lists
-        // its models as they are, the mark is nanoMuse Cloud's word alone
+        // its models as they are, the mark is NanoLika Cloud's word alone
         cloud?.let { options(context, slot, it, cloud = true) }?.takeIf { it.isNotEmpty() }
             ?.let { out += Group(cloud, true, ordered(it)) }
         for (inst in own) {
@@ -286,8 +286,8 @@ object ModelSlots {
     }
 
     /**
-     * A provider switched off while new chats answered through it, nanoMuse Cloud above all
-     * (Settings › Models › *Use nanoMuse Cloud models*; the desktop's `setCloudModels` does the
+     * A provider switched off while new chats answered through it, NanoLika Cloud above all
+     * (Settings › Models › *Use NanoLika Cloud models*; the desktop's `setCloudModels` does the
      * same), hands the chat slot to the first source that still talks: the relay's recommended
      * chat model when the relay is on, else the first own provider with a chat model, its
      * catalogue default first ([groups]' order). So the Models page names what answers, and new
@@ -320,7 +320,7 @@ object ModelSlots {
 
     /**
      * New chats and the main chat follow [entryId]: the entry leads a group named after its
-     * provider (the relay's `nanoMuse Cloud` group, or one called what the person called the
+     * provider (the relay's `NanoLika Cloud` group, or one called what the person called the
      * provider) and that group becomes the default; the main chat is bound to it
      * ([mainChatFollows]). A group with another name of the person's own is never edited; when
      * such a group is the default and already leads with the pick, the groups do not move.

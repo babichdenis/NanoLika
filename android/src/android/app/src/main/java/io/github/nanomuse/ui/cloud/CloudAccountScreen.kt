@@ -95,7 +95,7 @@ import java.text.NumberFormat
 import java.util.Date
 
 /**
- * Settings → nanoMuse Cloud: the account. Who is signed in (the hint, never the number), the
+ * Settings → NanoLika Cloud: the account. Who is signed in (the hint, never the number), the
  * password, the devices holding a key, what was used of the allowance and what is left, what was used
  * by kind (chat, pictures, video, calls) and by model, the account's own history, the provider's
  * pages, and the ways out — this phone, everywhere, or the account itself.
@@ -1112,7 +1112,7 @@ private fun InviteCard(a: NanoMuseCloud.Account) {
 const val NOTICE_URL = "https://nanomuse.cn/#open-source"
 
 /**
- * The community notice: nanoMuse is free, open source and non-profit; who pays; what the relay
+ * The community notice: NanoLika is free, open source and non-profit; who pays; what the relay
  * keeps; and the invitation to file issues and pull requests — with the repository one tap
  * away. The title opens the same notice on the site. Shown on the account page, the sign-in
  * screen and (in short) the first-run screen.

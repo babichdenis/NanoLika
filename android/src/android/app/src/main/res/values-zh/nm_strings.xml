@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: 在上游之外新增的字符串，单独成文件，上游同步不会碰到。 -->
+<!-- NanoLika: 在上游之外新增的字符串，单独成文件，上游同步不会碰到。 -->
 <resources>
     <string name="nm_about_build">这个版本</string>
     <string name="nm_about_license">许可证</string>
@@ -603,9 +603,9 @@
     <string name="nm_risk_class_remote">远程控制</string>
     <string name="nm_hub_remote_reason">%1$s 可以操作这台手机</string>
 
-    <!-- nanoMuse Cloud：手机号/邮箱验证码登录，赠送体验额度 -->
+    <!-- NanoLika Cloud：手机号/邮箱验证码登录，赠送体验额度 -->
     <string name="nm_setup_own_key">我有自己的 API key</string>
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">一个开源的个人智能体，装在你的每一台设备上。</string>
     <string name="nm_welcome_email">登录，免费开始</string>
     <string name="nm_welcome_fine_print">一个账号连起你的几台设备，也承载免费的模型额度；不收费。登录之后随时可以改用自己的 API key。</string>
@@ -863,7 +863,7 @@
     <string name="nm_coding_stopped">已停止。</string>
     <string name="nm_coding_fresh_hint">和 %1$s 的新对话。你的第一条消息会在电脑上把它开起来。</string>
     <string name="nm_coding_no_transcript">这个会话里还没有可读的内容。</string>
-    <!-- nanoMuse: 账号页的金额，以及社区说明 -->
+    <!-- NanoLika: 账号页的金额，以及社区说明 -->
     <string name="nm_cloud_spend_member">成员 · 不限额度</string>
     <string name="nm_cloud_spent_total">累计已用 ¥%1$s · $%2$s，由开发者承担</string>
     <string name="nm_cloud_allowance_used">已用 ¥%1$s · $%2$s</string>
@@ -874,7 +874,7 @@
     <string name="nm_cloud_notice_title">免费 · 开源 · 非营利</string>
     <string name="nm_cloud_notice_closing">发现问题、想要新功能、愿意改代码，都欢迎到 GitHub 上提。</string>
     <string name="nm_cloud_notice">nanoLika 是非营利的开源社区项目，永久免费。模型自带一份由开发者承担的免费额度，用完换自己的 key。数据不会出售；服务器保存什么写在隐私政策里，「设置 → 数据控制」由你决定；随时可以删除账号。</string>
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">来自你其他设备的消息</string>
     <string name="nm_hub_service_channel">与你的设备保持连接</string>
     <string name="nm_hub_service_title">nanoLika · 你的其他设备可以找到这台手机</string>

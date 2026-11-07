@@ -1,5 +1,5 @@
-# The public nanoMuse showcase: a phone in the browser (MobileGym with the nanoMuse app) and a
-# private, short-lived nanoMuse per visitor. See README.md for the whole picture and the
+# The public NanoLika showcase: a phone in the browser (MobileGym with the NanoLika app) and a
+# private, short-lived NanoLika per visitor. See README.md for the whole picture and the
 # deployment steps.
 #
 #   cp .env.example .env && $EDITOR .env
@@ -9,7 +9,7 @@
 #
 # Sessions are started by the gateway on the `nanomuse-sessions` network, which has no way out:
 # the only thing a visitor's Muse can talk to is the gateway (and through it, the model).
-# With WEB_ENABLED=1 the gateway also runs nanoMuse Web — a kept Muse per Cloud account, on
+# With WEB_ENABLED=1 the gateway also runs NanoLika Web — a kept Muse per Cloud account, on
 # the `nanomuse-web` network next to the relay (gateway/showcase_gateway/accounts.py).
 # The gateway reaches Docker through `docker-proxy`, which lets through what starting and
 # stopping containers takes and nothing else of the daemon (no exec, images, volumes, build).
@@ -138,7 +138,7 @@ networks:
   sessions:
     name: nanomuse-sessions
     internal: true
-  # nanoMuse Web (gateway/accounts.py): the kept, per-account containers live here, together
+  # NanoLika Web (gateway/accounts.py): the kept, per-account containers live here, together
   # with the Cloud relay they sign in to (cloud/deploy/nanomuse-hk joins it too). Not internal:
   # an account's Muse may fetch pages and talk to the model like one on a phone would.
   web:

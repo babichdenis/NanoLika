@@ -1,7 +1,7 @@
 # Feature parity across the clients
 
-nanoMuse is one agent on every device: the phone (Android, iOS), the computer (nanoMuse Desktop,
-the `dsh-nanomuse` harness bundle in the Electron shell) and the browser (nanoMuse Web, served by
+NanoLika is one agent on every device: the phone (Android, iOS), the computer (NanoLika Desktop,
+the `dsh-nanomuse` harness bundle in the Electron shell) and the browser (NanoLika Web, served by
 the runtime). The rule since 0.1.32 is the **union**: whatever one client can do, every client
 does, unless the platform itself forbids it (the computer does not build a mini-Linux the way the
 phone does; iOS does not let an app drive another). This page is the ledger: what each client
@@ -10,7 +10,7 @@ has, what is platform-specific by design, and what is still open for a decision.
 Legend: **✓** done · **◐** partial (what is missing is in the note) · **—** not on this client ·
 **n/a** platform-specific, not meant to be.
 
-## Account (nanoMuse Cloud)
+## Account (NanoLika Cloud)
 
 | Feature | Android | iOS | Desktop | Web |
 |---|---|---|---|---|
@@ -30,16 +30,16 @@ Legend: **✓** done · **◐** partial (what is missing is in the note) · **�
 | Data controls (what the relay keeps of the chats) | ✓ | ✓ 0.1.33 | ✓ | ✓ |
 | Own-key presets (Bailian · OpenRouter, by region) | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 |
 | Chat model and Hands model as two settings (`deepseek-v4.1-flash` / `qwen3.8-27b`, the relay's `for`) | ✓ 0.1.34 | ✓ 0.1.34 *(chat; no hands)* | ✓ 0.1.34 | ✓ 0.1.34 |
-| Models page, four slots (*Chat* · *Operating the screen* · *Making pictures* · *Making clips*): each row `provider · model`, a picker of nanoMuse Cloud's models (signed in, the recommended one marked) and of each own provider's models that fit; an empty row names who could and offers *Add a provider* | ✓ 0.1.41 *Settings → Models*, the card at the top of Settings opens it; *Settings → Hands* and *Image & video models* use the same choices | ✓ 0.1.41 the first card of Settings; the screen row disabled (*Not on iPhone*; the computer uses its own setting); the pictures and clips pickers list nanoMuse Cloud and own providers on a DashScope host only *(40)* | ✓ 0.1.41 right after General; the hands speak OpenAI's shape, so an Anthropic or native Gemini key is named under the row, not listed; pictures through an own provider go to it directly, nothing billed to the account | ✓ 0.1.41 *Connections*: the *Chat model* card, the *Hands model* select, the *Making pictures* and *Making clips* rows (`PUT /api/connections/image` · `/video`) |
-| *Automatic* on the screen, pictures and clips rows, saying what it gives right now; the order when nothing was chosen: the chat provider's own model when it is yours and can → nanoMuse Cloud when signed in → the first own provider that can; a choice always wins | ✓ 0.1.41 `SlotOrder` | ✓ 0.1.41 pictures and clips (the screen is n/a) | ✓ 0.1.41 `handsChoice`, `imageEndpoint`, `videoEndpoint`; a hands change takes effect at the hands' next step, no restart | ✓ 0.1.41 the runtime resolves it (`effective_*`); *Currently provider · model* under each control |
+| Models page, four slots (*Chat* · *Operating the screen* · *Making pictures* · *Making clips*): each row `provider · model`, a picker of NanoLika Cloud's models (signed in, the recommended one marked) and of each own provider's models that fit; an empty row names who could and offers *Add a provider* | ✓ 0.1.41 *Settings → Models*, the card at the top of Settings opens it; *Settings → Hands* and *Image & video models* use the same choices | ✓ 0.1.41 the first card of Settings; the screen row disabled (*Not on iPhone*; the computer uses its own setting); the pictures and clips pickers list NanoLika Cloud and own providers on a DashScope host only *(40)* | ✓ 0.1.41 right after General; the hands speak OpenAI's shape, so an Anthropic or native Gemini key is named under the row, not listed; pictures through an own provider go to it directly, nothing billed to the account | ✓ 0.1.41 *Connections*: the *Chat model* card, the *Hands model* select, the *Making pictures* and *Making clips* rows (`PUT /api/connections/image` · `/video`) |
+| *Automatic* on the screen, pictures and clips rows, saying what it gives right now; the order when nothing was chosen: the chat provider's own model when it is yours and can → NanoLika Cloud when signed in → the first own provider that can; a choice always wins | ✓ 0.1.41 `SlotOrder` | ✓ 0.1.41 pictures and clips (the screen is n/a) | ✓ 0.1.41 `handsChoice`, `imageEndpoint`, `videoEndpoint`; a hands change takes effect at the hands' next step, no restart | ✓ 0.1.41 the runtime resolves it (`effective_*`); *Currently provider · model* under each control |
 | *Use it for* after a key is saved: one toggle per capability the provider has, all on; *Use it* moves those rows to the provider's catalogue defaults, *Not now* changes nothing; saving alone switches nothing | ✓ 0.1.41 | ✓ 0.1.41 (no screen toggle) | ✓ 0.1.41 | — the own-key form sets the chat provider; pictures and clips are set on their own rows *(40)* |
-| *Use nanoMuse Cloud models*, a switch, not a delete: off, the account leaves the pickers and the automatic order of every slot and nothing spends the allowance but the explicit *Use nanoMuse Cloud this time*; the sign-in stays for sync and the hub, and the Cloud provider row cannot be deleted | ✓ *Settings → Models* | ✓ *Settings → Models* | ✓ *Settings → Models* | ✓ the nanoMuse Cloud card under *Connections* (`POST /api/cloud/models`); refused while the chat model is the account's, since the runtime holds one chat model |
+| *Use NanoLika Cloud models*, a switch, not a delete: off, the account leaves the pickers and the automatic order of every slot and nothing spends the allowance but the explicit *Use NanoLika Cloud this time*; the sign-in stays for sync and the hub, and the Cloud provider row cannot be deleted | ✓ *Settings → Models* | ✓ *Settings → Models* | ✓ *Settings → Models* | ✓ the NanoLika Cloud card under *Connections* (`POST /api/cloud/models`); refused while the chat model is the account's, since the runtime holds one chat model |
 | With a key of your own the app works signed out (chat, hands, pictures, clips); the first screen offers *Use your own API key instead* and the sign-in waits for the Cloud models, sync and the devices | ✓ | ✓ | ✓ the sign-in was never a wall | ✓ the sign-in page steps aside once a model is ready or the button was taken |
-| No silent fallback: a failed turn on an own model offers *Use nanoMuse Cloud this time* (signed in), that one turn on the account, no row changed | ✓ 0.1.41 `CloudRetry` | ✓ 0.1.41 `NanoMuseCloudOnce` | ✓ 0.1.41 also after a failed studio round and a failed set of clips | ✓ 1.0.1 under the failed turn (`via: "cloud"` on the send); the rows stay as set |
+| No silent fallback: a failed turn on an own model offers *Use NanoLika Cloud this time* (signed in), that one turn on the account, no row changed | ✓ 0.1.41 `CloudRetry` | ✓ 0.1.41 `NanoMuseCloudOnce` | ✓ 0.1.41 also after a failed studio round and a failed set of clips | ✓ 1.0.1 under the failed turn (`via: "cloud"` on the send); the rows stay as set |
 | "Ways on" ordered by region (Bailian first on the mainland, OpenRouter first elsewhere) | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 | ✓ 0.1.34 |
 | Own-key catalogue (`providers.json`: 21 providers, what each covers (chat · screen · pictures · clips), key pages, regions; one file, generated for every client) | ✓ 0.1.39 | ✓ 0.1.40 `NanoMuseCatalogue` *(32)* | ✓ 0.1.39 | ✓ 0.1.39 |
-| "Ways on" from the catalogue: the region's lead first, *more providers*, the plans one can sign in with, the key taken inline | ✓ 0.1.39 | ✓ 0.1.40 the pinned card, Settings → nanoMuse Cloud and the own-key sheet, one list (`NanoMuseWaysList`) *(32)* | ✓ 0.1.39 Settings → nanoMuse Cloud, the own-key first-run step | ✓ 0.1.39 |
-| The ways read from the relay's `spend.guidance` (providers for the region, plans, caveats, docs) rather than a list in the app; the bundled catalogue only when the relay sends none | ✓ 0.1.40 `guidance` first, the catalogue when none *(34)* | ✓ 0.1.40 the same (`NanoMuseWays`) *(32)* | ✓ 0.1.40 the chat card and Settings → nanoMuse Cloud, one component | ✓ 0.1.39 |
+| "Ways on" from the catalogue: the region's lead first, *more providers*, the plans one can sign in with, the key taken inline | ✓ 0.1.39 | ✓ 0.1.40 the pinned card, Settings → NanoLika Cloud and the own-key sheet, one list (`NanoMuseWaysList`) *(32)* | ✓ 0.1.39 Settings → NanoLika Cloud, the own-key first-run step | ✓ 0.1.39 |
+| The ways read from the relay's `spend.guidance` (providers for the region, plans, caveats, docs) rather than a list in the app; the bundled catalogue only when the relay sends none | ✓ 0.1.40 `guidance` first, the catalogue when none *(34)* | ✓ 0.1.40 the same (`NanoMuseWays`) *(32)* | ✓ 0.1.40 the chat card and Settings → NanoLika Cloud, one component | ✓ 0.1.39 |
 | A refused turn (`429 allowance_exhausted`) is a card under it in the chat: one sentence, the three ways on, *Open Settings*, *Try again*; never the relay's reply as text | ✓ 0.1.39 `AllowanceWaysCard` | ✓ 0.1.40 pinned under the header like the star card (`NanoMuseAllowanceCard`) *(33)* | ✓ 0.1.40 *(before: the JSON, after five retries as a rate limit)* | ✓ 0.1.39 notice with the ways |
 | The relay's other refusals as one sentence and a button: 413 *too large* → *New chat*, 401 → *Sign in*, 403, 429 busy (with the wait), the daily cap, 404 model, 5xx / no answer → *Try again*; never a status code or JSON | ✓ 0.1.40 `RelayRefusal` + `RelayRefusalCard`, 17 locales *(35)* | ✓ 0.1.40 `NanoMuseRelayRefusal` + `NanoMuseRelayRefusalCard`, 9 locales; a refused chat turn goes through `describe` *(35)* | ✓ 0.1.40 | ✓ 0.1.40 `failures.py` (413, `not_invited`, `too_many_in_flight`, `provider_busy` added) |
 | The operator's switches (relay 0.22, [cloud.md](cloud.md#controls)) as plain sentences: the allowance *paused, not used up* (the same card), `service_paused`, `sync_paused`, `hub_paused`, `signup_closed` at sign-in | ✓ 0.1.40 *(35)* | ✓ 0.1.40 *(35)* | ✓ 0.1.40 | ✓ 0.1.40 |
@@ -81,7 +81,7 @@ Legend: **✓** done · **◐** partial (what is missing is in the note) · **�
 | Report a problem: one tap opens a GitHub issue | ✓ Settings → Account | ✓ About → *Report an issue* | ✓ the corner menu; under the shell a screenshot goes to Downloads and the issue opens filled in | ✓ Settings → Feedback |
 | Installed and latest version, side by side (`nanomuse.cn/dl/index.json` first, GitHub second, a day's cache) | ✓ 0.1.35 Settings → Version | ✓ 0.1.35 Settings → Version | ✓ 0.1.35 About, Settings row | ✓ 0.1.35 Settings |
 | A black capture is an error with the fix (Screen Recording, Wayland), never a picture | n/a | n/a | ✓ 0.1.33 | n/a |
-| macOS permissions read back live; *Open System Settings* after an ask; Screen Recording relaunch notice | n/a | n/a | ✓ 0.1.33; 0.1.35: one row to switch on, *Try it* rows, a restart dialog when Screen Recording flips on; since 0.1.38 the row is *nanoMuse Computer Use*, the helper app *(26)* | n/a |
+| macOS permissions read back live; *Open System Settings* after an ask; Screen Recording relaunch notice | n/a | n/a | ✓ 0.1.33; 0.1.35: one row to switch on, *Try it* rows, a restart dialog when Screen Recording flips on; since 0.1.38 the row is *NanoLika Computer Use*, the helper app *(26)* | n/a |
 | Mini-Linux sandbox on the device | ✓ | ✓ upstream (iSH) | n/a (the runtime's own sandbox) | n/a |
 
 ## Face, rooms, look
@@ -153,7 +153,7 @@ notes above; a settled item keeps its number and says how it went.
     Muse takes `task` calls from the other devices while the app is open (`@iPhone …`).
 11. **iOS · The Muse shell.** Done in 0.1.33 on the iPhone; in 0.1.34 Feed and Goals are real
     (`NanoMuseScheduler.swift`: foreground catch-up, `BGAppRefreshTask`, a local notification at
-    the set time), the iPad runs the shell too, the shell and header switches are in the nanoMuse
+    the set time), the iPad runs the shell too, the shell and header switches are in the NanoLika
     settings page, and the studio draws through the relay or your own Bailian key. Left: a
     routine never runs in the background on iOS; the refresh task only posts the reminder, and
     the copy says so (*at the set time the phone reminds you to open it*); the hub route (a
@@ -238,9 +238,9 @@ notes above; a settled item keeps its number and says how it went.
     rather than a `GLOBAL.md` edit; the gear on the first-run pages dismisses them for the
     session only.
 26. **Desktop · macOS permissions.** Re-audited in 0.1.35: TCC attributes the bundled runtime to
-    the responsible process, so only *nanoMuse Desktop* has to be switched on (the words say so
+    the responsible process, so only *NanoLika Desktop* has to be switched on (the words say so
     now; the runtime no longer appears as a second entry to hunt for). Since 0.1.38 the two grants
-    belong to the helper app *nanoMuse Computer Use* instead ([desktop.md](desktop.md#macos-permissions)). Left to try on a Mac: the
+    belong to the helper app *NanoLika Computer Use* instead ([desktop.md](desktop.md#macos-permissions)). Left to try on a Mac: the
     *Try it* rows after a fresh grant, the restart dialog when Screen Recording flips on, the
     capsule's `showInactive` (17), window mode's AX-less clicks and Retina mapping (19), the
     face click after 0.1.36's change (no drag region under the face at all; the face below the
@@ -303,7 +303,7 @@ notes above; a settled item keeps its number and says how it went.
     caveats) and the card ignores it. *Proposal:* prefer `guidance` when the relay sends it, fall
     back to the catalogue, as the web and the desktop already do; a few dozen lines in
     `AllowanceWaysCard.kt` and `NanoMuseCloud.kt`. *Settled in 0.1.40:* `Guidance.kt`
-    parses it, `Ways.resolve` prefers it, the card and Settings → nanoMuse Cloud read it.
+    parses it, `Ways.resolve` prefers it, the card and Settings → NanoLika Cloud read it.
 35. **Phones · 413, the remaining refusals and the operator's switches.** The phones' `describe`
     knows the allowance, the daily cap, the rate limit, a bad key, a disabled account and the
     upstream's trouble, but not `too_large` (413), `not_invited`, `too_many_in_flight` or
@@ -337,18 +337,18 @@ notes above; a settled item keeps its number and says how it went.
     (state in `firstrun.json` beside the profile), the fence helpers `nanomuse/fences.py`, the
     routes `/api/firstrun*`, the `firstrun` socket frame; the chat speaks the three lines and
     draws the chooser (`web/src/components/FirstConversation.tsx`), and the first-run list lost
-    its *Meet your nanoMuse* page. The address goes to the profile and to memory as *Call them:
+    its *Meet your NanoLika* page. The address goes to the profile and to memory as *Call them:
     …* (the runtime has no USER.md). The identity form stays under Settings for later changes.
     One addition to the contract: the runtime keeps the language *Start* was pressed in
     (`lang`), so the addendum quotes the opening in the words the person saw.
     [web.md](web.md#the-first-run-and-the-chat-s-opening) has the walk-through.
 40. **Models page, four slots (0.1.41).** Settled on Android, iOS and the desktop as one page
-    with the *Use it for* card after a key is saved and *Use nanoMuse Cloud this time* on a
+    with the *Use it for* card after a key is saved and *Use NanoLika Cloud this time* on a
     failed own-key turn; the web console has the same four slots on *Connections* (the runtime's
     `PUT /api/connections/gui`, `/image`, `/video` and *Automatic* on each) and, since 1.0.1,
-    *Use nanoMuse Cloud this time* under a failed own-key turn, but no *Use it for* card: the
+    *Use NanoLika Cloud this time* under a failed own-key turn, but no *Use it for* card: the
     own-key form sets the chat provider, and pictures and clips are set on their own rows. Left on iOS: the pictures and clips pickers list, besides
-    nanoMuse Cloud, only own providers on a DashScope host (Alibaba Cloud Bailian), since the
+    NanoLika Cloud, only own providers on a DashScope host (Alibaba Cloud Bailian), since the
     iPhone's image and clip code speaks DashScope's API only. *Proposal:* the card on the web,
     and the OpenAI image shape on the iPhone, when someone asks.
 

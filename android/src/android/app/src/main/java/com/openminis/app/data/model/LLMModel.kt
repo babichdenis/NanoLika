@@ -253,7 +253,7 @@ data class LLMModel(
             // OpenAI family
             if (lid.contains("gpt-3.5")) return 16_000
             if (lid.contains("gpt-4o") || lid.contains("gpt-4-turbo")) return 128_000
-            if (lid.contains("gpt-5") || lid.contains("gpt-6")) return 400_000 // nanoMuse: GPT-6 family fallback window
+            if (lid.contains("gpt-5") || lid.contains("gpt-6")) return 400_000 // NanoLika: GPT-6 family fallback window
             if (lid.contains("gpt-4")) return 8_000
             if (lid.contains("o3") || lid.contains("o4")) return 200_000
             if (lid.contains("codex")) return 200_000
@@ -296,7 +296,7 @@ data class LLMModel(
         // "audio_input", models.dev spells them bare. Lowercasing alone left the
         // suffix intact, so a vision model from an OpenAI-shaped catalog was told
         // in its own system prompt that it could NOT see images.
-        // nanoMuse: when nothing was declared, say nothing that could be wrong.
+        // NanoLika: when nothing was declared, say nothing that could be wrong.
         // An empty list here used to read as "cannot process images, PDFs,
         // audio, video" for every model without catalog data — which is how a
         // sighted model came to tell people it did not support image input.

@@ -1,8 +1,8 @@
 //
 //  NanoMuseProfile.swift
-//  nanoMuse
+//  NanoLika
 //
-//  The relay side of the agent's look: pictures drawn through nanoMuse
+//  The relay side of the agent's look: pictures drawn through NanoLika
 //  Cloud (/v1/images/*), what a new face would cost (/v1/estimate), and
 //  the profile the account's devices share (/v1/me/profile). Android:
 //  cloud/ProfileSync.kt, cloud/FaceCost.kt, avatar/ImageGen.kt.
@@ -45,7 +45,7 @@ enum NanoMuseRelayMedia {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        request.setValue("nanoMuse-iOS/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("NanoLika-iOS/\(version)", forHTTPHeaderField: "User-Agent")
         return request
     }
 
@@ -401,7 +401,7 @@ final class NanoMuseProfileSync: ObservableObject {
                     }
                     if stills[.idle] != nil {
                         store.wear(remote: stills, faceId: full.faceId, description: full.description, style: full.style)
-                        // nanoMuse: clips are per device — the old ones went with `wear`; new ones when enabled (contract C3)
+                        // NanoLika: clips are per device — the old ones went with `wear`; new ones when enabled (contract C3)
                         NanoMuseAvatarMotion.shared.animateIfEnabled()
                     }
                 } else if head.rev > 0, store.source != .dragon {

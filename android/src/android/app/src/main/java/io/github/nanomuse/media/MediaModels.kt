@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
 /**
- * The three models nanoMuse runs on. Muse ships with all of them built in; here each is one of
+ * The three models NanoLika runs on. Muse ships with all of them built in; here each is one of
  * the user's own providers, chosen in Settings → Image & video models:
  *
  *  - the **chat model** — OpenMinis' default model group, unchanged;
@@ -50,7 +50,7 @@ object MediaModels {
 
     /**
      * Providers whose host speaks Model Studio's asynchronous video API: Model Studio itself, and
-     * nanoMuse Cloud, which relays those same paths (the account's own key is used).
+     * NanoLika Cloud, which relays those same paths (the account's own key is used).
      */
     fun eligibleVideoInstances(context: Context): List<ProviderInstance> {
         val app = context.applicationContext as? MinisApp ?: return emptyList()
@@ -74,7 +74,7 @@ object MediaModels {
     /** True when the person switched the video model off (a choice, unlike "never chosen"). */
     fun videoSwitchedOff(context: Context): Boolean = prefs(context).getString(KEY_VIDEO_INSTANCE, null) == VIDEO_OFF
 
-    /** The video model nanoMuse would pick for [inst]: the catalogue's `defaults.video` for its vendor, else Wan 2.2 Flash. */
+    /** The video model NanoLika would pick for [inst]: the catalogue's `defaults.video` for its vendor, else Wan 2.2 Flash. */
     fun defaultVideoModel(context: Context, inst: ProviderInstance): String =
         io.github.nanomuse.models.ModelSlots.defaultOf(context, inst, io.github.nanomuse.models.ModelSlots.Slot.VIDEO) ?: DEFAULT_VIDEO_MODEL
 
@@ -82,7 +82,7 @@ object MediaModels {
      * The video model, or null when there is none. The one chosen (Settings → Models, or →
      * Image & video models); with nothing chosen, in the Models page's order (0.1.41,
      * [io.github.nanomuse.models.SlotOrder]): the chat provider's own video model when the
-     * chat provider is the person's own and makes clips, else nanoMuse Cloud's when signed
+     * chat provider is the person's own and makes clips, else NanoLika Cloud's when signed
      * in, else the first own provider that can. Off stays off. [automatic] leaves the choice
      * (and Off) aside and answers what that order gives now, for the picker's *Automatic* row.
      */

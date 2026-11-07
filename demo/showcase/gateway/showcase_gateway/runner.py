@@ -3,7 +3,7 @@
 One container per session, on a network with no way out (``docker network create --internal``):
 the only thing a session can talk to is this gateway, which is also where its model calls go.
 The container is as locked down as the project's own compose file makes it — no capabilities,
-no new privileges, a read-only image with tmpfs for the three places nanoMuse writes — plus a
+no new privileges, a read-only image with tmpfs for the three places NanoLika writes — plus a
 memory, CPU and process ceiling so one visitor cannot crowd out the others.
 """
 

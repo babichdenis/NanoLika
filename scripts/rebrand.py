@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn the OpenMinis tree in android/ into nanoMuse. Idempotent; re-run after every
+"""Turn the OpenMinis tree in android/ into NanoLika. Idempotent; re-run after every
 upstream pull (CONTRIBUTING.md), then scripts/gen-android-icons.py.
 
 What it changes, and only this:
@@ -24,7 +24,7 @@ What it changes, and only this:
   Localizable.xcstrings (keys renamed, every translation updated), the About links, the
   Soul emoji, the accent colour. Icons: scripts/gen-ios-icons.py.
 
-Anything else is a hand edit marked `// nanoMuse:` in the file.
+Anything else is a hand edit marked `// NanoLika:` in the file.
 
     python scripts/rebrand.py            # apply, then report what is still upstream's
     python scripts/rebrand.py --check    # report only, write nothing
@@ -95,7 +95,7 @@ def package_ids() -> None:
             (
                 r'const val SERVICE_ID = "com\.openminis\.app/\.accessibility\.MinisAccessibilityService"',
                 'val SERVICE_ID = "${BuildConfig.APPLICATION_ID}/com.openminis.app.accessibility.'
-                'MinisAccessibilityService" // nanoMuse: the applicationId is not the package',
+                'MinisAccessibilityService" // NanoLika: the applicationId is not the package',
             ),
         ],
     )
@@ -138,7 +138,7 @@ def soul_defaults() -> None:
             [
                 (
                     r'^([ \t]*)assertEquals\("Minis", back\.metadata\.name\)$',
-                    r"\1// nanoMuse: round-trip the rebranded default name.\n"
+                    r"\1// NanoLika: round-trip the rebranded default name.\n"
                     r"\1assertEquals(SoulMetadata.DEFAULT.name, back.metadata.name)",
                 ),
             ],
@@ -249,7 +249,7 @@ def notification_icons() -> None:
             [
                 (
                     r"setSmallIcon\(R\.mipmap\.ic_launcher\)",
-                    "setSmallIcon(R.drawable.ic_stat_nanomuse) // nanoMuse: flat status-bar mark",
+                    "setSmallIcon(R.drawable.ic_stat_nanomuse) // NanoLika: flat status-bar mark",
                 ),
             ],
         )
@@ -268,7 +268,7 @@ def notification_faces() -> None:
         ctx, indent = m.group(2), m.group(3)
         return (
             f"{m.group(1)}{indent}.setLargeIcon(io.github.nanomuse.identity.NanoMuseIdentity"
-            f".face({ctx})) // nanoMuse: the agent is the sender\n"
+            f".face({ctx})) // NanoLika: the agent is the sender\n"
         )
 
     for path in sorted(JAVA.rglob("*.kt")):
@@ -443,7 +443,7 @@ def ios_product_name() -> None:
     for key, entry in strings.items():
         new_key = WORD.sub(NAME, key)
         if new_key in renamed and new_key != key:
-            continue  # upstream already has the nanoMuse spelling; keep theirs
+            continue  # upstream already has the NanoLika spelling; keep theirs
         renamed[new_key] = walk(entry)
     if renamed != strings:
         data["strings"] = renamed
@@ -614,11 +614,11 @@ def privacy_links() -> None:
 
 def customer_branding(base: Path = ROOT) -> None:
     """Rebrand native display literals while preserving class names, URLs and wire values."""
-    old = re.compile(r"\b(?:nanoMuse|NanoMuse|NANOMUSE)\b")
+    old = re.compile(r"\b(?:NanoLika|NanoLika|NANOMUSE)\b")
     literal = re.compile(r'"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"')
 
     def display_value(value: str) -> str:
-        if re.search(r"https?://|(?:nanoMuse|NanoMuse|NANOMUSE)[.:/_-][A-Za-z0-9]", value):
+        if re.search(r"https?://|(?:NanoLika|NanoLika|NANOMUSE)[.:/_-][A-Za-z0-9]", value):
             return value
         return old.sub("nanoLika", value)
 
@@ -638,7 +638,7 @@ def customer_branding(base: Path = ROOT) -> None:
     # Only AppLocalized arguments are display text here, never arbitrary storage/wire strings.
     localized = re.compile(r'(AppLocalized\(\s*)("(?:[^"\\\n]|\\.)*")')
     for path in (native / "ios").rglob("*.swift"):
-        if "NanoMuse" in path.relative_to(native / "ios").parts:
+        if "NanoLika" in path.relative_to(native / "ios").parts:
             continue
         before = path.read_text(encoding="utf-8")
         after = localized.sub(lambda m: m.group(1) + display_value(m.group(2)), before)

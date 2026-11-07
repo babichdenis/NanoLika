@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">Bu derleme</string>
@@ -620,10 +620,10 @@
     <string name="nm_risk_class_remote">Uzaktan denetim</string>
     <string name="nm_hub_remote_reason">%1$s bu telefonu kullanabilir</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">Kendi API anahtarım var</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">Sahip olduğun her cihaz için açık kaynaklı bir kişisel ajan.</string>
     <string name="nm_welcome_email">Oturum aç (ücretsiz)</string>
     <string name="nm_welcome_fine_print">Tek hesap cihazlarını bir arada tutar ve ücretsiz model kullanımını taşır; hiçbir ücret alınmaz. Kendi API anahtarını hemen ardından ekleyebilirsin.</string>
@@ -905,7 +905,7 @@
     <string name="nm_coding_fresh_hint">%1$s ile yeni bir konuşma. İlk mesajın onu bilgisayarda başlatır.</string>
     <string name="nm_coding_no_transcript">Bu oturumda henüz okunabilir bir şey yok.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">Üye · sınır yok</string>
     <string name="nm_cloud_spent_total">Toplam ¥%1$s · $%2$s harcandı, geliştirici ödedi</string>
     <string name="nm_cloud_allowance_used">Kullanılan ¥%1$s · $%2$s</string>
@@ -917,7 +917,7 @@
     <string name="nm_cloud_notice_closing">Bir hata mı buldun, bir özellik mi istiyorsun, bir yaman mı var? Yeri GitHub deposu.</string>
     <string name="nm_cloud_notice">nanoLika kâr amacı gütmeyen, açık kaynaklı bir topluluk projesidir: ücretsiz, sonsuza kadar. Model, geliştiricinin ödediği ücretsiz bir kotayla gelir; sonrasında kendi anahtarın. Hiçbir şey satılmaz; relay’in neyi tuttuğu gizlilik politikasında yazar ve Ayarlar → Veri denetimleri senindir. Hesabı istediğin zaman sil.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">Cihazlarından gelen mesajlar</string>
     <string name="nm_hub_service_channel">Cihazlarına bağlı</string>
     <string name="nm_hub_service_title">nanoLika · cihazlarından erişilebilir</string>

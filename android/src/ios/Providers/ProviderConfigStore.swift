@@ -2660,7 +2660,7 @@ final class ProviderConfigStore: ObservableObject {
             if let manualToken = ProviderKeychainHelper.loadOAuthString(instanceId: instance.id, account: "manual-oauth-token") {
                 return try await OpenAIModelsAPI.fetchModels(apiKey: manualToken, baseURL: customBase, appendV1Suffix: appendV1, forceRefresh: forceRefresh, userAgent: ua)
             }
-            // nanoMuse: query live Codex OAuth models when signed in (#475)
+            // NanoLika: query live Codex OAuth models when signed in (#475)
             let token = try? await CodexOAuthManager.shared.validAccessToken(instanceId: instance.id)
             let accountId = CodexOAuthManager.shared.accountId(instanceId: instance.id)
             return await OpenAIModelsAPI.fetchModelsOAuth(accessToken: token, accountId: accountId)

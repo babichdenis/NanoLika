@@ -38,7 +38,7 @@ class OpenAIProviderTest {
         server.shutdown()
     }
 
-    // nanoMuse: sendMessage always issues a streaming request and folds the deltas back into
+    // NanoLika: sendMessage always issues a streaming request and folds the deltas back into
     // one LLMResponse (OpenAIProvider.sendMessageClamped); a plain JSON body yields no chunk and
     // failOnSilentEmptyCompletion raises TransientError. The sendMessage fixtures below are
     // therefore Chat Completions SSE streams: deltas, then one chunk with finish_reason and
@@ -69,7 +69,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage parses ChatCompletions response`() = runBlocking {
-        // nanoMuse: streamed, see sse().
+        // NanoLika: streamed, see sse().
         server.enqueue(
             sseReply(
                 text = "Hello from GPT!",
@@ -90,7 +90,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage parses cached tokens from prompt_tokens_details`() = runBlocking {
-        // nanoMuse: streamed, see sse().
+        // NanoLika: streamed, see sse().
         server.enqueue(
             sseReply(
                 usage = """{"prompt_tokens":100,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":50}}""",
@@ -98,7 +98,7 @@ class OpenAIProviderTest {
         )
         val response = provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "Hi")), null, 1024)
 
-        // nanoMuse: parseChatCompletionsUsage reports inputTokens as the fresh part only
+        // NanoLika: parseChatCompletionsUsage reports inputTokens as the fresh part only
         // (prompt_tokens minus cached_tokens) and keeps the full prompt in latestContextTokens.
         assertEquals(50, response.usage?.inputTokens)
         assertEquals(100, response.usage?.latestContextTokens)
@@ -109,19 +109,19 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage returns null cacheReadInputTokens when zero`() = runBlocking {
-        // nanoMuse: streamed, see sse().
+        // NanoLika: streamed, see sse().
         server.enqueue(
             sseReply(
                 usage = """{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":0}}""",
             ),
         )
         val response = provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "Hi")), null, 1024)
-        // nanoMuse: the usage chunk did arrive; only the zero cache count is dropped.
+        // NanoLika: the usage chunk did arrive; only the zero cache count is dropped.
         assertEquals(10, response.usage?.inputTokens)
         assertNull(response.usage?.cacheReadInputTokens)
     }
 
-    // nanoMuse: a stream with no content and no finish_reason is the documented transient
+    // NanoLika: a stream with no content and no finish_reason is the documented transient
     // failure (failOnSilentEmptyCompletion), not an empty success.
     @Test(expected = LLMError.TransientError::class)
     fun `sendMessage treats empty choices as a transient error`() = runBlocking {
@@ -135,7 +135,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage includes Bearer auth header`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 100)
 
@@ -146,7 +146,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage includes system prompt as system message`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(
             listOf(LLMMessage(LLMMessage.Role.USER, "test")),
@@ -165,7 +165,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage omits system message when null`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 100)
 
@@ -178,7 +178,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage includes temperature when set`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 100, temperature = 0.8)
 
@@ -189,7 +189,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage omits temperature when null`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 100, temperature = null)
 
@@ -200,7 +200,7 @@ class OpenAIProviderTest {
 
     @Test
     fun `sendMessage uses max_completion_tokens for OpenAI`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 2048)
 
@@ -210,11 +210,11 @@ class OpenAIProviderTest {
         assertTrue(!body.has("max_tokens"))
     }
 
-    // nanoMuse: sendMessage streams on the wire (some gateways reject stream=false), so the
+    // NanoLika: sendMessage streams on the wire (some gateways reject stream=false), so the
     // request carries stream=true and asks for the usage chunk.
     @Test
     fun `sendMessage streams on the wire and asks for usage`() = runBlocking {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
 
         provider.sendMessage(listOf(LLMMessage(LLMMessage.Role.USER, "test")), null, 100)
 
@@ -380,7 +380,7 @@ class OpenAIProviderTest {
 
     /** Drive one request through the real stack and return the parsed body. */
     private fun captureBody(model: LLMModel, level: ThinkingLevel): JSONObject {
-        server.enqueue(sseReply()) // nanoMuse: streamed, see sse().
+        server.enqueue(sseReply()) // NanoLika: streamed, see sse().
         provider.model = model
         runBlocking {
             provider.sendMessageClamped(

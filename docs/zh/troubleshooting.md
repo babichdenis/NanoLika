@@ -6,7 +6,7 @@
 
 **启动时提示「web app not built」。** 你是在一个没有构建前端的检出目录里运行。`cd web && npm install && npm run build`，或者改为安装软件包。
 
-**启动时提示「port 8787 on 127.0.0.1 is already in use by nanoMuse 1.0.1」。** 这个端口上已经有一个 nanoMuse 在跑（更早的一次 `nanomuse serve`、daemon、一个容器），`serve` 在碰数据目录之前就停下了。在浏览器里打开那一个，或者先停掉它再启动；`--port 8790` 可以让这一个和它并存。提示里是「by another program」的话，是别的程序占着端口：停掉它，或者换一个端口。
+**启动时提示「port 8787 on 127.0.0.1 is already in use by NanoLika 1.0.1」。** 这个端口上已经有一个 NanoLika 在跑（更早的一次 `nanomuse serve`、daemon、一个容器），`serve` 在碰数据目录之前就停下了。在浏览器里打开那一个，或者先停掉它再启动；`--port 8790` 可以让这一个和它并存。提示里是「by another program」的话，是别的程序占着端口：停掉它，或者换一个端口。
 
 **回复的语言不对。** `agent.language = "auto"` 时，系统提示词会写明你最新一条消息的语言（按文字系统检测）。如果模型还是跑偏，在「你 → 回复语言」里设一个固定语言，或者 `agent.language = "English"`。
 
@@ -16,7 +16,7 @@
 
 **日志里出现「does not support tools」，然后智能体接着干。** 这是 `auto` 在尽职：Ollama 拒绝了这个模型的函数调用，于是从那以后工具都写在提示词里。选一个带工具模板的模型（`qwen3:8b`、`llama3.1:8b`），长任务上效果更好。
 
-**用推理模型时回复为空，或者点子一直停在初始列表上。** DeepSeek 的思考版本和 OpenAI 的 o 系列把推理也算进 `max_tokens`；碰到难的提示词，它们可能把整个预算都花在思考上，什么也不返回（`finish_reason = "length"`）。遇到这种情况 nanoMuse 会用四倍预算再问一次。如果还是反复出现，调高 `[llm]` 下的 `max_tokens`（对这些模型来说 16384 是个合理的值）。
+**用推理模型时回复为空，或者点子一直停在初始列表上。** DeepSeek 的思考版本和 OpenAI 的 o 系列把推理也算进 `max_tokens`；碰到难的提示词，它们可能把整个预算都花在思考上，什么也不返回（`finish_reason = "length"`）。遇到这种情况 NanoLika 会用四倍预算再问一次。如果还是反复出现，调高 `[llm]` 下的 `max_tokens`（对这些模型来说 16384 是个合理的值）。
 
 **429 / 频率限制。** 请求会按指数退避重试（`max_retries`，默认 5）。调低 `agent.max_steps`，或者把 `web_fetch` 加进 `always_ask_tools` 让循环慢下来。
 
@@ -32,7 +32,7 @@
 
 **刚装好就提示「The data folder … is not writable」/「cannot write to the data directory」（Windows，0.1.20–0.1.21）。** 运行时把 `workspace` 文件夹建在了启动器启动它时所在的位置（安装程序打开 App 时是 `C:\Windows\System32`），失败后就停了。从 0.1.22 起工作区默认在 `<data dir>\workspace`，外壳也改在数据文件夹里启动运行时；更新即可，旧版本可以设 `NANOMUSE_WORKSPACE`。
 
-**macOS：把 nanoMuse.app 从 dmg 里拖出来时，Finder 提示「can't complete the operation … error code -36」（0.1.20–0.1.21）。** 那个镜像是 HFS+ 的；从 0.1.22 起 dmg 是 APFS，版本里还附带一个 App 的 `.zip`：下载、双击解压、把 `nanoMuse.app` 拖进「应用程序」。
+**macOS：把 NanoLika.app 从 dmg 里拖出来时，Finder 提示「can't complete the operation … error code -36」（0.1.20–0.1.21）。** 那个镜像是 HFS+ 的；从 0.1.22 起 dmg 是 APFS，版本里还附带一个 App 的 `.zip`：下载、双击解压、把 `NanoLika.app` 拖进「应用程序」。
 
 **macOS：「nanoMuse.app is damaged and can't be opened」或者「Apple could not verify…」。** 没有 Apple 开发者证书的构建是 ad-hoc 签名的，所以 macOS 会问一次（用项目的 Developer ID 签名并公证的版本不会问；怎么做见 [desktop.md](desktop.md#macos-signing)）。打开它，关掉对话框，然后 系统设置 → 隐私与安全性 → 「仍要打开」（或者在终端里 `xattr -dr com.apple.quarantine /Applications/nanoMuse.app`）。Windows 出于同样的原因显示「Windows 已保护你的电脑」：「更多信息」→「仍要运行」。
 
@@ -40,13 +40,13 @@
 
 **Android App 在「设备」下显示「中继拒绝了连接；重新登录一下」。** 中继不再接受这台手机的 key（在所有设备上退出了登录，或者账号被删了）。在账号页退出再登录；hub 会自己重新加入。
 
-**聊天里说「模型服务商的内容审核没有放行这次请求」。** 负责回答的服务商（nanoMuse Cloud 的上游，或者你自己 key 背后的厂商，比如阿里云的 `DataInspectionFailed`）在模型跑起来之前就读到了对话里它不愿处理的内容，于是直接拒绝。这不是故障，也不会自动重试：卡片上有「再试一次」和「新聊天」。换个说法通常就能过；如果拒绝反复出现，被拦下的多半是对话里更早的内容，开一个新聊天就好。在中继的健康页上，这类拒绝和上游错误分开计数，因为它们说明不了服务商的健康状况。
+**聊天里说「模型服务商的内容审核没有放行这次请求」。** 负责回答的服务商（NanoLika Cloud 的上游，或者你自己 key 背后的厂商，比如阿里云的 `DataInspectionFailed`）在模型跑起来之前就读到了对话里它不愿处理的内容，于是直接拒绝。这不是故障，也不会自动重试：卡片上有「再试一次」和「新聊天」。换个说法通常就能过；如果拒绝反复出现，被拦下的多半是对话里更早的内容，开一个新聊天就好。在中继的健康页上，这类拒绝和上游错误分开计数，因为它们说明不了服务商的健康状况。
 
 **全部重置。** 停掉服务器，删除 `~/.nanomuse`（或者你的 `data_dir`）。保险库的密钥也在那里，需要的话先把秘密导出来。
 
 
 ## iPhone 提示未配置模型 {#iphone-says-no-model-is-configured}
 
-这条提示出现在应用调用模型之前。它表示手机无法从已保存的选择中找到对话模型，不表示电脑必须开着。在「设置」的「模型」中确认 nanoMuse Cloud 已登录并启用，或者选择自己的、已启用且能对话的模型。交给电脑的任务仍然需要那台电脑在线，手机上的普通对话不需要。
+这条提示出现在应用调用模型之前。它表示手机无法从已保存的选择中找到对话模型，不表示电脑必须开着。在「设置」的「模型」中确认 NanoLika Cloud 已登录并启用，或者选择自己的、已启用且能对话的模型。交给电脑的任务仍然需要那台电脑在线，手机上的普通对话不需要。
 
 iOS 登录时先使用已验证的登录回复里的模型菜单，再单独刷新模型列表。重新检查账号时，也会用账号当前的模型菜单恢复缺失的对话条目，或者修复所有成员都不可用的默认分组。已有的可用模型选择和主动关闭 Cloud 的设置会保留。恢复逻辑需要更新后的 iOS 应用；只更新中继，无法改变已安装客户端的本地模型选择。

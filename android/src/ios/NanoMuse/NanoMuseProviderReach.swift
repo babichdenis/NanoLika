@@ -1,6 +1,6 @@
 //
 //  NanoMuseProviderReach.swift
-//  nanoMuse
+//  NanoLika
 //
 //  Why a provider did not answer, read off the error the model client raised, so the chat
 //  shows a card that says what happened and what helps instead of the transport's own words
@@ -26,7 +26,7 @@ enum NanoMuseProviderReach {
         case signedOut = "signed_out"
         case quota
         case rateLimited = "rate_limited"
-        /// nanoMuse Cloud refused the turn (`nm_relay:` line; NanoMuseRelayRefusal): `detail` is the whole line, the card is NanoMuseRelayRefusalCard.
+        /// NanoLika Cloud refused the turn (`nm_relay:` line; NanoMuseRelayRefusal): `detail` is the whole line, the card is NanoMuseRelayRefusalCard.
         case relay
     }
 
@@ -193,7 +193,7 @@ final class NanoMuseReachSignal: @unchecked Sendable {
 
     /// Call for every non-2xx answer of a model request; only the ones the card is for are kept.
     func noteHTTPError(status: Int, body: String?, host: String, oauth: Bool, retryAfter: String? = nil) {
-        // nanoMuse Cloud's refusals (413 too large, the allowance, the operator's switches …) have a card of their own
+        // NanoLika Cloud's refusals (413 too large, the allowance, the operator's switches …) have a card of their own
         if NanoMuseRelaySignal.shared.noteHTTPError(status: status, body: body, host: host) { return }
         let retry = retryAfter.flatMap { Double($0.trimmingCharacters(in: .whitespaces)) }.map { Int($0) }
         guard let reach = NanoMuseProviderReach.fromHTTP(status: status, body: body, host: host, oauth: oauth, retryAfterS: retry) else { return }

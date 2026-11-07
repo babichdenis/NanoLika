@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- nanoMuse: strings added on top of upstream; kept in their own file so an
+<!-- NanoLika: strings added on top of upstream; kept in their own file so an
      upstream pull never touches them. Anything missing here falls back to English. -->
 <resources>
     <string name="nm_about_build">Эта сборка</string>
@@ -626,10 +626,10 @@
     <string name="nm_risk_class_remote">Удалённое управление</string>
     <string name="nm_hub_remote_reason">%1$s может управлять этим телефоном</string>
 
-    <!-- nanoMuse Cloud: sign in with a phone/e-mail code for a starter allowance -->
+    <!-- NanoLika Cloud: sign in with a phone/e-mail code for a starter allowance -->
     <string name="nm_setup_own_key">У меня есть свой API-ключ</string>
 
-    <!-- nanoMuse: the first-run pages -->
+    <!-- NanoLika: the first-run pages -->
     <string name="nm_welcome_tagline">Личный агент с открытым кодом для каждого вашего устройства.</string>
     <string name="nm_welcome_email">Войти (бесплатно)</string>
     <string name="nm_welcome_fine_print">Один аккаунт связывает ваши устройства и несёт бесплатное использование модели; ничего не списывается. Свой API-ключ можно добавить сразу после.</string>
@@ -911,7 +911,7 @@
     <string name="nm_coding_fresh_hint">Новый разговор с %1$s. Ваше первое сообщение запустит его на компьютере.</string>
     <string name="nm_coding_no_transcript">В этой сессии пока нечего читать.</string>
 
-    <!-- nanoMuse: money on the account page, and the community notice -->
+    <!-- NanoLika: money on the account page, and the community notice -->
     <string name="nm_cloud_spend_member">Участник · без ограничений</string>
     <string name="nm_cloud_spent_total">¥%1$s · $%2$s потрачено всего, оплачено разработчиком</string>
     <string name="nm_cloud_allowance_used">Использовано ¥%1$s · $%2$s</string>
@@ -923,7 +923,7 @@
     <string name="nm_cloud_notice_closing">Нашли ошибку, хотите функцию, есть патч? Репозиторий на GitHub и есть то самое место.</string>
     <string name="nm_cloud_notice">nanoLika является некоммерческим проектом сообщества с открытым кодом, бесплатным навсегда. Модель идёт с бесплатным лимитом, который оплачивает разработчик; дальше нужен ваш собственный ключ. Ничего не продаётся; что хранит релей, написано в политике конфиденциальности, а Настройки → Управление данными в ваших руках. Удалить аккаунт можно когда угодно.</string>
 
-    <!-- nanoMuse: devices on the hub -->
+    <!-- NanoLika: devices on the hub -->
     <string name="nm_hub_channel">Сообщения от ваших устройств</string>
     <string name="nm_hub_service_channel">Связь с вашими устройствами</string>
     <string name="nm_hub_service_title">nanoLika · доступен с ваших устройств</string>

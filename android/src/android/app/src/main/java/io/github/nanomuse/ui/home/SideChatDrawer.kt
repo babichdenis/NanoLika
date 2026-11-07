@@ -88,16 +88,16 @@ fun SideChatDrawer(
     onCoding: (() -> Unit)? = null,
 ) {
     val sessions by chatRepository.observeSessions().collectAsState(initial = emptyList())
-    // nanoMuse: the account's other devices, for the row under the main chat
+    // NanoLika: the account's other devices, for the row under the main chat
     val hubConnected by io.github.nanomuse.hub.Hub.connected.collectAsState()
     val hubDevices by io.github.nanomuse.hub.Hub.devices.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val othersOnline = remember(hubDevices) { hubDevices.count { it.online && it.kind != "web" && it.id != io.github.nanomuse.hub.Hub.deviceId(context) } }
-    // nanoMuse: computers whose runtime can show and steer coding agents (Cursor, Codex, Claude Code)
+    // NanoLika: computers whose runtime can show and steer coding agents (Cursor, Codex, Claude Code)
     val codingComputers = remember(hubDevices) {
         hubDevices.count { it.online && it.actions.contains("coding.sessions") && it.id != io.github.nanomuse.hub.Hub.deviceId(context) }
     }
-    // nanoMuse: a chat from another device of the account is the same chat here (contract C8) — no
+    // NanoLika: a chat from another device of the account is the same chat here (contract C8) — no
     // badge per chat; the turns written elsewhere carry "From Pixel 8" in the bubble instead
     var query by remember { mutableStateOf("") }
     val sideChats = remember(sessions, mainSessionId, query) {
@@ -114,7 +114,7 @@ fun SideChatDrawer(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        // nanoMuse: Muse's drawer voice: the agent name big and plain, rows in
+        // NanoLika: Muse's drawer voice: the agent name big and plain, rows in
         // quiet pills, everything monochrome.
         val nmDark = ChatColors.isDark
         val nmRowSelected = if (nmDark) Color.White.copy(alpha = 0.09f) else Color.Black.copy(alpha = 0.06f)
@@ -150,7 +150,7 @@ fun SideChatDrawer(
             )
         }
 
-        // nanoMuse: Devices — the account's other Muses, one tap away like a chat (docs/every-device.md)
+        // NanoLika: Devices — the account's other Muses, one tap away like a chat (docs/every-device.md)
         if (onDevices != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -182,7 +182,7 @@ fun SideChatDrawer(
             }
         }
 
-        // nanoMuse: Coding — the coding agents on the account's computers, shown once one is online
+        // NanoLika: Coding — the coding agents on the account's computers, shown once one is online
         if (onCoding != null && codingComputers > 0) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

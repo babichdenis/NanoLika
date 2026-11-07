@@ -6,9 +6,9 @@
 > mentioned below no longer exists.
 
 
-On a phone, nanoMuse can reach what is on it: the clipboard, the calendar, the contacts, where the phone is, the clock's alarms and timers, the notification shade, and the photo library through the system picker. This page is about how that works, what each tool may do, what it asks the user, and what it deliberately cannot do.
+On a phone, NanoLika can reach what is on it: the clipboard, the calendar, the contacts, where the phone is, the clock's alarms and timers, the notification shade, and the photo library through the system picker. This page is about how that works, what each tool may do, what it asks the user, and what it deliberately cannot do.
 
-The rule of the design: **the model gets tools, the user gets Android's own dialogs.** nanoMuse never grants itself anything. Every permission is asked for by the platform's dialog, the photo library is only ever seen through the platform's picker, and alarms are handed to the clock app the user already has. The Python brain does not change to run on a phone; the Kotlin side is a small tool host.
+The rule of the design: **the model gets tools, the user gets Android's own dialogs.** NanoLika never grants itself anything. Every permission is asked for by the platform's dialog, the photo library is only ever seen through the platform's picker, and alarms are handed to the clock app the user already has. The Python brain does not change to run on a phone; the Kotlin side is a small tool host.
 
 ```
  nanomuse serve (Python, in PRoot)                 the app (Kotlin)
@@ -55,9 +55,9 @@ The Kotlin list (`DeviceTools.kt`) and the Python table (`DEVICE_TOOLS`) must ag
 Everything the tools need from the user is an Android dialog, opened by an invisible activity of the app (`DeviceAskActivity`) so it can appear from wherever the agent is running. Android 10+ does not let a background app start an activity, so there are two routes:
 
 - **The app is on screen** → the dialog appears right away over it.
-- **The app is in the background** → a notification (*nanoMuse needs a permission* / *nanoMuse wants to read the clipboard* / *… wants a photo*) with one line on why; tapping it brings up the dialog. The tool call waits in the meantime (2 min for a permission, 1.5 min for the clipboard, 4 min for photos), the model is told what happened either way.
+- **The app is in the background** → a notification (*NanoLika needs a permission* / *NanoLika wants to read the clipboard* / *… wants a photo*) with one line on why; tapping it brings up the dialog. The tool call waits in the meantime (2 min for a permission, 1.5 min for the clipboard, 4 min for photos), the model is told what happened either way.
 
-Three outcomes reach the model, in words it can pass on: granted (the tool runs); *the user did not allow it: do not ask again now, it can be allowed later in Android's settings*; *nobody answered: ask the user to open nanoMuse and try again*.
+Three outcomes reach the model, in words it can pass on: granted (the tool runs); *the user did not allow it: do not ask again now, it can be allowed later in Android's settings*; *nobody answered: ask the user to open NanoLika and try again*.
 
 Specific rules, each from the platform rather than from us:
 
@@ -72,9 +72,9 @@ Specific rules, each from the platform rather than from us:
 
 The local build registers a `DocumentsProvider`: the agent's workspace appears as a root named after the agent in the system Files app and in every open/save dialog on the phone (Storage Access Framework). Files the agent made are ordinary files; a file dropped there is in the workspace. Hidden entries and the browser profile are not shown. The connect build has no workspace on the phone and shows no root.
 
-## Sharing into nanoMuse
+## Sharing into NanoLika
 
-nanoMuse is in the system share sheet for text, links and files. A share becomes a **new conversation**: files are uploaded to the workspace (`attachments/<date>/…`), the thread is named after the subject or the first file, and the chat opens with the shared text as a draft and the files as attachment chips, waiting for what to do with them; nothing is sent to the model until the user says so. Both builds do this (the connect build uploads to the computer).
+NanoLika is in the system share sheet for text, links and files. A share becomes a **new conversation**: files are uploaded to the workspace (`attachments/<date>/…`), the thread is named after the subject or the first file, and the chat opens with the shared text as a draft and the files as attachment chips, waiting for what to do with them; nothing is sent to the model until the user says so. Both builds do this (the connect build uploads to the computer).
 
 ## Connect mode
 

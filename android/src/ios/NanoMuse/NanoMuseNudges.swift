@@ -1,6 +1,6 @@
 //
 //  NanoMuseNudges.swift
-//  nanoMuse
+//  NanoLika
 //
 //  When the app may ask for a star on GitHub (contract C1). The policy comes
 //  from the relay — `GET /v1/nudges`, public, also the `nudges` field of

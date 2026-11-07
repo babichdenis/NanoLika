@@ -181,7 +181,7 @@ class SoulIconConfigEdgeTest {
             val back = SoulMDParser.parse(text)
             assertEquals(v, back.metadata.icon)
             // The other keys must survive untouched.
-            // nanoMuse: round-trip the rebranded default name.
+            // NanoLika: round-trip the rebranded default name.
             assertEquals(SoulMetadata.DEFAULT.name, back.metadata.name)
             assertEquals("auto", back.metadata.lang)
             assertEquals("body", back.body.trim())
