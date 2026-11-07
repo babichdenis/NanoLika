@@ -140,6 +140,18 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     // the browser's "Failed to fetch": the runtime is down or the network is
     throw new Error("Cannot reach your NanoLika right now.");
   }
+  if (res.status === 401 && token) {
+    // The key this browser kept is stale. The site's own sign-in (the session cookie on
+    // this origin) may still be good: drop the dead key and try once as the browser.
+    setToken("");
+    const retryHeaders = { ...headers };
+    delete retryHeaders.Authorization;
+    try {
+      res = await fetch(path, { ...init, headers: retryHeaders });
+    } catch {
+      throw new Error("Cannot reach your NanoLika right now.");
+    }
+  }
   if (res.status === 401) throw new AuthError();
   if (!res.ok) {
     let data: unknown;
