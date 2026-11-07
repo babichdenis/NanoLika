@@ -122,10 +122,22 @@ class RuntimePage(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:  # noqa: ANN401
         path = request.url.path
+        if path in ("/web2", "/web2/"):
+            # The full client cannot sign in through `/api` (that door needs a caller):
+            # send the person to the site's own sign-in and come back with a session.
+            if await _caller_for(self.cloud, request) is None:
+                from urllib.parse import quote
+
+                from fastapi.responses import RedirectResponse
+
+                target = quote("https://cloud.nanolika.ru/web2/", safe="")
+                return RedirectResponse(f"https://nanolika.ru/app/?signin=1&next={target}", status_code=302)
+            return await call_next(request)
         page = path in ("/web", "/web/")
         if not page and not any(path.startswith(prefix) for prefix in self.PREFIXES):
             return await call_next(request)
         caller = await _caller_for(self.cloud, request)
+
         if caller is None or caller.account_id not in OWNERS:
             return await call_next(request)
         key = await asyncio.to_thread(_account_key, self.cloud, caller.account_id)
