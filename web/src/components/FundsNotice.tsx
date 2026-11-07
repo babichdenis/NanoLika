@@ -1,9 +1,9 @@
-import { fundsView, type FundsInfo } from "../../../cloud/nanomuse_cloud/web_client/funds.js";
+import { fundsView } from "../funds";
 import { useLocale } from "../i18n";
 import { useStore } from "../store";
 
 /** A priced refusal is separate from the free-allowance card; retry is always explicit. */
-export function FundsNotice({ info }: { info: FundsInfo }) {
+export function FundsNotice({ info }: { info: unknown }) {
   const { setTab } = useStore();
   const locale = useLocale();
   const view = fundsView(info, locale);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TOPUP_URL, fundsView, safeTopupUrl } from "../../cloud/nanomuse_cloud/web_client/funds.js";
+import { DEFAULT_TOPUP_URL, fundsView, safeTopupUrl } from "./funds";
 
 const error = { code: "insufficient_funds", required_rub: 10.26, balance_rub: 5, currency: "RUB", topup_url: "https://relay.example/app" };
 describe("priced generation refusal shared by both web clients", () => {

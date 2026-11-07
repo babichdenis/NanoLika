@@ -14,8 +14,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "check": "npm run lint && npm run typecheck && npm test",
-    "preview": "vite preview"
+    "check": "npm run lint && npm run typecheck && npm run providers:check && npm test",
+    "preview": "vite preview",
+    "providers:check": "node ../scripts/client-providers.mjs --check"
   },
   "dependencies": {
     "lucide-react": "^0.577.0",

@@ -9,7 +9,7 @@
  * relay, the desktop and the phones read.
  */
 import { useEffect, useState } from "react";
-import catalogue from "../../nanomuse/llm/providers.json";
+import catalogue from "./data/providers.client.json";
 import { api } from "./api";
 import { isMainland } from "./region";
 import type { Capability, CatalogueProvider, CloudAccount, ProvidersView } from "./types";
