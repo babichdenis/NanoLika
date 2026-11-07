@@ -7,7 +7,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
-import { chat, cloudToken, CloudError, me, models, relayBase, setCloudToken, type CloudMessage, type CloudModel } from "./client";
+import { chat, cloudToken, CloudError, isRecord, me, models, relayBase, setCloudToken, type CloudMessage, type CloudModel } from "./client";
+import { announce, signInFromWebApp } from "./webapp";
 
 interface Turn {
   role: "user" | "assistant";
@@ -26,7 +27,22 @@ export function CloudChat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const abort = useRef<AbortController | null>(null);
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
   const bottom = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    announce();
+    if (tokenRef.current) return;
+    // Opened from Telegram or MAX: the messenger's signed payload is the sign-in.
+    signInFromWebApp()
+      .then((key) => {
+        if (key) setToken(key);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Мессенджер не подтвердил вход."));
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -37,8 +53,9 @@ export function CloudChat() {
         if (!alive) return;
         setList(menu);
         setModel((current) => current || menu[0]?.id || "");
-        const spend = (who as any)?.spend;
-        setAccount(String((who as any)?.account?.hint || (who as any)?.hint || spend?.left_rub || ""));
+        const spend = isRecord(who) && isRecord(who.spend) ? who.spend : {};
+        const hint = isRecord(who) ? String(who.hint || "") : "";
+        setAccount(hint || String(spend.left_rub ?? ""));
         setError("");
       } catch (e) {
         if (alive) setError(e instanceof CloudError ? e.message : "Не удалось прочитать меню моделей.");

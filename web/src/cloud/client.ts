@@ -74,6 +74,17 @@ export function setCloudToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+/** A JSON object from the wire, without trusting it. */
+export type Json = Record<string, unknown>;
+
+export function isRecord(value: unknown): value is Json {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function errorOf(data: unknown): Json {
+  return isRecord(data) && isRecord(data.error) ? data.error : {};
+}
+
 export class CloudError extends Error {
   constructor(
     message: string,
@@ -96,19 +107,14 @@ async function request<T>(path: string, init: RequestInit = {}, timeout = 30_000
   let response: Response;
   try {
     response = await fetch(relayBase() + path, { ...init, headers, signal: init.signal ?? controller.signal });
-  } catch (error) {
+  } catch {
     throw new CloudError("Нет связи с облаком. Проверьте интернет и попробуйте снова.", 0, "offline");
   } finally {
     clearTimeout(timer);
   }
-  let data: any = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
+  const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = data?.error ?? {};
+    const error = errorOf(data);
     throw new CloudError(String(error.message || "Облако отказало в запросе."), response.status, String(error.code || ""), error);
   }
   return data as T;
@@ -150,13 +156,8 @@ export async function chat(
     }),
   });
   if (!response.ok) {
-    let data: any = null;
-    try {
-      data = await response.json();
-    } catch {
-      /* a plain-text refusal stands as it is */
-    }
-    const error = data?.error ?? {};
+    const data: unknown = await response.json().catch(() => null);
+    const error = errorOf(data);
     throw new CloudError(String(error.message || "Облако отказало в запросе."), response.status, String(error.code || ""), error);
   }
   return streamChat(response, options);
@@ -181,14 +182,17 @@ export async function streamChat(
     if (!trimmed.startsWith("data:")) return;
     const payload = trimmed.slice(5).trim();
     if (!payload || payload === "[DONE]") return;
-    let chunk: any;
+    let parsed: unknown;
     try {
-      chunk = JSON.parse(payload);
+      parsed = JSON.parse(payload);
     } catch {
       return;
     }
-    if (chunk.usage) usage = chunk.usage as CloudUsage;
-    const delta = chunk.choices?.[0]?.delta ?? {};
+    if (!isRecord(parsed)) return;
+    if (isRecord(parsed.usage)) usage = parsed.usage as CloudUsage;
+    const choices = Array.isArray(parsed.choices) ? parsed.choices : [];
+    const first = choices[0];
+    const delta = isRecord(first) && isRecord(first.delta) ? first.delta : {};
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
       reasoning += delta.reasoning_content;
       options.onReasoning?.(delta.reasoning_content);
