@@ -4028,6 +4028,10 @@ def create_app(
     async def web_client_headers(request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
+        if path == "/web2" or path.startswith("/web2/"):
+            # A new build changes the asset names; the page itself must not be cached, or a
+            # browser keeps the old names and the person sees yesterday's interface.
+            response.headers["Cache-Control"] = "no-cache"
         if path == "/web" or path.startswith("/web/"):
             response.headers["Cache-Control"] = "no-cache"
             response.headers["X-Content-Type-Options"] = "nosniff"
