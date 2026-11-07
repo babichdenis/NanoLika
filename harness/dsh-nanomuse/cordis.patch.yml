@@ -129,6 +129,56 @@
           GIGACHAT_CLIENT_SECRET: ''
         failOnStartupError: false
 
+    - id: mcp-ru-kaiten
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: kaiten
+        command: npx
+        args: ['-y', '@theyahia/kaiten-mcp']
+        env:
+          KAITEN_DOMAIN: ''
+          KAITEN_TOKEN: ''
+        failOnStartupError: false
+
+    - id: mcp-ru-amocrm
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: amocrm
+        command: npx
+        args: ['-y', '@theyahia/amocrm-mcp']
+        env:
+          AMOCRM_SUBDOMAIN: ''
+          AMOCRM_ACCESS_TOKEN: ''
+          AMOCRM_REFRESH_TOKEN: ''
+          AMOCRM_CLIENT_ID: ''
+          AMOCRM_CLIENT_SECRET: ''
+        failOnStartupError: false
+
+    - id: mcp-ru-sber
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: sber
+        command: npx
+        args: ['-y', '@theyahia/sber-mcp']
+        env:
+          SBER_TOKEN: ''
+        failOnStartupError: false
+
+    - id: mcp-ru-tilda
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: tilda
+        command: npx
+        args: ['-y', '@theyahia/tilda-mcp']
+        env:
+          TILDA_PUBLIC_KEY: ''
+          TILDA_SECRET_KEY: ''
+        failOnStartupError: false
+
 # Paper and sage are the factory theme; the Host retains a person's saved override.
 - id: ui-theme
   config:
