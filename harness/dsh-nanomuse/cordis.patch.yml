@@ -88,6 +88,47 @@
     - id: nanomuse-web-search
       name: dsh-nanomuse/web-search
 
+# Russian services out of the box — a ready set of local MCP servers so nobody
+# has to hunt for them. Each row is an `@deepseek-ai/dsh-mcp-client` stdio server
+# run through npx (Node.js ships with the desktop app); the env vars the service
+# needs stay empty until the person fills them in. DaData in the connectors
+# catalogue already works with no key at all, so it needs no row here.
+- insert:
+    - id: mcp-ru-moysklad
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: moysklad
+        command: npx
+        args: ['-y', '@theyahia/moysklad-mcp']
+        env:
+          MOYSKLAD_LOGIN: ''
+          MOYSKLAD_PASSWORD: ''
+        failOnStartupError: false
+
+    - id: mcp-ru-bitrix24
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: bitrix24
+        command: npx
+        args: ['-y', '@theyahia/bitrix24-mcp']
+        env:
+          BITRIX24_WEBHOOK_URL: ''
+        failOnStartupError: false
+
+    - id: mcp-ru-gigachat
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: gigachat
+        command: npx
+        args: ['-y', '@theyahia/gigachat-mcp']
+        env:
+          GIGACHAT_CLIENT_ID: ''
+          GIGACHAT_CLIENT_SECRET: ''
+        failOnStartupError: false
+
 # Paper and sage are the factory theme; the Host retains a person's saved override.
 - id: ui-theme
   config:
