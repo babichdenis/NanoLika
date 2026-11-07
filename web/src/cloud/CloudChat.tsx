@@ -305,8 +305,61 @@ export function CloudChat() {
     );
   }
 
+
+  const listContent = (
+    <>
+      <div className="px-3">
+        <button
+          type="button"
+          className="mb-2 w-full rounded-2xl bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
+          onClick={() => {
+            setOpenChat(null);
+            setHistoryRows([]);
+            setTurns([]);
+            cidRef.current = "";
+            startedRef.current = 0;
+            setDrawer(false);
+          }}
+        >
+          {t("New chat")}
+        </button>
+      </div>
+      <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+        {chats.length === 0 && <p className="px-2 py-1 text-xs text-muted">{t("No conversations yet")}</p>}
+        {chats.map((row) => (
+          <button
+            key={row.cid}
+            type="button"
+            onClick={() => {
+              setDrawer(false);
+              void openHistory(row);
+            }}
+            className={
+              row.cid === openChat?.cid
+                ? "flex w-full items-center gap-2 rounded-xl bg-surface px-3 py-2 text-left text-sm"
+                : "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-surface"
+            }
+          >
+            <span className="min-w-0 flex-1 truncate">{row.title || t("Untitled chat")}</span>
+            {typeof row.unread === "number" && row.unread > 0 && (
+              <span className="rounded-full bg-accent px-2 text-xs text-accent-fg">{row.unread}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-bg">
+    <div className="flex min-h-dvh bg-bg">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-border/60 bg-bg lg:flex">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <img src="/avatars/lika-idle.webp" alt="" className="h-8 w-8 rounded-full object-contain" />
+          <p className="text-sm font-semibold">nanoLika</p>
+        </div>
+        {listContent}
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border/60 bg-bg/95 px-4 py-3 backdrop-blur">
         <button
           type="button"
@@ -338,45 +391,7 @@ export function CloudChat() {
                 ×
               </button>
             </div>
-            <div className="px-3">
-              <button
-                type="button"
-                className="mb-2 w-full rounded-2xl bg-accent px-3 py-2 text-sm font-medium text-accent-fg"
-                onClick={() => {
-                  setOpenChat(null);
-                  setHistoryRows([]);
-                  setTurns([]);
-                  cidRef.current = "";
-                  startedRef.current = 0;
-                  setDrawer(false);
-                }}
-              >
-                {t("New chat")}
-              </button>
-            </div>
-            <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
-              {chats.length === 0 && <p className="px-2 py-1 text-xs text-muted">{t("No conversations yet")}</p>}
-              {chats.map((row) => (
-                <button
-                  key={row.cid}
-                  type="button"
-                  onClick={() => {
-                    setDrawer(false);
-                    void openHistory(row);
-                  }}
-                  className={
-                    row.cid === openChat?.cid
-                      ? "flex w-full items-center gap-2 rounded-xl bg-surface px-3 py-2 text-left text-sm"
-                      : "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-surface"
-                  }
-                >
-                  <span className="min-w-0 flex-1 truncate">{row.title || t("Untitled chat")}</span>
-                  {typeof row.unread === "number" && row.unread > 0 && (
-                    <span className="rounded-full bg-accent px-2 text-xs text-accent-fg">{row.unread}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            {listContent}
           </aside>
         </>
       )}
@@ -527,6 +542,7 @@ export function CloudChat() {
           </form>
         </>
       )}
+      </div>
     </div>
   );
 }
