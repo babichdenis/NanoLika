@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import time
@@ -69,7 +70,18 @@ def _account_key(cloud: Any, account_id: str) -> str:
 
 
 async def _caller_for(cloud: Any, request: Request | WebSocket) -> Any:
-    """The account behind the browser session, or None."""
+    """The account behind the request: an account key, or the browser session cookie.
+
+    The apps send the key they already hold (`Authorization: Bearer`); the site and the
+    mini-apps carry a session cookie instead. Either proves the same account, so a client
+    that signed in with a key does not have to sign in again just to reach the agent.
+    """
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        try:
+            return await asyncio.to_thread(cloud.authenticate, auth[7:].strip())
+        except Exception:  # noqa: BLE001 — an unknown or revoked key is simply not in
+            return None
     token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
         return None
@@ -145,12 +157,30 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
 
     @app.websocket("/ws")
     async def web_runtime_ws(websocket: WebSocket) -> None:
-        """The chat's events: the account is chosen by the session cookie on the handshake."""
+        """The chat's events: a key in the first frame, or the session cookie."""
+        # A cookie or an Authorization header proves the account before the handshake;
+        # only when neither is there does the socket wait for the key in its first frame.
         caller = await _caller_for(cloud, websocket)
+        await websocket.accept()
+        if caller is None:
+            first = ""
+            try:
+                first = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+            except Exception:  # noqa: BLE001 — no frame at all is the normal cookie case
+                first = ""
+            if first:
+                try:
+                    frame = json.loads(first)
+                except ValueError:
+                    frame = None
+                if isinstance(frame, dict) and frame.get("kind") == "auth" and isinstance(frame.get("token"), str):
+                    try:
+                        caller = await asyncio.to_thread(cloud.authenticate, frame["token"])
+                    except Exception:  # noqa: BLE001
+                        caller = None
         if caller is None or caller.account_id not in OWNERS:
             await websocket.close(code=4401)
             return
-        await websocket.accept()
         try:
             key = await asyncio.to_thread(_account_key, cloud, caller.account_id)
             upstream = await websockets.connect(
