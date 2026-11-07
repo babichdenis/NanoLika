@@ -99,7 +99,7 @@ export class CloudError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}, timeout = 30_000): Promise<T> {
+export async function cloudRequest<T>(path: string, init: RequestInit = {}, timeout = 30_000): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   const token = cloudToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -123,12 +123,12 @@ async function request<T>(path: string, init: RequestInit = {}, timeout = 30_000
 }
 
 export async function models(): Promise<CloudModel[]> {
-  const data = await request<{ data?: CloudModel[] }>("/v1/models");
+  const data = await cloudRequest<{ data?: CloudModel[] }>("/v1/models");
   return (data.data ?? []).filter((model) => (model.nanomuse?.kind ?? "chat") === "chat");
 }
 
 export function me(): Promise<Record<string, unknown>> {
-  return request("/v1/me");
+  return cloudRequest("/v1/me");
 }
 
 /** One streamed turn. Returns the text the model wrote and the usage it reported. */

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { useT } from "../i18n";
 import { chat, cloudToken, CloudError, isRecord, me, models, relayBase, setCloudToken, type CloudMessage, type CloudModel } from "./client";
+import { catalog, messages as history, type ConversationMeta, type SyncedMessage } from "./sync";
 import { announce, signInFromWebApp } from "./webapp";
 
 interface Turn {
@@ -28,6 +29,10 @@ export function CloudChat() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [chats, setChats] = useState<ConversationMeta[]>([]);
+  const [openChat, setOpenChat] = useState<ConversationMeta | null>(null);
+  const [historyRows, setHistoryRows] = useState<SyncedMessage[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const tokenRef = useRef(token);
   const tRef = useRef(t);
@@ -53,9 +58,10 @@ export function CloudChat() {
     let alive = true;
     (async () => {
       try {
-        const [menu, who] = await Promise.all([models(), me()]);
+        const [menu, who, list] = await Promise.all([models(), me(), catalog().catch(() => [])]);
         if (!alive) return;
         setList(menu);
+        setChats(list);
         setModel((current) => current || menu[0]?.id || "");
         const spend = isRecord(who) && isRecord(who.spend) ? who.spend : {};
         const hint = isRecord(who) ? String(who.hint || "") : "";
@@ -131,6 +137,21 @@ export function CloudChat() {
     }
   }
 
+  async function openHistory(chatMeta: ConversationMeta) {
+    setOpenChat(chatMeta);
+    setHistoryBusy(true);
+    setError("");
+    try {
+      const page = await history(chatMeta.cid, { limit: 100 });
+      setHistoryRows(page.messages ?? []);
+    } catch (e) {
+      setError(e instanceof CloudError ? e.message : t("Could not read this conversation."));
+      setHistoryRows([]);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
   if (!token) {
     return (
       <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-3 p-6">
@@ -167,6 +188,21 @@ export function CloudChat() {
           <p className="truncate text-sm font-semibold">nanoLika Cloud</p>
           <p className="truncate text-xs text-muted">{account || relayBase()}</p>
         </div>
+        <button
+          type="button"
+          className="rounded-lg border border-border px-2 py-1 text-xs"
+          onClick={() => {
+            if (openChat) {
+              setOpenChat(null);
+              setHistoryRows([]);
+              return;
+            }
+            const first = chats[0];
+            if (first) void openHistory(first);
+          }}
+        >
+          {openChat ? t("Back") : t("History")}
+        </button>
         <select
           value={model}
           onChange={(event) => setModel(event.target.value)}
@@ -181,8 +217,30 @@ export function CloudChat() {
       </header>
 
       <main className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {visible.length === 0 && <p className="text-sm text-muted">{t("Write the first message — it goes to the cloud.")}</p>}
-        {visible.map((turn, index) => (
+        {openChat ? (
+          <>
+            <p className="text-xs text-muted">
+              {openChat.title || t("Untitled chat")} · {t("read only for now")}
+            </p>
+            {historyBusy && <Loader2 className="animate-spin" size={16} />}
+            {historyRows.map((row) => (
+              <div key={row.mid} className={row.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div
+                  className={
+                    row.role === "user"
+                      ? "max-w-[85%] whitespace-pre-wrap rounded-2xl bg-fg px-3 py-2 text-sm text-bg"
+                      : "max-w-[85%] whitespace-pre-wrap rounded-2xl bg-surface px-3 py-2 text-sm"
+                  }
+                >
+                  {row.text}
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          visible.length === 0 && <p className="text-sm text-muted">{t("Write the first message — it goes to the cloud.")}</p>
+        )}
+        {!openChat && visible.map((turn, index) => (
           <div key={index} className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}>
             <div
               className={
@@ -202,6 +260,7 @@ export function CloudChat() {
 
       <form
         className="flex items-end gap-2 border-t border-border px-4 py-3"
+        hidden={!!openChat}
         onSubmit={(event) => {
           event.preventDefault();
           void send();

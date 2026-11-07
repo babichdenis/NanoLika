@@ -285,6 +285,10 @@ const ru: Record<string, string> = {
   "Could not read the model list.": "Не удалось прочитать список моделей.",
   "No answer came.": "Ответ не пришёл.",
   "The messenger did not confirm the sign-in.": "Мессенджер не подтвердил вход.",
+  "History": "История",
+  "Untitled chat": "Без названия",
+  "read only for now": "пока только чтение",
+  "Could not read this conversation.": "Не удалось прочитать эту беседу.",
 };
 
 export default ru;

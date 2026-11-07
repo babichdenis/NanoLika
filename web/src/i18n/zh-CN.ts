@@ -1926,6 +1926,9 @@ const zhCN: Record<string, string> = {
   "password for this app": "此应用密码",
   "tokens": "令牌",
   "you@yandex.ru or you@gmail.com": "you@yandex.ru 或 you@gmail.com",
+  "History": "历史",
+  "read only for now": "目前仅可阅读",
+  "Could not read this conversation.": "无法读取此对话。",
 };
 
 export default zhCN;
