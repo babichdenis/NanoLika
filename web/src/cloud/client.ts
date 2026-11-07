@@ -7,6 +7,8 @@
  * so a message sent here lands in the same conversation as everywhere else.
  */
 
+import { t } from "../i18n";
+
 const TOKEN_KEY = "nm.key";
 const SESSION_KEY = "nl.web.session.v1";
 const RELAY_KEY = "nl.cloud.relay";
@@ -108,14 +110,14 @@ async function request<T>(path: string, init: RequestInit = {}, timeout = 30_000
   try {
     response = await fetch(relayBase() + path, { ...init, headers, signal: init.signal ?? controller.signal });
   } catch {
-    throw new CloudError("Нет связи с облаком. Проверьте интернет и попробуйте снова.", 0, "offline");
+    throw new CloudError(t("Cannot reach the cloud. Check the connection and try again."), 0, "offline");
   } finally {
     clearTimeout(timer);
   }
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const error = errorOf(data);
-    throw new CloudError(String(error.message || "Облако отказало в запросе."), response.status, String(error.code || ""), error);
+    throw new CloudError(String(error.message || t("The cloud refused the request.")), response.status, String(error.code || ""), error);
   }
   return data as T;
 }
@@ -158,7 +160,7 @@ export async function chat(
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
     const error = errorOf(data);
-    throw new CloudError(String(error.message || "Облако отказало в запросе."), response.status, String(error.code || ""), error);
+    throw new CloudError(String(error.message || t("The cloud refused the request.")), response.status, String(error.code || ""), error);
   }
   return streamChat(response, options);
 }
@@ -168,7 +170,7 @@ export async function streamChat(
   response: Response,
   options: { onDelta?: (text: string) => void; onReasoning?: (text: string) => void } = {},
 ): Promise<{ text: string; reasoning: string; usage: CloudUsage | null }> {
-  if (!response.body) throw new CloudError("Облако не прислало поток.", 502, "no_stream");
+  if (!response.body) throw new CloudError(t("The cloud sent no stream."), 502, "no_stream");
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

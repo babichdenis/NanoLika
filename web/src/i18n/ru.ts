@@ -274,6 +274,17 @@ const ru: Record<string, string> = {
   "This is not your login password, but a separate app password from the provider.": "Это не ваш пароль от входа, а отдельный пароль приложения у вашего почтовика.",
   "It reads your mail and helps with replies, and always asks before sending. Everything is set up for you — just add your address and a password.": "Лика читает вашу почту и помогает с ответами, а перед отправкой всегда спросит вас. Настройка уже готова — просто добавьте адрес и пароль.",
   "A password is already saved. Leave blank to keep it.": "Пароль уже сохранён. Оставьте поле пустым, чтобы его не менять.",
+  "nanoLika Cloud": "nanoLika Cloud",
+  "Paste the account key — the same nanoLika API key as in your account page.": "Вставьте ключ аккаунта — тот же ключ nanoLika API, что в кабинете.",
+  "Relay: {url}": "Релей: {url}",
+  "Write the first message — it goes to the cloud.": "Напишите первое сообщение — оно уйдёт в облако.",
+  "Write to Lika…": "Напишите Лике…",
+  "Cannot reach the cloud. Check the connection and try again.": "Не удалось связаться с облаком. Проверьте связь и попробуйте ещё раз.",
+  "The cloud refused the request.": "Облако отказало в запросе.",
+  "The cloud sent no stream.": "Облако не прислало ответ.",
+  "Could not read the model list.": "Не удалось прочитать список моделей.",
+  "No answer came.": "Ответ не пришёл.",
+  "The messenger did not confirm the sign-in.": "Мессенджер не подтвердил вход.",
 };
 
 export default ru;
