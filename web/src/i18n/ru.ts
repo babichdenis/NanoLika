@@ -289,6 +289,7 @@ const ru: Record<string, string> = {
   "Untitled chat": "Без названия",
   "read only for now": "пока только чтение",
   "Could not read this conversation.": "Не удалось прочитать эту беседу.",
+  "Could not save this message to the shared history.": "Не удалось сохранить сообщение в общую историю.",
 };
 
 export default ru;

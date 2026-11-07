@@ -92,3 +92,35 @@ export async function messages(
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return cloudRequest<MessagePage>(`/v1/sync/conversations/${encodeURIComponent(cid)}/messages${suffix}`);
 }
+
+export interface OutgoingChat {
+  cid: string;
+  kind?: "main" | "side";
+  title?: string;
+  created_at: number;
+  updated_at: number;
+  archived?: boolean;
+  model?: string;
+  reasoning?: string;
+}
+
+export interface OutgoingMessage {
+  mid: string;
+  cid: string;
+  role: "user" | "assistant";
+  text: string;
+  created_at: number;
+  attachments?: SyncedAttachment[];
+}
+
+export interface PublishResult {
+  rejected?: Array<{ reason?: string; cid?: string; cid_main?: string }>;
+}
+
+/** Send one turn to the account's history: the chat's card and its new messages. */
+export function publish(chat: OutgoingChat, messages: OutgoingMessage[]): Promise<PublishResult> {
+  return cloudRequest<PublishResult>("/v1/sync/changes", {
+    method: "POST",
+    body: JSON.stringify({ device: deviceId(), conversations: [chat], messages }),
+  });
+}

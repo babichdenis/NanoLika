@@ -4019,6 +4019,10 @@ def create_app(
 
     web_client = Path(__file__).with_name("web_client")
     app.mount("/web", StaticFiles(directory=web_client, html=True, check_dir=False), name="web-client")
+    # The React client, while it is being proven: its own path, its own files, and the old
+    # client stays exactly where it is. When it reaches parity it takes /web and this goes.
+    web2_client = Path(__file__).resolve().parent / "web2"
+    app.mount("/web2", StaticFiles(directory=str(web2_client), html=True, check_dir=False), name="web2-client")
 
     @app.middleware("http")
     async def web_client_headers(request: Request, call_next):

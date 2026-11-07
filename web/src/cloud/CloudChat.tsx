@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { useT } from "../i18n";
 import { chat, cloudToken, CloudError, isRecord, me, models, relayBase, setCloudToken, type CloudMessage, type CloudModel } from "./client";
-import { catalog, messages as history, type ConversationMeta, type SyncedMessage } from "./sync";
+import { catalog, messages as history, publish, type ConversationMeta, type SyncedMessage } from "./sync";
 import { announce, signInFromWebApp } from "./webapp";
 
 interface Turn {
@@ -33,6 +33,8 @@ export function CloudChat() {
   const [openChat, setOpenChat] = useState<ConversationMeta | null>(null);
   const [historyRows, setHistoryRows] = useState<SyncedMessage[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const cidRef = useRef<string>("");
+  const startedRef = useRef<number>(0);
   const abort = useRef<AbortController | null>(null);
   const tokenRef = useRef(token);
   const tRef = useRef(t);
@@ -93,6 +95,26 @@ export function CloudChat() {
       { role: "user", content: text },
     ];
     setTurns((all) => [...all, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    // One conversation per screen session; its id is what every other client will see.
+    if (!cidRef.current) cidRef.current = crypto.randomUUID();
+    if (!startedRef.current) startedRef.current = Math.floor(Date.now() / 1000);
+    const cid = cidRef.current;
+    const sentAt = Math.floor(Date.now() / 1000);
+    try {
+      await publish(
+        {
+          cid,
+          kind: "side",
+          title: text.slice(0, 52),
+          created_at: startedRef.current,
+          updated_at: sentAt,
+          ...(model ? { model } : {}),
+        },
+        [{ mid: crypto.randomUUID(), cid, role: "user", text, created_at: sentAt }],
+      );
+    } catch {
+      setError(tRef.current("Could not save this message to the shared history."));
+    }
     const controller = new AbortController();
     abort.current = controller;
     try {
@@ -119,6 +141,17 @@ export function CloudChat() {
         if (last?.role === "assistant") next[next.length - 1] = { ...last, text: result.text, pending: false };
         return next;
       });
+      if (result.text) {
+        const repliedAt = Math.floor(Date.now() / 1000);
+        try {
+          await publish(
+            { cid, kind: "side", title: text.slice(0, 52), created_at: startedRef.current, updated_at: repliedAt, ...(model ? { model } : {}) },
+            [{ mid: crypto.randomUUID(), cid, role: "assistant", text: result.text, created_at: repliedAt }],
+          );
+        } catch {
+          setError(tRef.current("Could not save this message to the shared history."));
+        }
+      }
     } catch (e) {
       if ((e as Error)?.name === "AbortError") {
         setTurns((all) => {

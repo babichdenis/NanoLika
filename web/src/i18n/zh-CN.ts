@@ -1929,6 +1929,7 @@ const zhCN: Record<string, string> = {
   "History": "历史",
   "read only for now": "目前仅可阅读",
   "Could not read this conversation.": "无法读取此对话。",
+  "Could not save this message to the shared history.": "无法将此消息保存到共享历史。",
 };
 
 export default zhCN;
