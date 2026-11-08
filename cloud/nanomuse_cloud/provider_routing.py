@@ -977,6 +977,11 @@ def normalize_messages(messages: Any) -> Any:
         if not isinstance(message, dict):
             out.append(message)
             continue
+        # The Responses API calls the system prompt "developer". Chat Completions
+        # suppliers reject the unknown role outright (Polza: 422 "unknown variant
+        # `developer`"), so the prompt never reaches the model. One name goes out.
+        if str(message.get("role") or "").lower() == "developer":
+            message = {**message, "role": "system"}
         content = message.get("content")
         if not isinstance(content, list):
             out.append(message)
