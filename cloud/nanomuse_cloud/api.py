@@ -226,6 +226,31 @@ def apply_chat_defaults(body: dict, defaults: dict, reasoning_model: bool = Fals
         body["reasoning_effort"] = "none"
 
 
+def align_thinking_with_history(body: dict) -> None:
+    """Turn thinking off for a history that cannot carry it.
+
+    DeepSeek's thinking mode refuses a turn whose earlier assistant messages have no
+    ``reasoning_content`` ("The `reasoning_content` in the thinking mode must be passed
+    back to the API"). An app that keeps only the answer builds exactly that history, and
+    the relay cannot invent the missing reasoning — so it answers in plain mode instead of
+    failing the turn.
+    """
+    if thinking_requested(body) is not True:
+        return
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return
+    assistants = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+    if not assistants or any(m.get("reasoning_content") for m in assistants):
+        return
+    body["enable_thinking"] = False
+    body.pop("thinking", None)
+    body.pop("thinking_budget", None)
+    effort = body.get("reasoning_effort")
+    if isinstance(effort, str) and effort.strip().lower() != "none":
+        body["reasoning_effort"] = "none"
+
+
 def upstream_detail(kind: str, status: int, model: str, raw: bytes | str) -> str:
     """The line an `upstream.error` event keeps: the kind, the status, the model and the
     provider's own words (its `error.message`, one line, trimmed) — enough to see *why* a
@@ -1541,6 +1566,7 @@ def create_app(
             if effort:
                 body["reasoning_effort"] = effort
         apply_chat_defaults(body, settings.chat_defaults, reasoning_model=bool(levels))
+        align_thinking_with_history(body)
         stream = bool(body.get("stream"))
         if stream:
             opts = body.get("stream_options") if isinstance(body.get("stream_options"), dict) else {}

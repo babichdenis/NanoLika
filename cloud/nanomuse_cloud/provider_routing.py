@@ -1083,7 +1083,14 @@ def retryable(response: httpx.Response, body: bytes | None = None) -> bool:
             if code in {"unsupported_parameter", "model_not_found", "unsupported_model"} or data.get("detail") == "Model not supported":
                 return True
         text = body.decode("utf-8", "ignore") if isinstance(body, bytes) else str(body or "")
-        return vision_refusal(text)
+        if vision_refusal(text):
+            return True
+        # A thinking-mode route that wants the previous turn's `reasoning_content` back
+        # cannot take a history that does not carry it (the app builds plain messages).
+        # It is a fact about the route, not the question, so another supplier answers.
+        if "reasoning_content" in text and "passed back" in text:
+            return True
+        return False
     return False
 
 
