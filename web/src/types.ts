@@ -447,6 +447,8 @@ export interface CloudMe {
     password_set_at: number | null;
     sessions: number;
     signed_in_via: string;
+    /** The messengers linked to this account: `{channel: "telegram" | "max", hint, since}`. */
+    linked?: Array<{ channel: string; hint: string; since: number }>;
     /** "cn" for a mainland account; older relays do not say */
     region?: string;
   };

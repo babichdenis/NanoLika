@@ -198,6 +198,9 @@ export const api = {
   cloudEvents: (limit = 50) => request<{ events: CloudEvent[] }>(`/api/cloud/events?limit=${limit}`),
   cloudDelete: () => request<CloudAccount>("/api/cloud/delete", json({})),
   cloudMe: () => request<CloudMe>("/api/cloud/me"),
+  /** Let a messenger go: the account's Telegram or MAX link is removed at the relay. */
+  cloudUnlinkChannel: (channel: string) =>
+    request<{ unlinked: number; channel: string }>(`/api/cloud/channels/${encodeURIComponent(channel)}`, { method: "DELETE" }),
   /** The relay's public figures (relay 0.15); {} from an older relay. */
   cloudConfig: () => request<CloudConfig>("/api/cloud/config"),
   cloudContribute: (on: boolean) => request<{ on: boolean; samples: number; default_on?: boolean; privacy_url?: string }>("/api/cloud/contribute", json({ on })),

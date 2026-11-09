@@ -254,6 +254,25 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
             with contextlib.suppress(Exception):
                 await websocket.close()
 
+    @app.delete("/api/cloud/channels/{channel}")
+    async def web_runtime_unlink(channel: str, request: Request) -> Response:
+        """Let a messenger go: the account's Telegram or MAX link is cut at the relay.
+
+        The runtime proxies `/api/*` to the account's worker, which has no such call — the
+        links live here — so this one route is answered by the relay itself.
+        """
+        caller = await _caller_for(cloud, request)
+        if caller is None:
+            return JSONResponse({"detail": "sign in to NanoLika"}, status_code=401)
+        if channel not in ("telegram", "max"):
+            return JSONResponse({"detail": "unknown messenger"}, status_code=404)
+        try:
+            answer = await asyncio.to_thread(cloud.unlink_channel, caller, channel)
+        except Exception as exc:  # noqa: BLE001 — the refusal carries the reason
+            detail = getattr(exc, "message", None) or str(exc) or "could not unlink"
+            return JSONResponse({"detail": detail}, status_code=400)
+        return JSONResponse(answer)
+
     @app.api_route(
         "/api/{path:path}",
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

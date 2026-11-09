@@ -7,7 +7,7 @@ import { MuseCaption, MuseCard, MuseDivider, MuseRow, MuseSwitchRow } from "../c
 import { useMenuKeys } from "../components/useMenuKeys";
 import { useT, type t as T } from "../i18n";
 import { useStore } from "../store";
-import type { HandsStatus, HubDevice, HubView } from "../types";
+import type { CloudSession, HandsStatus, HubDevice, HubView } from "../types";
 import { cx, relativeTime } from "../util";
 
 /**
@@ -94,6 +94,9 @@ export function DevicesScreen() {
           <CloudCard account={hub?.account ?? null} onChange={() => void reload()} />
         </div>
 
+        <ChannelsCard />
+        <DevicesList />
+
         {hub && (
           <div className="px-4">
             <SectionLabel>{t("This device")}</SectionLabel>
@@ -131,6 +134,191 @@ export function DevicesScreen() {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return <p className="px-1 pb-2 text-[12.5px] font-medium uppercase tracking-wide text-muted">{children}</p>;
+}
+
+/** The messengers the account is reachable in: Telegram and MAX, each with its way out. */
+function ChannelsCard() {
+  const { toast } = useStore();
+  const t = useT();
+  const [linked, setLinked] = useState<Array<{ channel: string; hint: string; since: number }>>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      const me = await api.cloudMe();
+      setLinked(me.account.linked ?? []);
+      setError("");
+    } catch {
+      setError(t("Sign in to see the messengers."));
+    }
+  };
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const off = async (channel: string) => {
+    if (!window.confirm(t("Turn off {channel}? The bot there will no longer know this chat.", { channel }))) return;
+    setBusy(channel);
+    try {
+      await api.cloudUnlinkChannel(channel);
+      await load();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const rows: Array<{ id: "telegram" | "max"; label: string }> = [
+    { id: "telegram", label: "Telegram" },
+    { id: "max", label: "MAX" },
+  ];
+
+  return (
+    <div className="px-4 pt-4">
+      <SectionLabel>{t("Messengers")}</SectionLabel>
+      <div className="overflow-hidden rounded-2xl border border-border/70 bg-surface">
+        {rows.map((row, i) => {
+          const link = linked.find((l) => l.channel === row.id);
+          return (
+            <div key={row.id} className={cx("flex items-center gap-3 px-4 py-3", i > 0 && "border-t border-border/60")}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg/70" aria-hidden>
+                <MessageSquare size={17} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-medium leading-[20px]">{row.label}</p>
+                <p className="truncate text-[12.5px] leading-[18px] text-muted">
+                  {link ? link.hint || t("Connected") : t("Not connected")}
+                </p>
+              </div>
+              {link && (
+                <button
+                  type="button"
+                  disabled={busy === row.id}
+                  onClick={() => void off(row.id)}
+                  className="h-8 rounded-full bg-surface-2 px-3 text-[13px] font-medium text-fg/80 hover:bg-surface-2/70 disabled:opacity-40"
+                >
+                  {t("Turn off")}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {error && <p className="border-t border-border/60 px-4 py-2 text-[12.5px] text-muted">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Every sign-in of the account that is a person's own device, newest first, each with its way out. */
+function DevicesList() {
+  const { toast, state } = useStore();
+  const t = useT();
+  const [sessions, setSessions] = useState<CloudSession[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      const r = await api.cloudSessions();
+      // `runtime` and `sync` rows are the cloud's own machinery, not a device to switch off.
+      setSessions(r.sessions.filter((s) => s.via !== "runtime" && s.via !== "sync"));
+      setError("");
+    } catch {
+      setError(t("Sign in to see your devices."));
+    }
+  };
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const off = async (s: CloudSession) => {
+    if (!window.confirm(t("Turn off {device}? It will have to sign in again.", { device: s.device }))) return;
+    setBusy(s.prefix);
+    try {
+      const r = await api.cloudRevokeSession(s.prefix);
+      setSessions(r.sessions.filter((x) => x.via !== "runtime" && x.via !== "sync"));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <div className="px-4 pt-4">
+      <SectionLabel>{t("Devices with {name} installed", { name: state.profile?.name ?? "NanoLika" })}</SectionLabel>
+      <div className="overflow-hidden rounded-2xl border border-border/70 bg-surface">
+        {sessions.length === 0 ? (
+          <p className="px-4 py-3 text-[13px] text-muted">{error || t("No device is signed in yet.")}</p>
+        ) : (
+          sessions.map((s, i) => (
+            <div key={s.prefix} className={cx("flex items-center gap-3 px-4 py-3", i > 0 && "border-t border-border/60")}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg/70" aria-hidden>
+                {kindIcon(kindOfDevice(s.device), 17)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1.5 truncate text-[15px] font-medium leading-[20px]">
+                  <span className="truncate">{s.device || t("Unknown device")}</span>
+                  {s.current && (
+                    <span className="shrink-0 rounded-full bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-accent">{t("this one")}</span>
+                  )}
+                </p>
+                <p className="truncate text-[12.5px] leading-[18px] text-muted">
+                  {[t("Last used {when}", { when: relativeTime(new Date((s.last_used_at ?? s.created_at) * 1000).toISOString()) }), viaLabel(s.via, t)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              {!s.current && (
+                <button
+                  type="button"
+                  disabled={busy === s.prefix}
+                  onClick={() => void off(s)}
+                  className="h-8 rounded-full bg-surface-2 px-3 text-[13px] font-medium text-fg/80 hover:bg-surface-2/70 disabled:opacity-40"
+                >
+                  {t("Turn off")}
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <p className="px-1 pt-2 text-[12.5px] leading-[18px] text-muted">
+        {t("A switched-off device is signed out of this account and has to sign in again. Its conversations stay here.")}
+      </p>
+    </div>
+  );
+}
+
+/** Phone or computer, from the name a device reports (the app says what it runs on). */
+function kindOfDevice(name: string): string {
+  const low = (name || "").toLowerCase();
+  if (/iphone|ipad|android|pixel|phone/.test(low)) return "phone";
+  if (/mac|win|desktop|linux|pc/.test(low)) return "computer";
+  return "web";
+}
+
+function viaLabel(via: string, t: typeof T): string {
+  switch (via) {
+    case "code":
+      return t("signed in by code");
+    case "password":
+      return t("signed in by password");
+    case "telegram":
+    case "telegram_webapp":
+      return "Telegram";
+    case "max":
+    case "max_webapp":
+      return "MAX";
+    case "session":
+      return t("browser session");
+    default:
+      return via;
+  }
 }
 
 /** The small grey line under a switch row inside a card. */
