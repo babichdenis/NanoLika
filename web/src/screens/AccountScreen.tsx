@@ -120,12 +120,6 @@ function Identity({ account, me }: { account: CloudAccount | null; me: CloudMe |
           </div>
         </div>
       </div>
-      {account?.account_id && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-surface-2/70 px-3 py-2 text-[12px]">
-          <span className="text-muted">{t("Account id")}</span>
-          <code className="truncate font-mono text-[11.5px] text-fg/80">{account.account_id}</code>
-        </div>
-      )}
     </section>
   );
 }

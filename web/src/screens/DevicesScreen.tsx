@@ -141,6 +141,7 @@ function ChannelsCard() {
   const { toast } = useStore();
   const t = useT();
   const [linked, setLinked] = useState<Array<{ channel: string; hint: string; since: number }>>([]);
+  const [own, setOwn] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -148,6 +149,7 @@ function ChannelsCard() {
     try {
       const me = await api.cloudMe();
       setLinked(me.account.linked ?? []);
+      setOwn(String(me.account.channel || ""));
       setError("");
     } catch {
       setError(t("Sign in to see the messengers."));
@@ -193,7 +195,7 @@ function ChannelsCard() {
                   {link ? link.hint || t("Connected") : t("Not connected")}
                 </p>
               </div>
-              {link && (
+              {link && row.id !== own && (
                 <button
                   type="button"
                   disabled={busy === row.id}
@@ -203,11 +205,17 @@ function ChannelsCard() {
                   {t("Turn off")}
                 </button>
               )}
+              {link && row.id === own && (
+                <span className="text-[12px] text-muted">{t("this is the account")}</span>
+              )}
             </div>
           );
         })}
         {error && <p className="border-t border-border/60 px-4 py-2 text-[12.5px] text-muted">{error}</p>}
       </div>
+      <p className="px-1 pt-2 text-[12.5px] leading-[18px] text-muted">
+        {t("A computer or phone joins this account by the e-mail. Telegram and MAX are profiles of their own: each has its own chat with Lika and need not match this e-mail.")}
+      </p>
     </div>
   );
 }
