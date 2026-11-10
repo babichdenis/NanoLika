@@ -26,6 +26,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -41,6 +42,25 @@ from .service import CHANNEL_CODE_TTL_S, Caller, Cloud, CloudError, chat_identit
 
 # a code is a few characters in a JSON object; anything larger is not one
 _BODY_BYTES = 8 * 1024
+
+_log = logging.getLogger(__name__)
+
+#: Keys a messenger's mini app mints by itself. One live key per messenger per account:
+#: otherwise every visit leaves another "Telegram WebApp" sign-in in the cabinet — a
+#: device the person never made.
+_WEBAPP_VIAS = ("telegram_webapp", "max_webapp")
+
+
+def _one_live_key(cloud: Cloud, account_id: str, via: str, keep_hash: str) -> None:
+    """Revoke the account's older live keys of this messenger, keeping the one just issued."""
+    if via not in _WEBAPP_VIAS:
+        return
+    try:
+        for row in cloud.db.keys_for(account_id, live_only=True):
+            if row["via"] == via and row["key_hash"] != keep_hash:
+                cloud.db.revoke_key(row["key_hash"])
+    except Exception:  # noqa: BLE001 - a tidy-up must never refuse the sign-in itself
+        _log.warning("channel keys: could not drop an older %s key of %s", via, account_id[:8])
 
 
 def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -127,6 +147,7 @@ def _max_session(cloud: Cloud, user_id: int) -> dict:
             raise CloudError(403, "account_disabled", "This account is disabled")
         key, caller = cloud._issue_key(str(account["id"]), "MAX WebApp", "max_webapp", expires_at=int(time.time()) + 30 * 86400)
         cloud._remember_channel_key("max", ident, caller.key_hash)
+        _one_live_key(cloud, str(account["id"]), "max_webapp", caller.key_hash)
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
@@ -165,6 +186,7 @@ def _telegram_session(cloud: Cloud, user_id: int, *, register: bool = True) -> d
             raise CloudError(403, "account_disabled", "This account is disabled")
         key, caller = cloud._issue_key(str(account["id"]), "Telegram WebApp", "telegram_webapp", expires_at=int(time.time()) + 30 * 86400)
         cloud._remember_channel_key("telegram", ident, caller.key_hash)
+        _one_live_key(cloud, str(account["id"]), "telegram_webapp", caller.key_hash)
         return {"api_key": key, "account": {"id": caller.account_id, "hint": caller.hint}}
 
 
