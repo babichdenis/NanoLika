@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import os
+import re
 import uuid
 import weakref
 from collections.abc import Callable, Mapping
@@ -22,13 +23,28 @@ from typing import Any, cast
 import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, ValidationError
 from starlette.datastructures import Headers
 
 from nanomuse import timeutil
 from nanomuse.config import load_settings
 from nanomuse.logger import logger
+from nanomuse.memory import account_scope
+from nanomuse.messenger_attachments import (
+    MAX_FILES,
+    MAX_REQUEST_BYTES,
+    AttachmentError,
+    parse_files,
+    save_to_thread,
+)
 from nanomuse.server.accounts import AccountRuntime, CapacityError
 from nanomuse.server.api import _handle_ws_message, create_app
+from nanomuse.server.events import STOPPED_NOTICE
+from nanomuse.server.messenger_ops import (
+    MessengerOperations,
+    OperationConflict,
+    confirm_user_durable,
+)
 
 DROP_REQUEST = {
     "host",
@@ -41,6 +57,7 @@ DROP_REQUEST = {
     "x-account",
     "x-cloud-key",
     "x-worker-secret",
+    "x-messenger-secret",
 }
 DROP_RESPONSE = {"content-length", "content-encoding", "transfer-encoding", "connection"}
 
@@ -48,6 +65,7 @@ DROP_RESPONSE = {"content-length", "content-encoding", "transfer-encoding", "con
 #: X-Cloud-Key only from a caller that also carries it. Empty keeps the loopback-only
 #: default of the pilot, and the worker then relies on the network for that trust.
 WORKER_SECRET = os.environ.get("NANOMUSE_WORKER_SECRET", "").strip()
+MESSENGER_SECRET = os.environ.get("NANOMUSE_MESSENGER_SECRET", "").strip()
 
 
 def worker_allows(headers: Mapping[str, str], secret: str | None = None) -> bool:
@@ -161,6 +179,14 @@ async def _models(service: Any) -> JSONResponse:  # noqa: ANN401
     )
 
 
+class MessengerMessage(BaseModel):
+    operation_id: str = Field(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    conversation_id: str = Field(min_length=1, max_length=128)
+    text: str = Field(default="", max_length=20_000)
+    language: str = Field(default="", max_length=20)
+    files: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_FILES)
+
+
 def build_worker() -> FastAPI:
     settings = load_settings()
     # The worker has no config file of its own; the relay is ours, not the upstream one the
@@ -178,6 +204,7 @@ def build_worker() -> FastAPI:
         in ("1", "true", "yes"),
     )
     apps = AppCache(lambda service: create_app(service.settings, service=service))
+    messenger_instance = uuid.uuid4().hex
     runtime.on_stop(apps.drop)
     app = FastAPI(title="NanoLika cloud worker", docs_url=None, redoc_url=None)
     app.add_middleware(RuntimeAccountContext)
@@ -205,6 +232,175 @@ def build_worker() -> FastAPI:
         runtime.begin(account_id)
         try:
             return await _models(service)
+        finally:
+            runtime.end(account_id)
+
+    @app.post("/internal/messenger/messages")
+    async def messenger_message(request: Request) -> JSONResponse:
+        # Unlike the legacy loopback pilot, this boundary never trusts network location
+        # alone: only the relay that proved the account may submit a messenger operation.
+        if (
+            not WORKER_SECRET or not worker_allows(request.headers)
+            or len(MESSENGER_SECRET) < 32
+            or not hmac.compare_digest(request.headers.get("x-messenger-secret", ""), MESSENGER_SECRET)
+        ):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > MAX_REQUEST_BYTES:
+                return JSONResponse({"detail": "request too large"}, status_code=413)
+        try:
+            body = MessengerMessage.model_validate_json(bytes(raw))
+            files = parse_files(body.files)
+            if not body.text.strip() and not files:
+                raise AttachmentError("empty message")
+        except (ValidationError, AttachmentError):
+            return JSONResponse({"detail": "invalid message or attachments"}, status_code=422)
+        account_id = request.headers.get("x-account", "").strip()
+        cloud_key = request.headers.get("x-cloud-key", "").strip()
+        try:
+            if str(uuid.UUID(account_id)) != account_id or not cloud_key:
+                raise ValueError("invalid account")
+        except (ValueError, AttributeError):
+            return JSONResponse({"detail": "verified account and key required"}, status_code=401)
+        if files:
+            return JSONResponse({"state": "rejected", "reason": "attachments_disabled"})
+        try:
+            service = cast(Any, await runtime.service(account_id, cloud_key))
+        except CapacityError:
+            return JSONResponse({"detail": "the runtime is busy"}, status_code=503)
+        except Exception:  # noqa: BLE001 - do not disclose customer keys or runtime state
+            return JSONResponse({"detail": "runtime unavailable"}, status_code=502)
+        runtime.begin(account_id)
+        try:
+            sync = service.sync
+            if sync.account_id != account_id or not sync.active:
+                return JSONResponse({"detail": "conversation sync unavailable"}, status_code=503)
+            try:
+                await sync.pull()
+            except Exception:  # noqa: BLE001 - stale routing must not select another chat
+                return JSONResponse({"detail": "conversation sync unavailable"}, status_code=503)
+            thread = sync.thread_of(body.conversation_id)
+            if (
+                thread is None or sync.owner_of(thread.id) != account_id
+                or sync.cid_of(thread.id) != body.conversation_id or not sync._eligible(thread)
+            ):
+                return JSONResponse({"detail": "conversation is not available"}, status_code=404)
+            cid = body.conversation_id
+            try:
+                await sync.hydrate_thread(thread, cid)
+            except Exception:  # noqa: BLE001 - do not start with stale or inaccessible history
+                return JSONResponse({"detail": "conversation history unavailable"}, status_code=503)
+            if (
+                not sync.active or sync.account_id != account_id
+                or sync.owner_of(thread.id) != account_id or not sync._eligible(thread)
+                or sync.cid_of(thread.id) != cid
+            ):
+                return JSONResponse({"detail": "conversation is no longer available"}, status_code=409)
+            try:
+                service.messenger_preflight(thread.id, body.text, [item["name"] for item in files])
+            except ValueError:
+                return JSONResponse({"state": "rejected", "reason": "unsupported_interaction"})
+            identity = uuid.uuid5(uuid.NAMESPACE_URL, f"nanolika:{account_id}:{body.operation_id}")
+            event_id, message_mid = "e_" + identity.hex, str(identity)
+            payload = {
+                "thread_id": cid, "text": body.text, "language": body.language,
+                "user_event_id": event_id, "user_mid": message_mid, "files": body.files,
+            }
+            journal = MessengerOperations(root / "messenger-operations.sqlite3", messenger_instance)
+            try:
+                operation = journal.reserve(account_id, body.operation_id, payload)
+            except OperationConflict:
+                return JSONResponse({"detail": "operation id conflicts with earlier request"}, status_code=409)
+            if operation["state"] in {"accepted", "rejected"}:
+                return JSONResponse(operation)
+            if operation["state"] != "queued" or not journal.claim(account_id, body.operation_id):
+                return JSONResponse({"detail": "operation outcome unknown; it was not repeated"}, status_code=409)
+            try:
+                paths = save_to_thread(service, thread.id, account_scope(account_id), body.operation_id, files) if files else []
+            except AttachmentError:
+                journal.reject_before_dispatch(account_id, body.operation_id)
+                return JSONResponse({"state": "rejected", "detail": "attachments could not be saved; the operation was not started"})
+            try:
+                event = service.send(
+                    thread.id, body.text, files=paths, language=body.language, via="cloud",
+                    once_key=cloud_key, once_base=settings.cloud.base_url,
+                    once_model=str(getattr(thread, "model", "") or ""),
+                    customer_scope=account_scope(account_id),
+                    user_event_id=event_id, user_mid=message_mid,
+                    require_sync_lease=True,
+                )
+                if event.get("id") != event_id or event.get("mid") != message_mid:
+                    raise ValueError("service returned an unexpected message identity")
+                await confirm_user_durable(thread, event_id, message_mid, paths)
+                journal.accepted(account_id, body.operation_id, event_id)
+            except Exception:  # noqa: BLE001 - dispatch may already have side effects
+                return JSONResponse({"detail": "operation outcome unknown; it was not repeated"}, status_code=503)
+            return JSONResponse({"state": "accepted", "thread_id": cid, "event_id": event["id"]})
+        finally:
+            runtime.end(account_id)
+
+    @app.get("/internal/messenger/messages/{operation_id}")
+    async def messenger_result(request: Request, operation_id: str) -> JSONResponse:
+        if (
+            not WORKER_SECRET or not worker_allows(request.headers)
+            or len(MESSENGER_SECRET) < 32
+            or not hmac.compare_digest(request.headers.get("x-messenger-secret", ""), MESSENGER_SECRET)
+        ):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        account_id = request.headers.get("x-account", "").strip()
+        cloud_key = request.headers.get("x-cloud-key", "").strip()
+        try:
+            if str(uuid.UUID(account_id)) != account_id or not cloud_key:
+                raise ValueError("invalid account")
+        except (ValueError, AttributeError):
+            return JSONResponse({"detail": "verified account and key required"}, status_code=401)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", operation_id):
+            return JSONResponse({"detail": "not found"}, status_code=404)
+        path = root / "messenger-operations.sqlite3"
+        if not path.is_file():
+            return JSONResponse({"detail": "not found"}, status_code=404)
+        operation = MessengerOperations(path, messenger_instance).lookup(account_id, operation_id)
+        if operation is None:
+            return JSONResponse({"detail": "not found"}, status_code=404)
+        try:
+            service = cast(Any, await runtime.service(account_id, cloud_key))
+        except CapacityError:
+            return JSONResponse({"detail": "the runtime is busy"}, status_code=503)
+        except Exception:  # noqa: BLE001 - do not disclose account state
+            return JSONResponse({"detail": "runtime unavailable"}, status_code=502)
+        runtime.begin(account_id)
+        try:
+            thread = service.sync.thread_of(operation["thread_id"])
+            if (
+                thread is None or service.sync.account_id != account_id
+                or service.sync.owner_of(thread.id) != account_id
+                or service.sync.cid_of(thread.id) != operation["thread_id"]
+            ):
+                return JSONResponse({"detail": "not found"}, status_code=404)
+            for event in reversed(thread.timeline.events):
+                if event.get("reply_to_event") != operation["event_id"]:
+                    continue
+                if (event.get("type") == "assistant" and event.get("final")) or (
+                    event.get("type") == "notice" and (event.get("level") == "error" or event.get("text") == STOPPED_NOTICE)
+                ):
+                    if event.get("type") == "assistant":
+                        artifacts = [row for row in thread.timeline.events
+                                     if row.get("type") == "artifact" and row.get("reply_to_event") == operation["event_id"]]
+                        if artifacts:
+                            return JSONResponse({"state": "failed", "thread_id": operation["thread_id"],
+                                                 "text": "Файлы созданы, но их безопасная передача между устройствами пока недоступна.",
+                                                 "mid": str(uuid.uuid5(uuid.NAMESPACE_URL, "nanolika-files-disabled:" + operation["event_id"])),
+                                                 "files": []})
+                    return JSONResponse({
+                        "state": "completed" if event.get("type") == "assistant" else "failed",
+                        "thread_id": operation["thread_id"], "event_id": event.get("id"),
+                        "text": str(event.get("text") or ""), "mid": str(event.get("mid") or ""),
+                        "files": [],
+                    })
+            state = "pending" if operation["state"] == "accepted" else "unknown"
+            return JSONResponse({"state": state, "thread_id": operation["thread_id"]})
         finally:
             runtime.end(account_id)
 

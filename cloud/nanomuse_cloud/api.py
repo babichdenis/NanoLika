@@ -1201,6 +1201,12 @@ def create_app(
 
     install_chat_catalog(app, sync_store, sync_dep)
 
+    messenger_bridge_enabled = os.environ.get("NANOMUSE_ACCOUNT_MESSENGER_BRIDGE") == "1"
+    if messenger_bridge_enabled:
+        from .delivery_journal import install as install_delivery_journal
+
+        install_delivery_journal(app, cloud.db, caller_dep)
+
     @app.get("/v1/sync/state")
     async def sync_state(caller: Caller = Depends(caller_dep)) -> dict:
         out = sync_store.state(caller.account_id)
@@ -3349,6 +3355,10 @@ def create_app(
 
     from .web_runtime import install_web_runtime
 
+    if messenger_bridge_enabled:
+        from .bot_runtime import install_bot_runtime
+
+        install_bot_runtime(app, cloud)
     install_web_runtime(app, cloud, settings)
     install_provider_prices(app, admin_dep)
 

@@ -31,6 +31,7 @@ minutes, in memory only — it is a hint for the screen, not data worth a table.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -176,7 +177,7 @@ def _message_row(r: sqlite3.Row, names: dict[str, str], unseal: Any = None) -> d
         attachments = json.loads(r["attachments"] or "[]")
     except ValueError:
         attachments = []
-    return {
+    result = {
         "mid": r["mid"],
         "cid": r["cid"],
         "seq": int(r["seq"]),
@@ -189,6 +190,10 @@ def _message_row(r: sqlite3.Row, names: dict[str, str], unseal: Any = None) -> d
         "created_at": int(r["created_at"]),
         "deleted": bool(r["deleted"]),
     }
+    # Older messages and clients have no proven parent; do not infer one.
+    if "reply_to_mid" in r.keys() and r["reply_to_mid"] and not r["deleted"]:
+        result["reply_to_mid"] = str(r["reply_to_mid"])
+    return result
 
 
 # -- presence -----------------------------------------------------------------------------------
@@ -576,6 +581,21 @@ class SyncStore:
         with self.db.tx() as c:
             if not self._enabled(c, account_id):
                 raise CloudError(409, "sync_off", "Conversation sync is off for this account")
+            # The durable journal and this legacy claim arbitrate atomically: a legacy
+            # client must never send while any part of a new-protocol delivery exists.
+            # Continue honoring an existing journal after the feature is disabled,
+            # but support databases that predate the optional journal entirely.
+            has_journal = c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='delivery_journal'"
+            ).fetchone()
+            if has_journal is not None:
+                target_hash = hashlib.sha256(chat.encode()).hexdigest()
+                durable = c.execute(
+                    "SELECT 1 FROM delivery_journal WHERE account_id=? AND mid=? AND channel=? AND target_hash=?",
+                    (account_id, mid_ok, channel, target_hash),
+                ).fetchone()
+                if durable is not None:
+                    raise CloudError(409, "delivery_claimed", "This message is handled by the durable delivery journal")
             known = c.execute("SELECT 1 FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid_ok)).fetchone()
             if known is None:
                 # pruned by retention, or never here: let the sender deliver, not 500
@@ -808,7 +828,7 @@ class SyncStore:
                     if deleted and not row["deleted"]:
                         seq = self._next_seq(c, account_id)
                         c.execute(
-                            "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', seq=? WHERE account_id=? AND mid=?",
+                            "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? WHERE account_id=? AND mid=?",
                             (t, seq, account_id, mid),
                         )
                         accepted += 1
@@ -826,14 +846,29 @@ class SyncStore:
                 if role not in ROLES:
                     rejected.append({"mid": mid, "reason": "bad_role"})
                     continue
+                reply_to = msg.get("reply_to_mid")
+                if reply_to not in (None, ""):
+                    parent_mid = valid_id(reply_to)
+                    if role != "assistant" or parent_mid is None or parent_mid == mid:
+                        rejected.append({"mid": mid, "reason": "bad_reply_parent"})
+                        continue
+                    parent = c.execute(
+                        "SELECT cid, role, deleted FROM sync_messages WHERE account_id=? AND mid=?",
+                        (account_id, parent_mid),
+                    ).fetchone()
+                    if parent is None or parent["cid"] != cid or parent["role"] != "user" or parent["deleted"]:
+                        rejected.append({"mid": mid, "reason": "reply_parent_missing"})
+                        continue
+                else:
+                    parent_mid = ""
                 text, truncated = cut_text(msg.get("text"))
                 seq = self._next_seq(c, account_id)
                 # A message may name its own device: the bot publishes a Telegram turn as
                 # `tg-…` and a MAX turn as `max-…`, while the conversation stays the bot's.
                 msg_device = str(msg.get("device") or device)[:80]
                 c.execute(
-                    "INSERT INTO sync_messages(account_id, mid, cid, seq, device, role, text, truncated, attachments, created_at, deleted, deleted_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO sync_messages(account_id, mid, cid, seq, device, role, text, truncated, attachments, created_at, deleted, deleted_at, reply_to_mid) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         account_id,
                         mid,
@@ -847,6 +882,7 @@ class SyncStore:
                         _ts(msg.get("created_at"), t),
                         1 if deleted else 0,
                         t if deleted else None,
+                        "" if deleted else parent_mid,
                     ),
                 )
                 touched_cids.add(cid)
@@ -1011,7 +1047,7 @@ class SyncStore:
             for row in rows:
                 seq = self._next_seq(c, account_id)
                 c.execute(
-                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', seq=? "
+                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
                     "WHERE account_id=? AND mid=?",
                     (t, seq, account_id, str(row["mid"])),
                 )
@@ -1041,7 +1077,7 @@ class SyncStore:
             for row in rows:
                 seq = self._next_seq(c, account_id)
                 c.execute(
-                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', seq=? "
+                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
                     "WHERE account_id=? AND mid=?",
                     (t, seq, account_id, str(row["mid"])),
                 )

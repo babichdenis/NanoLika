@@ -1205,7 +1205,7 @@ class MuseService:
         thread.worker.cancel()
         return True
 
-    def _settle_stopped(self, thread: Thread) -> None:
+    def _settle_stopped(self, thread: Thread, *, reply_mid: str = "") -> None:
         """After a cancelled run: the transcript must not end on a tool call the model never
         saw answered, and the agent goes back to idle so the next message runs cleanly."""
         agent = thread.agent
@@ -1220,9 +1220,10 @@ class MuseService:
         agent.state = agent.state.__class__.IDLE
         agent._save_session()
         thread.stopping = False
-        self.ui.emit(
-            {"type": "notice", "level": "info", "text": STOPPED_NOTICE, "thread": thread.id}
-        )
+        notice = {"type": "notice", "level": "info", "text": STOPPED_NOTICE, "thread": thread.id}
+        if reply_mid:
+            notice["mid"] = str(uuid.uuid5(uuid.NAMESPACE_URL, "nanolika-error:" + reply_mid))
+        self.ui.emit(notice)
 
     def clear_thread(self, thread_id: str) -> bool:
         thread = self.threads.get(thread_id)
@@ -1237,6 +1238,21 @@ class MuseService:
         return True
 
     # ------------------------------------------------------------------ messaging
+    def messenger_preflight(self, thread_id: str, text: str, files: list[str] | None = None) -> None:
+        """Do not let unsupported UI interceptors consume a strict messenger turn."""
+        from nanomuse.avatar.studio import parse_choice, parse_request
+
+        if text.strip().startswith("/"):
+            raise ValueError("Эта команда пока недоступна в облачной беседе.")
+        if not files and self.ui.has_pending_question(thread_id):
+            raise ValueError("Ответ на ожидающий вопрос пока нельзя передать через этот канал.")
+        current = self.avatar.current
+        if parse_request(text) is not None or (
+            not files and current is not None and current.thread == thread_id
+            and current.stage == "choose" and parse_choice(text) is not None
+        ):
+            raise ValueError("Студия аватара пока недоступна через этот канал.")
+
     def send(
         self,
         thread_id: str,
@@ -1251,6 +1267,9 @@ class MuseService:
         customer_scope: str = "",
         via_channel: str = "",
         once_base: str = "",
+        user_event_id: str = "",
+        user_mid: str = "",
+        require_sync_lease: bool = False,
     ) -> dict[str, Any]:
         """Queue a message for a thread. Returns the timeline event that was created.
 
@@ -1267,6 +1286,8 @@ class MuseService:
         text = text.strip()
         language = language.strip()
         thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
+        if require_sync_lease and source == "user":
+            self.messenger_preflight(thread_id, text, files)
         owner = self.sync.owner_of(thread_id)
         if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and (
             not once_key or once_key == "!" or not once_base or not customer_scope.startswith("account:")
@@ -1314,9 +1335,15 @@ class MuseService:
             self.hub.run_remote(thread, text)
             return event
         if source in ("user", "device"):
+            # Assign the canonical identity before sync can publish this event. The queue
+            # keeps it too, so a turn can rehydrate after its lease without text matching.
             event_data: dict[str, Any] = {
-                "type": "user", "text": text, "thread": thread_id, "mid": str(uuid.uuid4()),
+                "type": "user", "text": text, "thread": thread_id, "mid": user_mid or str(uuid.uuid4()),
             }
+            if user_event_id:
+                if thread.timeline.get(user_event_id) is not None:
+                    raise ValueError("This message was already recorded.")
+                event_data["id"] = user_event_id
             if via_channel:
                 # the words came from a messenger topic: other devices show the channel's
                 # name on the bubble, not this computer's
@@ -1379,6 +1406,7 @@ class MuseService:
                 Incoming(
                     text, attachments, language, once[0], once[1], turn_scope, once_key, once_base,
                     user_event_id=str(event.get("id") or ""), user_mid=str(event.get("mid") or ""),
+                    require_sync_lease=require_sync_lease,
                 )
             )
         else:
@@ -1386,6 +1414,7 @@ class MuseService:
                 Incoming(
                     text, attachments, language, customer_scope=turn_scope,
                     user_event_id=str(event.get("id") or ""), user_mid=str(event.get("mid") or ""),
+                    require_sync_lease=require_sync_lease,
                 )
             )
         self._ensure_worker(thread)
@@ -1603,9 +1632,42 @@ class MuseService:
                 # before the run; another device's live lease makes this turn wait, and
                 # after LEASE_WAIT_S this device asks for the chat outright. An old relay
                 # or a network error means no lease and the turn runs as before.
-                lease_cid, lease_turn = await self._lease_turn(thread)
+                try:
+                    if incoming.require_sync_lease:
+                        lease_cid, lease_turn = await self._lease_turn_strict(thread)
+                        try:
+                            await self.sync.hydrate_thread(
+                                thread, lease_cid, current_user_mid=incoming.user_mid,
+                            )
+                        except BaseException:
+                            self.sync.drop_turn_lease(lease_cid, lease_turn)
+                            raise
+                    else:
+                        lease_cid, lease_turn = await self._lease_turn(thread)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - no model runs without a safe lease/context
+                    notice = failure_notice(exc, thread.id)
+                    notice["reply_to_event"] = incoming.user_event_id
+                    if incoming.require_sync_lease and incoming.user_mid:
+                        notice["mid"] = str(uuid.uuid5(uuid.NAMESPACE_URL, "nanolika-error:" + incoming.user_mid))
+                    if isinstance(exc, CloudError):
+                        messages = {
+                            "conversation_busy": "Беседа занята. Попробуйте позже.",
+                            "sync_unavailable": "Связь с облаком недоступна. Попробуйте позже.",
+                            "sync_order_unknown": "Не удалось подтвердить порядок сообщений между устройствами. Проверьте историю и повторите позже.",
+                            "sync_turn_completed": "На это сообщение уже есть ответ.",
+                        }
+                        if exc.code in messages:
+                            notice["code"] = exc.code
+                            notice["text"] = messages[exc.code]
+                    self.ui.emit(notice)
+                    if incoming.llm is not None:
+                        with contextlib.suppress(Exception):
+                            await incoming.llm.close()
+                    continue
                 thread.busy = True
-                thread.agent.inbox = thread.inbox
+                thread.agent.inbox = None if incoming.require_sync_lease else thread.inbox
                 if incoming.llm is not None:
                     # *Use NanoLika Cloud this time*: this turn on the account's model, the
                     # configured client back when it ends (or whatever a switch meanwhile set)
@@ -1631,7 +1693,8 @@ class MuseService:
                 lease_task: asyncio.Task[None] | None = None
                 if lease_cid:
                     lease_task = asyncio.create_task(
-                        self._keep_turn_lease(lease_cid, lease_turn), name="sync-lease"
+                        self._keep_turn_lease(lease_cid, lease_turn, strict=incoming.require_sync_lease),
+                        name="sync-lease",
                     )
                 turn_event_token = current_turn_user_event.set(incoming.user_event_id)
                 try:
@@ -1653,23 +1716,52 @@ class MuseService:
                                 None if purpose else self._firstrun_addendum_for(thread.id)
                             )
                             self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
-                            final = await thread.agent.run(
-                                text,
-                                purpose=purpose,
-                                files=incoming.files,
-                                language=incoming.language,
-                            )
+                            if incoming.require_sync_lease:
+                                self.ui.enable_artifact_fingerprints(thread.id)
+                            if incoming.require_sync_lease:
+                                assert lease_task is not None
+                                run_task = asyncio.create_task(thread.agent.run(
+                                    text, purpose=purpose, files=incoming.files, language=incoming.language,
+                                ))
+                                try:
+                                    done, _ = await asyncio.wait(
+                                        {run_task, lease_task}, return_when=asyncio.FIRST_COMPLETED,
+                                    )
+                                    if lease_task in done:
+                                        raise CloudError(409, "lease_lost", "The conversation lease was lost; the turn stopped.")
+                                    final = await run_task
+                                finally:
+                                    if not run_task.done():
+                                        run_task.cancel()
+                                        with contextlib.suppress(asyncio.CancelledError):
+                                            await run_task
+                            else:
+                                final = await thread.agent.run(
+                                    text, purpose=purpose, files=incoming.files, language=incoming.language,
+                                )
                             quiet, final = (
                                 prompts.split_quiet(final or "") if purpose else (False, final or "")
                             )
-                            self._finish_run(thread, purpose, final.strip(), quiet)
+                            if incoming.require_sync_lease:
+                                await self.ui.wait_artifact_fingerprints(thread.id)
+                            self._finish_run(
+                                thread, purpose, final.strip(), quiet,
+                                incoming.user_event_id, incoming.require_sync_lease, incoming.user_mid,
+                            )
                 except asyncio.CancelledError:
                     if thread.stopping:
-                        self._settle_stopped(thread)
+                        self._settle_stopped(thread, reply_mid=incoming.user_mid if incoming.require_sync_lease else "")
                     raise
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("thread {} failed", thread.id)
                     notice = failure_notice(exc, thread.id)
+                    if incoming.user_event_id:
+                        notice["reply_to_event"] = incoming.user_event_id
+                    if incoming.require_sync_lease and incoming.user_mid:
+                        notice["mid"] = str(uuid.uuid5(uuid.NAMESPACE_URL, "nanolika-error:" + incoming.user_mid))
+                    if isinstance(exc, CloudError) and exc.code == "lease_lost":
+                        notice["code"] = "lease_lost"
+                        notice["text"] = "Связь с беседой потеряна, поэтому выполнение остановлено. Проверьте результат перед повтором."
                     if incoming.model:
                         notice["model_used"] = incoming.model
                     self.ui.emit(notice)
@@ -1743,11 +1835,27 @@ class MuseService:
                     return "", ""
             await asyncio.sleep(LEASE_RETRY_S)
 
-    async def _keep_turn_lease(self, cid: str, turn: str) -> None:
-        """Renew while the model works; a taken-over lease ends the renewals, not the answer."""
+    async def _lease_turn_strict(self, thread: Thread) -> tuple[str, str]:
+        """A cloud messenger turn must own its conversation; never steal or run offline."""
+        sync = self.sync
+        cid = sync.cid_of(thread.id)
+        if not sync.active or not cid or not sync._eligible(thread):
+            raise CloudError(409, "sync_unavailable", "Cloud conversation sync is unavailable.")
+        turn = "t_" + uuid.uuid4().hex[:12]
+        state, _holder = await sync.take_turn_lease(thread, turn)
+        if state != "held":
+            code = "conversation_busy" if state == "busy" else "sync_unavailable"
+            raise CloudError(409, code, "The conversation is busy or unavailable. Please retry later.")
+        return cid, turn
+
+    async def _keep_turn_lease(self, cid: str, turn: str, *, strict: bool = False) -> None:
+        """Renew until the turn ends, or until the relay no longer proves ownership."""
         while True:
             await asyncio.sleep(LEASE_RENEW_S)
-            if not await self.sync.renew_turn_lease(cid, turn):
+            if strict:
+                if not await self.sync.renew_turn_lease(cid, turn, strict=True):
+                    return
+            elif not await self.sync.renew_turn_lease(cid, turn):
                 return
 
     def _release_llm(self, thread: Thread) -> None:
@@ -1764,7 +1872,10 @@ class MuseService:
                 return
         spawn(held.close(), "closing a retired model client")
 
-    def _finish_run(self, thread: Thread, purpose: str | None, final: str, quiet: bool) -> None:
+    def _finish_run(
+        self, thread: Thread, purpose: str | None, final: str, quiet: bool, user_event_id: str = "",
+        report_empty: bool = False, user_mid: str = "",
+    ) -> None:
         """The run's last word: shown as the assistant bubble unless it is on screen
         already, and flagged ``final`` so clients can tell it from the step narration
         before it. Background runs push it once, here, not per step."""
@@ -1809,8 +1920,25 @@ class MuseService:
                     event["model_used"] = self.ui.model_once[thread.id]
                 event = self.ui.emit(event)
         if event and not event.get("mid"):
-            # All clients can identify this response before the first sync push.
+            # The canonical response id must exist before this result is delivered or
+            # published to sync, so every device arbitrates the same outgoing message.
             self.ui.patch(thread.id, event["id"], mid=str(uuid.uuid4()))
+        linked = False
+        if user_event_id and event:
+            # A previous answer may remain in the UI's last-event slot when this run has
+            # no reply. Never attach the current request to an older assistant bubble.
+            events = thread.timeline.events
+            user_index = next((i for i, row in enumerate(events) if row.get("id") == user_event_id), -1)
+            answer_index = next((i for i, row in enumerate(events) if row.get("id") == event.get("id")), -1)
+            if user_index >= 0 and answer_index > user_index:
+                self.ui.patch(thread.id, event["id"], reply_to_event=user_event_id)
+                linked = True
+        if report_empty and user_event_id and not linked and not purpose and not quiet:
+            self.ui.emit({
+                "type": "notice", "level": "error", "code": "empty_response", "thread": thread.id,
+                "text": "Не удалось получить ответ. Попробуйте ещё раз.", "reply_to_event": user_event_id,
+                "mid": str(uuid.uuid5(uuid.NAMESPACE_URL, "nanolika-error:" + user_mid)),
+            })
         if purpose and event and event.get("text") and not event.get("quiet"):
             self._push_background(event)
         # the turn is done: its texts go to the account's other devices in a moment

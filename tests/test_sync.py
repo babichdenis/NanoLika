@@ -1809,3 +1809,36 @@ def test_only_the_first_hydration_reads_the_whole_chat(synced) -> None:
         "no backward paging after the first read"
     )
     assert [m.content for m in thread.agent.messages][-1] == "new question"
+
+
+def test_hydrate_at_exact_user_mid_excludes_later_identical_turns(synced) -> None:
+    from functools import partial
+
+    client, service, _llm, relay = synced
+    side = client.post("/api/threads", json={"title": "Queued identical messages"}).json()
+    thread = service.threads[side["id"]]
+    client.portal.call(service.sync.push)
+    cid = service.sync.cid_of(thread.id)
+    assert cid is not None
+    relay.add_message(cid, "user", "same")
+    relay.add_message(cid, "assistant", "first answer")
+    current_mid = relay.add_message(cid, "user", "same")
+    relay.add_message(cid, "user", "same")
+    client.portal.call(partial(service.sync.hydrate_thread, thread, cid, current_user_mid=current_mid))
+    assert [message.content for message in thread.agent.messages] == ["same", "first answer"]
+    assert all(message.meta.get("mid") != current_mid for message in thread.agent.messages)
+
+
+def test_hydrate_refuses_missing_current_user_mid(synced) -> None:
+    from functools import partial
+
+    from nanomuse.cloud import CloudError
+
+    client, service, _llm, relay = synced
+    client.portal.call(service.sync.push)
+    thread = service.threads[MAIN_THREAD]
+    cid = service.sync.cid_of(thread.id)
+    assert cid is not None
+    relay.add_message(cid, "user", "same")
+    with pytest.raises(CloudError, match="current message"):
+        client.portal.call(partial(service.sync.hydrate_thread, thread, cid, current_user_mid=str(uuid.uuid4())))

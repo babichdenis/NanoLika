@@ -727,7 +727,10 @@ async def test_a_conversation_older_than_a_week_can_still_be_renamed():
     )
     assert r.json()["accepted"] == 1, r.json()
     out = (await client.get("/v1/sync/changes?since=0", headers=auth(key))).json()
-    assert [(c["title"], c["updated_at"]) for c in out["conversations"]] == [("New", t)]
+    assert [c["title"] for c in out["conversations"]] == ["New"]
+    # The relay stamps the rename with its own clock. The two requests above may
+    # cross a second boundary, especially when the test runs on a network share.
+    assert t <= out["conversations"][0]["updated_at"] <= int(time.time())
     # even a future or lagging client timestamp renames; the relay's own time is kept,
     # so the title is not scheduled into next month (S10)
     r = await client.post(

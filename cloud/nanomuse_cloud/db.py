@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS sync_messages (
     text          TEXT NOT NULL DEFAULT '',
     truncated     INTEGER NOT NULL DEFAULT 0, -- cut at 16 KB
     attachments   TEXT NOT NULL DEFAULT '[]', -- JSON [{name, mime, size}] — names and sizes only
+    reply_to_mid  TEXT NOT NULL DEFAULT '',   -- proven parent user message, when supplied
     created_at    INTEGER NOT NULL,
     deleted       INTEGER NOT NULL DEFAULT 0,
     deleted_at    INTEGER,
@@ -277,6 +278,28 @@ CREATE TABLE IF NOT EXISTS sync_deliveries (
     FOREIGN KEY (account_id, mid) REFERENCES sync_messages(account_id, mid) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS sync_deliveries_age ON sync_deliveries(claimed_at);
+-- Durable part-level arbitration. No timeout automatically takes over a sending part.
+CREATE TABLE IF NOT EXISTS delivery_journal (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    mid TEXT NOT NULL, channel TEXT NOT NULL, target_hash TEXT NOT NULL,
+    digest TEXT NOT NULL, parts INTEGER NOT NULL,
+    PRIMARY KEY (account_id, mid, channel, target_hash)
+);
+CREATE TABLE IF NOT EXISTS delivery_journal_parts (
+    account_id TEXT NOT NULL, mid TEXT NOT NULL, channel TEXT NOT NULL, target_hash TEXT NOT NULL,
+    part INTEGER NOT NULL, state TEXT NOT NULL, claim_hash TEXT NOT NULL DEFAULT '',
+    remote_id TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (account_id, mid, channel, target_hash, part),
+    FOREIGN KEY (account_id, mid, channel, target_hash)
+        REFERENCES delivery_journal(account_id, mid, channel, target_hash) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS delivery_journal_decisions (
+    account_id TEXT NOT NULL, mid TEXT NOT NULL, channel TEXT NOT NULL, target_hash TEXT NOT NULL,
+    decision_hash TEXT NOT NULL, part INTEGER NOT NULL,
+    PRIMARY KEY (account_id, mid, channel, target_hash, decision_hash),
+    FOREIGN KEY (account_id, mid, channel, target_hash)
+        REFERENCES delivery_journal(account_id, mid, channel, target_hash) ON DELETE CASCADE
+);
 -- 0.22: one number per UTC day, metric and key — the GitHub snapshots the collector takes
 -- (stars, forks, watchers, downloads per asset), the relay's own daily counters (API calls
 -- by group, accounts active by any call, errors by code, sync volume). Counters survive a
@@ -527,8 +550,15 @@ class Database:
 
         def add(table: str, col: str, ddl: str) -> None:
             if col not in cols(table):
-                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
-                self.added.add(f"{table}.{col}")
+                try:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+                except sqlite3.OperationalError:
+                    # A different relay process may have added the column after our
+                    # initial PRAGMA. Never mask a failure when it is still absent.
+                    if col not in cols(table):
+                        raise
+                else:
+                    self.added.add(f"{table}.{col}")
 
         # 0.33: several keys per provider (issue #294). The first table was keyed
         # (account_id, provider); recreate it with an id and a label, keeping the rows.
@@ -560,6 +590,7 @@ class Database:
                 )
 
         add("accounts", "is_test", "INTEGER NOT NULL DEFAULT 0")
+        add("sync_messages", "reply_to_mid", "TEXT NOT NULL DEFAULT ''")
         add("sync_conversations", "archived", "INTEGER NOT NULL DEFAULT 0")
         add("sync_conversations", "model", "TEXT NOT NULL DEFAULT ''")
         add("sync_conversations", "reasoning", "TEXT NOT NULL DEFAULT ''")
@@ -1053,6 +1084,35 @@ class Database:
                 raise
             else:
                 self._conn.execute("COMMIT")
+
+    @contextmanager
+    def tx_durable(self):
+        """Commit a critical journal update with a WAL fsync, restoring the setting.
+
+        Hold the same connection lock as tx() across both PRAGMA changes. Callers must
+        not nest this inside another transaction: SQLite cannot change synchronous then.
+        """
+        with self._lock:
+            if self._conn.in_transaction:
+                raise RuntimeError("durable transaction cannot be nested")
+            previous = int(self._conn.execute("PRAGMA synchronous").fetchone()[0])
+            self._conn.execute("PRAGMA synchronous=FULL")
+            try:
+                # IMMEDIATE arbitrates competing relay processes before either reads.
+                self._conn.execute("BEGIN IMMEDIATE")
+                try:
+                    yield self._conn
+                    self._conn.execute("COMMIT")
+                except BaseException:
+                    if self._conn.in_transaction:
+                        self._conn.execute("ROLLBACK")
+                    raise
+            finally:
+                # Includes cancellation and failure to commit; never leak a transaction
+                # or a changed setting to unrelated uses of this shared connection.
+                if self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                self._conn.execute(f"PRAGMA synchronous={previous}")
 
     def close(self) -> None:
         self._conn.close()

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import hashlib
 import os
+import stat
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
@@ -111,6 +113,9 @@ class WebUI:
         self._ws_before: dict[str, dict[str, float] | None] = {}
         # artifact events already shown in the current run: path -> event id
         self._artifacts: dict[str, dict[str, str]] = {}
+        self._artifact_fingerprint_enabled: set[str] = set()
+        self._artifact_fingerprint_tasks: dict[str, set[asyncio.Task[None]]] = {}
+        self._artifact_fingerprint_revision: dict[str, int] = {}
         self.pending_approvals: dict[str, asyncio.Future[ApprovalDecision]] = {}
         self.pending_questions: dict[str, asyncio.Future[str]] = {}  # thread -> future
         self.status: dict[str, dict[str, Any]] = {}
@@ -159,6 +164,7 @@ class WebUI:
             self.background.pop(thread, None)
 
     def end_run(self, thread: str) -> None:
+        self._artifact_fingerprint_enabled.discard(thread)
         self.background.pop(thread, None)
         self.model_once.pop(thread, None)
         self._ws_before.pop(thread, None)
@@ -320,6 +326,71 @@ class WebUI:
                     return None
         return out
 
+    def enable_artifact_fingerprints(self, thread: str) -> None:
+        self._artifact_fingerprint_enabled.add(thread)
+
+    @staticmethod
+    def _artifact_fingerprint(workspace: Path, rel: str) -> dict[str, Any]:
+        """Hash one small regular file, never following a symlink out of the workspace."""
+        pieces = Path(rel).parts
+        if not pieces or Path(rel).is_absolute() or any(p in {"", ".", ".."} for p in pieces):
+            return {}
+        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY") or os.open not in os.supports_dir_fd:
+            return {}
+        descriptors: list[int] = []
+        try:
+            root = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            descriptors.append(root)
+            current = root
+            for part in pieces[:-1]:
+                current = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+                descriptors.append(current)
+            file_fd = os.open(pieces[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=current)
+            descriptors.append(file_fd)
+            before = os.fstat(file_fd)
+            if not stat.S_ISREG(before.st_mode) or before.st_size > 5 * 1024 * 1024:
+                return {}
+            digest = hashlib.sha256()
+            while True:
+                part = os.read(file_fd, 1024 * 1024)
+                if not part:
+                    break
+                digest.update(part)
+            after = os.fstat(file_fd)
+            if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
+                return {}
+            return {"sha256": digest.hexdigest(), "size": before.st_size}
+        except OSError:
+            return {}
+        finally:
+            for fd in reversed(descriptors):
+                os.close(fd)
+
+    def _schedule_artifact_fingerprint(self, thread: str, event_id: str, rel: str) -> None:
+        if thread not in self._artifact_fingerprint_enabled or self.workspace is None:
+            return
+        workspace = active_workspace(self.workspace)
+        if workspace is None:
+            return
+        revision = self._artifact_fingerprint_revision.get(event_id, 0) + 1
+        self._artifact_fingerprint_revision[event_id] = revision
+        self.patch(thread, event_id, sha256="", size=None, fingerprint_pending=True)
+
+        async def run() -> None:
+            result = await asyncio.to_thread(self._artifact_fingerprint, workspace, rel)
+            if self._artifact_fingerprint_revision.get(event_id) == revision:
+                self.patch(thread, event_id, **result, fingerprint_pending=False)
+
+        task = asyncio.create_task(run(), name="artifact-fingerprint")
+        tasks = self._artifact_fingerprint_tasks.setdefault(thread, set())
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+
+    async def wait_artifact_fingerprints(self, thread: str) -> None:
+        tasks = self._artifact_fingerprint_tasks.get(thread, set())
+        if tasks:
+            await asyncio.gather(*tuple(tasks))
+
     def _announce_artifact(self, thread: str, rel: str, action: str) -> None:
         seen = self._artifacts.setdefault(thread, {})
         if rel in seen:
@@ -327,6 +398,7 @@ class WebUI:
             # The action stays what it was — a page written in parts (write, then append)
             # is still a new page, not an update of something the user had before.
             self.patch(thread, seen[rel], updated_ts=now_iso())
+            self._schedule_artifact_fingerprint(thread, seen[rel], rel)
             return
         ev = self.emit(
             {
@@ -338,6 +410,7 @@ class WebUI:
             }
         )
         seen[rel] = ev["id"]
+        self._schedule_artifact_fingerprint(thread, ev["id"], rel)
 
     def emit(self, event: dict[str, Any], persist: bool = True) -> dict[str, Any]:
         thread = event.get("thread") or self.thread()

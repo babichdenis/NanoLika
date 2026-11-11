@@ -647,7 +647,7 @@ class TelegramChannel(Channel):
             raise TelegramError(str(data.get("description") or f"HTTP {response.status_code}"))
         return str((data.get("result") or {}).get("message_id") or "")
 
-    async def _send_file(self, chat_id: str, path: Path) -> None:
+    async def _send_file(self, chat_id: str, path: Path) -> str:
         """A file from the agent: a picture, a clip that plays in the chat, a voice take,
         or a document. Telegram's own players are used where the type has one; anything
         else goes as a document, which still downloads."""
@@ -679,6 +679,7 @@ class TelegramChannel(Channel):
         data = json_object(response)
         if not data.get("ok"):
             raise TelegramError(str(data.get("description") or f"HTTP {response.status_code}"))
+        return str((data.get("result") or {}).get("message_id") or "")
 
     async def stream(
         self, chat_id: str, stream_id: str, text: str, *, done: bool, reply_to: str = ""

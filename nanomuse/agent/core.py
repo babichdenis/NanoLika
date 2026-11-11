@@ -40,7 +40,7 @@ class Incoming:
 
     __slots__ = (
         "cloud_base", "cloud_key", "customer_scope", "files", "language", "llm", "model",
-        "text", "user_event_id", "user_mid",
+        "text", "user_event_id", "user_mid", "require_sync_lease",
     )
 
     def __init__(
@@ -55,6 +55,7 @@ class Incoming:
         cloud_base: str = "",
         user_event_id: str = "",
         user_mid: str = "",
+        require_sync_lease: bool = False,
     ):
         self.text = text
         self.files = files or []
@@ -66,6 +67,7 @@ class Incoming:
         self.cloud_base = cloud_base
         self.user_event_id = user_event_id
         self.user_mid = user_mid
+        self.require_sync_lease = require_sync_lease
 
 
 class MuseAgent:

@@ -326,6 +326,15 @@ class ChannelManager(ChannelBus):
         # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
         self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float, str]] = {}
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
+        self._cloud_messenger = None
+        if (
+            os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+            and os.environ.get("NANOMUSE_ACCOUNT_MESSENGER_BRIDGE") == "1"
+        ):
+            from nanomuse.channels.cloud_messenger_adapter import CloudMessengerAdapter
+
+            self._cloud_messenger = CloudMessengerAdapter(self)
+            self._spawn(self._cloud_messenger.resume())
         self._queue = self.svc.bus.subscribe(lambda msg: msg.get("kind") in CHANNEL_EVENT_KINDS)
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
         self._backfill_folders()
@@ -630,6 +639,9 @@ class ChannelManager(ChannelBus):
                 sender_name=msg.sender_name,
                 chat_id=physical_chat(msg.channel, msg.chat_id),
             )
+        bridge = getattr(self, "_cloud_messenger", None)
+        if bridge is not None and await bridge.handle(msg):
+            return
         msg = self.picker.topics.resume(msg)
         if await self.picker.topics.inbound(msg):
             return
@@ -1285,6 +1297,12 @@ class ChannelManager(ChannelBus):
     async def _handle_action(
         self, channel: str, chat_id: str, sender_id: str, value: dict[str, Any]
     ) -> None:
+        bridge = getattr(self, "_cloud_messenger", None)
+        if bridge is not None and channel in {"telegram", "max"}:
+            probe = InboundMessage(channel=channel, chat_id=chat_id, sender_id=sender_id)
+            if self._allowed(probe):
+                await bridge.reject_legacy_action(probe)
+            return
         if await self.menu.callback(channel, chat_id, sender_id, value):
             return
         approval_id = str(value.get("approval") or "")

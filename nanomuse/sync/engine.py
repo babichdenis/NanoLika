@@ -62,6 +62,7 @@ import asyncio
 import json
 import time
 import uuid
+from bisect import bisect_right
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -119,6 +120,91 @@ def _iso(unix: int | float | None) -> str:
         return datetime.fromtimestamp(float(unix or 0), UTC).isoformat(timespec="milliseconds")
     except (OverflowError, OSError, ValueError):
         return now_iso()
+
+
+def _strict_history_before_turn(
+    history: list[Message], current_index: int, events: list[dict[str, Any]]
+) -> list[Message]:
+    """Order proved replies by parent, refusing ambiguous cross-device histories.
+
+    A reply to an earlier turn can be published after a queued user message.
+    Recent relays store a parent id, and this runtime also knows local parent
+    events. Legacy replies may have neither: never infer parents from text or
+    order, since an old device can still run without a lease.
+    """
+    user_positions: dict[str, int] = {}
+    for index, message in enumerate(history):
+        if message.role != "user":
+            continue
+        mid = str(message.meta.get("mid") or "")
+        if not mid or mid in user_positions:
+            raise CloudError(409, "sync_order_unknown", "Cannot verify the conversation's user messages")
+        user_positions[mid] = index
+    current_mid = str(history[current_index].meta.get("mid") or "")
+    users_by_id: dict[str, list[str]] = {}
+    replies_by_mid: dict[str, list[str]] = {}
+    for event in events:
+        if event.get("type") == "user" and event.get("id") and event.get("mid"):
+            users_by_id.setdefault(str(event["id"]), []).append(str(event["mid"]))
+        if event.get("type") == "assistant" and event.get("mid"):
+            replies_by_mid.setdefault(str(event["mid"]), []).append(str(event.get("reply_to_event") or ""))
+    parents: dict[int, str] = {}
+    unknown: list[int] = []
+    for index, message in enumerate(history):
+        if message.role != "assistant":
+            continue
+        links = replies_by_mid.get(str(message.meta.get("mid") or ""), [])
+        local_parents = users_by_id.get(links[0], []) if len(links) == 1 and links[0] else []
+        relay_parent = str(message.meta.get("reply_to_mid") or "")
+        if len(local_parents) > 1 or len(links) > 1:
+            raise CloudError(409, "sync_order_unknown", "Cannot verify the order of replies in this conversation")
+        if relay_parent and local_parents and relay_parent != local_parents[0]:
+            raise CloudError(409, "sync_order_unknown", "The reply has conflicting parent messages")
+        parent = relay_parent or (local_parents[0] if local_parents else "")
+        if not parent:
+            if index >= current_index:
+                raise CloudError(409, "sync_order_unknown", "Cannot verify the order of replies in this conversation")
+            unknown.append(index)
+            continue
+        if parent == current_mid:
+            raise CloudError(409, "sync_turn_completed", "This message already has a reply")
+        parent_index = user_positions.get(parent)
+        if parent_index is None or parent_index >= current_index or parent_index >= index:
+            raise CloudError(409, "sync_order_unknown", "A later turn may already have been answered")
+        parents[index] = parent
+
+    # Preserve old, unlinked messages in place. A proved reply can move across
+    # queued users and other proved replies, but never across an unlinked reply:
+    # that legacy reply's parent and relative order cannot be established.
+    later_user: dict[str, int] = {}
+    next_user = len(history)
+    for index in range(len(history) - 1, -1, -1):
+        message = history[index]
+        if message.role == "user":
+            mid = str(message.meta.get("mid") or "")
+            later_user[mid] = next_user
+            next_user = index
+    moved: dict[str, list[Message]] = {}
+    for index, parent in parents.items():
+        boundary = later_user[parent]
+        if index < boundary:
+            continue
+        first_unknown = bisect_right(unknown, boundary)
+        if first_unknown < len(unknown) and unknown[first_unknown] < index:
+            raise CloudError(409, "sync_order_unknown", "An older reply cannot be placed safely")
+        moved.setdefault(parent, []).append(history[index])
+
+    ordered: list[Message] = []
+    pending_parent = ""
+    for index, message in enumerate(history[:current_index]):
+        if message.role == "user":
+            ordered.extend(moved.pop(pending_parent, []))
+            pending_parent = str(message.meta.get("mid") or "")
+        elif index in parents and later_user[parents[index]] <= index:
+            continue
+        ordered.append(message)
+    ordered.extend(moved.pop(pending_parent, []))
+    return ordered
 
 
 class ConversationSync:
@@ -706,12 +792,12 @@ class ConversationSync:
             return "busy", dict(out.get("holder") or {})
         return "held", dict(out.get("holder") or {})
 
-    async def renew_turn_lease(self, cid: str, turn: str) -> bool:
+    async def renew_turn_lease(self, cid: str, turn: str, *, strict: bool = False) -> bool:
         """Keep the lease alive while the model works. True while it may go on: an old
         relay (404) or a network hiccup is not a reason to stop a turn; a taken-over lease
         is."""
         if not self.active:
-            return True
+            return not strict
         self.client.cloud.api_key = self.svc.hub._key()
         try:
             await self.client.renew_lease(cid, self.svc.hub.device_id, turn, LEASE_TTL_S)
@@ -719,7 +805,7 @@ class ConversationSync:
             if exc.code in {"conversation_busy", "lease_lost"}:
                 logger.info("sync: the turn lease was taken over by another device")
                 return False
-            return exc.status != 404
+            return False if strict else exc.status != 404
         return True
 
     def drop_turn_lease(self, cid: str, turn: str) -> None:
@@ -1005,6 +1091,10 @@ class ConversationSync:
         """(event, wire message) for every user / final assistant text not yet on the relay."""
         out: list[tuple[dict[str, Any], dict[str, Any]]] = []
         channel = ""
+        parent_events = {
+            str(ev.get("id")): ev for ev in thread.timeline.events
+            if ev.get("type") == "user" and ev.get("id")
+        }
         for ev in thread.timeline.events:
             kind = ev.get("type")
             if kind not in ("user", "assistant") or ev.get("synced") or ev.get("quiet"):
@@ -1040,6 +1130,11 @@ class ConversationSync:
                 "text": text,
                 "created_at": _unix(ev.get("ts")),
             }
+            if kind == "assistant":
+                parent = parent_events.get(str(ev.get("reply_to_event") or ""))
+                parent_mid = str(parent.get("mid") or "") if parent is not None else str(ev.get("reply_to_mid") or "")
+                if parent_mid:
+                    wire["reply_to_mid"] = parent_mid
             device = self._channel_device(channel)
             if device:
                 wire["device"] = device
@@ -1227,6 +1322,8 @@ class ConversationSync:
                 text = f"{text}\n\n[Attached files]\n" + "\n".join(labels)
         message = Message.user(text) if role == "user" else Message.assistant(text)
         message.meta["mid"] = str(row.get("mid") or "")
+        if role == "assistant" and row.get("reply_to_mid"):
+            message.meta["reply_to_mid"] = str(row["reply_to_mid"])
         return message
 
     def _cache_relay_message(self, cid: str, row: dict[str, Any]) -> None:
@@ -1245,7 +1342,7 @@ class ConversationSync:
             return
         for i, old in enumerate(cached):
             if old.meta.get("mid") == mid:
-                if old.content != message.content:
+                if old.content != message.content or old.meta != message.meta:
                     cached[i] = message
                 return
         cached.append(message)
@@ -1260,6 +1357,7 @@ class ConversationSync:
         *,
         remote_task: bool = False,
         current_user_text: str = "",
+        current_user_mid: str = "",
     ) -> int:
         """Replace the agent's text context with the relay's canonical transcript.
 
@@ -1346,7 +1444,12 @@ class ConversationSync:
             # transcript before handing it to this device. `svc.send()` will add it to
             # the task thread, so remove only that final canonical user row to avoid
             # giving the model the same turn twice.
-            if (
+            if current_user_mid:
+                matches = [i for i, message in enumerate(history) if message.meta.get("mid") == current_user_mid]
+                if len(matches) != 1 or history[matches[0]].role != "user":
+                    raise CloudError(409, "sync_message_missing", "The current message is not in the shared history")
+                history = _strict_history_before_turn(history, matches[0], thread.timeline.events)
+            elif (
                 remote_task
                 and current_user_text
                 and history
@@ -1646,6 +1749,8 @@ class ConversationSync:
             event["via_device_name"] = str(row.get("device_name") or "")
         if role == "assistant":
             event["final"] = True
+            if row.get("reply_to_mid"):
+                event["reply_to_mid"] = str(row["reply_to_mid"])
         if row.get("truncated"):
             event["truncated"] = True
         attachments = row.get("attachments")
