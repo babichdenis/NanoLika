@@ -6,6 +6,7 @@ API module stays a thin translation of these calls into status codes.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -414,14 +415,24 @@ class InFlight:
         self.ttl_s = ttl_s  # a request nobody settled (a client gone before its stream began) lapses
         self.clock = clock
         self._held: dict[str, dict[str, tuple[int, float]]] = {}
+        self._active: dict[str, dict[str, asyncio.Task]] = {}
+        self._key_held: dict[str, dict[str, tuple[str, int]]] = {}
 
     def _live(self, account_id: str) -> dict[str, tuple[int, float]]:
         held = self._held.get(account_id)
         if not held:
             return {}
         t = self.clock()
-        for rid in [rid for rid, (_, until) in held.items() if until <= t]:
+        active = self._active.get(account_id, {})
+        key_held = self._key_held.get(account_id, {})
+        for rid in [rid for rid, (_, until) in held.items() if until <= t and (rid not in active or active[rid].done())]:
             del held[rid]
+            active.pop(rid, None)
+            key_held.pop(rid, None)
+        if not active:
+            self._active.pop(account_id, None)
+        if not key_held:
+            self._key_held.pop(account_id, None)
         if not held:
             self._held.pop(account_id, None)
         return held
@@ -432,13 +443,38 @@ class InFlight:
     def reserved(self, account_id: str) -> int:
         return sum(cost for cost, _ in self._live(account_id).values())
 
+    def key_reserved(self, account_id: str, key_hash: str) -> int:
+        self._live(account_id)
+        return sum(cost for key, cost in self._key_held.get(account_id, {}).values() if key == key_hash)
+
     def full(self, account_id: str) -> bool:
         return self.limit > 0 and self.count(account_id) >= self.limit
 
-    def reserve(self, account_id: str, request_id: str, cost_uy: int) -> None:
+    def reserve(self, account_id: str, request_id: str, cost_uy: int, key_hash: str = "", key_cost_uy: int = 0) -> None:
         self._held.setdefault(account_id, {})[request_id] = (max(0, int(cost_uy)), self.clock() + self.ttl_s)
+        if key_hash:
+            self._key_held.setdefault(account_id, {})[request_id] = (key_hash, max(0, int(key_cost_uy)))
+        elif account_id in self._key_held:
+            self._key_held[account_id].pop(request_id, None)
+            if not self._key_held[account_id]:
+                del self._key_held[account_id]
+
+    def activate(self, account_id: str, request_id: str, task: asyncio.Task | None) -> None:
+        """Keep a running request's reservation; abandoned, unstarted ones still expire."""
+        if task is not None and request_id in self._held.get(account_id, {}):
+            self._active.setdefault(account_id, {})[request_id] = task
 
     def settle(self, account_id: str, request_id: str) -> None:
+        key_held = self._key_held.get(account_id)
+        if key_held is not None:
+            key_held.pop(request_id, None)
+            if not key_held:
+                del self._key_held[account_id]
+        active = self._active.get(account_id)
+        if active is not None:
+            active.pop(request_id, None)
+            if not active:
+                del self._active[account_id]
         held = self._held.get(account_id)
         if held is not None:
             held.pop(request_id, None)
@@ -3254,7 +3290,8 @@ class Cloud:
         the refusal's "ways on" when the allowance is out."""
         # A user-issued API key can carry its own daily/30-day spend limits. The limit is in
         # customer rubles, so `key_uy` (the sale estimate) wins over the provider's cost.
-        self._check_key_limit(caller, max(cost_uy, key_uy if key_uy is not None else (hold_uy or 0)))
+        key_reserve = max(cost_uy, key_uy if key_uy is not None else (hold_uy or 0))
+        self._check_key_limit(caller, key_reserve + self.in_flight.key_reserved(caller.account_id, caller.key_hash))
         try:
             self._check_budget(caller, minimum, cost_uy, place)
         except CloudError as e:
@@ -3265,7 +3302,7 @@ class Cloud:
             t = now()
             if self.s.per_minute_requests > 0 and not self.db.admit_request(caller.account_id, self.s.per_minute_requests, t - 60, t):
                 raise CloudError(429, "rate_limited", "Too many requests; slow down a little")
-            self.in_flight.reserve(caller.account_id, request_id, cost_uy if hold_uy is None else hold_uy)
+            self.in_flight.reserve(caller.account_id, request_id, cost_uy if hold_uy is None else hold_uy, caller.key_hash, key_reserve)
 
     def settle(self, caller: Caller, request_id: str) -> None:
         """The request is over (charged, failed or dropped): its reservation goes."""

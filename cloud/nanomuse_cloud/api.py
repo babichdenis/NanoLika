@@ -1645,6 +1645,7 @@ def create_app(
         sample_messages = body.get("messages") if collect_sample and isinstance(body.get("messages"), list) else []
 
         if not stream:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             try:
                 try:
                     r, selected = await request_chat(
@@ -1745,6 +1746,7 @@ def create_app(
             )
 
         async def gen() -> AsyncIterator[bytes]:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             usage: Usage | None = None
             accounting_meta: dict = {}
             text_len = 0
