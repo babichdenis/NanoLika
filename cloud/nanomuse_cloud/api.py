@@ -1847,6 +1847,7 @@ def create_app(
                             cached_tokens=usage.cached,
                             provider_cost_rub=accounting_meta.get("provider_cost_rub"),
                             routing_meta=accounting_meta,
+                            byok=byok is not None,
                             message_mid=message_mid,
                             usage_estimated=usage_estimated,
                         )
