@@ -19,6 +19,7 @@ standing instruction, and planting one is the obvious thing for a hostile web pa
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import time
@@ -298,13 +299,21 @@ class SkillLibrary:
         self._skills: dict[str, Skill] = {}
         self.errors: dict[str, str] = {}
         self._loaded = 0.0
+        self._loaded_shared = False
         self.reload()
 
     # ---------------------------------------------------------------- loading
     def reload(self) -> None:
         skills: dict[str, Skill] = {}
         errors: dict[str, str] = {}
-        for source, root in ((BUILT_IN, self.builtin_dir), (YOURS, self.own_dir)):
+        # In the public bot ``own_dir`` belongs to the shared process, not to the
+        # authenticated customer. Never put it into a customer's prompts, slash
+        # commands or skill listing. Still load the shipped built-ins independently.
+        self._loaded_shared = os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+        roots = [(BUILT_IN, self.builtin_dir)]
+        if not self._loaded_shared:
+            roots.append((YOURS, self.own_dir))
+        for source, root in roots:
             if not root.is_dir():
                 continue
             for folder in sorted(root.iterdir()):
@@ -325,10 +334,14 @@ class SkillLibrary:
     def _fresh(self) -> None:
         """Pick up folders edited by hand (cheap: one stat per skill folder, at most every
         two seconds)."""
+        shared = os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+        if shared != self._loaded_shared:
+            self.reload()
+            return
         if time.time() - self._loaded < 2:
             return
         seen: set[str] = set()
-        for root in (self.builtin_dir, self.own_dir):
+        for root in ((self.builtin_dir,) if shared else (self.builtin_dir, self.own_dir)):
             if root.is_dir():
                 seen.update(p.name for p in root.iterdir() if p.is_dir())
         changed = seen != set(self._skills) | set(self.errors) or any(

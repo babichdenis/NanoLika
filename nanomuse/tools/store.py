@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import zipfile
@@ -165,6 +166,11 @@ class Store(BaseTool):
         self, action: str = "list", name: str = "", all: bool = False, **_: Any
     ) -> ToolResult:  # noqa: A002 — the model's schema names it `all`
         action = (action or "list").strip().lower()
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and action in ("addon", "skill", "mcp"):
+            return ToolResult.fail(
+                "Установка дополнений в общий облачный бот временно недоступна: "
+                "они изменяют окружение всех клиентов. Каталог по-прежнему можно посмотреть."
+            )
         if action == "status":
             return ToolResult(output=self._status())
         try:
