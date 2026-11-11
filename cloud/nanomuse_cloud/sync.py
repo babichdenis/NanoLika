@@ -2,8 +2,8 @@
 the account shows the same chats and a new device can catch up.
 
 What is stored: conversations (an id, a kind, a title, which device started it) and messages
-(an id, the role, the text — cut at 16 KB — and the names and sizes of attachments). Never a
-file, never a picture, never anything of another account. One change counter per account
+(an id, the role, the text — cut at 16 KB — and attachment metadata). An optional separately
+installed private store keeps encrypted file bytes per account and conversation. One change counter per account
 gives every accepted change a `seq`; a device keeps the highest seq it has seen (its cursor)
 and asks for what came after it.
 
@@ -115,6 +115,29 @@ def clean_attachments(value: object) -> list[dict]:
         if name or mime or size:
             out.append({"name": name, "mime": mime, "size": size, "url": url})
     return out
+
+
+def checked_attachments(c: sqlite3.Connection, account_id: str, cid: str, value: object) -> list[dict] | None:
+    """Resolve private file IDs to server-owned metadata, or reject the message.
+
+    Legacy links retain their original wire format. A missing private store is a
+    refusal, never a reason to silently publish a message without its file.
+    """
+    if not isinstance(value, list):
+        return clean_attachments(value)
+    output = []
+    for item in value[:MAX_ATTACHMENTS]:
+        if not isinstance(item, dict) or not item.get("file_id"):
+            output.extend(clean_attachments([item]))
+            continue
+        ident = valid_id(item.get("file_id"))
+        if ident is None or not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_private_files'").fetchone():
+            return None
+        file_row = c.execute("SELECT file_id,name,mime,size FROM sync_private_files WHERE account_id=? AND cid=? AND file_id=?", (account_id, cid, ident)).fetchone()
+        if file_row is None:
+            return None
+        output.append({"file_id": file_row["file_id"], "name": file_row["name"], "mime": file_row["mime"], "size": file_row["size"]})
+    return output
 
 
 # A device's clock may be a little ahead; a week ahead is not a clock, it is a way to
@@ -307,11 +330,20 @@ class SyncStore:
         c.execute("UPDATE sync_cursors SET seq=seq+1 WHERE account_id=?", (account_id,))
         return self._cursor(c, account_id)
 
+    @staticmethod
+    def _private_generation(c: sqlite3.Connection, account_id: str) -> tuple[int, str, int] | None:
+        # Present only when private file storage is explicitly installed. This lets
+        # an offline device detect sync being switched off and back on elsewhere.
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_private_generations'").fetchone():
+            return None
+        row = c.execute("SELECT generation,reason,last_wipe_generation FROM sync_private_generations WHERE account_id=?", (account_id,)).fetchone()
+        return (int(row[0]), str(row[1]), int(row[2])) if row else (0, "initial", 0)
+
     def _state(self, c: sqlite3.Connection, account_id: str) -> dict:
         row = c.execute("SELECT sync_enabled FROM accounts WHERE id=?", (account_id,)).fetchone()
         convs = c.execute("SELECT COUNT(*) FROM sync_conversations WHERE account_id=? AND deleted=0", (account_id,)).fetchone()[0]
         msgs = c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=? AND deleted=0", (account_id,)).fetchone()[0]
-        return {
+        result = {
             "enabled": bool(row["sync_enabled"]) if row is not None else False,
             "cursor": self._cursor(c, account_id),
             "counts": {"conversations": int(convs), "messages": int(msgs)},
@@ -319,6 +351,10 @@ class SyncStore:
             "working": self.presence.working(account_id),
             "leases": self._leases(c, account_id),
         }
+        generation = self._private_generation(c, account_id)
+        if generation is not None:
+            result["private_generation"], result["private_reset_reason"], result["private_last_wipe_generation"] = generation
+        return result
 
     def state(self, account_id: str) -> dict:
         with self.db.tx() as c:
@@ -330,10 +366,12 @@ class SyncStore:
         with self.db.tx() as c:
             c.execute("UPDATE accounts SET sync_enabled=? WHERE id=?", (1 if enabled else 0, account_id))
             if not enabled:
-                self._wipe(c, account_id)
+                self._wipe(c, account_id, reason="sync_off")
             return self._state(c, account_id)
 
-    def _wipe(self, c: sqlite3.Connection, account_id: str) -> None:
+    def _wipe(self, c: sqlite3.Connection, account_id: str, *, reason: str = "wipe") -> None:
+        if self._private_generation(c, account_id) is not None:
+            c.execute("INSERT INTO sync_private_generations(account_id,generation,reason,last_wipe_generation) VALUES(?,1,?,?) ON CONFLICT(account_id) DO UPDATE SET generation=generation+1,reason=excluded.reason,last_wipe_generation=CASE WHEN excluded.reason='wipe' THEN generation+1 ELSE last_wipe_generation END", (account_id, reason, int(reason == "wipe")))
         c.execute("DELETE FROM sync_messages WHERE account_id=?", (account_id,))
         c.execute("DELETE FROM sync_conversations WHERE account_id=?", (account_id,))
         c.execute("DELETE FROM sync_leases WHERE account_id=?", (account_id,))
@@ -390,6 +428,7 @@ class SyncStore:
             if not self._enabled(c, account_id):
                 raise CloudError(409, "sync_off", "Conversation sync is off for this account")
             names = self._device_names(c, account_id)
+            generation = self._private_generation(c, account_id)
             skipped: int | None = None
             if tail:
                 msgs = c.execute(
@@ -452,6 +491,8 @@ class SyncStore:
             "conversations": [_conversation_row(r, names) for r in conversations],
             "messages": [_message_row(r, names, lambda value: self._unseal(account_id, value)) for _, k, r in rows if k == "m"],
         }
+        if generation is not None:
+            out["private_generation"], out["private_reset_reason"], out["private_last_wipe_generation"] = generation
         with self.db.tx() as c:
             self.usage_for_messages(c, account_id, out["messages"])
         if skipped is not None:
@@ -861,6 +902,10 @@ class SyncStore:
                         continue
                 else:
                     parent_mid = ""
+                attachments = [] if deleted else checked_attachments(c, account_id, cid, msg.get("attachments"))
+                if attachments is None:
+                    rejected.append({"mid": mid, "reason": "attachment_unavailable"})
+                    continue
                 text, truncated = cut_text(msg.get("text"))
                 seq = self._next_seq(c, account_id)
                 # A message may name its own device: the bot publishes a Telegram turn as
@@ -878,7 +923,7 @@ class SyncStore:
                         role,
                         "" if deleted else self._seal(account_id, text),
                         0 if deleted else (1 if truncated else 0),
-                        "[]" if deleted else json.dumps(clean_attachments(msg.get("attachments")), ensure_ascii=False),
+                        "[]" if deleted else json.dumps(attachments, ensure_ascii=False),
                         _ts(msg.get("created_at"), t),
                         1 if deleted else 0,
                         t if deleted else None,
@@ -976,6 +1021,14 @@ class SyncStore:
             cid = str(row["cid"])
             if cid == canonical_cid:
                 continue
+            # An acknowledged upload can be attached in a later sync request.
+            # Tombstoning this source while that upload is unattached would erase
+            # the only cloud copy before the sender has a chance to publish it.
+            if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_private_file_refs'").fetchone() and c.execute(
+                "SELECT 1 FROM sync_private_files f WHERE f.account_id=? AND f.cid=? AND NOT EXISTS (SELECT 1 FROM sync_private_file_refs r WHERE r.file_id=f.file_id) LIMIT 1",
+                (account_id, cid),
+            ).fetchone():
+                continue
             messages = c.execute(
                 "SELECT mid FROM sync_messages WHERE account_id=? AND cid=? AND deleted=0 ORDER BY seq",
                 (account_id, cid),
@@ -1037,6 +1090,18 @@ class SyncStore:
         if count <= limit:
             return 0
         pruned = 0
+        private_store = bool(c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_private_prune_guard'").fetchone())
+
+        def preserve_pruned_file(mid: str) -> None:
+            if not private_store:
+                return
+            c.execute("INSERT OR IGNORE INTO sync_private_prune_guard(account_id,mid) VALUES(?,?)", (account_id, mid))
+            c.execute("INSERT OR IGNORE INTO sync_private_recovery_holds(file_id,account_id,mid,reason) SELECT file_id,account_id,mid,'history_pruned' FROM sync_private_file_refs WHERE account_id=? AND mid=?", (account_id, mid))
+            c.execute("UPDATE sync_private_files SET recovery_reason='history_pruned' WHERE account_id=? AND file_id IN (SELECT file_id FROM sync_private_file_refs WHERE account_id=? AND mid=?)", (account_id, account_id, mid))
+
+        def release_prune_guard(mid: str) -> None:
+            if private_store:
+                c.execute("DELETE FROM sync_private_prune_guard WHERE account_id=? AND mid=?", (account_id, mid))
 
         def bury(cid: str, how_many: int | None = None) -> int:
             rows = c.execute(
@@ -1045,12 +1110,14 @@ class SyncStore:
                 (account_id, cid, *((how_many,) if how_many is not None else ())),
             ).fetchall()
             for row in rows:
+                preserve_pruned_file(str(row["mid"]))
                 seq = self._next_seq(c, account_id)
                 c.execute(
                     "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
                     "WHERE account_id=? AND mid=?",
                     (t, seq, account_id, str(row["mid"])),
                 )
+                release_prune_guard(str(row["mid"]))
             return len(rows)
 
         rows = c.execute(
@@ -1075,12 +1142,14 @@ class SyncStore:
                 (account_id, count - limit),
             ).fetchall()
             for row in rows:
+                preserve_pruned_file(str(row["mid"]))
                 seq = self._next_seq(c, account_id)
                 c.execute(
                     "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
                     "WHERE account_id=? AND mid=?",
                     (t, seq, account_id, str(row["mid"])),
                 )
+                release_prune_guard(str(row["mid"]))
                 removed += 1
             pruned += removed
         return pruned
