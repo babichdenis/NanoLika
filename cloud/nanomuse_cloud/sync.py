@@ -482,11 +482,13 @@ class SyncStore:
         force: bool = False,
         take: bool = False,
     ) -> dict:
-        """Take the chat's turn lease. A live lease of another device is 409 for a caller
-        that opts in with `take=True` (the only mode that blocks); everyone else gets the
-        holder and goes on, so a client that never asks is never stopped. `force=True`
-        replaces the holder, and the old device learns on its next renew. Same device may
-        replace its own turn (a restarted client)."""
+        """Take or renew a lease for one (device, turn) without displacing a live turn.
+
+        A conflicting caller opting in with `take=True` receives 409; a caller that only
+        asks gets the holder. The legacy `force` argument cannot displace a live turn:
+        the old device may still be executing even after it loses its lease. Recovery is
+        possible after release or expiry. Clients must still check and renew the lease.
+        """
         cid_ok = valid_id(cid)
         if cid_ok is None:
             raise CloudError(400, "bad_cid", "That is not a conversation id")
@@ -508,7 +510,7 @@ class SyncStore:
             if row is not None and int(row["expires_at"]) <= t:
                 c.execute("DELETE FROM sync_leases WHERE account_id=? AND cid=?", (account_id, cid_ok))
                 row = None
-            if row is not None and not force and str(row["device"]) != device:
+            if row is not None and (str(row["device"]) != device or str(row["turn"]) != turn):
                 holder = self._lease_holder(row)
                 if take:
                     raise CloudError(409, "conversation_busy", "Another device is answering in this chat", {"holder": holder})

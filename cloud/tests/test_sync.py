@@ -1000,7 +1000,7 @@ async def test_main_only_cursor_does_not_skip_side_rows_when_the_scope_widens():
     assert [m["mid"] for m in widened["messages"]] == [smid]
 
 
-async def test_a_turn_lease_is_exclusive_expires_and_can_be_forced():
+async def test_a_turn_lease_is_exclusive_and_expires(monkeypatch):
     app, client, sender, up, cloud, settings = make()
     key = await signed_in(client, sender)
     account_id = cloud.authenticate(key).account_id
@@ -1037,12 +1037,41 @@ async def test_a_turn_lease_is_exclusive_expires_and_can_be_forced():
         json={"cid": cid, "device": "phone-1", "turn": "turn-b", "force": True, "take": True},
         headers=auth(key),
     )
-    assert forced.status_code == 200 and forced.json()["holder"]["device"] == "phone-1"
-    lost = await client.post("/v1/sync/lease/renew", json={"cid": cid, "device": "pc-1", "turn": "turn-a"}, headers=auth(key))
-    assert lost.status_code == 409 and lost.json()["error"]["code"] == "conversation_busy"
+    assert forced.status_code == 409 and forced.json()["error"]["code"] == "conversation_busy"
+    assert forced.json()["error"]["holder"]["device"] == "pc-1"
+    # Nor may a new turn from the same device replace a still-running turn.
+    same_device = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "pc-1", "turn": "turn-new", "force": True, "take": True},
+        headers=auth(key),
+    )
+    assert same_device.status_code == 409 and same_device.json()["error"]["holder"]["turn"] == "turn-a"
+    legacy_force = await client.post(
+        "/v1/sync/lease",
+        json={"cid": cid, "device": "phone-1", "turn": "turn-b", "force": True},
+        headers=auth(key),
+    )
+    assert legacy_force.status_code == 200 and legacy_force.json()["ok"] is False
+    assert legacy_force.json()["holder"]["turn"] == "turn-a"
+    from nanomuse_cloud import sync as sync_module
+
+    lease_time = sync_module.now()
+    monkeypatch.setattr(sync_module, "now", lambda: lease_time + 10)
+    still_renewed = await client.post(
+        "/v1/sync/lease/renew", json={"cid": cid, "device": "pc-1", "turn": "turn-a", "ttl": 120}, headers=auth(key)
+    )
+    assert still_renewed.status_code == 200 and still_renewed.json()["holder"]["turn"] == "turn-a"
+    assert still_renewed.json()["holder"]["expires_at"] > renewed.json()["holder"]["expires_at"]
+    # Idempotent retries for the holder's exact device and turn are still accepted.
+    retry = await client.post(
+        "/v1/sync/lease", json={"cid": cid, "device": "pc-1", "turn": "turn-a", "take": True}, headers=auth(key)
+    )
+    assert retry.status_code == 200 and retry.json()["holder"]["turn"] == "turn-a"
+    # The rejected claimant cannot release the current holder's lease either.
+    await client.request("DELETE", "/v1/sync/lease", json={"cid": cid, "device": "phone-1", "turn": "turn-b"}, headers=auth(key))
     state = (await client.get("/v1/sync/state", headers=auth(key))).json()
-    assert state["leases"][0]["device"] == "phone-1" and state["leases"][0]["turn"] == "turn-b"
-    released = await client.request("DELETE", "/v1/sync/lease", json={"cid": cid, "device": "phone-1", "turn": "turn-b"}, headers=auth(key))
+    assert state["leases"][0]["device"] == "pc-1" and state["leases"][0]["turn"] == "turn-a"
+    released = await client.request("DELETE", "/v1/sync/lease", json={"cid": cid, "device": "pc-1", "turn": "turn-a"}, headers=auth(key))
     assert released.status_code == 204
     assert (await client.get("/v1/sync/state", headers=auth(key))).json()["leases"] == []
     # the lease expires on its own; the next device may take it
