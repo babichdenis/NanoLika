@@ -226,10 +226,13 @@ class Sentinel:
         if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and tool.name in {
             "picture", "video", "media", "beatapi", "share_file", "models",
         }:
-            return ToolResult.fail(
-                "Эта функция временно недоступна в общем облачном боте: "
-                "ещё не настроено надёжное списание и хранение для вашего аккаунта."
-            )
+            from nanomuse.cloud_context import current_cloud_client
+
+            if current_cloud_client() is None:
+                return ToolResult.fail(
+                    "Эта функция недоступна без подтверждённого аккаунта. "
+                    "Войдите и повторите запрос: чужой баланс не используется."
+                )
         # These personal stores and browser sessions belong to the installation,
         # not to the current customer, on the shared bot. A customer's approval
         # cannot authorize reading or changing another customer's state.

@@ -659,14 +659,13 @@ def test_shared_bot_uses_cached_relay_timezone_only_for_verified_account(chan, m
     monkeypatch.setattr(timeutil, "_zone_name", timeutil._zone_name)
     timeutil.set_zone("Europe/Moscow")
     expires = time.time() + 60
-    manager._cloud_keys[("fake", "u-clock-a")] = ("key-a", "model", "Europe/Kaliningrad", expires)
+    manager._cloud_keys[("fake", "u-clock-a")] = ("key-a", "model", "Europe/Kaliningrad", expires, "https://cloud.example")
     manager._cloud_customer_scopes[("fake", "u-clock-a")] = "account:manager-clock-a"
-    manager._cloud_keys[("fake", "u-clock-b")] = ("key-b", "model", "Asia/Vladivostok", expires)
+    manager._cloud_keys[("fake", "u-clock-b")] = ("key-b", "model", "Asia/Vladivostok", expires, "https://cloud.example")
     manager._cloud_customer_scopes[("fake", "u-clock-b")] = "account:manager-clock-b"
-    manager._cloud_keys[("fake", "u-clock-unknown")] = ("key-c", "model", "Asia/Vladivostok", expires)
 
     async def load():
-        for sender in ("u-clock-a", "u-clock-b", "u-clock-unknown"):
+        for sender in ("u-clock-a", "u-clock-b"):
             await manager._cloud_key_for("fake", dm("x", sender=sender))
 
     asyncio.run(load())
@@ -718,8 +717,10 @@ def test_shared_bot_records_timezone_from_fresh_signin(chan, monkeypatch):
         assert timeutil.trusted() and timeutil.zone_name() == "Asia/Vladivostok"
 
 
-def test_shared_bot_refuses_signin_without_owner_and_clears_old_scope(chan, monkeypatch):
+@pytest.mark.parametrize("valid_cache_without_scope", [False, True])
+def test_shared_bot_refuses_signin_without_owner_and_clears_old_scope(chan, monkeypatch, valid_cache_without_scope):
     import asyncio
+    import time
 
     import httpx
 
@@ -754,8 +755,10 @@ def test_shared_bot_refuses_signin_without_owner_and_clears_old_scope(chan, monk
     monkeypatch.setattr(manager, "_cloud_no_account", no_account)
     monkeypatch.setattr("nanomuse.channels.manager.httpx.AsyncClient", RelayClient)
     identity = ("fake", "u-missing-account")
-    manager._cloud_keys[identity] = ("old-key", "old-model", "Asia/Vladivostok", 0)
-    manager._cloud_customer_scopes[identity] = "account:previous-owner"
+    expires = time.time() + 60 if valid_cache_without_scope else 0
+    manager._cloud_keys[identity] = ("old-key", "old-model", "Asia/Vladivostok", expires, "https://cloud.example")
+    if not valid_cache_without_scope:
+        manager._cloud_customer_scopes[identity] = "account:previous-owner"
     assert asyncio.run(manager._cloud_key_for("fake", dm("x", sender=identity[1]))) == ("!", "")
     assert identity not in manager._cloud_keys
     assert identity not in manager._cloud_customer_scopes

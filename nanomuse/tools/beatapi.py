@@ -87,7 +87,9 @@ class BeatAPI(BaseTool):
         input: dict[str, Any] | None = None,
         **_: Any,
     ) -> ToolResult:
-        client = self.cloud
+        # The app supplies a per-turn client factory so each customer's calls use their
+        # own account. Older direct callers can still pass a CloudClient instance.
+        client = self.cloud() if callable(self.cloud) else self.cloud
         if client is None:
             return ToolResult.fail("the account relay is not configured on this device")
         try:

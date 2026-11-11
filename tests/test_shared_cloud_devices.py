@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +20,12 @@ from nanomuse.tools.devices import DeviceFiles, Devices
 from nanomuse.ui import HeadlessUI
 
 pytest_plugins = ("test_channels_manager",)
+
+
+def cache_fake_auth(manager, channel, msg, key):
+    manager._cloud_keys[(channel, msg.sender_id)] = (
+        key, "model", "", time.time() + 120, "https://cloud.example.test"
+    )
 
 
 @pytest.mark.asyncio
@@ -97,6 +104,7 @@ def test_shared_computer_command_requires_same_verified_account(chan, monkeypatc
         if identity == "missing":
             return "", ""
         manager._cloud_customer_scopes[(channel, msg.sender_id)] = "account:" + ("owner" if identity == "revoked" else identity)
+        cache_fake_auth(manager, channel, msg, "verified-fixture-key")
         return "verified-fixture-key", "model"
 
     async def refuse(msg, **kwargs):
@@ -133,6 +141,7 @@ def test_shared_normal_turn_adds_hub_context_only_for_verified_owner(chan, monke
 
     async def authenticate(channel, msg):
         manager._cloud_customer_scopes[(channel, msg.sender_id)] = "account:" + identity
+        cache_fake_auth(manager, channel, msg, "verified-fixture-key")
         return "verified-fixture-key", "model"
 
     monkeypatch.setattr(manager, "_cloud_key_for", authenticate)
@@ -191,6 +200,7 @@ def test_selected_owner_conversation_requires_live_owner_key_before_sync(chan, m
 
     async def authenticate(channel, msg):
         manager._cloud_customer_scopes[(channel, msg.sender_id)] = "account:owner"
+        cache_fake_auth(manager, channel, msg, "owner-key")
         return "owner-key", "model"
 
     async def confirmed(_msg, _key, _scope):
@@ -307,6 +317,75 @@ def test_shared_pinned_owner_still_signs_in_and_proves_account(chan, monkeypatch
     assert not requests
 
 
+def test_shared_signin_cache_is_bound_to_original_relay_origin(chan, monkeypatch):
+    import httpx
+
+    client, _service, _llm, manager, _fake = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    origin = ["https://relay-one.test"]
+    monkeypatch.setattr(manager.store, "resolved", lambda _cfg: {
+        "cloud_per_chat": "true", "cloud_url": origin[0], "cloud_bot_token": "fixture-secret",
+    })
+    visited = []
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def post(self, url, **_kwargs):
+            visited.append(url)
+            return httpx.Response(200, json={
+                "api_key": f"fixture-key-{len(visited)}", "models": [], "account": {"id": "customer"},
+            })
+
+    monkeypatch.setattr("nanomuse.channels.manager.httpx.AsyncClient", FakeClient)
+    msg = dm("x")
+    assert client.portal.call(manager._cloud_key_for, "fake", msg)[0] == "fixture-key-1"
+    assert client.portal.call(manager._cloud_key_for, "fake", msg)[0] == "fixture-key-1"
+    origin[0] = "https://relay-two.test"
+    assert client.portal.call(manager._cloud_key_for, "fake", msg)[0] == "fixture-key-2"
+    assert visited == ["https://relay-one.test/v1/bot/signin", "https://relay-two.test/v1/bot/signin"]
+    assert manager._cloud_keys[("fake", "u1")][4] == "https://relay-two.test"
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_shared_artifact_upload_never_uses_installation_vault(chan, monkeypatch, tmp_path, cached):
+    client, service, _llm, manager, _fake = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    service.sync.state["account_id"] = "owner"
+    service.timeline("owner-thread")
+    thread = service.threads["owner-thread"]
+    thread.customer_scope = thread.workspace_scope = "account:owner"
+    service.app.vault.set("NANOMUSE_CLOUD_KEY", "installation-key")
+    if cached:
+        manager._cloud_customer_scopes[("fake", "u1")] = "account:owner"
+        manager._cloud_keys[("fake", "u1")] = ("customer-key", "", "", time.time() + 120, "https://issuer.test")
+    seen = []
+
+    class FakeCloud:
+        def __init__(self, *, base_url, api_key):
+            seen.append((base_url, api_key))
+
+        async def upload(self, *_args):
+            return "https://issuer.test/result"
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("nanomuse.cloud.CloudClient", FakeCloud)
+    file = tmp_path / "result.txt"
+    file.write_text("fixture")
+    result = client.portal.call(manager._artifact_link, "owner-thread", file)
+    assert bool(result) == cached
+    assert seen == ([('https://issuer.test', 'customer-key')] if cached else [])
+
+
 def test_other_account_can_continue_its_own_selected_local_conversation(chan, monkeypatch):
     from nanomuse.schema import LLMResponse
 
@@ -323,6 +402,7 @@ def test_other_account_can_continue_its_own_selected_local_conversation(chan, mo
 
     async def authenticate(channel, msg):
         manager._cloud_customer_scopes[(channel, msg.sender_id)] = "account:customer-b"
+        cache_fake_auth(manager, channel, msg, "customer-b-key")
         return "customer-b-key", "model"
 
     async def confirmed(_msg, key, scope):
@@ -330,7 +410,7 @@ def test_other_account_can_continue_its_own_selected_local_conversation(chan, mo
 
     monkeypatch.setattr(manager, "_cloud_key_for", authenticate)
     monkeypatch.setattr(manager, "_shared_sender_account_confirmed", confirmed)
-    monkeypatch.setattr(service, "cloud_once", lambda *_args: (llm, "model"))
+    monkeypatch.setattr(service, "cloud_once", lambda *_args, **_kwargs: (llm, "model"))
     llm.script.extend([LLMResponse(content="first reply"), LLMResponse(content="second reply")])
     fake.bus.inbound(dm("first request"))
     wait_for(lambda: any("first reply" in t for t in fake.texts()))
@@ -339,3 +419,69 @@ def test_other_account_can_continue_its_own_selected_local_conversation(chan, mo
     users = [event.get("text") for event in thread.timeline.events if event.get("type") == "user"]
     assert users[-2:] == ["first request", "second request"]
     assert "first request" in str(llm.calls[-1])
+
+
+def test_shared_voice_uses_issuing_relay_and_never_installation_fallback(chan, monkeypatch):
+    _client, service, _llm, manager, _fake = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    service.app.vault.set("NANOMUSE_CLOUD_KEY", "installation-key")
+    manager._cloud_keys[("fake", "u1")] = (
+        "customer-key", "", "", time.time() + 120, "https://issuer.test",
+    )
+    assert manager._voice_key("fake", "customer-key", "u1") == ("https://issuer.test", "customer-key")
+    assert manager._voice_key("fake", "customer-key", "other") == ("", "")
+    assert manager._voice_key("fake", "", "u1") == ("", "")
+    manager._cloud_keys[("fake", "u1")] = ("customer-key", "", "", time.time() - 1, "https://issuer.test")
+    assert manager._voice_key("fake", "customer-key", "u1") == ("", "")
+
+
+def test_payment_order_has_unique_idempotency_key(chan, monkeypatch):
+    client, _service, _llm, manager, fake = chan
+    msg = dm("pay")
+    manager._pay_plans[(msg.channel, msg.chat_id)] = {"1": "fixture-plan"}
+    manager._pay_address[(msg.channel, msg.chat_id)] = "fixture@example.test"
+    calls = []
+
+    async def pay_call(_msg, method, path, body):
+        calls.append((method, path, body))
+        return {"payment_url": "https://payment.example.test/order"}
+
+    monkeypatch.setattr(manager, "_pay_call", pay_call)
+    client.portal.call(manager._pay_order, msg, 1)
+    client.portal.call(manager._pay_order, msg, 1)
+    assert len(calls) == 2
+    assert all(method == "POST" and path == "/v1/payments/orders" for method, path, _body in calls)
+    assert all(body["plan"] == "fixture-plan" for _method, _path, body in calls)
+    assert calls[0][2]["idempotency_key"] != calls[1][2]["idempotency_key"]
+    assert any("https://payment.example.test/order" in text for text in fake.texts())
+
+
+def test_shared_cached_key_without_account_scope_requires_signin(chan, monkeypatch):
+    import httpx
+
+    client, _service, _llm, manager, _fake = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    monkeypatch.setattr(manager.store, "resolved", lambda _cfg: {
+        "cloud_per_chat": "true", "cloud_url": "https://relay.test", "cloud_bot_token": "fixture-secret",
+    })
+    manager._cloud_keys[("fake", "u1")] = ("unscoped-key", "", "", time.time() + 120, "https://relay.test")
+    visits = []
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def post(self, url, **_kwargs):
+            visits.append(url)
+            return httpx.Response(200, json={"api_key": "fresh-key", "models": [], "account": {"id": "customer"}})
+
+    monkeypatch.setattr("nanomuse.channels.manager.httpx.AsyncClient", FakeClient)
+    assert client.portal.call(manager._cloud_key_for, "fake", dm("test"))[0] == "fresh-key"
+    assert visits == ["https://relay.test/v1/bot/signin"]
+    assert manager._cloud_customer_scopes[("fake", "u1")] == "account:customer"

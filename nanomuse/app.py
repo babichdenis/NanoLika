@@ -331,6 +331,10 @@ class NanoMuseApp:
         ``None`` in that case — not an AttributeError deep inside a turn ("сбой модуля
         связи" is what the person saw when it did).
         """
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            from nanomuse.cloud_context import current_cloud_client
+
+            return current_cloud_client()
         hub = getattr(self, "hub", None)
         return getattr(hub, "cloud", None) if hub is not None else None
 

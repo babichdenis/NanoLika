@@ -38,7 +38,7 @@ class Incoming:
     for *Use NanoLika Cloud this time*, the model client this one turn runs on (``llm``)
     and its id (``model``); None and "" for a turn on the configured model."""
 
-    __slots__ = ("customer_scope", "files", "language", "llm", "model", "text")
+    __slots__ = ("cloud_base", "cloud_key", "customer_scope", "files", "language", "llm", "model", "text")
 
     def __init__(
         self,
@@ -48,6 +48,8 @@ class Incoming:
         llm: BaseLLM | None = None,
         model: str = "",
         customer_scope: str = "",
+        cloud_key: str = "",
+        cloud_base: str = "",
     ):
         self.text = text
         self.files = files or []
@@ -55,6 +57,8 @@ class Incoming:
         self.llm = llm
         self.model = model
         self.customer_scope = customer_scope
+        self.cloud_key = cloud_key
+        self.cloud_base = cloud_base
 
 
 class MuseAgent:

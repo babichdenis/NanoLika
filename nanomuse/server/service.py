@@ -33,6 +33,7 @@ from nanomuse.avatar import AvatarStudio
 from nanomuse.background import spawn
 from nanomuse.bridge.server import Bridge
 from nanomuse.cloud import CLOUD_KEY, DEFAULT_CHAT_MODEL, CloudError, model_url
+from nanomuse.cloud_context import turn_cloud_client
 from nanomuse.coding.service import CodingService
 from nanomuse.config import LLMSettings, Settings
 from nanomuse.goals import Goal
@@ -1249,6 +1250,7 @@ class MuseService:
         once_model: str = "",
         customer_scope: str = "",
         via_channel: str = "",
+        once_base: str = "",
     ) -> dict[str, Any]:
         """Queue a message for a thread. Returns the timeline event that was created.
 
@@ -1266,6 +1268,16 @@ class MuseService:
         language = language.strip()
         thread = self.threads.get(thread_id) or self._make_thread(thread_id, thread_id)
         owner = self.sync.owner_of(thread_id)
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and (
+            not once_key or once_key == "!" or not once_base or not customer_scope.startswith("account:")
+            or len(customer_scope) <= len("account:")
+        ):
+            raise ValueError("Не удалось подтвердить аккаунт для этой задачи. Войдите и повторите запрос.")
+        if (
+            os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+            and once_key and owner and customer_scope != account_scope(owner)
+        ):
+            raise ValueError("Не удалось подтвердить владельца беседы; задача не запущена.")
         turn_scope = (
             account_scope(owner)
             if owner
@@ -1280,11 +1292,13 @@ class MuseService:
         ]
         if not text and not attachments:
             raise ValueError("empty message")
-        once = (
-            self.cloud_once(once_key, once_model, thread.reasoning)
-            if (via == "cloud" or once_key)
-            else None
-        )
+        if via == "cloud" or once_key:
+            once = (
+                self.cloud_once(once_key, once_model, thread.reasoning, base_url=once_base)
+                if once_base else self.cloud_once(once_key, once_model, thread.reasoning)
+            )
+        else:
+            once = None
         thread.updated_at = now_iso()
         if language:
             # remembered on the conversation: a chat addressed to another device passes it on
@@ -1360,7 +1374,7 @@ class MuseService:
                 thread.purposes[text] = label
         if once is not None:
             thread.inbox.put_nowait(
-                Incoming(text, attachments, language, once[0], once[1], turn_scope)
+                Incoming(text, attachments, language, once[0], once[1], turn_scope, once_key, once_base)
             )
         else:
             thread.inbox.put_nowait(
@@ -1453,6 +1467,7 @@ class MuseService:
         model: str = "",
         reasoning: str = "",
         temperature: float | None = None,
+        base_url: str = "",
     ) -> tuple[BaseLLM | None, str]:
         """The client for *Use NanoLika Cloud this time* (the own-key models contract, §4)
         and the model's id: the account's recommended chat model under the Cloud key from
@@ -1477,10 +1492,10 @@ class MuseService:
         merged = LLMSettings(
             provider="openai",
             model=model,
-            base_url=model_url(self.hub.cloud.base_url),
-            # The vault holds the key the relay last rotated in; a key handed down by an
-            # older caller may already be revoked, so the vault wins when it has one.
-            api_key=self.app.vault.get(CLOUD_KEY) or key or "",
+            base_url=model_url(base_url or self.hub.cloud.base_url),
+            # A per-turn key belongs to this customer and must win over the installation's
+            # vault. If it expired, the relay rejects it; never silently charge another account.
+            api_key=key or self.app.vault.get(CLOUD_KEY) or "",
             tool_mode="auto",
             stream=llm.stream,
             temperature=temperature if temperature is not None else llm.temperature,
@@ -1613,29 +1628,32 @@ class MuseService:
                 try:
                     purpose = thread.purposes.pop(text, None)
                     turn_scope = incoming.customer_scope or self.memory_scope_for_thread(thread)
-                    with (
-                        memory_scope(turn_scope),
-                        self.workspace_context_for_thread(thread, turn_scope),
-                    ):
-                        self.workspace_for_thread(thread.id, turn_scope).mkdir(
-                            parents=True, exist_ok=True
-                        )
-                        # the first conversation speaks to the person's turns in its own chat;
-                        # a background run (a goal pass, a routine) never hears it
-                        thread.agent.prompt_addendum = (
-                            None if purpose else self._firstrun_addendum_for(thread.id)
-                        )
-                        self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
-                        final = await thread.agent.run(
-                            text,
-                            purpose=purpose,
-                            files=incoming.files,
-                            language=incoming.language,
-                        )
-                        quiet, final = (
-                            prompts.split_quiet(final or "") if purpose else (False, final or "")
-                        )
-                        self._finish_run(thread, purpose, final.strip(), quiet)
+                    shared = os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+                    key = incoming.cloud_key if shared and turn_scope.startswith("account:") else ""
+                    async with turn_cloud_client(incoming.cloud_base if key else "", key):
+                        with (
+                            memory_scope(turn_scope),
+                            self.workspace_context_for_thread(thread, turn_scope),
+                        ):
+                            self.workspace_for_thread(thread.id, turn_scope).mkdir(
+                                parents=True, exist_ok=True
+                            )
+                            # the first conversation speaks to the person's turns in its own chat;
+                            # a background run (a goal pass, a routine) never hears it
+                            thread.agent.prompt_addendum = (
+                                None if purpose else self._firstrun_addendum_for(thread.id)
+                            )
+                            self.ui.begin_run(thread.id, background=purpose, model_used=incoming.model)
+                            final = await thread.agent.run(
+                                text,
+                                purpose=purpose,
+                                files=incoming.files,
+                                language=incoming.language,
+                            )
+                            quiet, final = (
+                                prompts.split_quiet(final or "") if purpose else (False, final or "")
+                            )
+                            self._finish_run(thread, purpose, final.strip(), quiet)
                 except asyncio.CancelledError:
                     if thread.stopping:
                         self._settle_stopped(thread)

@@ -324,7 +324,7 @@ class ChannelManager(ChannelBus):
         self.started = True
         self._loop = asyncio.get_running_loop()
         # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
-        self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float]] = {}
+        self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float, str]] = {}
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
         self._queue = self.svc.bus.subscribe(lambda msg: msg.get("kind") in CHANNEL_EVENT_KINDS)
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
@@ -879,7 +879,7 @@ class ChannelManager(ChannelBus):
         heard: list[str] = []
         voice_base = voice_key = ""
         if any(item.kind == "audio" for item in msg.files):
-            voice_base, voice_key = self._voice_key(msg.channel, cloud_key)
+            voice_base, voice_key = self._voice_key(msg.channel, cloud_key, msg.sender_id)
             for item in msg.files:
                 if item.kind != "audio":
                     continue
@@ -959,6 +959,12 @@ class ChannelManager(ChannelBus):
         if cloud_key:
             send_options["once_key"] = cloud_key
             send_options["once_model"] = cloud_model
+            if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+                cached = self._cloud_keys.get((msg.channel, msg.sender_id))
+                if not cached or len(cached) < 5 or cached[0] != cloud_key or cached[3] <= time.time():
+                    await self._cloud_no_account(msg.channel, msg.chat_id)
+                    return
+                send_options["once_base"] = cached[4]
         try:
             self.svc.send(thread_id, text, **send_options)
         except TypeError as exc:
@@ -1189,7 +1195,9 @@ class ChannelManager(ChannelBus):
             if not scope:
                 identity = (msg.channel, msg.sender_id)
                 cached = self._cloud_keys.get(identity)
-                if cached and cached[0] and cached[0] != "!" and cached[3] > time.time():
+                settings = self.store.resolved(self.store.config(msg.channel))
+                origin = str(settings.get("cloud_url") or "").strip().rstrip("/")
+                if cached and len(cached) > 4 and cached[4] == origin and cached[0] and cached[0] != "!" and cached[3] > time.time():
                     scope = self._cloud_customer_scopes.get(identity, "")
             allowed = bool(scope and thread and self._shared_sender_can_use_thread(msg, selected, scope))
         if allowed:
@@ -1990,19 +1998,24 @@ class ChannelManager(ChannelBus):
         if thread_obj.workspace_scope and thread_obj.workspace_scope != scope:
             return ""
         key = ""
+        base = str(self.svc.settings.cloud.base_url).rstrip("/")
         for identity, customer_scope in self._cloud_customer_scopes.items():
             held = self._cloud_keys.get(identity)
             if customer_scope == scope and held and held[3] > time.time():
+                if timeutil.shared_bot():
+                    if len(held) < 5 or not held[4]:
+                        continue
+                    base = held[4]
                 key = held[0]
                 break
         # The installation key belongs to the signed-in owner, not to every public chat.
         owner = self.svc.sync.account_id
-        if not key and owner and scope == account_scope(owner):
+        if not key and not timeutil.shared_bot() and owner and scope == account_scope(owner):
             key = self.svc.app.vault.get(CLOUD_KEY)
         if not key:
             return ""
         mime = file_mime(path.name)
-        client = CloudClient(base_url=self.svc.settings.cloud.base_url, api_key=key)
+        client = CloudClient(base_url=base, api_key=key)
         try:
             return await client.upload(path.name, path.read_bytes(), mime)
         except Exception as exc:  # noqa: BLE001 — the chat still gets the file itself
@@ -2324,9 +2337,14 @@ class ChannelManager(ChannelBus):
                 label + " · " + self.say("You", "你", "Вы") + "\n" + text,
             )
 
-    def _voice_key(self, channel: str, cloud_key: str) -> tuple[str, str]:
+    def _voice_key(self, channel: str, cloud_key: str, sender_id: str = "") -> tuple[str, str]:
         """Who pays for hearing and saying in this chat: its own Cloud account when it has
         one (the same key its turns spend), this machine's account otherwise."""
+        if timeutil.shared_bot():
+            held = self._cloud_keys.get((channel, sender_id))
+            if held and len(held) > 4 and held[0] == cloud_key and held[3] > time.time() and held[4]:
+                return held[4], held[0]
+            return "", ""
         if cloud_key and cloud_key != "!":
             settings = self.store.resolved(self.store.config(channel))
             url = str(settings.get("cloud_url") or "").strip().rstrip("/")
@@ -2412,13 +2430,28 @@ class ChannelManager(ChannelBus):
             return "!", ""
         cache_key = (channel, msg.sender_id)
         held = self._cloud_keys.get(cache_key)
-        if held is not None and held[3] > time.time():
+        if (
+            held is not None and held[3] > time.time()
+            and (
+                not timeutil.shared_bot()
+                or (
+                    len(held) > 4 and held[4] == url
+                    and self._cloud_customer_scopes.get(cache_key, "").startswith("account:")
+                    and len(self._cloud_customer_scopes.get(cache_key, "")) > len("account:")
+                )
+            )
+        ):
             # the account's clock is the computer's: every turn speaks in it
             if timeutil.shared_bot():
                 timeutil.set_account_zone(self._cloud_customer_scopes.get(cache_key, ""), held[2])
             elif held[2]:
                 timeutil.set_zone(held[2])
             return held[0], held[1]
+        if timeutil.shared_bot() and held is not None:
+            # A cached identity is valid only for the relay that issued the key. Never
+            # carry it across a URL change, expiry or a failed re-authentication.
+            self._cloud_keys.pop(cache_key, None)
+            self._cloud_customer_scopes.pop(cache_key, None)
         try:
             async with httpx.AsyncClient(timeout=20) as client:
                 answer = await client.post(
@@ -2488,7 +2521,7 @@ class ChannelManager(ChannelBus):
             return "!", ""
         if tz and not timeutil.shared_bot():
             timeutil.set_zone(tz)
-        self._cloud_keys[cache_key] = (key, model, tz, time.time() + CLOUD_KEY_TTL_S)
+        self._cloud_keys[cache_key] = (key, model, tz, time.time() + CLOUD_KEY_TTL_S, url)
         if account_id:
             self._cloud_customer_scopes[cache_key] = account_scope(account_id)
             if timeutil.shared_bot():
