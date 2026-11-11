@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
-import hashlib
 import json
 import os
 import re
@@ -2838,28 +2837,36 @@ class ChannelManager(ChannelBus):
                     continue
                 parts = urlsplit(url)
                 suffix = Path(unquote(parts.path)).suffix[:12]
-                target = (
-                    Path(tempfile.gettempdir())
-                    / f"nanolika-share-{hashlib.sha1(url.encode()).hexdigest()[:12]}{suffix}"
-                )
+                target: Path | None = None
+                keep = False
                 total = 0
                 try:
                     async with client.stream("GET", url) as response:
                         response.raise_for_status()
-                        with target.open("wb") as stream:
+                        # A share can be delivered to several chats concurrently. Each
+                        # delivery owns its temporary copy so one cleanup never removes
+                        # or truncates another delivery's in-progress upload.
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb", prefix="nanolika-share-", suffix=suffix, delete=False
+                        ) as stream:
+                            target = Path(stream.name)
                             async for chunk in response.aiter_bytes():
                                 total += len(chunk)
                                 if total > SHARE_MAX_BYTES:
                                     break
                                 stream.write(chunk)
                     if total > SHARE_MAX_BYTES:
-                        target.unlink(missing_ok=True)
                         logger.debug("channel: share object over 50 MB left as a link")
                         continue
+                    assert target is not None
                     out.append((url, target))
+                    keep = True
                 except (httpx.HTTPError, OSError) as exc:
-                    target.unlink(missing_ok=True)
                     logger.debug("channel: share object not fetched: {}", exc)
+                finally:
+                    if target is not None and not keep:
+                        with contextlib.suppress(OSError):
+                            target.unlink(missing_ok=True)
         return out
 
     async def _shared_files(self, text: str) -> list[Path]:
