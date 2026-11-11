@@ -118,10 +118,12 @@ class ChatCatalog:
                 has_older = len(rows) > limit
                 rows = list(reversed(rows[:limit]))
                 more = False
+            messages = [_message_row(r, names, lambda value: self.store._unseal(account, value)) for r in rows]
+            self.store.usage_for_messages(c, account, messages)
             return {
                 "account_id": account,
                 "cid": cid,
-                "messages": [_message_row(r, names, lambda value: self.store._unseal(account, value)) for r in rows],
+                "messages": messages,
                 "cursor": int(rows[-1]["seq"]) if more else snapshot,
                 "more": more,
                 "has_older": has_older,

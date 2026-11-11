@@ -593,6 +593,13 @@ class Database:
             self._conn.execute("ALTER TABLE ledger ADD COLUMN key_hash TEXT NOT NULL DEFAULT ''")
         if "extra" not in cols("ledger"):
             self._conn.execute("ALTER TABLE ledger ADD COLUMN extra TEXT NOT NULL DEFAULT ''")
+        # Old rows may contain plain text rather than JSON. Build only entries for
+        # message-linked chat charges; the ledger itself is never rewritten.
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS ledger_message_usage ON ledger"
+            "(account_id, json_extract(extra, '$.message_mid')) "
+            "WHERE kind='chat' AND json_valid(extra) AND json_type(extra, '$.message_mid')='text'"
+        )
         for col, ddl in (
             ("password_hash", "TEXT NOT NULL DEFAULT ''"),
             ("password_set_at", "INTEGER"),

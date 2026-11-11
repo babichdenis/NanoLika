@@ -530,7 +530,7 @@ def create_app(
         ],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Bot-Token"],
+        allow_headers=["Authorization", "Content-Type", "X-Bot-Token", "X-NanoLika-Message-ID"],
     )
 
     def with_places(out: dict) -> dict:
@@ -1173,6 +1173,18 @@ def create_app(
     sync_store = SyncStore(cloud.db, crypto=cloud.crypto)
     app.state.sync = sync_store
 
+    @app.get("/v1/me/message-usage/{mid}")
+    async def message_usage(mid: str, response: Response, caller: Caller = Depends(caller_dep)) -> dict:
+        try:
+            mid = str(uuid.UUID(mid))
+        except (ValueError, AttributeError):
+            raise CloudError(400, "bad_message_id", "Invalid message identifier") from None
+        rows = [{"mid": mid, "role": "assistant", "deleted": False}]
+        with cloud.db.tx() as c:
+            sync_store.usage_for_messages(c, caller.account_id, rows)
+        response.headers["Cache-Control"] = "no-store"
+        return {"usage": rows[0].get("usage")}
+
     def sync_dep(caller: Caller = Depends(caller_dep)) -> Caller:
         """0.22: every sync call but reading the state is refused with 503 `sync_paused`
         while the operator's *Conversation sync* switch is off; the stored texts stay."""
@@ -1518,6 +1530,12 @@ def create_app(
     @app.post("/v1/chat/completions")
     async def chat(request: Request, caller: Caller = Depends(caller_dep)) -> Response:
         body = await _json(request)
+        message_mid = request.headers.get("x-nanolika-message-id", "")
+        if message_mid:
+            try:
+                message_mid = str(uuid.UUID(message_mid))
+            except (ValueError, AttributeError):
+                raise CloudError(400, "bad_message_id", "Invalid message identifier") from None
         if "messages" in body:
             # One Chat Completions shape goes out, whatever names the client used
             # (`input_image` from an older build, a bare string, a bare url).
@@ -1679,6 +1697,7 @@ def create_app(
                 if not isinstance(obj, dict) or obj.get("error") or not obj.get("choices"):
                     raise CloudError(502, "upstream", "The model provider sent no answer")
                 usage = usage_from_json(obj)
+                usage_estimated = usage is None
                 text = _reply_text(obj)
                 if usage is None:
                     usage = Usage(fallback_prompt_tokens, estimate_tokens(text))
@@ -1705,6 +1724,8 @@ def create_app(
                     provider_cost_rub=meta.get("provider_cost_rub"),
                     routing_meta=meta,
                     byok=byok is not None,
+                    message_mid=message_mid,
+                    usage_estimated=usage_estimated,
                 )
                 record_metadata(cloud, caller.account_id, request_id, meta)
             finally:
@@ -1812,6 +1833,7 @@ def create_app(
             finally:
                 try:
                     if not failed and (usage is not None or text_len > 0):
+                        usage_estimated = usage is None
                         if usage is None:
                             usage = Usage(fallback_prompt_tokens, text_cjk + math.ceil((text_len - text_cjk) / 3.5))
                         accounting_meta = router.accounting(selected, accounting_meta, usage.prompt, usage.completion, usage.cached)
@@ -1825,6 +1847,8 @@ def create_app(
                             cached_tokens=usage.cached,
                             provider_cost_rub=accounting_meta.get("provider_cost_rub"),
                             routing_meta=accounting_meta,
+                            message_mid=message_mid,
+                            usage_estimated=usage_estimated,
                         )
                         record_metadata(cloud, caller.account_id, request_id, accounting_meta)
                         if sample_meta is not None:

@@ -3367,6 +3367,8 @@ class Cloud:
         provider_cost_rub: float | None = None,
         routing_meta: dict[str, Any] | None = None,
         byok: bool = False,
+        message_mid: str = "",
+        usage_estimated: bool = False,
     ) -> int:
         """One chat turn in the ledger: the tokens as the provider counted them, the money at
         the model's price in force when the reply came in (`at`, now by default) — the
@@ -3398,6 +3400,14 @@ class Cloud:
             cost = 0
             sale = 0
             detail["byok"] = True
+        if message_mid:
+            detail["message_mid"] = message_mid
+            detail["usage_estimated"] = usage_estimated
+            detail["sale_rub_at_charge"] = (
+                sale / 1_000_000 / self.s.usd_cny * self.s.rub_per_usd
+                * (1 + self.s.topup_fee_pct / 100)
+                if self.s.rub_per_usd > 0 and self.s.usd_cny > 0 else None
+            )
         if cached_tokens > 0:
             detail["cached_tokens"] = min(max(0, cached_tokens), max(0, prompt_tokens))
         if model.idle_at(at):

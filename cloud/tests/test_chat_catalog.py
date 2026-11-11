@@ -1,8 +1,12 @@
 """Shared metadata, lazy bodies, read races and account boundaries."""
 
+import httpx
+import pytest
 from test_accounts import auth, make
 from test_cloud import sign_up
 from test_sync import conv, msg, uid
+
+from nanomuse_cloud.db import Database
 
 
 async def setup():
@@ -231,3 +235,121 @@ async def test_catalog_answers_304_until_something_changes():
     read = await client.get("/v1/sync/catalog?client=view", headers={**a, "If-None-Match": etag})
     assert read.status_code == 200 and read.headers["etag"] != etag
     assert next(row for row in read.json()["conversations"] if row["cid"] == c1)["unread"] == 0
+
+async def test_message_usage_links_all_model_calls_to_their_own_account():
+    app, client, sender, _, _, _ = make(rub_per_usd=100, usd_cny=7)
+    a = await sign_up(client, sender, "usage@example.test")
+    b = await sign_up(client, sender, "other-usage@example.test")
+    headers = auth(a["api_key"])
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=headers)
+    await client.put("/v1/sync/state", json={"enabled": True}, headers=auth(b["api_key"]))
+    cid, mid, old_mid = uid(), uid(), uid()
+    prompt = {"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hello"}]}
+    for stream in (False, True):
+        response = await client.post(
+            "/v1/chat/completions", headers={**headers, "X-NanoLika-Message-ID": mid},
+            json={**prompt, "stream": stream},
+        )
+        assert response.status_code == 200, response.text
+    await client.post("/v1/sync/changes", headers=headers, json={
+        "device": "browser", "conversations": [conv(cid)],
+        "messages": [msg(mid, cid, "assistant", "answer"), msg(old_mid, cid, "assistant", "old")],
+    })
+    result = await client.get(f"/v1/sync/conversations/{cid}/messages", headers=headers)
+    assert result.status_code == 200, result.text
+    messages = {item["mid"]: item for item in result.json()["messages"]}
+    assert messages[mid]["usage"]["requests"] == 2
+    assert messages[mid]["usage"]["estimated"] is False
+    account_id = app.state.cloud.authenticate(a["api_key"]).account_id
+    rows = app.state.cloud.db._conn.execute(
+        "SELECT sale_uy FROM ledger WHERE account_id=? AND kind='chat'", (account_id,)
+    ).fetchall()
+    settings = app.state.cloud.s
+    expected = sum(row["sale_uy"] for row in rows) / 1_000_000 / settings.usd_cny * settings.rub_per_usd * (1 + settings.topup_fee_pct / 100)
+    assert messages[mid]["usage"]["cost_rub"] == pytest.approx(expected)
+    direct = await client.get(f"/v1/me/message-usage/{mid}", headers=headers)
+    assert direct.json()["usage"] == messages[mid]["usage"]
+    assert direct.headers["cache-control"] == "no-store"
+    assert (await client.get(f"/v1/me/message-usage/{mid}", headers=auth(b["api_key"]))).json()["usage"] is None
+    assert (await client.get(f"/v1/me/message-usage/{mid}")).status_code == 401
+    assert (await client.get("/v1/me/message-usage/invalid", headers=headers)).status_code == 400
+    assert messages[mid]["usage"]["input_tokens"] > 0
+    assert messages[mid]["usage"]["output_tokens"] > 0
+    assert "usage" not in messages[old_mid]
+    assert (await client.get(f"/v1/sync/conversations/{cid}/messages", headers=auth(b["api_key"]))).status_code == 404
+    other_cid = uid()
+    other_headers = auth(b["api_key"])
+    await client.post("/v1/sync/changes", headers=other_headers, json={
+        "device": "other-browser", "conversations": [conv(other_cid)],
+        "messages": [msg(mid, other_cid, "assistant", "same identifier")],
+    })
+    other_result = await client.get(f"/v1/sync/conversations/{other_cid}/messages", headers=other_headers)
+    assert "usage" not in other_result.json()["messages"][0]
+    changes = await client.get("/v1/sync/changes?since=0", headers=headers)
+    assert any(m.get("usage", {}).get("requests") == 2 for m in changes.json()["messages"])
+    await client.aclose()
+
+async def test_message_usage_records_partial_stream_as_estimated():
+    app, client, sender, _, _, _ = make(rub_per_usd=100, usd_cny=7)
+    signed = await sign_up(client, sender, "partial@example.test")
+    headers, mid = auth(signed["api_key"]), uid()
+
+    class Interrupted(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"Partial answer"}}]}\n\n'
+            raise httpx.ReadError("connection lost")
+
+    async def provider(request):
+        return httpx.Response(200, stream=Interrupted(), headers={"content-type": "text/event-stream"})
+
+    original = app.state.http._transport
+    app.state.http._transport = httpx.MockTransport(provider)
+    try:
+        response = await client.post(
+            "/v1/chat/completions", headers={**headers, "X-NanoLika-Message-ID": mid},
+            json={"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "hello"}], "stream": True},
+        )
+        assert response.status_code == 200 and "Partial answer" in response.text
+        assert "stopped answering" in response.text
+        usage = (await client.get(f"/v1/me/message-usage/{mid}", headers=headers)).json()["usage"]
+        assert usage["requests"] == 1 and usage["estimated"] is True
+        assert usage["input_tokens"] > 0 and usage["output_tokens"] > 0
+    finally:
+        app.state.http._transport = original
+        await client.aclose()
+
+
+def test_message_usage_index_migrates_existing_ledger_without_rewriting(tmp_path):
+    path = str(tmp_path / "legacy.db")
+    db = Database(path)
+    db._conn.execute("DROP INDEX ledger_message_usage")
+    db._conn.execute("INSERT INTO accounts(id, id_hash, channel, hint, created_at) VALUES('old', 'old', 'email', 'old', 1)")
+    db._conn.execute("INSERT INTO ledger(account_id, ts, kind, charged, extra) VALUES('old', 1, 'chat', 0, 'not json')")
+    db._conn.commit()
+    db._conn.close()
+    reopened = Database(path)
+    assert reopened._conn.execute("SELECT extra FROM ledger WHERE account_id='old'").fetchone()[0] == "not json"
+    assert reopened._conn.execute("SELECT name FROM sqlite_master WHERE name='ledger_message_usage'").fetchone()
+    reopened._conn.close()
+
+
+async def test_message_usage_marks_estimates_and_skips_old_ledger_rows():
+    import json
+
+    _, client, sender, _, cloud, _ = make(rub_per_usd=100, usd_cny=7)
+    user = await sign_up(client, sender, "estimates@example.test")
+    headers = auth(user["api_key"])
+    mid = uid()
+    account = user["account"]["id"]
+    for request_id, extra in (
+        ("measured", {"message_mid": mid, "sale_rub_at_charge": 0.00001, "usage_estimated": False}),
+        ("estimated", {"message_mid": mid, "sale_rub_at_charge": 0.00002, "usage_estimated": True}),
+    ):
+        cloud.db.charge(account, "chat", "test-model", 10, 5, 15, request_id, extra=json.dumps(extra))
+    cloud.db.charge(account, "chat", "old", 100, 100, 200, "old", extra="not JSON")
+    result = await client.get(f"/v1/me/message-usage/{mid}", headers=headers)
+    usage = result.json()["usage"]
+    assert usage["input_tokens"] == 20 and usage["output_tokens"] == 10
+    assert usage["requests"] == 2 and usage["estimated"] is True
+    assert abs(usage["cost_rub"] - 0.00003) < 1e-12
+    await client.aclose()

@@ -249,6 +249,36 @@ class SyncStore:
             # quiet data loss is worse than a line at start-up that says why.
             log.warning("sync: CLOUD_SECRET is not set; encrypted conversation texts will read as empty")
 
+    def usage_for_messages(self, c: sqlite3.Connection, account_id: str, messages: list[dict]) -> None:
+        """Attach account-scoped, recorded charges to synced message IDs."""
+        ids = [m["mid"] for m in messages if m.get("role") == "assistant" and not m.get("deleted")]
+        if not ids:
+            return
+        marks = ",".join("?" for _ in ids)
+        rows = c.execute(
+            f"SELECT prompt_tokens, completion_tokens, extra FROM ledger "
+            f"WHERE account_id=? AND kind='chat' AND json_valid(extra) AND json_type(extra, '$.message_mid')='text' "
+            f"AND json_extract(extra, '$.message_mid') IN ({marks})",
+            (account_id, *ids),
+        ).fetchall()
+        usage = {}
+        for row in rows:
+            detail = json.loads(row["extra"])
+            mid = detail["message_mid"]
+            item = usage.setdefault(mid, {"input_tokens": 0, "output_tokens": 0, "cost_rub": 0.0, "estimated": False, "requests": 0})
+            item["input_tokens"] += int(row["prompt_tokens"] or 0)
+            item["output_tokens"] += int(row["completion_tokens"] or 0)
+            sale_rub = detail.get("sale_rub_at_charge")
+            if sale_rub is None:
+                item["cost_rub"] = None
+            elif item["cost_rub"] is not None:
+                item["cost_rub"] += float(sale_rub)
+            item["estimated"] |= bool(detail.get("usage_estimated"))
+            item["requests"] += 1
+        for message in messages:
+            if message["mid"] in usage:
+                message["usage"] = usage[message["mid"]]
+
     def _seal(self, account_id: str, text: str) -> str:
         if not text or self.crypto is None:
             return text
@@ -417,6 +447,8 @@ class SyncStore:
             "conversations": [_conversation_row(r, names) for r in conversations],
             "messages": [_message_row(r, names, lambda value: self._unseal(account_id, value)) for _, k, r in rows if k == "m"],
         }
+        with self.db.tx() as c:
+            self.usage_for_messages(c, account_id, out["messages"])
         if skipped is not None:
             out["skipped"] = skipped
         return out

@@ -320,6 +320,16 @@ DELETE /v1/sync/changes                 → the state, counts at zero     everyt
 DELETE /v1/sync/conversations/{cid}     → {cursor, deleted: true}      a tombstone the other devices apply; 404 no_conversation
 ```
 
+Clients may attach a UUID in `X-NanoLika-Message-ID` to each chat completion
+that contributes to the same assistant message. For new linked charges, sync
+message pages and `GET /v1/me/message-usage/{mid}` provide an optional
+server-derived `usage` object with summed `input_tokens`, `output_tokens`,
+`cost_rub`, `requests`, and `estimated` (true when any call used a token
+estimate). `cost_rub` is null if the conversion rate was unavailable when any
+call was charged. Accounting is isolated by account; the header does not affect
+older clients. Existing ledger rows are not retrospectively associated with
+messages. A message without a linked charge has no usage data.
+
 `scope` (relay 0.20) is `all` unless said; `main` returns only the main
 conversation and its messages, and an account with no main yet gets an empty
 page whose `cursor` is `since`. `tail=K` (K ≤ 500, honoured with `since=0`
