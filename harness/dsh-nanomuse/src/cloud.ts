@@ -1,3 +1,4 @@
+import { StateStore } from './state-store.ts'
 import { ConversationNavigation, type ConversationNavigationRequest } from './conversation-navigation.ts'
 import { recoveryRulesFor, restoreOutcomes, TurnOutcomes, type TurnOutcome } from './turn-outcomes.ts'
 import { TurnBudget, type TurnView } from './turn-budget.ts'
@@ -700,6 +701,7 @@ export default class NanomuseCloud extends Service {
   readonly profile: ProfileStore
   readonly hub: HubClient
   private state: State = {}
+  private readonly stateStore = new StateStore()
   private busy: Promise<unknown> = Promise.resolve()
   private readonly streams = new Set<ServerResponse>()
   private readonly changeListeners = new Set<() => void>()
@@ -1020,8 +1022,17 @@ export default class NanomuseCloud extends Service {
         isBatchSession: (sessionId) => (this.ctx.get('nanomuseRooms') as { isBatch?(id: string): boolean } | undefined)?.isBatch?.(sessionId) === true,
         load: () => this.state.sync,
         save: async (state) => {
+          const previous = this.state.sync
           this.state.sync = state
-          await this.writeState()
+          try {
+            await this.writeState()
+          } catch (error) {
+            if (this.state.sync === state) {
+              if (previous) this.state.sync = previous
+              else delete this.state.sync
+            }
+            throw error
+          }
         },
         onChange: () => this.broadcast(),
         log: (level, text) => this.ctx.logger[level](text),
@@ -1124,7 +1135,14 @@ export default class NanomuseCloud extends Service {
           }),
         'nanomuse cloud: sync on hub connect',
       )
-      if (this.state.account) sync.start()
+      const initialAccount = this.state.account
+      if (initialAccount) {
+        // Older saved sync state may not name its account. Bind it to the verified
+        // signed-in account before any outgoing message identity is persisted.
+        void sync.accountChanged(initialAccount.id, false).then(() => {
+          if (this.sync === sync && this.state.account?.id === initialAccount.id) sync.start()
+        }).catch((error: unknown) => this.ctx.logger.warn('nanomuse sync: account could not be restored: %s', message(error)))
+      }
       ctx.effect(() => () => {
         sync.stop()
         this.sync = undefined
@@ -4146,9 +4164,7 @@ export default class NanomuseCloud extends Service {
   }
 
   private async writeState(): Promise<void> {
-    const path = this.statePath()
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, JSON.stringify(this.state, null, 2) + '\n', { mode: 0o600 })
+    await this.stateStore.write(this.statePath(), this.state)
   }
 
   private serialize<T>(work: () => Promise<T>): Promise<T> {

@@ -55,7 +55,7 @@
  *
  * Never a key in a log, never a file: attachments travel as names and sizes.
  */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -71,6 +71,8 @@ declare module '@deepseek-ai/dsh-llm' {
 /** The relay's limits (contract C7). */
 export const MAX_POST_MESSAGES = 200
 export const PUSH_DELAY_MS = 2000
+/** Avoid a busy loop when the cloud cannot accept a pending message. */
+export const PUSH_RETRY_MS = 60_000
 /** The person's words go up this soon after they are sent (C8). */
 export const SEND_DELAY_MS = 50
 export const PULL_EVERY_MS = 60_000
@@ -545,7 +547,7 @@ export interface KnownConversation {
 export type CloudMark = 'device' | 'sync' | 'local'
 
 /** Why a cloud switch or a delete was refused (C11), the browser half's sentence to the person. */
-export type CloudRefusal = 'main' | 'synced-from-cloud' | 'not-synced-account' | 'unknown-session'
+export type CloudRefusal = 'main' | 'synced-from-cloud' | 'not-synced-account' | 'unknown-session' | 'wipe-pending'
 
 /** The answer to a cloud switch or to deleting a chat from the account (C11): the whole view, and whether it was done. */
 export interface SyncedOutcome extends SyncView {
@@ -576,6 +578,12 @@ export interface SyncState {
   owners: Record<string, string>
   /** dsh message id → the mid it was pushed as. */
   mids: Record<string, string>
+  /** Account/session/line → durable identity for a message not yet acknowledged. */
+  pendingMids?: Record<string, { mid: string; cid: string; digest: string }>
+  /** A remote deletion was requested but has not been confirmed, per account. */
+  pendingWipes?: Record<string, boolean>
+  /** Account → reason that locally retained messages have not reached the cloud. */
+  pushIssues?: Record<string, 'message_limit' | 'pending' | 'conflict'>
   /** session id → the title last pushed (or pulled: not pushed back). */
   titles: Record<string, string>
   /** session id → the chat's own model (a Cloud id): what this device chose or applied, so a pick in one chat never follows into another. */
@@ -684,6 +692,7 @@ export interface SyncEngineOptions {
   onChange?(): void
   log?(level: 'info' | 'warn' | 'debug', text: string): void
   pushDelayMs?: number
+  retryDelayMs?: number
   pullEveryMs?: number
   frameCoalesceMs?: number
 }
@@ -702,6 +711,8 @@ export interface SyncView {
   synced: string[]
   available: boolean
   paused: boolean
+  /** An unsent local message needs the person's attention. */
+  pushIssue?: 'message_limit' | 'pending' | 'conflict' | 'wipe_pending'
   cursor: number
   relay: SyncRelayState | null
   /** Grows with every change applied here; the browser half re-reads a session's remote rows when it moves. */
@@ -710,6 +721,8 @@ export interface SyncView {
   mainSession: string
   /** Sessions that hold a synced conversation: listed in the chats column even before a turn ran here. */
   sessions: string[]
+  /** Sessions explicitly kept only on this computer. */
+  local: string[]
   /** The title of each synced session, so a chat the harness has not listed yet still has a name. */
   titles: Record<string, string>
   /** session id → the device that started the conversation ('' = this computer): the chats column
@@ -741,9 +754,15 @@ export interface WorkingPresence {
   at: number
 }
 
+interface PullContext { account: string; epoch: number; token?: string }
+class StalePull extends Error {}
+
 export class SyncEngine {
   state: SyncState
   private paused = false
+  private stopped = false
+  private wiping = false
+  private epoch = 0
   private pushTimer: ReturnType<typeof setTimeout> | undefined
   private pullTimer: ReturnType<typeof setInterval> | undefined
   private frameTimer: ReturnType<typeof setTimeout> | undefined
@@ -830,7 +849,7 @@ export class SyncEngine {
 
   /** On, signed in, and the key not refused. */
   async active(): Promise<boolean> {
-    return this.state.enabled && !this.paused && Boolean(await this.options.token())
+    return this.state.enabled && !this.paused && !this.state.pendingWipes?.[this.state.accountId] && Boolean(await this.options.token())
   }
 
   view(): SyncView {
@@ -842,11 +861,17 @@ export class SyncEngine {
       synced: Object.entries(this.state.clouds).filter(([, mark]) => mark === 'device').map(([sid]) => sid),
       available: !this.paused && Boolean(this.state.accountId),
       paused: this.paused,
+      ...(this.signedIn && this.state.pendingWipes?.[this.state.accountId]
+        ? { pushIssue: 'wipe_pending' as const }
+        : this.signedIn && this.state.enabled && this.state.pushIssues?.[this.state.accountId]
+          ? { pushIssue: this.state.pushIssues[this.state.accountId]! }
+          : {}),
       cursor: this.state.cursor,
       relay: this.relayState,
       rev: this.rev,
       mainSession: this.state.mainSession,
       sessions: Object.keys(this.state.cids).filter((sid) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
+      local: Object.keys(this.state.clouds).filter((sid) => this.owns(sid) && this.state.clouds[sid] === 'local'),
       titles: Object.fromEntries(
         Object.entries(this.state.titles).filter(([sid]) => this.owns(sid) && this.state.clouds[sid] !== 'local'),
       ),
@@ -917,6 +942,7 @@ export class SyncEngine {
   // ---- lifecycle ----------------------------------------------------------------------------
 
   start(): void {
+    this.stopped = false
     this.signedIn = true
     this.pullTimer ??= setInterval(() => void this.pullQuietly(), this.options.pullEveryMs ?? PULL_EVERY_MS)
     // Keep chats that already existed on this computer local by default. The first message
@@ -934,6 +960,7 @@ export class SyncEngine {
   }
 
   stop(): void {
+    this.stopped = true
     if (this.pullTimer) clearInterval(this.pullTimer)
     this.pullTimer = undefined
     if (this.pushTimer) clearTimeout(this.pushTimer)
@@ -950,12 +977,13 @@ export class SyncEngine {
    * account's mapping is kept — and whatever this does to the view is told. The same
    * account again (or a first sign-in) changes nothing but the pull that follows.
    */
-  async accountChanged(accountId: string): Promise<void> {
+  async accountChanged(accountId: string, schedule = true): Promise<void> {
     this.paused = false
     this.signedIn = true
     // a different account than the one this device last synced with (the first sign-in ever is not a switch)
     const changed = Boolean(accountId) && Boolean(this.state.accountId) && accountId !== this.state.accountId
     if (changed) {
+      this.epoch++
       this.selectedSessions.clear()
       this.viewSelections.clear()
       this.preparingSessions.clear()
@@ -978,12 +1006,15 @@ export class SyncEngine {
     }
     if (changed) this.changed()
     // the pull from zero follows, on its own tick, so the reset state is what a caller sees first
-    const timer = setTimeout(() => void this.pullQuietly().then(() => this.pushAllSoon()), 0)
-    timer.unref?.()
+    if (schedule) {
+      const timer = setTimeout(() => void this.pullQuietly().then(() => this.pushAllSoon()), 0)
+      timer.unref?.()
+    }
   }
 
   /** A sign-out: nothing is dropped (the account is remembered, so a different one next is known); every local chat shows. */
   signedOut(): void {
+    this.epoch++
     this.paused = false
     this.signedIn = false
     this.viewSelections.clear()
@@ -1040,6 +1071,7 @@ export class SyncEngine {
 
   /** Archive a shared chat without deleting its transcript; local chat state remains on the host. */
   async setArchived(sessionId: string, archived: boolean): Promise<void> {
+    const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
     const cid = this.state.cids[sessionId]
     if (!this.state.accountId || !this.syncs(sessionId)) return
     this.state.pendingArchives ??= {}
@@ -1048,8 +1080,11 @@ export class SyncEngine {
     if (known) known.archived = archived
     this.state.toArchive = this.state.toArchive.filter(id => id !== sessionId)
     await this.save()
+    if (this.state.accountId !== ctx.account || this.epoch !== ctx.epoch) return
     this.changed()
-    try { await this.flushArchives() } catch (error) { this.noteError(error) }
+    try { await this.flushArchives() } catch (error) {
+      if (!(error instanceof StalePull) && this.state.accountId === ctx.account && this.epoch === ctx.epoch) this.noteError(error)
+    }
   }
 
   private archiveFlushing: Promise<void> | undefined
@@ -1062,26 +1097,40 @@ export class SyncEngine {
 
   private async flushArchiveBatch(): Promise<void> {
     if (!this.state.enabled || !this.signedIn) return
+    const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
     const token = await this.options.token()
+    this.assertPull(ctx)
     if (!token) return
-    const account = this.state.accountId
+    ctx.token = token
+    const account = ctx.account
     for (const [sid, archived] of Object.entries(this.state.pendingArchives ?? {})) {
       if (this.state.accountId !== account) return
       const cid = this.state.cids[sid]
       if (!cid || !this.owns(sid) || this.state.clouds[sid] === 'local') continue
       try {
         await this.options.relay.setArchived(token, cid, archived)
+        await this.checkPull(ctx); this.assertPull(ctx)
       } catch (error) {
+        await this.checkPull(ctx); this.assertPull(ctx)
         if (error instanceof RelayError && error.status === 404 && this.state.accountId === account && this.state.cids[sid] === cid) {
           delete this.state.pendingArchives?.[sid]
           await this.save()
+          await this.checkPull(ctx); this.assertPull(ctx)
           continue
         }
         throw error
       }
       if (this.state.accountId === account && this.state.pendingArchives?.[sid] === archived) {
+        const known = this.state.conversations[cid]
+        if (known) known.archived = archived
         delete this.state.pendingArchives[sid]
         await this.save()
+        await this.checkPull(ctx); this.assertPull(ctx)
+        // Resume queued local messages only after the relay accepted unarchiving.
+        if (!archived && this.syncs(sid)) {
+          this.dirty.add(sid)
+          this.pushSoon(this.options.pushDelayMs ?? PUSH_DELAY_MS)
+        }
       }
     }
   }
@@ -1107,11 +1156,18 @@ export class SyncEngine {
   // ---- the switch ---------------------------------------------------------------------------
 
   async setEnabled(enabled: boolean): Promise<SyncView> {
+    if (this.state.pendingWipes?.[this.state.accountId]) throw new Error('Cloud history deletion is not confirmed')
+    const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
     const token = await this.options.token()
+    this.assertPull(ctx)
     if (token) {
+      ctx.token = token
       try {
-        this.relayState = await this.options.relay.setEnabled(token, enabled)
+        const relayState = await this.options.relay.setEnabled(token, enabled)
+        await this.checkPull(ctx); this.assertPull(ctx)
+        this.relayState = relayState
       } catch (error: unknown) {
+        await this.checkPull(ctx); this.assertPull(ctx)
         this.noteError(error)
         throw error
       }
@@ -1122,11 +1178,16 @@ export class SyncEngine {
       // on again: this device's conversations go up in full — the signed-in account's and the
       // ownerless; another account's lines keep their ids (its relay store was not emptied, C10)
       const keep = new Set<string>()
-      for (const sid of this.foreign()) for (const line of await this.options.sessions.lines(sid).catch(() => [] as SessionLine[])) keep.add(line.id)
+      for (const sid of this.foreign()) {
+        const lines = await this.options.sessions.lines(sid).catch(() => [] as SessionLine[])
+        await this.checkPull(ctx); this.assertPull(ctx)
+        for (const line of lines) keep.add(line.id)
+      }
       this.state.titles = Object.fromEntries(Object.entries(this.state.titles).filter(([sid]) => !this.owns(sid)))
       this.state.mids = Object.fromEntries(Object.entries(this.state.mids).filter(([id]) => keep.has(id)))
     }
     await this.save()
+    await this.checkPull(ctx); this.assertPull(ctx)
     if (enabled) void this.pullQuietly().then(() => this.pushAllSoon())
     this.changed()
     return this.view()
@@ -1149,7 +1210,9 @@ export class SyncEngine {
 
   /** Pause this computer's exchange without deleting the shared conversation or its mapping. */
   async setSynced(sessionId: string, on: boolean): Promise<SyncedOutcome> {
-    const refusal = this.cloudRefusal(sessionId)
+    if (this.state.pendingWipes?.[this.state.accountId]) return { ...this.view(), ok: false, reason: 'wipe-pending' }
+    const canRestoreMain = on && this.state.clouds[sessionId] === 'local' && sessionId === this.state.mainSession && this.state.enabled && this.signedIn && !!this.state.accountId && this.owns(sessionId)
+    const refusal = canRestoreMain ? undefined : this.cloudRefusal(sessionId)
     if (refusal) return { ...this.view(), ok: false, reason: refusal }
     this.state.clouds[sessionId] = on ? 'device' : 'local'
     // "turn the cloud on" is the person asking for this chat to exist over there now: a new
@@ -1177,7 +1240,14 @@ export class SyncEngine {
     if (!sessionId) return { ...this.view(), ok: false, reason: 'unknown-session' }
     if (sessionId === this.state.mainSession || this.holdsMain(sessionId)) return { ...this.view(), ok: false, reason: 'main' }
     if (!this.state.enabled || !this.signedIn || !this.state.accountId || !this.owns(sessionId)) return { ...this.view(), ok: false, reason: 'not-synced-account' }
-    await this.cloudOff(sessionId)
+    const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
+    // The local transcript remains private to its owner even after its cloud
+    // copy is deleted. Persist that binding before starting a network request.
+    this.adopt(sessionId)
+    await this.options.save(this.state)
+    if (ctx.account !== this.state.accountId || ctx.epoch !== this.epoch) return { ...this.view(), ok: false, reason: 'not-synced-account' }
+    if (!(await this.cloudOff(sessionId, ctx))) return { ...this.view(), ok: false, reason: 'not-synced-account' }
+    if (ctx.account !== this.state.accountId || ctx.epoch !== this.epoch) return { ...this.view(), ok: false, reason: 'not-synced-account' }
     // Turning the cloud off is not a deletion here: the conversation leaves the account (the
     // relay tombstones it, so the other devices, the web and the messengers lose it) and the
     // copy on this computer stays a local chat. Only "delete everywhere" hides the row.
@@ -1185,6 +1255,7 @@ export class SyncEngine {
       ? [...new Set([...(this.state.gone ?? []), sessionId])]
       : (this.state.gone ?? []).filter(id => id !== sessionId)
     await this.save()
+    if (ctx.account !== this.state.accountId || ctx.epoch !== this.epoch) return { ...this.view(), ok: false, reason: 'not-synced-account' }
     this.changed()
     return { ...this.view(), ok: true }
   }
@@ -1199,17 +1270,26 @@ export class SyncEngine {
   }
 
   /** Explicit account deletion is separate from pausing this computer's sync. */
-  private async cloudOff(sessionId: string): Promise<void> {
+  private async cloudOff(sessionId: string, ctx: PullContext): Promise<boolean> {
     const cid = this.state.cids[sessionId]
     if (cid && sessionId !== this.state.mainSession) {
+      let token: string | undefined
       try {
-        const token = await this.options.token()
-        if (token) await this.options.relay.deleteConversation(token, cid, this.options.deviceId())
-      } catch {
-        // the account could not be reached: the chat is local here all the same
+        token = await this.options.token()
+        this.assertPull(ctx)
+        if (token) {
+          ctx.token = token
+          await this.options.relay.deleteConversation(token, cid, this.options.deviceId())
+        }
+      } catch (error) {
+        if (error instanceof StalePull) return false
+        // Keep the existing offline behaviour, but do not apply an old result
+        // to a different account or to a newer sign-in of the same account.
       }
+      try { await this.checkPull(ctx); this.assertPull(ctx) } catch { return false }
+      if (this.state.cids[sessionId] !== cid) return false
       delete this.state.cids[sessionId]
-      delete this.state.owners[sessionId]
+      // The file on this computer remains owned by the original account.
       delete this.state.titles[sessionId]
       delete this.state.conversations[cid]
       for (const mid of Object.keys(this.state.pulled)) {
@@ -1218,16 +1298,23 @@ export class SyncEngine {
     }
     this.state.clouds[sessionId] = 'local'
     this.dirty.delete(sessionId)
+    return true
   }
 
   async relayStatus(): Promise<SyncRelayState | null> {
-    const token = await this.options.token()
-    if (!token) return (this.relayState = null)
+    const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
     try {
-      this.relayState = await this.options.relay.state(token)
-      for (const w of this.relayState.working) this.noteWorking(w, false)
+      const token = await this.options.token()
+      this.assertPull(ctx)
+      if (!token) return (this.relayState = null)
+      ctx.token = token
+      const relayState = await this.options.relay.state(token)
+      await this.checkPull(ctx); this.assertPull(ctx)
+      this.relayState = relayState
+      for (const w of relayState.working) this.noteWorking(w, false)
       this.expireWorking()
     } catch (error: unknown) {
+      try { await this.checkPull(ctx); this.assertPull(ctx) } catch { return this.relayState }
       this.noteError(error)
     }
     return this.relayState
@@ -1311,18 +1398,76 @@ export class SyncEngine {
 
   /** "Delete synced conversations": the relay's store emptied; what it knew is forgotten here, the sessions stay, and every chat that was in the cloud reads as local (C11). */
   async deleteRemote(): Promise<SyncView> {
-    const token = await this.options.token()
-    if (token) {
-      this.relayState = await this.options.relay.wipe(token)
-      this.state.cursor = this.relayState.cursor
+    if (this.wiping) throw new Error('Cloud history deletion is already in progress')
+    this.wiping = true
+    const account = this.state.accountId
+    const epoch = ++this.epoch
+    if (this.pushTimer) clearTimeout(this.pushTimer)
+    this.pushTimer = undefined
+    try {
+      // An already-dispatched push must finish before the wipe, or it could
+      // recreate the cloud immediately after the relay deletes it.
+      await Promise.allSettled([this.pushing, this.pulling, this.archiveFlushing].filter(Boolean))
+      if (account !== this.state.accountId || epoch !== this.epoch) throw new Error('Account changed during cloud deletion')
+      const token = await this.options.token()
+      if (!token || !account) throw new Error('Sign in before deleting cloud history')
+      const sessions = await this.options.sessions.list()
+      const currentToken = await this.options.token()
+      if (account !== this.state.accountId || epoch !== this.epoch || token !== currentToken) throw new Error('Account changed during cloud deletion')
+      // Persist the uncertain outcome first, but retain all identities and
+      // mappings. A failed request may mean the relay deleted the history or
+      // may mean it never received the wipe. Neither permits a blind re-upload.
+      this.state.pendingWipes = { ...this.state.pendingWipes, [account]: true }
+      await this.options.save(this.state)
+      this.changed()
+      const beforeWipeToken = await this.options.token()
+      if (account !== this.state.accountId || epoch !== this.epoch || token !== beforeWipeToken) throw new Error('Account changed during cloud deletion')
+      const relayState = await this.options.relay.wipe(token)
+      const responseToken = await this.options.token()
+      if (account !== this.state.accountId || epoch !== this.epoch || token !== responseToken) throw new Error('Account changed during cloud deletion')
+
+      // Only an acknowledged wipe can discard this account's old identities.
+      // mids is shared across accounts, so select this account's session lines.
+      const wiped = sessions.filter((session) => (!this.state.owners[session.id] || this.state.owners[session.id] === account) && (Boolean(this.state.cids[session.id]) || this.syncsBeforeWipe(session.id)))
+      const wipedLines = new Set<string>()
+      for (const session of wiped) {
+        for (const line of await this.options.sessions.lines(session.id)) wipedLines.add(line.id)
+      }
+      const finalToken = await this.options.token()
+      if (account !== this.state.accountId || epoch !== this.epoch || token !== finalToken) throw new Error('Account changed during cloud deletion')
+      const previous = this.state
+      const next: SyncState = {
+        ...previous,
+        clouds: { ...previous.clouds }, cids: { ...previous.cids }, mids: { ...previous.mids },
+        pendingMids: { ...previous.pendingMids }, pendingWipes: { ...previous.pendingWipes },
+        pushIssues: { ...previous.pushIssues }, conversations: {},
+        titles: Object.fromEntries(Object.entries(previous.titles).filter(([sid]) => previous.owners[sid] && previous.owners[sid] !== account)),
+        pendingArchives: {}, toArchive: [],
+        cursor: relayState.cursor,
+      }
+      for (const session of wiped) {
+        next.clouds[session.id] = 'local'
+        delete next.cids[session.id]
+      }
+      for (const lineId of wipedLines) delete next.mids[lineId]
+      for (const key of Object.keys(next.pendingMids ?? {})) {
+        try { if (JSON.parse(key)[0] === account) delete next.pendingMids?.[key] } catch { /* leave unknown records untouched */ }
+      }
+      delete next.pendingWipes?.[account]
+      delete next.pushIssues?.[account]
+      // Until this durable save succeeds the live engine keeps the pending-wipe
+      // marker; a failed save cannot accidentally enable a retry in memory.
+      await this.options.save(next)
+      if (account !== this.state.accountId || epoch !== this.epoch) throw new Error('Account changed during cloud deletion')
+      this.state = next
+      this.dirty.clear()
+      this.relayState = relayState
+      this.changed()
+      return this.view()
+    } finally {
+      this.wiping = false
+      if (this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
     }
-    this.state.conversations = {}
-    this.state.mids = {}
-    this.state.titles = {}
-    this.state.clouds = {}
-    await this.save()
-    this.changed()
-    return this.view()
   }
 
   // ---- hooks --------------------------------------------------------------------------------
@@ -1350,14 +1495,18 @@ export class SyncEngine {
    * cloud the person took off. Another account's chat never (C10).
    */
   private syncs(sessionId: string): boolean {
+    return !this.state.pendingWipes?.[this.state.accountId] && this.syncsBeforeWipe(sessionId)
+  }
+
+  private syncsBeforeWipe(sessionId: string): boolean {
     if (!this.owns(sessionId)) return false
     if (this.options.isBatchSession?.(sessionId)) return false
     if ((this.state.gone ?? []).includes(sessionId)) return false
+    const mark = this.state.clouds[sessionId]
+    if (mark === 'local') return false
     if (this.options.isTaskSession?.(sessionId) === true) return true
     if (sessionId === this.state.mainSession) return true
-    const mark = this.state.clouds[sessionId]
     if (mark === 'device' || mark === 'sync') return true
-    if (mark === 'local') return false
     return this.state.sideChats
   }
 
@@ -1433,6 +1582,7 @@ export class SyncEngine {
   // ---- push ---------------------------------------------------------------------------------
 
   private pushSoon(delayMs: number): void {
+    if (this.stopped || this.wiping) return
     if (this.pushTimer) clearTimeout(this.pushTimer)
     this.pushTimer = setTimeout(() => {
       this.pushTimer = undefined
@@ -1454,9 +1604,19 @@ export class SyncEngine {
   /** The dirty sessions' new lines to the relay, oldest session first, one POST of up to 200 messages at a time; one push at a time. */
   push(): Promise<void> {
     const run = (): Promise<void> => {
+      const account = this.state.accountId
+      const epoch = this.epoch
       const p = this.pushNow()
-        .catch((error: unknown) => {
-          this.noteError(error)
+        .catch(async (error: unknown) => {
+          if (this.state.accountId === account && this.epoch === epoch) {
+            this.noteError(error)
+            // A failure while fetching the token or session list happens before
+            // pushNow takes its snapshot; the original dirty set is still intact.
+            if (this.state.enabled && !this.paused && this.dirty.size) {
+              await this.setPushIssue(account, this.pushIssueFor(error))
+              this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+            }
+          }
           throw error
         })
         .finally(() => {
@@ -1469,29 +1629,46 @@ export class SyncEngine {
   }
 
   private async pushNow(): Promise<void> {
-    if (!(await this.active())) return
+    const epoch = this.epoch
+    if (this.wiping || !(await this.active()) || epoch !== this.epoch) return
     const token = await this.options.token()
     if (!token) return
+    const account = this.state.accountId
+    if (this.signedIn && !account) {
+      // Never give an outgoing line an ownerless identity while account restore is pending.
+      if (this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+      return
+    }
     const device = this.options.deviceId()
     const sessions = new Map((await this.options.sessions.list()).map((s) => [s.id, s]))
+    if ((this.state.accountId !== account || this.epoch !== epoch)) return
     // oldest first: a history going up in full arrives in the order it was lived
     const ids = [...this.dirty].sort((a, b) => (sessions.get(a)?.createdAt ?? 0) - (sessions.get(b)?.createdAt ?? 0))
     this.dirty.clear()
+    try {
     for (let round = 0; round < 50 && ids.length > 0; round++) {
       const conversations: Record<string, unknown>[] = []
       const messages: Record<string, unknown>[] = []
-      const pending: Array<{ sessionId: string; line: SessionLine; mid: string }> = []
+      const pending: Array<{ sessionId: string; line: SessionLine; mid: string; key: string }> = []
       // the conversations whose chat model goes up with them (C7)
       const modelOf = new Map<string, string>()
       const reasoningOf = new Map<string, string>()
       const touched: string[] = []
+      const targets = new Map<string, string>()
       // sessions with more than 200 new lines and those the round did not reach go again
       const again = new Set(ids)
       for (const sessionId of ids) {
+        if ((this.state.accountId !== account || this.epoch !== epoch)) return
         again.delete(sessionId)
         const info = sessions.get(sessionId)
         if (!info || !this.syncs(sessionId)) continue
+        if (this.state.toArchive.includes(sessionId)) continue
         const cid = this.cidFor(sessionId)
+        targets.set(sessionId, cid)
+        // Archive metadata still needs to travel, even before a new chat first has a
+        // remote id. Its pending messages must not be sent while it is archived.
+        const archivePending = sessionId in (this.state.pendingArchives ?? {})
+        const blockMessages = Boolean(this.state.conversations[cid]?.archived || archivePending || this.state.toArchive.includes(sessionId))
         const title = info.title || 'New chat'
         // the chat's own model follows its conversation, so the same chat answers the same
         // way in the app, in the browser and in the messengers. The relay's copy is the
@@ -1510,7 +1687,7 @@ export class SyncEngine {
         // the level travels beside the model; '' is a real value ("provider default") and
         // must reach the relay too, or a level cleared here would stay on the other devices
         const reasoningChanged = Boolean(model) && (this.state.conversations[cid]?.reasoning ?? '') !== reasoning
-        if (this.state.titles[sessionId] !== title || modelChanged || reasoningChanged || folderChanged) {
+        if ((!blockMessages || (!known && archivePending)) && (this.state.titles[sessionId] !== title || modelChanged || reasoningChanged || folderChanged)) {
           conversations.push({ cid, kind: sessionId === this.state.mainSession ? 'main' : 'side', title, created_at: Math.floor(info.createdAt / 1000), updated_at: Math.floor(info.updatedAt / 1000), ...(modelChanged || reasoningChanged ? { model, reasoning } : {}), ...(folderChanged ? { folder } : {}) })
           if (modelChanged || reasoningChanged) {
             modelOf.set(String(cid), model)
@@ -1520,29 +1697,81 @@ export class SyncEngine {
         // a task session's answer is the call's result over there: only the person's own
         // words typed here go up, never the model's
         const task = this.options.isTaskSession?.(sessionId) === true
-        const lines = (await this.options.sessions.lines(sessionId)).filter((line) => !task || line.role === 'user')
+        const lines = blockMessages ? [] : (await this.options.sessions.lines(sessionId)).filter((line) => !task || line.role === 'user')
+        if ((this.state.accountId !== account || this.epoch !== epoch)) return
         for (const line of lines) {
+          // Older versions marked this temporary refusal as final. The relay did not
+          // accept it, so it is safe to put the local line back in the pending queue.
+          if (this.state.mids[line.id]?.startsWith('refused:')) delete this.state.mids[line.id]
           if (this.state.mids[line.id]) continue
           if (messages.length >= MAX_POST_MESSAGES) {
             again.add(sessionId)
             break
           }
-          const mid = randomUUID()
+          const key = JSON.stringify([account, sessionId, line.id])
+          const digest = createHash('sha256').update(JSON.stringify([line.role, line.text, line.at])).digest('hex')
+          this.state.pendingMids ??= {}
+          let held = this.state.pendingMids[key]
+          if (Object.hasOwn(this.state.pendingMids, key) && (!held || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(held.mid) || held.cid !== cid || held.digest !== digest)) {
+            // The outcome of the old attempt may be unknown. Never give changed content
+            // or another conversation the same identity, and do not resend it blindly.
+            throw new RelayError(409, 'sync_pending_conflict', 'A pending message changed before it was confirmed')
+          }
+          if (!held) held = this.state.pendingMids[key] = { mid: randomUUID(), cid, digest }
+          const mid = held.mid
           messages.push({ mid, cid, role: line.role, text: line.text, created_at: Math.floor(line.at / 1000) })
-          pending.push({ sessionId, line, mid })
+          pending.push({ sessionId, line, mid, key })
         }
         touched.push(sessionId)
         if (messages.length >= MAX_POST_MESSAGES) break
       }
       if (conversations.length === 0 && messages.length === 0) {
+        await this.flushArchives()
         // nothing new in these sessions: they are done, not dirty again
         for (const sid of touched) this.tellWorking(token, sid)
         ids.splice(0, ids.length, ...ids.filter((sid) => again.has(sid)))
         break
       }
+      // Save the identities and the conversation mapping before crossing the network
+      // boundary. A lost response or application restart must reuse the same mid.
+      // Bind ownerless local sessions before any outgoing attempt. Otherwise an account
+      // switch after an uncertain failure could send the same local text to a new owner.
+      for (const sid of touched) this.adopt(sid)
+      await this.options.save(this.state)
+      const currentToken = await this.options.token()
+      if ((this.state.accountId !== account || this.epoch !== epoch) || currentToken !== token) {
+        for (const sid of ids) if (this.syncs(sid)) this.dirty.add(sid)
+        if (this.state.accountId === account && this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+        return
+      }
+      if (touched.some((sid) => !this.syncs(sid) || this.state.toArchive.includes(sid) || this.state.cids[sid] !== targets.get(sid)) || pending.some((p) => {
+        const cid = this.state.cids[p.sessionId]
+        return !this.syncs(p.sessionId) || !cid || this.state.pendingMids?.[p.key]?.cid !== cid || this.state.conversations[cid]?.archived || p.sessionId in (this.state.pendingArchives ?? {}) || this.state.toArchive.includes(p.sessionId)
+      })) {
+        for (const sid of ids) {
+          const cid = this.state.cids[sid]
+          if (this.syncs(sid) && (!cid || !this.state.conversations[cid]?.archived) && !(sid in (this.state.pendingArchives ?? {})) && !this.state.toArchive.includes(sid)) this.dirty.add(sid)
+        }
+        if (this.dirty.size) this.pushSoon(this.options.pushDelayMs ?? PUSH_DELAY_MS)
+        return
+      }
       const out = await this.options.relay.push(token, device, conversations, messages)
+      const responseToken = await this.options.token()
+      if ((this.state.accountId !== account || this.epoch !== epoch) || responseToken !== token) {
+        if (this.state.accountId === account && this.epoch === epoch) {
+          for (const sid of ids) if (this.syncs(sid)) this.dirty.add(sid)
+          if (this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+        }
+        return
+      }
       // the relay took the round: an ownerless session is the signed-in account's from now on (C10)
       for (const sid of touched) this.adopt(sid)
+      // Preserve every unaccepted row. Unknown/permanent rejection needs attention,
+      // not an invisible local 'refused' marker that drops it from future retries.
+      const unexpected = out.rejected.find((r) => !['main_exists', 'known_mid', 'message_limit'].includes(r.reason))
+      if (unexpected) throw new RelayError(409, 'sync_pending_conflict', `Relay rejected a pending change: ${unexpected.reason}`)
+      if (out.rejected.some((r) => r.reason === 'message_limit' && !r.mid)) throw new RelayError(409, 'message_limit', 'Relay could not store the batch')
+      if (out.rejected.some((r) => (r.reason === 'known_mid' || r.reason === 'message_limit') && !pending.some((p) => p.mid === r.mid))) throw new RelayError(409, 'sync_pending_conflict', 'Relay rejected an unknown message')
       const redirect = new Map<string, string>()
       for (const r of out.rejected) if (r.reason === 'main_exists' && r.cid && r.cid_main) redirect.set(r.cid, r.cid_main)
       if (redirect.size > 0) {
@@ -1559,10 +1788,46 @@ export class SyncEngine {
       }
       const refused = new Map(out.rejected.filter((r) => r.mid && r.reason !== 'main_exists').map((r) => [r.mid!, r.reason]))
       const redirected = new Set(out.rejected.filter((r) => r.mid && r.reason === 'main_exists').map((r) => r.mid!))
+      // A known id is not a receipt: an earlier write might have used it for
+      // different text or another chat. Verify the authenticated remote row.
+      const unverified = new Map(pending.filter((p) => refused.get(p.mid) === 'known_mid').map((p) => [p.mid, p]))
+      for (const cid of new Set([...unverified.values()].map((p) => this.state.pendingMids?.[p.key]?.cid))) {
+        if (!cid) throw new RelayError(409, 'sync_pending_conflict', 'Missing pending conversation')
+        let before = 0
+        for (let pageNo = 0; pageNo < 70 && [...unverified.values()].some((p) => this.state.pendingMids?.[p.key]?.cid === cid); pageNo++) {
+          const page = await this.options.relay.chatMessages(token, cid, 0, before, 300)
+          const verificationToken = await this.options.token()
+          if ((this.state.accountId !== account || this.epoch !== epoch) || (page.account_id && page.account_id !== account) || verificationToken !== token) throw new RelayError(409, 'sync_pending_conflict', 'Account changed during verification')
+          for (const row of page.messages) {
+            const p = unverified.get(row.mid)
+            if (!p) continue
+            if (row.cid !== cid || row.deleted || row.truncated || row.role !== p.line.role || row.text !== p.line.text) throw new RelayError(409, 'sync_pending_conflict', 'Remote message differs from pending message')
+            unverified.delete(row.mid)
+          }
+          if (!page.has_older || !page.messages.length) break
+          const oldest = Math.min(...page.messages.map((row) => Number(row.seq) || 0))
+          if (!oldest || oldest === before) break
+          before = oldest
+        }
+      }
+      if (unverified.size) throw new RelayError(409, 'sync_pending_conflict', 'Pending message was not found in its conversation')
+      let full = false
       for (const p of pending) {
-        if (redirected.has(p.mid)) continue
+        if (redirected.has(p.mid)) {
+          const target = out.rejected.find((r) => r.mid === p.mid && r.reason === 'main_exists')?.cid_main
+          const held = this.state.pendingMids?.[p.key]
+          if (target && held) held.cid = target
+          continue
+        }
+        if (refused.get(p.mid) === 'message_limit') {
+          again.add(p.sessionId)
+          full = true
+          continue
+        }
         // a refused row stays refused: it is not sent again and again
-        this.state.mids[p.line.id] = refused.has(p.mid) ? `refused:${refused.get(p.mid)}` : p.mid
+        const reason = refused.get(p.mid)
+        this.state.mids[p.line.id] = reason && reason !== 'known_mid' ? `refused:${reason}` : p.mid
+        delete this.state.pendingMids?.[p.key]
       }
       for (const c of conversations) {
         if (out.rejected.some((r) => r.cid === c.cid)) continue
@@ -1590,6 +1855,13 @@ export class SyncEngine {
         }
       }
       await this.save()
+      await this.flushArchives()
+      if (full) {
+        for (const sid of ids) if (this.syncs(sid)) this.dirty.add(sid)
+        await this.setPushIssue(account, 'message_limit')
+        this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+        return
+      }
       // the turn's start or end told once the words are up (C9)
       for (const sid of touched) if (!again.has(sid)) this.tellWorking(token, sid)
       ids.splice(0, ids.length, ...ids.filter((sid) => again.has(sid)))
@@ -1598,9 +1870,40 @@ export class SyncEngine {
       // a very long history: the rest goes after the next debounce
       for (const sid of ids) this.dirty.add(sid)
       this.pushSoon(this.options.pushDelayMs ?? PUSH_DELAY_MS)
+    } else if (this.dirty.size === 0) {
+      await this.setPushIssue(account, undefined)
     }
     // our rows come back on the next pull (known by device, no change) and the cursor catches up
     void this.pullQuietly()
+    } catch (error: unknown) {
+      for (const sid of ids) if (this.syncs(sid)) this.dirty.add(sid)
+      const currentToken = await this.options.token().catch(() => undefined)
+      if (this.state.accountId !== account || this.epoch !== epoch) return
+      if (currentToken !== token) {
+        if (this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+        return
+      }
+      if (this.state.accountId === account && this.epoch === epoch) {
+        await this.setPushIssue(account, this.pushIssueFor(error))
+        if (this.state.enabled && !this.paused && this.dirty.size) this.pushSoon(this.options.retryDelayMs ?? PUSH_RETRY_MS)
+      }
+      throw error
+    }
+  }
+
+  private pushIssueFor(error: unknown): 'message_limit' | 'pending' | 'conflict' {
+    if (error instanceof RelayError && error.code === 'message_limit') return 'message_limit'
+    if (error instanceof RelayError && error.code === 'sync_pending_conflict') return 'conflict'
+    return 'pending'
+  }
+
+  private async setPushIssue(account: string, issue: 'message_limit' | 'pending' | 'conflict' | undefined): Promise<void> {
+    this.state.pushIssues ??= {}
+    if (this.state.pushIssues[account] === issue) return
+    if (issue) this.state.pushIssues[account] = issue
+    else delete this.state.pushIssues[account]
+    await this.save()
+    if (this.state.accountId === account) this.changed()
   }
 
   private cidFor(sessionId: string): string {
@@ -1611,6 +1914,19 @@ export class SyncEngine {
       this.state.cids[sessionId] = cid
     }
     return cid
+  }
+
+  private assertPull(ctx: PullContext): void {
+    if (this.epoch !== ctx.epoch || this.state.accountId !== ctx.account || this.wiping || this.state.pendingWipes?.[ctx.account]) throw new StalePull()
+  }
+
+  private async checkPull(ctx: PullContext): Promise<void> {
+    this.assertPull(ctx)
+    if (ctx.token !== undefined) {
+      const token = await this.options.token()
+      this.assertPull(ctx)
+      if (token !== ctx.token) throw new StalePull()
+    }
   }
 
   // ---- pull ---------------------------------------------------------------------------------
@@ -1627,8 +1943,11 @@ export class SyncEngine {
 
   private pullMode(mode: 'normal' | 'tail' | 'full'): Promise<number> {
     const run = (): Promise<number> => {
-      const p = this.pullNow(mode)
-        .catch((error: unknown) => {
+      const ctx: PullContext = { account: this.state.accountId, epoch: this.epoch }
+      const p = this.pullNow(mode, ctx)
+        .catch(async (error: unknown) => {
+          if (error instanceof StalePull) return 0
+          try { await this.checkPull(ctx); this.assertPull(ctx) } catch { return 0 }
           this.noteError(error)
           throw error
         })
@@ -1653,27 +1972,30 @@ export class SyncEngine {
 
   private syncPaused(sessionId: string): boolean { return this.state.clouds[sessionId] === 'local' }
 
-  private async pullCatalogue(token: string): Promise<number | undefined> {
+  private async pullCatalogue(token: string, ctx: PullContext): Promise<number | undefined> {
     if (this.catalogSupported === false) return undefined
     const account = this.state.accountId
     let data: Awaited<ReturnType<SyncRelay['catalog']>>
     try {
       data = await this.options.relay.catalog(token, this.options.deviceId(), this.options.deviceId())
     } catch (error) {
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (error instanceof RelayError && error.status === 404) { this.catalogSupported = false; return undefined }
       throw error
     }
+    await this.checkPull(ctx); this.assertPull(ctx)
     if (account !== this.state.accountId || (data.account_id && data.account_id !== account)) return 0
     this.catalogSupported = true
     const ids = new Set(data.conversations.map((c) => c.cid))
     for (const row of data.deleted ?? []) {
-      await this.applyConversation(row)
+      await this.applyConversation(row, ctx)
+      await this.checkPull(ctx); this.assertPull(ctx)
       this.unread.delete(row.cid)
     }
     this.catalogueIds = ids
     let changed = this.catalogueSignature !== JSON.stringify(data)
     this.catalogueSignature = JSON.stringify(data)
-    for (const c of data.conversations) { await this.applyConversation(c); this.unread.set(c.cid, c.unread || 0) }
+    for (const c of data.conversations) { await this.applyConversation(c, ctx); await this.checkPull(ctx); this.assertPull(ctx); this.unread.set(c.cid, c.unread || 0) }
     // Messenger conversations that arrived before this build have no cursor and used to
     // stay blank on the computer. Pull their first page once, so the chat is a chat here
     // and not an empty row only the web can see.
@@ -1711,10 +2033,12 @@ export class SyncEngine {
         const page = mode === 'older'
           ? await this.options.relay.chatMessages(token, cid, 0, before, 300)
           : await this.options.relay.chatMessages(token, cid, mode === 'newest' ? 0 : after, 0, 300)
+        await this.checkPull(ctx); this.assertPull(ctx)
         if (account !== this.state.accountId || (page.account_id && page.account_id !== account) || this.syncPaused(sessionId) || (!this.selectedSessions.has(sessionId) && !this.preparingSessions.has(sessionId))) break
         const collectNotes = mode === 'after'
         for (const m of page.messages) {
-          await this.applyMessage(m, collectNotes ? notes : new Map(), mode !== 'older')
+          await this.applyMessage(m, collectNotes ? notes : new Map(), mode !== 'older', ctx)
+          await this.checkPull(ctx); this.assertPull(ctx)
           applied++
         }
         if (mode === 'older') {
@@ -1726,6 +2050,7 @@ export class SyncEngine {
           this.historyBefore.delete(cid)
           if (this.selectedSessions.has(sessionId)) {
             await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            await this.checkPull(ctx); this.assertPull(ctx)
             if (this.unread.get(cid)) changed = true
             this.unread.set(cid, 0)
           }
@@ -1736,6 +2061,7 @@ export class SyncEngine {
           this.messageCursors.set(cid, page.through_seq)
           if (this.selectedSessions.has(sessionId)) {
             await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            await this.checkPull(ctx); this.assertPull(ctx)
             if (this.unread.get(cid)) changed = true
             this.unread.set(cid, 0)
           }
@@ -1751,6 +2077,7 @@ export class SyncEngine {
         if (!page.more) {
           if (this.selectedSessions.has(sessionId)) {
             await this.options.relay.markRead(token, cid, this.options.deviceId(), page.through_seq)
+            await this.checkPull(ctx); this.assertPull(ctx)
             if (this.unread.get(cid)) changed = true
             this.unread.set(cid, 0)
           }
@@ -1759,27 +2086,38 @@ export class SyncEngine {
         if (page.cursor <= after) break
       }
     }
+    await this.checkPull(ctx); this.assertPull(ctx)
     if (account !== this.state.accountId) return 0
     this.state.cursor = data.cursor
     this.state.messageCursors = Object.fromEntries(this.messageCursors)
     for (const cid of [...this.historyBefore.keys()]) if (!ids.has(cid)) this.historyBefore.delete(cid)
     this.state.historyBefore = Object.fromEntries(this.historyBefore)
     await this.save()
-    for (const [sid, lines] of notes) await this.options.sessions.inject(sid, meanwhileNote(lines)).catch(() => undefined)
+    await this.checkPull(ctx); this.assertPull(ctx)
+    for (const [sid, lines] of notes) {
+      await this.checkPull(ctx); this.assertPull(ctx)
+      await this.options.sessions.inject(sid, meanwhileNote(lines)).catch(() => undefined)
+      await this.checkPull(ctx); this.assertPull(ctx)
+    }
     if (changed || applied) this.changed()
     return applied
   }
 
-  private async pullNow(mode: 'normal' | 'tail' | 'full'): Promise<number> {
-    if (!(await this.active())) return 0
+  private async pullNow(mode: 'normal' | 'tail' | 'full', ctx: PullContext): Promise<number> {
+    if (this.wiping || !(await this.active()) || this.wiping) return 0
+    this.assertPull(ctx)
     const token = await this.options.token()
+    this.assertPull(ctx)
     if (!token) return 0
+    ctx.token = token
     await this.flushArchives()
+    await this.checkPull(ctx); this.assertPull(ctx)
     // S3: a side-chat backfill is a full read of the old `changes` API. The catalogue
     // hands out bodies only for the chats someone opens; going through it here would
     // report success and leave the rest of the history on the relay.
     if (mode !== 'full') {
-      const lazy = await this.pullCatalogue(token)
+      const lazy = await this.pullCatalogue(token, ctx)
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (lazy !== undefined) return lazy
     }
     let applied = 0
@@ -1793,21 +2131,25 @@ export class SyncEngine {
       // of the scope (C9); a full backfill asks from zero without a tail (S3)
       const tail = mode !== 'full' && since === 0 ? TAIL : 0
       const out = await this.options.relay.changes(token, since, PAGE, scope, tail)
+      await this.checkPull(ctx); this.assertPull(ctx)
       // The page's conversations first, then its messages, each in seq order: a rename puts
       // a conversation's seq above its messages, and the relay sends every message's
       // conversation along with the page so none of them is an orphan.
       for (const c of [...out.conversations].sort((a, b) => a.seq - b.seq)) {
-        await this.applyConversation(c)
+        await this.applyConversation(c, ctx)
+        await this.checkPull(ctx); this.assertPull(ctx)
         applied += 1
       }
       for (const m of [...out.messages].sort((a, b) => a.seq - b.seq)) {
-        await this.applyMessage(m, notes)
+        await this.applyMessage(m, notes, true, ctx)
+        await this.checkPull(ctx); this.assertPull(ctx)
         applied += 1
       }
       cursors[scope] = Math.max(cursors[scope] ?? 0, out.cursor)
       this.state.cursors = cursors
       this.state.cursor = Math.max(cursors.main ?? 0, cursors.all ?? 0)
       await this.save()
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (!out.more || mode === 'tail') break
       // A page that says "more" without moving forward would spin forever.
       if (out.cursor <= since) break
@@ -1815,7 +2157,9 @@ export class SyncEngine {
     }
     this.lastError = ''
     for (const [sessionId, lines] of notes) {
+      await this.checkPull(ctx); this.assertPull(ctx)
       await this.options.sessions.inject(sessionId, meanwhileNote(lines)).catch((error: unknown) => this.log('warn', `nanomuse sync: context not injected: ${message(error)}`))
+      await this.checkPull(ctx); this.assertPull(ctx)
     }
     if (applied > 0) {
       this.log('info', `nanomuse sync: ${applied} change(s) from the account’s other devices`)
@@ -1824,7 +2168,8 @@ export class SyncEngine {
     return applied
   }
 
-  private async applyConversation(c: WireConversation): Promise<void> {
+  private async applyConversation(c: WireConversation, ctx: PullContext): Promise<void> {
+    this.assertPull(ctx)
     let sessionId = this.sessionOf(c.cid)
     if (sessionId && this.state.clouds[sessionId] === 'local') return
     if (sessionId && sessionId in (this.state.pendingArchives ?? {})) c = { ...c, archived: this.state.pendingArchives![sessionId] === true }
@@ -1876,10 +2221,27 @@ export class SyncEngine {
         // one thread (C8): a conversation from elsewhere is a chat here from the moment it is known
         const title = c.title || (c.kind === 'main' ? 'Main chat' : 'New chat')
         try {
-          sessionId = await this.options.sessions.create(title)
+          // A neutral title avoids exposing an old account's title while an
+          // asynchronous creation overlaps a switch to a different account.
+          sessionId = await this.options.sessions.create('New chat')
         } catch (error: unknown) {
+          await this.checkPull(ctx); this.assertPull(ctx)
           this.log('warn', `nanomuse sync: no session for a synced conversation: ${message(error)}`)
           return
+        }
+        try {
+          await this.checkPull(ctx); this.assertPull(ctx)
+        } catch (error) {
+          // The newly-created local shell belongs to the original account,
+          // even when its result returns after another account signed in.
+          this.state.owners[sessionId] = ctx.account
+          await this.save()
+          throw error
+        }
+        this.state.owners[sessionId] = ctx.account
+        if (title !== 'New chat') {
+          await this.options.sessions.rename(sessionId, title).catch(() => undefined)
+          await this.checkPull(ctx); this.assertPull(ctx)
         }
         this.state.cids[sessionId] = c.cid
         this.adopt(sessionId)
@@ -1894,7 +2256,8 @@ export class SyncEngine {
         }
       }
       this.noteCloud(sessionId, c.device)
-      await this.applyChatModel(sessionId, model, reasoning)
+      await this.applyChatModel(sessionId, model, reasoning, ctx)
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (c.archived && sessionId !== this.state.mainSession && !this.state.toArchive.includes(sessionId)) this.state.toArchive.push(sessionId)
       return
     }
@@ -1902,9 +2265,11 @@ export class SyncEngine {
       // renamed elsewhere: renamed here, and not pushed back
       this.state.titles[sessionId] = c.title
       await this.options.sessions.rename(sessionId, c.title).catch(() => undefined)
+      await this.checkPull(ctx); this.assertPull(ctx)
     }
     this.noteCloud(sessionId, c.device)
-    await this.applyChatModel(sessionId, model, reasoning)
+    await this.applyChatModel(sessionId, model, reasoning, ctx)
+    await this.checkPull(ctx); this.assertPull(ctx)
   }
 
   /**
@@ -1912,7 +2277,8 @@ export class SyncEngine {
    * turn on. Applied once — the value this device already knows is not applied again, so a
    * chat answering through an own key here keeps it until the account's choice changes.
    */
-  private async applyChatModel(sessionId: string, model: string, reasoning = ''): Promise<void> {
+  private async applyChatModel(sessionId: string, model: string, reasoning: string, ctx: PullContext): Promise<void> {
+    this.assertPull(ctx)
     if (!model) return
     const before = this.state.models[sessionId]
     const beforeEffort = this.state.reasoning[sessionId]
@@ -1923,9 +2289,11 @@ export class SyncEngine {
     try {
       if (!this.options.sessions.model) return
       await this.options.sessions.model(sessionId, model, reasoning || undefined)
+      await this.checkPull(ctx); this.assertPull(ctx)
       this.log('info', `nanomuse sync: the chat answers with ${model}${reasoning ? ` (${reasoning})` : ''}`)
       this.changed()
     } catch (error: unknown) {
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (before === undefined) delete this.state.models[sessionId]
       else this.state.models[sessionId] = before
       if (beforeEffort) this.state.reasoning[sessionId] = beforeEffort
@@ -1978,7 +2346,8 @@ export class SyncEngine {
     }
   }
 
-  private async applyMessage(m: WireMessage, notes: Map<string, RemoteLine[]>, allowPromote = true): Promise<void> {
+  private async applyMessage(m: WireMessage, notes: Map<string, RemoteLine[]>, allowPromote: boolean, ctx: PullContext): Promise<void> {
+    this.assertPull(ctx)
     const mappedSession = this.sessionOf(m.cid)
     if (mappedSession && this.state.clouds[mappedSession] === 'local') return
     if (m.deleted) {
@@ -1986,6 +2355,7 @@ export class SyncEngine {
       if (kept) {
         if (!this.state.hidden.includes(m.mid)) this.state.hidden.push(m.mid)
         await this.options.sessions.forget(kept, m.mid).catch(() => undefined)
+        await this.checkPull(ctx); this.assertPull(ctx)
       }
       return
     }
@@ -1994,6 +2364,15 @@ export class SyncEngine {
     // same device must get its own rows back.
     if (this.state.pulled[m.mid]) return
     if (Object.values(this.state.mids).includes(m.mid)) return
+    // The relay may have committed a push whose response was lost. Until the
+    // retry receives its receipt, that row is still ours, not a remote bubble.
+    for (const [key, pending] of Object.entries(this.state.pendingMids ?? {})) {
+      if (!pending || pending.mid !== m.mid || pending.cid !== m.cid) continue
+      try {
+        const identity: unknown = JSON.parse(key)
+        if (Array.isArray(identity) && identity[0] === this.state.accountId) return
+      } catch { /* Invalid persisted identity is never trusted. */ }
+    }
     const sessionId = this.sessionOf(m.cid)
     // side chats off (C9): an explicitly side conversation stays where it was written. If
     // its cached metadata was cleared, the existing mapping still proves that this is the
@@ -2018,17 +2397,22 @@ export class SyncEngine {
       ...(files.length ? { files } : {}),
     }
     if (m.role === 'user' && allowPromote && this.options.sessions.promote) {
+      this.adopt(sessionId)
       const promoted = await this.options.sessions.promote(sessionId, line, this.state.titles[sessionId] ?? "").catch(() => false)
+      await this.checkPull(ctx); this.assertPull(ctx)
       if (promoted) {
         this.state.pulled[m.mid] = sessionId
         return
       }
     }
     try {
+      this.adopt(sessionId)
       await this.options.sessions.keep(sessionId, line)
+      await this.checkPull(ctx); this.assertPull(ctx)
       this.state.pulled[m.mid] = sessionId
       notes.set(sessionId, [...(notes.get(sessionId) ?? []), line])
     } catch (error: unknown) {
+      await this.checkPull(ctx); this.assertPull(ctx)
       this.log('warn', `nanomuse sync: a turn from ${m.device_name || 'another device'} did not reach its chat: ${message(error)}`)
     }
   }

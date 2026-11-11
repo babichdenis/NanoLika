@@ -15,6 +15,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RelayError } from '../lib/relay.js'
+import { StateStore, atomicReplace } from '../lib/state-store.js'
+import { rename } from 'node:fs/promises'
 
 const tick = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(pred, ms = 2000) {
@@ -190,6 +192,389 @@ function engine(relay, sessions, extra = {}) {
   })
   return { engine: e, saved: () => saved, changes: () => changes }
 }
+
+function historyFull() {
+  return new Response(JSON.stringify({ error: { code: 'message_limit', message: 'history is full' } }), {
+    status: 409, headers: { 'content-type': 'application/json' },
+  })
+}
+
+test('history limit keeps local messages and retries their original identity after restart', async () => {
+  const relay = fakeRelay()
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'do not lose', at: 1738000000000 }])
+  const initial = { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }
+  const original = relay.fetch
+  const attempts = []
+  let full = true
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const body = JSON.parse(init.body)
+      if (body.messages.length) {
+        attempts.push(body.messages[0].mid)
+        if (full) return historyFull()
+      }
+    }
+    return original(url, init)
+  }
+  const first = engine(relay, sessions, { state: initial, options: { retryDelayMs: 30_000 } })
+  first.engine.start()
+  await until(() => first.engine.view().pushIssue === 'message_limit')
+  const snapshot = first.saved()
+  assert.equal(snapshot.mids['line-1'], undefined)
+  assert.ok(Object.values(snapshot.pendingMids).some((row) => row.mid === attempts[0]))
+  await tick(30)
+  assert.equal(attempts.length, 1, 'a full history does not cause a tight retry loop')
+  first.engine.stop()
+
+  full = false
+  const second = engine(relay, sessions, { state: snapshot, options: { retryDelayMs: 30_000 } })
+  second.engine.start()
+  await until(() => relay.msgs.size === 1 && !second.engine.view().pushIssue)
+  assert.equal(attempts[1], attempts[0])
+  assert.equal([...relay.msgs.values()][0].text, 'do not lose')
+  assert.equal(second.saved().mids['line-1'], attempts[0])
+  second.engine.stop()
+})
+
+test('a lost response retries the same mid and verifies the stored receipt', async () => {
+  const relay = lazyRelay()
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'once', at: 1738000000000 }])
+  const original = relay.fetch
+  const attempts = []
+  let lost = false
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const body = JSON.parse(init.body)
+      if (body.messages.length) {
+        attempts.push(body.messages[0].mid)
+        if (!lost) {
+          lost = true
+          await original(url, init)
+          throw new Error('connection lost after acceptance')
+        }
+        return new Response(JSON.stringify({ cursor: relay.seq, accepted: 0, rejected: [{ mid: body.messages[0].mid, reason: 'known_mid' }] }), { headers: { 'content-type': 'application/json' } })
+      }
+    }
+    return original(url, init)
+  }
+  const first = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30_000 } })
+  first.engine.start()
+  await until(() => first.engine.view().pushIssue === 'pending')
+  assert.equal(relay.msgs.size, 1)
+  const snapshot = first.saved()
+  first.engine.stop()
+  const second = engine(relay, sessions, { state: snapshot, options: { retryDelayMs: 30_000 } })
+  second.engine.start()
+  await until(() => attempts.length >= 2 && !second.engine.view().pushIssue)
+  assert.equal(attempts[1], attempts[0])
+  assert.equal(relay.msgs.size, 1)
+  assert.deepEqual(sessions.appended, [], 'the pending local message is not shown again as a remote one')
+  assert.equal(second.saved().mids['line-1'], attempts[0])
+  second.engine.stop()
+})
+
+test('known-mid collision does not acknowledge different remote text', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'local', at: 1738000000000 }])
+  const original = relay.fetch
+  let lost = false
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const body = JSON.parse(init.body)
+      if (body.messages.length) {
+        if (!lost) {
+          lost = true
+          await original(url, init)
+          relay.msgs.get(body.messages[0].mid).text = 'different remote message'
+          throw new Error('response lost')
+        }
+        return new Response(JSON.stringify({ cursor: relay.seq, accepted: 0, rejected: [{ mid: body.messages[0].mid, reason: 'known_mid' }] }), { headers: { 'content-type': 'application/json' } })
+      }
+    }
+    return original(url, init)
+  }
+  const first = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30_000 } })
+  first.engine.start()
+  await until(() => first.engine.view().pushIssue === 'pending')
+  const snapshot = first.saved()
+  first.engine.stop()
+  const second = engine(relay, sessions, { state: snapshot, options: { retryDelayMs: 30_000 } })
+  second.engine.start()
+  await until(() => second.engine.view().pushIssue === 'conflict')
+  assert.equal(second.saved().mids['line-1'], undefined)
+  assert.equal(Object.keys(second.saved().pendingMids).length, 1)
+  second.engine.stop()
+})
+
+test('a temporary full-history refusal retries automatically without changing the message id', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'retry', at: 1738000000000 }])
+  const original = relay.fetch
+  const attempts = []
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const messages = JSON.parse(init.body).messages
+      if (messages.length) {
+        attempts.push(messages[0].mid)
+        if (attempts.length === 1) return historyFull()
+      }
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 20 } })
+  e.start()
+  await until(() => relay.msgs.size === 1 && attempts.length >= 2 && !e.view().pushIssue)
+  assert.equal(attempts[0], attempts[1])
+  assert.equal(e.view().pushIssue, undefined)
+  e.stop()
+})
+
+test('a changed unconfirmed line is not resent under a different identity', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'original', at: 1738000000000 }])
+  const original = relay.fetch
+  let attempts = 0
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      attempts++
+      return historyFull()
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30_000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'message_limit')
+  sessions.lines.get('s-main')[0].text = 'changed locally'
+  await assert.rejects(e.push(), (error) => error.code === 'sync_pending_conflict')
+  assert.equal(attempts, 1)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal(e.view().pushIssue, 'conflict')
+  e.stop()
+})
+
+test('a queued line stays local when its cloud is paused or chat is archived', async () => {
+  const relay = fakeRelay()
+  const sessions = fakeSessions()
+  const cid = 'side-cid'
+  relay.add(cid, 'side', 'Side', 'pc-1', 'Desk')
+  sessions.add('s-side', 'Side', [{ id: 'line-1', role: 'user', text: 'pending', at: 1738000000000 }])
+  const initial = { ...emptyState(), accountId: 'acct-1', mainSession: 'another', cids: { 's-side': cid }, owners: { 's-side': 'acct-1' }, clouds: { 's-side': 'device' }, conversations: { [cid]: { kind: 'side', title: 'Side', device: 'pc-1', deviceName: 'Desk', createdAt: 1, updatedAt: 1 } } }
+  const original = relay.fetch
+  let full = true
+  let messages = 0
+  relay.fetch = async (url, init = {}) => {
+    const path = new URL(url).pathname
+    if (init.method === 'POST' && path.endsWith('/archive')) {
+      relay.convs.get(cid).archived = JSON.parse(init.body).archived
+      return new Response('{}', { headers: { 'content-type': 'application/json' } })
+    }
+    if (init.method === 'POST' && path === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      messages++
+      if (full) return historyFull()
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: initial, options: { retryDelayMs: 30_000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'message_limit')
+  await e.setArchived('s-side', true)
+  full = false
+  await e.push()
+  assert.equal(messages, 1, 'an archived conversation is never recreated or sent a new message')
+  assert.equal(relay.convs.get(cid).archived, true, 'the archive mark itself is sent')
+  await e.setArchived('s-side', false)
+  await until(() => messages === 2)
+  assert.equal(relay.convs.get(cid).archived, false, 'the unarchive mark is confirmed before retry')
+  assert.equal([...relay.msgs.values()][0].text, 'pending')
+  full = true
+  sessions.lines.get('s-side').push({ id: 'line-2', role: 'user', text: 'also pending', at: 1738000001000 })
+  e.messageSent('s-side')
+  await until(() => messages === 3 && e.view().pushIssue === 'message_limit')
+  assert.equal((await e.setSynced('s-side', false)).ok, true)
+  full = false
+  await e.push()
+  assert.equal(messages, 3, 'a locally paused conversation stays local')
+  assert.equal(e.state.cids['s-side'], cid)
+  e.stop()
+})
+
+test('a different account never sees or retries another account’s pending lines', async () => {
+  const relay = fakeRelay()
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-a', role: 'user', text: 'account A only', at: 1738000000000 }])
+  const original = relay.fetch
+  let attempts = 0
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      attempts++
+      return historyFull()
+    }
+    return original(url, init)
+  }
+  const state = { ...emptyState(), accountId: 'account-a', mainSession: 's-main' }
+  const { engine: e } = engine(relay, sessions, { state, options: { retryDelayMs: 30_000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'message_limit')
+  assert.equal(e.state.owners['s-main'], 'account-a', 'the owner is persisted before an uncertain outgoing attempt')
+  const before = attempts
+  await e.accountChanged('account-b')
+  await tick(50)
+  await e.push()
+  assert.equal(e.view().pushIssue, undefined)
+  assert.equal(attempts, before)
+  assert.equal(relay.msgs.size, 0)
+  e.stop()
+})
+
+test('archiving during pending-id persistence never sends the queued message', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  const cid = 'side-cid'
+  relay.add(cid, 'side', 'Side', 'pc-1', 'Desk')
+  sessions.add('s-side', 'Side', [{ id: 'line-1', role: 'user', text: 'pending', at: 1738000000000 }])
+  const state = { ...emptyState(), accountId: 'acct-1', mainSession: 'another', cids: { 's-side': cid }, owners: { 's-side': 'acct-1' }, clouds: { 's-side': 'device' }, conversations: { [cid]: { kind: 'side', title: 'Side', device: 'pc-1', deviceName: 'Desk', createdAt: 1, updatedAt: 1 } } }
+  const original = relay.fetch
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname.endsWith('/archive')) {
+      relay.convs.get(cid).archived = JSON.parse(init.body).archived
+      return new Response('{}', { headers: { 'content-type': 'application/json' } })
+    }
+    return original(url, init)
+  }
+  let entered = false
+  let release
+  const wait = new Promise((resolve) => { release = resolve })
+  const { engine: e } = engine(relay, sessions, { state, options: { save: async (next) => {
+    if (!entered && Object.keys(next.pendingMids ?? {}).length) { entered = true; await wait }
+  } } })
+  e.start()
+  await until(() => entered)
+  await e.setArchived('s-side', true)
+  release()
+  await tick(60)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal(relay.convs.get(cid).archived, true)
+  e.stop()
+})
+
+test('switching accounts while a pending identity is saved never sends it to the new account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'private to A', at: 1738000000000 }])
+  let entered = false
+  let release
+  let key = 'key-a'
+  const wait = new Promise((resolve) => { release = resolve })
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'account-a', mainSession: 's-main' }, options: {
+    token: async () => key,
+    save: async (next) => { if (!entered && Object.keys(next.pendingMids ?? {}).length) { entered = true; await wait } },
+  } })
+  e.start()
+  await until(() => entered)
+  assert.equal(e.state.owners['s-main'], 'account-a')
+  key = 'key-b'
+  await e.accountChanged('account-b')
+  release()
+  await tick(80)
+  assert.equal(relay.msgs.size, 0)
+  assert.ok(e.view().foreign.includes('s-main'))
+  assert.equal(e.state.mids['line-1'], undefined)
+  e.stop()
+})
+
+test('a response delayed across an account switch cannot acknowledge a message in the new account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'private to A', at: 1738000000000 }])
+  const original = relay.fetch
+  let entered = false, release
+  let key = 'key-a'
+  const wait = new Promise((resolve) => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    const response = await original(url, init)
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      entered = true
+      await wait
+    }
+    return response
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'account-a', mainSession: 's-main' }, options: { token: async () => key } })
+  e.start()
+  await until(() => entered)
+  key = 'key-b'
+  await e.accountChanged('account-b', false)
+  release()
+  await tick(80)
+  assert.equal(e.state.accountId, 'account-b')
+  assert.equal(e.state.mids['line-1'], undefined)
+  assert.ok(e.view().foreign.includes('s-main'))
+  e.stop()
+})
+
+test('failure to save a pending id does not send a message to the relay', async () => {
+  const relay = fakeRelay()
+  const sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'local', at: 1738000000000 }])
+  let cannotSave = true
+  const { engine: e } = engine(relay, sessions, {
+    state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' },
+    options: { retryDelayMs: 30_000, save: async () => { if (cannotSave) throw new Error('disk full') } },
+  })
+  e.start()
+  await until(() => e.view().pushIssue === 'pending')
+  assert.equal(relay.msgs.size, 0)
+  cannotSave = false
+  await e.push()
+  assert.equal(relay.msgs.size, 1)
+  assert.equal(e.view().pushIssue, undefined)
+  e.stop()
+})
+
+test('a signed-in engine waits for a verified account before assigning a message identity', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'my message', at: 1738000000000 }])
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), mainSession: 's-main' }, options: { retryDelayMs: 30_000 } })
+  e.start()
+  e.messageSent('s-main')
+  await tick(60)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal(Object.keys(e.state.pendingMids ?? {}).length, 0)
+  await e.accountChanged('verified-account')
+  await until(() => relay.msgs.size === 1)
+  assert.equal([...relay.msgs.values()][0].text, 'my message')
+  e.stop()
+})
+
+test('a per-message full-history refusal remains queued instead of being marked final', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'keep me', at: 1738000000000 }])
+  const original = relay.fetch
+  let first = true
+  const ids = []
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const messages = JSON.parse(init.body).messages
+      if (messages.length) {
+        ids.push(messages[0].mid)
+        if (first) {
+          first = false
+          const body = JSON.parse(init.body)
+          await original(url, { ...init, body: JSON.stringify({ ...body, messages: [] }) })
+          return new Response(JSON.stringify({ cursor: relay.seq, accepted: body.conversations.length, rejected: [{ mid: messages[0].mid, reason: 'message_limit' }] }), { headers: { 'content-type': 'application/json' } })
+        }
+      }
+    }
+    return original(url, init)
+  }
+  const { engine: e, saved } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30_000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'message_limit')
+  assert.equal(saved().mids['line-1'], undefined)
+  await e.push()
+  assert.equal(ids[0], ids[1])
+  assert.equal(relay.msgs.size, 1)
+  assert.equal(e.view().pushIssue, undefined)
+  e.stop()
+})
 
 test('the person’s words go up when sent, the model’s at the turn’s end; the main chat is the account’s main conversation', async () => {
   const relay = fakeRelay()
@@ -389,6 +774,7 @@ test('the hub frame pulls, our own echo does not; the switch and the refusals', 
   const relay = fakeRelay()
   const sessions = fakeSessions()
   const { engine: e } = engine(relay, sessions)
+  await e.accountChanged('acct-1', false)
   relay.add('c1', 'side', 'Elsewhere')
   // (a first pull is a tail pull: it carries the conversations of the newest messages, so the chat needs one)
   relay.say('c1', 'user', 'hello')
@@ -1449,10 +1835,8 @@ test('a fresh install restores its own rows by mid, not by device', async () => 
   sessions.add('s-main', 'Desk main', [])
   const { engine: e } = engine(relay, sessions)
   await e.setMain('s-main')
-  await e.accountChanged('acct-1')
-  await e.applyConversation(relay.convs.get('c-main'))
-  const mid = [...relay.msgs.keys()][0]
-  await e.applyMessage(relay.msgs.get(mid), new Map())
+  await e.accountChanged('acct-1', false)
+  await e.pull()
   assert.equal(sessions.appended.filter(([, line]) => line.text === 'lost and found').length, 1)
   e.stop()
 })
@@ -1465,4 +1849,481 @@ test('a picture from another device is found among the attachments and drawn by 
   assert.equal(pictureOf([{ ...picture, url: '' }]), '')
   assert.equal(pictureOf([]), '')
   assert.equal(pictureOf(undefined), '')
+})
+
+test('rejected rows remain pending and the problem is visible', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'retain', at: 1738000000000 }])
+  const original = relay.fetch
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes') {
+      const body = JSON.parse(init.body)
+      if (body.messages.length) return new Response(JSON.stringify({ cursor: 0, accepted: 0, rejected: [{ mid: body.messages[0].mid, reason: 'unknown_cid' }] }), { headers: { 'content-type': 'application/json' } })
+    }
+    return original(url, init)
+  }
+  const { engine: e, saved } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'conflict')
+  assert.equal(e.state.mids['line-1'], undefined)
+  assert.equal(Object.keys(saved().pendingMids).length, 1)
+  e.stop()
+})
+
+test('deleting cloud history clears queued retries and leaves the main chat local until explicitly enabled', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'do not restore', at: 1738000000000 }])
+  const original = relay.fetch
+  let full = true
+  relay.fetch = async (url, init = {}) => {
+    if (full && init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) return historyFull()
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { retryDelayMs: 30000 } })
+  e.start()
+  await until(() => e.view().pushIssue === 'message_limit')
+  await e.deleteRemote()
+  full = false
+  await e.push()
+  e.messageSent('s-main')
+  await tick(30)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal(Object.keys(e.state.pendingMids ?? {}).length, 0)
+  assert.equal(e.state.clouds['s-main'], 'local')
+  assert.ok(e.view().local.includes('s-main'))
+  assert.equal((await e.setSynced('s-main', true)).ok, true)
+  await until(() => relay.msgs.size === 1)
+  e.stop()
+})
+
+test('cloud deletion waits for an in-flight push and does not replay it afterward', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'pending', at: 1738000000000 }])
+  const original = relay.fetch
+  let entered = false, release
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      entered = true
+      await gate
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' } })
+  e.start()
+  await until(() => entered)
+  const deletion = e.deleteRemote()
+  await tick(20)
+  assert.equal(relay.calls.includes('DELETE /v1/sync/changes'), false)
+  release()
+  await deletion
+  await tick(30)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal(e.state.clouds['s-main'], 'local')
+  e.stop()
+})
+
+test('a response from a previous account epoch is ignored even after returning to the same account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'private', at: 1738000000000 }])
+  const original = relay.fetch
+  let entered = false, release
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    const response = await original(url, init)
+    if (init.method === 'POST' && new URL(url).pathname === '/v1/sync/changes' && JSON.parse(init.body).messages.length) {
+      entered = true
+      await gate
+    }
+    return response
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'account-a', mainSession: 's-main' } })
+  e.start()
+  await until(() => entered)
+  await e.accountChanged('account-b', false)
+  await e.accountChanged('account-a', false)
+  release()
+  await tick(30)
+  assert.equal(e.state.mids['line-1'], undefined)
+  assert.equal(Object.keys(e.state.pendingMids ?? {}).length, 1)
+  e.stop()
+})
+
+test('cloud deletion is not sent if the local opt-out cannot be persisted', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'keep', at: 1738000000000 }])
+  let failSave = false
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' }, options: { save: async () => { if (failSave) throw new Error('disk full') } } })
+  e.start()
+  await until(() => relay.msgs.size === 1)
+  failSave = true
+  await assert.rejects(e.deleteRemote(), /disk full/)
+  assert.equal(relay.calls.includes('DELETE /v1/sync/changes'), false)
+  assert.equal(relay.msgs.size, 1)
+  e.stop()
+})
+
+test('an uncertain cloud wipe retains identities across restart and account switches until confirmed', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('main-a', 'A', [{ id: 'line-a', role: 'user', text: 'kept once', at: 1738000000000 }])
+  sessions.add('side-b', 'B', [{ id: 'line-b', role: 'user', text: 'B only', at: 1738000000001 }])
+  const original = relay.fetch
+  let lost = false, wipeFails = true, postCount = 0
+  relay.fetch = async (url, init = {}) => {
+    const path = new URL(url).pathname
+    if (path === '/v1/sync/changes' && init.method === 'DELETE' && wipeFails) throw new Error('wipe response lost')
+    if (path === '/v1/sync/changes' && init.method === 'POST' && JSON.parse(init.body).messages.length) {
+      postCount++
+      if (!lost) { lost = true; await original(url, init); throw new Error('response lost after acceptance') }
+    }
+    return original(url, init)
+  }
+  const state = { ...emptyState(), accountId: 'acct-a', mainSession: 'main-a', cids: { 'side-b': 'cid-b' }, owners: { 'side-b': 'acct-b' }, clouds: { 'side-b': 'device' }, mids: { 'line-b': 'mid-b' } }
+  const first = engine(relay, sessions, { state, options: { retryDelayMs: 30000 } })
+  first.engine.start()
+  await until(() => first.engine.view().pushIssue === 'pending')
+  const mid = [...relay.msgs.keys()][0]
+  await assert.rejects(first.engine.deleteRemote(), /wipe response lost/)
+  assert.equal(first.engine.view().pushIssue, 'wipe_pending')
+  assert.equal((await first.engine.setSynced('main-a', true)).reason, 'wipe-pending')
+  assert.equal(Object.values(first.engine.state.pendingMids)[0].mid, mid)
+  const snapshot = first.saved()
+  first.engine.stop()
+  const second = engine(relay, sessions, { state: snapshot, options: { retryDelayMs: 30000 } })
+  second.engine.start()
+  await tick(60)
+  assert.equal(second.engine.view().pushIssue, 'wipe_pending')
+  assert.equal(postCount, 1)
+  await second.engine.accountChanged('acct-b', false)
+  assert.equal(second.engine.view().pushIssue, undefined)
+  assert.equal(second.engine.state.mids['line-b'], 'mid-b')
+  await second.engine.accountChanged('acct-a', false)
+  assert.equal(second.engine.view().pushIssue, 'wipe_pending')
+  assert.equal(Object.values(second.engine.state.pendingMids)[0].mid, mid)
+  await second.engine.push()
+  assert.equal(postCount, 1)
+  wipeFails = false
+  await second.engine.deleteRemote()
+  assert.equal(second.engine.state.mids['line-b'], 'mid-b')
+  assert.equal(second.engine.state.pendingWipes['acct-a'], undefined)
+  assert.equal(relay.msgs.size, 0)
+  assert.equal((await second.engine.setSynced('main-a', true)).ok, true)
+  await until(() => relay.msgs.size === 1)
+  assert.equal([...relay.msgs.values()][0].text, 'kept once')
+  second.engine.stop()
+})
+
+test('wiping account A leaves the confirmed mids of account B intact', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('main-a', 'A', [{ id: 'line-a', role: 'user', text: 'a', at: 1738000000000 }])
+  sessions.add('side-b', 'B', [{ id: 'line-b', role: 'user', text: 'b', at: 1738000000001 }])
+  sessions.add('paused-a', 'Paused A', [{ id: 'line-paused', role: 'user', text: 'paused', at: 1738000000002 }])
+  const state = { ...emptyState(), accountId: 'acct-a', mainSession: 'main-a', cids: { 'main-a': 'cid-a', 'side-b': 'cid-b', 'paused-a': 'cid-paused' }, owners: { 'main-a': 'acct-a', 'side-b': 'acct-b', 'paused-a': 'acct-a' }, clouds: { 'main-a': 'device', 'side-b': 'device', 'paused-a': 'local' }, mids: { 'line-a': 'mid-a', 'line-b': 'mid-b', 'line-paused': 'mid-paused' } }
+  const { engine: e } = engine(relay, sessions, { state })
+  await e.deleteRemote()
+  assert.equal(e.state.mids['line-a'], undefined)
+  assert.equal(e.state.mids['line-paused'], undefined)
+  assert.equal(e.state.cids['paused-a'], undefined)
+  assert.equal(e.state.clouds['paused-a'], 'local')
+  assert.equal(e.state.mids['line-b'], 'mid-b')
+  await e.accountChanged('acct-b', false)
+  assert.equal(e.state.mids['line-b'], 'mid-b')
+  e.messageSent('side-b')
+  await e.push()
+  assert.equal(relay.msgs.size, 0, 'B must not re-upload its already confirmed line')
+  e.stop()
+})
+
+
+for (const phase of ['file', 'directory']) test(`failed ${phase} fsync never sends an unconfirmed identity`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nanolika-sync-fsync-'))
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('s-main', 'Main', [{ id: 'line-1', role: 'user', text: 'local', at: 1738000000000 }])
+  const store = new StateStore(async (path, contents) => {
+    if (!Object.keys(JSON.parse(contents).pendingMids ?? {}).length) return atomicReplace(path, contents)
+    return atomicReplace(path, contents, rename,
+      phase === 'directory' ? async () => { throw new Error('directory fsync failed') } : undefined,
+      phase === 'file' ? async () => { throw new Error('file fsync failed') } : undefined)
+  })
+  const { engine: e } = engine(relay, sessions, {
+    state: { ...emptyState(), accountId: 'acct-1', mainSession: 's-main' },
+    options: { retryDelayMs: 30000, save: async (state) => store.write(join(dir, 'cloud.json'), state) },
+  })
+  try {
+    e.start()
+    await until(() => e.view().pushIssue === 'pending')
+    assert.equal(relay.msgs.size, 0)
+    assert.equal(relay.pushes.filter((p) => p.messages.length).length, 0)
+    assert.equal(Object.keys(e.state.pendingMids ?? {}).length, 1)
+  } finally { e.stop(); rmSync(dir, { recursive: true, force: true }) }
+})
+
+
+test('review: old account pull must not populate new account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  relay.add('private-a-cid', 'side', 'Private A')
+  relay.say('private-a-cid', 'assistant', 'secret A')
+  const original = relay.fetch
+  let blocked = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    const response = await original(url, init)
+    if (new URL(url).pathname === '/v1/sync/changes' && (!init.method || init.method === 'GET')) { blocked = true; await gate }
+    return response
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const pulling = e.pull()
+    await until(() => blocked)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await pulling
+    assert.equal(e.state.accountId, 'acct-b')
+    assert.equal(e.state.conversations['private-a-cid'], undefined, 'A data must not be applied in B')
+  } finally { release?.(); e.stop() }
+})
+
+test('review: switch during catalogue session create must not bind A chat to B', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('private-a-cid', 'side', 'Private A')
+  const original = sessions.api.create
+  let blocked = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  sessions.api.create = async (...args) => { blocked = true; await gate; return original(...args) }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const pulling = e.pull()
+    await until(() => blocked)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await pulling
+    assert.equal(e.state.accountId, 'acct-b')
+    assert.equal(Object.values(e.state.cids).includes('private-a-cid'), false, 'A chat must not be bound to B')
+    const made = [...sessions.rows.keys()][0]
+    assert.equal(sessions.rows.get(made).title, 'New chat')
+    assert.equal(e.state.owners[made], 'acct-a')
+    assert.ok(e.view().foreign.includes(made))
+  } finally { release?.(); e.stop() }
+})
+
+test('review: old account sync_off must not disable new account sync', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  const original = relay.fetch
+  let blocked = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/sync/catalog') {
+      blocked = true; await gate
+      return new Response(JSON.stringify({error: {code: 'sync_off', message: 'off'}}), {status: 409})
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a', enabled: true }, options: { token: async () => key } })
+  try {
+    const pulling = e.pull().catch(() => undefined)
+    await until(() => blocked)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await pulling
+    assert.equal(e.state.accountId, 'acct-b')
+    assert.equal(e.state.enabled, true, 'A sync_off must not disable B sync')
+  } finally { release?.(); e.stop() }
+})
+
+test('switching accounts during local message storage never adds a foreign row to the new state', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  relay.add('cid-a', 'side', 'Private A')
+  relay.say('cid-a', 'assistant', 'secret A')
+  sessions.add('session-a', 'Private A')
+  const keep = sessions.api.keep
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  sessions.api.keep = async (...args) => { entered = true; await gate; return keep(...args) }
+  const state = { ...emptyState(), accountId: 'acct-a', cids: { 'session-a': 'cid-a' }, owners: { 'session-a': 'acct-a' }, clouds: { 'session-a': 'sync' } }
+  const { engine: e } = engine(relay, sessions, { state, options: { token: async () => key } })
+  try {
+    const pulling = e.pull()
+    await until(() => entered)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await pulling
+    assert.equal(e.state.accountId, 'acct-b')
+    assert.deepEqual(e.state.pulled, {})
+    assert.ok(e.view().foreign.includes('session-a'))
+    assert.equal(sessions.injected.length, 0)
+  } finally { release?.(); e.stop() }
+})
+
+test('an old unauthorized response cannot pause the new account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  const original = relay.fetch
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/sync/catalog') {
+      entered = true; await gate
+      return new Response(JSON.stringify({ error: { code: 'bad_key', message: 'expired' } }), { status: 401 })
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const pulling = e.pull()
+    await until(() => entered)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await pulling
+    assert.equal(e.view().paused, false)
+    assert.equal(e.state.enabled, true)
+  } finally { release?.(); e.stop() }
+})
+
+
+test('a creation from an old account epoch cannot bind even after switching back', async () => {
+  const relay = lazyRelay(), sessions = fakeSessions()
+  relay.add('private-a-cid', 'side', 'Private A')
+  const original = sessions.api.create
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  sessions.api.create = async (...args) => { entered = true; await gate; return original(...args) }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const pulling = e.pull()
+    await until(() => entered)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    key = 'key-a'
+    await e.accountChanged('acct-a', false)
+    release()
+    await pulling
+    assert.equal(Object.values(e.state.cids).includes('private-a-cid'), false)
+    const made = [...sessions.rows.keys()][0]
+    assert.equal(sessions.rows.get(made).title, 'New chat')
+    assert.equal(e.state.owners[made], 'acct-a')
+  } finally { release?.(); e.stop() }
+})
+
+test('a stale relay status error cannot disable the new account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  const original = relay.fetch
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/sync/state') {
+      entered = true; await gate
+      return new Response(JSON.stringify({ error: { code: 'sync_off', message: 'off' } }), { status: 409 })
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const status = e.relayStatus()
+    await until(() => entered)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await status
+    assert.equal(e.state.enabled, true)
+  } finally { release?.(); e.stop() }
+})
+
+test('a delayed sync-setting response cannot change the new account setting', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  const original = relay.fetch
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    if (new URL(url).pathname === '/v1/sync/state' && init.method === 'PUT') {
+      const response = await original(url, init)
+      entered = true; await gate
+      return response
+    }
+    return original(url, init)
+  }
+  const { engine: e } = engine(relay, sessions, { state: { ...emptyState(), accountId: 'acct-a' }, options: { token: async () => key } })
+  try {
+    const changing = e.setEnabled(false).catch(() => undefined)
+    await until(() => entered)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await changing
+    assert.equal(e.state.enabled, true)
+  } finally { release?.(); e.stop() }
+})
+
+
+test('review: delete of A chat after account switch must retain A ownership', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('private-a', 'Private A', [{ id: 'a-line', role: 'user', text: 'A secret', at: 1738000000000 }])
+  relay.add('cid-a', 'side', 'Private A')
+  const original = relay.fetch
+  let blocked = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    const response = await original(url, init)
+    if (new URL(url).pathname === '/v1/sync/conversations/cid-a' && init.method === 'DELETE') { blocked = true; await gate }
+    return response
+  }
+  const state = { ...emptyState(), accountId: 'acct-a', cids: { 'private-a': 'cid-a' }, owners: { 'private-a': 'acct-a' }, clouds: { 'private-a': 'device' } }
+  const { engine: e } = engine(relay, sessions, { state, options: { token: async () => key } })
+  try {
+    await e.accountChanged('acct-a', false)
+    const deleting = e.deleteConversation('private-a')
+    await until(() => blocked)
+    key = 'key-b'
+    await e.accountChanged('acct-b', false)
+    release()
+    await deleting
+    assert.equal(e.state.owners['private-a'], 'acct-a', 'B must not see A local chat')
+  } finally { release?.(); e.stop() }
+})
+
+
+test('deleting a cloud chat preserves ownership of its local transcript', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('private-a', 'Private A', [{ id: 'a-line', role: 'user', text: 'secret', at: 1738000000000 }])
+  relay.add('cid-a', 'side', 'Private A')
+  const state = { ...emptyState(), accountId: 'acct-a', cids: { 'private-a': 'cid-a' }, owners: { 'private-a': 'acct-a' }, clouds: { 'private-a': 'device' } }
+  const { engine: e } = engine(relay, sessions, { state })
+  try {
+    await e.accountChanged('acct-a', false)
+    assert.equal((await e.deleteConversation('private-a')).ok, true)
+    assert.equal(e.state.owners['private-a'], 'acct-a')
+    assert.equal(e.state.clouds['private-a'], 'local')
+    await e.accountChanged('acct-b', false)
+    assert.ok(e.view().foreign.includes('private-a'))
+  } finally { e.stop() }
+})
+
+test('a deletion response from an old epoch is ignored after returning to the same account', async () => {
+  const relay = fakeRelay(), sessions = fakeSessions()
+  sessions.add('private-a', 'Private A', [{ id: 'a-line', role: 'user', text: 'secret', at: 1738000000000 }])
+  relay.add('cid-a', 'side', 'Private A')
+  const original = relay.fetch
+  let entered = false, release, key = 'key-a'
+  const gate = new Promise(resolve => { release = resolve })
+  relay.fetch = async (url, init = {}) => {
+    const response = await original(url, init)
+    if (new URL(url).pathname === '/v1/sync/conversations/cid-a' && init.method === 'DELETE') { entered = true; await gate }
+    return response
+  }
+  const state = { ...emptyState(), accountId: 'acct-a', cids: { 'private-a': 'cid-a' }, owners: { 'private-a': 'acct-a' }, clouds: { 'private-a': 'device' } }
+  const { engine: e } = engine(relay, sessions, { state, options: { token: async () => key } })
+  try {
+    await e.accountChanged('acct-a', false)
+    const deleting = e.deleteConversation('private-a')
+    await until(() => entered)
+    key = 'key-b'; await e.accountChanged('acct-b', false)
+    key = 'key-a'; await e.accountChanged('acct-a', false)
+    release()
+    assert.equal((await deleting).ok, false)
+    assert.equal(e.state.owners['private-a'], 'acct-a')
+    assert.equal(e.state.cids['private-a'], 'cid-a')
+  } finally { release?.(); e.stop() }
 })

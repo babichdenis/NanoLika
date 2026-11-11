@@ -39,8 +39,10 @@ const MAIN_KEY = 'nanomuse.mainChat'
 interface SyncList {
   unread: Record<string, number>
   enabled: boolean
+  pushIssue?: 'message_limit' | 'pending' | 'conflict' | 'wipe_pending'
   mainSession: string
   sessions: Set<string>
+  local: Set<string>
   titles: Record<string, string>
   /** Sessions of another account than the one signed in (C10): not listed, not searched; empty when signed out. */
   foreign: Set<string>
@@ -58,7 +60,7 @@ interface SyncList {
   /** session id → the folder the account knows the chat by (workspace title, or Telegram / MAX / Web). */
   folders: Record<string, string>
 }
-const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set(), origins: {}, folders: {} }
+const NO_SYNC: SyncList = { unread: {}, enabled: true, mainSession: '', sessions: new Set(), local: new Set(), titles: {}, foreign: new Set(), toArchive: [], synced: new Set(), gone: new Set(), origins: {}, folders: {} }
 
 /** The host's sync view; read again whenever the host's sync revision moves. */
 export function useSyncList(): SyncList {
@@ -67,8 +69,8 @@ export function useSyncList(): SyncList {
   useEffect(() => {
     let alive = true
     const load = () => {
-      call<{ enabled: boolean; mainSession?: string; sessions?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number>; origins?: Record<string, string>; folders?: Record<string, string> }>('sync/state')
-        .then((v) => { if (alive) { const __s=new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]); setList({ unread: v.unread ?? {}, enabled: v.enabled, mainSession: v.mainSession ?? '', sessions: new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []), origins: v.origins ?? {}, folders: v.folders ?? {} }) } })
+      call<{ enabled: boolean; pushIssue?: 'message_limit' | 'pending' | 'conflict' | 'wipe_pending'; mainSession?: string; sessions?: string[]; local?: string[]; titles?: Record<string, string>; foreign?: string[]; toArchive?: string[]; toRestore?: string[]; synced?: string[]; gone?: string[]; unread?: Record<string, number>; origins?: Record<string, string>; folders?: Record<string, string> }>('sync/state')
+        .then((v) => { if (alive) { const __s=new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]); setList({ unread: v.unread ?? {}, enabled: v.enabled, ...(v.pushIssue ? { pushIssue: v.pushIssue } : {}), mainSession: v.mainSession ?? '', sessions: new Set([...(v.sessions ?? []), ...Object.keys(v.titles ?? {})]), local: new Set(v.local ?? []), titles: v.titles ?? {}, foreign: new Set(v.foreign ?? []), toArchive: v.toArchive ?? [], toRestore: v.toRestore ?? [], synced: new Set(v.synced ?? []), gone: new Set(v.gone ?? []), origins: v.origins ?? {}, folders: v.folders ?? {} }) } })
         .catch(() => undefined)
     }
     void load()
@@ -495,6 +497,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
   ]
 
   return h('div', { className: 'nm-chats', ref: (el: HTMLDivElement | null): void => { columnRef.current = el } },
+    sync.pushIssue ? h('div', { role: 'status', 'aria-live': 'polite', style: { padding: '8px 12px', fontSize: 12, lineHeight: 1.4 } }, t(sync.pushIssue === 'message_limit' ? 'syncHistoryFull' : sync.pushIssue === 'conflict' ? 'syncMessageChanged' : sync.pushIssue === 'wipe_pending' ? 'syncWipePending' : 'syncMessagesPending')) : null,
     h('div', { className: 'nm-chats-head' },
       h('label', { className: 'nm-chats-search' },
         h(IconSearch, { size: 15 }),
@@ -504,7 +507,7 @@ export function MuseChats({ t, useSessions, useSessionStatus, useWorkspaces, act
     h('div', { className: 'nm-chats-list' },
       mainMatches
         ? (main
-            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, cloud: 'main', onCloud: () => undefined, onDelete: () => undefined })
+            ? h(ChatRow, { unreadCount: sync.unread[main.id] ?? 0, t, chat: main, label: t('chMain'), main: true, pinned: false, selected: current === main.id, useSessionStatus, actions, onMakeMain: () => undefined, cloud: sync.local.has(main.id) ? 'local' : 'main', onCloud: (action) => runCloud(main.id, action), onDelete: () => undefined })
             : h('div', { className: 'nm-chat-row nm-main' },
                 h('button', { type: 'button', className: 'nm-chat-open', onClick: openMain }, h('span', { className: 'nm-chat-title' }, t('chMain')))))
         : null,

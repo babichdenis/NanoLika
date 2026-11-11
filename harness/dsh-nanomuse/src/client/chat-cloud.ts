@@ -67,6 +67,7 @@ export const CLOUD_REASONS: Record<string, Words> = {
   'synced-from-cloud': 'chCloudRemote',
   'not-synced-account': 'chCloudNoSync',
   'unknown-session': 'chCloudFailed',
+  'wipe-pending': 'syncWipePending',
 }
 
 /** What to tell the person: our sentence for a reason we know, the host's own words for one we do not. */
