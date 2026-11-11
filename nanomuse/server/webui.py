@@ -27,6 +27,9 @@ from nanomuse.workspace_context import active_workspace
 current_thread: contextvars.ContextVar[str] = contextvars.ContextVar(
     "nanomuse_thread", default=MAIN_THREAD
 )
+current_turn_user_event: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "nanomuse_turn_user_event", default=""
+)
 
 # browser frames kept per thread (in memory; a restart clears them)
 _FRAMES_KEPT = 12
@@ -339,6 +342,10 @@ class WebUI:
     def emit(self, event: dict[str, Any], persist: bool = True) -> dict[str, Any]:
         thread = event.get("thread") or self.thread()
         event["thread"] = thread
+        if event.get("type") != "user" and thread == current_thread.get():
+            user_event = current_turn_user_event.get()
+            if user_event:
+                event.setdefault("reply_to_event", user_event)
         if (
             thread in self.background
             and "source" not in event
@@ -672,4 +679,4 @@ def _preview_args(args: dict[str, Any], limit: int = 400) -> dict[str, Any]:
     return out
 
 
-__all__ = ["WebUI", "current_thread"]
+__all__ = ["WebUI", "current_thread", "current_turn_user_event"]

@@ -62,7 +62,7 @@ from nanomuse.server.events import (
 from nanomuse.server.failures import failure_notice
 from nanomuse.server.providers import ChatGPTSignIn, Providers
 from nanomuse.server.push import PushService
-from nanomuse.server.webui import WebUI, current_thread
+from nanomuse.server.webui import WebUI, current_thread, current_turn_user_event
 from nanomuse.sync import ConversationSync, parse_mention, system_note
 from nanomuse.sync.engine import LEASE_RENEW_S
 from nanomuse.tools.browser import Browser
@@ -1314,7 +1314,9 @@ class MuseService:
             self.hub.run_remote(thread, text)
             return event
         if source in ("user", "device"):
-            event_data: dict[str, Any] = {"type": "user", "text": text, "thread": thread_id}
+            event_data: dict[str, Any] = {
+                "type": "user", "text": text, "thread": thread_id, "mid": str(uuid.uuid4()),
+            }
             if via_channel:
                 # the words came from a messenger topic: other devices show the channel's
                 # name on the bubble, not this computer's
@@ -1374,11 +1376,17 @@ class MuseService:
                 thread.purposes[text] = label
         if once is not None:
             thread.inbox.put_nowait(
-                Incoming(text, attachments, language, once[0], once[1], turn_scope, once_key, once_base)
+                Incoming(
+                    text, attachments, language, once[0], once[1], turn_scope, once_key, once_base,
+                    user_event_id=str(event.get("id") or ""), user_mid=str(event.get("mid") or ""),
+                )
             )
         else:
             thread.inbox.put_nowait(
-                Incoming(text, attachments, language, customer_scope=turn_scope)
+                Incoming(
+                    text, attachments, language, customer_scope=turn_scope,
+                    user_event_id=str(event.get("id") or ""), user_mid=str(event.get("mid") or ""),
+                )
             )
         self._ensure_worker(thread)
         return event
@@ -1625,6 +1633,7 @@ class MuseService:
                     lease_task = asyncio.create_task(
                         self._keep_turn_lease(lease_cid, lease_turn), name="sync-lease"
                     )
+                turn_event_token = current_turn_user_event.set(incoming.user_event_id)
                 try:
                     purpose = thread.purposes.pop(text, None)
                     turn_scope = incoming.customer_scope or self.memory_scope_for_thread(thread)
@@ -1667,6 +1676,7 @@ class MuseService:
                     if thread.agent.state.value == "error":
                         thread.agent.state = thread.agent.state.__class__.IDLE
                 finally:
+                    current_turn_user_event.reset(turn_event_token)
                     if lease_task is not None:
                         lease_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
@@ -1798,6 +1808,9 @@ class MuseService:
                 if thread.id in self.ui.model_once:
                     event["model_used"] = self.ui.model_once[thread.id]
                 event = self.ui.emit(event)
+        if event and not event.get("mid"):
+            # All clients can identify this response before the first sync push.
+            self.ui.patch(thread.id, event["id"], mid=str(uuid.uuid4()))
         if purpose and event and event.get("text") and not event.get("quiet"):
             self._push_background(event)
         # the turn is done: its texts go to the account's other devices in a moment
