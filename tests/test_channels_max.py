@@ -392,7 +392,7 @@ class MarkupTests(unittest.IsolatedAsyncioTestCase):
         async def call(method, path, **kwargs):
             self.sent.append(dict(kwargs.get("json") or {}))
             if self.refuse and (kwargs.get("json") or {}).get("format"):
-                raise m.MaxError("MAX request failed (HTTP 400)")
+                raise m.MaxError("MAX request failed (HTTP 400)", status_code=400)
             return {"message": {"body": {"mid": "m1"}}}
 
         self.max._call = call

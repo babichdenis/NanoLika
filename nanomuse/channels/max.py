@@ -87,7 +87,11 @@ _ACTIONS = {
 
 
 class MaxError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        # Only a received HTTP response supplies this; a transport exception has
+        # an unknown delivery outcome and must never trigger a second POST.
+        self.status_code = status_code
 
 
 class MaxChannel(Channel):
@@ -163,7 +167,7 @@ class MaxChannel(Channel):
         data = json_object(r)
         if r.status_code >= 400 or data.get("success") is False:
             # Never include headers, arbitrary provider bodies, tokens or user content.
-            raise MaxError(f"MAX request failed (HTTP {r.status_code})")
+            raise MaxError(f"MAX request failed (HTTP {r.status_code})", status_code=r.status_code)
         return data
 
     async def verify(self) -> str:
@@ -618,7 +622,11 @@ class MaxChannel(Channel):
                 params={"chat_id": chat_id},
                 json={"text": part.html, "format": "html", **link},
             )
-        except MaxError:
+        except MaxError as exc:
+            # MAX explicitly rejects HTTP 400. A timeout or 5xx can happen after
+            # it accepted the message, so repeating the POST could duplicate it.
+            if exc.status_code != 400:
+                raise
             result = await self._call(
                 "POST",
                 "/messages",
@@ -720,7 +728,9 @@ class MaxChannel(Channel):
                 params={"message_id": mid},
                 json={"text": part.html, "format": "html"},
             )
-        except MaxError:
+        except MaxError as exc:
+            if exc.status_code != 400:
+                raise
             await self._call(
                 "PUT",
                 "/messages",
