@@ -98,17 +98,21 @@ def _account_key(cloud: Any, account_id: str) -> str:
     return key
 
 
-async def _caller_for(cloud: Any, request: Request | WebSocket) -> Any:
-    """The account behind the request: an account key, or the browser session cookie.
+def _runtime_caller(caller: Any) -> Any:
+    """Model-only API keys must never become account or runtime sessions."""
+    return caller if caller is not None and getattr(caller, "via", "") not in ("", "user") else None
 
-    The apps send the key they already hold (`Authorization: Bearer`); the site and the
-    mini-apps carry a session cookie instead. Either proves the same account, so a client
-    that signed in with a key does not have to sign in again just to reach the agent.
+
+async def _caller_for(cloud: Any, request: Request | WebSocket) -> Any:
+    """Resolve an account session key or browser session cookie for the runtime.
+
+    The apps send their session keys via ``Authorization: Bearer``; the site and
+    mini-apps use browser session cookies. Model-only personal API keys are rejected.
     """
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         try:
-            return await asyncio.to_thread(cloud.authenticate, auth[7:].strip())
+            return _runtime_caller(await asyncio.to_thread(cloud.authenticate, auth[7:].strip()))
         except Exception:  # noqa: BLE001 — an unknown or revoked key is simply not in
             return None
     token = request.cookies.get(SESSION_COOKIE, "")
@@ -120,12 +124,12 @@ async def _caller_for(cloud: Any, request: Request | WebSocket) -> Any:
         if resolved is None:
             resolved = await asyncio.to_thread(store.legacy_caller, token)
         if resolved is not None:
-            return resolved
+            return _runtime_caller(resolved)
         log.info("web ui: session %s… resolved to nobody", token[:6])
     except Exception as exc:  # noqa: BLE001 — fall through to the key path
         log.info("web ui: session lookup failed: %s", type(exc).__name__)
     try:
-        return await asyncio.to_thread(cloud.authenticate, token)
+        return _runtime_caller(await asyncio.to_thread(cloud.authenticate, token))
     except Exception:  # noqa: BLE001 — an unknown or revoked session is simply not in
         return None
 
@@ -216,7 +220,7 @@ def install_web_runtime(app: Any, cloud: Any, settings: Any) -> None:
                     frame = None
                 if isinstance(frame, dict) and frame.get("kind") == "auth" and isinstance(frame.get("token"), str):
                     try:
-                        caller = await asyncio.to_thread(cloud.authenticate, frame["token"])
+                        caller = _runtime_caller(await asyncio.to_thread(cloud.authenticate, frame["token"]))
                     except Exception:  # noqa: BLE001
                         caller = None
         if caller is None or caller.account_id not in OWNERS:
