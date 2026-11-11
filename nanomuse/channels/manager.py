@@ -19,6 +19,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import os
 import re
 import secrets
 import tempfile
@@ -635,7 +636,65 @@ class ChannelManager(ChannelBus):
             return
         if await self.menu.inbound(msg):
             return
-        origin_thread = self._thread_for(msg)
+        # On the multi-account bot identity must be checked before _thread_for mutates
+        # routes or a selected thread is hydrated/echoed to other clients. A topic's
+        # saved owner is evidence to compare, never proof of the sender's identity.
+        verified_cloud: tuple[str, str] | None = None
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            raw_command = (msg.text.strip().split() or [""])[0].lower().split("@")[0]
+            account_commands = {
+                "/start", "/unlink", "/отвязать", "/развязать", "/logout", "/выйти",
+                "/connect", "/подключить", "/pay", "/оплатить", "/help", "/status",
+            }
+            if raw_command not in account_commands and (msg.text.strip() or msg.files):
+                verified_cloud = await self._cloud_key_for(msg.channel, msg)
+                sender_scope = self._cloud_customer_scopes.get((msg.channel, msg.sender_id), "")
+                if verified_cloud[0] == "!":
+                    return
+                if not verified_cloud[0] or not sender_scope.startswith("account:") or sender_scope == "account:":
+                    await self._cloud_no_account(msg.channel, msg.chat_id)
+                    return
+                selected = self.picker.selected(msg.channel, msg.chat_id)
+                candidate = selected or (
+                    MAIN_THREAD if getattr(self.svc.settings.channels, "shared_thread", False)
+                    else thread_id_for(msg.channel, msg.chat_id)
+                )
+                if not self._shared_sender_can_use_thread(msg, candidate, sender_scope):
+                    await self._send(
+                        msg.channel, msg.chat_id,
+                        self.say(
+                            "I could not confirm that this conversation belongs to your account. The request was not started.",
+                            "无法确认此会话属于您的账户，未开始处理。",
+                            "Не удалось подтвердить, что эта беседа принадлежит вашему аккаунту. Задача не запущена.",
+                        ),
+                    )
+                    return
+                selected_thread = self.svc.threads.get(candidate)
+                existing_owner = str(self.svc.sync.owner_of(candidate) or "")
+                main_owner = str(getattr(selected_thread, "main_of", "") or "")
+                if (existing_owner or main_owner) and not await self._shared_sender_account_confirmed(
+                    msg, verified_cloud[0], sender_scope
+                ):
+                    await self._cloud_no_account(msg.channel, msg.chat_id)
+                    return
+                # Never quietly fall back to another conversation if a selected thread
+                # vanished. A different account's own existing local thread may continue,
+                # even though this process cannot synchronize it via the owner's hub.
+                if selected and selected_thread is None:
+                    await self._send(
+                        msg.channel, msg.chat_id,
+                        self.say(
+                            "This conversation cannot be opened here right now. I did not switch to another chat.",
+                            "此会话目前无法在此处打开，我没有切换到其他聊天。",
+                            "Пока не могу открыть эту беседу здесь. В другой чат я не переключалась.",
+                        ),
+                    )
+                    return
+        origin_thread = (
+            self._thread_for(msg, verified_sender_scope=sender_scope)
+            if verified_cloud is not None
+            else self._thread_for(msg)
+        )
         if msg.message_id:
             # Which message this turn answers: the reply quotes it, so a group keeps the
             # thread and a long chat shows what is being answered.
@@ -699,7 +758,20 @@ class ChannelManager(ChannelBus):
                     ),
                 )
                 return
-            if self.menu.public_private(msg) and not await self.menu.native_account(msg):
+            if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+                # The hub belongs to a single verified account, while this public bot
+                # can receive messages from many accounts. Resolve the sender first and
+                # never route their request to another account's computer.
+                customer_key, _ = verified_cloud or await self._cloud_key_for(msg.channel, msg)
+                if customer_key == "!":
+                    return
+                if not await self._shared_sender_hub_confirmed(msg, customer_key):
+                    await self.menu.cloud_handoff(msg, computer=True)
+                    return
+            if (
+                os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1"
+                and self.menu.public_private(msg)
+            ) and not await self.menu.native_account(msg):
                 await self.menu.cloud_handoff(msg, computer=True)
                 return
             if not requested:
@@ -795,7 +867,7 @@ class ChannelManager(ChannelBus):
         self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
         # an account of its own in the relay when the chat is on Cloud, and `"!"` when that
         # account cannot be reached: then this turn is refused, never paid for by this machine
-        cloud_key, cloud_model = await self._cloud_key_for(msg.channel, msg)
+        cloud_key, cloud_model = verified_cloud or await self._cloud_key_for(msg.channel, msg)
         if cloud_key == "!":
             return
         # the chat's own model comes first (C7): a model picked in this conversation — here
@@ -826,7 +898,12 @@ class ChannelManager(ChannelBus):
         # there and its app is online. Sending every message to the desktop is what made a
         # MAX request wait on a machine, ask its own cards and end with "the computer has not
         # finished"; `/computer <text>` is the explicit way to use the hands.
-        self._shared_runtime_context(thread_id)
+        owner = self.svc.sync.account_id
+        if (
+            os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1"
+            or (owner and self.customer_scope_for(msg) == account_scope(owner))
+        ):
+            self._shared_runtime_context(thread_id)
         linked_owner = self.svc.sync.owner_of(thread_id) if not msg.is_group else ""
         customer_scope = (
             account_scope(linked_owner) if linked_owner else self.customer_scope_for(msg)
@@ -964,6 +1041,69 @@ class ChannelManager(ChannelBus):
         # picked up by the MacBook as soon as the Windows app went offline).
         return None
 
+    async def _shared_sender_hub_confirmed(self, msg: InboundMessage, key: str) -> bool:
+        """Revalidate a sender's key against the shared hub's owner, even if sync is off."""
+        owner = str(self.svc.sync.account_id or "")
+        scope = self._cloud_customer_scopes.get((msg.channel, msg.sender_id), "")
+        if not key or key == "!" or not owner or scope != account_scope(owner):
+            return False
+        return await self._shared_sender_account_confirmed(msg, key, scope)
+
+    async def _shared_sender_account_confirmed(
+        self, msg: InboundMessage, key: str, scope: str
+    ) -> bool:
+        """Revalidate this sender's account without borrowing the installation hub."""
+        from nanomuse.cloud import CloudClient
+
+        if (
+            not key or key == "!" or not scope.startswith("account:") or scope == "account:"
+            or self._cloud_customer_scopes.get((msg.channel, msg.sender_id), "") != scope
+        ):
+            return False
+        settings = self.store.resolved(self.store.config(msg.channel))
+        base = str(settings.get("cloud_url") or "").strip().rstrip("/")
+        if not base:
+            return False
+        client = CloudClient(base_url=base, api_key=key)
+        try:
+            me = await asyncio.wait_for(client.me(), timeout=8)
+            return account_scope(str((me.get("account") or {}).get("id") or "")) == scope
+        except Exception as exc:  # noqa: BLE001 — a failed identity check must fail closed
+            logger.warning("channel: hub identity check failed: {}", type(exc).__name__)
+            return False
+        finally:
+            with contextlib.suppress(Exception):
+                await client.close()
+
+    def _shared_sender_can_use_thread(
+        self, msg: InboundMessage, thread_id: str, sender_scope: str
+    ) -> bool:
+        """Compare a relay-verified sender with every existing owner/workspace claim."""
+        thread = self.svc.threads.get(thread_id)
+        if thread is None:
+            return True
+        verified_id = sender_scope.removeprefix("account:")
+        owner = str(self.svc.sync.owner_of(thread_id) or "")
+        main_owner = str(getattr(thread, "main_of", "") or "")
+        if (owner and owner != verified_id) or (main_owner and main_owner != verified_id):
+            return False
+        channel_owner = (
+            channel_scope(msg.channel, f"group:{msg.chat_id}") if msg.is_group
+            else channel_scope(msg.channel, msg.sender_id)
+        )
+        for scope in (thread.customer_scope, thread.workspace_scope):
+            if scope.startswith("account:") and scope != sender_scope:
+                return False
+            if scope.startswith("channel:") and scope != channel_owner:
+                return False
+            if scope == "installation" and not (owner == verified_id or main_owner == verified_id):
+                return False
+        # Legacy ownerless selected conversations cannot be attributed by name alone.
+        has_claim = bool(owner or main_owner or thread.customer_scope or thread.workspace_scope)
+        if not has_claim and thread_id != thread_id_for(msg.channel, msg.chat_id):
+            return False
+        return True
+
     def _shared_runtime_context(self, thread_id: str) -> None:
         """Describe server execution honestly when the desktop cannot continue the turn."""
         thread = self.svc.threads.get(thread_id)
@@ -1041,10 +1181,19 @@ class ChannelManager(ChannelBus):
             return ""
         return opening
 
-    def _thread_for(self, msg: InboundMessage) -> str:
+    def _thread_for(self, msg: InboundMessage, *, verified_sender_scope: str = "") -> str:
         selected = self.picker.selected(msg.channel, msg.chat_id)
         thread = self.svc.threads.get(selected)
-        if thread is not None and self.svc.sync._mine(thread):
+        allowed = thread is not None and self.svc.sync._mine(thread)
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            scope = verified_sender_scope
+            if not scope:
+                identity = (msg.channel, msg.sender_id)
+                cached = self._cloud_keys.get(identity)
+                if cached and cached[0] and cached[0] != "!" and cached[3] > time.time():
+                    scope = self._cloud_customer_scopes.get(identity, "")
+            allowed = bool(scope and thread and self._shared_sender_can_use_thread(msg, selected, scope))
+        if allowed:
             # A chat that still carries the bot's generic name takes the first words of the
             # person's message, the way a chat made on the computer is named.
             opening = self._opening_title(msg) if not msg.is_group else ""
@@ -2221,17 +2370,20 @@ class ChannelManager(ChannelBus):
         machine never pays for a turn that was meant for the relay, and the chat is told
         why instead of seeing nothing happen."""
         settings = self.store.resolved(self.store.config(channel))
-        if str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes"):
+        if (
+            str(settings.get("cloud_per_chat") or "").lower() not in ("1", "true", "yes")
+            and not timeutil.shared_bot()
+        ):
             return "", ""
         approved = self.pairing.approved(channel)
         pinned = approved.get(str(msg.sender_id), {})
         if (channel == "telegram" and physical_chat(channel, msg.chat_id) == str(msg.sender_id)
             and pinned.get("runtime_account") == self.svc.sync.account_id and self.svc.sync.account_id
-            and self.svc.hub.signed_in):
+            and self.svc.hub.signed_in and not timeutil.shared_bot()):
             return "", ""
         if (
             str(msg.sender_id) in approved or str(physical_chat(channel, msg.chat_id)) in approved
-        ) and self.svc.hub.signed_in and not (
+        ) and self.svc.hub.signed_in and not timeutil.shared_bot() and not (
             channel in {"telegram", "max"} and str(settings.get("public") or "").lower() in ("1", "true", "yes")
         ):
             # The owner's own chat keeps this machine's account while the bot itself is
@@ -2263,7 +2415,9 @@ class ChannelManager(ChannelBus):
         held = self._cloud_keys.get(cache_key)
         if held is not None and held[3] > time.time():
             # the account's clock is the computer's: every turn speaks in it
-            if held[2]:
+            if timeutil.shared_bot():
+                timeutil.set_account_zone(self._cloud_customer_scopes.get(cache_key, ""), held[2])
+            elif held[2]:
                 timeutil.set_zone(held[2])
             return held[0], held[1]
         try:
@@ -2325,11 +2479,21 @@ class ChannelManager(ChannelBus):
         account = body.get("account")
         account_id = str(account.get("id") or "") if isinstance(account, dict) else ""
         tz = str(account.get("tz") or "").strip() if isinstance(account, dict) else ""
-        if tz:
+        if timeutil.shared_bot() and not account_id:
+            # Never carry a previous owner's namespace forward when a fresh sign-in
+            # returned a key without proving which account it belongs to.
+            self._cloud_keys.pop(cache_key, None)
+            self._cloud_customer_scopes.pop(cache_key, None)
+            logger.warning("channel {}: the bot door answered without an account id", channel)
+            await self._cloud_no_account(channel, msg.chat_id)
+            return "!", ""
+        if tz and not timeutil.shared_bot():
             timeutil.set_zone(tz)
         self._cloud_keys[cache_key] = (key, model, tz, time.time() + CLOUD_KEY_TTL_S)
         if account_id:
             self._cloud_customer_scopes[cache_key] = account_scope(account_id)
+            if timeutil.shared_bot():
+                timeutil.set_account_zone(account_scope(account_id), tz)
         return key, model
 
     def customer_scope_for(self, msg: InboundMessage) -> str:

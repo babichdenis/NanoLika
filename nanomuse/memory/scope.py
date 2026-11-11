@@ -51,6 +51,11 @@ def memory_scope(scope: str = INSTALLATION_SCOPE) -> Iterator[None]:
         _current_scope.reset(token)
 
 
+def current_memory_scope() -> str:
+    """The trusted account/session namespace of the currently running task."""
+    return _current_scope.get()
+
+
 class MemoryStoreRouter:
     """A MemoryStore-compatible facade, opening one database per customer scope.
 
@@ -105,6 +110,7 @@ __all__ = [
     "MemoryStoreRouter",
     "account_scope",
     "channel_scope",
+    "current_memory_scope",
     "memory_scope",
     "session_scope",
 ]

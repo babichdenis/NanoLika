@@ -5,23 +5,69 @@ is set for, "today" in a check-in) is in the *person's* timezone, never the proc
 computer that is the system zone; for a messenger bot the runtime may live on a relay in
 another country, so the account's zone arrives with the shared profile and is kept here.
 
-Set once, read everywhere: :func:`set_zone` from the account (IANA name), :func:`now` for
-the clock, :func:`localize` for a stamp that was stored in UTC.
+On a personal installation :func:`set_zone` sets the local account's clock. The shared
+bot instead resolves the current task's account scope and its relay-verified timezone, so
+one person's clock cannot change another's. :func:`now` returns the clock and
+:func:`localize` converts a stamp stored in UTC.
 """
 
 from __future__ import annotations
 
 import os
+import threading
 from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 #: the account's zone, when it is known (an IANA name); None = this computer's own zone
 _zone: tzinfo | None = None
 _zone_name: str = ""
+_account_zones: dict[str, tuple[str, tzinfo]] = {}
+_account_zones_lock = threading.RLock()
+
+
+def shared_bot() -> bool:
+    """The public bot has many owners and must not use a process-wide account zone."""
+    return os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
+
+
+def set_account_zone(scope: str, name: str) -> bool:
+    """Record the zone supplied by the relay for a verified account namespace.
+
+    An absent or invalid zone clears the previous value: a new unknown value must not
+    silently inherit another person's clock. Arbitrary conversation/group scopes are not
+    sufficient evidence of an account's identity.
+    """
+    scope = str(scope or "").strip()
+    if not scope.startswith("account:") or not scope.removeprefix("account:"):
+        return False
+    name = str(name or "").strip()
+    try:
+        place = ZoneInfo(name) if name else None
+    except (ZoneInfoNotFoundError, ValueError):
+        place = None
+    with _account_zones_lock:
+        if place is None:
+            _account_zones.pop(scope, None)
+            return False
+        _account_zones[scope] = (name, place)
+    return True
+
+
+def _account_zone() -> tuple[str, tzinfo] | None:
+    # Agent turns run in long-lived worker tasks: the context set by the inbound
+    # messenger task does not propagate through the queue. The existing memory scope
+    # is installed by the worker for each turn and is the trusted identity to use.
+    from nanomuse.memory.scope import current_memory_scope
+
+    with _account_zones_lock:
+        return _account_zones.get(current_memory_scope())
 
 
 def zone_name() -> str:
     """The IANA name in use: the account's when set, else the system's ("" if unplaceable)."""
+    if shared_bot():
+        account = _account_zone()
+        return account[0] if account is not None else system_zone_name()
     if _zone_name:
         return _zone_name
     return system_zone_name()
@@ -58,6 +104,8 @@ def trusted() -> bool:
     True when the account's zone is known (the computer wrote it) or when this process is
     the desktop app itself. A bot container with no account zone has no business stating a
     time: its own zone is the datacentre's, not the person's."""
+    if shared_bot():
+        return _account_zone() is not None
     return bool(_zone_name) or os.environ.get("NANOMUSE_DESKTOP") == "1"
 
 
@@ -81,6 +129,9 @@ def set_zone(name: str) -> bool:
 
 def zone() -> tzinfo:
     """The zone to show times in: the account's, else this computer's."""
+    if shared_bot():
+        account = _account_zone()
+        return account[1] if account is not None else datetime.now().astimezone().tzinfo or UTC
     if _zone is not None:
         return _zone
     return datetime.now().astimezone().tzinfo or UTC
@@ -113,6 +164,8 @@ __all__ = [
     "localize",
     "now",
     "set_zone",
+    "set_account_zone",
+    "shared_bot",
     "trusted",
     "stamp",
     "system_zone_name",

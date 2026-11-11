@@ -638,6 +638,130 @@ def test_the_owner_chat_keeps_the_machine_account_on_a_public_channel(chan, monk
     assert asyncio.run(key_for("u1")) == ("", "")
 
 
+def test_shared_bot_uses_cached_relay_timezone_only_for_verified_account(chan, monkeypatch):
+    import asyncio
+    import time
+
+    from nanomuse import timeutil
+    from nanomuse.memory.scope import memory_scope
+
+    _client, _service, _llm, manager, _fake = chan
+    original = manager.store.resolved
+
+    def resolved(cfg):
+        data = dict(original(cfg))
+        data.update({"cloud_per_chat": "true", "cloud_url": "https://cloud.example", "cloud_bot_token": "test"})
+        return data
+
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    monkeypatch.setattr(manager.store, "resolved", resolved)
+    monkeypatch.setattr(timeutil, "_zone", timeutil._zone)
+    monkeypatch.setattr(timeutil, "_zone_name", timeutil._zone_name)
+    timeutil.set_zone("Europe/Moscow")
+    expires = time.time() + 60
+    manager._cloud_keys[("fake", "u-clock-a")] = ("key-a", "model", "Europe/Kaliningrad", expires)
+    manager._cloud_customer_scopes[("fake", "u-clock-a")] = "account:manager-clock-a"
+    manager._cloud_keys[("fake", "u-clock-b")] = ("key-b", "model", "Asia/Vladivostok", expires)
+    manager._cloud_customer_scopes[("fake", "u-clock-b")] = "account:manager-clock-b"
+    manager._cloud_keys[("fake", "u-clock-unknown")] = ("key-c", "model", "Asia/Vladivostok", expires)
+
+    async def load():
+        for sender in ("u-clock-a", "u-clock-b", "u-clock-unknown"):
+            await manager._cloud_key_for("fake", dm("x", sender=sender))
+
+    asyncio.run(load())
+    with memory_scope("account:manager-clock-a"):
+        assert timeutil.trusted() and timeutil.zone_name() == "Europe/Kaliningrad"
+    with memory_scope("account:manager-clock-b"):
+        assert timeutil.trusted() and timeutil.zone_name() == "Asia/Vladivostok"
+    with memory_scope("channel:fake:u-clock-unknown"):
+        assert not timeutil.trusted()
+
+
+def test_shared_bot_records_timezone_from_fresh_signin(chan, monkeypatch):
+    import asyncio
+
+    from nanomuse import timeutil
+    from nanomuse.memory.scope import memory_scope
+
+    _client, _service, _llm, manager, _fake = chan
+    original = manager.store.resolved
+
+    def resolved(cfg):
+        data = dict(original(cfg))
+        data.update({"cloud_per_chat": "true", "cloud_url": "https://cloud.example", "cloud_bot_token": "test"})
+        return data
+
+    class RelayClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            import httpx
+
+            return httpx.Response(200, json={
+                "api_key": "test-key", "models": [{"id": "model"}],
+                "account": {"id": "manager-fresh-clock", "tz": "Asia/Vladivostok"},
+            })
+
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    monkeypatch.setattr(manager.store, "resolved", resolved)
+    monkeypatch.setattr("nanomuse.channels.manager.httpx.AsyncClient", RelayClient)
+    assert asyncio.run(manager._cloud_key_for("fake", dm("x", sender="u-fresh-clock"))) == ("test-key", "model")
+    with memory_scope("account:manager-fresh-clock"):
+        assert timeutil.trusted() and timeutil.zone_name() == "Asia/Vladivostok"
+
+
+def test_shared_bot_refuses_signin_without_owner_and_clears_old_scope(chan, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    _client, _service, _llm, manager, _fake = chan
+    original = manager.store.resolved
+
+    def resolved(cfg):
+        data = dict(original(cfg))
+        data.update({"cloud_per_chat": "true", "cloud_url": "https://cloud.example", "cloud_bot_token": "test"})
+        return data
+
+    class RelayClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            return httpx.Response(200, json={"api_key": "new-key", "models": [], "account": {}})
+
+    notices = []
+
+    async def no_account(channel, chat):
+        notices.append((channel, chat))
+
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    monkeypatch.setattr(manager.store, "resolved", resolved)
+    monkeypatch.setattr(manager, "_cloud_no_account", no_account)
+    monkeypatch.setattr("nanomuse.channels.manager.httpx.AsyncClient", RelayClient)
+    identity = ("fake", "u-missing-account")
+    manager._cloud_keys[identity] = ("old-key", "old-model", "Asia/Vladivostok", 0)
+    manager._cloud_customer_scopes[identity] = "account:previous-owner"
+    assert asyncio.run(manager._cloud_key_for("fake", dm("x", sender=identity[1]))) == ("!", "")
+    assert identity not in manager._cloud_keys
+    assert identity not in manager._cloud_customer_scopes
+    assert notices == [("fake", "chat1")]
+
+
 def test_switching_off_and_on_and_removing_a_chat(chan):
     client, service, llm, manager, fake = chan
     pair(client, fake)

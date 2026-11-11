@@ -300,6 +300,10 @@ class MuseAgent:
         hub = getattr(tool, "hub", None)
         if tool is None or hub is None:
             return ""
+        from nanomuse.tools.devices import shared_hub_allowed
+
+        if not shared_hub_allowed(hub):
+            return ""
         others = hub.others()
         if not getattr(hub, "client", None) or not hub.client.connected.is_set():
             status = (

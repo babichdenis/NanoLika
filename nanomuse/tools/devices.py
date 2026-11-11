@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -49,6 +50,19 @@ _RISKS = {
     "moderate": RiskLevel.MODERATE,
     "sensitive": RiskLevel.SENSITIVE,
 }
+
+
+def shared_hub_allowed(hub: Any) -> bool:
+    """Only the verified account that owns the process-wide hub may use it."""
+    if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1":
+        return True
+    from nanomuse.memory import account_scope
+
+    svc = getattr(hub, "svc", None)
+    owner = str(getattr(getattr(svc, "sync", None), "account_id", "") or "")
+    memory = getattr(getattr(svc, "app", None), "memory", None)
+    scope = str(getattr(memory, "current_scope", "") or "")
+    return bool(owner and scope == account_scope(owner))
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -87,6 +101,11 @@ class _DeviceTool(BaseTool):
         return await hub.call(str(device["id"]), action, args, timeout=timeout)
 
     async def execute(self, **kwargs: Any) -> ToolResult:
+        if not shared_hub_allowed(self.hub):
+            return ToolResult.fail(
+                "Это устройство относится к другому аккаунту или его владелец не подтверждён. "
+                "Подключите компьютер к своему аккаунту."
+            )
         try:
             return await self._run(**kwargs)
         except HubError as exc:
