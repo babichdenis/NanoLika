@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from nanomuse.background import spawn
-from nanomuse.cloud import CLOUD_KEY, CloudError, model_url
+from nanomuse.cloud import CLOUD_KEY, CloudClient, CloudError, model_url
 from nanomuse.logger import logger
 
 if TYPE_CHECKING:
@@ -555,6 +555,7 @@ class AvatarStudio:
 
     def view(self) -> dict[str, Any]:
         ep = self.endpoint()
+        shared = os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
         return {
             "available": ep is not None,
             "unavailable": "" if ep is not None else self.unavailable_message(),
@@ -563,8 +564,8 @@ class AvatarStudio:
             "video_model": ep.video_model if ep and ep.clips else "",
             "cloud": bool(ep and ep.cloud),
             "host": ep.base_url.split("//", 1)[-1].split("/", 1)[0] if ep else "",
-            "current": self.current.view() if self.current else None,
-            "face": self.face_info(),
+            "current": self.current.view() if self.current and not shared else None,
+            "face": self.face_info() if not shared else None,
         }
 
     def face_info(self) -> dict[str, Any] | None:
@@ -676,6 +677,8 @@ class AvatarStudio:
 
     async def estimate(self, ep: Endpoint | None = None) -> dict[str, Any]:
         """What a new face costs: the relay's word when the account draws; otherwise the count."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            raise StudioError(self.unavailable_message())
         ep = ep or self.endpoint()
         if ep is None:
             raise StudioError("no image model")
@@ -689,15 +692,17 @@ class AvatarStudio:
         }
         if not ep.cloud:
             return cost
-        hub = self.svc.hub
-        hub.cloud.api_key = ep.api_key
+        # Estimating one face must not alter the shared Hub client or another request's key.
+        client = CloudClient(base_url=_video_root(ep.base_url), api_key=ep.api_key)
         try:
-            data = await hub.cloud.estimate(
+            data = await client.estimate(
                 PICTURES_PER_FACE, ep.image_model, SIZE, clips=clips, video_model=ep.video_model
             )
         except CloudError as exc:
             cost["error"] = exc.describe()
             return cost
+        finally:
+            await client.close()
         cost.update(
             {
                 "cny": data.get("cny"),
@@ -711,6 +716,8 @@ class AvatarStudio:
         return cost
 
     def _session(self, session_id: str) -> Session:
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            raise StudioError(self.unavailable_message())
         cur = self.current
         if cur is None or cur.id != session_id:
             raise StudioError("that session is over")
@@ -802,6 +809,8 @@ class AvatarStudio:
     async def redraw_moods(self) -> dict[str, Any]:
         """*Redraw the poses* for the face the profile wears, from its idle still — the phone's
         menu item; what to do when a pose came out wrong or the clips were never made."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            raise StudioError(self.unavailable_message())
         face = self.svc.profile.avatar
         ws = self.svc.workspace()
         if not face or face == "dragon" or not (ws / "avatar" / face / "idle.webp").is_file():
