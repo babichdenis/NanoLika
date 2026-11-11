@@ -37,7 +37,7 @@ const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined
 const money=n=>new Intl.NumberFormat(lang,{style:'currency',currency:'RUB',maximumFractionDigits:6}).format(n);
 const count=n=>new Intl.NumberFormat(lang).format(n||0);
 const date=n=>n?new Date(n*1000).toLocaleDateString(lang):'—';
-async function api(path,options={}){const r=await fetch(path,{...options,cache:'no-store',headers:{Authorization:'Bearer '+session.key,...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}});if(r.status===401){$('private-content').hidden=true;$('identity').textContent='';const e=new Error('expired');e.status=401;throw e;}if(!r.ok){const data=await r.json().catch(()=>null),e=new Error('request');e.status=r.status;e.code=data?.error?.code;throw e;}return r.status===204?null:r.json();}
+async function api(path,options={}){const {preserveContentOnUnauthorized=false,...fetchOptions}=options;const r=await fetch(path,{...fetchOptions,cache:'no-store',headers:{Authorization:'Bearer '+session.key,...(fetchOptions.body?{'Content-Type':'application/json'}:{}),...fetchOptions.headers}});if(r.status===401){if(!preserveContentOnUnauthorized){$('private-content').hidden=true;$('identity').textContent='';}const e=new Error('expired');e.status=401;throw e;}if(!r.ok){const data=await r.json().catch(()=>null),e=new Error('request');e.status=r.status;e.code=data?.error?.code;throw e;}return r.status===204?null:r.json();}
 function row(title,subtitle){const n=h('div',undefined,'account-row'),text=h('div');text.append(h('strong',title),h('p',subtitle||''));n.append(text);return n;}
 function empty(node,message=T.empty){node.replaceChildren(h('p',message,'pad'));}
 /* A chat tied to the account, with the way out beside it.
@@ -120,7 +120,7 @@ function openKeyEditor(k){
  $('api-key-dialog').showModal();
  $('api-key-edit-label').focus();
 }
-async function loadApiKeys(){if(!$('api-keys'))return;const result=await api('/v1/me/keys');renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited.toLocaleLowerCase(lang):Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
+async function loadApiKeys(options={}){if(!$('api-keys'))return;const result=await api('/v1/me/keys',options);renderApiKeys(result.keys||[]);const balance=result.balance||{};if($('api-balance'))$('api-balance').textContent=`${T.apiBalance}: ${balance.unlimited?T.unlimited.toLocaleLowerCase(lang):Number.isFinite(balance.left_rub)?rub(balance.left_rub):'—'}`;}
 async function loadProviders(){if(!$('providers-list'))return;try{const result=await api('/v1/me/providers');renderProviders(result.providers||[]);}catch(_){empty($('providers-list'),T.unavailable);}}
 function renderProviders(list){const box=$('providers-list');box.replaceChildren();if(!list.length){box.append(h('p',T.providerNone,'pad'));return;}for(const p of list){const card=h('article',undefined,'account-row');const text=h('div');text.append(h('strong',p.label?`${p.label} · ${p.provider}`:p.provider),h('p',`${p.base_url} · ${p.key_hint}${p.last_error?' · '+p.last_error:''}`));const del=h('button',T.providerDelete,'quiet danger-text');del.type='button';del.onclick=async()=>{if(!confirm(T.providerDeleteConfirm))return;del.disabled=true;try{await api('/v1/me/providers/'+encodeURIComponent(p.id),{method:'DELETE'});await loadProviders();}catch(_){$('provider-status').textContent=T.providerError;del.disabled=false;}};card.append(text,del);box.append(card);}}
 async function loadUsage(){await usageChart.load();}
@@ -152,7 +152,11 @@ if($('create-api-key'))$('create-api-key').onclick=async()=>{
   const result=await api('/v1/me/keys',{method:'POST',body:JSON.stringify({device:'web-api',label,...(ttl?{ttl_s:ttl}:{}),daily_limit_rub:daily,monthly_limit_rub:monthly})});
   if(!result.api_key)throw new Error('missing_key');
   $('new-api-key-value').textContent=result.api_key;$('new-api-key').hidden=false;$('api-key-status').textContent=T.apiCreated;
-  await loadApiKeys();
+  try{await loadApiKeys({preserveContentOnUnauthorized:true});}
+  catch(_){
+   const detail={ru:'Ключ создан. Скопируйте его сейчас. Не удалось обновить список ключей — обновите страницу после копирования.',en:'The key was created. Copy it now. The key list could not be refreshed; refresh the page after copying.',zh:'密钥已创建，请立即复制。密钥列表暂时无法更新，请复制后刷新页面。'};
+   $('api-key-status').textContent=detail[lang]||detail.ru;
+  }
  }catch(e){$('api-key-status').textContent=lang==='ru'?(e.status===401?'Войдите в аккаунт заново, затем создайте ключ.':e.status===404?'Сервис выдачи ключей недоступен. Попробуйте обновить страницу.':T.apiError):T.apiError;}finally{button.disabled=false;}
 };
 if($('add-provider'))$('add-provider').onclick=async()=>{
