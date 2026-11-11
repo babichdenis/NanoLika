@@ -2607,6 +2607,9 @@ fun ChatScreen(
         containerColor = ChatColors.background,
         contentWindowInsets = WindowInsets(0),
         topBar = {
+            val nmHistoryFull by io.github.nanomuse.sync.ConversationSync.historyFull.collectAsState()
+            val nmSyncConflict by io.github.nanomuse.sync.ConversationSync.syncConflict.collectAsState()
+            Column {
             // NanoLika: the header is an overlay. The list slides underneath and
             // the scrim melts it away: a soft shade at the top edge dissolving
             // to clear, never a bar.
@@ -3383,6 +3386,17 @@ fun ChatScreen(
                 },
             )
             } // NanoLika: close the header-fade wrapper
+            if (nmHistoryFull || nmSyncConflict) {
+                Text(
+                    text = stringResource(if (nmHistoryFull) R.string.nm_sync_history_full else R.string.nm_sync_conflict),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->

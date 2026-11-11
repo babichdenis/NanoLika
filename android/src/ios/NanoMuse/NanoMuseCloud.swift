@@ -717,7 +717,11 @@ enum NanoMuseCloud {
             return object ?? [:]
         }
         let err = object?["error"] as? [String: Any]
-        let code = (err?["code"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "http_\(status)"
+        // Older sync endpoints returned {"error":"sync_off"}; do not infer
+        // that every HTTP 409 means the person turned synchronization off.
+        let code = (err?["code"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (object?["error"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? "http_\(status)"
         let message = (err?["message"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "HTTP \(status)"
         let retry = (err?["retry_after"] as? NSNumber).map { $0.doubleValue }.flatMap { $0 > 0 ? Int(ceil($0)) : nil }
         let paused = (err?["paused"] as? Bool) ?? ((err?["paused"] as? NSNumber)?.boolValue ?? false)

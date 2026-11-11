@@ -43,6 +43,81 @@ final class NanoMuseRound5Tests: XCTestCase {
 
     // MARK: - C9: scope, tail, the switch
 
+    func testHistoryFullDoesNotDisableSyncAndRetriesDeletionsFirst() {
+        XCTAssertTrue(NanoMuseSyncPolicy.historyFull(status: 409, code: "message_limit"))
+        XCTAssertFalse(NanoMuseSyncPolicy.syncDisabled(code: "message_limit"))
+        XCTAssertTrue(NanoMuseSyncPolicy.syncDisabled(code: "sync_off"))
+        XCTAssertFalse(NanoMuseSyncPolicy.historyFull(status: 500, code: "message_limit"))
+        XCTAssertEqual(
+            NanoMuseSyncPolicy.batches(deleted: [false, true, false, true, false], limit: 2),
+            [[1, 3], [0, 2], [4]]
+        )
+        XCTAssertTrue(NanoMuseSyncPolicy.batches(deleted: [], limit: 200).isEmpty)
+    }
+
+    func testLateReplyCannotApplyToAnotherAccountAndCollisionsStayPending() {
+        XCTAssertTrue(NanoMuseSyncPolicy.ownsReply(expected: "A", current: "A", store: "A"))
+        XCTAssertFalse(NanoMuseSyncPolicy.ownsReply(expected: "A", current: "B", store: "B"))
+        XCTAssertFalse(NanoMuseSyncPolicy.ownsReply(expected: "A", current: "A", store: "B"))
+        XCTAssertTrue(NanoMuseSyncPolicy.refused(mid: "m", cid: "c", rejected: [["mid": "m", "reason": "known_mid"]]))
+        XCTAssertTrue(NanoMuseSyncPolicy.refused(mid: "m", cid: "c", rejected: [["cid": "c", "reason": "conversation_deleted"]]))
+        XCTAssertFalse(NanoMuseSyncPolicy.refused(mid: "m", cid: "c", rejected: [["mid": "other"]]))
+    }
+
+    func testExistingMessageMustMatchContentAndConversation() {
+        let local: [String: Any] = ["mid": "m", "cid": "c", "role": "user", "text": "same", "created_at": 1]
+        XCTAssertTrue(NanoMuseSyncPolicy.matches(local: local, remote: local))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "other", "role": "user", "text": "same", "created_at": 1]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "role": "user", "text": "different", "created_at": 1]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "role": "user", "text": "same", "created_at": 1, "deleted": true]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "role": "user", "text": "same", "created_at": 1, "truncated": true]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "role": "user", "text": "same", "created_at": 1, "reply_to_mid": "parent"]))
+    }
+
+    func testConfirmedReceiptSurvivesRestartAndProtectsTombstone() throws {
+        let local: [String: Any] = ["mid": "m", "cid": "c", "role": "user", "text": "picture", "created_at": 1,
+                                    "attachments": [["name": "face.png", "mime": "image/png", "size": 8]]]
+        let remote: [String: Any] = ["mid": "m", "cid": "c", "role": "user", "text": "picture", "created_at": 1,
+                                     "attachments": [["name": "face.png", "mime": "image/png", "size": 8, "url": ""]]]
+        let receipt = try XCTUnwrap(NanoMuseSyncPolicy.receipt(local: local, remoteDigest: NanoMuseSyncPolicy.remoteDigest(remote)))
+        let restored = try JSONDecoder().decode(NanoMuseSyncReceipt.self, from: JSONEncoder().encode(receipt))
+        XCTAssertTrue(NanoMuseSyncPolicy.trustsLive(receipt: restored, local: local, remote: remote))
+        XCTAssertTrue(NanoMuseSyncPolicy.trusts(receipt: restored, local: local, cid: "c")) // tombstone
+        XCTAssertFalse(NanoMuseSyncPolicy.trusts(receipt: nil, local: local, cid: "c")) // legacy mid alone
+        XCTAssertFalse(NanoMuseSyncPolicy.trusts(receipt: restored, local: local, cid: "other"))
+        var changed = local; changed["text"] = "changed"
+        XCTAssertFalse(NanoMuseSyncPolicy.trusts(receipt: restored, local: changed, cid: "c"))
+        var altered = remote; altered["text"] = "different"
+        XCTAssertFalse(NanoMuseSyncPolicy.trustsLive(receipt: restored, local: local, remote: altered))
+    }
+
+    func testReceiptPreservesReplyParentAcrossFullPull() throws {
+        let local: [String: Any] = ["mid": "r", "cid": "c", "role": "assistant", "text": "reply", "created_at": 2]
+        let remote: [String: Any] = ["mid": "r", "cid": "c", "role": "assistant", "text": "reply", "created_at": 2, "reply_to_mid": "parent"]
+        let receipt = try XCTUnwrap(NanoMuseSyncPolicy.receipt(local: local, remoteDigest: NanoMuseSyncPolicy.remoteDigest(remote)))
+        let restored = try JSONDecoder().decode(NanoMuseSyncReceipt.self, from: JSONEncoder().encode(receipt))
+        XCTAssertTrue(NanoMuseSyncPolicy.trustsLive(receipt: restored, local: local, remote: remote))
+        var changed = remote; changed["reply_to_mid"] = "other"
+        XCTAssertFalse(NanoMuseSyncPolicy.trustsLive(receipt: restored, local: local, remote: changed))
+        XCTAssertFalse(NanoMuseSyncPolicy.trustsLive(receipt: nil, local: local, remote: remote))
+    }
+
+    func testLostTombstoneAcknowledgementRequiresExactIdAndDeletedState() {
+        let local: [String: Any] = ["mid": "m", "cid": "c", "deleted": true]
+        XCTAssertTrue(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "deleted": true]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "c", "deleted": false]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "m", "cid": "different", "deleted": true]))
+        XCTAssertFalse(NanoMuseSyncPolicy.matches(local: local, remote: ["mid": "different", "cid": "c", "deleted": true]))
+    }
+
+    func testLookupBudgetIsSharedAcrossAllMessagesAndConversations() {
+        var budget = NanoMuseLookupBudget(maxPages: 70)
+        var requests = 0
+        for _ in 0..<200 { for _ in 0..<70 { if budget.take() { requests += 1 } } }
+        XCTAssertEqual(requests, 70)
+        XCTAssertFalse(budget.take())
+    }
+
     func testPullPathCarriesScopeAndTail() {
         XCTAssertEqual(NanoMuseSync.pullPath(since: 0, sideChats: false, tail: 300), "/v1/sync/changes?since=0&limit=500&scope=main&tail=300")
         XCTAssertEqual(NanoMuseSync.pullPath(since: 0, sideChats: true, tail: 300), "/v1/sync/changes?since=0&limit=500&scope=all&tail=300")

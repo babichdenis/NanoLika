@@ -1033,6 +1033,7 @@
     <!-- Conversation sync between the account's devices (contract C7) -->
     <string name="nm_sync_title">Синхронизировать разговоры между моими устройствами</string>
     <string name="nm_sync_caption">Текст ваших чатов хранится в nanoLika Cloud, чтобы каждое устройство показывало одни и те же разговоры. Файлы и изображения остаются на устройстве, где были созданы.</string>
+    <string name="nm_sync_history_full">Облачная история заполнена. Новые сообщения сохранены на этом устройстве, но не синхронизированы. Освободите место в облачной истории — мы повторим отправку автоматически.</string>
     <string name="nm_sync_sign_in">Войдите, чтобы синхронизировать</string>
     <string name="nm_sync_on_toast">Включено. Разговоры этого телефона отправляются.</string>
     <string name="nm_sync_off_toast">Выключено. Сохранённое удалено.</string>
@@ -1170,4 +1171,5 @@
     <string name="nm_nl_own_title">Свои модели</string>
     <string name="nm_nl_own_subtitle">Необязательно. Подключите своего провайдера для чата.</string>
     <string name="nm_nl_cloud_use">Использовать nanoLika Cloud</string>
+    <string name="nm_sync_conflict">Некоторые сообщения не удалось синхронизировать. Они сохранены на этом устройстве. Если ошибка повторяется, обратитесь в поддержку.</string>
 </resources>

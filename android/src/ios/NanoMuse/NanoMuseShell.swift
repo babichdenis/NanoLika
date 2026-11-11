@@ -77,6 +77,7 @@ enum NanoMuseTab: String, CaseIterable, Identifiable {
 struct NanoMuseRoot: View {
     @AppStorage("nanomuse.shell.enabled") private var shellEnabled = true
     @ObservedObject private var store = ProviderConfigStore.shared
+    @ObservedObject private var sync = NanoMuseSync.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var hasSessions: Bool?
     @State private var setupDone = NanoMuseFirstRun.isDone
@@ -132,6 +133,17 @@ struct NanoMuseRoot: View {
                     }, onPrefillChat: { text in
                         NotificationCenter.default.post(name: .nanoMuseComposerPrefill, object: nil, userInfo: ["text": text])
                     }, onOpenRoutines: nil)
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if sync.historyFull || sync.syncConflict {
+                Text(AppLocalized(sync.historyFull ? "nm.sync.history_full" : "nm.sync.conflict"))
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.2))
+                    .accessibilityAddTraits(.isStaticText)
             }
         }
         // The card for a step another device's Muse asks about, over the shell and the upstream layout alike.

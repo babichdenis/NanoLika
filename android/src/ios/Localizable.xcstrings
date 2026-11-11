@@ -1,6 +1,38 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "nm.sync.history_full" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud conversation history is full. New messages remain on this device and have not synced. Free space in cloud history; we will retry automatically."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Облачная история заполнена. Новые сообщения сохранены на этом устройстве, но не синхронизированы. Освободите место в облачной истории — мы повторим отправку автоматически."
+          }
+        }
+      }
+    },
+    "nm.sync.conflict" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some messages could not be synced. They remain on this device. Please contact support if the problem persists."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Некоторые сообщения не удалось синхронизировать. Они сохранены на этом устройстве. Если ошибка повторяется, обратитесь в поддержку."
+          }
+        }
+      }
+    },
     "nl.cloud.ready" : {
       "localizations" : {
         "en" : {

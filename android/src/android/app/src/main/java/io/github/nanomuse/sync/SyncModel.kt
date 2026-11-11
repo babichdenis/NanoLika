@@ -38,6 +38,7 @@ data class RemoteMessage(
     val deleted: Boolean,
     /** The name of the device that wrote it (`device_name`), for the "From Pixel 8" caption. */
     val deviceName: String = "",
+    val replyToMid: String = "",
 )
 
 /** A page of changes since a cursor, in `seq` order. */
@@ -104,3 +105,9 @@ data class SyncState(
  * (`sync_off`, `bad_key`) or `http_<status>`.
  */
 class SyncException(val status: Int, val code: String, message: String) : IOException(message)
+
+/** Global page budget for all candidate conversations in one retry operation. */
+class LookupBudget(maxPages: Int) {
+    private var remaining = maxPages.coerceAtLeast(0)
+    fun take(): Boolean = if (remaining > 0) { remaining--; true } else false
+}

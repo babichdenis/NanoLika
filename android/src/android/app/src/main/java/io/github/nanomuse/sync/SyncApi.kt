@@ -27,6 +27,8 @@ interface SyncApi {
 
     @Throws(SyncException::class)
     fun push(device: String, conversations: List<OutConversation>, messages: List<OutMessage>): PushResult
+    /** One bounded lookup across the whole retry batch. */
+    fun findMessages(candidates: List<OutMessage>, maxPages: Int = 70): Map<String, RemoteMessage> = emptyMap()
 
     /**
      * Presence (C9): this device started ([working] true) or finished a turn on [cid]. Best
@@ -83,6 +85,7 @@ object SyncJson {
                     createdAt = it.optLong("created_at"),
                     deleted = it.optBoolean("deleted", false),
                     deviceName = it.optString("device_name"),
+                    replyToMid = it.optString("reply_to_mid"),
                 )
             }.filter { it.mid.isNotBlank() },
         )
@@ -177,6 +180,7 @@ class RelaySyncApi(
     private val token: String,
     private val userAgent: String,
     private val http: OkHttpClient = defaultClient,
+    private val expectedAccountId: String? = null,
 ) : SyncApi {
     override fun state(): SyncState = SyncJson.state(call("GET", "/v1/sync/state"))
 
@@ -188,6 +192,30 @@ class RelaySyncApi(
 
     override fun push(device: String, conversations: List<OutConversation>, messages: List<OutMessage>): PushResult =
         SyncJson.pushResult(call("POST", "/v1/sync/changes", SyncJson.pushBody(device, conversations, messages)))
+
+    override fun findMessages(candidates: List<OutMessage>, maxPages: Int): Map<String, RemoteMessage> {
+        val accountId = expectedAccountId?.takeIf { it.isNotBlank() } ?: return emptyMap()
+        val found = mutableMapOf<String, RemoteMessage>()
+        val budget = LookupBudget(maxPages)
+        for ((cid, group) in candidates.groupBy { it.cid }) {
+            val needed = group.map { it.mid }.toMutableSet()
+            var before = 0L
+            while (needed.isNotEmpty() && budget.take()) {
+                val query = if (before == 0L) "after=0" else "before=$before"
+                val page = call("GET", "/v1/sync/conversations/$cid/messages?$query&limit=300")
+                if (page.optString("account_id") != accountId || page.optString("cid") != cid) {
+                    throw SyncException(409, "sync_rejected", "Verification returned a different account or conversation")
+                }
+                val rows = SyncJson.changes(page).messages
+                for (row in rows) if (needed.remove(row.mid)) found[row.mid] = row
+                if (!page.optBoolean("has_older", false)) break
+                val oldest = rows.minOfOrNull { it.seq } ?: break
+                if (oldest <= 0 || oldest == before) break
+                before = oldest
+            }
+        }
+        return found
+    }
 
     override fun working(device: String, cid: String, working: Boolean) {
         call("POST", "/v1/sync/working", JSONObject().put("cid", cid).put("working", working).put("device", device))

@@ -39,6 +39,8 @@ fun SyncConversationsCard(signedIn: Boolean, onSignIn: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val enabled by ConversationSync.enabled.collectAsState()
+    val historyFull by ConversationSync.historyFull.collectAsState()
+    val syncConflict by ConversationSync.syncConflict.collectAsState()
     var busy by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -85,6 +87,14 @@ fun SyncConversationsCard(signedIn: Boolean, onSignIn: () -> Unit) {
             if (!signedIn) append(' ').append(stringResource(R.string.nm_sync_sign_in))
         },
     )
+    if (signedIn && enabled && (historyFull || syncConflict)) {
+        Text(
+            text = stringResource(if (historyFull) R.string.nm_sync_history_full else R.string.nm_sync_conflict),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
+        )
+    }
     if (on) {
         // contract C9: main first — side chats stay on this phone unless asked for (per device, off by default)
         val sideChats by ConversationSync.sideChats.collectAsState()

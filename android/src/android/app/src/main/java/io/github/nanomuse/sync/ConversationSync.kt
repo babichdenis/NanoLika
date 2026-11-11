@@ -8,6 +8,7 @@ import com.openminis.app.BuildConfig
 import com.openminis.app.MinisApp
 import com.openminis.app.logging.AppLogger
 import io.github.nanomuse.account.AccountData
+import io.github.nanomuse.account.AccountScope
 import io.github.nanomuse.cloud.NanoMuseCloud
 import io.github.nanomuse.hub.Hub
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +56,7 @@ object ConversationSync {
     private const val PREFS = "nanomuse_sync"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_SIDE_CHATS = "side_chats"
+    private const val KEY_HISTORY_FULL = "history_full_"
     private const val PUSH_DELAY_MS = 2_000L
     private const val PULL_EVERY_MS = 60_000L
     /** The turn's last rows are still being written when the stream flag drops; the reply goes a breath later. */
@@ -73,6 +75,12 @@ object ConversationSync {
     private val _enabled = MutableStateFlow(true)
     /** The switch as this phone knows it (the relay's word wins when it differs). */
     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
+
+    private val _historyFull = MutableStateFlow(false)
+    /** Pending messages remain on this device until cloud history has room again. */
+    val historyFull: StateFlow<Boolean> = _historyFull.asStateFlow()
+    private val _syncConflict = MutableStateFlow(false)
+    val syncConflict: StateFlow<Boolean> = _syncConflict.asStateFlow()
 
     private val _sideChats = MutableStateFlow(false)
     /** "Also sync side chats" (C9): this phone's setting, off until the person turns it on. */
@@ -113,6 +121,8 @@ object ConversationSync {
         app = ctx
         _enabled.value = prefs(ctx).getBoolean(KEY_ENABLED, true)
         _sideChats.value = prefs(ctx).getBoolean(KEY_SIDE_CHATS, false)
+        _historyFull.value = _enabled.value && (accountKey(ctx)?.let { historyWasFull(ctx, it) } ?: false)
+        _syncConflict.value = _enabled.value && (accountKey(ctx)?.let { conflictWasPresent(ctx, it) } ?: false)
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
                 when (event) {
@@ -157,6 +167,15 @@ object ConversationSync {
         return lock.withLock { block() }
     }
 
+    /** Call inside exclusive immediately before the user deletes a chat. */
+    suspend fun markDeleted(sessionId: String) {
+        val ctx = app ?: return
+        val store = RoomSyncStore(ctx)
+        val account = accountKey(ctx) ?: return
+        val map = store.conversation(sessionId) ?: return
+        if (map.owner == null || map.owner == account) store.putConversation(map.copy(deleted = true))
+    }
+
     /** Every chat has an owner and the hidden set is current (C12); after a sign-in, a sign-out, a restore. */
     suspend fun reconcileOwners(context: Context) {
         val ctx = context.applicationContext
@@ -168,6 +187,8 @@ object ConversationSync {
 
     /** The signed-in account is not the one the last sync ran for (C10): nothing of the old one is shown as the new one's. */
     private fun accountChanged() {
+        _historyFull.value = _enabled.value && (app?.let { ctx -> accountKey(ctx)?.let { historyWasFull(ctx, it) } } ?: false)
+        _syncConflict.value = app?.let { ctx -> accountKey(ctx)?.let { conflictWasPresent(ctx, it) } } ?: false
         _working.value = emptyMap()
         workingSent.clear()
         _captions.value = emptyMap()
@@ -188,7 +209,7 @@ object ConversationSync {
         pushJob?.cancel()
         pushJob = scope.launch {
             delay(PUSH_DELAY_MS)
-            run(ctx) { it.push() }
+            run(ctx) { pushWithStatus(ctx, it) }
         }
     }
 
@@ -197,7 +218,7 @@ object ConversationSync {
         val ctx = context.applicationContext
         if (!active(ctx)) return
         pushJob?.cancel()
-        scope.launch { run(ctx) { it.push() } }
+        scope.launch { run(ctx) { pushWithStatus(ctx, it) } }
     }
 
     /**
@@ -213,7 +234,7 @@ object ConversationSync {
         pushJob?.cancel()
         scope.launch {
             run(ctx) {
-                it.push()
+                pushWithStatus(ctx, it)
                 if (sessionId != null && runCatching { it.working(sessionId, true) }.getOrDefault(false)) workingSent += sessionId
             }
         }
@@ -230,7 +251,7 @@ object ConversationSync {
         scope.launch {
             delay(TURN_END_SETTLE_MS)
             run(ctx) {
-                it.push()
+                pushWithStatus(ctx, it)
                 runCatching { it.working(sessionId, false) }
             }
         }
@@ -249,7 +270,7 @@ object ConversationSync {
         scope.launch {
             run(ctx) {
                 applyPull(it.pull())
-                it.push()
+                pushWithStatus(ctx, it)
                 runCatching { seedPresence(it, it.state().working) }
             }
         }
@@ -309,6 +330,8 @@ object ConversationSync {
     fun signedIn(context: Context) {
         halted = false
         val ctx = context.applicationContext
+        _historyFull.value = _enabled.value && (accountKey(ctx)?.let { historyWasFull(ctx, it) } ?: false)
+        _syncConflict.value = _enabled.value && (accountKey(ctx)?.let { conflictWasPresent(ctx, it) } ?: false)
         scope.launch {
             run(ctx) {
                 // C10: the list is this account's from the first frame — another account's chats
@@ -320,7 +343,7 @@ object ConversationSync {
                 if (_enabled.value) {
                     applyPull(it.pull())
                     if (state != null) seedPresence(it, state.working)
-                    it.push()
+                    pushWithStatus(ctx, it)
                 }
             }
         }
@@ -339,6 +362,7 @@ object ConversationSync {
         pushJob?.cancel()
         prefs(ctx).edit().remove(KEY_ENABLED).remove(KEY_SIDE_CHATS).apply()
         _enabled.value = true
+        _historyFull.value = false
         _sideChats.value = false
         _captions.value = emptyMap()
         _remoteRows.value = emptyMap()
@@ -352,7 +376,11 @@ object ConversationSync {
         ticker = scope.launch {
             while (isActive) {
                 delay(PULL_EVERY_MS)
-                if (active(ctx)) run(ctx) { applyPull(it.pull()) }
+                if (active(ctx)) run(ctx) {
+                    applyPull(it.pull())
+                    // Retry durable pending rows after space is freed elsewhere.
+                    if (_historyFull.value || _syncConflict.value) pushWithStatus(ctx, it)
+                }
             }
         }
     }
@@ -376,6 +404,7 @@ object ConversationSync {
         lock.withLock { e.setEnabled(on) }
         setLocalEnabled(ctx, on)
         if (on) {
+            _historyFull.value = accountKey(ctx)?.let { historyWasFull(ctx, it) } ?: false
             halted = false
             syncSoon(ctx)
         }
@@ -396,7 +425,7 @@ object ConversationSync {
             run(ctx) {
                 it.sideChatsTurnedOn()
                 applyPull(it.pull())
-                it.push()
+                pushWithStatus(ctx, it)
             }
         }
     }
@@ -411,6 +440,8 @@ object ConversationSync {
     private fun setLocalEnabled(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean(KEY_ENABLED, on).apply()
         _enabled.value = on
+        if (!on) { _historyFull.value = false; _syncConflict.value = false }
+        else _syncConflict.value = accountKey(ctx)?.let { conflictWasPresent(ctx, it) } ?: false
     }
 
     // ── internals ─────────────────────────────────────────────────────────
@@ -423,20 +454,47 @@ object ConversationSync {
         return SyncEngine(
             store = RoomSyncStore(ctx),
             chats = RoomChats(ctx, repo),
-            api = RelaySyncApi(NanoMuseCloud.baseUrl(ctx), token, "NanoLika-Android/${BuildConfig.VERSION_NAME}"),
+            api = RelaySyncApi(NanoMuseCloud.baseUrl(ctx), token, "NanoLika-Android/${BuildConfig.VERSION_NAME}",
+                expectedAccountId = NanoMuseCloud.account(ctx)?.accountId),
             deviceId = Hub.deviceId(ctx),
             account = account,
             sideChats = { _sideChats.value },
             onAccountChanged = { accountChanged() },
+            isCurrentAccount = { accountKey(ctx) == account && NanoMuseCloud.apiKey(ctx) == token },
         )
+    }
+
+    private fun historyKey(account: String) = KEY_HISTORY_FULL + AccountScope.dirName(account)
+
+    private fun conflictKey(account: String) = "sync_conflict_" + AccountScope.dirName(account)
+    private fun conflictWasPresent(ctx: Context, account: String) = prefs(ctx).getBoolean(conflictKey(account), false)
+    private fun setSyncConflict(ctx: Context, account: String, conflict: Boolean) {
+        prefs(ctx).edit().putBoolean(conflictKey(account), conflict).apply()
+        if (accountKey(ctx) == account) _syncConflict.value = conflict
+    }
+
+    private fun historyWasFull(ctx: Context, account: String): Boolean =
+        prefs(ctx).getBoolean(historyKey(account), false)
+
+    private fun setHistoryFull(ctx: Context, account: String, full: Boolean) {
+        prefs(ctx).edit().putBoolean(historyKey(account), full).apply()
+        if (accountKey(ctx) == account) _historyFull.value = full
+    }
+
+    private suspend fun pushWithStatus(ctx: Context, engine: SyncEngine) {
+        val owner = accountKey(ctx)
+        engine.push()
+        if (owner != null) { setHistoryFull(ctx, owner, false); setSyncConflict(ctx, owner, false) }
     }
 
     private suspend fun run(ctx: Context, block: suspend (SyncEngine) -> Unit) {
         lock.withLock {
             val e = engine(ctx) ?: return
+            val owner = accountKey(ctx)
             try {
                 block(e)
             } catch (x: SyncException) {
+                if (accountKey(ctx) != owner) return@withLock
                 when {
                     x.status == 401 -> {
                         halted = true
@@ -446,12 +504,19 @@ object ConversationSync {
                         setLocalEnabled(ctx, false)
                         AppLogger.info(TAG, "sync is off for the account")
                     }
+                    x.code == "sync_rejected" -> {
+                        if (owner != null) setSyncConflict(ctx, owner, true)
+                    }
+                    x.code == "message_limit" -> {
+                        if (owner != null) setHistoryFull(ctx, owner, true)
+                    }
                     x.status == 0 -> {} // offline: the next trigger tries again
                     else -> AppLogger.info(TAG, "relay: ${x.status} ${x.code}")
                 }
             } catch (x: Exception) {
                 AppLogger.warning(TAG, "sync: ${x.message}")
             }
+            if (accountKey(ctx) != owner) return@withLock
             runCatching {
                 _hidden.value = e.hidden() + AccountData.reconcile(ctx)
                 _captions.value = e.captions()

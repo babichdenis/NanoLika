@@ -69,6 +69,10 @@ struct NanoMuseSyncSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppLocalized("The text of your chats is kept on nanoLika Cloud so every device shows the same conversations. Files and images stay on the device they were made on."))
+                if sync.historyFull || sync.syncConflict {
+                    Text(AppLocalized(sync.historyFull ? "nm.sync.history_full" : "nm.sync.conflict"))
+                        .foregroundStyle(.red)
+                }
                 if let message, !message.isEmpty {
                     Text(message)
                 }

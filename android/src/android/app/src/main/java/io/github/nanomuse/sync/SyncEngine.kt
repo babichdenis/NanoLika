@@ -66,7 +66,12 @@ class SyncEngine(
     private val sideChats: () -> Boolean = { false },
     /** The signed-in account is not the last one (C10): the caller drops what it cached of the old one. */
     private val onAccountChanged: suspend () -> Unit = {},
+    private val isCurrentAccount: () -> Boolean = { true },
 ) {
+    private fun requireCurrentAccount() {
+        if (!isCurrentAccount()) throw SyncException(0, "account_changed", "Sync account changed")
+    }
+
     /** The cursor last applied, or null before the first pull of this account. */
     suspend fun cursor(): Long? = store.meta(SyncStore.CURSOR)?.toLongOrNull()
 
@@ -104,6 +109,7 @@ class SyncEngine(
 
     /** Sends what the relay does not have yet. Returns how many changes it accepted. */
     suspend fun push(): Int {
+        requireCurrentAccount()
         ensureAccount()
         // adoption first: a phone that never pulled must not seed a second main chat
         if (cursor() == null) pull()
@@ -115,6 +121,7 @@ class SyncEngine(
         val convs = mutableListOf<OutConversation>()
         val msgs = mutableListOf<OutMessage>()
         val pending = mutableListOf<SyncMessage>()
+        val unverifiableMids = mutableSetOf<String>()
         val titles = mutableMapOf<String, Pair<SyncConversation, String?>>()
         val gone = mutableListOf<SyncMessage>()
         // C10: another account's chats are not pushed into this one — not their rows, not
@@ -160,6 +167,7 @@ class SyncEngine(
                 val m = known[item.messageId] ?: SyncMessage(item.messageId, newId(), s.id, pushed = false).also { fresh += it }
                 if (m.pushed) continue
                 pending += m
+                if (item.text.length > TEXT_MAX || item.text.toByteArray(Charsets.UTF_8).size > TEXT_MAX) unverifiableMids += m.mid
                 msgs += OutMessage(
                     mid = m.mid, cid = map.cid, role = item.role,
                     text = item.text.take(TEXT_MAX), attachments = item.attachments,
@@ -188,7 +196,11 @@ class SyncEngine(
             }
         }
         // chats deleted here: a tombstone, then the relay's delete route (side chats only while the switch is on)
-        val deletedMaps = store.conversations().filter { it.mine() && it.sessionId !in liveIds && (side || it.kind == "main") }
+        val missingMaps = store.conversations().filter { it.mine() && it.sessionId !in liveIds && (side || it.kind == "main") }
+        // A missing row may be an interrupted account/database switch, not a
+        // user's deletion. Only an explicit local deletion can send a tombstone.
+        val unconfirmedMissing = missingMaps.any { !it.deleted }
+        val deletedMaps = missingMaps.filter { it.deleted }
         for (map in deletedMaps) {
             if (!map.pushed) {
                 // the relay never saw it; nothing to tell
@@ -200,42 +212,88 @@ class SyncEngine(
             convs += OutConversation(map.cid, map.kind, map.pushedTitle, now() / 1000, now() / 1000, deleted = true)
         }
 
-        if (convs.isEmpty() && msgs.isEmpty()) return 0
+        if (convs.isEmpty() && msgs.isEmpty()) {
+            if (unconfirmedMissing) throw SyncException(409, "sync_rejected", "A local chat mapping needs recovery")
+            return 0
+        }
 
         var accepted = 0
         val rejected = mutableListOf<Rejection>()
-        // oldest first across every chat (a backfill is the whole history; tombstones, dated now, last);
-        // the conversations ride with the first batch so every message finds its cid
-        val ordered = msgs.sortedBy { it.createdAt }
-        val batches = if (ordered.isEmpty()) listOf(emptyList()) else ordered.chunked(BATCH)
+        val replies = mutableListOf<Pair<List<OutMessage>, PushResult>>()
+        // Removals free history capacity before new rows are submitted. Otherwise a
+        // full relay rejects a batch before it reaches its later tombstones, and a
+        // person cannot make room and retry. Keep chronological order within each group.
+        val removals = msgs.filter { it.deleted }.sortedBy { it.createdAt }
+        val additions = msgs.filterNot { it.deleted }.sortedBy { it.createdAt }
+        // The relay rolls back the whole rejected POST. Put deletions in separate
+        // POSTs so a still-full additions batch cannot roll back the freed space.
+        val batches = (removals.chunked(BATCH) + additions.chunked(BATCH)).ifEmpty { listOf(emptyList()) }
         batches.forEachIndexed { i, batch ->
+            requireCurrentAccount()
             val r = api.push(deviceId, if (i == 0) convs else emptyList(), batch)
+            requireCurrentAccount()
             accepted += r.accepted
             rejected += r.rejected
+            replies += batch to r
+        }
+        // A lost HTTP reply causes a legitimate replay to return known_mid.
+        // Only confirm it when the relay proves the same live text and chat.
+        val known = rejected.filter { it.reason == "known_mid" && it.mid != null }
+        val knownIds = known.mapNotNull { it.mid }.toSet()
+        val candidates = msgs.filter { it.mid in knownIds && (it.deleted ||
+            (it.mid !in unverifiableMids && it.attachments.isEmpty() && it.text.toByteArray(Charsets.UTF_8).size <= 16384)) }
+        requireCurrentAccount()
+        val found = try { api.findMessages(candidates) } catch (e: SyncException) {
+            if (e.status == 401 || e.code == "sync_off") throw e
+            emptyMap() // Unavailable verification is not a receipt.
+        }
+        requireCurrentAccount()
+        val verifiedIds = mutableSetOf<String>()
+        for (refusal in known) {
+            val local = candidates.firstOrNull { it.mid == refusal.mid } ?: continue
+            val remote = found[local.mid]
+            val sameDeletion = local.deleted && remote != null && remote.deleted && remote.cid == local.cid && remote.mid == local.mid
+            val sameLive = !local.deleted && remote != null && !remote.deleted && !remote.truncated && remote.attachments.isEmpty() && remote.replyToMid.isEmpty() &&
+                remote.cid == local.cid && remote.mid == local.mid && remote.role == local.role && remote.text == local.text && remote.createdAt == local.createdAt
+            if (sameDeletion || sameLive) {
+                rejected.remove(refusal)
+                verifiedIds += local.mid
+            }
         }
         val rejectedMids = rejected.mapNotNull { it.mid }.toSet()
         val rejectedCids = rejected.mapNotNull { it.cid }.toSet()
 
-        // what the relay took is pushed; what it refused for good is dropped rather than retried forever
-        store.putMessages(pending.map { it.copy(pushed = true) })
-        store.removeMessages(gone.map { it.messageId })
+        // Older relay variants can report the cap per row rather than as an HTTP
+        // error. Nothing in that batch should be marked sent: mids are stable, so
+        // re-sending accepted rows is safe after the person frees cloud space.
+        if (rejected.any { it.reason == "message_limit" }) {
+            throw SyncException(409, "message_limit", "Cloud conversation history is full")
+        }
+
+        for ((batch, reply) in replies) {
+            val expected = batch.count { it.mid !in verifiedIds && it.mid !in rejectedMids && it.cid !in rejectedCids }
+            if (reply.accepted < expected) throw SyncException(409, "sync_rejected", "The relay did not confirm the changes")
+        }
+
+        // Keep every refused row pending until its identity can be confirmed.
+        val refusedCids = rejectedCids
+        val refusedMids = rejectedMids + msgs.filter { it.cid in refusedCids }.map { it.mid }
+        store.putMessages(pending.filter { it.mid !in refusedMids }.map { it.copy(pushed = true) })
+        store.removeMessages(gone.filter { it.mid !in refusedMids }.map { it.messageId })
         for ((cid, pair) in titles) {
             if (cid in rejectedCids) continue
             val (map, title) = pair
             store.putConversation(map.copy(pushed = true, pushedTitle = title))
         }
         for (map in deletedMaps) {
-            if (!map.pushed) continue
-            runCatching { api.deleteConversation(map.cid) }
+            if (!map.pushed || map.cid in rejectedCids) continue
+            requireCurrentAccount()
+            val deleted = runCatching { api.deleteConversation(map.cid) }.isSuccess
+            requireCurrentAccount()
+            if (!deleted) continue
             store.removeMessagesOf(map.sessionId)
             store.removeConversation(map.sessionId)
         }
-        if (rejectedMids.isNotEmpty()) {
-            // a message the relay will never take (bad role, unknown cid): not sent again
-            val drop = pending.filter { it.mid in rejectedMids }
-            store.putMessages(drop.map { it.copy(pushed = true) })
-        }
-
         // two devices seeded a main chat each: the relay kept the older one, ours moves under it
         val mainClash = rejected.firstOrNull { it.reason == "main_exists" && it.cidMain != null }
         if (mainClash != null && retryMain) {
@@ -244,6 +302,9 @@ class SyncEngine(
                 rehome(local, mainClash.cidMain!!, "", "")
                 return accepted + pushOnce(retryMain = false)
             }
+        }
+        if (rejected.isNotEmpty() || unconfirmedMissing) {
+            throw SyncException(409, "sync_rejected", "Some conversation changes were refused and remain pending")
         }
         return accepted
     }
@@ -262,6 +323,7 @@ class SyncEngine(
      * page is written as one transaction.
      */
     suspend fun pull(): PullResult {
+        requireCurrentAccount()
         ensureAccount()
         val first = cursor() == null
         var cursor = cursor() ?: 0L
@@ -271,18 +333,26 @@ class SyncEngine(
         val replied = mutableSetOf<String>()
         val scope = if (sideChats()) SyncApi.SCOPE_ALL else SyncApi.SCOPE_MAIN
         while (true) {
+            requireCurrentAccount()
             val page = api.changes(cursor, PAGE, scope, if (first && cursor == 0L) TAIL else 0)
+            requireCurrentAccount()
+            // The mapping and chat tables are separate databases. Detect an
+            // identifier collision before this page creates any new mappings.
+            for (m in page.messages) ensureKnownMessageOwner(m, store.messageByMid(m.mid))
             skipped += page.skipped
             applied += chats.transaction {
                 var n = 0
                 for (c in page.conversations) {
+                    requireCurrentAccount()
                     if (applyConversation(c, touched)) n++
                 }
                 for (m in page.messages) {
+                    requireCurrentAccount()
                     if (applyMessage(m, touched, replied)) n++
                 }
                 n
             }
+            requireCurrentAccount()
             cursor = maxOf(cursor, page.cursor)
             store.putMeta(SyncStore.CURSOR, cursor.toString())
             if (!page.more || (page.conversations.isEmpty() && page.messages.isEmpty())) break
@@ -358,8 +428,20 @@ class SyncEngine(
         return true
     }
 
+    private suspend fun ensureKnownMessageOwner(m: RemoteMessage, known: SyncMessage?) {
+        if (known == null) return
+        // The mapping database is shared by accounts. An identical mid is
+        // not proof that this account or this conversation owns the row.
+        val owner = store.conversation(known.sessionId)
+        requireCurrentAccount()
+        if (owner == null || owner.owner != account || owner.cid != m.cid || owner.deleted) {
+            throw SyncException(409, "sync_rejected", "A message identifier belongs to another conversation")
+        }
+    }
+
     private suspend fun applyMessage(m: RemoteMessage, touched: MutableSet<String>, replied: MutableSet<String>): Boolean {
         val known = store.messageByMid(m.mid)
+        ensureKnownMessageOwner(m, known)
         if (m.deleted) {
             if (known == null) return false
             if (!sideChats() && store.conversation(known.sessionId)?.kind == "side") return false // C9: side chats rest while off

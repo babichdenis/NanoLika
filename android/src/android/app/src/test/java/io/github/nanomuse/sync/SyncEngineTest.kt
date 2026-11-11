@@ -18,7 +18,8 @@ class SyncEngineTest {
         val chats = MemoryChats()
         var clock = 1_700_000_000_000L
         var sideChats = sideChats
-        val engine = SyncEngine(store, chats, relay, device, account, now = { clock }, sideChats = { this.sideChats })
+        var signedIn = true
+        val engine = SyncEngine(store, chats, relay, device, account, now = { clock }, sideChats = { this.sideChats }, isCurrentAccount = { signedIn })
     }
 
     private fun phone(relay: FakeRelay, device: String, account: String = "acct-1", sideChats: Boolean = true) = Phone(relay, device, account, sideChats)
@@ -67,6 +68,202 @@ class SyncEngineTest {
         val minted = p.store.msgs.values.single().mid
         assertEquals(2, p.engine.push())
         assertEquals(minted, relay.msgs.keys.single())
+    }
+
+    @Test fun `late push response cannot mark messages sent after account changes`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        p.engine.pull()
+        val id = p.chats.user("main", "private")
+        relay.onPushReply = { p.signedIn = false }
+        val failure = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+        assertEquals("account_changed", failure.code)
+        assertFalse(p.store.msgs.getValue(id).pushed)
+    }
+
+    @Test fun `late pull response cannot populate a different account`() = runTest {
+        val relay = FakeRelay()
+        relay.seed("desk", "private-cid", "main", "A", 1)
+        relay.seedMessage("desk", "private-cid", "private-mid", "user", "private", 2)
+        val p = phone(relay, "phone-a")
+        relay.onChangesReply = { p.signedIn = false }
+        val failure = runCatching { p.engine.pull() }.exceptionOrNull() as SyncException
+        assertEquals("account_changed", failure.code)
+        assertTrue(p.chats.sessions.isEmpty())
+        assertTrue(p.store.msgs.isEmpty())
+        assertNull(p.engine.cursor())
+    }
+
+    @Test fun `message identifier collision and deleted conversation remain pending`() = runTest {
+        for (reason in listOf("known_mid", "conversation_deleted")) {
+            val relay = FakeRelay()
+            val p = phone(relay, "phone-a")
+            p.chats.addSession("main"); p.chats.main = "main"
+            p.engine.pull()
+            val id = p.chats.user("main", "pending")
+            relay.refusal = { convs, messages ->
+                val rejection = if (reason == "known_mid") Rejection(messages.single().mid, null, reason, null)
+                    else Rejection(null, convs.single().cid, reason, null)
+                PushResult(0, 0, listOf(rejection))
+            }
+            val failure = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+            assertEquals("sync_rejected", failure.code)
+            assertFalse(p.store.msgs.getValue(id).pushed)
+            if (reason == "conversation_deleted") assertFalse(p.store.convs.getValue("main").pushed)
+        }
+    }
+
+    @Test fun `missing local chat mapping never deletes the cloud conversation`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        p.chats.user("main", "keep")
+        p.engine.push()
+        val cid = p.store.convs.getValue("main").cid
+        p.chats.deleteSession("main") // Simulate a lost row, not an explicit user deletion.
+        val failure = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+        assertEquals("sync_rejected", failure.code)
+        assertFalse(relay.convs.getValue(cid).deleted)
+        assertTrue(relay.deletes.isEmpty())
+        assertEquals(cid, p.store.convs.getValue("main").cid)
+    }
+
+    @Test fun `known mid is confirmed only when remote text and conversation match`() = runTest {
+        for (same in listOf(true, false)) {
+            val relay = FakeRelay()
+            val p = phone(relay, "phone-a")
+            p.chats.addSession("main"); p.chats.main = "main"
+            p.engine.pull()
+            val id = p.chats.user("main", "same")
+            relay.refusal = { convs, messages ->
+                val message = messages.single()
+                relay.seedMessage("phone-a", message.cid, message.mid, message.role, if (same) message.text else "different", message.createdAt)
+                PushResult(0, 0, listOf(Rejection(message.mid, null, "known_mid", null)))
+            }
+            val result = runCatching { p.engine.push() }
+            assertEquals(same, result.isSuccess)
+            assertEquals(same, p.store.msgs.getValue(id).pushed)
+        }
+    }
+
+    @Test fun `partial message rejection leaves only refused row pending`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        p.engine.pull()
+        val accepted = p.chats.user("main", "accepted")
+        val refused = p.chats.user("main", "refused")
+        relay.refusal = { _, messages ->
+            PushResult(0, 1, listOf(Rejection(messages.last().mid, null, "known_mid", null)))
+        }
+        val error = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+        assertEquals("sync_rejected", error.code)
+        assertTrue(p.store.msgs.getValue(accepted).pushed)
+        assertFalse(p.store.msgs.getValue(refused).pushed)
+    }
+
+    @Test fun `many known mids are verified in one bounded batch`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        p.engine.pull()
+        repeat(200) { p.chats.user("main", "row-$it") }
+        relay.refusal = { _, messages ->
+            messages.forEach { relay.seedMessage("phone-a", it.cid, it.mid, it.role, it.text, it.createdAt) }
+            PushResult(0, 0, messages.map { Rejection(it.mid, null, "known_mid", null) })
+        }
+        p.engine.push()
+        assertEquals(1, relay.lookupCalls)
+        assertTrue(p.store.msgs.values.all { it.pushed })
+        val budget = LookupBudget(70)
+        assertEquals(70, (0 until 200 * 70).count { budget.take() })
+        assertFalse(budget.take())
+    }
+
+    @Test fun `foreign account or conversation mid collision never deletes or hides local message`() = runTest {
+        for (deleted in listOf(false, true)) for (foreignAccount in listOf(false, true)) {
+            val relay = FakeRelay()
+            val p = phone(relay, "phone-b", account = "account-b")
+            p.chats.addSession("local-a", "A")
+            val localId = p.chats.user("local-a", "private A")
+            p.store.putConversation(SyncConversation("local-a", "cid-a", "side", "a", "", null, true,
+                owner = if (foreignAccount) "account-a" else "account-b"))
+            p.store.putMessages(listOf(SyncMessage(localId, "same-mid", "local-a", pushed = true)))
+            p.store.putMeta(SyncStore.ACCOUNT, "account-b")
+            relay.seed("other", "cid-b", "side", "B", 1)
+            val remote = relay.seedMessage("other", "cid-b", "same-mid", "user", "B content", 2)
+            remote.deleted = deleted
+            val failure = runCatching { p.engine.pull() }.exceptionOrNull() as SyncException
+            assertEquals("sync_rejected", failure.code)
+            assertEquals("private A", Transcript.items(p.chats.messages("local-a")).single().text)
+            assertEquals("local-a", p.store.messageByMid("same-mid")?.sessionId)
+            assertNull(p.store.conversationByCid("cid-b")) // no mapping survives an aborted chat transaction
+        }
+    }
+
+    @Test fun `lost deletion acknowledgement is resolved only for the same remote tombstone`() = runTest {
+        for (remoteDeleted in listOf(false, true)) {
+            val relay = FakeRelay()
+            val p = phone(relay, "phone-a")
+            p.chats.addSession("main"); p.chats.main = "main"
+            val id = p.chats.user("main", "old")
+            p.engine.push()
+            val mid = p.store.msgs.getValue(id).mid
+            p.chats.removeRow(id)
+            relay.refusal = { _, messages ->
+                relay.msgs.getValue(mid).deleted = remoteDeleted
+                PushResult(0, 0, messages.map { Rejection(it.mid, null, "known_mid", null) })
+            }
+            val result = runCatching { p.engine.push() }
+            assertEquals(remoteDeleted, result.isSuccess)
+            assertEquals(!remoteDeleted, p.store.msgs.containsKey(id))
+        }
+    }
+
+    @Test fun `history cap keeps pending rows and retries the same chat after a separate deletion`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a", account = "account-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        val old = p.chats.user("main", "old")
+        p.engine.push()
+        val cid = p.store.convs.getValue("main").cid
+        // Another account's chat remains local and must not be pushed on retry.
+        p.chats.addSession("foreign", "other account")
+        p.chats.user("foreign", "not mine")
+        p.store.putConversation(SyncConversation("foreign", "foreign-cid", "side", "b", "", null, true, owner = "account-b"))
+        relay.messageLimit = 1
+        val fresh = p.chats.user("main", "new")
+        val failure = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+        assertEquals("message_limit", failure.code)
+        val pending = p.store.msgs.getValue(fresh)
+        assertFalse(pending.pushed)
+        assertEquals(cid, p.store.convs.getValue("main").cid)
+
+        p.chats.removeRow(old)
+        p.engine.push()
+        assertEquals(pending.mid, p.store.msgs.getValue(fresh).mid)
+        assertTrue(p.store.msgs.getValue(fresh).pushed)
+        assertEquals(listOf("new"), relay.msgs.values.filterNot { it.deleted }.map { it.text })
+        assertTrue(relay.convs["foreign-cid"] == null)
+    }
+
+    @Test fun `per-row history refusal remains pending rather than marked sent`() = runTest {
+        val relay = FakeRelay()
+        val p = phone(relay, "phone-a")
+        p.chats.addSession("main"); p.chats.main = "main"
+        p.engine.pull()
+        relay.messageLimit = 0
+        relay.capAsRowRejection = true
+        val id = p.chats.user("main", "pending")
+        val failure = runCatching { p.engine.push() }.exceptionOrNull() as SyncException
+        assertEquals("message_limit", failure.code)
+        assertFalse(p.store.msgs.getValue(id).pushed)
+        val mid = p.store.msgs.getValue(id).mid
+        relay.messageLimit = 1
+        p.engine.push()
+        assertEquals(mid, p.store.msgs.getValue(id).mid)
+        assertTrue(p.store.msgs.getValue(id).pushed)
     }
 
     @Test fun `main chat adoption on the first pull`() = runTest {
@@ -202,6 +399,7 @@ class SyncEngineTest {
 
         // deleted
         val cid = p.store.convs.getValue("side").cid
+        p.store.putConversation(p.store.convs.getValue("side").copy(deleted = true))
         p.chats.deleteSession("side")
         p.engine.push()
         assertTrue(relay.convs.getValue(cid).deleted)

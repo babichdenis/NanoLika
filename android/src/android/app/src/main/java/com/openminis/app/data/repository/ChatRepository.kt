@@ -115,9 +115,12 @@ class ChatRepository(internal val dao: ChatDao) {
     }
 
     suspend fun deleteSession(id: String) {
-        dao.deleteMessages(id)
-        dao.deleteSession(id)
-        io.github.nanomuse.guard.Grants.clearSession(id) // NanoLika
+        io.github.nanomuse.sync.ConversationSync.exclusive {
+            io.github.nanomuse.sync.ConversationSync.markDeleted(id)
+            dao.deleteMessages(id)
+            dao.deleteSession(id)
+            io.github.nanomuse.guard.Grants.clearSession(id) // NanoLika
+        }
         io.github.nanomuse.sync.ConversationSync.changed() // NanoLika: a tombstone goes to the other devices
     }
 

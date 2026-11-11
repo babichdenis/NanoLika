@@ -1005,6 +1005,7 @@
     <!-- Conversation sync between the account's devices (contract C7) -->
     <string name="nm_sync_title">Sync conversations between my devices</string>
     <string name="nm_sync_caption">The text of your chats is kept on nanoLika Cloud so every device shows the same conversations. Files and images stay on the device they were made on.</string>
+    <string name="nm_sync_history_full">Cloud conversation history is full. New messages remain on this device and have not synced. Free space in cloud history; we will retry automatically.</string>
     <string name="nm_sync_sign_in">Sign in to sync</string>
     <string name="nm_sync_on_toast">On. This phone\'s conversations are being sent.</string>
     <string name="nm_sync_off_toast">Off. What was kept has been deleted.</string>
@@ -1141,4 +1142,5 @@
     <string name="nm_nl_own_title">Your models</string>
     <string name="nm_nl_own_subtitle">Optional. Choose your own provider for chat.</string>
     <string name="nm_nl_cloud_use">Use nanoLika Cloud</string>
+    <string name="nm_sync_conflict">Some messages could not be synced. They remain on this device. Please contact support if the problem persists.</string>
 </resources>

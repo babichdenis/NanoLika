@@ -136,7 +136,7 @@ class MemoryChats : LocalChats {
  * `sync_off` as 409.
  */
 class FakeRelay(private val names: Map<String, String> = emptyMap()) : SyncApi {
-    class Conv(val cid: String, val kind: String, var title: String?, val device: String, val createdAt: Long, var updatedAt: Long, var deleted: Boolean, var seq: Long)
+    class Conv(val cid: String, val kind: String, var title: String?, val device: String, val createdAt: Long, var updatedAt: Long, var deleted: Boolean, var seq: Long, var archived: Boolean = false)
     class Msg(val mid: String, val cid: String, val device: String, val role: String, var text: String, val attachments: List<Attachment>, val createdAt: Long, var deleted: Boolean, var seq: Long)
 
     var enabled = true
@@ -149,6 +149,11 @@ class FakeRelay(private val names: Map<String, String> = emptyMap()) : SyncApi {
     val pushedBatches = mutableListOf<Int>()
     /** Set to make every call fail with this. */
     var failWith: SyncException? = null
+    var messageLimit: Int? = null
+    var capAsRowRejection = false
+    var onPushReply: (() -> Unit)? = null
+    var onChangesReply: (() -> Unit)? = null
+    var refusal: ((List<OutConversation>, List<OutMessage>) -> PushResult)? = null
 
     private fun check() {
         failWith?.let { throw it }
@@ -180,6 +185,7 @@ class FakeRelay(private val names: Map<String, String> = emptyMap()) : SyncApi {
         check()
         if (!enabled) throw SyncException(409, "sync_off", "sync is off")
         changeCalls += Triple(since, scope, tail)
+        onChangesReply?.invoke()
         val mainOnly = scope == SyncApi.SCOPE_MAIN && !ignoreScope
         val inScope: (String) -> Boolean = { cid -> !mainOnly || convs[cid]?.kind == "main" }
         val cs = convs.values.filter { it.seq > since && inScope(it.cid) }.sortedBy { it.seq }
@@ -217,6 +223,18 @@ class FakeRelay(private val names: Map<String, String> = emptyMap()) : SyncApi {
         check()
         if (!enabled) throw SyncException(409, "sync_off", "sync is off")
         if (messages.size > 200) throw SyncException(413, "http_413", "too many")
+        refusal?.let { return it(conversations, messages).also { onPushReply?.invoke() } }
+        messageLimit?.let { cap ->
+            val live = msgs.values.count { !it.deleted }
+            val removed = messages.count { it.deleted && msgs[it.mid]?.deleted == false }
+            val added = messages.count { !it.deleted && it.mid !in msgs }
+            if (live - removed + added > cap) {
+                if (capAsRowRejection) return PushResult(seq, 0, messages.filterNot { it.deleted }.map {
+                    Rejection(it.mid, null, "message_limit", null)
+                })
+                throw SyncException(409, "message_limit", "history full")
+            }
+        }
         pushes++
         pushedBatches += messages.size
         var accepted = 0
@@ -250,7 +268,13 @@ class FakeRelay(private val names: Map<String, String> = emptyMap()) : SyncApi {
             msgs[m.mid] = Msg(m.mid, m.cid, device, m.role, m.text.take(16_384), m.attachments, m.createdAt, false, ++seq)
             accepted++
         }
-        return PushResult(seq, accepted, rejected)
+        return PushResult(seq, accepted, rejected).also { onPushReply?.invoke() }
+    }
+
+    var lookupCalls = 0
+    override fun findMessages(candidates: List<OutMessage>, maxPages: Int): Map<String, RemoteMessage> {
+        lookupCalls++
+        return candidates.mapNotNull { m -> msgs[m.mid]?.takeIf { it.cid == m.cid }?.remote()?.let { m.mid to it } }.toMap()
     }
 
     override fun deleteConversation(cid: String) {

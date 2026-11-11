@@ -76,6 +76,7 @@ final class NanoMuseSync: ObservableObject {
         var text: String
         var createdAt: Int
         var deviceName: String
+        var remoteDigest: String? = nil
     }
 
     private struct Store: Codable {
@@ -99,6 +100,11 @@ final class NanoMuseSync: ObservableObject {
         /// C10: the local session the Chat tab showed when this account was last signed in, so
         /// the same chat is the main one again when it comes back.
         var mainSession: String?
+        /// A 409 history limit belongs to this account and survives restarts.
+        var historyFull = false
+        var conflictSource = ""
+        /// Verified under this account, including the local content digest.
+        var receipts: [String: NanoMuseSyncReceipt] = [:]
 
         init(account: String = "") {
             self.account = account
@@ -117,6 +123,9 @@ final class NanoMuseSync: ObservableObject {
             remoteMids = try c.decodeIfPresent([String: String].self, forKey: .remoteMids) ?? [:]
             deferred = try c.decodeIfPresent([Pending].self, forKey: .deferred) ?? []
             mainSession = try c.decodeIfPresent(String.self, forKey: .mainSession)
+            historyFull = try c.decodeIfPresent(Bool.self, forKey: .historyFull) ?? false
+            conflictSource = try c.decodeIfPresent(String.self, forKey: .conflictSource) ?? ""
+            receipts = try c.decodeIfPresent([String: NanoMuseSyncReceipt].self, forKey: .receipts) ?? [:]
         }
     }
 
@@ -143,6 +152,8 @@ final class NanoMuseSync: ObservableObject {
 
     @Published private(set) var syncing = false
     @Published private(set) var lastError: String?
+    @Published private(set) var historyFull = false
+    @Published private(set) var syncConflict = false
     /// What the relay says about the account's switch; nil until asked.
     @Published private(set) var serverEnabled: Bool?
     @Published private(set) var conversationCount = 0
@@ -277,6 +288,8 @@ final class NanoMuseSync: ObservableObject {
         tables.stores.removeValue(forKey: account)
         if store.account == account {
             store = Store(account: account)
+            historyFull = false
+            syncConflict = false
             workingToSend = [:]
             pushDebounce?.cancel()
         }
@@ -305,6 +318,8 @@ final class NanoMuseSync: ObservableObject {
     func accountChanged() {
         load()
         if accountKey.isEmpty {
+            historyFull = false
+            syncConflict = false
             // signed out: what the relay said about the account's conversations is forgotten and
             // the lists show everything on the phone again; the table waits for an account
             workingToSend = [:]
@@ -350,6 +365,8 @@ final class NanoMuseSync: ObservableObject {
         next.cursor = 0
         next.pulled = false
         store = next
+        historyFull = next.historyFull && enabled
+        syncConflict = !next.conflictSource.isEmpty && enabled
         tables.current = key
         tables.stores[key] = next
         save()
@@ -508,6 +525,8 @@ final class NanoMuseSync: ObservableObject {
             let reply = try await NanoMuseCloud.call("PUT", "/v1/sync/state", body: ["enabled": on], token: token)
             apply(state: reply)
             lastError = nil
+            historyFull = on && store.historyFull
+            syncConflict = on && !store.conflictSource.isEmpty
             if on {
                 load()
                 for key in store.entries.keys { store.entries[key]?.knownMids = []; store.entries[key]?.pushedTitle = nil }
@@ -545,7 +564,7 @@ final class NanoMuseSync: ObservableObject {
     private func apply(state reply: [String: Any]) {
         if let on = reply["enabled"] as? Bool {
             serverEnabled = on
-            if !on { enabled = false }
+            if !on { enabled = false; historyFull = false; syncConflict = false }
         }
         if let counts = reply["counts"] as? [String: Any] {
             conversationCount = (counts["conversations"] as? Int) ?? 0
@@ -579,6 +598,7 @@ final class NanoMuseSync: ObservableObject {
         if pushing { pushAgain = true; return }
         pushing = true
         syncing = true
+        let owner = accountKey
         Task { @MainActor [self] in
             defer {
                 pushing = false
@@ -587,17 +607,27 @@ final class NanoMuseSync: ObservableObject {
             }
             load()
             do {
-                try await pushTombstones(token: token)
-                try await pushChanges(token: token)
+                try requirePushOwner(owner)
+                try await pushTombstones(token: token, owner: owner)
+                try await pushChanges(token: token, owner: owner)
+                guard accountKey == owner, store.account == owner else { return }
+                store.historyFull = false
+                historyFull = false
+                if store.conflictSource == "push" { store.conflictSource = ""; syncConflict = false }
+                save()
                 lastError = nil
                 sendWorking()
             } catch {
-                note(error)
+                if accountKey == owner, store.account == owner { note(error) }
             }
         }
     }
 
-    private func pushTombstones(token: String) async throws {
+    private func requirePushOwner(_ owner: String) throws {
+        guard NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) else { throw CancellationError() }
+    }
+
+    private func pushTombstones(token: String, owner: String) async throws {
         guard !store.pendingDeletes.isEmpty else { return }
         for cid in store.pendingDeletes {
             do {
@@ -605,15 +635,17 @@ final class NanoMuseSync: ObservableObject {
             } catch let error as NanoMuseCloudError where error.status == 404 {
                 // already gone
             }
+            try requirePushOwner(owner)
             store.pendingDeletes.removeAll { $0 == cid }
             save()
         }
     }
 
-    private func pushChanges(token: String) async throws {
+    private func pushChanges(token: String, owner: String) async throws {
         // Oldest first (C8): a sign-in backfills the whole history in the order it happened, the
         // first conversation at the head.
         let every = await eligibleSessions().sorted { $0.createdAt < $1.createdAt }
+        try requirePushOwner(owner)
         let mainId = ownMainSessionId()
         let alive = Set(every.map(\.id))
         // C9: with the side-chat switch off only the main chat goes up — the one mapped as main,
@@ -634,7 +666,7 @@ final class NanoMuseSync: ObservableObject {
         }
         if !store.pendingDeletes.isEmpty {
             save()
-            try await pushTombstones(token: token)
+            try await pushTombstones(token: token, owner: owner)
         }
 
         var conversations: [[String: Any]] = []
@@ -661,6 +693,7 @@ final class NanoMuseSync: ObservableObject {
             // Only a session that changed since its last push is read; the rest is known.
             guard entry.knownMids.isEmpty || entry.pushedUpdatedAt != updated else { continue }
             let local = await ChatStore.shared.loadMessages(sessionId: session.id)
+            try requirePushOwner(owner)
             let present = Set(local.map { $0.id.lowercased() })
             // The first conversation's opening (what the app said on the agent's behalf) is virtual
             // here — in the message list, never in the database — so the other devices get it
@@ -688,31 +721,68 @@ final class NanoMuseSync: ObservableObject {
 
         guard !conversations.isEmpty || !messages.isEmpty else { return }
 
-        // Conversations first, then the texts, 200 a POST.
+        // A full relay rolls back a rejected POST. Send tombstones separately
+        // first, so new messages cannot undo the deletion that frees space.
+        let indices = NanoMuseSyncPolicy.batches(
+            deleted: messages.map { ($0["deleted"] as? Bool) == true }, limit: Self.pushLimit
+        )
+        let batches = indices.isEmpty ? [[]] : indices
         var first = true
-        var offset = 0
-        repeat {
-            let slice = Array(messages[offset..<min(offset + Self.pushLimit, messages.count)])
+        for indices in batches {
+            let slice = indices.map { messages[$0] }
             let body: [String: Any] = [
                 "device": NanoMuseHub.shared.deviceId,
                 "conversations": first ? conversations : [],
                 "messages": slice,
             ]
             let reply = try await NanoMuseCloud.call("POST", "/v1/sync/changes", body: body, token: token)
-            let rejected = reply["rejected"] as? [[String: Any]] ?? []
-            let rejectedMids = Set(rejected.compactMap { $0["mid"] as? String })
-            for (session, mid) in pending[offset..<min(offset + Self.pushLimit, pending.count)] where !rejectedMids.contains(mid) {
-                store.entries[session]?.knownMids.insert(mid)
-            }
-            if first {
-                for session in sessions {
-                    guard store.entries[session.id] != nil else { continue }
-                    store.entries[session.id]?.pushedTitle = session.title ?? ""
-                    store.entries[session.id]?.pushedUpdatedAt = Int(session.updatedAt.timeIntervalSince1970)
+            try requirePushOwner(owner)
+            var rejected = reply["rejected"] as? [[String: Any]] ?? []
+            // One bounded walk for the entire POST, not one walk per message.
+            let knownIds = Set(rejected.compactMap { row in
+                (row["reason"] as? String) == "known_mid" ? row["mid"] as? String : nil
+            })
+            var verified: Set<String> = []
+            if !knownIds.isEmpty {
+                do { verified = try await verifyExistingBatch(slice, mids: knownIds, token: token, owner: owner) }
+                catch is CancellationError { throw CancellationError() }
+                catch let error as NanoMuseCloudError where error.status == 401 || error.code == "sync_off" { throw error }
+                catch { verified = [] }
+                rejected.removeAll { row in
+                    (row["reason"] as? String) == "known_mid" && verified.contains(row["mid"] as? String ?? "")
                 }
-                if let mainId, let entry = store.entries[mainId], entry.kind == "main", store.mainCid == nil { store.mainCid = entry.cid }
+            }
+            let refusals = rejected.map { row in row.compactMapValues { $0 as? String } }
+            let expectedNew = indices.filter { index in
+                let mid = pending[index].mid
+                let cid = messages[index]["cid"] as? String
+                return !verified.contains(mid) && !NanoMuseSyncPolicy.refused(mid: mid, cid: cid, rejected: refusals)
+            }.count
+            guard let accepted = reply["accepted"] as? Int, accepted >= expectedNew else {
+                throw NanoMuseCloudError(code: "sync_rejected", message: "The relay did not confirm the changes", status: 409)
+            }
+            for index in indices {
+                let (session, mid) = pending[index]
+                let cid = messages[index]["cid"] as? String
+                guard !NanoMuseSyncPolicy.refused(mid: mid, cid: cid, rejected: refusals) else { continue }
+                if (messages[index]["deleted"] as? Bool) == true {
+                    store.entries[session]?.knownMids.remove(mid)
+                    store.receipts.removeValue(forKey: mid)
+                } else {
+                    store.entries[session]?.knownMids.insert(mid)
+                    if let receipt = NanoMuseSyncPolicy.receipt(local: messages[index], remoteDigest: NanoMuseSyncPolicy.remoteDigest(messages[index])) { store.receipts[mid] = receipt }
+                }
             }
             save()
+            // Some relays return a per-row refusal instead of an HTTP 409.
+            if rejected.contains(where: { ($0["reason"] as? String) == "message_limit" }) {
+                throw NanoMuseCloudError(code: "message_limit", message: "Cloud conversation history is full", status: 409)
+            }
+            // Refused rows are not evidence that the same message was stored.
+            // Keep their mids pending rather than treating a collision as success.
+            if rejected.contains(where: { ($0["reason"] as? String) != "main_exists" }) {
+                throw NanoMuseCloudError(code: "sync_rejected", message: "Some conversation changes were refused and remain pending", status: 409)
+            }
             // Another device's main chat was there first: ours joins it.
             if let clash = rejected.first(where: { ($0["reason"] as? String) == "main_exists" }),
                let cidMain = clash["cid_main"] as? String,
@@ -721,8 +791,16 @@ final class NanoMuseSync: ObservableObject {
                 return
             }
             first = false
-            offset += Self.pushLimit
-        } while offset < messages.count
+        }
+        // Only mark a session fully pushed after every batch succeeded. Otherwise
+        // its unsent tail must still be read again after a restart or a retry.
+        for session in sessions {
+            guard store.entries[session.id] != nil else { continue }
+            store.entries[session.id]?.pushedTitle = session.title ?? ""
+            store.entries[session.id]?.pushedUpdatedAt = Int(session.updatedAt.timeIntervalSince1970)
+        }
+        if let mainId, let entry = store.entries[mainId], entry.kind == "main", store.mainCid == nil { store.mainCid = entry.cid }
+        save()
     }
 
     /// The relay keeps one main conversation; the session we pushed as `rejectedCid` re-posts under it.
@@ -802,6 +880,43 @@ final class NanoMuseSync: ObservableObject {
         return record
     }
 
+    private func verifyExistingBatch(_ local: [[String: Any]], mids: Set<String>, token: String, owner: String) async throws -> Set<String> {
+        guard let accountId = NanoMuseCloud.account?.id, !accountId.isEmpty, accountId == owner else { return [] }
+        let eligible = local.filter { item in
+            guard let mid = item["mid"] as? String, mids.contains(mid) else { return false }
+            if (item["deleted"] as? Bool) == true { return true }
+            guard let text = item["text"] as? String, text.utf8.count <= 16384 else { return false }
+            return (item["attachments"] as? [[String: Any]] ?? []).isEmpty
+        }
+        let groups = Dictionary(grouping: eligible) { $0["cid"] as? String ?? "" }
+        var budget = NanoMuseLookupBudget(maxPages: 70)
+        var verified: Set<String> = []
+        for cid in groups.keys.sorted() where !cid.isEmpty {
+            let group = groups[cid] ?? []
+            var needed: [String: [String: Any]] = [:]
+            for item in group { if let mid = item["mid"] as? String { needed[mid] = item } }
+            var before = 0
+            while !needed.isEmpty && budget.take() {
+                try requirePushOwner(owner)
+                let query = before == 0 ? "?after=0&limit=300" : "?before=\(before)&limit=300"
+                let page = try await NanoMuseCloud.call("GET", "/v1/sync/conversations/\(cid)/messages\(query)", body: nil, token: token)
+                try requirePushOwner(owner)
+                guard (page["account_id"] as? String) == accountId, (page["cid"] as? String) == cid else {
+                    throw NanoMuseCloudError(code: "sync_rejected", message: "Verification returned a different account or conversation", status: 409)
+                }
+                let rows = page["messages"] as? [[String: Any]] ?? []
+                for row in rows {
+                    guard let mid = row["mid"] as? String, let candidate = needed.removeValue(forKey: mid) else { continue }
+                    if NanoMuseSyncPolicy.matches(local: candidate, remote: row) { verified.insert(mid) }
+                }
+                guard (page["has_older"] as? Bool) == true,
+                      let oldest = rows.compactMap({ $0["seq"] as? Int }).min(), oldest > 0, oldest != before else { break }
+                before = oldest
+            }
+        }
+        return verified
+    }
+
     // MARK: - Pull
 
     /// What the other devices wrote since our cursor, applied in `seq` order.
@@ -810,6 +925,7 @@ final class NanoMuseSync: ObservableObject {
         if pulling { pullAgain = true; return }
         pulling = true
         syncing = true
+        let owner = accountKey
         Task { @MainActor [self] in
             defer {
                 pulling = false
@@ -818,6 +934,7 @@ final class NanoMuseSync: ObservableObject {
             }
             load()
             do {
+                try requirePushOwner(owner)
                 var more = true
                 var touched = false
                 // C9: a table's first pull and the switch-on pull start at 0 and ask for the last
@@ -828,8 +945,11 @@ final class NanoMuseSync: ObservableObject {
                 var since = full ? 0 : store.cursor
                 while more {
                     let path = Self.pullPath(since: since, sideChats: sideChats, tail: full ? Self.tail : nil)
+                    try requirePushOwner(owner)
                     let reply = try await NanoMuseCloud.call("GET", path, body: nil, token: token)
-                    let changed = await apply(changes: reply)
+                    try requirePushOwner(owner)
+                    let changed = try await apply(changes: reply, owner: owner)
+                    try requirePushOwner(owner)
                     touched = touched || changed
                     let cursor = (reply["cursor"] as? Int) ?? Int((reply["cursor"] as? Double) ?? 0)
                     if cursor > store.cursor { store.cursor = cursor }
@@ -842,6 +962,7 @@ final class NanoMuseSync: ObservableObject {
                     store.pulled = true
                     save()
                 }
+                if store.conflictSource == "pull" { store.conflictSource = ""; syncConflict = false; save() }
                 lastError = nil
                 if touched {
                     revision += 1
@@ -851,13 +972,14 @@ final class NanoMuseSync: ObservableObject {
                 // Our own texts the relay does not have yet (first pull after sign-in, a new main cid).
                 schedulePush()
             } catch {
-                note(error)
+                if accountKey == owner, store.account == owner { note(error) }
             }
         }
     }
 
     /// One page. Returns true when something changed locally.
-    private func apply(changes reply: [String: Any]) async -> Bool {
+    private func apply(changes reply: [String: Any], owner: String) async throws -> Bool {
+        try requirePushOwner(owner)
         var changed = false
         // C10: the account's main joins the shell's main chat only when that chat is this
         // account's business — never another account's conversation still pinned to the tab
@@ -865,6 +987,7 @@ final class NanoMuseSync: ObservableObject {
         let sideChats = sideChats
 
         for record in reply["conversations"] as? [[String: Any]] ?? [] {
+            try requirePushOwner(owner)
             guard let cid = record["cid"] as? String else { continue }
             let deleted = (record["deleted"] as? Bool) ?? false
             let kind = (record["kind"] as? String) ?? "side"
@@ -879,6 +1002,7 @@ final class NanoMuseSync: ObservableObject {
                 if let local {
                     store.entries.removeValue(forKey: local.key)
                     await ChatStore.shared.deleteSession(local.key)
+                    try requirePushOwner(owner)
                     changed = true
                 }
                 if store.mainCid == cid { store.mainCid = nil }
@@ -891,6 +1015,7 @@ final class NanoMuseSync: ObservableObject {
                     let sessionId = local.key
                     if let title, title != local.value.pushedTitle, await ChatStore.shared.getSession(sessionId)?.title != title {
                         await ChatStore.shared.updateSessionTitle(sessionId, title: title, category: nil)
+                        try requirePushOwner(owner)
                         store.entries[sessionId]?.pushedTitle = title
                         changed = true
                     }
@@ -900,11 +1025,16 @@ final class NanoMuseSync: ObservableObject {
                     store.entries[mainId] = Entry(cid: cid, kind: "main", fromDevice: own?.fromDevice, fromDeviceName: own?.fromDeviceName, pushedTitle: title, pushedUpdatedAt: nil, knownMids: [])
                     if let title, await ChatStore.shared.getSession(mainId)?.title == nil {
                         await ChatStore.shared.updateSessionTitle(mainId, title: title, category: nil)
+                        try requirePushOwner(owner)
                     }
                     changed = true
                 } else {
                     // No main chat here yet (a draft): the account's main becomes a session the shell adopts.
                     let session = await ChatStore.shared.createSession(modelId: Self.defaultModelId(), title: title, source: "nanomuse-sync")
+                    if !NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) {
+                        await ChatStore.shared.deleteSession(session.id)
+                        throw CancellationError()
+                    }
                     store.entries[session.id] = Entry(cid: cid, kind: "main", fromDevice: device, fromDeviceName: deviceName, pushedTitle: title, pushedUpdatedAt: nil, knownMids: [])
                     NotificationCenter.default.post(name: .nanoMuseMainChatAdopt, object: session.id)
                     changed = true
@@ -916,19 +1046,25 @@ final class NanoMuseSync: ObservableObject {
                 let sessionId = local.key
                 if let title, title != local.value.pushedTitle, await ChatStore.shared.getSession(sessionId)?.title != title {
                     await ChatStore.shared.updateSessionTitle(sessionId, title: title, category: nil)
+                    try requirePushOwner(owner)
                     store.entries[sessionId]?.pushedTitle = title
                     changed = true
                 }
             } else {
                 let session = await ChatStore.shared.createSession(modelId: Self.defaultModelId(), title: title, source: "nanomuse-sync")
+                if !NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) {
+                    await ChatStore.shared.deleteSession(session.id)
+                    throw CancellationError()
+                }
                 store.entries[session.id] = Entry(cid: cid, kind: "side", fromDevice: device, fromDeviceName: deviceName, pushedTitle: title, pushedUpdatedAt: Int(session.updatedAt.timeIntervalSince1970), knownMids: [])
                 changed = true
             }
         }
 
         // Texts, grouped by conversation so each session's ids are read once.
-        var presentBySession: [String: Set<String>] = [:]
+        var localRecordsBySession: [String: [String: [String: Any]]] = [:]
         for record in reply["messages"] as? [[String: Any]] ?? [] {
+            try requirePushOwner(owner)
             guard let mid = (record["mid"] as? String)?.lowercased(), let cid = record["cid"] as? String,
                   let entry = store.entries.first(where: { $0.value.cid == cid }) else { continue }
             let sessionId = entry.key
@@ -936,21 +1072,47 @@ final class NanoMuseSync: ObservableObject {
             guard Self.takes(kind: entry.value.kind, sideChats: sideChats) else { continue }
             let deleted = (record["deleted"] as? Bool) ?? false
             if deleted {
+                // A tombstone has no original content to compare. Never delete a
+                // same-id local message unless it was previously received from
+                // another device under this account.
+                let localRows = await ChatStore.shared.loadMessages(sessionId: sessionId)
+                try requirePushOwner(owner)
+                if let local = localRows.first(where: { $0.id.lowercased() == mid }) {
+                    guard let localRecord = Self.record(local, cid: cid),
+                          NanoMuseSyncPolicy.trusts(receipt: store.receipts[mid], local: localRecord, cid: cid) else {
+                        throw NanoMuseCloudError(code: "sync_conflict", message: AppLocalized("nm.sync.conflict"), status: 409)
+                    }
+                }
                 await ChatStore.shared.deleteLocalMessage(messageId: mid)
+                try requirePushOwner(owner)
                 await ChatStore.shared.deleteLocalMessage(messageId: mid.uppercased())
+                try requirePushOwner(owner)
                 store.entries[sessionId]?.knownMids.remove(mid)
                 store.remoteMids.removeValue(forKey: mid)
+                store.receipts.removeValue(forKey: mid)
                 store.deferred.removeAll { $0.mid == mid }
                 changed = true
                 continue
             }
             // A row already here (ours, or another device's) is not appended twice; a row
             // missing after a reinstall is restored by mid like any other.
-            if store.entries[sessionId]?.knownMids.contains(mid) == true || store.deferred.contains(where: { $0.mid == mid }) { continue }
-            if presentBySession[sessionId] == nil {
-                presentBySession[sessionId] = Set(await ChatStore.shared.loadMessages(sessionId: sessionId).map { $0.id.lowercased() })
+            if store.deferred.contains(where: { $0.mid == mid }) { continue }
+            if localRecordsBySession[sessionId] == nil {
+                let localMessages = await ChatStore.shared.loadMessages(sessionId: sessionId)
+                try requirePushOwner(owner)
+                var localRecords: [String: [String: Any]] = [:]
+                for message in localMessages { localRecords[message.id.lowercased()] = Self.record(message, cid: cid) ?? [:] }
+                localRecordsBySession[sessionId] = localRecords
             }
-            if presentBySession[sessionId]?.contains(mid) == true { store.entries[sessionId]?.knownMids.insert(mid); continue }
+            if let localRecord = localRecordsBySession[sessionId]?[mid] {
+                guard NanoMuseSyncPolicy.trustsLive(receipt: store.receipts[mid], local: localRecord, remote: record)
+                        || NanoMuseSyncPolicy.matches(local: localRecord, remote: record) else {
+                    throw NanoMuseCloudError(code: "sync_conflict", message: AppLocalized("nm.sync.conflict"), status: 409)
+                }
+                if let receipt = NanoMuseSyncPolicy.receipt(local: localRecord, remoteDigest: NanoMuseSyncPolicy.remoteDigest(record)) { store.receipts[mid] = receipt }
+                store.entries[sessionId]?.knownMids.insert(mid)
+                continue
+            }
             guard let roleName = record["role"] as? String, MessageRole(rawValue: roleName) != nil else { continue }
             var text = (record["text"] as? String) ?? ""
             if let attachments = record["attachments"] as? [[String: Any]], !attachments.isEmpty {
@@ -962,13 +1124,17 @@ final class NanoMuseSync: ObservableObject {
             }
             guard !text.isEmpty else { store.entries[sessionId]?.knownMids.insert(mid); continue }
             let created = (record["created_at"] as? Int) ?? Int((record["created_at"] as? Double) ?? Date().timeIntervalSince1970)
-            let pending = Pending(mid: mid, cid: cid, role: roleName, text: text, createdAt: created, deviceName: (record["device_name"] as? String) ?? "")
+            let pending = Pending(mid: mid, cid: cid, role: roleName, text: text, createdAt: created, deviceName: (record["device_name"] as? String) ?? "", remoteDigest: NanoMuseSyncPolicy.remoteDigest(record))
+            try requirePushOwner(owner)
             if await insert(pending, into: sessionId) {
-                presentBySession[sessionId]?.insert(mid)
+                try requirePushOwner(owner)
+                localRecordsBySession[sessionId]?[mid] = record
                 changed = true
             }
         }
+        try requirePushOwner(owner)
         if !store.deferred.isEmpty, await writeDeferred() { changed = true }
+        try requirePushOwner(owner)
         return changed
     }
 
@@ -976,6 +1142,8 @@ final class NanoMuseSync: ObservableObject {
     /// end). While that chat runs a turn here the store refuses — the row waits in `deferred` and
     /// `turnFinished` / the next pull write it. Returns true when the row is in the database.
     private func insert(_ pending: Pending, into sessionId: String) async -> Bool {
+        let owner = accountKey
+        guard NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) else { return false }
         if SessionActivityTracker.isActiveThreadSafe(sessionId) {
             if !store.deferred.contains(where: { $0.mid == pending.mid }) { store.deferred.append(pending) }
             return false
@@ -986,8 +1154,15 @@ final class NanoMuseSync: ObservableObject {
             createdAt: Date(timeIntervalSince1970: TimeInterval(pending.createdAt)), tokenUsageJson: nil, sortOrder: 0,
             reasoningContent: nil, streamInterruptCount: 0
         )
+        guard NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) else { return false }
         await ChatStore.shared.nmTouchSession(sessionId)
+        guard NanoMuseSyncPolicy.ownsReply(expected: owner, current: accountKey, store: store.account) else { return false }
         store.entries[sessionId]?.knownMids.insert(pending.mid)
+        // insert() writes a text part; record() will strip reminders and trim it.
+        let local: [String: Any] = ["mid": pending.mid, "cid": pending.cid, "role": pending.role,
+            "text": RawMessage.stripSystemReminders(pending.text).trimmingCharacters(in: .whitespacesAndNewlines),
+            "created_at": pending.createdAt]
+        if let receipt = NanoMuseSyncPolicy.receipt(local: local, remoteDigest: pending.remoteDigest) { store.receipts[pending.mid] = receipt }
         store.remoteMids[pending.mid] = pending.deviceName
         store.deferred.removeAll { $0.mid == pending.mid }
         return true
@@ -1085,10 +1260,25 @@ final class NanoMuseSync: ObservableObject {
                 lastError = AppLocalized("Sign in to sync")
                 return
             }
-            if cloud.status == 409 || cloud.code == "sync_off" {
+            if NanoMuseSyncPolicy.historyFull(status: cloud.status, code: cloud.code) {
+                store.historyFull = true
+                historyFull = true
+                save()
+                lastError = AppLocalized("nm.sync.history_full")
+                return
+            }
+            if NanoMuseSyncPolicy.syncDisabled(code: cloud.code) {
                 enabled = false
                 serverEnabled = false
+                historyFull = false
                 lastError = nil
+                return
+            }
+            if cloud.code == "sync_rejected" || cloud.code == "sync_conflict" {
+                store.conflictSource = cloud.code == "sync_conflict" ? "pull" : "push"
+                syncConflict = true
+                save()
+                lastError = AppLocalized("nm.sync.conflict")
                 return
             }
             if cloud.code == "unreachable" { return }
@@ -1127,6 +1317,8 @@ final class NanoMuseSync: ObservableObject {
             }
             loaded = true
             store = tables.stores[tables.current] ?? Store(account: tables.current)
+            historyFull = store.historyFull && !account.isEmpty && enabled
+            syncConflict = !store.conflictSource.isEmpty && !account.isEmpty && enabled
         }
         // Signed out: the tables wait for an account; what is on the phone is the person's to see.
         guard !account.isEmpty else { return }
