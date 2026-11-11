@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import os
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -23,6 +26,26 @@ _zone: tzinfo | None = None
 _zone_name: str = ""
 _account_zones: dict[str, tuple[str, tzinfo]] = {}
 _account_zones_lock = threading.RLock()
+_runtime_account: ContextVar[str] = ContextVar("nanomuse_runtime_account", default="")
+
+
+@contextmanager
+def account_runtime(account_id: str) -> Iterator[None]:
+    """Carry the verified cloud-worker owner through requests and spawned tasks.
+
+    A conversation's memory scope can intentionally be legacy-session; it must not
+    decide which account clock to show for a worker serving multiple accounts.
+    """
+    token = _runtime_account.set(str(account_id or "").strip())
+    try:
+        yield
+    finally:
+        _runtime_account.reset(token)
+
+
+def runtime_account() -> str:
+    """The worker's verified account id in this task, or empty outside a worker."""
+    return _runtime_account.get()
 
 
 def shared_bot() -> bool:
@@ -59,13 +82,14 @@ def _account_zone() -> tuple[str, tzinfo] | None:
     # is installed by the worker for each turn and is the trusted identity to use.
     from nanomuse.memory.scope import current_memory_scope
 
+    scope = f"account:{runtime_account()}" if runtime_account() else current_memory_scope()
     with _account_zones_lock:
-        return _account_zones.get(current_memory_scope())
+        return _account_zones.get(scope)
 
 
 def zone_name() -> str:
     """The IANA name in use: the account's when set, else the system's ("" if unplaceable)."""
-    if shared_bot():
+    if runtime_account() or shared_bot():
         account = _account_zone()
         return account[0] if account is not None else system_zone_name()
     if _zone_name:
@@ -104,7 +128,7 @@ def trusted() -> bool:
     True when the account's zone is known (the computer wrote it) or when this process is
     the desktop app itself. A bot container with no account zone has no business stating a
     time: its own zone is the datacentre's, not the person's."""
-    if shared_bot():
+    if runtime_account() or shared_bot():
         return _account_zone() is not None
     return bool(_zone_name) or os.environ.get("NANOMUSE_DESKTOP") == "1"
 
@@ -129,7 +153,7 @@ def set_zone(name: str) -> bool:
 
 def zone() -> tzinfo:
     """The zone to show times in: the account's, else this computer's."""
-    if shared_bot():
+    if runtime_account() or shared_bot():
         account = _account_zone()
         return account[1] if account is not None else datetime.now().astimezone().tzinfo or UTC
     if _zone is not None:

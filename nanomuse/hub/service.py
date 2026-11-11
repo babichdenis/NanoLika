@@ -32,7 +32,7 @@ from nanomuse.hub import actions
 from nanomuse.hub.client import HubClient, HubError, IncomingCall
 from nanomuse.hub.profile import ProfileSync
 from nanomuse.logger import logger
-from nanomuse.memory import memory_scope
+from nanomuse.memory import account_scope, memory_scope
 from nanomuse.schema import RiskLevel
 from nanomuse.sentinel.grants import grant_key, normalize_scope
 from nanomuse.server.events import MAIN_THREAD, STOPPED_NOTICE, now_iso
@@ -552,6 +552,23 @@ class HubService:
         not the person's, and writing it was what made messages say "по времени сервера".
         Everything else adopts what the computer wrote."""
         from nanomuse import timeutil
+
+        runtime_owner = str(getattr(self.svc, "_runtime_account_id", "") or "").strip()
+        if runtime_owner:
+            # The worker serves multiple accounts in one process. Do not touch the
+            # installation-wide clock; accept a timezone only from `/me` for this
+            # runtime's independently verified owner.
+            if data is None:
+                data = await self.cloud.me()
+            account = data.get("account") if isinstance(data, dict) else None
+            actual = str(account.get("id") or "").strip() if isinstance(account, dict) else ""
+            if actual != runtime_owner:
+                timeutil.set_account_zone(account_scope(runtime_owner), "")
+                logger.warning("clock: worker account identity did not match; timezone cleared")
+                return
+            tz = str(account.get("tz") or "").strip()
+            timeutil.set_account_zone(account_scope(runtime_owner), tz)
+            return
 
         if data is None:
             theirs = (await self.cloud.tz()).strip()

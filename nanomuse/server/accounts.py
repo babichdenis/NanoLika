@@ -33,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from nanomuse import timeutil
 from nanomuse.cloud import CLOUD_KEY
 from nanomuse.config import Settings
 from nanomuse.logger import logger
@@ -155,6 +156,12 @@ class AccountRuntime:
         """The account's service, started and kept warm; raises if it cannot start."""
         if not account_id:
             raise ValueError("an account id is required")
+        # Long-lived tasks started while building inherit this verified owner, including
+        # services woken in the background rather than by an HTTP request.
+        with timeutil.account_runtime(account_id):
+            return await self._service(account_id, cloud_key)
+
+    async def _service(self, account_id: str, cloud_key: str = "") -> object:
         lock = self._locks.setdefault(account_id, asyncio.Lock())
         async with lock:
             entry = self._entries.get(account_id)
@@ -221,6 +228,9 @@ class AccountRuntime:
                 CLOUD_KEY, cloud_key
             )
         service = MuseService(settings)
+        # Clock updates can arrive outside the creator task. Bind the trusted owner
+        # before start so HubService can verify `/me` against it.
+        service._runtime_account_id = account_id
         if not self.allow_code:
             for name in ("shell", "python_execute", "coding_agents"):
                 service.app.tools.remove(name)

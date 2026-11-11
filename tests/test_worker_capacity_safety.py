@@ -59,6 +59,24 @@ async def test_concurrent_builds_respect_the_global_limit(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_hundred_concurrent_accounts_are_bounded_and_refused_explicitly(tmp_path):
+    runtime = AccountRuntime(Settings(), tmp_path, limit=24)
+
+    async def build(account, key=""):
+        await asyncio.sleep(0.05)
+        service = FakeService()
+        service.threads["thread"] = SimpleNamespace(busy=True)
+        return service
+
+    runtime._build = build
+    results = await asyncio.gather(*(runtime.service(f"account-{n}") for n in range(100)), return_exceptions=True)
+    assert sum(isinstance(result, FakeService) for result in results) == 24
+    assert sum(isinstance(result, CapacityError) for result in results) == 76
+    assert len(runtime.active()) == 24
+    assert not any(result.stopped for result in results if isinstance(result, FakeService))
+
+
+@pytest.mark.asyncio
 async def test_waiting_inbox_is_busy_even_before_the_worker_starts(tmp_path):
     runtime = AccountRuntime(Settings(), tmp_path, limit=1)
 

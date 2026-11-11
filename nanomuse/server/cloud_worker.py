@@ -22,7 +22,9 @@ from typing import Any, cast
 import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
 
+from nanomuse import timeutil
 from nanomuse.config import load_settings
 from nanomuse.logger import logger
 from nanomuse.server.accounts import AccountRuntime, CapacityError
@@ -54,6 +56,29 @@ def worker_allows(headers: Mapping[str, str], secret: str | None = None) -> bool
     if not wanted:
         return True
     return hmac.compare_digest(str(headers.get("x-worker-secret", "")), wanted)
+
+
+class RuntimeAccountContext:
+    """Carry the relay-proved owner through HTTP, WebSocket and their child tasks.
+
+    Authentication is still enforced by the individual endpoints. This wrapper uses
+    exactly the same worker secret check and never treats a denied header as an owner.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") not in {"http", "websocket"}:
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        account = str(headers.get("x-account", "") or "").strip()
+        # Clear any inherited context for a denied/anonymous request. Endpoints still
+        # perform their own authorization; this wrapper grants no access on its own.
+        verified = account if account and worker_allows(headers) else ""
+        with timeutil.account_runtime(verified):
+            await self.app(scope, receive, send)
 
 
 class AppCache:
@@ -155,6 +180,7 @@ def build_worker() -> FastAPI:
     apps = AppCache(lambda service: create_app(service.settings, service=service))
     runtime.on_stop(apps.drop)
     app = FastAPI(title="NanoLika cloud worker", docs_url=None, redoc_url=None)
+    app.add_middleware(RuntimeAccountContext)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
