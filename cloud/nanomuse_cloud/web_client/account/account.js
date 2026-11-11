@@ -37,7 +37,15 @@ const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined
 const money=n=>new Intl.NumberFormat(lang,{style:'currency',currency:'RUB',maximumFractionDigits:6}).format(n);
 const count=n=>new Intl.NumberFormat(lang).format(n||0);
 const date=n=>n?new Date(n*1000).toLocaleDateString(lang):'—';
-async function api(path,options={}){const {preserveContentOnUnauthorized=false,...fetchOptions}=options;const r=await fetch(path,{...fetchOptions,cache:'no-store',headers:{Authorization:'Bearer '+session.key,...(fetchOptions.body?{'Content-Type':'application/json'}:{}),...fetchOptions.headers}});if(r.status===401){if(!preserveContentOnUnauthorized){$('private-content').hidden=true;$('identity').textContent='';}const e=new Error('expired');e.status=401;throw e;}if(!r.ok){const data=await r.json().catch(()=>null),e=new Error('request');e.status=r.status;e.code=data?.error?.code;throw e;}return r.status===204?null:r.json();}
+let signInRedirectStarted=false;
+function redirectForSignIn(){
+ if(signInRedirectStarted)return;
+ signInRedirectStarted=true;
+ $('private-content').hidden=true;
+ $('identity').textContent='';
+ location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));
+}
+async function api(path,options={}){const {preserveContentOnUnauthorized=false,...fetchOptions}=options;const r=await fetch(path,{...fetchOptions,cache:'no-store',headers:{Authorization:'Bearer '+session.key,...(fetchOptions.body?{'Content-Type':'application/json'}:{}),...fetchOptions.headers}});if(r.status===401){if(!preserveContentOnUnauthorized && path!=='/v1/auth/sign-out')redirectForSignIn();const e=new Error('expired');e.status=401;throw e;}if(!r.ok){const data=await r.json().catch(()=>null),e=new Error('request');e.status=r.status;e.code=data?.error?.code;throw e;}return r.status===204?null:r.json();}
 function row(title,subtitle){const n=h('div',undefined,'account-row'),text=h('div');text.append(h('strong',title),h('p',subtitle||''));n.append(text);return n;}
 function empty(node,message=T.empty){node.replaceChildren(h('p',message,'pad'));}
 /* A chat tied to the account, with the way out beside it.
@@ -125,7 +133,7 @@ async function loadProviders(){if(!$('providers-list'))return;try{const result=a
 function renderProviders(list){const box=$('providers-list');box.replaceChildren();if(!list.length){box.append(h('p',T.providerNone,'pad'));return;}for(const p of list){const card=h('article',undefined,'account-row');const text=h('div');text.append(h('strong',p.label?`${p.label} · ${p.provider}`:p.provider),h('p',`${p.base_url} · ${p.key_hint}${p.last_error?' · '+p.last_error:''}`));const del=h('button',T.providerDelete,'quiet danger-text');del.type='button';del.onclick=async()=>{if(!confirm(T.providerDeleteConfirm))return;del.disabled=true;try{await api('/v1/me/providers/'+encodeURIComponent(p.id),{method:'DELETE'});await loadProviders();}catch(_){$('provider-status').textContent=T.providerError;del.disabled=false;}};card.append(text,del);box.append(card);}}
 async function loadUsage(){await usageChart.load();}
 async function load(){
- if(!session?.key){location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));return;}$('refresh').disabled=true;$('status').textContent=T.loading;
+ if(!session?.key){redirectForSignIn();return;}$('refresh').disabled=true;$('status').textContent=T.loading;
  try{me=await api('/v1/me');if(!me.account?.id||(session.owner&&me.account.id!==session.owner))throw new Error('identity');session.owner=me.account.id;renderMe();$('private-content').hidden=false;autopay.load();
  const results=await Promise.allSettled([api('/v1/devices'),api('/v1/me/sessions'),api('/v1/config'),loadUsage(),loadApiKeys(),api('/v1/link/channels'),loadProviders()]);
  const [devices,sessions,config,usage,apiKeys,channelLinks,providers]=results;
@@ -139,7 +147,7 @@ async function load(){
  if(sessions.status==='fulfilled'){const list=sessions.value.sessions||[];$('sessions').replaceChildren(...list.map(s=>{const n=row(s.device||'nanoLika',`${s.current?T.currentSession+' · ':''}${date(s.last_used_at||s.created_at)}`);if(!s.current){const b=h('button',T.revoke);b.type='button';b.onclick=async()=>{if(!confirm(T.revokeConfirm))return;b.disabled=true;try{await api('/v1/me/sessions/'+encodeURIComponent(s.prefix),{method:'DELETE'});await load();}catch(_){$('status').textContent=T.error;b.disabled=false;}};n.append(b);}return n;}));if(!list.length)empty($('sessions'));}else empty($('sessions'),T.unavailable);
  if(config.status==='fulfilled')minPassword=Math.max(1,Number(config.value.password_min_len)||8);if(usage.status==='rejected')$('status').textContent=T.usageError;if(apiKeys.status==='rejected')empty($('api-keys'),T.unavailable);if(providers.status==='rejected')empty($('providers-list'),T.unavailable);
  $('status').textContent='';
- }catch(e){$('private-content').hidden=true;$('identity').textContent='';if(e.status===401||e.message==='identity')location.replace('/app/?signin=1&next='+encodeURIComponent(location.href));else $('status').textContent=T.error;}finally{$('refresh').disabled=false;}
+ }catch(e){$('private-content').hidden=true;$('identity').textContent='';if(e.status===401||e.message==='identity')redirectForSignIn();else $('status').textContent=T.error;}finally{$('refresh').disabled=false;}
 }
 $('refresh').onclick=load;
 if($('create-api-key'))$('create-api-key').onclick=async()=>{
