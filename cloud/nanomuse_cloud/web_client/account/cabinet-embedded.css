@@ -1,0 +1,70 @@
+/* Same materials and controls as the current application. Controllers and DOM IDs
+   are shared with the standalone account, including payments and key restrictions. */
+html.cabinet-embedded {
+  --om-bg:#f7f3e9;--om-surface:#fffcf5;--om-surface-2:#ede8da;
+  --om-border:#ded9cb;--om-fg:#35382f;--om-muted:#686d60;
+  --om-accent:#536b48;--om-accent-fg:#fff;--om-accent-soft:#e3ead9;
+  color-scheme:light;
+}
+html.cabinet-embedded body.account-studio {
+  --canvas:var(--om-bg);--surface:var(--om-surface);--fill:var(--om-surface-2);
+  --hairline:var(--om-border);--ink:var(--om-fg);--ink-2:var(--om-muted);--ink-3:var(--om-muted);
+  --action:var(--om-accent);--muted:var(--om-muted);
+  --brand-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  margin:0;min-height:100dvh;background:var(--canvas);font:14px/1.6 var(--brand-body);color:var(--ink);
+}
+.cabinet-embedded .account-top,.cabinet-embedded .account-nav,.cabinet-embedded body>footer,
+.cabinet-embedded .page-heading h1 {display:none!important}
+.cabinet-embedded .account-layout {display:block!important;width:100%!important;max-width:1080px!important;margin:0 auto!important;padding:20px 32px 40px!important;box-sizing:border-box}
+.cabinet-embedded .account-layout main {display:block!important;min-width:0;padding:0!important;border:0!important}
+.cabinet-embedded .page-heading {display:flex!important;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 0 24px!important;padding:0!important;border:0!important}
+.cabinet-embedded #identity {flex:1;min-width:0;margin:0!important;font:14px/1.5 var(--brand-body)!important;overflow-wrap:anywhere;color:var(--ink-2)}
+.cabinet-embedded #identity .identity-plan {margin-left:10px;padding:3px 9px;border-radius:8px;background:var(--fill);color:var(--ink);font:500 12px/1.5 var(--brand-body)}
+.cabinet-embedded #refresh {position:static!important;margin:0!important;min-height:40px;padding:8px 14px!important;border-radius:10px!important;font:500 13px/1.4 var(--brand-body)!important}
+.cabinet-embedded #status {flex-basis:100%;font-size:13px;margin:0!important;color:var(--ink-2)}
+.cabinet-embedded #status:empty {display:none}
+.cabinet-embedded #private-content>section {margin:0!important;padding:0!important}
+.cabinet-embedded #private-content>section>h2 {margin:0 0 20px;font:600 18px/1.3 var(--brand-body)!important;letter-spacing:0!important}
+.cabinet-embedded #overview>h2 {display:none}
+.cabinet-embedded .overview-grid {display:grid;grid-template-columns:1.15fr 1fr;gap:20px;margin-bottom:24px}
+.cabinet-embedded .overview-grid>.card {padding:24px!important;border:1px solid var(--hairline)!important;border-radius:16px!important;background:var(--surface)!important}
+.cabinet-embedded .overview-grid .eyebrow {margin:0 0 10px!important;text-transform:none!important;letter-spacing:0!important;font:500 14px/1.5 var(--brand-body)!important;color:var(--ink-2)!important}
+.cabinet-embedded #balance {display:block;font:600 34px/1.2 var(--brand-body)!important;letter-spacing:-.025em!important;font-variant-numeric:tabular-nums}
+.cabinet-embedded #plan-name {font:600 26px/1.3 var(--brand-body)!important;letter-spacing:-.02em!important;margin:0 0 12px}
+.cabinet-embedded .overview-grid p:not(.eyebrow) {font:14px/1.6 var(--brand-body)!important;letter-spacing:0!important}
+.cabinet-embedded button,.cabinet-embedded .button,.cabinet-embedded input,.cabinet-embedded select {font-family:var(--brand-body)!important;letter-spacing:0!important;text-transform:none!important;border-radius:10px!important;min-height:44px}
+.cabinet-embedded button,.cabinet-embedded .button {font-weight:500!important}
+.cabinet-embedded button.primary,.cabinet-embedded .button.primary {background:var(--action)!important;color:var(--om-accent-fg)!important;border-color:var(--action)!important}
+.cabinet-embedded button:focus-visible,.cabinet-embedded a:focus-visible,.cabinet-embedded input:focus-visible,.cabinet-embedded select:focus-visible {outline:2px solid var(--action);outline-offset:3px}
+.cabinet-embedded h3 {font:600 16px/1.4 var(--brand-body)!important;letter-spacing:0!important;text-transform:none!important}
+.cabinet-embedded .api-key-form {gap:16px!important}
+.cabinet-embedded .api-key-form label {font-size:13px!important;color:var(--ink-2)}
+.cabinet-embedded .api-key-form input,.cabinet-embedded .api-key-form select {padding:10px 12px!important;background:var(--surface)!important;color:var(--ink)!important;border:1px solid var(--hairline)!important}
+.cabinet-embedded .api-key-controls>span {font-size:13px!important;letter-spacing:0!important;color:var(--ink-2)!important}
+.cabinet-embedded .account-row,.cabinet-embedded .api-key-row {padding:16px 0!important}
+.cabinet-embedded summary {min-height:44px;font-size:14px!important;letter-spacing:0!important}
+.cabinet-embedded .account-shortcuts {display:flex;flex-wrap:wrap;gap:12px 20px;padding-top:16px}
+.cabinet-embedded .account-shortcuts a {font:500 14px/1.5 var(--brand-body)!important;letter-spacing:0!important;text-decoration:underline;text-underline-offset:4px}
+.cabinet-embedded #new-api-key {border-radius:14px!important}
+.cabinet-embedded #private-content p {max-width:74ch}
+.cabinet-embedded #private-content code {overflow-wrap:anywhere}
+.cabinet-embedded #private-content table {font-size:13px}
+.cabinet-embedded #private-content th {font:600 12px/1.5 var(--brand-body)!important;text-transform:none!important;letter-spacing:0!important}
+@media(max-width:640px){
+ .cabinet-embedded .account-layout {padding:18px 20px 32px!important}
+ .cabinet-embedded .overview-grid {grid-template-columns:minmax(0,1fr);gap:14px}
+ .cabinet-embedded .overview-grid>.card {padding:20px!important}
+ .cabinet-embedded .api-key-form {grid-template-columns:minmax(0,1fr)!important}
+ .cabinet-embedded .account-row {flex-wrap:wrap;gap:12px}
+ .cabinet-embedded .api-key-controls {align-items:flex-start!important}
+}
+@media(prefers-reduced-motion:reduce){.cabinet-embedded *, .cabinet-embedded *::before,.cabinet-embedded *::after {scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+.cabinet-embedded .overview-grid {border:0!important;padding:0!important}
+.cabinet-embedded #fund-account {font:500 14px/1.4 var(--brand-body)!important;letter-spacing:0!important;padding:11px 16px!important;margin-top:16px}
+.cabinet-embedded #private-content h2,.cabinet-embedded #private-content h3,.cabinet-embedded #private-content label,.cabinet-embedded #private-content small {text-transform:none!important;letter-spacing:0!important}
+.cabinet-embedded #overview .autopay-panel {padding:14px 0!important;min-height:0!important;margin:24px 0!important}
+.cabinet-embedded #overview .account-shortcuts {margin:0!important;padding:16px 0!important}
+.cabinet-embedded #private-content footer {margin-top:28px!important;padding-top:18px!important}
+.cabinet-embedded #payment-dialog h2 {font:600 22px/1.3 var(--brand-body)!important}
+.cabinet-embedded #payment-dialog h3 {font:600 18px/1.3 var(--brand-body)!important}
+.cabinet-embedded #payment-dialog label,.cabinet-embedded #payment-dialog strong,.cabinet-embedded #payment-dialog span {text-transform:none!important;letter-spacing:0!important}
