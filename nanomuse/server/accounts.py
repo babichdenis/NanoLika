@@ -148,6 +148,13 @@ class AccountRuntime:
                 inbox = getattr(thread, "inbox", None)
                 if inbox is not None and hasattr(inbox, "empty") and not inbox.empty():
                     return True
+        # Avatar drawing and animation continue after the HTTP request returns. Never
+        # evict the account while one of its paid background operations is still live.
+        studio = getattr(entry.service, "avatar", None)
+        session = getattr(studio, "current", None)
+        tasks = getattr(session, "tasks", ()) if session is not None else ()
+        if any(not task.done() for task in tasks):
+            return True
         return False
 
     # ------------------------------------------------------------------ the registry
