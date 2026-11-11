@@ -145,6 +145,11 @@ class AccountRuntime:
             for thread in threads.values():
                 if getattr(thread, "busy", False):
                     return True
+                # The queue is already drained while a worker waits for a lease or
+                # hydrates history; it still owns a live task and cannot be evicted.
+                worker = getattr(thread, "worker", None)
+                if worker is not None and not worker.done():
+                    return True
                 inbox = getattr(thread, "inbox", None)
                 if inbox is not None and hasattr(inbox, "empty") and not inbox.empty():
                     return True
