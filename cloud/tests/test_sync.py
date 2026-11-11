@@ -7,17 +7,16 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from test_accounts import auth, make
-from test_cloud import sign_up
-from test_hub import connect, hello
-from test_hub import sign_up as ws_sign_up
-
 from nanomuse_cloud.api import create_app
 from nanomuse_cloud.config import Settings
 from nanomuse_cloud.db import Database
 from nanomuse_cloud.senders import LogSender
-from nanomuse_cloud.service import Cloud
+from nanomuse_cloud.service import Cloud, CloudError
 from nanomuse_cloud.sync import LIMITS, clean_attachments, cut_text, valid_id
+from test_accounts import auth, make
+from test_cloud import sign_up
+from test_hub import connect, hello
+from test_hub import sign_up as ws_sign_up
 
 
 def uid() -> str:
@@ -412,38 +411,21 @@ async def test_turning_sync_off_deletes_and_refuses_until_on_again():
     assert (await client.put("/v1/sync/state", json={}, headers=auth(key))).status_code == 400
 
 
-async def test_retention_drops_the_oldest_conversations_messages():
+async def test_retention_refuses_new_messages_without_deleting_history(monkeypatch):
     app, client, sender, up, cloud, settings = make()
     key = await signed_in(client, sender)
     store = app.state.sync
     account_id = cloud.authenticate(key).account_id
-    old, mid_conv, new = uid(), uid(), uid()
-    # three conversations, by age; the limit is lowered for the test
-    store.push(account_id, "a", [conv(old, created_at=1000), conv(mid_conv, created_at=2000), conv(new, created_at=3000)], [])
-    import nanomuse_cloud.sync as sync_mod
-
-    saved = dict(LIMITS)
-    try:
-        sync_mod.LIMITS["messages"] = 5
-        store.push(account_id, "a", [], [msg(uid(), old, created_at=1000 + i) for i in range(3)])
-        store.push(account_id, "a", [], [msg(uid(), mid_conv, created_at=2000 + i) for i in range(2)])
-        assert store.state(account_id)["counts"]["messages"] == 5
-        store.push(account_id, "a", [], [msg(uid(), new, created_at=3000)])
-        all_msgs = store.changes(account_id, 0, 1000)["messages"]
-        active = [m for m in all_msgs if not m["deleted"]]
-        by_cid: dict[str, int] = {}
-        for m in active:
-            by_cid[m["cid"]] = by_cid.get(m["cid"], 0) + 1
-        assert old not in by_cid and by_cid[mid_conv] == 2 and by_cid[new] == 1
-        assert any(m["cid"] == old and m["deleted"] for m in all_msgs)
-        # one conversation holding it all: its oldest messages become tombstones
-        store.push(account_id, "a", [], [msg(uid(), new, created_at=3001 + i) for i in range(6)])
-        all_msgs = store.changes(account_id, 0, 1000)["messages"]
-        msgs = [m for m in all_msgs if m["cid"] == new and not m["deleted"]]
-        assert len(msgs) == 5 and min(m["created_at"] for m in msgs) == 3002
-        assert any(m["cid"] == new and m["deleted"] for m in all_msgs)
-    finally:
-        sync_mod.LIMITS.update(saved)
+    old, new = uid(), uid()
+    monkeypatch.setitem(LIMITS, "messages", 2)
+    mids = [uid(), uid()]
+    assert store.push(account_id, "a", [conv(old), conv(new)], [msg(mid, old) for mid in mids])["accepted"] == 4
+    third = uid()
+    with pytest.raises(CloudError) as exc:
+        store.push(account_id, "a", [], [msg(third, new)])
+    assert getattr(exc.value, "code", "") == "message_limit"
+    assert {row["mid"] for row in store.changes(account_id, 0, 100)["messages"]} == set(mids)
+    await client.aclose()
 
 
 async def test_side_conversations_are_capped_per_account():

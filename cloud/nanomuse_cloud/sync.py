@@ -15,8 +15,8 @@ and every client already handles the refusal.
 Off until the person turns it on (the audit's rule: nothing of a new account travels by
 default); turning it off deletes everything stored. Deleting
 a chat tombstones the conversation (so the other devices drop it) and removes its texts at
-once; tombstones go after 30 days. At most 20,000 messages per account: beyond that, the
-oldest conversations' messages are dropped from the relay (devices keep their own copies).
+once; tombstones go after 30 days. At most 20,000 live messages per account: new messages are refused when the limit is full,
+while existing history stays intact until explicitly deleted.
 At most 2,000 live side conversations: a new one past that is refused with
 `conversation_limit` (0.23) and stays on the device.
 
@@ -807,7 +807,7 @@ class SyncStore:
                             ),
                         )
                         accepted += 1
-            touched_cids: set[str] = set()
+            live_messages = int(c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=? AND deleted=0", (account_id,)).fetchone()[0])
             for msg in messages:
                 if not isinstance(msg, dict):
                     continue
@@ -832,6 +832,7 @@ class SyncStore:
                             (t, seq, account_id, mid),
                         )
                         accepted += 1
+                        live_messages -= 1
                     else:
                         rejected.append({"mid": mid, "reason": "known_mid"})
                     continue
@@ -861,6 +862,8 @@ class SyncStore:
                         continue
                 else:
                     parent_mid = ""
+                if not deleted and live_messages >= LIMITS["messages"]:
+                    raise CloudError(409, "message_limit", "Облачная история заполнена. Новое сообщение не синхронизировано. Освободите место в облачной истории и повторите попытку.")
                 text, truncated = cut_text(msg.get("text"))
                 seq = self._next_seq(c, account_id)
                 # A message may name its own device: the bot publishes a Telegram turn as
@@ -885,16 +888,12 @@ class SyncStore:
                         "" if deleted else parent_mid,
                     ),
                 )
-                touched_cids.add(cid)
+                if not deleted:
+                    live_messages += 1
                 accepted += 1
-            pruned = 0
-            if touched_cids:
-                pruned = self._retain(c, account_id, touched_cids, t)
             folded = self._fold_daily_feed(c, account_id)
             cursor = self._cursor(c, account_id)
         out = {"cursor": cursor, "accepted": accepted, "rejected": rejected}
-        if pruned:
-            out["pruned"] = {"messages": pruned}
         if folded:
             out["folded"] = folded
         return out
@@ -1027,63 +1026,6 @@ class SyncStore:
                 (cutoff,),
             ).rowcount
             return max(0, gone)
-
-    def _retain(self, c: sqlite3.Connection, account_id: str, keep: set[str], t: int) -> int:
-        """Over the message limit: the oldest conversations' messages go first (the ones not
-        written in this request); when one conversation holds it all, its oldest messages go.
-        Each one becomes a tombstone with its own seq, so an offline device learns about it."""
-        limit = LIMITS["messages"]
-        count = int(c.execute("SELECT COUNT(*) FROM sync_messages WHERE account_id=? AND deleted=0", (account_id,)).fetchone()[0])
-        if count <= limit:
-            return 0
-        pruned = 0
-
-        def bury(cid: str, how_many: int | None = None) -> int:
-            rows = c.execute(
-                "SELECT mid FROM sync_messages WHERE account_id=? AND cid=? AND deleted=0 ORDER BY seq"
-                + (" LIMIT ?" if how_many is not None else ""),
-                (account_id, cid, *((how_many,) if how_many is not None else ())),
-            ).fetchall()
-            for row in rows:
-                seq = self._next_seq(c, account_id)
-                c.execute(
-                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
-                    "WHERE account_id=? AND mid=?",
-                    (t, seq, account_id, str(row["mid"])),
-                )
-            return len(rows)
-
-        rows = c.execute(
-            """SELECT sc.cid, COUNT(sm.mid) AS n FROM sync_conversations sc
-               JOIN sync_messages sm ON sm.account_id=sc.account_id AND sm.cid=sc.cid AND sm.deleted=0
-               WHERE sc.account_id=? GROUP BY sc.cid ORDER BY sc.updated_at, sc.seq""",
-            (account_id,),
-        ).fetchall()
-        for r in rows:
-            if count <= limit:
-                return pruned
-            if str(r["cid"]) in keep:
-                continue
-            removed = bury(str(r["cid"]))
-            count -= removed
-            pruned += removed
-        if count > limit:
-            # only the conversations written just now are left: trim their oldest messages
-            removed = 0
-            rows = c.execute(
-                "SELECT cid, mid FROM sync_messages WHERE account_id=? AND deleted=0 ORDER BY seq LIMIT ?",
-                (account_id, count - limit),
-            ).fetchall()
-            for row in rows:
-                seq = self._next_seq(c, account_id)
-                c.execute(
-                    "UPDATE sync_messages SET deleted=1, deleted_at=?, text='', truncated=0, attachments='[]', reply_to_mid='', seq=? "
-                    "WHERE account_id=? AND mid=?",
-                    (t, seq, account_id, str(row["mid"])),
-                )
-                removed += 1
-            pruned += removed
-        return pruned
 
     @staticmethod
     def _sweep(c: sqlite3.Connection, t: int) -> None:
