@@ -220,6 +220,16 @@ async def _run(
     network: bool = True,
     extra_env: dict[str, str] | None = None,
 ) -> ToolResult:
+    # The public multi-account bot shares a process and an OS identity. Its workspace
+    # routing is not an execution sandbox: cwd and a scrubbed environment alone do not
+    # stop a subprocess from reading other customers' files. Fail closed until the bot
+    # uses a real, account-isolated executor. Personal installations do not set this flag.
+    if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+        return ToolResult.fail(
+            "В общем облачном боте выполнение кода временно недоступно: "
+            "изолированная обработка ещё не подключена. Обычная работа с текстовыми "
+            "файлами доступна; для локальных файлов нужен подключённый компьютер."
+        )
     env = scrubbed_env()
     if extra_env:
         # the CLI bridge's call token: set on purpose, after the scrub, for this command only

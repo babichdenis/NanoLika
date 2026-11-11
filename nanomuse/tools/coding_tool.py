@@ -11,6 +11,7 @@ sentinel asks for one.
 from __future__ import annotations
 
 import json
+import os
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ConfigDict
@@ -97,6 +98,12 @@ class CodingAgents(BaseTool):
         limit: int = 0,
         **_: Any,
     ) -> ToolResult:
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return ToolResult.fail(
+                "В общем облачном боте агенты разработки временно недоступны: "
+                "изолированная обработка ещё не подключена. Для работы с локальными "
+                "проектами нужен подключённый компьютер."
+            )
         from nanomuse.coding.service import CodingError
 
         coding: CodingService = self.coding
