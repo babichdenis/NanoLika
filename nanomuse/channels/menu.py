@@ -1524,26 +1524,45 @@ class ChatMenu:
                 await client.close()
             spend = data.get("spend") or {}
             tokens = data.get("tokens") or {}
+            lang = self.language(msg)
+            labels = {
+                "ru": ("Расход сегодня", "Расход всего", "Токены всего"),
+                "en": ("Spent today", "Total spent", "Total tokens"),
+                "zh": ("今日支出", "累计支出", "累计令牌"),
+            }[lang if lang in {"ru", "en", "zh"} else "ru"]
+            lines = []
             if spend.get("unlimited"):
-                return c["balance_label"] + ": ∞\n" + c["demo"]
-            # the relay's own rubles when it prices in them (RUB_PER_USD): the apps show
-            # the pre-computed *_rub figures, and the chat must speak the same currency
-            left_rub = spend.get("left_rub")
-            if isinstance(left_rub, (int, float)) and float(spend.get("rub_per_usd") or 0) > 0:
-                amount = f"{left_rub:.0f}" if float(left_rub) % 1 == 0 else f"{left_rub:.2f}"
-                return c["balance_label"] + ": " + amount + " ₽\n" + c["demo"]
-            if isinstance(spend.get("left"), (int, float)):
-                return (
-                    c["balance_label"]
-                    + ": "
-                    + str(round(spend["left"], 4))
-                    + " "
-                    + str(spend.get("currency") or "CNY")
-                    + "\n"
-                    + c["demo"]
+                lines.append(c["balance_label"] + ": ∞")
+            elif isinstance(spend.get("left_rub"), (int, float)) and float(spend.get("rub_per_usd") or 0) > 0:
+                left = spend["left_rub"]
+                amount = f"{left:.0f}" if float(left) % 1 == 0 else f"{left:.2f}"
+                lines.append(c["balance_label"] + ": " + amount + " ₽")
+            elif isinstance(spend.get("left"), (int, float)):
+                lines.append(c["balance_label"] + ": " + str(round(spend["left"], 4)) + " " + str(spend.get("currency") or "CNY"))
+            elif isinstance(tokens.get("remaining"), (int, float)):
+                lines.append(c["tokens"] + ": " + str(tokens["remaining"]))
+            else:
+                lines.append(c["no_money"])
+
+            if float(spend.get("rub_per_usd") or 0) > 0:
+                for key, label in (("today_rub", labels[0]), ("total_rub", labels[1])):
+                    value = spend.get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        formatted = f"{value:.6f}".rstrip("0")
+                        if formatted.endswith("."):
+                            formatted += "00"
+                        elif len(formatted.rsplit(".", 1)[-1]) < 2:
+                            formatted += "0"
+                        lines.append(f"{label}: {formatted} ₽")
+            usage = (data.get("usage") or {}).get("total") or {}
+            rows = usage.get("by_kind")
+            if isinstance(rows, list):
+                count = sum(
+                    int(row.get("prompt_tokens") or 0) + int(row.get("completion_tokens") or 0)
+                    for row in rows if isinstance(row, dict)
                 )
-            if isinstance(tokens.get("remaining"), (int, float)):
-                return c["tokens"] + ": " + str(tokens["remaining"]) + "\n" + c["demo"]
-            return c["no_money"]
+                lines.append(f"{labels[2]}: {count:,}".replace(",", " "))
+            lines.append(c["demo"])
+            return "\n".join(lines)
         except Exception:
             return c["balance_error"]

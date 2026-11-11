@@ -511,3 +511,32 @@ async def test_a_card_answered_elsewhere_loses_its_buttons(tg: FakeTelegram):
     # an approval that is not here is not an error
     await ch.retire_approval("1001", "gone")
     await ch.stop()
+
+async def test_partial_attachment_failure_refuses_the_request(tg: FakeTelegram, monkeypatch):
+    bus = Bus()
+    ch = channel(tg)
+    await ch.start(bus)
+    original = ch._download
+
+    async def download(file_id, name, kind):
+        if file_id == "bad-file":
+            return None
+        return await original(file_id, name, kind)
+
+    monkeypatch.setattr(ch, "_download", download)
+    tg.push({
+        "update_id": 1,
+        "message": {
+            "message_id": 7,
+            "from": {"id": 1001, "first_name": "Ann"},
+            "chat": {"id": 1001, "type": "private"},
+            "caption": "Edit the attached report",
+            "photo": [{"file_id": "good-image"}],
+            "document": {"file_id": "bad-file", "file_name": "report.docx"},
+        },
+    })
+    await until(lambda: bool(tg.of("sendMessage")))
+    assert bus.inbound_msgs == []
+    assert "report.docx" in tg.of("sendMessage")[-1]["text"]
+    assert "Запрос не выполнен" in tg.of("sendMessage")[-1]["text"]
+    await ch.stop()

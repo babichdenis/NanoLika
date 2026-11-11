@@ -1122,3 +1122,40 @@ async def test_the_step_stays_under_the_answer_and_the_step_name_restarts_the_in
         ("react", "1001", "7", "working"),
         ("react", "1001", "7", "done"),
     ]
+
+def test_computer_request_with_attachment_is_not_silently_sent(chan, monkeypatch):
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    called = []
+
+    async def call(*args, **kwargs):
+        called.append(args)
+        return {}
+
+    monkeypatch.setattr(service.hub, "call", call)
+    fake.bus.inbound(dm("/computer проверь документ", files=[
+        InboundFile(name="report.docx", data=b"example", kind="file"),
+    ]))
+    wait_for(lambda: any("The request was not sent" in t for t in fake.texts()))
+    assert not called
+
+def test_partial_upload_failure_does_not_run_request(chan, monkeypatch):
+    client, service, llm, manager, fake = chan
+    pair(client, fake)
+    original = service.save_upload
+    sent = []
+
+    def save_upload(name, data, **kwargs):
+        if name == "broken.docx":
+            raise ValueError("unavailable")
+        return original(name, data, **kwargs)
+
+    monkeypatch.setattr(service, "save_upload", save_upload)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append(args))
+    fake.bus.inbound(dm("Edit these", files=[
+        InboundFile(name="good.txt", data=b"hello", kind="file"),
+        InboundFile(name="broken.docx", data=b"broken", kind="file"),
+    ]))
+    wait_for(lambda: any("broken.docx" in t for t in fake.texts()))
+    assert not sent
+    assert not list(service.settings.data_dir.rglob("good.txt"))

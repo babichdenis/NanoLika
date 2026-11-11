@@ -380,7 +380,20 @@ class MaxChannel(Channel):
         text: str,
         mid: str,
     ) -> None:
-        files = await self._attachments(body)
+        missing_files: list[str] = []
+        files = await self._attachments(body, missing_files)
+        if missing_files:
+            names = ", ".join(
+                re.sub(r"[^\w. -]", "_", Path(name.replace("\\", "/")).name)[:80] or "file"
+                for name in missing_files[:10]
+            )
+            warning = {
+                "en": f"I couldn't download: {names}. The request was not processed. Please send the request and files again.",
+                "zh": f"无法下载：{names}。请求未处理，请重新发送请求和文件。",
+            }.get(self._lang(), f"Не удалось скачать: {names}. Запрос не выполнен. Отправьте его вместе с файлами ещё раз.")
+            with suppress(Exception):
+                await self.send(chat, warning)
+            return
         if text or files:
             self._deliver(chat, sender, user, text, files, mid)
 
@@ -413,13 +426,13 @@ class MaxChannel(Channel):
         if self.bus is not None:
             self.bus.inbound(inbound)
 
-    async def _attachments(self, body: dict[str, Any]) -> list[InboundFile]:
+    async def _attachments(self, body: dict[str, Any], missing: list[str] | None = None) -> list[InboundFile]:
         """The pictures, clips, voice and documents of one message, fetched into memory.
 
         MAX gives an image, an audio file and a document a direct `url`; a video's
         `url` is a page, so its token is exchanged for the mp4 links with
-        `GET /videos/{token}`. A file that cannot be read is left out, not fatal:
-        the words of the message still reach the agent.
+        `GET /videos/{token}`. Missing files are reported to the caller so that an
+        incomplete request is never silently passed to the agent.
         """
         out: list[InboundFile] = []
         items = body.get("attachments")
@@ -439,7 +452,11 @@ class MaxChannel(Channel):
                 token = str(payload.get("token") or "")
                 url = str(payload.get("url") or "")
                 if not url and token:
-                    details = await self._call("GET", f"/videos/{token}")
+                    try:
+                        details = await self._call("GET", f"/videos/{token}")
+                    except Exception:  # noqa: BLE001
+                        logger.warning("max: could not retrieve an incoming video")
+                        details = {}
                     raw_urls = details.get("urls")
                     urls = raw_urls if isinstance(raw_urls, dict) else {}
                     for key in ("mp4_1080", "mp4_720", "mp4_480", "mp4_360", "mp4_240"):
@@ -462,6 +479,13 @@ class MaxChannel(Channel):
                 continue
             if got is not None:
                 out.append(got)
+            elif missing is not None:
+                if kind == "video":
+                    missing.append("video.mp4")
+                elif kind == "audio":
+                    missing.append("audio.mp3")
+                else:
+                    missing.append(name)
         return out
 
     async def _download_url(self, url: str, name: str, kind: str) -> InboundFile | None:

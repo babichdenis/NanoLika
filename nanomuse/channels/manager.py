@@ -684,6 +684,17 @@ class ChannelManager(ChannelBus):
             return
         requested = computer_request(text) if not msg.is_group else None
         if requested is not None:
+            if msg.files:
+                await self._send(
+                    msg.channel,
+                    msg.chat_id,
+                    self.say(
+                        "The request was not sent: attachments cannot yet be transferred to the computer. Open the file on the computer and retry without an attachment.",
+                        "请求未发送：附件暂时无法传到电脑。请在电脑上打开文件，然后不带附件重试。",
+                        "Задача не отправлена: пока я не могу передать вложения на компьютер. Откройте файл на компьютере и повторите запрос без вложения.",
+                    ),
+                )
+                return
             if self.menu.public_private(msg) and not await self.menu.native_account(msg):
                 await self.menu.cloud_handoff(msg, computer=True)
                 return
@@ -817,6 +828,7 @@ class ChannelManager(ChannelBus):
             account_scope(linked_owner) if linked_owner else self.customer_scope_for(msg)
         )
         paths: list[str] = []
+        failed_uploads: list[str] = []
         for item in msg.files:
             try:
                 paths.append(
@@ -827,8 +839,31 @@ class ChannelManager(ChannelBus):
                         customer_scope=customer_scope,
                     ).path
                 )
-            except ValueError as exc:
-                await self._send(msg.channel, msg.chat_id, _short(exc))
+            except (ValueError, OSError):
+                failed_uploads.append(item.name)
+        if failed_uploads:
+            for path in paths:
+                try:
+                    saved = self.svc.resolve_workspace_path(
+                        path, thread_id=thread_id, customer_scope=customer_scope
+                    )
+                    saved.unlink(missing_ok=True)
+                except (OSError, ValueError, PermissionError):
+                    logger.warning("channel: could not remove an incomplete upload")
+            names = "; ".join(
+                re.sub(r"[^\w. -]", "_", Path(name.replace("\\", "/")).name)[:80] or "file"
+                for name in failed_uploads[:10]
+            )
+            await self._send(
+                msg.channel,
+                msg.chat_id,
+                self.say(
+                    "The request was not processed because these files could not be saved: ",
+                    "请求未处理，因为无法保存这些文件：",
+                    "Запрос не выполнен: не удалось сохранить файлы: ",
+                ) + names,
+            )
+            return
         if not text and not paths:
             return
         send_options: dict[str, Any] = {

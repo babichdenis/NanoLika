@@ -454,3 +454,31 @@ async def test_balance_keeps_yuan_until_the_relay_prices_in_rubles(tmp_path, mon
     monkeypatch.setattr("nanomuse.cloud.CloudClient", FakeClient)
     text = await menu.balance(msg(text="/balance"))
     assert "1.6746 CNY" in text
+
+@pytest.mark.asyncio
+async def test_balance_reports_account_spending_and_actual_token_totals(tmp_path, monkeypatch):
+    menu = ChatMenu(manager(tmp_path))
+    monkeypatch.setattr(ChatMenu, "_cloud_access", AsyncMock(return_value=("key", "https://relay.test")))
+
+    class FakeClient:
+        def __init__(self, base_url, api_key):
+            pass
+
+        async def me(self):
+            return {
+                "spend": {"left_rub": 21.39, "rub_per_usd": 80, "today_rub": 2.5, "total_rub": 10.75},
+                "usage": {"total": {"by_kind": [
+                    {"prompt_tokens": 1200, "completion_tokens": 300},
+                    {"prompt_tokens": 10, "completion_tokens": 20},
+                ]}},
+            }
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("nanomuse.cloud.CloudClient", FakeClient)
+    text = await menu.balance(msg(text="/balance"))
+    assert "21.39 ₽" in text
+    assert "2.50 ₽" in text
+    assert "10.75 ₽" in text
+    assert "1 530" in text

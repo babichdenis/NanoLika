@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
+import re
 from contextlib import suppress
 from html import escape
 from pathlib import Path
@@ -256,12 +257,15 @@ class TelegramChannel(Channel):
         mentioned = not is_group or self._mentioned(message, text)
         text = self._strip_mention(text)
         files: list[InboundFile] = []
+        missing_files: list[str] = []
         photo = message.get("photo")
         if isinstance(photo, list) and photo:
             best = photo[-1]
             item = await self._download(best.get("file_id"), "photo.jpg", "image")
             if item:
                 files.append(item)
+            else:
+                missing_files.append('photo.jpg')
         document = message.get("document")
         if isinstance(document, dict):
             item = await self._download(
@@ -269,6 +273,8 @@ class TelegramChannel(Channel):
             )
             if item:
                 files.append(item)
+            else:
+                missing_files.append(str(document.get("file_name") or "file"))
         video = message.get("video")
         if isinstance(video, dict):
             item = await self._download(
@@ -276,11 +282,15 @@ class TelegramChannel(Channel):
             )
             if item:
                 files.append(item)
+            else:
+                missing_files.append(str(video.get("file_name") or "video.mp4"))
         note = message.get("video_note")
         if isinstance(note, dict):
             item = await self._download(note.get("file_id"), "video-note.mp4", "video")
             if item:
                 files.append(item)
+            else:
+                missing_files.append('video-note.mp4')
         animation = message.get("animation")
         if isinstance(animation, dict):
             item = await self._download(
@@ -290,6 +300,8 @@ class TelegramChannel(Channel):
             )
             if item:
                 files.append(item)
+            else:
+                missing_files.append(str(animation.get("file_name") or "animation.gif"))
         voice = message.get("voice") or message.get("audio")
         if isinstance(voice, dict):
             item = await self._download(
@@ -297,11 +309,25 @@ class TelegramChannel(Channel):
             )
             if item:
                 files.append(item)
+            else:
+                missing_files.append(str(voice.get("file_name") or "voice.ogg"))
+        if chat.get("type") == "private" and message.get("message_thread_id"):
+            chat_id = topic_chat(chat_id, message["message_thread_id"])
+        if missing_files:
+            names = ", ".join(
+                re.sub(r"[^\w. -]", "_", Path(name.replace("\\", "/")).name)[:80] or "file"
+                for name in missing_files[:10]
+            )
+            warning = {
+                "en": f"I couldn't download: {names}. The request was not processed. Please send the request and files again.",
+                "zh": f"无法下载：{names}。请求未处理，请重新发送请求和文件。",
+            }.get(self._lang(), f"Не удалось скачать: {names}. Запрос не выполнен. Отправьте его вместе с файлами ещё раз.")
+            with suppress(Exception):
+                await self.send(chat_id, warning)
+            return
         topic_event = message.get("forum_topic_created") or message.get("forum_topic_edited")
         if not text and not files and not topic_event:
             return
-        if chat.get("type") == "private" and message.get("message_thread_id"):
-            chat_id = topic_chat(chat_id, message["message_thread_id"])
         name = " ".join(p for p in (sender.get("first_name"), sender.get("last_name")) if p) or str(
             sender.get("username") or ""
         )
@@ -445,7 +471,7 @@ class TelegramChannel(Channel):
                 return None
             token = str(self.settings.get("bot_token") or "")
             response = await self._http.get(f"{API}/file/bot{token}/{path}")
-            if response.status_code >= 400:
+            if response.status_code >= 400 or not response.content:
                 return None
             if name in ("photo.jpg", "file") and "." in path.rsplit("/", 1)[-1]:
                 name = path.rsplit("/", 1)[-1]

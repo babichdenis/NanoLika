@@ -143,7 +143,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.bus.messages), 1)
         self.assertEqual(len(self.bus.actions), 1)
 
-    async def test_malformed_attachment_payloads_preserve_text_delivery(self):
+    async def test_malformed_attachment_payloads_refuse_incomplete_request(self):
         update = self.update()
         update["message"]["body"]["attachments"] = [
             {"type": kind, "payload": payload}
@@ -152,15 +152,33 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         ]
         await self.post(update)
         await asyncio.sleep(0.05)
-        self.assertEqual(len(self.bus.messages), 1)
-        self.assertEqual(self.bus.messages[0].text, "hello")
-        self.assertEqual(self.bus.messages[0].files, [])
+        self.assertEqual(self.bus.messages, [])
+        sent = [json.loads(r.content) for r in self.calls if r.url.path == "/messages" and r.method == "POST"]
+        self.assertIn("Запрос не выполнен", sent[-1]["text"])
+        self.assertIn("file", sent[-1]["text"])
 
     async def test_verified_bot_and_subscription(self):
         self.assertEqual(self.bus.status[-1][1], "connected")
         self.assertTrue(all(r.headers.get("Authorization") == "fixture-token" for r in self.calls))
         self.assertTrue(all("fixture-token" not in str(r.url) for r in self.calls))
         self.assertEqual(json.loads(self.calls[-1].content)["secret"], "s" * 40)
+
+    async def test_partial_download_failure_refuses_the_request(self):
+        update = self.update()
+        update["message"]["body"]["attachments"] = [
+            {"type": "image", "payload": {"url": "https://cdn.invalid/i.jpg"}},
+            {"type": "file", "filename": "report.docx", "payload": {}},
+        ]
+        await self.post(update)
+        await asyncio.sleep(0.05)
+        self.assertEqual(self.bus.messages, [])
+        sent = [
+            json.loads(r.content)
+            for r in self.calls
+            if r.url.path == "/messages" and r.method == "POST"
+        ]
+        self.assertIn("report.docx", sent[-1]["text"])
+        self.assertIn("Запрос не выполнен", sent[-1]["text"])
 
     async def test_forged_webhook_does_not_reach_agent(self):
         self.assertEqual((await self.post(self.update(), "wrong")).status_code, 403)
