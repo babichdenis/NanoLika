@@ -1598,15 +1598,13 @@ def create_app(
         if not chain:
             cloud.settle(caller, request_id)
             if vision:
-                # The model is alive, it just cannot take this picture: say so instead of
-                # "no routes", and name the models that can (the client shows a picker).
-                cloud.note(caller.account_id, "upstream.vision_unsupported", f"No vision route for {spec.id}")
-                suggested = [s.id for s in settings.models if s.kind == "chat" and "image" in s.input_modalities]
+                # No eligible route can also mean a stale catalog, cooldown, balance
+                # or missing capability evidence. It does not prove the model is blind.
+                cloud.note(caller.account_id, "upstream.vision_route_unavailable", f"No eligible vision route for {spec.id}")
                 raise CloudError(
-                    400,
-                    "vision_unsupported",
-                    "This model does not take pictures. Choose a model that sees images.",
-                    extra={"suggested": suggested},
+                    503,
+                    "provider_routes_unavailable",
+                    "No verified image route is available right now. Retry later or choose another model.",
                 )
             cloud.note(caller.account_id, "upstream.no_routes", f"No eligible provider route for {spec.id}")
             raise CloudError(
@@ -1632,7 +1630,7 @@ def create_app(
             try:
                 try:
                     r, selected = await request_chat(
-                        http, chain, stream=False, on_failure=router.note_failure, on_success=router.note_success, vision=vision
+                        http, chain, stream=False, on_failure=None if byok is not None else router.note_failure, on_success=None if byok is not None else router.note_success, vision=vision
                     )
                 except httpx.HTTPError as e:
                     if byok is not None:
@@ -1740,7 +1738,7 @@ def create_app(
             selected = None
             try:
                 r, selected = await request_chat(
-                    http, chain, stream=True, on_failure=router.note_failure, on_success=router.note_success, vision=vision
+                    http, chain, stream=True, on_failure=None if byok is not None else router.note_failure, on_success=None if byok is not None else router.note_success, vision=vision
                 )
                 accounting_meta.update(
                     capture_metadata(r.headers, provider=selected.provider, usd_rub=router.usd_rub, usd_fee_pct=router.usd_fee)

@@ -19,6 +19,7 @@ import httpx
 from .deepseek_pricing import PRICE_URL as DEEPSEEK_PRICE_URL
 from .deepseek_pricing import catalog as deepseek_catalog
 from .providers import catalogue
+from .route_quality import QualityEvidence, valid_chat_response, validated_stream
 
 log = logging.getLogger(__name__)
 
@@ -35,27 +36,17 @@ def _has_catalog(name: str) -> bool:
     return bool(_catalog_entry(name).get("catalog"))
 
 
+CHAT_RESPONSE_SECONDS = 90
+CHAT_HEADERS_SECONDS = 30
+
 FLASH_FAMILY = "deepseek/deepseek-v4.1-flash"
 ALIASES = {
     # Provider revision IDs are normalized to one customer-facing Flash family.
     "deepseek-flash": FLASH_FAMILY,
     "deepseek-v4.1-flash": FLASH_FAMILY,
     "deepseek/deepseek-v4.1-flash": FLASH_FAMILY,
-    # Older Flash generations are lower-priced implementations of the same
-    # customer-facing product. Feature checks below still keep vision/tool routes
-    # on providers and generations that actually support those capabilities.
-    "deepseek-v4-flash": FLASH_FAMILY,
-    "deepseek/deepseek-v4-flash": FLASH_FAMILY,
-    "deepseek-v4-flash-vision-exp": FLASH_FAMILY,
-    "deepseek/deepseek-v4-flash-vision-exp": FLASH_FAMILY,
-    "deepseek-v4-flash-0731": FLASH_FAMILY,
-    "deepseek/deepseek-v4-flash-0731": FLASH_FAMILY,
-    # OpenRouter's tilde-prefixed aliases are dynamic Flash routes. Keep them in
-    # the same internal family so their live prices and availability are visible.
-    "~deepseek/deepseek-flash-latest": FLASH_FAMILY,
-    "~deepseek/deepseek-v4-flash-latest": FLASH_FAMILY,
-    "deepseek/deepseek-v4.1-flash-1017": FLASH_FAMILY,
-    "deepseek-v4.1-flash-1017": FLASH_FAMILY,
+    # A cheaper old generation or moving alias is not proof of equivalent quality.
+    # Explicit revision requests still match their own exact model IDs.
     # Yandex models are named differently by RouterAI and Polza; one customer
     # position must route to both, not appear twice in the menu.
     "yandex/yandexgpt-5-lite": "yandex/gpt-lite-5",
@@ -70,6 +61,14 @@ ROUTING_CATALOG_PROVIDERS = frozenset(entry["id"] for entry in catalogue().get("
 
 def identity(model: str) -> str:
     return ALIASES.get(model.lower(), model)
+
+
+def offer_identity(offer: Any) -> str:
+    canonical = identity(offer.canonical_model or offer.model)
+    actual = identity(offer.model)
+    # Cached catalogs may still carry the old broad Flash alias. Do not let that
+    # metadata silently turn a requested current generation into an old snapshot.
+    return actual if canonical == FLASH_FAMILY else canonical
 
 
 # Only the customer-facing alias routes across the DeepSeek Flash family. A
@@ -96,6 +95,21 @@ def number(value: Any) -> float | None:
     except (ValueError, TypeError):
         return None
     return result if math.isfinite(result) and result >= 0 else None
+
+
+def signed_number(value: Any) -> float | None:
+    """Balance remainder with its sign: a supplier in debt is a negative number.
+
+    number() drops everything below zero, so a channel in debt looked like an
+    unreadable balance and stayed eligible for routing. Balances need the sign.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (ValueError, TypeError):
+        return None
+    return result if math.isfinite(result) else None
 
 
 def proxy_catalog(html: str) -> dict:
@@ -226,6 +240,9 @@ class Route:
     # Other ids of the same model family at the same supplier that claim pictures:
     # when this id refuses one, the turn stays with the supplier instead of leaving it.
     siblings: tuple[Offer, ...] = ()
+    quality_status: str = "unverified"
+    first_token_ms: float | None = None
+    duration_ms: float | None = None
 
 
 class ProviderRouter:
@@ -260,6 +277,14 @@ class ProviderRouter:
         self.vision_strikes: dict[str, int] = {}
         self.provider_blocked_until: dict[str, float] = {}
         self.price_alerted: dict[tuple[str, str], float] = {}
+        self.health: dict[str, dict] = {}
+        self.incidents: list[dict] = []
+        self._last_health_save = 0.0
+        self._quality_probe_at = 0.0
+        self._quality_task: asyncio.Task | None = None
+        self.quality = QualityEvidence(os.getenv("CLOUD_ROUTING_QUALITY_FILE", ""))
+        self.quality_required = {model_key(v.strip()) for v in os.getenv("CLOUD_ROUTING_QUALITY_REQUIRED", "").split(",") if v.strip()}
+
         self.lock = asyncio.Lock()
         path = os.getenv("CLOUD_ROUTING_CACHE")
         self.path = Path(path) if path else None
@@ -294,6 +319,19 @@ class ProviderRouter:
                     self.vision_confirmed = {
                         str(key): until for key, value in seen.items() if (until := number(value)) is not None and until > now
                     }
+                quarantined = raw.get("price_quarantined", {})
+                if isinstance(quarantined, dict):
+                    for key, value in quarantined.items():
+                        until = number(value)
+                        if "|" in key and until is not None and until > time.time():
+                            self.quarantined[tuple(key.split("|", 1))] = until
+                health = raw.get("route_health", {})
+                if isinstance(health, dict):
+                    self.health = {k: v for k, v in health.items() if isinstance(v, dict)}
+                self._quality_probe_at = number(raw.get("quality_last_probe_at")) or 0
+                incidents = raw.get("routing_incidents", [])
+                if isinstance(incidents, list):
+                    self.incidents = [v for v in incidents[-100:] if isinstance(v, dict)]
                 strikes = raw.get("vision_strikes", {})
                 if isinstance(strikes, dict):
                     self.vision_strikes = {str(key): int(value) for key, value in strikes.items() if number(value) is not None}
@@ -313,15 +351,19 @@ class ProviderRouter:
         When the id a customer asked for refuses the picture, the turn stays with the
         same supplier on a sibling id instead of the supplier being dropped.
         """
-        family = identity(offer.canonical_model or offer.model)
+        family = offer_identity(offer)
         rows = []
         for other in self.offers.get(provider, []):
             if other.model == offer.model:
                 continue
-            if identity(other.canonical_model or other.model) != family:
+            if offer_identity(other) != family:
                 continue
             pair = offer_key(provider, other.model)
-            if "image" not in other.modalities and self.vision_confirmed.get(pair, 0) <= now:
+            if (
+                "image" not in other.modalities
+                and self.vision_confirmed.get(pair, 0) <= now
+                and not self.quality.check(pair, {"vision"}, True)[0]
+            ):
                 continue
             if self.vision_blocked.get(pair, 0) > now:
                 continue
@@ -338,9 +380,14 @@ class ProviderRouter:
         return tuple(row[2] for row in rows)
 
     def below_balance_floor(self, balance: dict) -> bool:
-        amount = number(balance.get("amount"))
+        amount = signed_number(balance.get("amount"))
         if amount is None:
-            return False
+            # An unreadable remainder still counts as below the floor when the
+            # supplier itself reports is_available=false: the channel is dead
+            # whether or not we managed to parse the digits.
+            return balance.get("available") is False
+        if amount < 0:
+            return True
         floor = self.minimum_balance_usd if str(balance.get("currency", "RUB")).upper() == "USD" else self.minimum_balance_rub
         return amount <= floor
 
@@ -535,11 +582,11 @@ class ProviderRouter:
                     infos = data.get("balance_infos") or []
                     for info in infos:
                         if str(info.get("currency")).upper() == "USD":
-                            amount = number(info.get("total_balance"))
+                            amount = signed_number(info.get("total_balance"))
                             break
                     entry["available"] = bool(data.get("is_available"))
                     entry["cny"] = next(
-                        (number(i.get("total_balance")) for i in infos if str(i.get("currency")).upper() == "CNY"),
+                        (signed_number(i.get("total_balance")) for i in infos if str(i.get("currency")).upper() == "CNY"),
                         None,
                     )
                 elif fmt == "openrouter":
@@ -590,15 +637,83 @@ class ProviderRouter:
         except OSError:
             log.warning("routing catalog cache could not be saved")
 
+    def schedule_quality_probe(self, http: httpx.AsyncClient) -> None:
+        interval = int(number(os.getenv("CLOUD_ROUTING_QUALITY_PROBE_SECONDS", "0")) or 0)
+        if interval:
+            interval = max(3600, interval)
+        if not interval or not self.quality_required or self.quality.path is None:
+            return
+        if self._quality_task is not None and not self._quality_task.done():
+            return
+        self.quality.load()
+        if time.time() - max(self._quality_probe_at, self.quality.checked_at) < interval:
+            return
+        self._quality_probe_at = time.time()
+        self.persist()
+
+        async def check():
+            from types import SimpleNamespace
+
+            from .route_probe import run
+
+            try:
+                result = await run(
+                    SimpleNamespace(
+                        model=os.getenv("CLOUD_ROUTING_QUALITY_PROBE_MODEL", "deepseek-flash"),
+                        max_routes=4,
+                        budget_rub=5.0,
+                        ttl_hours=24,
+                        output=str(self.quality.path),
+                        run=True,
+                    )
+                )
+                self.quality.load()
+                failed = [r for r in result["results"] if not all(r["checks"].values())]
+                if failed:
+                    self.incidents.append(
+                        {
+                            "at": int(time.time()),
+                            "kind": "quality_probe_failed",
+                            "routes": [{"provider": r["provider"], "model": r["model"], "checks": r["checks"]} for r in failed],
+                        }
+                    )
+                    token = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_TOKEN", "")
+                    chat = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_CHAT_ID", "")
+                    if token and chat:
+                        names = ", ".join(r["provider"] + "/" + r["model"] for r in failed)
+                        await self._send_price_alert(
+                            http,
+                            token,
+                            chat,
+                            "nanoLika: поставщик не прошёл проверку возможностей. "
+                            + names
+                            + ". Непройденные возможности исключены из маршрутизации.",
+                        )
+            except Exception as exc:
+                self.incidents.append({"at": int(time.time()), "kind": "quality_probe_error", "error": type(exc).__name__})
+                log.error("Scheduled route quality probe failed: %s", type(exc).__name__)
+            finally:
+                self.incidents = self.incidents[-100:]
+                self.persist()
+
+        self._quality_task = asyncio.create_task(check(), name="route-quality-probe")
+
     async def run(self, http: httpx.AsyncClient) -> None:
-        while True:
-            await asyncio.sleep(min(120, self.refresh_seconds))
-            if time.time() - self.refreshed >= self.refresh_seconds:
-                await self.refresh(http)
-            else:
-                await self.refresh_balances(http)
+        try:
+            while True:
+                await asyncio.sleep(min(120, self.refresh_seconds))
+                self.schedule_quality_probe(http)
+                if time.time() - self.refreshed >= self.refresh_seconds:
+                    await self.refresh(http)
+                else:
+                    await self.refresh_balances(http)
+        finally:
+            if self._quality_task is not None:
+                self._quality_task.cancel()
+                await asyncio.gather(self._quality_task, return_exceptions=True)
 
     def status(self, include_offers: bool = False) -> dict:
+        self.quality.load()
         result = {
             "enabled": self.enabled,
             "updated": self.refreshed,
@@ -614,6 +729,12 @@ class ProviderRouter:
             "vision_confirmed": {key: until for key, until in self.vision_confirmed.items() if until > time.time()},
             "vision_strikes": dict(self.vision_strikes),
             "providers": {name: len(rows) for name, rows in self.offers.items()},
+            "price_quarantined": {offer_key(*pair): until for pair, until in self.quarantined.items() if until > time.time()},
+            "route_health": dict(self.health),
+            "routing_incidents": list(self.incidents),
+            "quality_required_models": sorted(self.quality_required),
+            "quality_last_probe_at": self._quality_probe_at,
+            "quality_evidence": {"error": self.quality.error, "routes": dict(self.quality.rows)},
         }
         if include_offers:
             result["offers"] = [asdict(o) for rows in self.offers.values() for o in rows]
@@ -657,9 +778,18 @@ class ProviderRouter:
         family: bool = False,
     ) -> list[Route]:
         clean_body = {k: v for k, v in body.items() if k not in {"provider", "models", "route"}}
+        capabilities = {"text"}
+        if body.get("tools") or body.get("functions"):
+            capabilities.add("tools")
+        if has_images(body.get("messages", [])):
+            capabilities.add("vision")
+        if isinstance(body.get("response_format"), dict) and body["response_format"].get("type") in {"json_object", "json_schema"}:
+            capabilities.add("json")
+        required = bool({model_key(getattr(spec, "id", "")), model_key(spec.upstream)} & self.quality_required)
         configured = Route(spec.provider or "", url, headers, self._supplier_body(spec.provider or "", clean_body))
         if not self.enabled:
-            return [configured]
+            allowed, _, _ = self.quality.check(offer_key(configured.provider, spec.upstream), capabilities, required)
+            return [configured] if allowed else []
         prompt = estimate_prompt(body)
         try:
             limit = int(body.get("max_completion_tokens") or body.get("max_tokens") or self.expected_output)
@@ -677,7 +807,7 @@ class ProviderRouter:
         if spec.provider and use_family:
             configured_offer = next((o for o in self.offers.get(spec.provider, []) if o.model == spec.upstream), None)
             if configured_offer:
-                wanted = identity(configured_offer.canonical_model or configured_offer.model)
+                wanted = offer_identity(configured_offer)
         for name, offers in self.offers.items():
             provider = self.settings.providers.get(name)
             if provider is None:
@@ -699,11 +829,14 @@ class ProviderRouter:
             for offer in offers:
                 # canonical_model is the customer-facing family alias; exact mode
                 # must compare the provider's own model id, not that alias.
-                offer_model = (offer.canonical_model or offer.model) if use_family else offer.model
+                offer_model = offer_identity(offer) if use_family else offer.model
                 matched = identity(offer_model) == wanted if use_family else model_key(offer_model) == wanted
                 if not matched:
                     continue
                 exclusions = list(provider_reasons)
+                if float(self.health.get(offer_key(name, offer.model), {}).get("blocked_until", 0)) > now:
+                    exclusions.append("временное исключение после сбоев маршрута")
+
                 if now - offer.updated > self.max_age:
                     exclusions.append("котировка устарела")
                 if offer.valid_until and now >= offer.valid_until:
@@ -719,7 +852,18 @@ class ProviderRouter:
                     exclusions.append("не поддерживает вызов инструментов")
                 pair = offer_key(name, offer.model)
                 siblings = self.vision_siblings(name, offer, now) if vision else ()
-                if vision and "image" not in offer.modalities and self.vision_confirmed.get(pair, 0) <= now:
+                siblings = tuple(
+                    o
+                    for o in siblings
+                    if self.quality.check(offer_key(name, o.model), capabilities, required)[0]
+                    and self.health.get(offer_key(name, o.model), {}).get("blocked_until", 0) <= now
+                )
+                if (
+                    vision
+                    and "image" not in offer.modalities
+                    and self.vision_confirmed.get(pair, 0) <= now
+                    and not self.quality.check(pair, {"vision"}, True)[0]
+                ):
                     # The catalog says text, but the same family at this supplier has a
                     # snapshot that sees: keep the supplier, swap the id.
                     if siblings:
@@ -735,6 +879,9 @@ class ProviderRouter:
                         pair = offer_key(name, offer.model)
                     else:
                         exclusions.append("поставщик отказал в приёме изображений")
+                allowed, quality_reason, quality_status = self.quality.check(offer_key(name, offer.model), capabilities, required)
+                if not allowed:
+                    exclusions.append(quality_reason)
                 if offer.context and prompt + limit > offer.context:
                     exclusions.append("недостаточный контекст")
                 if offer.output_limit and limit > offer.output_limit:
@@ -768,6 +915,7 @@ class ProviderRouter:
                     routing_eligible=not exclusions,
                     exclusion_reason="; ".join(dict.fromkeys(exclusions)),
                     siblings=tuple(other for other in siblings if other.model != offer.model),
+                    quality_status=quality_status,
                 )
                 ranked = (estimated_cost, name != spec.provider, route)
                 inventory.append(ranked)
@@ -781,8 +929,8 @@ class ProviderRouter:
             if key not in unique or cost < unique[key][0]:
                 unique[key] = (cost, deprioritized, route)
         candidates = list(unique.values())
-        candidates.sort(key=lambda item: (item[0], item[1], item[2].provider))
-        inventory.sort(key=lambda item: (item[0], item[1], item[2].provider))
+        candidates.sort(key=lambda item: (self.health_rank(item[2]), item[0], item[1], item[2].provider))
+        inventory.sort(key=lambda item: (self.health_rank(item[2]), item[0], item[1], item[2].provider))
         if include_all:
             return [item[2] for item in inventory]
         # Keep every compatible, priced provider as a fallback. A relative-price
@@ -791,9 +939,7 @@ class ProviderRouter:
         # Only the explicitly configured route is allowed as an unpriced last resort.
         # Never send the model to arbitrary known providers or a different model version.
         has_quote = any(
-            (identity(o.canonical_model or o.model) == wanted if use_family else model_key(o.model) == wanted)
-            for offers in self.offers.values()
-            for o in offers
+            (offer_identity(o) == wanted if use_family else model_key(o.model) == wanted) for offers in self.offers.values() for o in offers
         )
         balance = self.balances.get(configured.provider, {})
         blocked = self.below_balance_floor(balance) and now - balance.get("checked", 0) < 300
@@ -801,6 +947,8 @@ class ProviderRouter:
             (not has_quote or self.allow_unpriced)
             and (configured.provider != "deepseek" or self.allow_unpriced)
             and not blocked
+            and self.quality.check(offer_key(configured.provider, spec.upstream), capabilities, required)[0]
+            and self.health.get(offer_key(configured.provider, spec.upstream), {}).get("blocked_until", 0) <= now
             and not any(
                 r.routing_eligible and r.provider == configured.provider and r.body["model"] == configured.body["model"] for r in routes
             )
@@ -813,6 +961,7 @@ class ProviderRouter:
             meta,
             provider=route.provider or "configured_upstream",
             routed_model=route.body["model"],
+            route_quality=route.quality_status,
             routing_price_updated=route.offer.updated if route.offer else None,
             price_quote=(
                 dict(
@@ -844,6 +993,19 @@ class ProviderRouter:
                 key = (route.provider, route.body["model"].lower())
                 until = time.time() + self.quarantine_seconds
                 self.quarantined[key] = until
+                self.incidents.append(
+                    {
+                        "at": int(time.time()),
+                        "kind": "price_mismatch",
+                        "provider": route.provider,
+                        "model": route.body["model"],
+                        "ratio": round(ratio, 4),
+                        "until": int(until),
+                    }
+                )
+                self.incidents = self.incidents[-100:]
+                self.persist()
+
                 # Ask the catalog loop to refresh soon. Until then, the bad offer is
                 # excluded and routes() chooses the cheapest compatible alternative.
                 self.refreshed = 0
@@ -862,6 +1024,11 @@ class ProviderRouter:
                     self.price_alerted[key] = time.time()
                     result["provider_price_alert"] = True
         return result
+
+    def health_rank(self, route: Route) -> tuple[int, int]:
+        row = self.health.get(offer_key(route.provider, route.body.get("model") or ""), {})
+        degraded = row.get("consecutive_failures", 0) > 0 or row.get("ttft_ema_ms", 0) > 15000
+        return (int(degraded), int(route.quality_status != "passed"))
 
     def note_failure(
         self,
@@ -893,6 +1060,19 @@ class ProviderRouter:
             )
             self.persist()
             return
+        if not proven and route.provider and (status_code in {0, 401, 402, 403, 408, 429} or status_code >= 500):
+            pair = offer_key(route.provider, route.body.get("model") or "")
+            row = self.health.setdefault(pair, {})
+            strikes = min(10, int(row.get("consecutive_failures", 0)) + 1)
+            row.update(
+                consecutive_failures=strikes,
+                failures=int(row.get("failures", 0)) + 1,
+                last_failure=int(time.time()),
+                last_status=status_code,
+                blocked_until=time.time() + min(900, (60 if status_code == 429 else 30) * 2 ** (strikes - 1)),
+            )
+            self._schedule_health_alert(route, row)
+            self.persist()
         if status_code != 402 or not route.provider:
             return
         until = time.time() + 300
@@ -917,7 +1097,18 @@ class ProviderRouter:
         if not route.provider:
             return
         pair = offer_key(route.provider, route.body.get("model") or "")
-        changed = False
+        health = self.health.setdefault(pair, {})
+        health.update(successes=int(health.get("successes", 0)) + 1, consecutive_failures=0, blocked_until=0, last_success=int(time.time()))
+        if route.duration_ms is not None:
+            samples = health.get("duration_samples_ms", [])[-31:] + [round(route.duration_ms)]
+            health["duration_samples_ms"] = samples
+            health["p95_duration_ms"] = sorted(samples)[max(0, math.ceil(len(samples) * 0.95) - 1)]
+        if route.first_token_ms is not None:
+            previous = health.get("ttft_ema_ms", route.first_token_ms)
+            health["ttft_ema_ms"] = round(previous * 0.8 + route.first_token_ms * 0.2)
+        changed = time.time() - self._last_health_save >= 10
+        if changed:
+            self._last_health_save = time.time()
         if vision and self.vision_confirmed.get(pair, 0) <= time.time():
             self.vision_confirmed[pair] = time.time() + 7 * 24 * 3600
             changed = True
@@ -927,6 +1118,33 @@ class ProviderRouter:
             changed = True
         if changed:
             self.persist()
+
+    def _schedule_health_alert(self, route: Route, row: dict) -> None:
+        token = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_TOKEN", "").strip()
+        chat = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_CHAT_ID", "").strip()
+        now = time.time()
+        if not token or not chat or row.get("consecutive_failures", 0) < 3 or now - row.get("last_alert_at", 0) < 900:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        row["last_alert_at"] = now
+
+        async def send():
+            async with httpx.AsyncClient() as client:
+                await self._send_price_alert(
+                    client,
+                    token,
+                    chat,
+                    "nanoLika: повторные сбои поставщика. "
+                    + route.provider
+                    + "/"
+                    + str(route.body.get("model") or "")
+                    + ". Маршрут временно исключён; доступные альтернативы продолжат обслуживать запросы.",
+                )
+
+        loop.create_task(send(), name="route-health-alert")
 
     def schedule_price_alert(self, http: httpx.AsyncClient, meta: dict) -> None:
         """Send an anomaly without blocking a user's model response; secrets stay in env."""
@@ -950,15 +1168,18 @@ class ProviderRouter:
 
     @staticmethod
     async def _send_price_alert(http: httpx.AsyncClient, token: str, chat_id: str, message: str) -> None:
+        proxy = os.getenv("CLOUD_PRICE_ALERT_TELEGRAM_PROXY", "").strip()
         try:
-            response = await http.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": message},
-                timeout=8,
-            )
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {"chat_id": chat_id, "text": message}
+            if proxy:
+                async with httpx.AsyncClient(proxy=proxy, timeout=8, trust_env=False) as transport:
+                    response = await transport.post(url, json=payload)
+            else:
+                response = await http.post(url, json=payload, timeout=8)
             response.raise_for_status()
-        except (httpx.HTTPError, ValueError):
-            log.exception("provider price alert could not be delivered to Telegram")
+        except (httpx.HTTPError, ValueError, ImportError):
+            log.error("provider alert could not be delivered to Telegram")
 
 
 def normalize_messages(messages: Any) -> Any:
@@ -1106,50 +1327,64 @@ async def request_chat(
     failures: list[str] = []
     refused: list[tuple[Route, int, bytes]] = []
     for index, route in enumerate(routes):
-        # The same supplier, other ids of the same family: a picture refused by one id is
-        # tried on a sibling before the turn leaves the supplier at all.
-        attempts: list[Route] = [route]
-        for sibling in route.siblings if vision else ():
-            attempts.append(
-                replace(route, body={**route.body, "model": sibling.model}, offer=sibling)
-            )
+        attempts = [route] + [replace(route, body={**route.body, "model": o.model}, offer=o) for o in route.siblings if vision]
         for position, attempt in enumerate(attempts):
+            response = None
+            timing = {"start": time.monotonic(), "first_token_ms": None}
+
+            def completed(attempt=attempt, timing=timing):
+                if on_failure is not None:
+                    for failed_route, status, refusal in refused:
+                        on_failure(failed_route, status, refusal, True)
+                if on_success is not None:
+                    on_success(
+                        replace(attempt, first_token_ms=timing["first_token_ms"], duration_ms=(time.monotonic() - timing["start"]) * 1000),
+                        vision,
+                    )
+
+            def failed_stream(attempt=attempt):
+                if on_failure is not None:
+                    on_failure(attempt, 502, b"invalid_or_incomplete_stream", False)
+
             try:
                 request = http.build_request("POST", attempt.url, headers=attempt.headers, json=attempt.body)
-                response = await http.send(request, stream=stream)
-            except httpx.HTTPError as exc:
-                last = exc
-                provider = attempt.provider or "configured"
-                model = str(attempt.body.get("model") or "")
-                failure = f"{provider}/{model}:{type(exc).__name__}"
-                failures.append(failure)
-                # Never log response bodies, URLs, or credentials; identify only the route and failure class.
-                log.warning("routing transport failure provider=%s model=%s error=%s", provider, model, type(exc).__name__)
-                continue
-            if response.status_code >= 400:
-                # Read the refusal once: both the failure hook and `retryable` judge it.
-                # A streaming response has no `content` until it is read, and touching it
-                # on a good reply would end the stream with ResponseNotRead.
-                await response.aread()
-                refusal = response.content
-                # Payment refusals count at once; a picture refusal is a fact only once
-                # another route with the same body has answered (see the success branch).
-                if on_failure is not None:
-                    on_failure(attempt, response.status_code, refusal, False)
-                more_attempts = position + 1 < len(attempts)
-                if retryable(response, refusal) and (more_attempts or index + 1 < len(routes)):
-                    log.warning("routing retry %s HTTP %s", attempt.provider or "configured", response.status_code)
-                    refused.append((attempt, response.status_code, refusal))
+                async with asyncio.timeout(CHAT_HEADERS_SECONDS if stream else CHAT_RESPONSE_SECONDS):
+                    response = await http.send(request, stream=stream)
+                if response.status_code >= 400:
+                    await response.aread()
+                    refusal = response.content
+                    if on_failure is not None:
+                        on_failure(attempt, response.status_code, refusal, False)
+                    if retryable(response, refusal) and (position + 1 < len(attempts) or index + 1 < len(routes)):
+                        log.warning("routing retry %s HTTP %s", attempt.provider or "configured", response.status_code)
+                        refused.append((attempt, response.status_code, refusal))
+                        await response.aclose()
+                        continue
+                    return response, attempt
+                if stream:
+                    checked = await validated_stream(response, completed, failed_stream)
+                    timing["first_token_ms"] = (time.monotonic() - timing["start"]) * 1000
+                    return checked, attempt
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = None
+                if not valid_chat_response(data):
+                    if on_failure is not None:
+                        on_failure(attempt, 502, b"invalid_or_empty_answer", False)
                     await response.aclose()
+                    failures.append(attempt.provider + ":invalid_answer")
                     continue
+                completed()
                 return response, attempt
-            # Answered: the refusals before it are now proven to be about the route, not
-            # about the request, so each one may be remembered.
-            if on_failure is not None:
-                for failed_route, status, refusal in refused:
-                    on_failure(failed_route, status, refusal, True)
-            if on_success is not None:
-                on_success(attempt, vision)
-            return response, attempt
-    detail = ", ".join(failures) if failures else "no routes"
-    raise httpx.ConnectError(f"No configured model provider answered ({detail})") from last
+            except (httpx.HTTPError, TimeoutError) as exc:
+                if isinstance(exc, TimeoutError):
+                    exc = httpx.ReadTimeout("Supplier did not answer before deadline")
+                last = exc
+                if response is not None:
+                    await response.aclose()
+                if on_failure is not None:
+                    on_failure(attempt, 0, b"transport_or_stream_failure", False)
+                failures.append((attempt.provider or "configured") + "/" + str(attempt.body.get("model") or "") + ":" + type(exc).__name__)
+                log.warning("routing transport failure provider=%s error=%s", attempt.provider or "configured", type(exc).__name__)
+    raise httpx.ConnectError("No configured model provider answered with a valid result (" + ", ".join(failures) + ")") from last

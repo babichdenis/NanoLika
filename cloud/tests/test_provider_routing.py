@@ -71,9 +71,9 @@ def test_flash_anchor_joins_family_and_routes_by_lowest_live_quote(monkeypatch):
 
     candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
 
-    assert identity("deepseek-v4.1-flash") == identity("deepseek/deepseek-v4.1-flash-1017")
-    assert [route.provider for route in candidates] == ["openrouter", "routerai"]
-    assert candidates[0].body["model"].endswith("1017")
+    assert identity("deepseek-v4.1-flash") != identity("deepseek/deepseek-v4.1-flash-1017")
+    assert [route.provider for route in candidates] == ["routerai"]
+    assert candidates[0].body["model"] == "deepseek-v4.1-flash"
     assert all(
         route.routing_eligible for route in r.routes(spec, body, "https://configured.example/v1/chat/completions", {}, include_all=True)
     )
@@ -108,11 +108,12 @@ def test_yandex_duplicate_names_route_as_one_family(monkeypatch):
     assert [route.provider for route in routes] == ["routerai", "polza"]
 
 
-def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monkeypatch):
+def test_flash_never_downgrades_to_cheaper_old_generation(monkeypatch):
     r = setup_router(monkeypatch)
     spec = ModelSpec("deepseek-flash", "DeepSeek Flash", "deepseek-v4.1-flash")
     r.offers = {
         "aitunnel": [
+            replace(quote("aitunnel", 35, 125), model="deepseek-v4.1-flash"),
             replace(quote("aitunnel", 30, 120), model="deepseek-v4.1-flash-1017"),
             replace(quote("aitunnel", 10, 32), model="deepseek-v4-flash-0731", modalities=("text",)),
             replace(quote("aitunnel", 13.6, 33.6), model="deepseek-v4-flash", modalities=("text",)),
@@ -121,18 +122,15 @@ def test_flash_uses_cheapest_compatible_generation_and_keeps_vision_on_v41(monke
     text_body = {"model": spec.upstream, "messages": [{"role": "user", "content": "hello"}], "max_tokens": 512}
     text_routes = r.routes(spec, text_body, "https://configured.example/v1/chat/completions", {})
 
-    assert [route.body["model"] for route in text_routes] == [
-        "deepseek-v4-flash-0731",
-        "deepseek-v4-flash",
-        "deepseek-v4.1-flash-1017",
-    ]
+    assert [route.body["model"] for route in text_routes] == ["deepseek-v4.1-flash"]
+
     image_body = {
         **text_body,
         "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://example.test/image.png"}}]}],
     }
     image_routes = r.routes(spec, image_body, "https://configured.example/v1/chat/completions", {})
 
-    assert [route.body["model"] for route in image_routes] == ["deepseek-v4.1-flash-1017"]
+    assert [route.body["model"] for route in image_routes] == ["deepseek-v4.1-flash"]
 
 
 def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monkeypatch):
@@ -146,7 +144,7 @@ def test_flash_revision_is_valid_configured_route_and_not_a_separate_family(monk
     candidates = r.routes(spec, body, "https://configured.example/v1/chat/completions", {})
 
     assert candidates and candidates[0].provider == "openrouter"
-    assert identity(candidates[0].body["model"]) == identity("deepseek-v4.1-flash")
+    assert candidates[0].body["model"] == "deepseek/deepseek-v4.1-flash-1017"
 
 
 def test_provider_402_quarantine_survives_router_restart(tmp_path, monkeypatch):
@@ -188,7 +186,7 @@ def test_admin_inventory_keeps_supplier_quotes_below_balance_floor(monkeypatch):
     now = time.time()
     r.offers = {
         "openrouter": [
-            replace(quote("openrouter", 30, 120), model="deepseek/deepseek-v4.1-flash-1017"),
+            replace(quote("openrouter", 30, 120), model="deepseek/deepseek-v4.1-flash"),
             replace(quote("openrouter", 10, 32), model="deepseek/deepseek-v4-flash-0731"),
             replace(quote("openrouter", 13.6, 33.6), model="deepseek/deepseek-v4-flash"),
         ],
@@ -205,11 +203,7 @@ def test_admin_inventory_keeps_supplier_quotes_below_balance_floor(monkeypatch):
 
     assert [route.provider for route in runtime] == ["polza"]
     suspended = [route for route in inventory if route.provider == "openrouter"]
-    assert {route.body["model"] for route in suspended} == {
-        "deepseek/deepseek-v4.1-flash-1017",
-        "deepseek/deepseek-v4-flash-0731",
-        "deepseek/deepseek-v4-flash",
-    }
+    assert {route.body["model"] for route in suspended} == {"deepseek/deepseek-v4.1-flash"}
     assert all(route.offer is not None and route.routing_eligible is False for route in suspended)
     assert all("баланс ниже рабочего порога" in route.exclusion_reason for route in suspended)
     assert next(route for route in inventory if route.provider == "polza").routing_eligible is True
@@ -217,9 +211,9 @@ def test_admin_inventory_keeps_supplier_quotes_below_balance_floor(monkeypatch):
 
 def test_openrouter_vision_and_latest_aliases_share_flash_family():
     family = "deepseek/deepseek-v4.1-flash"
-    assert identity("deepseek/deepseek-v4-flash-vision-exp") == family
-    assert identity("~deepseek/deepseek-flash-latest") == family
-    assert identity("~deepseek/deepseek-v4-flash-latest") == family
+    assert identity("deepseek/deepseek-v4-flash-vision-exp") != family
+    assert identity("~deepseek/deepseek-flash-latest") != family
+    assert identity("~deepseek/deepseek-v4-flash-latest") != family
 
 
 def test_reported_openrouter_cost_quarantines_bad_offer_and_uses_next_supplier(monkeypatch):
@@ -339,7 +333,13 @@ def test_aitunnel_flash_tool_support_is_restored_from_model_documentation(monkey
         "openrouter": {"amount": 0.0068, "currency": "USD", "checked": time.time(), "error": None},
     }
 
-    selected = routes(r, tools=[{"type": "function", "function": {"name": "lookup"}}], max_tokens=512)
+    spec = ModelSpec("flash-0731", "Flash 0731", "deepseek-v4-flash-0731")
+    selected = r.routes(
+        r_spec := spec,
+        {"model": r_spec.upstream, "messages": [], "tools": [{"type": "function", "function": {"name": "lookup"}}], "max_tokens": 512},
+        "https://own.example/chat/completions",
+        {},
+    )
 
     assert "tools" in at_offers[0].parameters
     assert selected[0].provider == "aitunnel"
@@ -405,7 +405,11 @@ def test_both_modes_fallback_before_response_only(failure, stream):
             if failure == "network":
                 raise httpx.ConnectError("fixture", request=request)
             return httpx.Response(failure, json={"error": {"code": "provider"}})
-        return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+        return (
+            httpx.Response(200, text='data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n')
+            if stream
+            else httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+        )
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
@@ -424,14 +428,14 @@ def test_streaming_success_is_not_read_before_returning():
 
     def handle(request):
         seen.append(request.url.host)
-        return httpx.Response(200, content=b'data: {"choices": []}\n\n')
+        return httpx.Response(200, content=b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n')
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
             routes = [Route("one", "https://one.example/v1/chat/completions", {}, {"model": "m"})]
             response, chosen = await request_chat(c, routes, stream=True)
             assert response.status_code == 200 and chosen.provider == "one"
-            assert await response.aread() == b'data: {"choices": []}\n\n'
+            assert await response.aread() == b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n'
             await response.aclose()
 
     asyncio.run(go())
@@ -444,7 +448,7 @@ def test_streaming_vision_refusal_moves_to_the_next_route():
     def handle(request):
         if request.url.host == "one.example":
             return httpx.Response(400, content=refusal.encode())
-        return httpx.Response(200, content=b'data: {"choices": []}\n\n')
+        return httpx.Response(200, content=b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n')
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
