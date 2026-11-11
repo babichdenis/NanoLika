@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -347,6 +349,97 @@ async def test_two_accounts_send_audio_using_their_own_model_and_key(kind):
     assert [(auth, model in body) for (auth, body), model in zip(requests, (b"voice-a", b"voice-b"), strict=True)] == [
         ("Bearer customer-a", True), ("Bearer customer-b", True),
     ]
+
+
+async def test_transcription_timeout_is_bounded_and_never_retried(monkeypatch):
+    calls, cancelled = [], []
+    monkeypatch.setattr(voice_note, "HEAR_TIMEOUT_S", 0.05)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/v1/me/models":
+            return httpx.Response(200, json={"models": [
+                {"id": "asr", "kind": "audio", "audio_kind": "transcribe"}
+            ]})
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+        return httpx.Response(200, json={"text": "late"})
+
+    with pytest.raises(voice_note.VoiceError, match="time"):
+        await voice_note.hear(b"audio", "voice.ogg", "audio/ogg", base="https://relay", key="k", transport=httpx.MockTransport(handler))
+    assert calls == ["/v1/me/models", "/v1/audio/transcriptions"]
+    assert cancelled == [True]
+
+
+async def test_ambiguous_404_from_transcription_is_not_retried():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path == "/v1/me/models":
+            return httpx.Response(200, json={"models": [
+                {"id": "asr", "kind": "audio", "audio_kind": "transcribe"}
+            ]})
+        return httpx.Response(404, json={"error": {"code": "unknown"}})
+
+    with pytest.raises(voice_note.VoiceError, match="404"):
+        await voice_note.hear(b"audio", "voice.ogg", "audio/ogg", base="https://relay", key="k", transport=httpx.MockTransport(handler))
+    assert requests == ["/v1/me/models", "/v1/audio/transcriptions"]
+
+
+async def test_only_pre_dispatch_model_refusal_can_be_reselected():
+    requests, provider_work = [], []
+    menus = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal menus
+        requests.append(request.url.path)
+        if request.url.path == "/v1/me/models":
+            menus += 1
+            model = "old" if menus == 1 else "new"
+            return httpx.Response(200, json={"models": [
+                {"id": model, "kind": "audio", "audio_kind": "transcribe"}
+            ]})
+        if b"old" in request.content:
+            return httpx.Response(404, json={"error": {"code": "plan_model"}})
+        provider_work.append(True)
+        return httpx.Response(200, json={"text": "words"})
+
+    assert await voice_note.hear(b"audio", "voice.ogg", "audio/ogg", base="https://relay", key="k", transport=httpx.MockTransport(handler)) == "words"
+    assert requests == ["/v1/me/models", "/v1/audio/transcriptions", "/v1/me/models", "/v1/audio/transcriptions"]
+    assert provider_work == [True]
+
+
+async def test_cancellation_stops_client_without_retrying_transcription():
+    started, cancelled = asyncio.Event(), []
+    calls = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/v1/me/models":
+            return httpx.Response(200, json={"models": [
+                {"id": "asr", "kind": "audio", "audio_kind": "transcribe"}
+            ]})
+        started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+        return httpx.Response(200, json={"text": "late"})
+
+    task = asyncio.create_task(voice_note.hear(
+        b"audio", "voice.ogg", "audio/ogg", base="https://relay", key="k", transport=httpx.MockTransport(handler)
+    ))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled == [True]
+    assert calls == ["/v1/me/models", "/v1/audio/transcriptions"]
 
 
 # -- the manager: the account key of a spoken chat does not stay in memory ------------------

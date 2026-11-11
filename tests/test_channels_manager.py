@@ -1288,6 +1288,229 @@ def test_partial_upload_failure_does_not_run_request(chan, monkeypatch):
     assert not list(service.settings.data_dir.rglob("good.txt"))
 
 
+@pytest.mark.parametrize("channel", ["telegram", "max"])
+@pytest.mark.parametrize("fail_at", [0, 1])
+def test_unheard_voice_never_runs_partial_request(chan, monkeypatch, channel, fail_at):
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    manager.channels[channel] = fake
+    manager.types[channel] = FakeChannel
+    manager.pairing.add(channel, "u1", sender_name="Ann", chat_id="chat1")
+    calls, sent, echoes, saved = [], [], [], []
+
+    async def hear(*_args, **_kwargs):
+        calls.append(True)
+        if len(calls) - 1 == fail_at:
+            raise RuntimeError("provider timeout")
+        return "first recording"
+
+    async def echo(*args):
+        echoes.append(args)
+
+    monkeypatch.setattr(manager, "_voice_key", lambda *_args: ("https://relay", "personal-key"))
+    monkeypatch.setattr("nanomuse.channels.manager.voice_note.hear", hear)
+    monkeypatch.setattr(manager, "_echo_selected_user", echo)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    monkeypatch.setattr(service, "save_upload", lambda *args, **kwargs: saved.append((args, kwargs)))
+    fake.bus.inbound(InboundMessage(
+        channel=channel, sender_id="u1", chat_id="chat1", message_id="77", text="caption",
+        files=[InboundFile("one.ogg", b"one", "audio"), InboundFile("two.ogg", b"two", "audio"),
+               InboundFile("report.txt", b"data", "file")],
+    ))
+    wait_for(lambda: any("couldn't transcribe" in text for text in fake.texts()))
+    assert len(calls) == fail_at + 1
+    assert not sent and not echoes and not saved
+    assert not manager._voice_admission.active
+
+
+@pytest.mark.parametrize("channel", ["telegram", "max"])
+def test_successful_voice_echoes_complete_transcript_with_other_files(chan, monkeypatch, channel):
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    manager.channels[channel] = fake
+    manager.types[channel] = FakeChannel
+    manager.pairing.add(channel, "u1", sender_name="Ann", chat_id="chat1")
+    sent, echoes = [], []
+
+    async def hear(*_args, **_kwargs):
+        return "words from recording"
+
+    async def echo(_thread, _msg, text):
+        echoes.append(text)
+
+    monkeypatch.setattr(manager, "_voice_key", lambda *_args: ("https://relay", "personal-key"))
+    monkeypatch.setattr("nanomuse.channels.manager.voice_note.hear", hear)
+    monkeypatch.setattr(manager, "_echo_selected_user", echo)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    fake.bus.inbound(InboundMessage(
+        channel=channel, sender_id="u1", chat_id="chat1", message_id="78", text="caption",
+        files=[InboundFile("one.ogg", b"voice", "audio"), InboundFile("report.txt", b"data", "file")],
+    ))
+    wait_for(lambda: sent)
+    assert echoes == ["words from recording\n\ncaption"]
+    assert sent[0][0][1] == echoes[0]
+    assert len(sent[0][1]["files"]) == 1
+    assert list(service.settings.data_dir.rglob("report.txt"))[0].read_bytes() == b"data"
+    assert not manager._voice_admission.active
+
+
+@pytest.mark.parametrize("renewed_account", ["account-a", "account-b"])
+def test_long_voice_refreshes_only_same_verified_customer(chan, monkeypatch, renewed_account):
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    calls, sent, echoes, rejected = [], [], [], []
+    identity = ("fake", "u1")
+
+    async def key_for(*_args):
+        calls.append(True)
+        account = "account-a" if len(calls) == 1 else renewed_account
+        key = "first-key" if len(calls) == 1 else "renewed-key"
+        manager._cloud_customer_scopes[identity] = "account:" + account
+        manager._cloud_keys[identity] = (key, "model", "", time.time() + 60, "https://relay")
+        return key, "model"
+
+    async def hear(*_args, **_kwargs):
+        cached = manager._cloud_keys[identity]
+        manager._cloud_keys[identity] = (cached[0], cached[1], cached[2], time.time() - 1, cached[4])
+        return "recognised"
+
+    async def echo(_thread, _msg, text):
+        echoes.append(text)
+
+    async def no_account(*_args):
+        rejected.append(True)
+
+    monkeypatch.setattr(manager, "_cloud_key_for", key_for)
+    monkeypatch.setattr(manager, "_shared_sender_can_use_thread", lambda *_args: True)
+    monkeypatch.setattr(manager, "_hear_one", hear)
+    monkeypatch.setattr(manager, "_echo_selected_user", echo)
+    monkeypatch.setattr(manager, "_cloud_no_account", no_account)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    fake.bus.inbound(dm("", message_id="79", files=[InboundFile("voice.ogg", b"voice", "audio")]))
+    wait_for(lambda: sent or rejected)
+    assert len(calls) == 2
+    if renewed_account == "account-a":
+        assert sent[0][1]["once_key"] == "renewed-key"
+        assert sent[0][1]["once_base"] == "https://relay"
+        assert echoes == ["recognised"] and not rejected
+    else:
+        assert rejected and not sent and not echoes
+
+
+def test_voice_admission_is_bounded_and_separate_per_customer():
+    from nanomuse.channels.manager import _VoiceAdmission
+
+    slots = _VoiceAdmission(limit=2)
+    assert slots.enter("account:a")
+    assert not slots.enter("account:a")
+    assert slots.enter("account:b")
+    assert not slots.enter("account:c")
+    slots.leave("account:a")
+    assert slots.enter("account:c")
+    assert slots.active == {"account:b", "account:c"}
+
+
+@pytest.mark.parametrize("full", ["same-account", "global"])
+def test_busy_voice_is_rejected_before_paid_call(chan, monkeypatch, full):
+    from nanomuse.channels.manager import _VoiceAdmission
+
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    manager._voice_admission = _VoiceAdmission(limit=2)
+    if full == "same-account":
+        assert manager._voice_admission.enter("installation")
+    else:
+        assert manager._voice_admission.enter("other-a")
+        assert manager._voice_admission.enter("other-b")
+    calls, sent = [], []
+
+    async def hear(*_args, **_kwargs):
+        calls.append(True)
+        return "wrong"
+
+    monkeypatch.setattr(manager, "_hear_one", hear)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    fake.bus.inbound(dm("", message_id="80", files=[InboundFile("voice.ogg", b"audio", "audio")]))
+    wait_for(lambda: any("not sent for recognition" in text for text in fake.texts()))
+    assert not calls and not sent
+
+
+@pytest.mark.parametrize("outcome", ["cancel", "exception"])
+def test_voice_slot_is_released_when_processing_stops(chan, monkeypatch, outcome):
+    import threading
+
+    client, _service, _llm, manager, fake = chan
+    pair(client, fake)
+    started = threading.Event()
+
+    async def hear(*_args, **_kwargs):
+        started.set()
+        if outcome == "exception":
+            raise RuntimeError("failed during processing")
+        await asyncio.sleep(30)
+        return "late"
+
+    monkeypatch.setattr(manager, "_hear_one", hear)
+    monkeypatch.setattr(manager, "_voice_key", lambda *_args: ("https://relay", "personal-key"))
+    task = asyncio.run_coroutine_threadsafe(
+        manager._handle_inbound(dm("", message_id="81", files=[InboundFile("voice.ogg", b"audio", "audio")])),
+        manager._loop,
+    )
+    assert started.wait(3)
+    if outcome == "cancel":
+        task.cancel()
+    else:
+        task.result(timeout=3)
+        assert any("couldn't transcribe" in text for text in fake.texts())
+    wait_for(lambda: not manager._voice_admission.active)
+
+
+def test_caption_is_not_submitted_as_answer_before_voice_recognition(chan, monkeypatch):
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    manager._questions["fake:chat1"] = "pending-thread"
+    answered = []
+    monkeypatch.setattr(service.ui, "has_pending_question", lambda _thread: True)
+    monkeypatch.setattr(service.ui, "answer_question", lambda *args: answered.append(args))
+    monkeypatch.setattr(manager, "_voice_key", lambda *_args: ("https://relay", "personal-key"))
+
+    async def no_words(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr(manager, "_hear_one", no_words)
+    fake.bus.inbound(dm("caption", message_id="82", files=[InboundFile("voice.ogg", b"audio", "audio")]))
+    wait_for(lambda: any("couldn't transcribe" in text for text in fake.texts()))
+    assert not answered
+    assert manager._questions["fake:chat1"] == "pending-thread"
+
+
+def test_voice_answer_is_passed_to_the_correct_pending_question(chan, monkeypatch):
+    client, service, _llm, manager, fake = chan
+    pair(client, fake)
+    manager._questions["fake:chat1"] = "pending-thread"
+    answered, sent = [], []
+    monkeypatch.setattr(manager.picker, "selected", lambda *_args: None)
+    monkeypatch.setattr(service.ui, "has_pending_question", lambda _thread: True)
+
+    def answer(thread, text):
+        answered.append((thread, text))
+        return True
+
+    async def hear(*_args, **_kwargs):
+        return "voice answer"
+
+    monkeypatch.setattr(service.ui, "answer_question", answer)
+    monkeypatch.setattr(manager, "_voice_key", lambda *_args: ("https://relay", "personal-key"))
+    monkeypatch.setattr(manager, "_hear_one", hear)
+    monkeypatch.setattr(service, "send", lambda *args, **kwargs: sent.append((args, kwargs)))
+    fake.bus.inbound(dm("caption", message_id="83", files=[InboundFile("voice.ogg", b"audio", "audio")]))
+    wait_for(lambda: answered)
+    assert answered == [("pending-thread", "voice answer\n\ncaption")]
+    assert "fake:chat1" not in manager._questions
+    assert not sent
+
+
 @pytest.mark.parametrize("key_state", ["valid", "expired", "missing", "other-account"])
 @pytest.mark.parametrize("channel", ["telegram", "max"])
 def test_public_chat_edit_sends_file_using_its_own_cloud_account(

@@ -267,6 +267,23 @@ class _Live:
     reply_to: str = ""
 
 
+class _VoiceAdmission:
+    """Fail fast before a paid ASR call; never queue audio in memory while waiting."""
+
+    def __init__(self, limit: int = 8):
+        self.limit = limit
+        self.active: set[str] = set()
+
+    def enter(self, scope: str) -> bool:
+        if scope in self.active or len(self.active) >= self.limit:
+            return False
+        self.active.add(scope)
+        return True
+
+    def leave(self, scope: str) -> None:
+        self.active.discard(scope)
+
+
 class ChannelManager(ChannelBus):
     def __init__(self, svc: MuseService):
         self.svc = svc
@@ -282,6 +299,7 @@ class ChannelManager(ChannelBus):
         # (VOICE_TURN_TTL_S): a turn served by another device or one that dies before the
         # answer must not leave a key in memory until the process ends.
         self._voice_turns: dict[str, tuple[str, str, float]] = {}
+        self._voice_admission = _VoiceAdmission()
         # thread id -> (channel, chat_id, message id): the message that started the turn.
         # A reply quotes it where the channel can, so a group keeps the thread.
         self._answer_to: dict[str, tuple[str, str, str]] = {}
@@ -883,10 +901,12 @@ class ChannelManager(ChannelBus):
             text = command + text[len(first_word):]
             skill_command = True
         delivered = self._questions.get(key)
+        has_audio = any(item.kind == "audio" for item in msg.files)
         if (
             delivered
             and (not selected or selected == delivered)
             and text
+            and not has_audio
             and self.svc.ui.has_pending_question(delivered)
         ):
             self._questions.pop(key, None)
@@ -895,7 +915,7 @@ class ChannelManager(ChannelBus):
                 msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала.")
             )
             return
-        if not delivered or not selected or selected == delivered:
+        if (not delivered or not selected or selected == delivered) and not has_audio:
             self._questions.pop(key, None)
         if not text and not msg.files:
             return
@@ -909,7 +929,6 @@ class ChannelManager(ChannelBus):
         thread_id = origin_thread
         if not await self._hydrate_shared_thread(thread_id, msg):
             return
-        await self._echo_selected_user(thread_id, msg, text)
         self.picker.pins.setdefault(thread_id, set()).add((msg.channel, msg.chat_id))
         # an account of its own in the relay when the chat is on Cloud, and `"!"` when that
         # account cannot be reached: then this turn is refused, never paid for by this machine
@@ -925,19 +944,96 @@ class ChannelManager(ChannelBus):
         # chat that lives on a computer still gets it. Listening costs the same as in the app.
         heard: list[str] = []
         voice_base = voice_key = ""
-        if any(item.kind == "audio" for item in msg.files):
-            voice_base, voice_key = self._voice_key(msg.channel, cloud_key, msg.sender_id)
-            for item in msg.files:
-                if item.kind != "audio":
-                    continue
-                words = await self._hear_one(item, voice_base, voice_key)
-                if words:
+        if has_audio:
+            voice_scope = (
+                sender_scope if verified_cloud is not None else
+                self._cloud_customer_scopes.get((msg.channel, msg.sender_id), "")
+                if cloud_key else "installation"
+            ) or channel_scope(msg.channel, msg.sender_id)
+            if not self._voice_admission.enter(voice_scope):
+                await self._send(
+                    msg.channel,
+                    msg.chat_id,
+                    self.say(
+                        "Voice recognition is busy. This attempt was not sent for recognition. "
+                        "Please try later or send text.",
+                        "语音识别正忙，此次请求未发送识别。请稍后重试或发送文字。",
+                        "Распознавание сейчас занято. Эта попытка не отправлена на распознавание. "
+                        "Попробуйте позже или отправьте текст.",
+                    ),
+                )
+                return
+            voice_failed = False
+            try:
+                voice_base, voice_key = self._voice_key(msg.channel, cloud_key, msg.sender_id)
+                for item in msg.files:
+                    if item.kind != "audio":
+                        continue
+                    words = await self._hear_one(item, voice_base, voice_key)
+                    if not words:
+                        raise voice_note.VoiceError("the recording produced no words")
                     heard.append(words)
+            except Exception as exc:  # noqa: BLE001 - never pass an incomplete turn to the model
+                logger.warning("channels: the voice request was not processed: {}", type(exc).__name__)
+                voice_failed = True
+            finally:
+                self._voice_admission.leave(voice_scope)
+            if voice_failed:
+                # A timed-out paid request might still finish at the provider. Do not
+                # retry automatically or claim the unknown outcome was free.
+                await self._send(
+                    msg.channel,
+                    msg.chat_id,
+                    self.say(
+                        "I couldn't transcribe the voice message, so I didn't run the request. "
+                        "You can send it as text. If the provider already started processing, "
+                        "the charge may still appear.",
+                        "无法识别语音，因此没有执行请求。可以发送文字。如果服务商已开始处理，仍可能产生费用。",
+                        "Не удалось распознать голосовое сообщение, поэтому запрос не выполнен. "
+                        "Можно отправить его текстом. Если поставщик уже начал распознавание, "
+                        "расход может появиться позже.",
+                    ),
+                )
+                return
             if heard:
                 # an opaque ogg would only confuse a text model, and the hearing is paid once
                 msg.files = [item for item in msg.files if item.kind != "audio"]
                 # what was said, then what was typed: the model sees one message in order
                 text = "\n\n".join(heard + ([text] if text else []))
+                if verified_cloud is not None:
+                    # Listening can take minutes. The cached per-customer key may have
+                    # expired; renew only for the very same verified account and chat.
+                    cached = self._cloud_keys.get((msg.channel, msg.sender_id))
+                    if not cached or len(cached) < 5 or cached[0] != cloud_key or cached[3] <= time.time():
+                        renewed, suggested_model = await self._cloud_key_for(msg.channel, msg)
+                        if renewed == "!":
+                            return
+                        if (
+                            not renewed
+                            or self._cloud_customer_scopes.get((msg.channel, msg.sender_id), "") != sender_scope
+                            or not self._shared_sender_can_use_thread(msg, thread_id, sender_scope)
+                        ):
+                            await self._cloud_no_account(msg.channel, msg.chat_id)
+                            return
+                        cloud_key = renewed
+                        if not (chosen_thread is not None and getattr(chosen_thread, "model", "")):
+                            cloud_model = suggested_model
+                        voice_base, voice_key = self._voice_key(msg.channel, cloud_key, msg.sender_id)
+                # A recording can answer a question sent to this particular channel.
+                # Recheck the binding after the long transcription; a failed or busy
+                # recording must leave the pending question available for a later reply.
+                selected_now = self.picker.selected(msg.channel, msg.chat_id)
+                if (
+                    delivered and not msg.files and self._questions.get(key) == delivered
+                    and (not selected_now or selected_now == delivered)
+                    and self.svc.ui.has_pending_question(delivered)
+                    and self.svc.ui.answer_question(delivered, text)
+                ):
+                    self._questions.pop(key, None)
+                    await self._send(
+                        msg.channel, msg.chat_id, self.say("Passed on.", "已转达。", "Передала.")
+                    )
+                    return
                 self._remember_voice_turn(thread_id, voice_base, voice_key)
         # A chat is answered here, in this process. The computer is a pair of hands, not the
         # brain: an ordinary message never travels to it, even when the conversation started
@@ -1012,6 +1108,9 @@ class ChannelManager(ChannelBus):
                     await self._cloud_no_account(msg.channel, msg.chat_id)
                     return
                 send_options["once_base"] = cached[4]
+        # Only echo a complete, authorised request. In particular, other devices
+        # must see the transcription rather than a caption sent before it was heard.
+        await self._echo_selected_user(thread_id, msg, text)
         try:
             self.svc.send(thread_id, text, **send_options)
         except TypeError as exc:

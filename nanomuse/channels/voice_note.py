@@ -13,6 +13,7 @@ sent, and the answer stays text.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 
@@ -27,9 +28,9 @@ TEXT_LIMIT = 1200
 HEAR = "transcribe"
 SAY = "speech"
 
-#: A phrase is heard in seconds; a relay that hangs must not hold the chat's inbound queue
-#: for the five minutes the first version waited. The turn stays text on a timeout.
-HEAR_TIMEOUT_S = 30.0
+#: The relay's provider may take 180 s; allow the answer to return while imposing a hard
+#: five-minute wall-clock limit, including model lookup and any safe 404 re-selection.
+HEAR_TIMEOUT_S = 300.0
 SAY_TIMEOUT_S = 30.0
 
 #: How long an account's old-relay fallback is remembered. Model choices themselves are
@@ -173,27 +174,38 @@ async def hear(
     if not (base and key):
         raise VoiceError("no relay to ask")
     base = base.rstrip("/")
-    chosen = model or await _pick(base, key, HEAR, transport)
-    form = {"model": chosen}
-    if language:
-        form["language"] = language
-    headers = {"Authorization": f"Bearer {key}"}
-    files = {"file": (filename or "voice.ogg", data, mime or "audio/ogg")}
-    for attempt in (1, 2):
-        try:
-            async with httpx.AsyncClient(transport=transport, timeout=HEAR_TIMEOUT_S) as client:
-                response = await client.post(
-                    f"{base}/v1/audio/transcriptions", data=form, files=files, headers=headers
-                )
-        except httpx.HTTPError as exc:
-            raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
-        if response.status_code == 404 and not model and attempt == 1:
-            # the model the menu gave us is gone (a plan, a rotation): ask once more
-            forget_menu(base, HEAR, key=key)
-            chosen = await _pick(base, key, HEAR, transport)
-            form["model"] = chosen
-            continue
-        break
+    try:
+        async with asyncio.timeout(HEAR_TIMEOUT_S):
+            chosen = model or await _pick(base, key, HEAR, transport)
+            form = {"model": chosen}
+            if language:
+                form["language"] = language
+            headers = {"Authorization": f"Bearer {key}"}
+            files = {"file": (filename or "voice.ogg", data, mime or "audio/ogg")}
+            for attempt in (1, 2):
+                try:
+                    async with httpx.AsyncClient(transport=transport, timeout=HEAR_TIMEOUT_S) as client:
+                        response = await client.post(
+                            f"{base}/v1/audio/transcriptions", data=form, files=files, headers=headers
+                        )
+                except httpx.HTTPError as exc:
+                    raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
+                if response.status_code == 404 and not model and attempt == 1:
+                    try:
+                        failure = response.json().get("error", {})
+                    except (ValueError, AttributeError):
+                        failure = {}
+                    if isinstance(failure, dict) and failure.get("code") in {"model_not_offered", "plan_model"}:
+                        # These two relay errors are raised before a provider request.
+                        # Any ambiguous 404 is reported without a paid retry.
+                        forget_menu(base, HEAR, key=key)
+                        chosen = await _pick(base, key, HEAR, transport)
+                        form["model"] = chosen
+                        continue
+                break
+    except TimeoutError:
+        # The provider may still complete and bill. No retry follows this boundary.
+        raise VoiceError("the relay did not answer in time") from None
     if response.status_code >= 400:
         # a refusal is worth a line: a key that lapsed is the usual reason
         logger.warning("voice: the relay refused the recording (HTTP {})", response.status_code)
