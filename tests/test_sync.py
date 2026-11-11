@@ -197,15 +197,21 @@ class FakeSyncRelay:
         cids = {c["cid"] for c in convs}
         msgs = [m for m in self.msgs.values() if m["cid"] in cids]
         if tail and since == 0:
-            # C9: the newest `tail` messages with their conversations, cursor at the end
+            # Match the relay: the tail includes message parents and the main chat,
+            # even before the main chat has messages. Its cursor follows returned rows.
             msgs.sort(key=lambda m: m["seq"])
             kept = msgs[-tail:]
             parents = {m["cid"] for m in kept}
+            conversations = sorted((c for c in convs if c["cid"] in parents), key=lambda c: c["seq"])
+            mains = sorted((c for c in convs if c["kind"] == "main" and not c["deleted"]), key=lambda c: c["seq"])
+            if mains and mains[0]["cid"] not in parents:
+                conversations.append(mains[0])
+            cursor = max([since, *[m["seq"] for m in kept], *[c["seq"] for c in conversations]])
             return {
-                "cursor": self.seq,
+                "cursor": cursor,
                 "more": False,
                 "skipped": len(msgs) - len(kept),
-                "conversations": [dict(c) for c in convs if c["cid"] in parents],
+                "conversations": [dict(c) for c in conversations],
                 "messages": [dict(m) for m in kept],
             }
         rows = [("c", c) for c in convs if c["seq"] > since] + [
@@ -415,6 +421,24 @@ class FakeSyncRelay:
         self.convs.clear()
         self.msgs.clear()
         return await self.state()
+
+
+async def test_fake_relay_tail_carries_empty_main_and_preserves_unseen_changes() -> None:
+    relay = FakeSyncRelay()
+    relay.add_conversation("main-id", kind="main", title="Main")
+    for scope in ("main", "all"):
+        page = await relay.changes(scope=scope, tail=300)
+        assert [c["cid"] for c in page["conversations"]] == ["main-id"]
+        assert page["messages"] == [] and page["cursor"] == 1
+
+    relay.add_conversation("side-id")
+    relay.add_message("side-id", "user", "hello")
+    relay.add_conversation("unseen-id")
+    page = await relay.changes(scope="all", tail=1)
+    assert {c["cid"] for c in page["conversations"]} == {"main-id", "side-id"}
+    assert page["cursor"] == 3
+    following = await relay.changes(since=page["cursor"])
+    assert [c["cid"] for c in following["conversations"]] == ["unseen-id"]
 
 
 @pytest.fixture()
@@ -1328,7 +1352,8 @@ def test_turning_side_chats_on_pulls_once_from_zero_and_pushes_them(main_only) -
     client.post("/api/sync/pull")
     assert "Phone side" not in [t["title"] for t in client.get("/api/threads").json()]
     cursor_before = service.sync.cursor
-    assert cursor_before == relay.seq
+    # A main-only cursor must not be assumed to include unseen side-chat rows.
+    assert cursor_before <= relay.seq
     n_pulls = len(relay.pulls)
     st = client.put("/api/sync/state", json={"side_chats": True}).json()
     assert st["side_chats"] is True and service.sync.state["side_chats"] is True
