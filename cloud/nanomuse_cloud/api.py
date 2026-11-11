@@ -2655,10 +2655,14 @@ def create_app(
             raise CloudError(413, "too_large", "The recording is longer than two hours")
         provider, base, key = settings.route(spec)
         request_id = uuid.uuid4().hex[:16]
+        # WAV duration is read from its header; compressed formats use a bitrate
+        # estimate. Reserve the same five-second units used by charge_transcribe,
+        # not a fixed minute, before dispatching to the provider.
+        estimated_units = max(1, math.ceil(max(0.0, estimated) / 5))
         cloud.check_budget(
             caller,
-            minimum=spec.per_minute,
-            cost_uy=model_pricing.amount(cloud, spec, {"seconds": 60}, caller)["sale_uy"],
+            minimum=max(1, round(spec.per_minute * estimated_units / 12)),
+            cost_uy=model_pricing.amount(cloud, spec, {"seconds": estimated}, caller)["sale_uy"],
             request_id=request_id,
             place=client_place(request),
         )

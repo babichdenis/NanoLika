@@ -18,6 +18,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
 from contextlib import closing
@@ -414,9 +415,11 @@ class InFlight:
         self.limit = max(0, limit)
         self.ttl_s = ttl_s  # a request nobody settled (a client gone before its stream began) lapses
         self.clock = clock
+        self._lock = threading.RLock()
         self._held: dict[str, dict[str, tuple[int, float]]] = {}
         self._active: dict[str, dict[str, asyncio.Task]] = {}
         self._key_held: dict[str, dict[str, tuple[str, int]]] = {}
+        self._token_held: dict[str, dict[str, int]] = {}
 
     def _live(self, account_id: str) -> dict[str, tuple[int, float]]:
         held = self._held.get(account_id)
@@ -425,65 +428,80 @@ class InFlight:
         t = self.clock()
         active = self._active.get(account_id, {})
         key_held = self._key_held.get(account_id, {})
+        token_held = self._token_held.get(account_id, {})
         for rid in [rid for rid, (_, until) in held.items() if until <= t and (rid not in active or active[rid].done())]:
             del held[rid]
             active.pop(rid, None)
             key_held.pop(rid, None)
+            token_held.pop(rid, None)
         if not active:
             self._active.pop(account_id, None)
         if not key_held:
             self._key_held.pop(account_id, None)
+        if not token_held:
+            self._token_held.pop(account_id, None)
         if not held:
             self._held.pop(account_id, None)
         return held
 
     def count(self, account_id: str) -> int:
-        return len(self._live(account_id))
+        with self._lock:
+            return len(self._live(account_id))
 
     def reserved(self, account_id: str) -> int:
-        return sum(cost for cost, _ in self._live(account_id).values())
+        with self._lock:
+            return sum(cost for cost, _ in self._live(account_id).values())
+
+    def tokens_reserved(self, account_id: str) -> int:
+        """Known token costs held by this account's live requests."""
+        with self._lock:
+            self._live(account_id)
+            return sum(self._token_held.get(account_id, {}).values())
 
     def key_reserved(self, account_id: str, key_hash: str) -> int:
-        self._live(account_id)
-        return sum(cost for key, cost in self._key_held.get(account_id, {}).values() if key == key_hash)
+        with self._lock:
+            self._live(account_id)
+            return sum(cost for key, cost in self._key_held.get(account_id, {}).values() if key == key_hash)
 
     def full(self, account_id: str) -> bool:
         return self.limit > 0 and self.count(account_id) >= self.limit
 
-    def reserve(self, account_id: str, request_id: str, cost_uy: int, key_hash: str = "", key_cost_uy: int = 0) -> None:
-        self._held.setdefault(account_id, {})[request_id] = (max(0, int(cost_uy)), self.clock() + self.ttl_s)
-        if key_hash:
-            self._key_held.setdefault(account_id, {})[request_id] = (key_hash, max(0, int(key_cost_uy)))
-        elif account_id in self._key_held:
-            self._key_held[account_id].pop(request_id, None)
-            if not self._key_held[account_id]:
-                del self._key_held[account_id]
+    def reserve(self, account_id: str, request_id: str, cost_uy: int, key_hash: str = "", key_cost_uy: int = 0,
+                *, token_cost: int = 0) -> None:
+        with self._lock:
+            self._held.setdefault(account_id, {})[request_id] = (max(0, int(cost_uy)), self.clock() + self.ttl_s)
+            if key_hash:
+                self._key_held.setdefault(account_id, {})[request_id] = (key_hash, max(0, int(key_cost_uy)))
+            elif account_id in self._key_held:
+                self._key_held[account_id].pop(request_id, None)
+                if not self._key_held[account_id]:
+                    del self._key_held[account_id]
+            if token_cost > 0:
+                self._token_held.setdefault(account_id, {})[request_id] = int(token_cost)
+            elif account_id in self._token_held:
+                self._token_held[account_id].pop(request_id, None)
+                if not self._token_held[account_id]:
+                    del self._token_held[account_id]
 
     def activate(self, account_id: str, request_id: str, task: asyncio.Task | None) -> None:
         """Keep a running request's reservation; abandoned, unstarted ones still expire."""
-        if task is not None and request_id in self._held.get(account_id, {}):
-            self._active.setdefault(account_id, {})[request_id] = task
+        with self._lock:
+            if task is not None and request_id in self._held.get(account_id, {}):
+                self._active.setdefault(account_id, {})[request_id] = task
 
     def settle(self, account_id: str, request_id: str) -> None:
-        key_held = self._key_held.get(account_id)
-        if key_held is not None:
-            key_held.pop(request_id, None)
-            if not key_held:
-                del self._key_held[account_id]
-        active = self._active.get(account_id)
-        if active is not None:
-            active.pop(request_id, None)
-            if not active:
-                del self._active[account_id]
-        held = self._held.get(account_id)
-        if held is not None:
-            held.pop(request_id, None)
-            if not held:
-                del self._held[account_id]
+        with self._lock:
+            for entries in (self._key_held, self._token_held, self._active, self._held):
+                group = entries.get(account_id)
+                if group is not None:
+                    group.pop(request_id, None)
+                    if not group:
+                        del entries[account_id]
 
     def snapshot(self) -> dict[str, int]:
         """For the admin view: accounts with something under way, and how many requests."""
-        return {account_id: len(self._live(account_id)) for account_id in list(self._held) if self._live(account_id)}
+        with self._lock:
+            return {account_id: len(self._live(account_id)) for account_id in list(self._held) if self._live(account_id)}
 
 
 # What a chat is reserved at while it runs: a typical turn's worth of the model, priced
@@ -559,6 +577,7 @@ class Cloud:
         self.db = db or Database(settings.database)
         self.s = self._with_overrides(settings, self.db.settings_all())
         settings = self.s
+        self._budget_lock = threading.RLock()
         self.in_flight = InFlight(settings.max_in_flight, ttl_s=settings.upstream_timeout_s + 120)
         self.sender = sender or make_sender(settings)
         if settings.dev_mode and not isinstance(self.sender, LogSender):
@@ -3288,25 +3307,34 @@ class Cloud:
         allowance — so requests started together cannot each pass this check and
         together overshoot it. `place` is where the request came from (geo.py), for
         the refusal's "ways on" when the allowance is out."""
-        # A user-issued API key can carry its own daily/30-day spend limits. The limit is in
-        # customer rubles, so `key_uy` (the sale estimate) wins over the provider's cost.
-        key_reserve = max(cost_uy, key_uy if key_uy is not None else (hold_uy or 0))
-        self._check_key_limit(caller, key_reserve + self.in_flight.key_reserved(caller.account_id, caller.key_hash))
-        try:
-            self._check_budget(caller, minimum, cost_uy, place)
-        except CloudError as e:
-            if e.code in ("out_of_tokens", "daily_cap", "allowance_exhausted", "insufficient_funds", "too_many_in_flight"):
-                self.db.add_event(caller.account_id, "budget.refused", e.code)
-            raise
-        if request_id is not None:
-            t = now()
-            if self.s.per_minute_requests > 0 and not self.db.admit_request(caller.account_id, self.s.per_minute_requests, t - 60, t):
-                raise CloudError(429, "rate_limited", "Too many requests; slow down a little")
-            self.in_flight.reserve(caller.account_id, request_id, cost_uy if hold_uy is None else hold_uy, caller.key_hash, key_reserve)
+        # Both the balance check and all reservations form one process-local critical
+        # section. Multiple request handlers (including threads) must not each admit
+        # themselves against the same unreserved balance.
+        with self._budget_lock:
+            # A user-issued API key can carry its own daily/30-day spend limits. The limit is in
+            # customer rubles, so `key_uy` (the sale estimate) wins over the provider's cost.
+            key_reserve = max(cost_uy, key_uy if key_uy is not None else (hold_uy or 0))
+            self._check_key_limit(caller, key_reserve + self.in_flight.key_reserved(caller.account_id, caller.key_hash))
+            try:
+                self._check_budget(caller, minimum, cost_uy, place)
+            except CloudError as e:
+                if e.code in ("out_of_tokens", "daily_cap", "allowance_exhausted", "insufficient_funds", "too_many_in_flight"):
+                    self.db.add_event(caller.account_id, "budget.refused", e.code)
+                raise
+            if request_id is not None:
+                t = now()
+                if self.s.per_minute_requests > 0 and not self.db.admit_request(caller.account_id, self.s.per_minute_requests, t - 60, t):
+                    raise CloudError(429, "rate_limited", "Too many requests; slow down a little")
+                self.in_flight.reserve(
+                    caller.account_id, request_id, cost_uy if hold_uy is None else hold_uy,
+                    caller.key_hash, key_reserve,
+                    token_cost=minimum if not self.s.unlimited else 0,
+                )
 
     def settle(self, caller: Caller, request_id: str) -> None:
         """The request is over (charged, failed or dropped): its reservation goes."""
-        self.in_flight.settle(caller.account_id, request_id)
+        with self._budget_lock:
+            self.in_flight.settle(caller.account_id, request_id)
 
     def _check_key_limit(self, caller: Caller, extra_uy: int) -> None:
         """Stop a key at its own daily or rolling 30-day ruble limit before it spends more."""
@@ -3330,12 +3358,17 @@ class Cloud:
                 )
 
     def _check_budget(self, caller: Caller, minimum: int, cost_uy: int, place: Place | None = None) -> None:
-        if not self.s.unlimited and caller.remaining < minimum:
-            raise CloudError(
-                402,
-                "out_of_tokens",
-                "Your NanoLika Cloud grant is used up. Add your own model key under Settings → Providers to keep going.",
-            )
+        if not self.s.unlimited:
+            # A caller may have authenticated before another request completed. Read the
+            # current ledger-backed counters instead of reusing that stale snapshot.
+            account = self.db.account(caller.account_id)
+            remaining = max(0, int(account["granted"]) - int(account["used"])) if account is not None else 0
+            if remaining - self.in_flight.tokens_reserved(caller.account_id) < minimum:
+                raise CloudError(
+                    402,
+                    "out_of_tokens",
+                    "Your NanoLika Cloud grant is used up. Add your own model key under Settings → Providers to keep going.",
+                )
         t = now()
         if self.in_flight.full(caller.account_id):
             raise CloudError(

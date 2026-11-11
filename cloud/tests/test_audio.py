@@ -6,8 +6,10 @@ of `/v1/audio/speech` and `/v1/audio/transcriptions` runs without a network.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import struct
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -248,3 +250,94 @@ async def test_transcribe_refuses_a_recording_over_the_limit(audio):
         )
         assert response.status_code == 413
         assert response.json()["error"]["code"] == "too_large"
+
+
+@pytest.mark.asyncio
+async def test_long_wav_is_refused_before_provider_if_estimated_cost_exceeds_balance(audio):
+    """A two-minute WAV must not be admitted for the price of one minute."""
+    cloud = audio["cloud"]
+    cloud.s = replace(cloud.s, allowance_cny=1.5, signup_tokens=0, rub_per_usd=0)
+    async with await client_of(audio) as client:
+        _user, headers = await signed_in(client, audio["sender"])
+        response = await client.post(
+            "/v1/audio/transcriptions", headers=headers,
+            files={"file": ("two-minutes.wav", wav(120), "audio/wav")},
+            data={"model": "ears"},
+        )
+        assert response.status_code == 402
+        assert response.json()["error"]["code"] == "insufficient_funds"
+        assert not audio["seen"], "the provider must not be contacted before the budget check"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_long_wavs_reserve_their_estimated_cost(audio):
+    """A running recording holds its full estimate against a parallel request."""
+    cloud = audio["cloud"]
+    cloud.s = replace(cloud.s, allowance_cny=3, signup_tokens=0, rub_per_usd=0, per_minute_requests=0)
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def provider(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json={"text": "слова", "duration": 120})
+
+    audio["app"].state.http._transport = httpx.MockTransport(provider)
+    async with await client_of(audio) as client:
+        user, headers = await signed_in(client, audio["sender"])
+        caller = cloud.authenticate(user["api_key"])
+        form = {"files": {"file": ("two-minutes.wav", wav(120), "audio/wav")}, "data": {"model": "ears"}}
+        first = asyncio.create_task(client.post("/v1/audio/transcriptions", headers=headers, **form))
+        second = None
+        try:
+            await asyncio.wait_for(started.wait(), timeout=5)
+            first_reserve = cloud.in_flight.reserved(caller.account_id)
+            second = asyncio.create_task(client.post("/v1/audio/transcriptions", headers=headers, **form))
+            done, _ = await asyncio.wait({second}, timeout=5)
+        finally:
+            release.set()
+            first_result = await first
+            second_result = await second if second is not None else None
+        assert first_reserve == 2_000_000
+        assert second in done, "an unaffordable request must be refused before the provider"
+        assert first_result.status_code == 200
+        assert second_result is not None and second_result.status_code == 402
+        assert calls == ["/v1/audio/transcriptions"]
+        assert cloud.in_flight.reserved(caller.account_id) == 0
+
+
+@pytest.mark.asyncio
+async def test_transcription_token_allowance_matches_recording_duration(audio):
+    """Short recordings can fit, but the two-minute token estimate cannot fit 1,500."""
+    cloud = audio["cloud"]
+    cloud.s = replace(cloud.s, allowance_cny=0, signup_tokens=1500)
+    async with await client_of(audio) as client:
+        _user, headers = await signed_in(client, audio["sender"])
+        long_result = await client.post(
+            "/v1/audio/transcriptions", headers=headers,
+            files={"file": ("long.wav", wav(120), "audio/wav")}, data={"model": "ears"},
+        )
+        assert long_result.status_code == 402
+        assert long_result.json()["error"]["code"] == "out_of_tokens"
+        assert not audio["seen"]
+        short_result = await client.post(
+            "/v1/audio/transcriptions", headers=headers,
+            files={"file": ("short.wav", wav(3), "audio/wav")}, data={"model": "ears"},
+        )
+        assert short_result.status_code == 200
+        assert short_result.headers["x-nanomuse-charged"] == "83"
+
+
+@pytest.mark.asyncio
+async def test_short_recording_does_not_require_a_whole_minute_of_token_allowance(audio):
+    cloud = audio["cloud"]
+    cloud.s = replace(cloud.s, allowance_cny=0, signup_tokens=200)
+    async with await client_of(audio) as client:
+        _user, headers = await signed_in(client, audio["sender"])
+        response = await client.post(
+            "/v1/audio/transcriptions", headers=headers,
+            files={"file": ("short.wav", wav(3), "audio/wav")}, data={"model": "ears"},
+        )
+        assert response.status_code == 200
+        assert response.headers["x-nanomuse-charged"] == "83"
