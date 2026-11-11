@@ -9,13 +9,17 @@ metadata:
 
 # Word documents
 
+When the `office_docx` tool is available, use it to create documents, append sections,
+or replace text in a new file. It works in the shared cloud without running Python;
+do not claim it can edit layout or replace text across formatting runs.
+
 `python-docx` is in the runtime; `python_execute` runs it in the workspace. Never `pip install` - the runtime is frozen.
 
 ## Shape of the job
 
 1. Ask for what is missing in **one** `ask_user`: who it is for, what it must contain, length, whether it is a draft to edit or a finished PDF. Do not ask about fonts.
 2. Write the content first as an outline in your head (or as `outline.md`): title, sections, what goes in each. A document that says something beats a beautiful empty one.
-3. Build the file with `python_execute`, then `office_convert` when a PDF is wanted.
+3. Use `office_docx` when available; otherwise build with `python_execute`. Use `office_convert` when a PDF is wanted.
 
 ## The script
 

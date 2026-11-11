@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -370,6 +371,12 @@ class NanoMuseApp:
             Models(cloud=self._cloud_client),
             BeatAPI(cloud=self._cloud_client),
         )
+        # The shared cloud bot cannot safely run arbitrary Python in its common
+        # process. Offer bounded, structured document operations instead.
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            from nanomuse.tools.office_docs import OfficeDocx, OfficeXlsx
+
+            tools.add(OfficeDocx(workspace=ws), OfficeXlsx(workspace=ws))
         tools.add(BotProjects(workspace=ws, credentials=self.vault, gateway_url=s.cloud.base_url))
         if self.memory is not None:
             tools.add(
@@ -408,6 +415,8 @@ class NanoMuseApp:
             from nanomuse.tools.discovery import CORE, TOOL_SEARCH, ToolSearch
 
             core = set(s.agent.tool_search_core) or set(CORE)
+            if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+                core.update({"office_docx", "office_xlsx"})
             core &= set(tools.tool_map)  # a build without the tool keeps going
             hidden = set(tools.tool_map) - core
             if hidden:

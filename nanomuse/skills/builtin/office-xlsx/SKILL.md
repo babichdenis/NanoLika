@@ -9,6 +9,10 @@ metadata:
 
 # Excel workbooks
 
+When the `office_xlsx` tool is available, use it to create a workbook or edit cells
+in a new copy without running Python. It stores formulas but cannot calculate them.
+It cannot safely edit workbooks with charts, external links, pivots, macros or signatures.
+
 `openpyxl` is in the runtime; `python_execute` runs it in the workspace. Never `pip install`.
 A workbook with a macro and a button is `office_xlsm`, not this skill.
 
