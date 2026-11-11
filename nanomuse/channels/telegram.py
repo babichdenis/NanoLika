@@ -45,6 +45,9 @@ _BUTTONS = {
     "zh": ("允许", "拒绝"),
 }
 POLL_TIMEOUT_S = 50
+# A slow download or account-link check should not hold up unrelated chats.
+# Keep the bound small: each update can temporarily hold a file in memory.
+INBOUND_CHAT_CONCURRENCY = 8
 TEXT_LIMIT = 4000  # Telegram allows 4096 per message
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 _ANIMATION_SUFFIXES = {".gif"}
@@ -209,12 +212,40 @@ class TelegramChannel(Channel):
                 self.bus.set_status(
                     self.name, "connected", f"@{self._username}" if self._username else ""
                 )
-            for update in updates or []:
-                self._offset = max(self._offset, int(update.get("update_id", 0)) + 1)
-                try:
-                    await self._handle_update(update)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("telegram: update failed: {}", self._redact(str(exc)))
+            await self._process_updates(updates or [])
+
+    async def _process_updates(self, updates: list[dict[str, Any]]) -> None:
+        """Process separate chats concurrently while preserving order within each chat.
+
+        Do not advance the poll offset until the whole batch finishes. Telegram confirms
+        earlier updates when the next poll is sent, so cancellation must not acknowledge
+        a file still being downloaded. Retries after interruption can still duplicate an
+        already handled update: durable idempotency belongs at the inbox boundary.
+        """
+        chats: dict[str, list[dict[str, Any]]] = {}
+        for update in updates:
+            message = update.get("message")
+            callback = update.get("callback_query")
+            if not isinstance(message, dict) and isinstance(callback, dict):
+                message = callback.get("message")
+            chat = message.get("chat") if isinstance(message, dict) else None
+            if not isinstance(chat, dict):
+                chat = {}
+            chat_id = str(chat.get("id") or "")
+            chats.setdefault(chat_id, []).append(update)
+        slots = asyncio.Semaphore(INBOUND_CHAT_CONCURRENCY)
+
+        async def handle_chat(batch: list[dict[str, Any]]) -> None:
+            async with slots:
+                for update in batch:
+                    try:
+                        await self._handle_update(update)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("telegram: update failed: {}", self._redact(str(exc)))
+
+        await asyncio.gather(*(handle_chat(batch) for batch in chats.values()))
+        for update in updates:
+            self._offset = max(self._offset, int(update.get("update_id", 0)) + 1)
 
     # ------------------------------------------------------------------ inbound
     async def _handle_update(self, update: dict[str, Any]) -> None:

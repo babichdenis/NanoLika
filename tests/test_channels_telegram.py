@@ -188,6 +188,93 @@ async def test_polling_brings_messages_in(tg: FakeTelegram):
     await ch.stop()
 
 
+async def test_slow_chat_does_not_delay_others_and_keeps_its_order(tg: FakeTelegram, monkeypatch):
+    ch = channel(tg)
+    slow_started = asyncio.Event()
+    release = asyncio.Event()
+    other_done = asyncio.Event()
+    delivered = []
+
+    async def handle(update):
+        if update["update_id"] == 1:
+            slow_started.set()
+            await release.wait()
+        delivered.append(update["update_id"])
+        if update["update_id"] == 2:
+            other_done.set()
+
+    monkeypatch.setattr(ch, "_handle_update", handle)
+    updates = [
+        {"update_id": 1, "message": {"chat": {"id": 1}}},
+        {"update_id": 2, "message": {"chat": {"id": 2}}},
+        {"update_id": 3, "callback_query": {"message": {"chat": {"id": 1}}}},
+    ]
+    task = asyncio.create_task(ch._process_updates(updates))
+    try:
+        await asyncio.wait_for(slow_started.wait(), 1)
+        await asyncio.wait_for(other_done.wait(), 1)
+        assert delivered == [2]
+        assert ch._offset == 0  # no batch acknowledgement while a download is pending
+    finally:
+        release.set()
+        await asyncio.wait_for(task, 1)
+    assert delivered == [2, 1, 3]
+    assert ch._offset == 4
+
+
+async def test_inbound_parallelism_is_bounded(tg: FakeTelegram, monkeypatch):
+    from nanomuse.channels.telegram import INBOUND_CHAT_CONCURRENCY
+
+    ch = channel(tg)
+    release = asyncio.Event()
+    reached_limit = asyncio.Event()
+    active = 0
+    peak = 0
+
+    async def handle(_update):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        if active == INBOUND_CHAT_CONCURRENCY:
+            reached_limit.set()
+        try:
+            await release.wait()
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(ch, "_handle_update", handle)
+    updates = [
+        {"update_id": i + 1, "message": {"chat": {"id": i + 1}}}
+        for i in range(INBOUND_CHAT_CONCURRENCY + 4)
+    ]
+    task = asyncio.create_task(ch._process_updates(updates))
+    try:
+        await asyncio.wait_for(reached_limit.wait(), 1)
+        await asyncio.sleep(0)
+        assert peak == INBOUND_CHAT_CONCURRENCY
+    finally:
+        release.set()
+        await asyncio.wait_for(task, 1)
+    assert ch._offset == len(updates) + 1
+
+
+async def test_interrupted_batch_is_not_acknowledged(tg: FakeTelegram, monkeypatch):
+    ch = channel(tg)
+    started = asyncio.Event()
+
+    async def handle(_update):
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(ch, "_handle_update", handle)
+    task = asyncio.create_task(ch._process_updates([{"update_id": 5, "message": {"chat": {"id": 1}}}]))
+    await asyncio.wait_for(started.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert ch._offset == 0
+
+
 async def test_a_video_message_is_downloaded(tg: FakeTelegram):
     bus = Bus()
     ch = channel(tg)
