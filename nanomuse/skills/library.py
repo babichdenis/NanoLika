@@ -19,9 +19,13 @@ standing instruction, and planting one is the obvious thing for a hostile web pa
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
+import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -292,15 +296,85 @@ def normalise_channel(value: Any) -> str:
 class SkillLibrary:
     """Every skill available: the built-in ones and yours, yours winning on a name clash."""
 
-    def __init__(self, settings: SkillsSettings, own_dir: Path, builtin_dir: Path = BUILTIN_DIR):
+    def __init__(
+        self, settings: SkillsSettings, own_dir: Path, builtin_dir: Path = BUILTIN_DIR,
+        *, _account_leaf: bool = False,
+    ):
         self.settings = settings
         self.own_dir = own_dir
         self.builtin_dir = builtin_dir
+        self._account_leaf = _account_leaf
+        self._account_libraries: dict[str, SkillLibrary] = {}
+        self._account_lock = threading.RLock()
         self._skills: dict[str, Skill] = {}
         self.errors: dict[str, str] = {}
         self._loaded = 0.0
         self._loaded_shared = False
         self.reload()
+
+    def _account_library(self, *, write: bool = False) -> SkillLibrary:
+        """Resolve the current trusted customer without ever reusing the shared book."""
+        if self._account_leaf or os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1":
+            return self
+        from nanomuse.memory.scope import current_memory_scope
+
+        scope = current_memory_scope()
+        if not scope.startswith("account:") or not scope.removeprefix("account:"):
+            if write:
+                raise PermissionError("Личный навык можно изменить только после входа в аккаунт.")
+            return self  # built-ins only; the original shared book stays hidden
+        with self._account_lock:
+            if scope not in self._account_libraries:
+                digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()
+                own = Path(self.own_dir).parent / "skills-accounts" / digest
+                if own.parent.is_symlink() or own.is_symlink():
+                    raise PermissionError("Недопустимый путь к личным навыкам.")
+                settings = self.settings.model_copy(deep=True)
+                config = own / ".disabled.json"
+                if config.is_file() and not config.is_symlink():
+                    try:
+                        disabled = json.loads(config.read_text("utf-8"))
+                        if isinstance(disabled, list) and all(isinstance(x, str) for x in disabled):
+                            settings.disabled = disabled
+                    except (OSError, ValueError):
+                        logger.warning("personal skill settings are unreadable")
+                self._account_libraries[scope] = SkillLibrary(
+                    settings, own, self.builtin_dir, _account_leaf=True
+                )
+            library = self._account_libraries[scope]
+            if library.own_dir.parent.is_symlink() or library.own_dir.is_symlink():
+                raise PermissionError("Недопустимый путь к личным навыкам.")
+            return library
+
+    def _save_account_settings(self) -> None:
+        if self._account_leaf:
+            self._make_account_dir()
+            path = self.own_dir / ".disabled.json"
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.own_dir, delete=False
+            ) as output:
+                temporary = Path(output.name)
+                try:
+                    output.write(json.dumps(self.settings.disabled, ensure_ascii=False))
+                    output.flush()
+                    os.fchmod(output.fileno(), 0o600)
+                except Exception:
+                    temporary.unlink(missing_ok=True)
+                    raise
+            try:
+                temporary.replace(path)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+    def _make_account_dir(self) -> None:
+        """Keep per-account data private and never follow a substituted directory link."""
+        root = self.own_dir.parent
+        if root.is_symlink() or self.own_dir.is_symlink():
+            raise PermissionError("Недопустимый путь к личным навыкам.")
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.own_dir.mkdir(mode=0o700, exist_ok=True)
+        root.chmod(0o700)
+        self.own_dir.chmod(0o700)
 
     # ---------------------------------------------------------------- loading
     def reload(self) -> None:
@@ -311,13 +385,19 @@ class SkillLibrary:
         # commands or skill listing. Still load the shipped built-ins independently.
         self._loaded_shared = os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1"
         roots = [(BUILT_IN, self.builtin_dir)]
-        if not self._loaded_shared:
+        if not self._loaded_shared or self._account_leaf:
             roots.append((YOURS, self.own_dir))
         for source, root in roots:
+            if self._account_leaf and source == YOURS and (root.parent.is_symlink() or root.is_symlink()):
+                logger.warning("personal skills directory is a symbolic link")
+                continue
             if not root.is_dir():
                 continue
             for folder in sorted(root.iterdir()):
                 if not folder.is_dir() or folder.name.startswith((".", "_")):
+                    continue
+                if self._account_leaf and (folder.is_symlink() or (folder / "SKILL.md").is_symlink()):
+                    logger.warning("personal skill path is a symbolic link: {}", folder.name)
                     continue
                 try:
                     skill = load_skill(folder, source)
@@ -341,7 +421,7 @@ class SkillLibrary:
         if time.time() - self._loaded < 2:
             return
         seen: set[str] = set()
-        for root in ((self.builtin_dir,) if shared else (self.builtin_dir, self.own_dir)):
+        for root in ((self.builtin_dir,) if shared and not self._account_leaf else (self.builtin_dir, self.own_dir)):
             if root.is_dir():
                 seen.update(p.name for p in root.iterdir() if p.is_dir())
         changed = seen != set(self._skills) | set(self.errors) or any(
@@ -358,6 +438,9 @@ class SkillLibrary:
         return len(self.enabled())
 
     def all(self) -> list[Skill]:
+        account = self._account_library()
+        if account is not self:
+            return account.all()
         self._fresh()
         return sorted(self._skills.values(), key=lambda s: s.name)
 
@@ -365,6 +448,9 @@ class SkillLibrary:
         return [s for s in self.all() if s.enabled]
 
     def get(self, name: str) -> Skill | None:
+        account = self._account_library()
+        if account is not self:
+            return account.get(name)
         self._fresh()
         return self._skills.get(name.strip().lower())
 
@@ -403,6 +489,11 @@ class SkillLibrary:
     ) -> Skill:
         """Write (or rewrite) one of your skills. A built-in of the same name is replaced
         by it from then on; its folder is left alone."""
+        account = self._account_library(write=True)
+        if account is not self:
+            return account.save(
+                name, description, body, license=license, allowed_tools=allowed_tools, metadata=metadata
+            )
         name = name.strip().lower()
         if not NAME_RE.match(name):
             raise ValueError(
@@ -423,9 +514,30 @@ class SkillLibrary:
         )
         if len(text.encode()) > MAX_SKILL_BYTES:
             raise ValueError(f"a SKILL.md is at most {MAX_SKILL_BYTES // 1024} KB")
+        if self._account_leaf:
+            self._make_account_dir()
         folder = self.own_dir / name
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "SKILL.md").write_text(text, "utf-8")
+        target = folder / "SKILL.md"
+        if self._account_leaf and (folder.is_symlink() or target.is_symlink()):
+            raise PermissionError("Недопустимый путь к личному навыку.")
+        folder.mkdir(mode=0o700 if self._account_leaf else 0o777, parents=True, exist_ok=True)
+        if self._account_leaf:
+            folder.chmod(0o700)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=folder, delete=False) as output:
+                temporary = Path(output.name)
+                try:
+                    output.write(text)
+                    output.flush()
+                    os.fchmod(output.fileno(), 0o600)
+                except Exception:
+                    temporary.unlink(missing_ok=True)
+                    raise
+            try:
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
+        else:
+            target.write_text(text, "utf-8")
         self.reload()
         skill = self._skills[name]
         return skill
@@ -454,6 +566,9 @@ class SkillLibrary:
     def remove(self, name: str) -> bool:
         """Delete one of your skills (folder and all). Built-ins cannot be removed —
         ``set_enabled(name, False)`` hides one."""
+        account = self._account_library(write=True)
+        if account is not self:
+            return account.remove(name)
         skill = self.get(name)
         if skill is None or skill.source != YOURS:
             return False
@@ -462,16 +577,23 @@ class SkillLibrary:
         return True
 
     def set_enabled(self, name: str, enabled: bool) -> Skill | None:
+        account = self._account_library(write=True)
+        if account is not self:
+            return account.set_enabled(name, enabled)
         skill = self.get(name)
         if skill is None:
             return None
         disabled = set(self.settings.disabled)
         (disabled.discard if enabled else disabled.add)(skill.name)
         self.settings.disabled = sorted(disabled)
+        self._save_account_settings()
         skill.enabled = enabled
         return skill
 
     def status(self) -> dict[str, Any]:
+        account = self._account_library()
+        if account is not self:
+            return account.status()
         skills = self.all()
         return {
             "count": len([s for s in skills if s.enabled]),

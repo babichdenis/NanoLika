@@ -3,7 +3,6 @@ down after a job the user wants done the same way again."""
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from nanomuse.schema import RiskLevel, ToolResult
@@ -69,11 +68,6 @@ class Skills(BaseTool):
         instructions: str | None = None,
         **_: Any,
     ) -> ToolResult:
-        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and action in ("save", "remove"):
-            return ToolResult.fail(
-                "Изменение личных навыков в общем облачном боте временно недоступно: "
-                "раздельное хранение навыков ещё не подключено. Общие инструкции можно читать."
-            )
         lib = self.library
         name = (name or "").strip().lower()
         try:
