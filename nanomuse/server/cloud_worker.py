@@ -255,10 +255,13 @@ def build_worker() -> FastAPI:
             logger.warning("worker: ws account {} did not start: {}", account_id[:8], exc)
             await ws.close(code=4502)
             return
-        await ws.accept()
         runtime.begin(account_id)
         conn_id = f"ws-{uuid.uuid4().hex[:8]}"
         lock = asyncio.Lock()
+        queue = None
+        pump_task = None
+        beat_task = None
+        accepted = False
 
         async def send(message: dict[str, Any]) -> None:
             async with lock:
@@ -270,16 +273,20 @@ def build_worker() -> FastAPI:
                 await asyncio.sleep(60)
                 runtime.touch(account_id)
 
-        queue = service.bus.subscribe()
-        await send({"kind": "hello", "state": service.state()})
-
-        async def pump() -> None:
-            while True:
-                await send(await queue.get())
-
-        pump_task = asyncio.create_task(pump())
-        beat_task = asyncio.create_task(keep_warm())
         try:
+            # The service must be protected even while the socket handshake yields.
+            await ws.accept()
+            accepted = True
+            queue = service.bus.subscribe()
+            await send({"kind": "hello", "state": service.state()})
+
+            async def pump() -> None:
+                assert queue is not None
+                while True:
+                    await send(await queue.get())
+
+            pump_task = asyncio.create_task(pump())
+            beat_task = asyncio.create_task(keep_warm())
             while True:
                 data = await ws.receive_json()
                 # The client's own auth frame names a runtime token it does not have here;
@@ -292,10 +299,13 @@ def build_worker() -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             logger.debug("worker ws closed: {}", exc)
         finally:
-            pump_task.cancel()
-            beat_task.cancel()
-            service.bus.unsubscribe(queue)
-            service.phone.detach(conn_id)
+            for task in (pump_task, beat_task):
+                if task is not None:
+                    task.cancel()
+            if queue is not None:
+                service.bus.unsubscribe(queue)
+            if accepted:
+                service.phone.detach(conn_id)
             runtime.end(account_id)
 
     @app.on_event("startup")

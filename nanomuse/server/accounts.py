@@ -144,6 +144,9 @@ class AccountRuntime:
             for thread in threads.values():
                 if getattr(thread, "busy", False):
                     return True
+                inbox = getattr(thread, "inbox", None)
+                if inbox is not None and hasattr(inbox, "empty") and not inbox.empty():
+                    return True
         return False
 
     # ------------------------------------------------------------------ the registry
