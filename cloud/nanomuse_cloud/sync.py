@@ -823,8 +823,11 @@ class SyncStore:
                     rejected.append({"mid": mid, "reason": "main_exists", "cid_main": redirected[cid]})
                     continue
                 deleted = bool(msg.get("deleted"))
-                row = c.execute("SELECT deleted FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid)).fetchone()
+                row = c.execute("SELECT cid, deleted FROM sync_messages WHERE account_id=? AND mid=?", (account_id, mid)).fetchone()
                 if row is not None:
+                    if row["cid"] != cid:
+                        rejected.append({"mid": mid, "reason": "mid_conversation_mismatch"})
+                        continue
                     if deleted and not row["deleted"]:
                         seq = self._next_seq(c, account_id)
                         c.execute(
