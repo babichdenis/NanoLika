@@ -334,3 +334,159 @@ async def test_equal_titles_do_not_merge_different_conversations(world: World):
     await world.topics.open(inbound("first"), first)
     await world.topics.open(inbound("second"), second)
     assert len(world.topic_calls("createForumTopic")) == 2
+
+async def test_missing_existing_topic_never_starts_a_different_conversation(world: World):
+    world.row(name="Старый чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    world.manager.svc.sync.thread_of = lambda cid: None
+    world.manager.svc.sync.pull = world._nothing
+    before = dict(world.topics.file.load()[key])
+    assert await world.topics.inbound(inbound("Продолжим")) is True
+    assert world.created == []
+    assert world.bindings == {}
+    assert world.topics.file.load()[key] == before
+
+
+async def test_missing_topic_catalog_unavailable_never_starts_different_conversation(world: World):
+    world.row(name="Старый чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    async def unavailable():
+        raise OSError("catalog unavailable")
+    world.manager.svc.sync.pull = unavailable
+    world.manager.svc.sync.thread_of = lambda cid: None
+    assert await world.topics.inbound(inbound("Продолжим")) is True
+    assert world.created == []
+    assert world.bindings == {}
+    assert world.topics.file.load()[key]["cid"] == "old-cid"
+
+
+async def test_missing_topic_after_pull_opens_original_conversation(world: World):
+    world.row(name="Старый чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    original = world._thread("Старый чат", "loaded-original")
+    original_id = original.id
+    loaded = False
+    def lookup(cid):
+        return original if loaded and cid == "old-cid" else None
+    async def pull():
+        nonlocal loaded
+        loaded = True
+    world.manager.svc.sync.thread_of = lookup
+    world.manager.svc.sync.cid_of = lambda thread: "old-cid" if thread == original_id else ""
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    world.manager.svc.sync.pull = pull
+    assert await world.topics.inbound(inbound("Продолжим")) is False
+    assert world.created == []
+    assert world.bindings[f"telegram:{CHAT}|7"] == original_id
+
+
+async def test_archived_topic_does_not_reopen_or_make_new_conversation(world: World):
+    original = world.thread("Архив")
+    world.row(name="Архив", topic=7, thread=original.id)
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["archived"] = True
+    world.topics.file.save(rows)
+    before = list(world.created)
+    assert await world.topics.inbound(inbound("Продолжим")) is True
+    assert world.created == before
+    assert world.bindings == {}
+
+async def test_topic_marked_archived_during_refresh_does_not_reopen(world: World):
+    world.row(name="Архив", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    original = world._thread("Архив", "loaded-original")
+    loaded = False
+    def lookup(cid):
+        return original if loaded and cid == "old-cid" else None
+    async def pull():
+        nonlocal loaded
+        loaded = True
+        world.manager.svc.sync.catalog.rows["old-cid"] = {"archived": True}
+    world.manager.svc.sync.thread_of = lookup
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    world.manager.svc.sync.pull = pull
+    assert await world.topics.inbound(inbound("Продолжим")) is True
+    assert world.created == []
+    assert world.bindings == {}
+
+
+async def test_topic_does_not_switch_accounts_during_refresh(world: World):
+    world.row(name="Старый чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.thread_of = lambda cid: None
+    async def pull():
+        world.manager.svc.sync.account_id = "different-account"
+    world.manager.svc.sync.pull = pull
+    assert await world.topics.inbound(inbound("Продолжим")) is True
+    assert world.created == []
+    assert world.bindings == {}
+
+async def test_catalogue_missing_row_does_not_delete_or_archive_topic(world: World):
+    world.row(name="Важный чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    await world.topics.discover()
+    assert world.topics.file.load()[key]["cid"] == "old-cid"
+    assert world.topic_calls("deleteForumTopic") == []
+    assert world.topic_calls("editForumTopic") == []
+
+
+async def test_catalogue_explicit_deletion_removes_topic(world: World):
+    world.row(name="Удалённый чат", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.state["conversation_marks"] = {"old-cid": {"deleted": True}}
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    await world.topics.discover()
+    assert key not in world.topics.file.load()
+    assert len(world.topic_calls("deleteForumTopic")) == 1
+
+
+async def test_catalogue_explicit_archive_keeps_topic(world: World):
+    world.row(name="Архив", topic=7, thread="lost-thread")
+    key = world.topics._key("acc", CHAT, 7)
+    rows = dict(world.topics.file.load())
+    rows[key]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.state["conversation_marks"] = {"old-cid": {"archived": True}}
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={})
+    await world.topics.discover()
+    assert world.topics.file.load()[key]["archived"] is True
+    assert not world.topic_calls("deleteForumTopic")
+    assert world.topic_calls("editForumTopic")[-1]["name"].startswith("Архив")
+
+
+async def test_catalogue_missing_cid_and_duplicate_mapping_are_preserved(world: World):
+    world.row(name="Без кода", topic=7, thread="lost-thread")
+    world.row(name="Дубликат 1", topic=8, thread="lost-thread")
+    world.row(name="Дубликат 2", topic=9, thread="lost-thread")
+    rows = dict(world.topics.file.load())
+    for topic in (8, 9):
+        rows[world.topics._key("acc", CHAT, topic)]["cid"] = "old-cid"
+    world.topics.file.save(rows)
+    world.manager.svc.sync.catalog = SimpleNamespace(supported=True, rows={"old-cid": {}})
+    await world.topics.discover()
+    assert len(world.topics.file.load()) == 3
+    assert world.topic_calls("deleteForumTopic") == []

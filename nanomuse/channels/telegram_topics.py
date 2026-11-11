@@ -47,6 +47,7 @@ COPY = {
         "choose": "Choose a chat or create a topic in Telegram to continue.",
         "new": "New chat",
         "failed": "Could not open the topic. Open the chat list and try again.",
+        "archived": "This conversation is archived. Restore it before continuing.",
         "history_failed": "Could not refresh the cloud conversation. This message was not sent to the model. Please try again later.",
     },
     "zh": {
@@ -56,6 +57,7 @@ COPY = {
         "choose": "请选择对话或在 Telegram 中新建话题。",
         "new": "新对话",
         "failed": "无法打开话题，请重新打开对话列表后重试。",
+        "archived": "此对话已归档，请先恢复后再继续。",
         "history_failed": "无法从云端更新对话记录。这条消息尚未发送给模型，请稍后重试。",
     },
     "ru": {
@@ -65,6 +67,7 @@ COPY = {
         "choose": "Выберите беседу или создайте тему в Telegram, чтобы продолжить.",
         "new": "Новый чат",
         "failed": "Не удалось открыть тему. Откройте список бесед и попробуйте снова.",
+        "archived": "Эта беседа в архиве. Верните её из архива, чтобы продолжить.",
         "history_failed": "Не удалось обновить историю из облака. Сообщение не отправлено модели. Попробуйте позже.",
     },
 }
@@ -736,35 +739,38 @@ class TelegramTopics:
             if row and not self._valid(row):
                 await self.m.menu.send(msg, self.copy(msg)["failed"], [])
                 return True
+            catalog = getattr(self.m.svc.sync, "catalog", None)
+            cid = str(row.get("cid") or "") if row else ""
+            mark = getattr(catalog, "rows", {}).get(cid, {}) if cid else {}
+            if row and (row.get("archived") or (isinstance(mark, dict) and mark.get("archived"))):
+                await self.m.menu.send(msg, self.copy(msg)["archived"], [])
+                return True
+            if isinstance(mark, dict) and mark.get("deleted"):
+                await self.m.menu.send(msg, self.copy(msg)["failed"], [])
+                return True
             thread = self.m.svc.threads.get(str(row.get("thread") or "")) if row else None
             lookup = getattr(self.m.svc.sync, "thread_of", None)
             if row and row.get("cid") and lookup is not None:
                 thread = lookup(row["cid"])
             if row and thread is None:
-                cid = str(row.get("cid") or "")
-                catalog = getattr(self.m.svc.sync, "catalog", None)
-                known = bool(cid) and bool(getattr(catalog, "rows", {}).get(cid))
-                if known and lookup is not None:
-                    # the conversation exists on the relay but this runtime has not
-                    # loaded it yet: one pull, then look again
+                # A missing local mapping is not evidence that this topic is new. The
+                # account catalogue may be cold or temporarily unavailable; never replace
+                # an existing conversation with a fresh one in the same topic.
+                if cid and lookup is not None:
                     with suppress(Exception):
                         await self.m.svc.sync.pull()
+                    if account != self.m.svc.sync.account_id:
+                        return True
                     thread = lookup(cid)
                 if thread is None:
-                    if not known:
-                        # The topic outlived its thread: an older run minted a cid and
-                        # never saved the conversation, so the row points at nothing.
-                        # Start a fresh conversation in this topic instead of refusing
-                        # the person's next message forever.
-                        if not msg.text.strip() and not msg.files:
-                            return True
-                        thread = self.m.svc.create_thread(self._thread_title(msg))
-                        self._put(msg, topic, thread, seeded=True)
-                        self.m.svc.sync.thread_changed(thread)
-                        await self.m.svc.sync.push()
-                    else:
-                        await self.m.menu.send(msg, self.copy(msg)["failed"], [])
-                        return True
+                    await self.m.menu.send(msg, self.copy(msg)["failed"], [])
+                    return True
+                catalog = getattr(self.m.svc.sync, "catalog", None)
+                mark = getattr(catalog, "rows", {}).get(cid, {})
+                if isinstance(mark, dict) and (mark.get("archived") or mark.get("deleted")):
+                    reason = "archived" if mark.get("archived") else "failed"
+                    await self.m.menu.send(msg, self.copy(msg)[reason], [])
+                    return True
             if (
                 row
                 and thread is not None
