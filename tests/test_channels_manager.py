@@ -476,7 +476,7 @@ def test_files_in_and_out(chan, settings: Settings):
     saved = list((settings.data_dir / "workspaces").rglob("*.png"))
     assert saved and saved[0].read_bytes() == b"\x89PNG fake"
     # an artifact the run produced goes out with the reply
-    (settings.agent.workspace / "out.txt").write_text("hello", "utf-8")
+    (service.workspace_for_thread("channel-fake-chat1") / "out.txt").write_text("hello", "utf-8")
     emit(
         manager,
         {
@@ -1159,3 +1159,82 @@ def test_partial_upload_failure_does_not_run_request(chan, monkeypatch):
     wait_for(lambda: any("broken.docx" in t for t in fake.texts()))
     assert not sent
     assert not list(service.settings.data_dir.rglob("good.txt"))
+
+
+@pytest.mark.parametrize("key_state", ["valid", "expired", "missing", "other-account"])
+@pytest.mark.parametrize("channel", ["telegram", "max"])
+def test_public_chat_edit_sends_file_using_its_own_cloud_account(
+    chan, monkeypatch, key_state, channel
+):
+    """An inbound file is edited by a real tool and returned to the originating chat.
+
+    A public customer's file must never be copied to the bot operator's cloud storage.
+    """
+    from nanomuse.cloud import CLOUD_KEY
+    from nanomuse.memory.scope import account_scope
+
+    client, service, llm, manager, fake = chan
+    manager.channels[channel] = fake
+    manager.types[channel] = FakeChannel
+    manager.pairing.add(channel, "u1", sender_name="Ann", chat_id="chat1")
+    scope = account_scope("customer-a")
+    manager._cloud_customer_scopes[(channel, "u1")] = scope
+    if key_state in ("valid", "expired"):
+        manager._cloud_keys[(channel, "u1")] = (
+            "customer-key", "", "", time.time() + (120 if key_state == "valid" else -1)
+        )
+    if key_state == "other-account":
+        manager._cloud_customer_scopes[(channel, "other")] = account_scope("customer-b")
+        manager._cloud_keys[(channel, "other")] = ("other-key", "", "", time.time() + 120)
+    service.app.vault.set(CLOUD_KEY, "operator-key")
+    used_keys = []
+    paths = []
+
+    class CloudStub:
+        def __init__(self, *, base_url, api_key):
+            used_keys.append(api_key)
+
+        async def upload(self, name, data, mime):
+            assert data == b"original\nchanged"
+            return "https://cloud.example/customer/file"
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("nanomuse.cloud.CloudClient", CloudStub)
+
+    def edit(_messages):
+        thread = service.threads[thread_id_for(channel, "chat1")]
+        user_event = next(e for e in reversed(thread.timeline.events) if e.get("files"))
+        path = user_event["files"][0]["path"]
+        paths.append(path)
+        return LLMResponse(tool_calls=[tc("files", action="append", path=path, content="\nchanged")])
+
+    def reply(_messages):
+        # The artifact uses the path relative to this conversation's workspace.
+        relative = paths[0].split("/", 2)[2]
+        return LLMResponse(content=f"Done: {relative}")
+
+    llm.script.extend([edit, reply])
+    fake.bus.inbound(
+        InboundMessage(
+            channel=channel, chat_id="chat1", sender_id="u1", text="Edit the attached file",
+            files=[InboundFile("note.txt", b"original")],
+        )
+    )
+    sent = wait_for(lambda: next((item for item in fake.sent if item[2]), None))
+    assert sent[0] == "chat1"
+    assert Path(sent[2][0]).read_bytes() == b"original\nchanged"
+    assert used_keys == (["customer-key"] if key_state == "valid" else [])
+
+
+@pytest.mark.parametrize("scope", ["installation", "account:someone", "channel:max:user"])
+def test_missing_customer_artifact_cannot_fall_back_to_operator_file(chan, scope):
+    _client, service, _llm, manager, _fake = chan
+    thread_id = "channel-max-other"
+    service.timeline(thread_id)
+    thread = service.threads[thread_id]
+    thread.customer_scope = scope
+    thread.workspace_scope = scope
+    (service.workspace() / "private.txt").write_text("operator secret", "utf-8")
+    assert manager._artifact_path(thread_id, "private.txt") is None

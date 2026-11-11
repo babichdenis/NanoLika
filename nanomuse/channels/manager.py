@@ -1796,25 +1796,49 @@ class ChannelManager(ChannelBus):
         # reused here instead of storing the file twice.
         known: dict[str, str] = {}
         thread_obj = self.svc.threads.get(thread)
-        if thread_obj is not None:
+        sync_owner = self.svc.sync.account_id
+        if (
+            thread_obj is not None
+            and sync_owner
+            and self.svc.memory_scope_for_thread(thread_obj) == account_scope(sync_owner)
+            and (not thread_obj.workspace_scope or thread_obj.workspace_scope == account_scope(sync_owner))
+        ):
             for item in thread_obj.timeline.events:
-                if item.get("type") == "artifact" and item.get("path") and item.get("url"):
-                    known[str(item["path"])] = str(item["url"])
+                if item.get("type") == "artifact" and item.get("path"):
+                    # An updated file without a URL must not reuse a previous version's link.
+                    known[str(item["path"])] = str(item.get("url") or "")
         for rel, path in pending:
             if not rel or rel not in text:
                 continue
-            link = known.get(rel) or await self._artifact_link(path)
+            link = known.get(rel) or await self._artifact_link(thread, path)
             text = text.replace(rel, f"[{path.name}]({link})" if link else path.name)
         return text
 
-    async def _artifact_link(self, path: Path) -> str:
-        """The stable relay link for a file the turn made, or "" when there is no storage."""
+    async def _artifact_link(self, thread: str, path: Path) -> str:
+        """Store the file only under the verified owner of this conversation."""
         from nanomuse.cloud import CLOUD_KEY, CloudClient
 
         with contextlib.suppress(OSError):
             if path.stat().st_size > SHARE_MAX_BYTES:
                 return ""
-        key = self.svc.app.vault.get(CLOUD_KEY)
+        thread_obj = self.svc.threads.get(thread)
+        if thread_obj is None:
+            return ""
+        scope = self.svc.memory_scope_for_thread(thread_obj)
+        # A conversation can retain an older workspace after its ownership changes. Until
+        # that mismatch is reconciled, do not copy its files to either account's storage.
+        if thread_obj.workspace_scope and thread_obj.workspace_scope != scope:
+            return ""
+        key = ""
+        for identity, customer_scope in self._cloud_customer_scopes.items():
+            held = self._cloud_keys.get(identity)
+            if customer_scope == scope and held and held[3] > time.time():
+                key = held[0]
+                break
+        # The installation key belongs to the signed-in owner, not to every public chat.
+        owner = self.svc.sync.account_id
+        if not key and owner and scope == account_scope(owner):
+            key = self.svc.app.vault.get(CLOUD_KEY)
         if not key:
             return ""
         mime = file_mime(path.name)
@@ -1836,9 +1860,25 @@ class ChannelManager(ChannelBus):
         skip a file that is not on disk without a word (`Path.is_file()`): the picture was
         drawn, paid for and never sent.
         """
-        for kwargs in ({"thread_id": thread}, {}):
+        thread_obj = self.svc.threads.get(thread)
+        owner = self.svc.sync.account_id
+        scope = self.svc.memory_scope_for_thread(thread_obj) if thread_obj is not None else ""
+        owner_verified = bool(
+            owner
+            and scope == account_scope(owner)
+            and (not thread_obj.workspace_scope or thread_obj.workspace_scope == scope)
+        )
+        with contextlib.suppress(Exception):
+            path = self.svc.resolve_workspace_path(rel, thread_id=thread)
+            workspace = self.svc.workspace_for_thread(thread)
+            if path.is_file() and (owner_verified or path.is_relative_to(workspace)):
+                return path
+        # The installation library is a legacy fallback only for the verified owner.
+        # A missing customer artifact must never resolve to a namesake in the bot's
+        # installation workspace, including when its scope is still "installation".
+        if owner_verified:
             with contextlib.suppress(Exception):
-                path = self.svc.resolve_workspace_path(rel, **kwargs)
+                path = self.svc.resolve_workspace_path(rel)
                 if path.is_file():
                     return path
         logger.warning("channel: artifact {} of thread {} is not on disk", rel, thread)
