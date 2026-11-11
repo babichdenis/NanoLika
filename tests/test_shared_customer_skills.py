@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from test_channels_cloud import chan  # noqa: F401
 
 from nanomuse.config import SentinelSettings, SkillsSettings
 from nanomuse.memory.scope import memory_scope
@@ -186,3 +187,125 @@ def test_shared_agent_prompt_shows_only_current_accounts_skills(settings, tmp_pa
     assert "exclusive alpha" in first and "exclusive beta" not in first
     assert "exclusive beta" in second and "exclusive alpha" not in second
     assert "exclusive alpha" not in unknown and "exclusive beta" not in unknown
+
+def test_channel_dispatches_only_the_verified_customers_slash_skill(chan, monkeypatch):  # noqa: F811
+    """A personal slash skill reaches the agent; another account cannot invoke it."""
+    import time
+
+    from test_channels_cloud import message, run
+
+    service, manager, channel = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    service.settings.channels.shared_thread = False
+    with memory_scope("account:slash-owner"):
+        service.app.skills.save("my-recipe", "private recipe", "private steps")
+    manager.pairing.add("quiet", "slash-owner", sender_name="Owner", chat_id="slash-owner")
+    manager.pairing.add("quiet", "slash-other", sender_name="Other", chat_id="slash-other")
+
+    async def key_for(_channel, msg):
+        owner = "slash-owner" if msg.sender_id == "slash-owner" else "slash-other"
+        manager._cloud_customer_scopes[(msg.channel, msg.sender_id)] = "account:" + owner
+        manager._cloud_keys[(msg.channel, msg.sender_id)] = (
+            "test-key", "test-model", "", time.time() + 60, "https://cloud.test"
+        )
+        return "test-key", "test-model"
+
+    async def hydrate(_thread, _msg):
+        return True
+
+    async def echo(_thread, _msg, _text):
+        return None
+
+    async def confirm(_msg, _key, _scope):
+        return True
+
+    submitted = []
+    monkeypatch.setattr(manager, "_cloud_key_for", key_for)
+    monkeypatch.setattr(manager, "_hydrate_shared_thread", hydrate)
+    monkeypatch.setattr(manager, "_echo_selected_user", echo)
+    monkeypatch.setattr(manager, "_shared_sender_account_confirmed", confirm)
+    monkeypatch.setattr(service, "send", lambda thread, text, **kw: submitted.append((thread, text, kw)))
+
+    run(manager, manager._handle_inbound(message("/my-recipe hello", sender="slash-owner", chat="slash-owner")))
+    assert len(submitted) == 1, channel.sent
+    assert submitted[0][1] == "/my-recipe hello"
+    assert submitted[0][2]["customer_scope"] == "account:slash-owner"
+
+    run(manager, manager._handle_inbound(message("/MY-RECIPE@quiet_bot again", sender="slash-owner", chat="slash-owner")))
+    assert len(submitted) == 2 and submitted[1][1] == "/my-recipe again"
+
+    run(manager, manager._handle_inbound(message("/my-recipe hello", sender="slash-other", chat="slash-other")))
+    assert len(submitted) == 2
+    assert any("не знаю" in text.lower() or "do not know" in text.lower() for chat, text in channel.sent if chat == "slash-other")
+
+    group = message("/my-recipe hello", sender="slash-owner", chat="group-chat")
+    group.is_group = True
+    run(manager, manager._handle_inbound(group))
+    assert len(submitted) == 2, "a group must not inherit a member's personal skill"
+
+    builtin = message("/weekly-review plan", sender="slash-owner", chat="group-chat")
+    builtin.is_group = True
+    run(manager, manager._handle_inbound(builtin))
+    assert len(submitted) == 3
+    assert submitted[2][1].startswith("/weekly-review Ann: plan")
+    assert submitted[2][2]["customer_scope"].startswith("channel:")
+
+    with memory_scope("account:slash-owner"):
+        assert service.app.skills.set_enabled("my-recipe", False) is not None
+    run(manager, manager._handle_inbound(message("/my-recipe hello", sender="slash-owner", chat="slash-owner")))
+    assert len(submitted) == 3, "a disabled skill must not reach the model"
+
+    def unavailable(_name):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(service.app.skills, "get", unavailable)
+    run(manager, manager._handle_inbound(message("/my-recipe hello", sender="slash-owner", chat="slash-owner")))
+    assert len(submitted) == 3
+    assert any("couldn't check your skills" in text.lower() or "не удалось проверить ваши навыки" in text.lower() for chat, text in channel.sent if chat == "slash-owner")
+
+
+def test_personal_slash_skill_reaches_real_agent_in_account_scope(chan, monkeypatch):  # noqa: F811
+    import time
+
+    from test_channels_cloud import message, run, wait_for
+
+    from nanomuse.schema import LLMResponse, Role
+
+    service, manager, channel = chan
+    monkeypatch.setenv("NANOMUSE_SHARED_CLOUD_BOT", "1")
+    service.settings.channels.shared_thread = False
+    with memory_scope("account:agent-owner"):
+        service.app.skills.save("customer-recipe", "my recipe", "use the private alpha instructions")
+    with memory_scope("account:agent-other"):
+        service.app.skills.save("customer-recipe", "another recipe", "never reveal private beta instructions")
+    manager.pairing.add("quiet", "agent-owner", sender_name="Owner", chat_id="agent-owner")
+
+    async def key_for(_channel, msg):
+        identity = (msg.channel, msg.sender_id)
+        manager._cloud_customer_scopes[identity] = "account:agent-owner"
+        manager._cloud_keys[identity] = ("test-key", "test-model", "", time.time() + 60, "https://cloud.test")
+        return "test-key", "test-model"
+
+    async def hydrate(_thread, _msg):
+        return True
+
+    async def echo(_thread, _msg, _text):
+        return None
+
+    async def confirm(_msg, _key, _scope):
+        return True
+
+    model = service.app.llm
+    model.script.append(LLMResponse(content="Done from personal skill"))
+    monkeypatch.setattr(manager, "_cloud_key_for", key_for)
+    monkeypatch.setattr(manager, "_hydrate_shared_thread", hydrate)
+    monkeypatch.setattr(manager, "_echo_selected_user", echo)
+    monkeypatch.setattr(manager, "_shared_sender_account_confirmed", confirm)
+    monkeypatch.setattr(service, "cloud_once", lambda *_args, **_kwargs: (model, "test-model"))
+
+    run(manager, manager._handle_inbound(message("/customer-recipe prepare", sender="agent-owner", chat="agent-owner")))
+    wait_for(lambda: model.calls)
+    user = next(m for m in model.calls[0]["messages"] if m.role == Role.USER)
+    assert "use the private alpha instructions" in user.content
+    assert "private beta" not in user.content
+    wait_for(lambda: any("Done from personal skill" in text for _chat, text in channel.sent))

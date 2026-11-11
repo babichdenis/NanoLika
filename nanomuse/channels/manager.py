@@ -53,7 +53,7 @@ from nanomuse.channels.welcome import send_welcome_art
 from nanomuse.cloud import CloudError
 from nanomuse.hub.client import HubError
 from nanomuse.logger import logger
-from nanomuse.memory import account_scope, channel_scope
+from nanomuse.memory import account_scope, channel_scope, memory_scope
 from nanomuse.mime import file_mime
 from nanomuse.schema import Message, Role
 from nanomuse.server.events import MAIN_THREAD, new_id
@@ -828,18 +828,48 @@ class ChannelManager(ChannelBus):
             approval_id = self._asks[key][-1]
             await self._decide(msg.channel, msg.chat_id, approval_id, word in ALLOW_WORDS)
             return
+        skill_command = False
         if command.startswith("/") and re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,31}", command):
             # A slash word nobody handles: a menu command that did not land, a typo, a
-            # command of another bot. Sending it to the model made it answer "what did you
-            # write there?" — a chat is not the place to guess at commands.
-            answer = self.say(
-                "I do not know that command. The menu at the slash shows the ones I have.",
-                "我不认识这个命令。用 / 打开的命令菜单看看我有哪些。",
-                "Такой команды я не знаю. Список моих - в меню по «/».",
+            # command of another bot. A genuine enabled skill is the exception: look it
+            # up only in the verified sender's scope (a group never inherits one member's
+            # personal skill), then let the agent expand it in the same scoped turn.
+            scope = (
+                self.customer_scope_for(msg) if msg.is_group
+                else sender_scope if verified_cloud is not None
+                else "installation"
             )
-            await self._send(msg.channel, msg.chat_id, answer)
-            self._record_channel_reply(msg, answer, thread_id=origin_thread)
-            return
+            try:
+                with memory_scope(scope):
+                    skill = (
+                        self.svc.app.skills.get(command[1:])
+                        if self.svc.app.tools.get("skills") is not None else None
+                    )
+            except (OSError, ValueError) as exc:
+                logger.warning("channel: cannot check the customer's skill: {}", type(exc).__name__)
+                await self._send(
+                    msg.channel, msg.chat_id,
+                    self.say(
+                        "I couldn't check your skills right now. Please try again later.",
+                        "暂时无法检查您的技能，请稍后重试。",
+                        "Сейчас не удалось проверить ваши навыки. Попробуйте позже.",
+                    ),
+                )
+                return
+            if skill is None or not skill.enabled:
+                answer = self.say(
+                    "I do not know that command. The menu at the slash shows the ones I have.",
+                    "我不认识这个命令。用 / 打开的命令菜单看看我有哪些。",
+                    "Такой команды я не знаю. Список моих - в меню по «/».",
+                )
+                await self._send(msg.channel, msg.chat_id, answer)
+                self._record_channel_reply(msg, answer, thread_id=origin_thread)
+                return
+            # Telegram may append @botname; normalize the command itself so the agent's
+            # slash expander sees the same validated name, while preserving the arguments.
+            first_word = text.split(maxsplit=1)[0]
+            text = command + text[len(first_word):]
+            skill_command = True
         delivered = self._questions.get(key)
         if (
             delivered
@@ -858,7 +888,12 @@ class ChannelManager(ChannelBus):
         if not text and not msg.files:
             return
         if msg.is_group and msg.sender_name and text:
-            text = f"{msg.sender_name}: {text}"
+            if skill_command:
+                first_word = text.split(maxsplit=1)[0]
+                rest = text[len(first_word):].strip()
+                text = f"{first_word} {msg.sender_name}: {rest}".rstrip()
+            else:
+                text = f"{msg.sender_name}: {text}"
         thread_id = origin_thread
         if not await self._hydrate_shared_thread(thread_id, msg):
             return
