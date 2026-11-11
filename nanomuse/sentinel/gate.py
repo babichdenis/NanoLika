@@ -220,6 +220,16 @@ class Sentinel:
 
     # ------------------------------------------------------------------ main entry
     async def guard(self, call: ToolCall, tool: BaseTool) -> ToolResult:
+        # Paid media and file sharing currently obtain the installation's Hub client.
+        # On the shared bot that is not necessarily this customer's account, so do not
+        # call them until an authenticated per-turn client is wired in.
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and tool.name in {
+            "picture", "video", "media", "beatapi", "share_file", "models",
+        }:
+            return ToolResult.fail(
+                "Эта функция временно недоступна в общем облачном боте: "
+                "ещё не настроено надёжное списание и хранение для вашего аккаунта."
+            )
         # These personal stores and browser sessions belong to the installation,
         # not to the current customer, on the shared bot. A customer's approval
         # cannot authorize reading or changing another customer's state.

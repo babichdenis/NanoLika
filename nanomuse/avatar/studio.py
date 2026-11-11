@@ -39,6 +39,7 @@ import asyncio
 import base64
 import io
 import json
+import os
 import re
 import shutil
 import time
@@ -434,6 +435,11 @@ class AvatarStudio:
     def unavailable_message(self, lang: str = "en") -> str:
         """The one sentence for "no provider draws pictures", providers named for the
         account's region (contract C11)."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return {
+                "ru": "Создание аватара в облачном боте временно недоступно: ещё не настроено списание с вашего аккаунта.",
+                "zh": "云端机器人的头像创建暂不可用：尚未配置从您的账户扣费。",
+            }.get(lang, "Avatar creation in the shared cloud bot is temporarily unavailable while account billing is being fixed.")
         from nanomuse.llm import catalogue
 
         hub = getattr(self.svc, "hub", None)
@@ -449,6 +455,8 @@ class AvatarStudio:
         are on; None when nothing draws. Clips follow the ``[video]`` slot the same way,
         else the picture host when it has the video API, else the relay when signed in and
         on."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return None
         s = self.svc.settings
         llm, image, video = s.llm, s.image, s.video
         chat_base = (llm.endpoint or "").rstrip("/")
