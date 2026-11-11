@@ -13,6 +13,7 @@ import contextlib
 import hashlib
 import json
 import mimetypes
+import os
 import re
 import secrets
 import shutil
@@ -2366,6 +2367,10 @@ class MuseService:
             logger.info("feed routine: batch not written: {}", exc)
 
     async def _goal_scheduler(self) -> None:
+        # The legacy scheduler reads installation-wide personal goals, reminders,
+        # triggers, calendar and feed. It cannot run for a shared multi-account bot.
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return
         self.schedule_next_pass()
         while True:
             try:

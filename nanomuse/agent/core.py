@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 from collections.abc import Callable
 from dataclasses import replace
@@ -147,6 +148,13 @@ class MuseAgent:
     # ------------------------------------------------------------------ prompt
     def sandbox_note(self) -> str:
         """How commands run, from the shell tool's sandbox (the tools own it)."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return (
+                "On this shared cloud bot, shell, Python execution and coding agents are "
+                "temporarily unavailable because customer execution is not yet isolated. "
+                "Do not retry them or claim code was run. Explain the limitation when needed. "
+                "The files tool can still handle supported files in this conversation."
+            )
         shell = self.tools.get("shell")
         box = getattr(shell, "sandbox", None)
         if box is not None and box.active:
@@ -314,6 +322,8 @@ class MuseAgent:
 
     def contacts_note(self) -> str:
         """One line on the address book, when there is one (the tool does the looking up)."""
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1":
+            return ""
         book = self.contacts
         if book is None or "contacts" not in self.tools or not book.configured:
             return ""
@@ -432,7 +442,7 @@ class MuseAgent:
                 if self.turns <= 1:
                     memories += prompts.MEMORY_OPENING_NOTE
         goals = ""
-        if self.goals is not None:
+        if self.goals is not None and os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1":
             active = self.goals.list("active")[:5]
             if active:
                 lines = []
@@ -450,7 +460,7 @@ class MuseAgent:
                     lines.append(f"- {g.id}: {g.title} ({', '.join(bits)})")
                 goals = prompts.GOALS_SECTION.format(items="\n".join(lines))
         calendar = ""
-        if self.calendar is not None and self.calendar.configured:
+        if self.calendar is not None and self.calendar.configured and os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1":
             # today and tomorrow, from the cache — the tool fetches when more is needed
             today = datetime.now(self.calendar.tz).date()
             events = self.calendar.agenda(today, 2)
@@ -461,7 +471,7 @@ class MuseAgent:
             )
         profile = (
             prompts.USER_PROFILE_SECTION.format(profile=a.user_profile.strip())
-            if a.user_profile.strip()
+            if a.user_profile.strip() and os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") != "1"
             else ""
         )
         extra = (

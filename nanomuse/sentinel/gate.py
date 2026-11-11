@@ -12,6 +12,7 @@ program) with a lifetime — see :mod:`nanomuse.sentinel.grants`.
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from collections.abc import Callable
@@ -219,6 +220,17 @@ class Sentinel:
 
     # ------------------------------------------------------------------ main entry
     async def guard(self, call: ToolCall, tool: BaseTool) -> ToolResult:
+        # These personal stores and browser sessions belong to the installation,
+        # not to the current customer, on the shared bot. A customer's approval
+        # cannot authorize reading or changing another customer's state.
+        if os.environ.get("NANOMUSE_SHARED_CLOUD_BOT") == "1" and tool.name in {
+            "goals", "reminders", "triggers", "contacts", "calendar", "read_emails",
+            "send_email", "browser", "bot_projects",
+        }:
+            return ToolResult.fail(
+                "Эта функция временно недоступна в общем облачном боте: "
+                "личное хранилище и доступы для каждого клиента ещё не разделены."
+            )
         args = call.arguments
         if "__raw__" in args:
             # The arguments never parsed (cut off in transit): there is nothing to assess,
