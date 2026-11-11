@@ -53,12 +53,15 @@ export interface SyncedMessage {
   created_at: number;
   attachments?: SyncedAttachment[];
   truncated?: boolean;
+  deleted?: boolean;
 }
 
 export interface MessagePage {
   messages: SyncedMessage[];
   through_seq?: number;
   more?: boolean;
+  has_older?: boolean;
+  account_id?: string;
 }
 
 export interface SyncState {
@@ -73,14 +76,18 @@ export function state(): Promise<SyncState> {
   return cloudRequest<SyncState>("/v1/sync/state");
 }
 
-export async function catalog(): Promise<ConversationMeta[]> {
+export async function catalogSnapshot(): Promise<{ conversations: ConversationMeta[]; deleted: ConversationMeta[]; account_id?: string }> {
   const device = deviceId();
   const query = new URLSearchParams({ client: device, device });
-  const data = await cloudRequest<{ conversations?: ConversationMeta[]; complete?: boolean }>(
+  const data = await cloudRequest<{ conversations?: ConversationMeta[]; deleted?: ConversationMeta[]; complete?: boolean; account_id?: string }>(
     `/v1/sync/catalog?${query.toString()}`,
   );
   if (!data?.complete) throw new Error("The chat list is not available");
-  return data.conversations ?? [];
+  return { conversations: data.conversations ?? [], deleted: data.deleted ?? [], account_id: data.account_id };
+}
+
+export async function catalog(): Promise<ConversationMeta[]> {
+  return (await catalogSnapshot()).conversations;
 }
 
 export async function messages(
@@ -116,7 +123,7 @@ export interface OutgoingMessage {
 }
 
 export interface PublishResult {
-  rejected?: Array<{ reason?: string; cid?: string; cid_main?: string }>;
+  rejected?: Array<{ reason?: string; cid?: string; cid_main?: string; mid?: string }>;
 }
 
 /** Send one turn to the account's history: the chat's card and its new messages. */

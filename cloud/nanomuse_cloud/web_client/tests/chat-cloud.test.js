@@ -20,12 +20,13 @@ function relay(plan){
   if(method==='DELETE')return new Response(null,{status:204});
   if(path.startsWith('/v1/sync/catalog')){const tag=options.headers?.['If-None-Match'];if(plan.catalogETag&&tag===plan.catalogETag)return new Response(null,{status:304,headers:{ETag:plan.catalogETag}});return reply(plan.catalog,200,plan.catalogETag?{ETag:plan.catalogETag}:{});}
   if(path.includes('/messages'))return reply({account_id:'owner',more:false,has_older:false,cursor:0,through_seq:0,messages:[],...(plan.messages?plan.messages(path):{})});
-  if(path==='/v1/sync/changes')return reply((plan.push&&plan.push(body,calls.filter(c=>c.path==='/v1/sync/changes').length-1))||{ok:true,rejected:[]});
+  if(path==='/v1/sync/changes'){const result=(plan.push&&plan.push(body,calls.filter(c=>c.path==='/v1/sync/changes').length-1))||{ok:true,rejected:[]};return result instanceof Response?result:reply(result);}
   if(path.includes('/read'))return reply({seen:0});
   throw new Error('unexpected request '+method+' '+path);
  };
- const sync=new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;},current:plan.current||(()=>null),save:async chat=>{kept.set(chat.key,chat);},remove:async key=>{removed.push(key);},onChange:plan.onChange||(()=>{})});
- return {calls,removed,deletes:()=>calls.filter(c=>c.method==='DELETE'),sync};
+ const makeSync=()=>new ChatSync({session:()=>session,getChats:()=>chats,setChats:rows=>{chats=rows;},current:plan.current||(()=>null),save:async chat=>{kept.set(chat.key,structuredClone(chat));},remove:async key=>{removed.push(key);},onChange:plan.onChange||(()=>{}),onSyncError:plan.onSyncError,onSyncRecovered:plan.onSyncRecovered});
+ const sync=makeSync();
+ return {calls,removed,deletes:()=>calls.filter(c=>c.method==='DELETE'),sync,makeSync,setChats:rows=>{chats=rows;},getChats:()=>chats,saved:key=>structuredClone(kept.get(key))};
 }
 function chat(extra){return {key:'owner:cid-1',owner:'owner',title:'Длинная беседа',messages:[],syncCid:'cid-1',shared:true,updated:1000,...extra};}
 
@@ -187,7 +188,7 @@ test('the first chat this browser syncs is the account main chat; later ones are
 
 test('a web chat joins the main chat another device already owns',async()=>{
  let pushes=0;
- const r=relay({catalog:{complete:true,account_id:'owner',conversations:[],deleted:[]},push:(body)=>{
+ const r=relay({catalog:{complete:true,account_id:'owner',conversations:[{cid:'main-cid',title:'Main',updated_at:1}],deleted:[]},push:(body)=>{
   pushes++;
   if(pushes===1)return {ok:true,accepted:0,rejected:[
    {cid:body.conversations[0].cid,reason:'main_exists',cid_main:'main-cid'},
@@ -205,4 +206,78 @@ test('a web chat joins the main chat another device already owns',async()=>{
  assert.equal(sent[1].conversations[0].kind,'main');
  assert.equal(sent[1].conversations[0].title,'','an adopted main keeps the title it had');
  assert.equal(one.messages[0].shared,true);
+});
+
+test('a full history keeps the saved message and retries after a browser restart even with a live socket',async()=>{
+ let full=true,recovered=0;const errors=[];
+ const catalog={complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'Chat',updated_at:10}],deleted:[]};
+ const r=relay({catalog,onSyncError:error=>errors.push(error.code),onSyncRecovered:()=>recovered++,push:()=>full?reply({error:{code:'message_limit',message:'full'}},409):{ok:true,rejected:[]}});
+ const one=chat({messages:[{mid:'message-one',role:'user',content:'Сохранить текст',at:1000,shared:false}]});r.setChats([one]);
+ r.sync.started=true;r.sync.socketOpen=true;
+ await assert.rejects(r.sync.publish(one),error=>error.code==='message_limit');
+ assert.equal(one.messages[0].shared,false);assert.equal(r.saved(one.key).messages[0].mid,'message-one');
+ assert.equal(errors.at(-1),'message_limit');assert.ok(r.sync.uploadTimer,'retry is scheduled even while the socket is open');
+ r.sync.stop();const saved=r.saved(one.key);r.setChats([saved]);full=false;
+ const reloaded=r.makeSync();await reloaded.refresh();
+ const sends=r.calls.filter(call=>call.path==='/v1/sync/changes');
+ assert.equal(sends.length,2);assert.equal(sends[1].body.messages[0].mid,'message-one');
+ assert.equal(r.saved(one.key).messages[0].shared,true);assert.equal(r.saved(one.key).messages[0].content,'Сохранить текст');
+ assert.equal(recovered,0,'a fresh session has no stale warning to clear');
+});
+
+test('one blocked conversation does not stop other chats from syncing',async()=>{
+ const errors=[];const catalog={complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'One',updated_at:2},{cid:'cid-2',title:'Two',updated_at:2}],deleted:[]};
+ const r=relay({catalog,onSyncError:error=>errors.push(error.code),push:body=>body.conversations[0].cid==='cid-1'?reply({error:{code:'message_limit'}},409):{rejected:[]}});
+ const a=chat({messages:[{mid:'a',role:'user',content:'waiting',at:1000,shared:false}]}),b=chat({key:'owner:cid-2',syncCid:'cid-2',messages:[{mid:'b',role:'user',content:'other chat',at:1000,shared:false}]});
+ r.setChats([a,b]);await r.sync.refresh();
+ assert.equal(a.messages[0].shared,false);assert.equal(b.messages[0].shared,true);assert.deepEqual(errors,['message_limit']);
+});
+
+test('pending text never reopens an archived chat on retry',async()=>{
+ const errors=[];const r=relay({catalog:{complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'Archived',archived:true,updated_at:2}],deleted:[]},onSyncError:error=>errors.push(error.code)});
+ const one=chat({messages:[{mid:'a',role:'user',content:'still here',at:1000,shared:false}]});r.setChats([one]);await r.sync.refresh();
+ assert.equal(r.calls.filter(call=>call.path==='/v1/sync/changes').length,0);assert.equal(one.archived,true);
+ assert.equal(one.messages[0].shared,false);assert.equal(r.saved(one.key).messages[0].content,'still here');assert.deepEqual(errors,['conversation_archived']);
+});
+
+test('remote deletion preserves an unsent message locally and never recreates its chat',async()=>{
+ const errors=[];const r=relay({catalog:{complete:true,account_id:'owner',conversations:[],deleted:[{cid:'cid-1'}]},onSyncError:error=>errors.push(error.code)});
+ const one=chat({messages:[{mid:'a',role:'user',content:'do not lose',at:1000,shared:false}]});r.setChats([one]);await r.sync.refresh();
+ assert.equal(r.calls.filter(call=>call.path==='/v1/sync/changes').length,0);assert.equal(r.removed.length,0);
+ assert.equal(one.local,true);assert.equal(one.syncCid,undefined);assert.equal(r.saved(one.key).messages[0].content,'do not lose');
+ assert.ok(errors.includes('conversation_deleted'));
+});
+
+test('a lost acknowledgement is reconciled only against the same saved remote text',async()=>{
+ const catalog={complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'One',updated_at:2}],deleted:[]};
+ const r=relay({catalog,push:()=>({rejected:[{mid:'a',reason:'known_mid'}]}),messages:()=>({messages:[row('a',1,'same text')],has_older:false})});
+ const one=chat({messages:[{mid:'a',role:'user',content:'same text',at:1000,shared:false}]});await r.sync.publish(one);
+ assert.equal(one.messages[0].shared,true);
+ const mismatch=chat({messages:[{mid:'a',role:'user',content:'different text',at:1000,shared:false}]});
+ await assert.rejects(r.sync.publish(mismatch),error=>error.code==='known_mid');assert.equal(mismatch.messages[0].shared,false);
+});
+
+test('an existing chat update does not send an archive reset',async()=>{
+ const catalog={complete:true,account_id:'owner',conversations:[{cid:'cid-1',title:'One',updated_at:2}],deleted:[]};
+ const r=relay({catalog});const one=chat({messages:[{mid:'a',role:'user',content:'one',at:1000,shared:false}]});
+ await r.sync.publish(one);const body=r.calls.find(call=>call.path==='/v1/sync/changes').body;
+ assert.equal(Object.hasOwn(body.conversations[0],'archived'),false);
+});
+
+test('an uncertain first creation is not silently recreated after its server record disappears',async()=>{
+ const catalog={complete:true,account_id:'owner',conversations:[],deleted:[]};
+ const r=relay({catalog,push:()=>{throw new TypeError('connection lost');}});
+ const one={key:'owner:new',owner:'owner',title:'New',messages:[{mid:'a',role:'user',content:'keep',at:1000,shared:false}],updated:1000};r.setChats([one]);
+ await assert.rejects(r.sync.publish(one));assert.equal(r.saved(one.key).syncCreateUncertain,true);
+ r.setChats([r.saved(one.key)]);const restarted=r.makeSync();await restarted.refresh();
+ assert.equal(r.calls.filter(call=>call.path==='/v1/sync/changes').length,1);assert.equal(r.saved(one.key).messages[0].content,'keep');
+});
+
+test('an atomic history-limit refusal allows a newly created chat to retry',async()=>{
+ let full=true;const catalog={complete:true,account_id:'owner',conversations:[],deleted:[]};
+ const r=relay({catalog,push:()=>full?reply({error:{code:'message_limit'}},409):{rejected:[]}});
+ const one={key:'owner:new',owner:'owner',title:'New',messages:[{mid:'a',role:'user',content:'keep',at:1000,shared:false}],updated:1000};r.setChats([one]);
+ await assert.rejects(r.sync.publish(one),error=>error.code==='message_limit');assert.equal(r.saved(one.key).syncCreateUncertain,false);
+ const saved=r.saved(one.key);r.setChats([saved]);full=false;await r.makeSync().refresh();
+ assert.equal(r.calls.filter(call=>call.path==='/v1/sync/changes').length,2);assert.equal(r.saved(one.key).messages[0].shared,true);
 });

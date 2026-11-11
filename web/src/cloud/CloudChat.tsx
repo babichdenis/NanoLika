@@ -5,7 +5,7 @@
  * `cloud.nanolika.ru/v1`. The look follows the product: the fairy, the warm paper, the
  * green bubble for the person's words.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Menu, Plus, Send } from "lucide-react";
 import { useT } from "../i18n";
 import {
@@ -22,7 +22,8 @@ import {
   type CloudModel,
   type UploadedFile,
 } from "./client";
-import { catalog, messages as history, publish, type ConversationMeta, type SyncedMessage } from "./sync";
+import { catalog, catalogSnapshot, messages as history, publish, type ConversationMeta, type SyncedMessage } from "./sync";
+import { PendingHistory, type PendingEntry } from "./pending-history";
 import { announce, applyMessengerTheme, loadTelegramSdk, signInFromWebApp, surface, wireBackButton } from "./webapp";
 
 interface Turn {
@@ -41,13 +42,18 @@ const isTextFile = (file: File) =>
   );
 const isImageFile = (file: File) => /^image\//i.test(file.type || "");
 
-export function CloudChat() {
+export function CloudChat({ token: propToken }: { standalone?: boolean; token?: string }) {
   const t = useT();
-  const [token, setToken] = useState(() => cloudToken());
+  const [token, setToken] = useState(() => propToken || cloudToken());
   const [account, setAccount] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [syncNotice, setSyncNotice] = useState("");
+  const [queued, setQueued] = useState<PendingEntry[]>([]);
+  const [queueIdentity, setQueueIdentity] = useState<{ owner: string; key: string } | null>(null);
   const [list, setList] = useState<CloudModel[]>([]);
   const [model, setModel] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [turnKey, setTurnKey] = useState(token);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -63,12 +69,61 @@ export function CloudChat() {
   const cidRef = useRef<string>("");
   const startedRef = useRef<number>(0);
   const tokenRef = useRef(token);
+  const historyRequestRef = useRef(0);
   const tRef = useRef(t);
+  const outboxRef = useRef<PendingHistory | null>(null);
+
+  const outbox = useCallback(() => {
+    if (!outboxRef.current) outboxRef.current = new PendingHistory(localStorage, { snapshot: catalogSnapshot, publish, history });
+    return outboxRef.current;
+  }, []);
+
+  const validAccount = useCallback((key: string) => {
+    try { return tokenRef.current === key && cloudToken() === key; } catch { return false; }
+  }, []);
+
+  const flushPending = useCallback(async (owner: string, key: string, alive: () => boolean = () => true) => {
+    const valid = () => alive() && validAccount(key);
+    try {
+      const queue = outbox();
+      const result = await queue.flush(owner, valid);
+      if (!valid()) return;
+      setQueued(queue.list(owner));
+      setQueueIdentity({ owner, key });
+      const reasons: Record<string, string> = {
+        message_limit: "Cloud history is full. New messages are saved in this browser and will sync when space is available.",
+        conversation_archived: "This conversation is archived. Unsent messages stay in this browser until it is restored.",
+        conversation_deleted: "This conversation was deleted in the cloud. Unsent messages remain in this browser.",
+        creation_unknown: "The conversation could not be verified in the cloud. Your messages remain in this browser.",
+      };
+      setSyncNotice(result.remaining ? tRef.current(reasons[result.reason] || "Messages are saved in this browser and waiting to sync.") : "");
+    } catch {
+      if (valid()) setSyncNotice(tRef.current("Could not save the message in this browser. It was not sent."));
+    }
+  }, [outbox, validAccount]);
 
   useEffect(() => {
     tokenRef.current = token;
     tRef.current = t;
   }, [token, t]);
+
+  useEffect(() => {
+    if (propToken !== undefined && propToken !== token) setToken(propToken);
+  }, [propToken, token]);
+
+  useEffect(() => {
+    if (propToken !== undefined) return;
+    const update = () => {
+      const next = cloudToken();
+      if (next === tokenRef.current) return;
+      tokenRef.current = next;
+      historyRequestRef.current++;
+      abort.current?.abort();
+      setToken(next);
+    };
+    window.addEventListener("storage", update);
+    return () => window.removeEventListener("storage", update);
+  }, [propToken]);
 
   useEffect(() => {
     announce();
@@ -84,6 +139,25 @@ export function CloudChat() {
   }, []);
 
   useEffect(() => {
+    historyRequestRef.current++;
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+    setDraft("");
+    setPending([]);
+    setAccount("");
+    setError("");
+    setTurns([]);
+    setOpenChat(null);
+    setHistoryRows([]);
+    setChats([]);
+    setQueued([]);
+    setQueueIdentity(null);
+    setSyncNotice("");
+    setAccountId("");
+    cidRef.current = "";
+    startedRef.current = 0;
+    setTurnKey(token);
     if (!token) return;
     let alive = true;
     (async () => {
@@ -95,6 +169,7 @@ export function CloudChat() {
         setModel((current) => current || menu[0]?.id || "");
         const accountRow = isRecord(who) && isRecord(who.account) ? who.account : {};
         setAccount(String(accountRow.hint || accountRow.email || ""));
+        setAccountId(String(accountRow.id || ""));
         setError("");
       } catch (e) {
         if (alive) setError(e instanceof CloudError ? e.message : tRef.current("Could not read the model list."));
@@ -106,12 +181,23 @@ export function CloudChat() {
   }, [token]);
 
   useEffect(() => {
+    if (!token || !accountId) return;
+    let alive = true;
+    const tick = () => { void flushPending(accountId, token, () => alive); };
+    tick();
+    const timer = window.setInterval(tick, 30_000);
+    window.addEventListener("online", tick);
+    return () => { alive = false; window.clearInterval(timer); window.removeEventListener("online", tick); };
+  }, [accountId, token, flushPending]);
+
+  useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, historyRows]);
 
   useEffect(() => {
     wireBackButton(() => {
       if (openChat) {
+        historyRequestRef.current++;
         setOpenChat(null);
         setHistoryRows([]);
         return true;
@@ -149,26 +235,47 @@ export function CloudChat() {
   }
 
   async function openHistory(chatMeta: ConversationMeta) {
+    const key = token, request = ++historyRequestRef.current;
     setOpenChat(chatMeta);
     setHistoryBusy(true);
     setError("");
     try {
       const page = await history(chatMeta.cid, { limit: 100 });
+      if (!validAccount(key) || request !== historyRequestRef.current) return;
       setHistoryRows(page.messages ?? []);
     } catch (e) {
+      if (!validAccount(key) || request !== historyRequestRef.current) return;
       setError(e instanceof CloudError ? e.message : t("Could not read this conversation."));
       setHistoryRows([]);
     } finally {
-      setHistoryBusy(false);
+      if (validAccount(key) && request === historyRequestRef.current) setHistoryBusy(false);
     }
   }
 
   async function send() {
     const text = draft.trim();
     if ((!text && pending.length === 0) || busy || !model) return;
-    setDraft("");
     setError("");
     setBusy(true);
+
+    const owner = accountId, key = token;
+    if (!owner || !validAccount(key)) {
+      setError(t("The account could not be verified. Try signing in again."));
+      setBusy(false);
+      return;
+    }
+
+    try {
+      if (outbox().list(owner).some((entry) => entry.chat.cid !== cidRef.current)) {
+        setError(t("Messages from another conversation are waiting to sync. Wait until they are synced before starting a new one."));
+        setBusy(false);
+        return;
+      }
+    } catch {
+      setError(t("Could not save the message in this browser. It was not sent."));
+      setBusy(false);
+      return;
+    }
 
     let content: CloudMessage["content"] = text;
     let uploaded: UploadedFile[] = [];
@@ -178,45 +285,42 @@ export function CloudChat() {
         content =
           typeof prepared.parts === "string" ? text + (prepared.parts ? "\n\n" + prepared.parts : "") : prepared.parts;
         uploaded = prepared.uploaded;
-        setPending([]);
       }
     } catch (e) {
+      if (!validAccount(key)) return;
       setError(e instanceof CloudError ? e.message : t("Could not read this file."));
       setBusy(false);
       return;
     }
 
+    if (!validAccount(key)) return;
+
     const history: CloudMessage[] = [
       ...turns.filter((turn) => !turn.pending).map((turn) => ({ role: turn.role, content: turn.text })),
       { role: "user", content },
     ];
-    setTurns((all) => [...all, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
-
     // One conversation per screen session; its id is what every other client will see.
     if (!cidRef.current) cidRef.current = crypto.randomUUID();
     if (!startedRef.current) startedRef.current = Math.floor(Date.now() / 1000);
     const cid = cidRef.current;
     const sentAt = Math.floor(Date.now() / 1000);
     const title = (text || pending.map((file) => file.name).join(", ")).slice(0, 52);
+    const chatMeta = { cid, kind: "side" as const, title, created_at: startedRef.current, updated_at: sentAt, ...(model ? { model } : {}) };
     try {
-      await publish(
-        { cid, kind: "side", title, created_at: startedRef.current, updated_at: sentAt, ...(model ? { model } : {}) },
-        [
-          {
-            mid: crypto.randomUUID(),
-            cid,
-            role: "user",
-            text: typeof content === "string" ? content : text,
-            created_at: sentAt,
-            ...(uploaded.length
-              ? { attachments: uploaded.map((f) => ({ name: f.name, mime: f.mime, size: f.size, url: f.url })) }
-              : {}),
-          },
-        ],
-      );
+      outbox().add({ owner, chat: chatMeta, locallyCreated: true, attempted: false, safeRetry: false, message: {
+        mid: crypto.randomUUID(), cid, role: "user", text: typeof content === "string" ? content : text,
+        created_at: sentAt, ...(uploaded.length ? { attachments: uploaded.map((f) => ({ name: f.name, mime: f.mime, size: f.size, url: f.url })) } : {}),
+      } });
     } catch {
-      setError(tRef.current("Could not save this message to the shared history."));
+      setError(tRef.current("Could not save the message in this browser. It was not sent."));
+      setBusy(false);
+      return;
     }
+    setDraft("");
+    setPending([]);
+    setTurns((all) => [...all, { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    await flushPending(owner, key);
+    if (!validAccount(key)) { setBusy(false); return; }
 
     const controller = new AbortController();
     abort.current = controller;
@@ -225,6 +329,7 @@ export function CloudChat() {
         signal: controller.signal,
         onDelta: (chunk) =>
           setTurns((all) => {
+            if (!validAccount(key)) return all;
             const next = [...all];
             const last = next[next.length - 1];
             if (last?.role === "assistant") next[next.length - 1] = { ...last, text: last.text + chunk, pending: false };
@@ -232,12 +337,14 @@ export function CloudChat() {
           }),
         onReasoning: (chunk) =>
           setTurns((all) => {
+            if (!validAccount(key)) return all;
             const next = [...all];
             const last = next[next.length - 1];
             if (last?.role === "assistant") next[next.length - 1] = { ...last, reasoning: (last.reasoning || "") + chunk };
             return next;
           }),
       });
+      if (!validAccount(key)) return;
       setTurns((all) => {
         const next = [...all];
         const last = next[next.length - 1];
@@ -247,15 +354,15 @@ export function CloudChat() {
       if (result.text) {
         const repliedAt = Math.floor(Date.now() / 1000);
         try {
-          await publish(
-            { cid, kind: "side", title, created_at: startedRef.current, updated_at: repliedAt, ...(model ? { model } : {}) },
-            [{ mid: crypto.randomUUID(), cid, role: "assistant", text: result.text, created_at: repliedAt }],
-          );
+          outbox().add({ owner, chat: { ...chatMeta, updated_at: repliedAt }, locallyCreated: true, attempted: false, safeRetry: false,
+            message: { mid: crypto.randomUUID(), cid, role: "assistant", text: result.text, created_at: repliedAt } });
+          await flushPending(owner, key);
         } catch {
-          setError(tRef.current("Could not save this message to the shared history."));
+          setError(tRef.current("Could not save this reply in this browser. Copy it before leaving."));
         }
       }
     } catch (e) {
+      if (!validAccount(key)) return;
       if ((e as Error)?.name === "AbortError") {
         setTurns((all) => {
           const next = [...all];
@@ -268,10 +375,12 @@ export function CloudChat() {
         setTurns((all) => all.filter((turn) => !turn.pending));
       }
     } finally {
-      abort.current = null;
-      setBusy(false);
+      if (abort.current === controller) abort.current = null;
+      if (validAccount(key)) setBusy(false);
     }
   }
+
+  if ((propToken !== undefined && propToken !== token) || turnKey !== token) return null;
 
   if (!token) {
     return (
@@ -318,6 +427,7 @@ export function CloudChat() {
             setTurns([]);
             cidRef.current = "";
             startedRef.current = 0;
+            historyRequestRef.current++;
             setDrawer(false);
           }}
         >
@@ -460,6 +570,8 @@ export function CloudChat() {
         <div ref={bottom} />
       </main>
 
+        {syncNotice && <p role="status" className="rounded-2xl bg-amber-500/12 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">{syncNotice}</p>}
+        {queueIdentity?.owner === accountId && queueIdentity.key === token && queued.length > 0 && <details className="text-sm text-muted"><summary>{t("Messages waiting to sync")} ({queued.length})</summary><ul>{queued.map((item) => <li key={item.message.mid}>{item.message.text || t("Attachment")}</li>)}</ul></details>}
       {!openChat && (
         <>
           {pending.length > 0 && (

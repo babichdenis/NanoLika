@@ -4,6 +4,17 @@
  * Run `npm test` — the i18n test lists the strings that still lack a translation.
  */
 const zhCN: Record<string, string> = {
+  "Messages from another conversation are waiting to sync. Wait until they are synced before starting a new one.": "另一段对话的消息正在等待同步。请先等待同步完成，再开始新对话。",
+  "Cloud history is full. New messages are saved in this browser and will sync when space is available.": "云端历史已满。新消息保存在此浏览器，空间恢复后会继续同步。",
+  "This conversation is archived. Unsent messages stay in this browser until it is restored.": "此对话已归档，未发送的消息保存在此浏览器，恢复对话后才会同步。",
+  "This conversation was deleted in the cloud. Unsent messages remain in this browser.": "云端对话已删除，未发送的消息仍保存在此浏览器。",
+  "The conversation could not be verified in the cloud. Your messages remain in this browser.": "无法确认云端对话，消息仍保存在此浏览器。",
+  "Messages are saved in this browser and waiting to sync.": "消息保存在此浏览器，正在等待同步。",
+  "Could not save the message in this browser. It was not sent.": "无法在浏览器中保存消息，因此没有发送。",
+  "Could not save this reply in this browser. Copy it before leaving.": "无法在浏览器中保存回复，离开前请先复制。",
+  "The account could not be verified. Try signing in again.": "无法确认账户，请重新登录。",
+  "Messages waiting to sync": "等待同步的消息",
+  "Attachment": "附件",
   "Restore from archive": "从归档恢复",
   "Archive": "归档",
   "Local chats": "本机对话",

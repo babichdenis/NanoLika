@@ -1,6 +1,6 @@
 /* Shared metadata everywhere; bodies and read marks belong to the selected visible chat. */
 export class ChatSync {
- constructor({session,getChats,setChats,current,save,remove,onChange}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.account='';let channel='web';try{channel=localStorage.getItem('nl.web.channel')||'web';}catch{}
+ constructor({session,getChats,setChats,current,save,remove,onChange,onSyncError,onSyncRecovered}){Object.assign(this,{session,getChats,setChats,current,save,remove,onChange,onSyncError,onSyncRecovered});this.queue=Promise.resolve();this.selected='';this.cursors=new Map();this.known=new Set();this.failures=new Map();this.uploadTimer=null;this.uploadRetry=0;this.account='';let channel='web';try{channel=localStorage.getItem('nl.web.channel')||'web';}catch{}
   if(!['telegram','max','web'].includes(channel))channel='web';
   this.channel=channel;
   const prefix=channel==='telegram'?'tg':channel==='max'?'max':'web';
@@ -11,7 +11,12 @@ export class ChatSync {
  async request(path,options={},session){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);try{const r=await fetch(path,{...options,signal:controller.signal,cache:'no-store',headers:{...(options.headers||{}),Authorization:'Bearer '+session.key,'Content-Type':'application/json'}});if(r.headers.get('etag'))this.catalogETag=r.headers.get('etag');if(r.status===304||r.status===204)return null;const data=await r.json();if(!r.ok||data?.ok===false){const e=new Error(data?.error?.message||'Chat sync unavailable');e.status=r.status;e.code=data?.error?.code||data?.reason;throw e;}return data;}finally{clearTimeout(timer);}}
  valid(session){const now=this.session();return now?.key===session?.key&&now?.owner===session?.owner;}
  /* A chat with nothing to say is not a conversation yet: the first message publishes it. */
- async publish(chat){return this.run(()=>this.upload(chat,this.session()));}
+ async publish(chat){return this.run(async()=>{const session=this.session();try{await this.upload(chat,session);this.clearFailure(chat,session);}catch(error){this.noteFailure(chat,error,session);throw error;}});}
+ /* Failed uploads remain in the saved chat, with the same message IDs. Retry even
+    when the hub socket is open and no one else sends an event. */
+ noteFailure(chat,error,session){if(!chat?.key||!this.valid(session)||chat.owner!==session.owner)return;const code=String(error?.code||'sync_unavailable');const previous=this.failures.get(chat.key);this.failures.set(chat.key,code);if(previous!==code)this.onSyncError?.(error,chat);this.scheduleUploadRetry();}
+ clearFailure(chat,session){if(!this.valid(session)||!this.failures.delete(chat.key))return;if(!this.failures.size){clearTimeout(this.uploadTimer);this.uploadTimer=null;this.uploadRetry=0;this.onSyncRecovered?.();}}
+ scheduleUploadRetry(){if(!this.started||this.uploadTimer||!this.failures.size)return;const delay=Math.min(300000,5000*Math.pow(2,Math.min(this.uploadRetry++,6)));this.uploadTimer=setTimeout(()=>{this.uploadTimer=null;this.refresh().catch(()=>{}).finally(()=>this.scheduleUploadRetry());},delay);}
  mainKey(owner){return 'nl.web.main.'+owner;}
  loadMain(session){try{return localStorage.getItem(this.mainKey(session.owner))||'';}catch{return '';}}
  saveMain(session,cid){try{localStorage.setItem(this.mainKey(session.owner),cid);}catch{}}
@@ -30,7 +35,21 @@ export class ChatSync {
   const folder=String(chat.folder||'').slice(0,120), folderDirty=folder!==String(chat.sharedFolder||'');
   if(!pending.length&&!modelDirty&&!reasoningDirty&&!folderDirty&&!chat.syncCid&&!force)return;
   const fresh=!chat.syncCid;
-  if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;}for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}
+  if(!chat.syncCid){chat.syncCid=crypto.randomUUID();chat.device=this.device;chat.syncPendingCreate=true;}
+  else{
+   /* Never reopen an archived or deleted conversation on a retry. A locally created
+      ID may legitimately be absent if its first request failed before reaching relay. */
+   const priorTag=this.catalogETag;let catalog;
+   try{catalog=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{},session);}finally{this.catalogETag=priorTag;}
+   if(!this.valid(session))return;
+   if(catalog?.complete!==true||(catalog.account_id&&catalog.account_id!==session.owner))throw new Error('The chat list is not available');
+   const meta=(catalog.conversations||[]).find(row=>row.cid===chat.syncCid);
+   const deleted=(catalog.deleted||[]).some(row=>row.cid===chat.syncCid);
+   if(deleted||(!meta&&!chat.syncPendingCreate)){const error=new Error('The cloud conversation was deleted');error.code='conversation_deleted';throw error;}
+   if(!meta&&chat.syncCreateUncertain){const error=new Error('The original creation could not be verified');error.code='creation_unknown';throw error;}
+   if(meta?.archived){const error=new Error('The conversation is archived');error.code='conversation_archived';throw error;}
+  }
+  for(const m of chat.messages){if(!m.mid)m.mid=crypto.randomUUID();}
   // The first chat this browser puts in the cloud is the account's main chat (S9):
   // desktop and phones with "main only" see it. Later chats here stay side chats.
   let mainCid=this.loadMain(session);
@@ -44,8 +63,12 @@ export class ChatSync {
    /* Файлы остаются в браузере, но в тексте для других устройств и мессенджеров
       честно сказано, что было вложено: иначе там видно только подпись. */
    const syncedText=m=>{const names=(m.files||[]).map(file=>file.name).filter(Boolean);return names.length?`${m.content||''}${m.content?'\n\n':''}[вложение: ${names.join(', ')}]`:(m.content||'')};
-   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),archived:chat.archived===true,...(modelDirty?{model}:{}),...(reasoningDirty?{reasoning}:{}),...(folderDirty?{folder}:{})}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:syncedText(m),created_at:Math.floor(m.at/1000),attachments:(m.files||[]).map(file=>({name:file.name,mime:file.mime,size:file.size,url:file.url||''}))}))};
-   const result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);
+   const batch=pending.slice(offset,offset+200),body={device:this.device,conversations:[{cid:chat.syncCid,kind:isMain?'main':'side',title:adopted?'':chat.title,created_at:Math.floor((chat.created||chat.updated)/1000),updated_at:Math.floor(chat.updated/1000),...(fresh?{archived:chat.archived===true}:{}),...(modelDirty?{model}:{}),...(reasoningDirty?{reasoning}:{}),...(folderDirty?{folder}:{})}],messages:batch.map(m=>({mid:m.mid,cid:chat.syncCid,role:m.role,text:syncedText(m),created_at:Math.floor(m.at/1000),attachments:(m.files||[]).map(file=>({name:file.name,mime:file.mime,size:file.size,url:file.url||''}))}))};
+   if(chat.syncPendingCreate){chat.syncCreateUncertain=true;await this.save(chat);}
+   let result;
+   try{result=await this.request('/v1/sync/changes',{method:'POST',body:JSON.stringify(body)},session);}
+   catch(error){/* A 409 message_limit is an atomic rejection: no conversation was created. */
+    if(chat.syncPendingCreate&&error?.status===409&&error?.code==='message_limit'){chat.syncCreateUncertain=false;await this.save(chat);}throw error;}
    const clash=(result.rejected||[]).find(r=>r.reason==='main_exists'&&r.cid_main&&r.cid===chat.syncCid);
    if(clash&&!adopted){
     // the account already has a main chat (desktop/phone): this browser joins it under
@@ -55,9 +78,28 @@ export class ChatSync {
     await this.save(chat);
     return this.upload(chat,session,{force:true,adopted:true});
    }
-   if(result.rejected?.length)throw new Error('Some chat messages could not be synced');
-   for(const m of batch)m.shared=true;chat.shared=true;if(modelDirty)chat.sharedModel=model;if(reasoningDirty)chat.sharedReasoning=reasoning;if(folderDirty)chat.sharedFolder=folder;await this.save(chat);
+   if(result.rejected?.length){
+    /* A timeout can hide a successful write. `known_mid` alone is not proof: it can
+       refer to different content or a tombstone. Verify the actual remote text. */
+    const known=result.rejected.every(r=>r.reason==='known_mid'&&batch.some(m=>m.mid===r.mid));
+    if(!known||!await this.verifyKnown(chat,batch,result.rejected,syncedText,session)){const error=new Error('Some chat messages could not be synced');error.code=result.rejected[0]?.reason||'sync_unavailable';throw error;}
+   }
+   for(const m of batch)m.shared=true;chat.shared=true;delete chat.syncPendingCreate;delete chat.syncCreateUncertain;if(modelDirty)chat.sharedModel=model;if(reasoningDirty)chat.sharedReasoning=reasoning;if(folderDirty)chat.sharedFolder=folder;await this.save(chat);
   }
+ }
+ async verifyKnown(chat,batch,rejected,syncedText,session){
+  const needed=new Map(rejected.map(row=>[row.mid,batch.find(m=>m.mid===row.mid)]));
+  /* Files and truncated text need a stronger receipt than the old relay provides. */
+  if([...needed.values()].some(m=>!m||(m.files||[]).length||new TextEncoder().encode(syncedText(m)).length>16384))return false;
+  let before=0;
+  for(let round=0;round<70&&needed.size;round++){
+   const page=await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid)+'/messages'+(before?'?before='+before+'&limit=300':'?after=0&limit=300'),{},session);
+   if(!this.valid(session)||(page.account_id&&page.account_id!==session.owner))return false;
+   for(const remote of page.messages||[]){const local=needed.get(remote.mid);if(!local)continue;if(remote.deleted||remote.cid!==chat.syncCid||remote.role!==local.role||remote.truncated||remote.text!==syncedText(local))return false;needed.delete(remote.mid);}
+   if(!page.has_older||!page.messages?.length)break;
+   const oldest=Math.min(...page.messages.map(m=>Number(m.seq)||0));if(!oldest||oldest===before)break;before=oldest;
+  }
+  return needed.size===0;
  }
  /* The relay's replies go into the local copy once: an update of a message already kept does not change it. */
  merge(chat,rows){const byId=new Map(chat.messages.filter(m=>m.mid).map(m=>[m.mid,m]));let changed=false;
@@ -69,17 +111,17 @@ export class ChatSync {
   chat.messages.sort((a,b)=>a.at-b.at);return changed;}
  async refresh(){if(this.refreshTask)return this.refreshTask;const task=this.run(async()=>{
   const session=this.session();if(!session?.key||!session.owner||!navigator.onLine)return;
-  if(this.account!==session.owner){this.account=session.owner;this.cursors.clear();this.known.clear();this.selected='';}
-  for(const chat of [...this.getChats()])if(!chat.local&&(!chat.shared||chat.messages.some(m=>!m.shared&&m.content&&(m.role==='user'||!m.interrupted))))await this.upload(chat,session);
+  if(this.account!==session.owner){this.account=session.owner;this.catalogETag='';this.cursors.clear();this.known.clear();this.selected='';this.failures.clear();clearTimeout(this.uploadTimer);this.uploadTimer=null;this.uploadRetry=0;}
+  for(const chat of [...this.getChats()])if(!chat.local&&(!chat.shared||chat.messages.some(m=>!m.shared&&(m.content||(Array.isArray(m.files)&&m.files.length))))){try{await this.upload(chat,session);this.clearFailure(chat,session);}catch(error){this.noteFailure(chat,error,session);}}
   const result=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{headers:this.catalogETag?{'If-None-Match':this.catalogETag}:{}},session);
   if(!this.valid(session))return;
   if(result===null){/* 304: the list is what this tab already has; the open chat may still have new text */const open=this.current();if(open?.syncCid&&document.visibilityState!=='hidden'){const changed=await this.pull(open,session);if(this.valid(session))this.onChange({messages:changed});}return;}
   if(result.complete!==true||(result.account_id&&result.account_id!==session.owner))return;
   this.catalogRows=result.conversations||[];
-  const existing=new Map(this.getChats().map(c=>[c.syncCid,c]));const rows=[];const ids=new Set();
-  for(const meta of result.conversations){ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;/* the model another device chose for this chat */const model=typeof meta.model==='string'?meta.model:'';if(model){chat.model=model;}chat.sharedModel=model;const reasoning=typeof meta.reasoning==='string'?meta.reasoning:'';if('reasoning' in meta){chat.reasoning=reasoning;chat.sharedReasoning=reasoning;}if('folder' in meta){chat.folder=String(meta.folder||'');chat.sharedFolder=chat.folder;}rows.push(chat);await this.save(chat);}
+  const existing=new Map(this.getChats().filter(c=>c.owner===session.owner).map(c=>[c.syncCid,c]));const rows=[];const ids=new Set();
+  for(const meta of result.conversations){if(!this.valid(session))return;ids.add(meta.cid);let chat=existing.get(meta.cid);if(!chat)chat={key:session.owner+':'+meta.cid,syncCid:meta.cid,owner:session.owner,messages:[],shared:true};chat.title=meta.title;chat.archived=meta.archived===true;chat.device=meta.device||'';chat.updated=Math.max(chat.updated||0,meta.updated_at*1000);chat.unread=meta.unread||0;/* the model another device chose for this chat */const model=typeof meta.model==='string'?meta.model:'';if(model){chat.model=model;}chat.sharedModel=model;const reasoning=typeof meta.reasoning==='string'?meta.reasoning:'';if('reasoning' in meta){chat.reasoning=reasoning;chat.sharedReasoning=reasoning;}if('folder' in meta){chat.folder=String(meta.folder||'');chat.sharedFolder=chat.folder;}rows.push(chat);await this.save(chat);}
   const deleted=new Set((result.deleted||[]).map(c=>c.cid));
-  for(const chat of this.getChats())if(!ids.has(chat.syncCid)){if(deleted.has(chat.syncCid)){chat.deleted=true;await this.remove(chat.key);}else rows.push(chat);}
+  for(const chat of this.getChats()){if(!this.valid(session))return;if(chat.owner!==session.owner)continue;if(!ids.has(chat.syncCid)){if(deleted.has(chat.syncCid)){if(chat.messages.some(m=>!m.shared&&(m.content||(Array.isArray(m.files)&&m.files.length)))){await this.markLocal(chat);if(!this.valid(session))return;this.failures.delete(chat.key);rows.push(chat);const error=new Error('The cloud conversation was deleted; unsent messages remain here');error.code='conversation_deleted';this.onSyncError?.(error,chat);}else{chat.deleted=true;await this.remove(chat.key);}}else rows.push(chat);}}
   if(!this.valid(session))return;
   const beforeKey=this.current()?.key;this.known=ids;this.setChats(rows.sort((a,b)=>b.updated-a.updated||a.key.localeCompare(b.key)));let messagesChanged=!!beforeKey&&!this.current();
   const current=this.current();if(current?.syncCid&&ids.has(current.syncCid)&&document.visibilityState!=='hidden')messagesChanged=(await this.pull(current,session))||messagesChanged;
@@ -87,8 +129,8 @@ export class ChatSync {
  });this.refreshTask=task.finally(()=>{this.refreshTask=null;});return this.refreshTask;}
  /* A permanent hub socket replaces the three-second catalogue poll (S8): another device
     says it pushed, and only then does this tab ask. A quiet relay costs nothing. */
- start(){if(this.started)return;this.started=true;this.connect();this.pollTimer=setInterval(()=>{if(this.socketOpen)return;const session=this.session();if(session?.key&&navigator.onLine&&document.visibilityState!=='hidden')this.refresh().catch(()=>{});},30000);}
- stop(){this.started=false;clearInterval(this.pollTimer);clearTimeout(this.reconnectTimer);clearTimeout(this.wakeTimer);this.pollTimer=this.reconnectTimer=this.wakeTimer=null;try{this.socket?.close();}catch{}this.socket=null;this.socketOpen=false;}
+ start(){if(this.started)return;this.started=true;this.connect();this.scheduleUploadRetry();this.pollTimer=setInterval(()=>{if(this.socketOpen)return;const session=this.session();if(session?.key&&navigator.onLine&&document.visibilityState!=='hidden')this.refresh().catch(()=>{});},30000);}
+ stop(){this.started=false;clearInterval(this.pollTimer);clearTimeout(this.reconnectTimer);clearTimeout(this.wakeTimer);clearTimeout(this.uploadTimer);this.pollTimer=this.reconnectTimer=this.wakeTimer=this.uploadTimer=null;try{this.socket?.close();}catch{}this.socket=null;this.socketOpen=false;}
  connect(){
   if(!this.started)return;
   const session=this.session();if(!session?.key||!session.owner){this.scheduleReconnect(15000);return;}
@@ -152,7 +194,7 @@ export class ChatSync {
   return seen;
  }
  async catalog(session){const result=await this.request('/v1/sync/catalog?'+new URLSearchParams({client:this.device,device:this.device}),{},session);if(!this.valid(session)||result?.complete!==true||(result.account_id&&result.account_id!==session.owner))throw new Error('The chat list is not available');return result.conversations||[];}
- async markLocal(chat){delete chat.syncCid;chat.local=true;chat.shared=false;chat.unread=0;for(const m of chat.messages)m.shared=false;await this.save(chat);}
+ async markLocal(chat){delete chat.syncCid;delete chat.syncPendingCreate;delete chat.syncCreateUncertain;chat.local=true;chat.shared=false;chat.unread=0;for(const m of chat.messages)m.shared=false;await this.save(chat);}
  /** Take the cloud off a chat and keep this browser's copy: the server copy goes for every device. Refuses when this browser does not hold the whole text, so no message is lost. */
  async unsync(chat){return this.run(async()=>{
   const session=this.session(),cid=chat.syncCid;
@@ -181,5 +223,5 @@ export class ChatSync {
   if(chat.syncCid)await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid)+'/archive',{method:'POST',body:JSON.stringify({archived:!!archived})},session);
   chat.archived=!!archived;await this.save(chat);this.onChange({archive:true});return chat;
  });}
- async delete(chat){return this.run(async()=>{const session=this.session();if(chat.syncCid&&session?.owner===chat.owner){if(this.loadMain(session)===chat.syncCid)this.saveMain(session,'');await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid),{method:'DELETE'},session);}await this.remove(chat.key);this.known.delete(chat.syncCid);});}
+ async delete(chat){return this.run(async()=>{const session=this.session();if(chat.syncCid&&session?.owner===chat.owner){if(this.loadMain(session)===chat.syncCid)this.saveMain(session,'');await this.request('/v1/sync/conversations/'+encodeURIComponent(chat.syncCid),{method:'DELETE'},session);}await this.remove(chat.key);this.known.delete(chat.syncCid);this.clearFailure(chat,session);});}
 }

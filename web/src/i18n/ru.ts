@@ -1,5 +1,16 @@
 /** Russian dictionary for the web client. Keys are the English source strings. */
 const ru: Record<string, string> = {
+  "Messages from another conversation are waiting to sync. Wait until they are synced before starting a new one.": "Сообщения из другой беседы ожидают синхронизации. Дождитесь её завершения, прежде чем начать новую беседу.",
+  "Cloud history is full. New messages are saved in this browser and will sync when space is available.": "Облачная история заполнена. Новые сообщения сохранены в этом браузере и синхронизируются, когда появится место.",
+  "This conversation is archived. Unsent messages stay in this browser until it is restored.": "Беседа в архиве. Неотправленные сообщения останутся в браузере до её восстановления.",
+  "This conversation was deleted in the cloud. Unsent messages remain in this browser.": "Беседа удалена из облака. Неотправленные сообщения остались в этом браузере.",
+  "The conversation could not be verified in the cloud. Your messages remain in this browser.": "Не удалось подтвердить беседу в облаке. Сообщения остались в этом браузере.",
+  "Messages are saved in this browser and waiting to sync.": "Сообщения сохранены в этом браузере и ожидают синхронизации.",
+  "Could not save the message in this browser. It was not sent.": "Не удалось сохранить сообщение в браузере. Оно не отправлено.",
+  "Could not save this reply in this browser. Copy it before leaving.": "Не удалось сохранить ответ в браузере. Скопируйте его перед выходом.",
+  "The account could not be verified. Try signing in again.": "Не удалось подтвердить аккаунт. Попробуйте войти ещё раз.",
+  "Messages waiting to sync": "Ожидают синхронизации",
+  "Attachment": "Вложение",
   "Activity": "Действия",
   "Off": "Выключено",
   "Local chats": "Локальные чаты",
