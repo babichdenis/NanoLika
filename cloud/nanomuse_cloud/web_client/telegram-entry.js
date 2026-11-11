@@ -7,6 +7,7 @@
   const status = document.getElementById('status');
   const retry = document.getElementById('retry');
   const login = document.getElementById('login');
+  login.href = '/app/?signin=1&next=' + encodeURIComponent(new URL(destination, location.origin).href);
   const sdkReady = new Promise(resolve => {
     if (window.Telegram?.WebApp) { resolve(); return; }
     const sdk = document.createElement('script');
