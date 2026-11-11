@@ -227,6 +227,128 @@ async def test_a_model_gone_from_the_menu_is_asked_for_once_more(monkeypatch):
     assert sound == b"OGG" and rounds["menu"] == 2
 
 
+@pytest.mark.parametrize("kind", [voice_note.HEAR, voice_note.SAY])
+async def test_audio_selection_follows_each_account_and_current_shelf(kind):
+    """Never reuse another customer's selection or a stale personal default."""
+    names = {"Bearer account-a-secret": "a-first", "Bearer account-b-secret": "b-model"}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/me/models"
+        model = names[request.headers["authorization"]]
+        return httpx.Response(200, json={
+            "models": [{"id": model, "kind": "audio", "audio_kind": kind}],
+            "shelf": {"default": {"audio": model}},
+        })
+
+    transport = httpx.MockTransport(handler)
+    assert await voice_note._pick("https://relay", "account-a-secret", kind, transport) == "a-first"
+    assert await voice_note._pick("https://relay", "account-b-secret", kind, transport) == "b-model"
+    names["Bearer account-a-secret"] = "a-new"
+    assert await voice_note._pick("https://relay", "account-a-secret", kind, transport) == "a-new"
+
+
+async def test_old_relay_fallback_for_one_account_does_not_hide_another_shelf():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers["authorization"]
+        if request.url.path == "/v1/me/models":
+            if auth == "Bearer account-a-secret":
+                return httpx.Response(404, json={})
+            return httpx.Response(200, json={
+                "models": [{"id": "b-model", "kind": "audio", "audio_kind": "transcribe"}],
+                "shelf": {"default": {"audio": "b-model"}},
+            })
+        assert request.url.path == "/v1/models"
+        return httpx.Response(200, json={"data": [
+            {"id": "a-model", "kind": "audio", "audio_kind": "transcribe"}
+        ]})
+
+    transport = httpx.MockTransport(handler)
+    assert await voice_note._pick("https://relay", "account-a-secret", voice_note.HEAR, transport) == "a-model"
+    assert await voice_note._pick("https://relay", "account-b-secret", voice_note.HEAR, transport) == "b-model"
+    assert "account-a-secret" not in repr(voice_note._no_shelf)
+
+
+async def test_plan_locked_default_is_not_selected_for_audio():
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "models": [
+                {"id": "locked", "kind": "audio", "audio_kind": "transcribe", "plan_locked": True},
+                {"id": "allowed", "kind": "audio", "audio_kind": "transcribe", "plan_locked": False},
+            ],
+            "shelf": {"default": {"audio": "locked"}},
+        })
+
+    assert await voice_note._pick("https://relay", "k", voice_note.HEAR, httpx.MockTransport(handler)) == "allowed"
+
+
+async def test_old_relay_fallback_expires_after_relay_upgrade(monkeypatch):
+    upgraded = False
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/me/models" and not upgraded:
+            return httpx.Response(404, json={})
+        if request.url.path == "/v1/me/models":
+            return httpx.Response(200, json={
+                "models": [{"id": "new", "kind": "audio", "audio_kind": "transcribe"}],
+                "shelf": {"default": {"audio": "new"}},
+            })
+        return httpx.Response(200, json={"data": [
+            {"id": "old", "kind": "audio", "audio_kind": "transcribe"}
+        ]})
+
+    transport = httpx.MockTransport(handler)
+    assert await voice_note._pick("https://relay", "k", voice_note.HEAR, transport) == "old"
+    upgraded = True
+    monkeypatch.setattr(voice_note, "MENU_TTL_S", 0.0)
+    assert await voice_note._pick("https://relay", "k", voice_note.HEAR, transport) == "new"
+
+
+async def test_switching_tariff_cannot_leave_an_unavailable_cached_audio_model():
+    restricted = False
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "models": [
+                {"id": "premium", "kind": "audio", "audio_kind": "transcribe", "plan_locked": restricted},
+                {"id": "basic", "kind": "audio", "audio_kind": "transcribe"},
+            ],
+            "shelf": {"default": {"audio": "premium"}},
+        })
+
+    transport = httpx.MockTransport(handler)
+    assert await voice_note._pick("https://relay", "same-key", voice_note.HEAR, transport) == "premium"
+    restricted = True
+    assert await voice_note._pick("https://relay", "same-key", voice_note.HEAR, transport) == "basic"
+
+
+@pytest.mark.parametrize("kind", [voice_note.HEAR, voice_note.SAY])
+async def test_two_accounts_send_audio_using_their_own_model_and_key(kind):
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers["authorization"]
+        model = {"Bearer customer-a": "voice-a", "Bearer customer-b": "voice-b"}[auth]
+        if request.url.path == "/v1/me/models":
+            return httpx.Response(200, json={
+                "models": [{"id": model, "kind": "audio", "audio_kind": kind}],
+                "shelf": {"default": {"audio": model}},
+            })
+        requests.append((auth, request.content))
+        if kind == voice_note.HEAR:
+            return httpx.Response(200, json={"text": "слова"})
+        return httpx.Response(200, content=b"voice", headers={"content-type": "audio/ogg"})
+
+    transport = httpx.MockTransport(handler)
+    for key in ("customer-a", "customer-b"):
+        if kind == voice_note.HEAR:
+            assert await voice_note.hear(b"audio", "voice.ogg", "audio/ogg", base="https://relay", key=key, transport=transport) == "слова"
+        else:
+            assert (await voice_note.say("слова", base="https://relay", key=key, transport=transport))[0] == b"voice"
+    assert [(auth, model in body) for (auth, body), model in zip(requests, (b"voice-a", b"voice-b"), strict=True)] == [
+        ("Bearer customer-a", True), ("Bearer customer-b", True),
+    ]
+
+
 # -- the manager: the account key of a spoken chat does not stay in memory ------------------
 
 

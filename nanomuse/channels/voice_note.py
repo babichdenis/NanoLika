@@ -13,6 +13,7 @@ sent, and the answer stays text.
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 import httpx
@@ -31,35 +32,34 @@ SAY = "speech"
 HEAR_TIMEOUT_S = 30.0
 SAY_TIMEOUT_S = 30.0
 
-#: How long a menu answer is trusted. The model behind it can leave the menu (a plan, a
-#: provider rotation, a limit), and a cache without a clock then breaks the voice silently
-#: until the process restarts. A 404 also drops the entry, so the next phrase re-asks.
+#: How long an account's old-relay fallback is remembered. Model choices themselves are
+#: fetched anew: another device may have changed the person's shelf or tariff.
 MENU_TTL_S = 600.0
+MAX_FALLBACK_ENTRIES = 512
 
 
 class VoiceError(RuntimeError):
     """The relay could not hear or say it; the caller keeps the turn as it was."""
 
 
-#: base + kind -> (the model id, when the menu was read); bounded by the TTL below
-_menus: dict[str, tuple[str, float]] = {}
-
-#: relays that answered 404 to `/v1/me/models`: an older relay is asked the plain menu
-#: from then on, so the shelf probe costs one request per process, not one per phrase
-_no_shelf: set[str] = set()
+#: Old-relay fallback is keyed by a one-way digest of the specific credential: one
+#: account's 404 must not hide another account's shelf, and raw keys are not retained.
+_no_shelf: dict[tuple[str, str], float] = {}
 
 
-def forget_menu(base: str = "", kind: str = "") -> None:
-    """Drop what was learned about the relay's audio models: one relay, one kind, or all
-    (a test, a new key, a menu that no longer names the model)."""
-    if not base and not kind:
-        _menus.clear()
+def forget_menu(base: str = "", kind: str = "", *, key: str = "") -> None:
+    """Forget old-relay fallbacks, for one relay or all relays.
+
+    `kind` remains accepted for existing callers; the fallback endpoint is shared by
+    both kinds, while model choices are not cached.
+    """
+    if not base and not kind and not key:
         _no_shelf.clear()
         return
-    for slot in list(_menus):
-        relay, _, held_kind = slot.rpartition("|")
-        if (not base or relay == base) and (not kind or held_kind == kind):
-            _menus.pop(slot, None)
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest() if key else ""
+    for slot in list(_no_shelf):
+        if (not base or slot[0] == base) and (not digest or slot[1] == digest):
+            _no_shelf.pop(slot, None)
 
 
 async def _menu(
@@ -72,14 +72,21 @@ async def _menu(
     The shelf is what the person picked for the account; an older relay that does not know
     the endpoint answers 404, and the plain menu (`/v1/models`) is read instead."""
     headers = {"Authorization": f"Bearer {key}"}
+    slot = (base, hashlib.sha256(key.encode("utf-8")).hexdigest())
+    previous = _no_shelf.get(slot)
+    fallback = previous is not None and time.monotonic() - previous < MENU_TTL_S
+    if previous is not None and not fallback:
+        _no_shelf.pop(slot, None)
     try:
         async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
-            if base in _no_shelf:
+            if fallback:
                 response = await client.get(f"{base}/v1/models", headers=headers)
             else:
                 response = await client.get(f"{base}/v1/me/models", headers=headers)
                 if response.status_code == 404:
-                    _no_shelf.add(base)
+                    if len(_no_shelf) >= MAX_FALLBACK_ENTRIES and slot not in _no_shelf:
+                        _no_shelf.pop(min(_no_shelf, key=_no_shelf.get), None)
+                    _no_shelf[slot] = time.monotonic()
                     response = await client.get(f"{base}/v1/models", headers=headers)
     except httpx.HTTPError as exc:
         raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
@@ -119,19 +126,15 @@ async def _pick(
 ) -> str:
     """The model this account keeps for the job, or the first one of that kind.
 
-    The shelf wins, as it does in the picture, clip and sound tools: one account should
-    not hear one voice and draw with another model. The answer is kept for
-    :data:`MENU_TTL_S` and dropped on a 404 from the audio route."""
-    slot = f"{base}|{kind}"
-    held = _menus.get(slot)
-    if held and time.monotonic() - held[1] < MENU_TTL_S:
-        return held[0]
+    The shelf wins, as it does in the picture, clip and sound tools: each request reads
+    this account's current shelf and plan instead of using a stale or shared selection."""
     rows, shelf = await _menu(base, key, transport)
     fits = [
         row
         for row in rows
         if row.get("kind") == "audio"
         and _audio_kind_of(row) == kind
+        and row.get("plan_locked") is not True
         and (row.get("nanomuse") or {}).get("available") is not False
         and row.get("available", True) is not False
     ]
@@ -152,7 +155,6 @@ async def _pick(
         pick = str(fits[0].get("id") or "")
     if not pick:
         raise VoiceError(f"the menu has no model that can {kind}")
-    _menus[slot] = (pick, time.monotonic())
     return pick
 
 
@@ -187,7 +189,7 @@ async def hear(
             raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
         if response.status_code == 404 and not model and attempt == 1:
             # the model the menu gave us is gone (a plan, a rotation): ask once more
-            forget_menu(base, HEAR)
+            forget_menu(base, HEAR, key=key)
             chosen = await _pick(base, key, HEAR, transport)
             form["model"] = chosen
             continue
@@ -238,7 +240,7 @@ async def say(
         except httpx.HTTPError as exc:
             raise VoiceError(f"the relay did not answer: {type(exc).__name__}") from None
         if response.status_code == 404 and not model and attempt == 1:
-            forget_menu(base, SAY)
+            forget_menu(base, SAY, key=key)
             chosen = await _pick(base, key, SAY, transport)
             payload["model"] = chosen
             continue
