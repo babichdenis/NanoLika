@@ -347,8 +347,24 @@ class ConversationSync:
         """May move for the signed-in account: its own, or not yet anyone's (C10 rule 3)."""
         if thread.main_of and thread.main_of != self.account_id:
             return False
+        # An ownerless chat is not necessarily unclaimed: messenger sessions and
+        # customer workspaces carry their own scope before sync has an owner entry.
+        # Never let the installation's account adopt a different customer's chat.
+        for scope in (thread.customer_scope, thread.workspace_scope):
+            if scope.startswith("channel:"):
+                return False
+            if scope.startswith("account:") and scope != f"account:{self.account_id}":
+                return False
         owner = self.owner_of(thread.id)
-        return not owner or not self.account_id or owner == self.account_id
+        # Old messenger threads may predate customer scopes. Their origin alone
+        # cannot prove which person owns them, even on a signed-in installation.
+        if (
+            not owner
+            and conversation_origin(thread.id, thread.title, thread.folder) != "account"
+            and (not self.account_id or thread.customer_scope != f"account:{self.account_id}")
+        ):
+            return False
+        return not owner or (bool(self.account_id) and owner == self.account_id)
 
     def _adopt(self, thread_id: str) -> None:
         """The conversation is the signed-in account's from now on (first push or pull)."""
@@ -923,6 +939,17 @@ class ConversationSync:
         the artifact events between the person's message and this answer are uploaded to
         the account's storage and named in the message: the desktop draws them as file
         chips and opens them beside the chat (`RemoteBubbles.ts`)."""
+        if not self._mine(thread):
+            return
+        # A chat can be assigned to an account after its workspace was fixed. A
+        # specifically scoped customer must not upload files from a different
+        # workspace, including the installation's legacy shared workspace.
+        if (
+            thread.customer_scope.startswith("account:")
+            and thread.workspace_scope
+            and thread.workspace_scope != thread.customer_scope
+        ):
+            return
         if ev.get("files"):
             return
         made: list[dict[str, Any]] = []

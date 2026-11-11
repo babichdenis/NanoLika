@@ -488,6 +488,51 @@ def test_a_file_made_in_a_turn_is_synced_with_its_link(synced) -> None:
     assert uploaded and uploaded[0][1] == b"docx"
 
 
+def test_foreign_ownerless_channel_is_neither_synced_nor_uploaded(synced) -> None:
+    client, service, _, relay = synced
+    client.portal.call(service.sync.account_changed, "account-owner")
+    thread = service._make_thread("channel-telegram-isolated", "Private Telegram")
+    thread.customer_scope = "channel:telegram:another-person"
+    thread.workspace_scope = thread.customer_scope
+    folder = service.workspace_for_thread(thread.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "private.txt").write_text("private customer data", encoding="utf-8")
+    thread.timeline.add({"type": "user", "text": "private question"})
+    thread.timeline.add({"type": "artifact", "path": "private.txt"})
+    answer = thread.timeline.add({"type": "assistant", "text": "private answer", "final": True})
+    uploads = []
+
+    async def upload(name: str, data: bytes, mime: str) -> str:
+        uploads.append((name, data, mime))
+        return "https://cloud.nanolika.ru/private.txt"
+
+    relay.cloud.upload = upload
+    assert not service.sync._eligible(thread)
+    client.portal.call(service.sync._attach_turn_files, thread, answer)
+    assert not uploads and not answer.get("files")
+    thread.customer_scope = "account:another-person"
+    thread.workspace_scope = thread.customer_scope
+    assert not service.sync._eligible(thread)
+    thread.customer_scope = "account:account-owner"
+    thread.workspace_scope = "account:another-person"
+    assert not service.sync._eligible(thread)
+    # Legacy messenger threads can also have no stored customer scope at all.
+    thread.customer_scope = ""
+    thread.workspace_scope = ""
+    assert not service.sync._eligible(thread)
+
+    # A reassigned chat may still point to the installation's old workspace.
+    # Its text may sync, but its old files cannot be uploaded to this account.
+    thread.customer_scope = "account:account-owner"
+    thread.workspace_scope = "installation"
+    folder = service.workspace_for_thread(thread.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "private.txt").write_text("legacy shared data", encoding="utf-8")
+    assert service.sync._eligible(thread)
+    client.portal.call(service.sync._attach_turn_files, thread, answer)
+    assert not uploads and not answer.get("files")
+
+
 def test_a_finished_turn_is_pushed_as_the_main_conversation(synced) -> None:
     client, service, llm, relay = synced
     llm.script.append(LLMResponse(content="Hello from the desk", finish_reason="stop"))
@@ -1514,6 +1559,10 @@ def test_a_device_shows_and_pushes_the_current_accounts_conversations_only(synce
     a_main_cid = relay_main(relay)
     # a chat that never synced belongs to nobody (side chats of another device, say)
     local = service.create_thread("Nobody's")
+    # Model an actual legacy ownerless chat: a new chat created while A is signed in
+    # now carries A's explicit customer/workspace scope even before its first sync.
+    local.customer_scope = ""
+    local.workspace_scope = ""
     local.device = "phone-1"
     service._save_index()
     assert _titles(client) == {"Main chat", "A side", "Nobody's"}
