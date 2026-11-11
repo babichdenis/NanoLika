@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -163,14 +164,31 @@ class EventBus:
 
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+        self._filters: dict[asyncio.Queue[dict[str, Any]], Callable[[dict[str, Any]], bool]] = {}
 
-    def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
+    def subscribe(
+        self, predicate: Callable[[dict[str, Any]], bool] | None = None
+    ) -> asyncio.Queue[dict[str, Any]]:
         q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1000)
         self._subscribers.add(q)
+        if predicate is not None:
+            self._filters[q] = predicate
         return q
 
     def unsubscribe(self, q: asyncio.Queue[dict[str, Any]]) -> None:
         self._subscribers.discard(q)
+        self._filters.pop(q, None)
+
+    def restore(self, q: asyncio.Queue[dict[str, Any]]) -> bool:
+        """Reattach a long-lived consumer that was detached for falling behind.
+
+        This does not replay the events missed while it was detached. The caller must
+        report that gap and, where possible, reconcile against the persistent timeline.
+        """
+        if q in self._subscribers:
+            return False
+        self._subscribers.add(q)
+        return True
 
     @property
     def connections(self) -> int:
@@ -178,6 +196,9 @@ class EventBus:
 
     def publish(self, message: dict[str, Any]) -> None:
         for q in list(self._subscribers):
+            predicate = self._filters.get(q)
+            if predicate is not None and not predicate(message):
+                continue
             try:
                 q.put_nowait(message)
             except asyncio.QueueFull:  # slow client: drop it

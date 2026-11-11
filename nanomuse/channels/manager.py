@@ -131,6 +131,10 @@ REMOTE_TASK_S = 600
 # chat writing twice does not need two sign-ins, and the relay issues a key per chat anyway.
 CLOUD_KEY_TTL_S = 600.0
 
+# Only these event kinds are consumed by _route. Avoid filling the bot's queue
+# with e.g. calendar or settings updates that it would silently ignore anyway.
+CHANNEL_EVENT_KINDS = frozenset({"delta", "stream_end", "status", "sync", "thread", "event", "update"})
+
 # A chat that spoke in voice gets its answer said back; the pair (relay, account key) waits
 # for that answer no longer than this, and no more than VOICE_TURNS_MAX chats are held.
 VOICE_TURN_TTL_S = 600.0
@@ -322,7 +326,7 @@ class ChannelManager(ChannelBus):
         # chat -> (key, model, lapses at): the Cloud key of a chat that has no app (0.26)
         self._cloud_keys: dict[tuple[str, str], tuple[str, str, str, float]] = {}
         self._cloud_customer_scopes: dict[tuple[str, str], str] = {}
-        self._queue = self.svc.bus.subscribe()
+        self._queue = self.svc.bus.subscribe(lambda msg: msg.get("kind") in CHANNEL_EVENT_KINDS)
         self._pump = asyncio.create_task(self._pump_loop(), name="channels-pump")
         self._backfill_folders()
         # The hub signs in after the manager is up; run once more when the account and the
@@ -1626,6 +1630,14 @@ class ChannelManager(ChannelBus):
         assert self._queue is not None
         while True:
             msg = await self._queue.get()
+            if self.svc.bus.restore(self._queue):
+                # Unlike a short-lived web socket, the channel pump has no client that
+                # reconnects when EventBus drops a full queue. Resume future events, but
+                # be explicit that this cannot recover the events missed in the gap.
+                logger.error(
+                    "channels: event queue overflowed; events may have been missed; "
+                    "subscription restored"
+                )
             try:
                 await self._route(msg)
             except Exception as exc:  # noqa: BLE001
