@@ -2119,6 +2119,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             png = await _image_with_fallback(spec, prompt, size, params)
             charged = cloud.charge_image(caller, spec, 1, request_id, size=size)
         finally:
@@ -2168,6 +2169,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             png = await _dashscope_image(edit_model, content, params)
             charged = cloud.charge_image(caller, spec, 1, request_id, size=_size_param(size), inputs=1)
         finally:
@@ -2289,6 +2291,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             data = await _beatapi(app.state.http, "/v1/capabilities/run", body)
             usage = data.get("usage") if isinstance(data, dict) else None
             actual = 0.0
@@ -2511,6 +2514,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             if not provider:
                 raise CloudError(501, "unsupported", "This voice lives only with the provider of its own")
             sound, sound_type, sound_seconds = await _polza_speech(base, key, spec, text, voice, fmt, speed)
@@ -2613,6 +2617,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             audio, media_type = await _polza_music(base, key, spec, prompt, body)
             charged = cloud.charge_music(caller, spec, request_id, 1)
         finally:
@@ -2658,6 +2663,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             if not provider:
                 raise CloudError(501, "unsupported", "This transcription model lives only with the provider of its own")
             said = await _polza_transcribe(base, key, spec, file.filename or "", data, language, file.content_type)
@@ -2823,6 +2829,7 @@ def create_app(
             place=client_place(request),
         )
         try:
+            cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             payload = dumps(_video_payload(provider, model or spec.upstream, spec, body))
             headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
             path = VIDEO_PATHS.get(provider, "/v1/media")
@@ -3061,6 +3068,8 @@ def create_app(
         if request.headers.get("x-dashscope-ossresourceresolve"):
             headers["X-DashScope-OssResourceResolve"] = request.headers["x-dashscope-ossresourceresolve"]
         try:
+            if not probe:
+                cloud.in_flight.activate(caller.account_id, request_id, asyncio.current_task())
             try:
                 r = await http.post(settings.dashscope_base.rstrip("/") + VIDEO_PATH, headers=headers, content=dumps(body).encode())
             except httpx.HTTPError as e:
