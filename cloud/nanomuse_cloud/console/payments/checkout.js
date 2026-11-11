@@ -47,20 +47,24 @@
   }
   async function check() {
     const data = await api('/v1/payments/orders/' + encodeURIComponent(order));
-    $('item').textContent = data.plan ? 'Пакет «' + config.plans[data.plan].name + '»' : 'Пополнение баланса';
+    $('item').textContent = data.plan ? 'Пакет «' + (data.plan_name || config.plans[data.plan]?.name || data.plan) + '»' : 'Пополнение баланса';
     $('amount').textContent = format(data.amount_kopecks);
     $('pay').hidden = true; $('refresh').hidden = false;
+    const test = data.test_mode === true;
+    $('provider-label').textContent = `nanoLika · ${config.provider_name}${test ? ' · тестовый режим' : ''}`;
+    $('payment-notice').textContent = test
+      ? 'Тестовый заказ. Он не меняет рабочий баланс.'
+      : 'Статус оплаты подтверждается сервером.';
+    $('pay').textContent = `Перейти в ${config.provider_name}${test ? ' · тест' : ''}`;
+
+    $('wallet').textContent = '';
     if (data.status === 'REFUNDED' || data.status === 'PARTIAL_REFUNDED') {
-      const wallet = await api('/v1/payments/wallet');
       message(data.status === 'REFUNDED'
-        ? 'Возвращен полностью · тест. Банк подтвердил возврат всей суммы. Зачисление на тестовый баланс отменено.'
+        ? (test ? 'Тестовый платёж возвращён полностью.' : 'Платёж возвращён полностью.')
         : 'Возвращена часть платежа: ' + format(data.refunded_amount_kopecks) + '. Остаток зачисления: ' + format(data.net_credited_amount_kopecks) + '.');
-      $('wallet').textContent = 'Тестовый баланс: ' + format(wallet.balance_kopecks);
       $('refresh').hidden = data.status === 'REFUNDED';
     } else if (data.credited) {
-      const wallet = await api('/v1/payments/wallet');
-      message('Оплачено · тест. Банк подтвердил тестовый платёж. Тестовое зачисление выполнено один раз. Реальный баланс не изменён.');
-      $('wallet').textContent = 'Тестовый баланс: ' + format(wallet.balance_kopecks) + (wallet.expires_at ? '. Тестовые условия до ' + new Date(wallet.expires_at * 1000).toLocaleString('ru-RU') : '');
+      message(test ? 'Тестовый платёж подтверждён. Тестовый баланс пополнен.' : 'Платёж подтверждён. Баланс nanoLika пополнен.');
       $('refresh').hidden = true;
     } else if (['REJECTED', 'AUTH_FAIL', 'CANCELED', 'DEADLINE_EXPIRED'].includes(data.status)) {
       message('Не получилось оплатить. Платёж не завершён, баланс не пополнен.');
@@ -69,6 +73,12 @@
     } else {
       message('Статус банка: ' + data.status + '. Возврат на эту страницу не подтверждает оплату.');
       if (data.payment_url && data.status === 'NEW') { $('pay').hidden = false; }
+    }
+    if (test && (data.credited || ['REFUNDED', 'PARTIAL_REFUNDED'].includes(data.status))) {
+      try {
+        const wallet = await api('/v1/payments/wallet');
+        $('wallet').textContent = 'Тестовый баланс: ' + format(wallet.balance_kopecks);
+      } catch (_) { /* The order status remains available without the test wallet. */ }
     }
     return data;
   }
